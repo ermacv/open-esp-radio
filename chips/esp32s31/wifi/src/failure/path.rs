@@ -124,8 +124,70 @@ impl DiagnosticPath for BackendFault {
                 });
             }
             Self::HardwareUnavailable => path.name("HardwareUnavailable"),
+            Self::CoreViewUnavailable(op) => {
+                path.name("CoreViewUnavailable");
+                path.name(match op {
+                    CoreOperation::Command => "Command",
+                    CoreOperation::Tbtt => "Tbtt",
+                    CoreOperation::Arena => "Arena",
+                    CoreOperation::Publish => "Publish",
+                });
+            }
+            Self::DuplicateCompletion { queue } => queue_fault(path, "DuplicateCompletion", *queue),
+            Self::RemovalOverflow => path.name("RemovalOverflow"),
+            Self::CompletionWithoutPending { queue } => {
+                queue_fault(path, "CompletionWithoutPending", *queue);
+            }
+            Self::DescriptorMissing { queue } => queue_fault(path, "DescriptorMissing", *queue),
+            Self::ReturnRefused { queue } => queue_fault(path, "ReturnRefused", *queue),
+            Self::BlockAckReportMissing { queue } => {
+                queue_fault(path, "BlockAckReportMissing", *queue);
+            }
+            Self::AirMissing { queue } => queue_fault(path, "AirMissing", *queue),
+            Self::AttemptCounter { queue } => queue_fault(path, "AttemptCounter", *queue),
+            Self::StageMissing { queue } => queue_fault(path, "StageMissing", *queue),
+            Self::QueueFull { queue } => queue_fault(path, "QueueFull", *queue),
+            Self::ReceiveOverflow => path.name("ReceiveOverflow"),
+            Self::ReceiveRange => path.name("ReceiveRange"),
+            Self::EventQueueFull => path.name("EventQueueFull"),
+            Self::ArenaCoreContract => path.name("ArenaCoreContract"),
+            Self::InstallationResources => path.name("InstallationResources"),
+            Self::EdcaUnsupported => path.name("EdcaUnsupported"),
+            Self::ChannelNotPermitted => path.name("ChannelNotPermitted"),
+            Self::KeySlotMissing(op) => {
+                path.name("KeySlotMissing");
+                path.name(match op {
+                    KeyOperation::Install => "Install",
+                    KeyOperation::Remove => "Remove",
+                    KeyOperation::Replace => "Replace",
+                    KeyOperation::Select => "Select",
+                    KeyOperation::Transmit => "Transmit",
+                });
+            }
+            Self::ReceiveAccounting => path.name("ReceiveAccounting"),
+            Self::CommandExpired(kind) => {
+                path.name("CommandExpired");
+                path.name(match kind {
+                    PortCommandKind::InstallPairwise => "InstallPairwise",
+                    PortCommandKind::InstallGroup => "InstallGroup",
+                    PortCommandKind::ReplaceGroup => "ReplaceGroup",
+                    PortCommandKind::SelectGroup => "SelectGroup",
+                    PortCommandKind::RemovePairwise => "RemovePairwise",
+                    PortCommandKind::RemoveGroup => "RemoveGroup",
+                    PortCommandKind::Configure => "Configure",
+                    PortCommandKind::CloseGate => "CloseGate",
+                    PortCommandKind::SetEdca => "SetEdca",
+                    PortCommandKind::SetBssColor => "SetBssColor",
+                });
+            }
         }
     }
+}
+
+/// A fault of one hardware queue: its name, then the queue.
+fn queue_fault(path: &mut DiagPath, name: &'static str, queue: u8) {
+    path.name(name);
+    path.word(u32::from(queue));
 }
 
 impl DiagnosticPath for LowerMacFault {

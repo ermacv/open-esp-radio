@@ -184,11 +184,15 @@ impl<P: LentNotifies> NetworkCredit<P> {
         self.returned.load(Ordering::Acquire)
     }
 
-    /// Start a new installation's count. The caller has seen the previous
-    /// installation return every unit.
+    /// Start a new installation's count. The lend credit outlives the
+    /// installation: units the network still holds stay counted against
+    /// its limit, and a return not yet rearmed stays reported, so each
+    /// unit rejoins the ring of whichever installation runs when the
+    /// network drops it. Only the previous installation's pending
+    /// transfers (its receive count restarts at zero) and its request for
+    /// units end here.
     pub(super) fn reset(&self) {
         self.transferred.store(0, Ordering::Release);
-        self.returned.store(false, Ordering::Release);
         self.wants_units.store(false, Ordering::Release);
     }
 }
@@ -344,6 +348,36 @@ mod tests {
         // The request is spent: a further return leaves the driver alone.
         return_one(credit);
         assert_eq!(driver.counts(), (1, 1));
+    }
+
+    #[test]
+    fn the_lend_credit_outlives_a_reinstall_and_late_returns_rejoin_the_new_ring() {
+        let credit = leaked(NetworkCredit::with(SameHart::new()));
+        // Two units lent by the old installation, one returned before the
+        // reinstall and not yet rearmed.
+        credit.held.fetch_add(2, Ordering::AcqRel);
+        credit.transferred.fetch_add(2, Ordering::AcqRel);
+        drop(ReturnOnDrop {
+            credit,
+            driver: leaked(PriorityWaker::new()),
+        });
+        credit.reset();
+        // The network still holds one: the new installation counts it
+        // against its limit, and owes the ring the earlier return.
+        assert_eq!(credit.held(), 1);
+        assert_eq!(
+            credit.take_transferred(),
+            0,
+            "the old receive count is gone"
+        );
+        assert!(credit.take_returned(), "the earlier return is rearmed now");
+        // The late return reaches the new installation's ring.
+        drop(ReturnOnDrop {
+            credit,
+            driver: leaked(PriorityWaker::new()),
+        });
+        assert_eq!(credit.held(), 0);
+        assert!(credit.take_returned());
     }
 
     #[test]

@@ -502,6 +502,40 @@ impl Device<512> for TestDevice {
         self.observed.borrow_mut().resumed_cuts += 1;
         Ok(())
     }
+    fn poll_rx_work(&mut self, _: &mut Context<'_>) -> Result<bool, Fault> {
+        self.capture();
+        Ok(!self.observed.borrow().received.is_empty())
+    }
+    fn pull_unit(
+        &mut self,
+        receive_room: usize,
+        now: Instant,
+    ) -> Result<DevicePull<TestReceive>, Fault> {
+        self.capture();
+        let mut observed = self.observed.borrow_mut();
+        observed.pulls += 1;
+        suspend_rx_continuation(receive_room, &mut observed.rx_continuation);
+        if receive_room == 0 {
+            return Ok(DevicePull::Empty);
+        }
+        // The ring waits for its continuation, as the device's does.
+        match observed.rx_continuation {
+            Some(at) if now < at => return Ok(DevicePull::Later(at)),
+            Some(_) => observed.rx_continuation = None,
+            None => {}
+        }
+        let Some(frame) = observed.received.pop_front() else {
+            return Ok(DevicePull::Empty);
+        };
+        if observed.continuous_rx {
+            observed.rx_delivered += 1;
+            if observed.rx_delivered.is_multiple_of(4) {
+                observed.rx_continuation =
+                    Some(now.saturating_add(crate::rx::receive::CONTINUATION_WAIT));
+            }
+        }
+        Ok(DevicePull::Unit(frame))
+    }
     fn recycle(&mut self, frame: TestReceive) {
         self.assert_task_context();
         drop(frame);
@@ -546,6 +580,7 @@ mod abandon;
 mod arena;
 mod barriers;
 mod conformance;
+mod data_port;
 mod retune;
 mod rx_capacity;
 

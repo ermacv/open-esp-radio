@@ -44,10 +44,16 @@ mod buffer;
 #[cfg(target_arch = "riscv32")]
 pub mod device;
 mod driver;
+mod engines;
+pub use engines::{
+    Esp32s31Arena, Esp32s31Commands, Esp32s31Port, GroupInstall, InstallRefused, PairwiseInstall,
+    PortInstallation, StoppedDataPort,
+};
 mod keys;
 mod lent;
 pub use lent::{LentNotifies, LentReceive, NetworkPeers, SameHart};
 mod lifecycle;
+pub use lifecycle::{InstallationPools, Resources};
 mod registration;
 pub use registration::{Registration, RegistrationError};
 mod phase;
@@ -287,6 +293,20 @@ pub trait Device<const B: usize>: Sized + 'static {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<Self::Receive>, Fault>>;
     fn finish_rx_cut(&mut self) -> Result<(), Fault>;
+    /// The data port's receive facts: take them, registering `cx` alone
+    /// on their signal, and report whether the ring holds work (a staged
+    /// unit, or ring work, however long its continuation waits). It
+    /// reads no clock; while a cut or a stop holds the ring it is `false`.
+    fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault>;
+    /// The data port's receive pull at the turn's `now`: a staged unit, or
+    /// the ring serviced once, while the caller has `receive_room`. It
+    /// never wakes: ring work left now is [`DevicePull::Again`], work
+    /// waiting for its continuation [`DevicePull::Later`].
+    fn pull_unit(
+        &mut self,
+        receive_room: usize,
+        now: Instant,
+    ) -> Result<DevicePull<Self::Receive>, Fault>;
     fn recycle(&mut self, frame: Self::Receive);
     /// The network dropped a lent unit: rearm what the ring got back.
     fn returned(&mut self);
@@ -299,6 +319,18 @@ pub trait Device<const B: usize>: Sized + 'static {
 pub enum DeviceEvent {
     Tx(WifiTxWake),
     Tbtt,
+}
+
+/// What the data port's receive pull found ([`Device::pull_unit`]).
+pub enum DevicePull<R> {
+    /// One received unit.
+    Unit(R),
+    /// Nothing now: the ring's next unit raises the receive signal.
+    Empty,
+    /// The ring has work left now; pull again within the turn's budget.
+    Again,
+    /// The ring's work resumes at this instant.
+    Later(Instant),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -322,6 +354,106 @@ pub enum Fault {
     Setting(settings::SettingFault),
     /// The device's registers were lent to an actor transaction or retired.
     HardwareUnavailable,
+    /// The lower-MAC core is not in the view this step needs.
+    CoreViewUnavailable(CoreOp),
+    /// A hardware queue completed twice in one service.
+    DuplicateCompletion {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// The core removed more keys than were installed.
+    RemovalOverflow,
+    /// A queue completed with no MPDU published on it.
+    CompletionWithoutPending {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// A completed descriptor held no memory, or its place was gone.
+    DescriptorMissing {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// A completion returned memory its buffer had not published.
+    ReturnRefused {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// A delivered BlockAckReq came without its BlockAck report.
+    BlockAckReportMissing {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// An ended MPDU recorded no transmission.
+    AirMissing {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// An attempt's transmission or retry count overflowed.
+    AttemptCounter {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// An attempt's retry plan has no stage at its position.
+    StageMissing {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// A queue held more attempts than there are tickets.
+    QueueFull {
+        /// The hardware queue.
+        queue: u8,
+    },
+    /// The caller would hold more received units than [`RX_HELD`].
+    ReceiveOverflow,
+    /// A received unit's MPDU lies outside the unit.
+    ReceiveRange,
+    /// A cut unit found the slot-loan path's event queue full.
+    EventQueueFull,
+    /// The data arenas' step completed an MPDU or removed a key.
+    ArenaCoreContract,
+    /// The installation's descriptors, chains, tickets or buffers were not
+    /// all available to it.
+    InstallationResources,
+    /// The core refused the EDCA table.
+    EdcaUnsupported,
+    /// The regulatory domain did not permit the channel being started.
+    ChannelNotPermitted,
+    /// A key a command names is not installed, or no key place is free.
+    KeySlotMissing(KeyOp),
+    /// The caller returned more received units than it held, or the
+    /// network more lends than the caller made.
+    ReceiveAccounting,
+    /// A command the data port held at its barrier passed its bound; the
+    /// port keeps the command with its quarantine.
+    CommandExpired(oer_protocols_ieee80211_contracts_port::CommandKind),
+}
+
+/// The lower-MAC operation a missing core view stopped.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CoreOp {
+    /// An idle-core command: a key, a setting or a Block Ack agreement.
+    Command,
+    /// A TBTT of the station's schedule.
+    Tbtt,
+    /// The data arenas' core.
+    Arena,
+    /// A single MPDU's publication.
+    Publish,
+}
+
+/// The key operation that found no key.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KeyOp {
+    /// An installation found no free key place.
+    Install,
+    /// A removal found no installed key of its identity.
+    Remove,
+    /// A replacement found no installed group key of its identity.
+    Replace,
+    /// A selection found no installed group key of its identity.
+    Select,
+    /// An attempt named a key that is not installed for transmission.
+    Transmit,
 }
 
 /// Why the radio front end did not retune a stopped Wi-Fi client.
@@ -631,7 +763,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
                         .is_some_and(|memory| storage.shared.returned.seed(index, memory).is_ok())
             });
             if !seeded {
-                storage.shared.poison(Fault::Capacity);
+                storage.shared.poison(Fault::InstallationResources);
             }
         }
         let channel = Channel::from_wifi_channel(config.channel);

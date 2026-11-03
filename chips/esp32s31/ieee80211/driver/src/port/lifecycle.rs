@@ -4,6 +4,20 @@ use radio::{EnableResult, PortBackend, SlotRetire, SlotStopped, SlotWakes};
 pub(super) type PortCoreOwner<'id, Id, D, const B: usize> =
     crate::lower_mac::CoreOwner<Core<'id, Id, D, B>>;
 
+/// The complete pool layout one installation mints.
+pub type InstallationPools = (
+    CorePools<TX_TICKETS>,
+    ArbiterPool,
+    TransmitPool<Tickets, TX_TICKETS>,
+    radio::Slots<Buffers, TX_BUFFERS>,
+    radio::Slots<ConnectionEpochKind, 1>,
+    radio::Slots<GroupPermission<Station>, 1>,
+    radio::Slots<GroupPermission<AccessPoint>, 1>,
+    association::BlockAckSlots<BlockAcks, 8>,
+    InterfaceCommandPool<Station>,
+    InterfaceCommandPool<AccessPoint>,
+);
+
 pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub tickets: [Slot<'p, Tickets, Part<Id, 2>>; TX_TICKETS],
     pub terminal_access: TerminalAccess<'p, Tickets, Part<Id, 2>>,
@@ -155,18 +169,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
     for Esp32s31Backend<Id, D, B, O>
 {
     type Vacant = StoppedPort<Id, D, B, O>;
-    type Pools = (
-        CorePools<TX_TICKETS>,
-        ArbiterPool,
-        TransmitPool<Tickets, TX_TICKETS>,
-        radio::Slots<Buffers, TX_BUFFERS>,
-        radio::Slots<ConnectionEpochKind, 1>,
-        radio::Slots<GroupPermission<Station>, 1>,
-        radio::Slots<GroupPermission<AccessPoint>, 1>,
-        association::BlockAckSlots<BlockAcks, 8>,
-        InterfaceCommandPool<Station>,
-        InterfaceCommandPool<AccessPoint>,
-    );
+    type Pools = InstallationPools;
     type Queues = Queues<Id, D, B, O>;
     const VACANT_QUEUES: Self::Queues = Queues::vacant();
     type Frontend<'s>

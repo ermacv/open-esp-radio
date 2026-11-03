@@ -234,3 +234,24 @@ fn an_abandoned_station_keeps_the_lifecycle_cause_and_the_ports_first_fault_as_o
     let path = oer_portable_diagnostics::DiagPath::of(&cancelled);
     assert_eq!(path.names(), ["Lifecycle", "Cancelled"]);
 }
+#[test]
+fn a_named_driver_fault_keeps_its_queue_and_operation_across_the_boundary() {
+    use oer_chips_esp32s31_ieee80211_driver::port::{CoreOp, Fault};
+    assert_eq!(
+        super::convert::backend_fault(Fault::DuplicateCompletion { queue: 2 }),
+        BackendFault::DuplicateCompletion { queue: 2 }
+    );
+    assert_eq!(
+        super::convert::backend_fault(Fault::CoreViewUnavailable(CoreOp::Tbtt)),
+        BackendFault::CoreViewUnavailable(CoreOperation::Tbtt)
+    );
+    assert_eq!(
+        super::convert::backend_fault(Fault::CommandExpired(
+            oer_protocols_ieee80211_contracts_port::CommandKind::InstallGroup
+        )),
+        BackendFault::CommandExpired(PortCommandKind::InstallGroup)
+    );
+    let path = oer_portable_diagnostics::DiagPath::of(&BackendFault::QueueFull { queue: 3 });
+    assert_eq!(path.names(), &["QueueFull"]);
+    assert_eq!(path.words(), &[3]);
+}

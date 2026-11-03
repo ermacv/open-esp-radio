@@ -16,7 +16,7 @@ pub(in crate::port) type DataArenas<'id, Id, const B: usize> =
     Esp32s31TxArena<'id, 'static, TxBacking<B>, CorePath<Id>, TX_AMPDU_SUBFRAMES>;
 
 /// One step's arena port of an installation.
-type Port<'a, 'id, Id, D, const B: usize, O> = ArenaPort<
+pub(in crate::port) type Port<'a, 'id, Id, D, const B: usize, O> = ArenaPort<
     'a,
     'id,
     'static,
@@ -37,7 +37,7 @@ type Port<'a, 'id, Id, D, const B: usize, O> = ArenaPort<
 
 /// The station's installed pairwise transmit key the arenas admit: the
 /// newest active one. A key whose removal began is no longer active.
-fn station_pairwise<'a, 'id, Id: SlotIdentity>(
+pub(in crate::port) fn station_pairwise<'a, 'id, Id: SlotIdentity>(
     keys: &'a [Option<(RawKeyIdentity, Installed<'id, Id>)>],
 ) -> Option<&'a KeyHandle<'id, CorePath<Id>>> {
     keys.iter()
@@ -56,7 +56,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     Driver<'id, Id, D, B, O>
 {
     /// Whether an arena is on the air.
-    pub(super) fn arena_on_air(&self) -> bool {
+    pub(in crate::port) fn arena_on_air(&self) -> bool {
         self.arena
             .as_ref()
             .is_some_and(|arena| arena.on_air().is_some())
@@ -65,14 +65,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// Whether the station's pending pairwise key removal waits for an
     /// arena's key right: a frame it encrypted is on the air, awaits
     /// settlement or is retained.
-    pub(super) fn arena_holds_removed_key(&self) -> bool {
-        matches!(
+    pub(in crate::port) fn arena_holds_removed_key(&self) -> bool {
+        (matches!(
             &self.pending_command,
             Some(Command::Remove { identity, .. }) if identity.role == VifRole::Station
-        ) && self
-            .arena
-            .as_ref()
-            .is_some_and(DataArenas::<Id, B>::holds_key_right)
+        ) || self
+            .barrier
+            .is_some_and(|identity| identity.role == VifRole::Station))
+            && self
+                .arena
+                .as_ref()
+                .is_some_and(DataArenas::<Id, B>::holds_key_right)
     }
 
     /// Whether the station may not publish an arena now: the port is not
@@ -96,26 +99,32 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
     }
 
-    /// Offer one TX edge to the arena on the air; its completion goes to
-    /// the station. `true` when its timeout abort settled, so the MPDUs'
-    /// latched timeouts are offered again.
+    /// Offer one TX edge to the arena on the air at `now`: its completion,
+    /// and `true` when its timeout abort settled, so the MPDUs' latched
+    /// timeouts are offered again.
     pub(super) fn service_arena(
         &mut self,
-        held: &Held<'_, 'id, Id, D, B, O>,
         device: &mut D,
         wake: WifiTxWake,
-    ) -> Result<bool, Fault> {
+        now: Instant,
+    ) -> Result<(Option<owned::ArenaDone>, bool), Fault> {
         let Some(arena) = self.arena.as_mut() else {
-            return Ok(false);
+            return Ok((None, false));
         };
         if arena.on_air().is_none() {
-            return Ok(false);
+            return Ok((None, false));
         }
         let was_settling = arena.settling();
-        let now = device.timer().now();
         let hardware = device.hardware()?;
-        let core = self.core.view().arena_core().ok_or(Fault::Capacity)?;
-        let observations = self.observations.as_mut().ok_or(Fault::Capacity)?;
+        let core = self
+            .core
+            .view()
+            .arena_core()
+            .ok_or(Fault::CoreViewUnavailable(CoreOp::Arena))?;
+        let observations = self
+            .observations
+            .as_mut()
+            .ok_or(Fault::InstallationResources)?;
         let pairwise = station_pairwise(&self.keys);
         let mut sink = Sink::default();
         let (done, settled) = {
@@ -137,12 +146,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         // An arena releases its key right only at the station's settlement.
         if !sink.removed.is_empty() || !sink.completed.is_empty() {
-            return Err(Fault::Capacity);
+            // The callback's owners stay with the sink's quarantine.
+            core::mem::forget(sink);
+            return Err(Fault::ArenaCoreContract);
         }
-        if let Some(done) = done {
-            held.arena_completed(done);
-        }
-        Ok(settled)
+        Ok((done, settled))
     }
 }
 
@@ -190,9 +198,16 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let mut device = self.held.port.device()?;
         let hardware = device.hardware()?;
         let driver = &mut *driver;
-        let arena = driver.arena.as_mut().ok_or(Fault::Capacity)?;
-        let core = driver.core.view().arena_core().ok_or(Fault::Capacity)?;
-        let observations = driver.observations.as_mut().ok_or(Fault::Capacity)?;
+        let arena = driver.arena.as_mut().ok_or(Fault::InstallationResources)?;
+        let core = driver
+            .core
+            .view()
+            .arena_core()
+            .ok_or(Fault::CoreViewUnavailable(CoreOp::Arena))?;
+        let observations = driver
+            .observations
+            .as_mut()
+            .ok_or(Fault::InstallationResources)?;
         let pairwise = station_pairwise(&driver.keys);
         let mut sink = Sink::default();
         let result = {
@@ -209,7 +224,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             step(&mut port).map_err(|fault| self.fault(fault))
         };
         let contract = sink.fault().or_else(|| {
-            (!sink.removed.is_empty() || !sink.completed.is_empty()).then_some(Fault::Capacity)
+            (!sink.removed.is_empty() || !sink.completed.is_empty())
+                .then_some(Fault::ArenaCoreContract)
         });
         if let Some(fault) = contract {
             self.held.storage.poison(fault);

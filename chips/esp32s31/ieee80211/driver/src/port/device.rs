@@ -340,7 +340,7 @@ where
                         .permit(
                             oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel),
                         )
-                        .map_err(|_| Fault::Capacity)?;
+                        .map_err(|_| Fault::ChannelNotPermitted)?;
                     self.power = Some(Power::new(report.tx_power, permit.tx_ceiling(self.limits)));
                     self.active = Some(Active {
                         registers,
@@ -372,7 +372,7 @@ where
             let permit = self
                 .domain
                 .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
-                .map_err(|_| Fault::Capacity)?;
+                .map_err(|_| Fault::ChannelNotPermitted)?;
             let ceiling = permit.tx_ceiling(self.limits);
             // The paused radio and its actor cell leave together, or the
             // device keeps both and reports the missing owner.
@@ -394,8 +394,8 @@ where
                 };
             let wifi = context.into_stopped(platform, registers);
             self.retune = Some(wifi.start_retune(actor, permit, ceiling));
-            cx.waker().wake_by_ref();
-            return Poll::Pending;
+            // Poll the retune at once: its future registers `cx` itself.
+            return <Self as Device<B>>::poll_start(self, cx, channel);
         }
         if core::mem::take(&mut self.paused) {
             session.reattach();
@@ -587,6 +587,80 @@ where
             Poll::Pending
         }
     }
+    fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
+        if self.cut || self.pausing {
+            return Ok(false);
+        }
+        let session = self.session.as_mut().map_err(|e| *e)?;
+        if let Poll::Ready(facts) = session.poll_received(cx) {
+            let facts = facts.map_err(Fault::Receive)?;
+            // A returned staging credit rearms the ring as a received unit
+            // fills it: both are ring work.
+            self.rx_pending |= !facts.is_empty();
+        }
+        Ok(!self.received.0.get_mut().is_empty() || self.rx_pending)
+    }
+    fn pull_unit(
+        &mut self,
+        receive_room: usize,
+        now: Instant,
+    ) -> Result<DevicePull<Self::Receive>, Fault> {
+        suspend_rx_continuation(receive_room, &mut self.continuation);
+        if receive_room == 0 || self.cut || self.pausing {
+            return Ok(DevicePull::Empty);
+        }
+        if let Some(frame) = self.received.0.get_mut().pop_front() {
+            return Ok(DevicePull::Unit(StagedReceive(frame)));
+        }
+        if !self.rx_pending {
+            return Ok(DevicePull::Empty);
+        }
+        if let Some(at) = self.continuation.filter(|at| now < *at) {
+            return Ok(DevicePull::Later(at));
+        }
+        let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
+        let session = self.session.as_mut().map_err(|e| *e)?;
+        self.continuation = None;
+        // The ring is serviced at the turn's instant, not a fresh reading.
+        let clock = TurnClock {
+            now,
+            timer: &self.timer,
+        };
+        let progress = session
+            .port_service(
+                &mut active.registers,
+                &self.doorbell,
+                &clock,
+                &self.received,
+            )
+            .map_err(Fault::Receive)?;
+        use crate::datapath::DatapathRxProgress as Progress;
+        let mut again = false;
+        match progress {
+            Progress::Drained | Progress::UpperLayerBlockedButDroppable => {
+                self.rx_pending = false;
+                self.streak = 0;
+                session.port_unmask(&self.doorbell);
+            }
+            Progress::StageCapacityBlocked => {}
+            _ => {
+                if self.streak < IMMEDIATE_CONTINUATIONS {
+                    self.streak += 1;
+                    again = true;
+                } else {
+                    self.streak = 0;
+                    self.continuation = Some(now.saturating_add(CONTINUATION_WAIT));
+                }
+            }
+        }
+        Ok(match self.received.0.get_mut().pop_front() {
+            Some(frame) => DevicePull::Unit(StagedReceive(frame)),
+            None if again => DevicePull::Again,
+            None => self
+                .continuation
+                .map_or(DevicePull::Empty, DevicePull::Later),
+        })
+    }
     fn recycle(&mut self, frame: Self::Receive) {
         drop(frame);
         self.rx_pending = true;
@@ -623,5 +697,24 @@ where
         if let Some(active) = self.active.as_mut() {
             crate::mac::crypto::erase_lower_mac_keys(&mut active.registers);
         }
+    }
+}
+
+/// The turn's one instant, as the data port's receive service reads the
+/// clock; waiting still uses the device's timer.
+struct TurnClock<'a, T> {
+    now: Instant,
+    timer: &'a T,
+}
+
+impl<T: Timer> oer_portable_time::Clock for TurnClock<'_, T> {
+    fn now(&self) -> Instant {
+        self.now
+    }
+}
+
+impl<T: Timer> Timer for TurnClock<'_, T> {
+    fn wait_until(&self, deadline: Instant) -> impl core::future::Future<Output = ()> {
+        self.timer.wait_until(deadline)
     }
 }

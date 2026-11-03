@@ -457,8 +457,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
                 }
                 return Ok(None);
             };
-            if let Some(event) = driver.admit(&mut **device, self.rx_out, self.storage, unit)? {
-                return Ok(Some(event));
+            if let Some((frame, meta)) =
+                driver.admit(&mut **device, self.rx_out, self.storage, unit)?
+            {
+                return Ok(Some(owned::OwnedEvent::Received { frame, meta }));
             }
         }
         cx.waker().wake_by_ref();

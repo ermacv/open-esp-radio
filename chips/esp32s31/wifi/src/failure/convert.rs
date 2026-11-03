@@ -49,6 +49,72 @@ pub(super) fn backend_fault(
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
         Source::Setting(v0) => BackendFault::Setting(setting_fault(v0)),
         Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
+        Source::CoreViewUnavailable(op) => BackendFault::CoreViewUnavailable(core_operation(op)),
+        Source::DuplicateCompletion { queue } => BackendFault::DuplicateCompletion { queue },
+        Source::RemovalOverflow => BackendFault::RemovalOverflow,
+        Source::CompletionWithoutPending { queue } => {
+            BackendFault::CompletionWithoutPending { queue }
+        }
+        Source::DescriptorMissing { queue } => BackendFault::DescriptorMissing { queue },
+        Source::ReturnRefused { queue } => BackendFault::ReturnRefused { queue },
+        Source::BlockAckReportMissing { queue } => BackendFault::BlockAckReportMissing { queue },
+        Source::AirMissing { queue } => BackendFault::AirMissing { queue },
+        Source::AttemptCounter { queue } => BackendFault::AttemptCounter { queue },
+        Source::StageMissing { queue } => BackendFault::StageMissing { queue },
+        Source::QueueFull { queue } => BackendFault::QueueFull { queue },
+        Source::ReceiveOverflow => BackendFault::ReceiveOverflow,
+        Source::ReceiveRange => BackendFault::ReceiveRange,
+        Source::EventQueueFull => BackendFault::EventQueueFull,
+        Source::ArenaCoreContract => BackendFault::ArenaCoreContract,
+        Source::InstallationResources => BackendFault::InstallationResources,
+        Source::EdcaUnsupported => BackendFault::EdcaUnsupported,
+        Source::ChannelNotPermitted => BackendFault::ChannelNotPermitted,
+        Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
+        Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
+        Source::CommandExpired(kind) => BackendFault::CommandExpired(command_kind(kind)),
+    }
+}
+
+pub(super) fn core_operation(
+    value: oer_chips_esp32s31_ieee80211_driver::port::CoreOp,
+) -> CoreOperation {
+    use oer_chips_esp32s31_ieee80211_driver::port::CoreOp as Source;
+    match value {
+        Source::Command => CoreOperation::Command,
+        Source::Tbtt => CoreOperation::Tbtt,
+        Source::Arena => CoreOperation::Arena,
+        Source::Publish => CoreOperation::Publish,
+    }
+}
+
+pub(super) fn key_operation(
+    value: oer_chips_esp32s31_ieee80211_driver::port::KeyOp,
+) -> KeyOperation {
+    use oer_chips_esp32s31_ieee80211_driver::port::KeyOp as Source;
+    match value {
+        Source::Install => KeyOperation::Install,
+        Source::Remove => KeyOperation::Remove,
+        Source::Replace => KeyOperation::Replace,
+        Source::Select => KeyOperation::Select,
+        Source::Transmit => KeyOperation::Transmit,
+    }
+}
+
+pub(super) fn command_kind(
+    value: oer_protocols_ieee80211_contracts_port::CommandKind,
+) -> PortCommandKind {
+    use oer_protocols_ieee80211_contracts_port::CommandKind as Source;
+    match value {
+        Source::InstallPairwise => PortCommandKind::InstallPairwise,
+        Source::InstallGroup => PortCommandKind::InstallGroup,
+        Source::ReplaceGroup => PortCommandKind::ReplaceGroup,
+        Source::SelectGroup => PortCommandKind::SelectGroup,
+        Source::RemovePairwise => PortCommandKind::RemovePairwise,
+        Source::RemoveGroup => PortCommandKind::RemoveGroup,
+        Source::Configure => PortCommandKind::Configure,
+        Source::CloseGate => PortCommandKind::CloseGate,
+        Source::SetEdca => PortCommandKind::SetEdca,
+        Source::SetBssColor => PortCommandKind::SetBssColor,
     }
 }
 

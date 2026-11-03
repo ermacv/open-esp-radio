@@ -489,6 +489,16 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {
         <Inner<W> as port::Device<TX>>::finish_rx_cut(&mut self.0)
     }
+    fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
+        <Inner<W> as port::Device<TX>>::poll_rx_work(&mut self.0, cx)
+    }
+    fn pull_unit(
+        &mut self,
+        room: usize,
+        now: oer_portable_time::Instant,
+    ) -> Result<port::DevicePull<Self::Receive>, Fault> {
+        <Inner<W> as port::Device<TX>>::pull_unit(&mut self.0, room, now)
+    }
     fn recycle(&mut self, frame: Self::Receive) {
         <Inner<W> as port::Device<TX>>::recycle(&mut self.0, frame)
     }

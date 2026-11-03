@@ -58,6 +58,98 @@ pub enum BackendFault {
     TuneNotRecorded,
     Setting(SettingFault),
     HardwareUnavailable,
+    /// The lower-MAC core was not in the view a step needed.
+    CoreViewUnavailable(CoreOperation),
+    /// A hardware queue completed twice in one service.
+    DuplicateCompletion {
+        queue: u8,
+    },
+    /// The core removed more keys than were installed.
+    RemovalOverflow,
+    /// A queue completed with no MPDU published on it.
+    CompletionWithoutPending {
+        queue: u8,
+    },
+    /// A completed descriptor held no memory, or its place was gone.
+    DescriptorMissing {
+        queue: u8,
+    },
+    /// A completion returned memory its buffer had not published.
+    ReturnRefused {
+        queue: u8,
+    },
+    /// A delivered BlockAckReq came without its BlockAck report.
+    BlockAckReportMissing {
+        queue: u8,
+    },
+    /// An ended MPDU recorded no transmission.
+    AirMissing {
+        queue: u8,
+    },
+    /// An attempt's transmission or retry count overflowed.
+    AttemptCounter {
+        queue: u8,
+    },
+    /// An attempt's retry plan had no stage at its position.
+    StageMissing {
+        queue: u8,
+    },
+    /// A queue held more attempts than there are tickets.
+    QueueFull {
+        queue: u8,
+    },
+    /// The receiver would hold more units than the port allows.
+    ReceiveOverflow,
+    /// A received unit's MPDU lay outside the unit.
+    ReceiveRange,
+    /// A receive cut's unit found the event queue full.
+    EventQueueFull,
+    /// The data arenas' step completed an MPDU or removed a key.
+    ArenaCoreContract,
+    /// The installation's descriptors, chains, tickets or buffers were not
+    /// all available.
+    InstallationResources,
+    /// The core refused the EDCA table.
+    EdcaUnsupported,
+    /// The regulatory domain did not permit the channel being started.
+    ChannelNotPermitted,
+    /// A key a command named was not installed, or no key place was free.
+    KeySlotMissing(KeyOperation),
+    /// Received units were returned or lent beyond the count held.
+    ReceiveAccounting,
+    /// A command the data port held at its barrier passed its bound.
+    CommandExpired(PortCommandKind),
+}
+/// The lower-MAC operation a missing core view stopped.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CoreOperation {
+    Command,
+    Tbtt,
+    Arena,
+    Publish,
+}
+/// The key operation that found no key.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KeyOperation {
+    Install,
+    Remove,
+    Replace,
+    Select,
+    Transmit,
+}
+/// The kind of a data-port command.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PortCommandKind {
+    InstallPairwise,
+    InstallGroup,
+    ReplaceGroup,
+    SelectGroup,
+    RemovePairwise,
+    RemoveGroup,
+    Configure,
+    CloseGate,
+    SetEdca,
+    SetBssColor,
 }
 /// Why the data arenas quarantined themselves.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
