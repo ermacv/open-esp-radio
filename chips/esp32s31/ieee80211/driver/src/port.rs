@@ -59,6 +59,8 @@ mod phase;
 mod receive;
 mod settings;
 use oer_portable_sync::PriorityWaker;
+#[cfg(oer_trace)]
+pub mod cycle;
 #[cfg(all(oer_trace, oer_debug_control))]
 pub mod trace;
 pub use buffer::*;

@@ -34,7 +34,7 @@ use static_cell::ConstStaticCell;
 use super::{Boot, Error, SamplerToken};
 use crate::observe::cpu::{Boundary, CpuCounter, ExecutorSample, Phase};
 use crate::observe::link::{Containment, LinkCounter, Rate, Settled, TxEnd};
-use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading};
+use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading, PartSample};
 use crate::observe::tracking::{Branches, Ran, Tick, TrackingCounter, TrackingSample};
 use crate::observe::{Bridge, BridgeCounter, Concurrent, StationHeld};
 
@@ -118,6 +118,22 @@ pub async fn parts() -> [PartReading; PARTS] {
             name: NAMES.name(number),
             sample: settled(|| counter.sample(now_us(), epoch)).await,
         };
+    }
+    // The driver keeps the aggregate cycle's spans itself.
+    #[cfg(all(feature = "wifi", oer_trace))]
+    for (part, span) in [
+        (LibraryPart::TxGap, &oer_chips_esp32s31_wifi::cycle::GAP),
+        (LibraryPart::TxAir, &oer_chips_esp32s31_wifi::cycle::AIR),
+    ] {
+        let (polls, total, longest) = span.read();
+        if let Some(reading) = readings.get_mut(part as usize) {
+            reading.sample = PartSample {
+                polls,
+                poll_us: total,
+                ended_us: total,
+                longest_us: (polls != 0).then_some(longest),
+            };
+        }
     }
     readings
 }

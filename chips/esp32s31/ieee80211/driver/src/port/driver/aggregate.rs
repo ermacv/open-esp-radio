@@ -376,7 +376,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         };
         match core.publish_ampdu(device.hardware()?, buffer, plan) {
-            Ok(published) => self.keep_running(index, Running::Aggregate { pending, published }),
+            Ok(published) => {
+                #[cfg(oer_trace)]
+                crate::port::cycle::published(device.timer().now().as_micros());
+                self.keep_running(index, Running::Aggregate { pending, published })
+            }
             Err(crate::lower_mac::ampdu::AmpduStartError::Expired(expired)) => {
                 // Aged at the publication edge: nothing reached the hardware.
                 let msdus = expired.expired_msdus();
@@ -505,7 +509,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             });
             match served {
                 Ok(AmpduServed::Pending) => continue,
-                Ok(AmpduServed::Ended) => {}
+                Ok(AmpduServed::Ended) => {
+                    #[cfg(oer_trace)]
+                    crate::port::cycle::ended(device.timer().now().as_micros());
+                }
                 Err(error) => {
                     // The failed publication leaves its queue's place
                     // retained, never dropped.

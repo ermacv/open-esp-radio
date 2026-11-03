@@ -645,6 +645,9 @@ pub mod radio;
 pub mod station;
 #[cfg(target_arch = "riscv32")]
 pub use dma::{DmaError, DmaResources};
+/// Diagnostic: the driver's aggregate cycle spans.
+#[cfg(oer_trace)]
+pub use oer_chips_esp32s31_ieee80211_driver::port::cycle;
 /// One reading of the S31 receive driver's counters.
 #[cfg(target_arch = "riscv32")]
 pub use oer_chips_esp32s31_ieee80211_driver::rx::counters::WifiRxReport;
