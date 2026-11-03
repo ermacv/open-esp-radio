@@ -6,6 +6,8 @@ use crate::data::MsduHeader;
 
 mod amsdu;
 pub use amsdu::{StaProtectedAmsduFrame, sta_protected_amsdu_frame_length};
+mod template;
+pub use template::{StaDataHeaderFields, StaDataHeaderTemplate};
 
 /// One unprotected 802.11 data MPDU sent by a station through its AP.
 ///
