@@ -73,9 +73,10 @@ pub use settings::SettingFault;
 /// aggregate takes one ticket, as an MPDU does.
 pub const TX_TICKETS: usize = 8;
 
-/// The transmit pool's buffers: two complete aggregates, one in the air
-/// while the next is built, and three for MPDUs beside them.
-pub const TX_BUFFERS: usize = 2 * TX_AMPDU_SUBFRAMES + 3;
+/// The transmit pool's buffers: three complete aggregates, one in the air,
+/// the next one growing and the network's queue behind them, and three for
+/// MPDUs beside them.
+pub const TX_BUFFERS: usize = 3 * TX_AMPDU_SUBFRAMES + 3;
 
 /// The aggregate descriptor chains: the one an aggregate in the air holds
 /// and the one the next aggregate publishes through.

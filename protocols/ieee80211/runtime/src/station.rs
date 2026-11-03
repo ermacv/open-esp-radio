@@ -526,9 +526,9 @@ type Uninstalled<'id, B, C, S, const GROUPS: usize, O, Out> = (
     RetiredService<'id, B, C, S, GROUPS, O>,
 );
 
-/// The most data buffers a station service's data machine holds: two
-/// aggregates' worth of MPDUs, one on the air and one waiting.
-pub const DATA_BUFFERS: usize = 2 * oer_protocols_ieee80211_core_roles_sta::data::MAX_AGGREGATE;
+/// The most data buffers a station service's data machine holds: three
+/// aggregates' worth of MPDUs, one on the air, one growing and one queued.
+pub const DATA_BUFFERS: usize = 3 * oer_protocols_ieee80211_core_roles_sta::data::MAX_AGGREGATE;
 
 /// The data machine of the service on the port `B`.
 pub type PortData<'id, B> = StaData<
