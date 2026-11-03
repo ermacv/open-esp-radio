@@ -40,12 +40,7 @@ fn a_station_without_a_profile_refuses_connect_and_keeps_its_credit() {
         let refused = world.command(at(0), 1, StaCommand::Connect).unwrap_err();
         assert_eq!(refused.reason, CommandRefusal::NoProfile);
         assert!(world.command_credits.connect.is_some());
-        assert!(
-            world
-                .station
-                .poll_action(at(0), &mut world.losses)
-                .is_none()
-        );
+        assert!(world.poll(at(0)).is_none());
         assert_eq!(world.station.policy(), None);
     });
 }

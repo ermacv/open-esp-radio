@@ -83,20 +83,38 @@ Commands and network frames travel through `oer_portable_memory::WakingSpscQueue
 
 Every transmission's parameters come from the cores: a station frame's rate
 plan, coexistence class, access category, protection exchange and power from
-`sta`'s action and its CCMP packet number from the station's pairwise key.
+`sta`'s action. Before its link exists the station numbers its frames and
+its CCMP packet number comes from the station's pairwise key; once it
+handed the link over, the service numbers each of its frames from the link
+(`FrameNumber::Link`): the Sequence Number of its space first, its packet
+number from the link's key once its rate is known.
 The service prepares the port's source in the buffer pool, submits it and
 routes each terminal back; a terminal's rate sample reaches
 `RateSelection::learn` with its frame class.
 
+The service holds the station's link from the station's handover at
+connect (`LinkAction::HandOver`) to its return at disconnect
+(`LinkAction::Return`, `Station::link_returned`), and before the station
+finishes. It admits the link's received data itself: data MSDUs go to the
+network, EAPOL to `Station::eapol`, every other frame and every frame
+before the link to `Station::receive`. The station's holds and releases of
+the link's data (sleep, absences, key confirmation) reach the service
+right after the input that caused them (`Station::poll_link`), before it
+takes the network's next MSDU; transmit agreement changes come with the
+step's actions. A group key's terminal switches its replay lane in the
+link before the station takes it.
+
 Data goes through the station phase's two data arenas
 (`StationPhase::data_arena`), filled and published by `sta`'s data plane
 (`station::data_tx`). The service claims the arenas' rights at its first
-step, hands the plane the station's link once it connects
-(`DataLink::for_link`) and takes it back once the connection ends, and
-tells it each transmit agreement that starts or ends and the port's A-MPDU
-limits at the aggregate rate whenever a rate lesson may have changed them.
-Each network MSDU goes to the plane with the turn's instant, its numbers
-drawn from the station's link; one the standby arena cannot take waits in
+step, hands the plane the link's data state at the first pass after the
+link first carries data, stops the plane's link when the station takes the
+link back, and tells the plane each transmit agreement that starts, moves
+or ends and the port's A-MPDU limits at the aggregate rate whenever a rate
+lesson may have changed them. Each network MSDU goes to the plane with the
+turn's instant, its numbers drawn from the link, and each TID that took
+one tells the station its next sequence number (`Station::tx_traffic`);
+one the standby arena cannot take waits in
 the service (one MSDU), and the network's queue is not read meanwhile. Each
 publication takes one rate plan, single or aggregate; a refused one goes
 again at the next pass. An arena's completion comes back as the port's

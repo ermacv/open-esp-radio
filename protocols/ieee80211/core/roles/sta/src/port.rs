@@ -204,6 +204,14 @@ where
     fn association(key: &Self::PairwiseKey) -> &Self::Association {
         &key.association
     }
+    type LinkKey = InstalledCcmpTxKey<<Ty::StationKeys as KeyTypes<'id>>::PairwiseKey>;
+    fn lend(key: Self::PairwiseKey) -> (Self::Association, Self::LinkKey) {
+        let StationPairwiseKey { key, association } = key;
+        (association, key)
+    }
+    fn reunite(association: Self::Association, key: Self::LinkKey) -> Self::PairwiseKey {
+        StationPairwiseKey { key, association }
+    }
 
     type GroupKey = <Ty::StationKeys as KeyTypes<'id>>::GroupKey;
     type GroupPermission = <Ty::StationKeys as KeyTypes<'id>>::GroupPermission;

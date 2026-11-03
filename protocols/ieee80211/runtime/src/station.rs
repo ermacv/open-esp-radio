@@ -111,11 +111,12 @@ pub use control::{
     ControlRefused, Device, Events, Operation, OperationEnd, RunnerControl, State, Status,
     StatusReader, TxRefused, TxSupply, UnreadOperation,
 };
-use data_tx::DataTx;
+use data_tx::{DataTx, PortLink};
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
 use core::marker::PhantomData;
 use oer_portable_events::{EventSink, report};
+use oer_protocols_ieee80211_core_roles_sta::link::{FrameNumber, LinkRx};
 use oer_protocols_ieee80211_core_roles_sta::machine::TxRefusal;
 
 use core::future::{Future, poll_fn};
@@ -1048,6 +1049,7 @@ impl<
                 arbiter,
                 state: ServiceState {
                     station,
+                    link: None,
                     data,
                     events,
                     rates,
@@ -1134,6 +1136,9 @@ struct ServiceState<
 > {
     /// The station.
     station: PortStation<'id, B, C, GROUPS>,
+    /// The station's link while the service holds it: it numbers the
+    /// link's frames and admits its data.
+    link: Option<PortLink<'id, B>>,
     /// Its data transmission over the port's data arenas.
     data: DataTx<B::TxMemory>,
     /// The rates of the station's frames and data.
@@ -1249,6 +1254,7 @@ impl<
             arbiter,
             state: ServiceState {
                 station,
+                link: None,
                 data: DataTx::new(),
                 rates,
                 terminal_access,
@@ -1307,6 +1313,7 @@ impl<
                 arbiter: arbiter,
                 state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, C, S, GROUPS, O>>| oer_portable_memory::init_in_place!(place, ServiceState {
                     station => |place| { let (station, granted) = station(place); credits.set(CommandCredits::new(granted)); station },
+                    link: None,
                     data: DataTx::new(),
                     rates: rates,
                     terminal_access: terminal_access,
@@ -1362,10 +1369,11 @@ impl<
                 oer_protocols_ieee80211_core_arbiter::LeaveReason::PortFailed,
             ),
         };
-        let (station, data, mut rates, mut events, terminal_access, pending) = oer_portable_memory::unpack_placed!(
+        let (mut station, link, data, mut rates, mut events, terminal_access, pending) = oer_portable_memory::unpack_placed!(
             state,
             ServiceState {
                 station,
+                link,
                 data,
                 rates,
                 events,
@@ -1373,6 +1381,9 @@ impl<
                 pending
             }
         );
+        // The station takes its link back before it finishes: its pairwise
+        // key retires with its bank.
+        data_tx::return_link::<B, C, GROUPS>(&mut link.read(), &mut station);
         let pending = pending.read();
         let network = pending.network;
         let completed = oer_portable_memory::Placed::init(output, |place| {
@@ -1459,7 +1470,8 @@ impl<
             }
         };
         let ServiceState {
-            station,
+            mut station,
+            link,
             data,
             mut rates,
             events,
@@ -1467,6 +1479,9 @@ impl<
             terminal_access,
         } = state;
         let network = pending.network;
+        // The station takes its link back before it finishes: its pairwise
+        // key retires with its bank.
+        data_tx::return_link::<B, C, GROUPS>(&mut { link }, &mut station);
         let (mut station, mut places) = station.finish(reason);
         rates.disconnected();
         while let Some(notice) = arbiter.poll_notice() {
@@ -1958,7 +1973,7 @@ impl<
                 .into_iter()
                 .flatten()
                 .min();
-                let sending = self.data.accepts() && self.station.link().is_some();
+                let sending = data_tx::accepts::<B>(self.link.as_ref(), &self.data);
                 // The memory ended MPDUs held goes back to the network while
                 // its queue has room; what still waits wakes the service
                 // when the network makes room.
@@ -2121,7 +2136,17 @@ impl<
                     }
                 }
             }
-            let transmit = if transmit && self.data.accepts() && self.station.link().is_some() {
+            // The inputs above may have held, released or ended the link: its
+            // holder takes that before it carries data again.
+            if let Err(fault) = self.link_changes(phase) {
+                return match fault {
+                    fault @ (ServiceFault::Backend(_) | ServiceFault::Submission(_)) => {
+                        self.drain_port_error(arbiter, phase, timer, fault).await
+                    }
+                    fault => Served::Failed(fault.into()),
+                };
+            }
+            let transmit = if transmit && data_tx::accepts::<B>(self.link.as_ref(), &self.data) {
                 B::span(ServiceSpan::Transmit, false);
                 let taken = self.send_queued(now, phase, io);
                 B::span(ServiceSpan::Transmit, true);
@@ -2399,6 +2424,7 @@ impl<
                     &self.rates,
                     &mut self.events,
                     &mut self.pending,
+                    &mut self.link,
                     &mut self.data,
                     action,
                 )
@@ -2428,6 +2454,7 @@ impl<
                             &self.rates,
                             &mut self.events,
                             &mut self.pending,
+                            &mut self.link,
                             &mut self.data,
                             action,
                         )
@@ -2490,6 +2517,9 @@ impl<
         match follow {
             Follow::Nothing => {}
             Follow::Input(input) => self.station.input(now, input, &mut self.events),
+            Follow::ReturnLink => {
+                data_tx::return_link::<B, C, GROUPS>(&mut self.link, &mut self.station)
+            }
             // The rates start from what the association made known.
             Follow::Associated(peer) => {
                 self.rates
@@ -2497,9 +2527,9 @@ impl<
             }
             Follow::Notice(notice) => {
                 if let StaNotice::Connected { .. } = notice
-                    && let Some(link) = self.station.link()
+                    && let Some(link) = self.link.as_ref().filter(|link| link.carries())
                 {
-                    io.control.state.epoch(link.epoch.sequence());
+                    io.control.state.epoch(link.epoch().sequence());
                 }
                 io.output.emit(ServiceOutput::Notice(notice.into()));
                 if let StaNotice::Disconnected(_) = notice {
@@ -2781,7 +2811,11 @@ impl<
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
-        let local = self.station.link().map(|link| link.address.get());
+        let local = self
+            .link
+            .as_ref()
+            .filter(|link| link.carries())
+            .map(|link| link.rx().address().get());
         let (frame, meta) =
             match self
                 .pending
@@ -2889,38 +2923,45 @@ impl<
         let mut several = false;
         let bytes = frame.bytes();
         let takes = io.network.takes_frames();
-        let result = self.station.receive(
-            now,
-            bytes,
-            meta,
-            |delivery| {
-                if !takes {
-                    // No network: the frame's buffer goes back at once.
-                    if counted {
-                        count_refusal(&mut refused, Some(MsduRefusal::NoNetwork));
-                    }
-                    return;
+        let deliver = |delivery: data::MsduDelivery<'_>| {
+            if !takes {
+                // No network: the frame's buffer goes back at once.
+                if counted {
+                    count_refusal(&mut refused, Some(MsduRefusal::NoNetwork));
                 }
-                B::span(ServiceSpan::Queue, false);
-                if first.is_none() && !several {
-                    first = Some(delivery.plan());
-                } else {
-                    several = true;
-                    let earlier = first
-                        .take()
-                        .map(|plan| Self::copy_received(io, bytes, &plan));
-                    let refusal = Self::copy_received(io, bytes, &delivery.plan());
-                    if counted {
-                        for refusal in earlier.into_iter().chain([refusal]) {
-                            count_refusal(&mut refused, refusal);
-                            copied.aggregated = copied.aggregated.saturating_add(1);
-                        }
+                return;
+            }
+            B::span(ServiceSpan::Queue, false);
+            if first.is_none() && !several {
+                first = Some(delivery.plan());
+            } else {
+                several = true;
+                let earlier = first
+                    .take()
+                    .map(|plan| Self::copy_received(io, bytes, &plan));
+                let refusal = Self::copy_received(io, bytes, &delivery.plan());
+                if counted {
+                    for refusal in earlier.into_iter().chain([refusal]) {
+                        count_refusal(&mut refused, refusal);
+                        copied.aggregated = copied.aggregated.saturating_add(1);
                     }
                 }
-                B::span(ServiceSpan::Queue, true);
-            },
-            &mut self.events,
-        );
+            }
+            B::span(ServiceSpan::Queue, true);
+        };
+        // The link admits its own data, its EAPOL goes to the station; any
+        // other frame, and every frame before the link, is the station's.
+        let station = &mut self.station;
+        let routed = match self.link.as_mut() {
+            Some(link) => link.receive(bytes, &meta, deliver, |payload, protection| {
+                station.eapol(payload, protection)
+            }),
+            None => LinkRx::Station,
+        };
+        let result = match routed {
+            LinkRx::Taken(result) => result,
+            LinkRx::Station => self.station.receive(now, bytes, meta, &mut self.events),
+        };
         let kept = match first {
             None => Some(frame),
             Some(plan) => {
@@ -3310,6 +3351,12 @@ impl<
         self.pending
             .admissions
             .remove(PendingTerminal::Control(ControlTerminal::GroupChange));
+        // Only the terminal switches a group key's replay lane: the link's
+        // holder applies it to the link's replay check first.
+        let mut input = input;
+        if let Some(link) = self.link.as_mut() {
+            link.group_terminal(&mut input);
+        }
         self.station.input(now, input, &mut self.events);
         Ok(())
     }
@@ -3382,6 +3429,8 @@ enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: 
     },
     /// The station left: the rates leave its peer.
     Notice(StaNotice),
+    /// The station asked for its link back.
+    ReturnLink,
     /// A submission's ticket's place held another context or lies beyond
     /// the storage: the context stays with the service's fault, the ticket
     /// with the port.
@@ -3463,20 +3512,35 @@ where
     })
 }
 
-/// Submit a station frame with its phase rate and optional pairwise key.
-/// Preparation refusal returns the operation to the station without admission.
+/// Submit a station frame with its phase rate and optional pairwise key: the
+/// station's own installed key, or the link's for a frame the link numbers.
+/// A frame the link numbers takes its Sequence Number first, as the
+/// station's own frames do when they are encoded; its packet number follows
+/// its rate. Preparation refusal returns the operation to the station
+/// without admission.
 fn submit_station<'p, 'id: 'p, B, P, S, const GROUPS: usize>(
     phase: &mut P,
     rates: &S,
     pending: &mut PendingActions<'id, B>,
+    link: Option<&mut PortLink<'id, B>>,
     key: Option<&StationPairwiseKey<'id, <B::Types<'id> as PhaseTypes<'id>>::StationKeys>>,
-    transmit: StaTransmit<'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
+    mut transmit: StaTransmit<'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
 where
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
 {
+    let numbered = match transmit.number {
+        FrameNumber::Open => Ok(None),
+        FrameNumber::Link { protected, .. } => match link {
+            Some(link) => link
+                .numbers_mut()
+                .number(&mut transmit)
+                .map(|()| Some((protected, &*link))),
+            None => Err(TxRefusal::LinkChanged),
+        },
+    };
     let StaTransmit {
         context,
         ticket,
@@ -3485,7 +3549,19 @@ where
         class,
         plan,
         access_category,
+        number: _,
     } = transmit;
+    let link = match numbered {
+        Ok(link) => link,
+        Err(reason) => {
+            return Ok(Follow::Refused {
+                context,
+                ticket,
+                buffer: <B::Types<'id> as TxBufferPool<'id, B::Small>>::erase(buffer),
+                reason,
+            });
+        }
+    };
     let frame = match frame
         .rated(plan, rates, |rate| phase.rate(rate))
         .ok_or(TxRefusal::NoRate)
@@ -3500,9 +3576,25 @@ where
             });
         }
     };
-    let protection = match key {
+    let numbered = match (key, link) {
+        (Some(key), _) => Some(key.number()),
+        (None, Some((true, link))) => match link.numbers().key() {
+            Some(key) => Some(key.number()),
+            // A protected frame of an open link does not go.
+            None => {
+                return Ok(Follow::Refused {
+                    context,
+                    ticket,
+                    buffer: <B::Types<'id> as TxBufferPool<'id, B::Small>>::erase(buffer),
+                    reason: TxRefusal::LinkChanged,
+                });
+            }
+        },
+        (None, Some((false, _)) | None) => None,
+    };
+    let protection = match numbered {
         None => TxProtection::Open,
-        Some(key) => match key.number() {
+        Some(numbered) => match numbered {
             Some(numbered) => TxProtection::Ccmp(numbered),
             None => {
                 return Ok(Follow::Refused {
@@ -3585,6 +3677,7 @@ fn station_action<
     rates: &S,
     events: &mut O,
     pending_actions: &mut PendingActions<'id, B>,
+    link: &mut Option<PortLink<'id, B>>,
     data: &mut DataTx<B::TxMemory>,
     action: StaAction<'_, 'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
@@ -3595,6 +3688,15 @@ where
     O: StationEvents,
 {
     let input = match action {
+        StaAction::Link(action) => {
+            return Ok(
+                if data_tx::link_action::<B, P>(link, data, phase, events, action)? {
+                    Follow::ReturnLink
+                } else {
+                    Follow::Nothing
+                },
+            );
+        }
         StaAction::BlockAck(request) => {
             pending_actions
                 .receive
@@ -3761,6 +3863,7 @@ where
                 phase,
                 rates,
                 pending_actions,
+                link.as_mut(),
                 None,
                 transmit,
             );
@@ -3770,6 +3873,7 @@ where
                 phase,
                 rates,
                 pending_actions,
+                link.as_mut(),
                 Some(key),
                 transmit,
             );

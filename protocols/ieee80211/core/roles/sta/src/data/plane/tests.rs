@@ -186,7 +186,7 @@ fn retried(frame: &[u8]) -> bool {
 
 struct World<'p, 'id> {
     rates: Rates<'p, 'id>,
-    /// The station's QoS sequence spaces, which each intake borrows.
+    /// The link's QoS sequence spaces, which each intake draws from.
     sequences: [SequenceCounter; 8],
     /// The station's pairwise key and its packet numbers.
     key: Option<InstalledCcmpTxKey<TestKey>>,
@@ -232,14 +232,19 @@ impl<'p, 'id: 'p> World<'p, 'id> {
         self.intake(msdu(tag, tid))
     }
 
-    /// Offer `msdu` with the station's numbers.
+    /// Offer `msdu` with the link's numbers.
     fn intake(&mut self, msdu: OutboundMsdu<ModelNetworkMemory>) -> Intake<ModelNetworkMemory> {
         let now = self.now();
-        let numbers = LinkNumbers {
-            sequences: LinkMode::Qos(&mut self.sequences),
-            packet_numbers: self.key.as_ref().map(InstalledCcmpTxKey::packet_numbers),
-        };
-        self.plane.intake(&mut self.arena, msdu, numbers, now)
+        let mut numbers = TxNumbers::new(
+            SequenceCounter::new(SequenceNumber::ZERO),
+            Some(self.sequences),
+            self.key.take(),
+        );
+        let intake = self.plane.intake(&mut self.arena, msdu, &mut numbers, now);
+        let (_, sequences, key) = numbers.into_parts();
+        self.sequences = sequences.unwrap();
+        self.key = key;
+        intake
     }
 
     fn taken(&mut self, tag: u8, tid: WmmUserPriority) {
@@ -708,21 +713,21 @@ fn shared_spaces<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 
 fn numbering<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let mut world = World::new(rates, link(LinkProtection::Open));
-    let mut counter = SequenceCounter::new(SequenceNumber::from_low_bits(0));
-    let numbers = LinkNumbers {
-        sequences: LinkMode::NonQos(&mut counter),
-        packet_numbers: None,
-    };
+    let mut numbers = TxNumbers::<InstalledCcmpTxKey<TestKey>>::new(
+        SequenceCounter::new(SequenceNumber::from_low_bits(0)),
+        None,
+        None,
+    );
     let now = world.now();
     let Intake::Refused { reason, .. } =
         world
             .plane
-            .intake(&mut world.arena, msdu(0, BE), numbers, now)
+            .intake(&mut world.arena, msdu(0, BE), &mut numbers, now)
     else {
         panic!("a QoS template refuses the station's non-QoS space");
     };
     assert_eq!(reason, IntakeRefusal::Numbering);
-    assert_eq!(counter.peek().get(), 0);
+    assert_eq!(numbers.next(BE).get(), 0);
 }
 
 fn withdraw_unpublished<'p, 'id: 'p>(rates: Rates<'p, 'id>) {

@@ -329,6 +329,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         #[allow(dead_code)]
         struct Unobserved<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, C: StaCallbacks, S> {
             station: PortStation<'id, B, C, 1>,
+            link: Option<super::super::data_tx::PortLink<'id, B>>,
             data: DataTx<B::TxMemory>,
             rates: S,
             terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<

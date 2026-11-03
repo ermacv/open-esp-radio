@@ -130,7 +130,7 @@ fn rekey(ptk: &Ptk, counter: u64, gtk: u8, igtk: u8) -> Vec<u8> {
 
 fn assert_released(world: &mut World<'_>) {
     assert!(matches!(world.station.state, State::Idle));
-    assert!(world.station.link().is_none());
+    assert!(world.link.is_none());
     assert!(world.station.keys.clear());
     assert_eq!(world.station.tickets.len(), 2);
     assert_eq!(world.station.buffers.len(), 2);
@@ -169,7 +169,7 @@ fn sa_query_deadline_overflow_disconnects_once_and_returns_every_key_and_credit(
             "no unschedulable SA Query is sent"
         );
         assert!(world.station.poll_deadline().is_none());
-        assert!(world.station.poll_action(late, &mut world.losses).is_none());
+        assert!(world.poll(late).is_none());
     });
 }
 
@@ -346,7 +346,7 @@ fn same_igtk_rekey_keeps_its_ipn_and_a_new_igtk_activates_at_the_terminal() {
         );
         world.hold_key_installs = false;
         for input in world.pending_installs.drain(..).collect::<Vec<_>>() {
-            world.station.input(at(45), input, &mut world.losses);
+            world.input(at(45), input);
         }
         world.run(at(45));
         world.receive(at(46), &wire(GROUP_DEAUTH_NEXT));
@@ -397,23 +397,26 @@ fn query_timeout_and_local_leave_keep_the_pairwise_key_until_protected_tx_return
                 let (mut world, _, _) = connected(mint);
                 let now = if timeout {
                     world.receive(at(50), &plain_disconnect(0xa0, 6));
-                    world
-                        .station
-                        .input(at(1074), StaInput::Tick, &mut world.losses);
+                    world.input(at(1074), StaInput::Tick);
                     at(1074)
                 } else {
                     world.command(at(50), 8, StaCommand::Disconnect).unwrap();
                     at(50)
                 };
-                let Some(StaAction::TransmitProtected { transmit, .. }) =
-                    world.station.poll_action(now, &mut world.losses)
-                else {
+                // A station that leaves on its own deadline asks for its link
+                // back in the same step, before it owes the frame.
+                let mut polled = world.poll(now);
+                if let Some(StaAction::Link(action)) = polled {
+                    world.link_action(action);
+                    polled = world.poll(now);
+                }
+                let Some(StaAction::TransmitProtected { transmit, .. }) = polled else {
                     panic!("protected Deauthentication");
                 };
                 world.transmitted(transmit, true);
                 assert_eq!(world.frames.last().unwrap()[..2], [0xc0, 0x40]);
                 assert!(matches!(world.station.keys.pairwise, KeyCell::Installed(_)));
-                assert!(world.station.poll_action(now, &mut world.losses).is_none());
+                assert!(world.poll(now).is_none());
                 match outcome {
                     Some(outcome) => world.outcomes.push_back((outcome, true)),
                     None => world.unsend_next = true,

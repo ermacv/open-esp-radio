@@ -1,18 +1,27 @@
-//! The service's data transmission over the port's two data arenas.
+//! The service's data transmission over the port's two data arenas, and the
+//! station's link it carries.
+//!
+//! The station hands its link over at connect ([`LinkAction::HandOver`]):
+//! the service keeps it ([`PortLink`]), numbers the link's data and the
+//! station's own frames from it and admits the link's received data
+//! without the station. The station holds and releases the link's data
+//! ([`LinkAction::Hold`], [`LinkAction::Release`]), tells each change of a
+//! transmit agreement ([`LinkAction::Agreement`]) and takes the link back
+//! at disconnect ([`LinkAction::Return`]): the frames the arenas hold
+//! unpublished and the waiting MSDU go back to the network then.
 //!
 //! The station's data plane ([`DataPlane`]) fills and publishes the arenas
-//! the station phase lends ([`StationPhase::data_arena`]). The service hands
-//! it the station's link at connect and takes it back at disconnect; each
-//! intake draws the MPDU's numbers from the station's link, whose spaces
-//! the station's own frames share. It keeps one network MSDU the standby
-//! arena cannot take yet ([`Intake::Wait`]) and the network's memory every
-//! ended frame returns until the network's queue takes it back. A
-//! publication takes one rate plan; an arena's completion comes back as the
-//! port's terminal ([`TxCompleted::Arena`]) and is settled at the next step,
-//! which owes the access point a BlockAckReq when the plane dropped a frame
-//! under an agreement and teaches the rate selection. Before a new pairwise
-//! key or a key removal, the frames written under the old key are withdrawn
-//! from the arenas that have not published them.
+//! the station phase lends ([`StationPhase::data_arena`]). It takes the
+//! link's data state at the first pass after the link first carries data;
+//! each intake draws the MPDU's numbers from the link. It keeps one network
+//! MSDU the standby arena cannot take yet ([`Intake::Wait`]) and the
+//! network's memory every ended frame returns until the network's queue
+//! takes it back. A publication takes one rate plan; an arena's completion
+//! comes back as the port's terminal ([`TxCompleted::Arena`]) and is settled
+//! at the next step, which owes the access point a BlockAckReq when the
+//! plane dropped a frame under an agreement and teaches the rate selection.
+//! Before a new pairwise key or a key removal, the frames written under the
+//! old key are withdrawn from the arenas that have not published them.
 //!
 //! [`StationPhase::data_arena`]: oer_protocols_ieee80211_contracts_port::StationPhase::data_arena
 //! [`TxCompleted::Arena`]: oer_protocols_ieee80211_contracts_port::TxCompleted::Arena
@@ -23,24 +32,38 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 };
 use oer_protocols_ieee80211_contracts_port::{AmpduPhase, StationPhase};
 use oer_protocols_ieee80211_core_roles_sta::data::plane::{
-    AggregateRate, DataLink, DataPlane, HtLimits, Intake, LinkNumbers, OutboundMsdu, PpduKind,
-    SettleError, TxWindow,
+    AggregateRate, DataPlane, Intake, OutboundMsdu, PpduKind, SettleError,
 };
-use oer_protocols_ieee80211_core_roles_sta::machine::{LinkMode, LinkProtection};
-use oer_protocols_ieee80211_core_upper_mac::block_ack::OperationalTxBlockAck;
+use oer_protocols_ieee80211_core_roles_sta::link::{LinkAction, LinkHandover};
 
 /// The network memory the station holds at most: both arenas' frames and
 /// the one MSDU that waits for the standby.
 const HELD: usize = 2 * ARENA_FRAMES as usize + 1;
 
+/// The transmit half of the station's pairwise key on the port `B`, which
+/// the link numbers its protected MPDUs with.
+pub(super) type PortLinkKey<'id, B> = oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey<
+    <<<B as StationPort>::Types<'id> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::PairwiseKey,
+>;
+
+/// The station's link on the port `B`, while the service holds it.
+pub(super) type PortLink<'id, B> = LinkHandover<
+    'id,
+    <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::EpochPath,
+    PortLinkKey<'id, B>,
+>;
+
+/// What the station tells the service of its link on the port `B`.
+pub(super) type PortLinkAction<'id, B> = LinkAction<
+    'id,
+    <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::EpochPath,
+    PortLinkKey<'id, B>,
+>;
+
 /// The data transmission's state beside the station.
 pub(super) struct DataTx<M> {
     /// The plane over the arenas, once the first phase lent their rights.
     plane: Option<DataPlane>,
-    /// The connection the plane holds the link of.
-    epoch: Option<u64>,
-    /// Each TID's transmit agreement as the plane last heard it.
-    agreements: [Option<OperationalTxBlockAck>; 8],
     /// The MSDU the standby arena could not take yet.
     deferred: Option<OutboundMsdu<M>>,
     /// The network's memory of ended frames, until the network's queue
@@ -52,15 +75,13 @@ impl<M> DataTx<M> {
     pub(super) const fn new() -> Self {
         Self {
             plane: None,
-            epoch: None,
-            agreements: [None; 8],
             deferred: None,
             freed: heapless::Deque::new(),
         }
     }
 
-    /// Whether the service takes the network's next MSDU: the plane holds a
-    /// link and no MSDU waits.
+    /// Whether the plane takes the network's next MSDU: it holds a link and
+    /// no MSDU waits.
     pub(super) fn accepts(&self) -> bool {
         self.deferred.is_none() && self.plane.as_ref().is_some_and(DataPlane::is_connected)
     }
@@ -93,11 +114,90 @@ impl<M> DataTx<M> {
     }
 }
 
+/// Whether the service takes the network's next MSDU: the station's link
+/// carries data and the plane takes one.
+pub(super) fn accepts<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
+    link: Option<&PortLink<'id, B>>,
+    data: &DataTx<B::TxMemory>,
+) -> bool {
+    link.is_some_and(LinkHandover::carries) && data.accepts()
+}
+
 /// Keep `memory` for the network; the bound holds every memory the station
 /// can hold, so a refusal keeps it quarantined rather than dropping it.
 fn free<M>(freed: &mut heapless::Deque<M, HELD>, memory: M) {
     if let Err(memory) = freed.push_back(memory) {
         let _quarantined = core::mem::ManuallyDrop::new(memory);
+    }
+}
+
+/// Take one change the station made to its link: keep the link it hands
+/// over, hold or release its data, tell the plane (or the link's data state
+/// it has not taken yet) a transmit agreement, or stop the link's data.
+/// Whether the station asked for its link back: the caller hands the held
+/// link to the station ([`return_link`]) once the action no longer borrows
+/// it. A second handover while the service holds a link is a contract
+/// violation; the service keeps the link it holds and quarantines the new
+/// one.
+pub(super) fn link_action<'p, 'id: 'p, B, P>(
+    link: &mut Option<PortLink<'id, B>>,
+    data: &mut DataTx<B::TxMemory>,
+    phase: &mut P,
+    events: &mut impl EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent>,
+    action: PortLinkAction<'id, B>,
+) -> Result<bool, ServiceFault<B>>
+where
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+{
+    match action {
+        LinkAction::HandOver(handover) => {
+            if link.is_some() {
+                let _quarantined = core::mem::ManuallyDrop::new(handover);
+                return Err(ServiceFault::Contract(
+                    BackendContractViolation::StationKeyBank(
+                        contract::KeyContractViolation::LinkKeyMismatch,
+                    ),
+                ));
+            }
+            *link = Some(handover);
+            Ok(false)
+        }
+        LinkAction::Hold | LinkAction::Release => {
+            if let Some(link) = link.as_mut() {
+                link.hold(matches!(action, LinkAction::Hold));
+            }
+            Ok(false)
+        }
+        LinkAction::Agreement { tid, window } => {
+            if !link
+                .as_mut()
+                .is_some_and(|link| link.agreement(tid, window))
+                && let Some(plane) = data.plane.as_mut()
+            {
+                plane.agreement(tid, window);
+            }
+            Ok(false)
+        }
+        LinkAction::Return => {
+            stop::<B, P>(data, phase, events)?;
+            Ok(true)
+        }
+    }
+}
+
+/// Give the station the link the service holds back.
+pub(super) fn return_link<
+    'id,
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    C: StaCallbacks,
+    const GROUPS: usize,
+>(
+    link: &mut Option<PortLink<'id, B>>,
+    station: &mut PortStation<'id, B, C, GROUPS>,
+) {
+    if let Some(link) = link.take() {
+        station.link_returned(link.into_return());
     }
 }
 
@@ -133,10 +233,32 @@ impl<
             .ok_or(ServiceFault::Contract(BackendContractViolation::ArenaClaim))
     }
 
+    /// Take every change the station made to its link since its last
+    /// input, before the link carries data again: its handover, a hold or
+    /// release, its return. Transmit agreements wait for the next step.
+    pub(super) fn link_changes<'p, P>(&mut self, phase: &mut P) -> Result<(), ServiceFault<B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        while let Some(action) = self.station.poll_link() {
+            if link_action::<B, P>(
+                &mut self.link,
+                &mut self.data,
+                phase,
+                &mut self.events,
+                action,
+            )? {
+                return_link::<B, C, GROUPS>(&mut self.link, &mut self.station);
+            }
+        }
+        Ok(())
+    }
+
     /// One pass of the data at `now`: the completed arena settled, the
-    /// station's link handed over or taken back, the waiting MSDU offered
-    /// and the next arena published. Whether the station owes an action it
-    /// did not owe before.
+    /// link's data state handed to the plane once the link first carries
+    /// data, the waiting MSDU offered and the next arena published. Whether
+    /// the station owes an action it did not owe before.
     pub(super) fn data_turn<'p, P>(
         &mut self,
         now: Instant,
@@ -148,11 +270,30 @@ impl<
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
         self.plane(phase)?;
-        let mut owed = self.settle(now, phase)?;
-        owed |= self.sync_link(phase)?;
-        owed |= self.take(now, phase, None::<&mut core::iter::Empty<_>>, output)?;
+        let owed = self.settle(now, phase)?;
+        self.connect_plane(phase)?;
+        let owed = owed | self.take(now, phase, None::<&mut core::iter::Empty<_>>, output)?;
         self.publish(now, phase)?;
         Ok(owed)
+    }
+
+    /// Hand the link's data state to the plane once the link carries data.
+    fn connect_plane<'p, P>(&mut self, phase: &mut P) -> Result<(), StepFailure<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        let Some(link) = self.link.as_mut().filter(|link| link.carries()) else {
+            return Ok(());
+        };
+        let Some(data) = link.take_data() else {
+            return Ok(());
+        };
+        if self.plane(phase)?.handover(data).is_err() {
+            return Err(ServiceFault::Contract(BackendContractViolation::ArenaClaim).into());
+        }
+        self.aggregate_rate(phase);
+        Ok(())
     }
 
     /// Hand every MSDU of `incoming` to the plane until the standby cannot
@@ -175,8 +316,9 @@ impl<
     }
 
     /// Offer the waiting MSDU, then those of `incoming`, to the plane on the
-    /// station's link, admitted at `now`; each TID that took one tells its
-    /// transmit agreement once. Whether that changed what the station owes.
+    /// station's link, admitted at `now`; each TID that took one tells the
+    /// station once, with its next sequence number. Whether that changed
+    /// what the station owes.
     fn take<'p, P>(
         &mut self,
         now: Instant,
@@ -189,15 +331,14 @@ impl<
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
         let mut tids = [None; 8];
+        let Some(link) = self.link.as_mut().filter(|link| link.carries()) else {
+            return Ok(false);
+        };
         {
-            let Some(mut link) = self.station.link() else {
-                return Ok(false);
-            };
             let DataTx {
                 plane: Some(plane),
                 deferred,
                 freed,
-                ..
             } = &mut self.data
             else {
                 return Ok(false);
@@ -223,17 +364,7 @@ impl<
                         None => break,
                     },
                 };
-                let numbers = LinkNumbers {
-                    sequences: match &mut link.mode {
-                        LinkMode::Qos(counters) => LinkMode::Qos(counters),
-                        LinkMode::NonQos(counter) => LinkMode::NonQos(counter),
-                    },
-                    packet_numbers: match &link.protection {
-                        LinkProtection::Open => None,
-                        LinkProtection::Ccmp { key, .. } => Some(key.packet_numbers()),
-                    },
-                };
-                match plane.intake(&mut arena, msdu, numbers, now) {
+                match plane.intake(&mut arena, msdu, link.numbers_mut(), now) {
                     Intake::Taken(tid) => {
                         *tid.select_mut(&mut tids) = Some(tid);
                     }
@@ -253,22 +384,23 @@ impl<
         let mut owed = false;
         for tid in tids.into_iter().flatten() {
             owed |= matches!(
-                self.station.tx_block_ack_traffic(tid, now),
+                self.station.tx_traffic(tid, link.numbers().next(tid), now),
                 StaTraffic::Input
             );
         }
         Ok(owed)
     }
 
-    /// Publish the next arena while the station's link is up: a single MPDU
-    /// by its rate plan, an A-MPDU at the plan's first rate; a refusal returns the arena to the plane, which
-    /// publishes it again at the next pass.
+    /// Publish the next arena while the station's link carries data: a
+    /// single MPDU by its rate plan, an A-MPDU at the plan's first rate; a
+    /// refusal returns the arena to the plane, which publishes it again at
+    /// the next pass.
     fn publish<'p, P>(&mut self, now: Instant, phase: &mut P) -> Result<(), StepFailure<'id, B>>
     where
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
-        if self.station.link().is_none() {
+        if !self.link.as_ref().is_some_and(LinkHandover::carries) {
             return Ok(());
         }
         let Some(plane) = self.data.plane.as_mut() else {
@@ -401,111 +533,52 @@ impl<
         plane.aggregate_rate(rate);
     }
 
-    /// Hand the plane the station's link once it connects, and take it back
-    /// once the connection ends; then tell it every transmit agreement that
-    /// started or ended. Whether that changed what the station owes.
-    fn sync_link<'p, P>(&mut self, phase: &mut P) -> Result<bool, StepFailure<'id, B>>
-    where
-        'id: 'p,
-        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    {
-        let connected = self.station.is_connected();
-        let epoch = self.station.link().map(|link| link.epoch.sequence());
-        // The connection ended, or another one holds the link now.
-        let ended = self.data.epoch.is_some()
-            && (!connected || epoch.is_some_and(|epoch| Some(epoch) != self.data.epoch));
-        if ended {
-            self.stop_data(phase)?;
-        }
-        if self.data.epoch.is_none()
-            && let Some(epoch) = epoch
-        {
-            let retry = self.station.tx_aggregate_retry();
-            let ht = self
-                .station
-                .tx_aggregate_limits()
-                .and_then(|(spacing, max_length)| {
-                    Some(HtLimits {
-                        spacing: oer_protocols_ieee80211_contracts_port::MpduStartSpacing::new(
-                            spacing,
-                        )?,
-                        max_length,
-                    })
-                });
-            let link = self
-                .station
-                .link()
-                .and_then(|link| DataLink::for_link(&link, retry, ht));
-            if let Some(link) = link {
-                let plane = self.plane(phase)?;
-                if plane.handover(link).is_err() {
-                    return Err(ServiceFault::Contract(BackendContractViolation::ArenaClaim).into());
-                }
-                self.data.epoch = Some(epoch);
-                self.data.agreements = [None; 8];
-                self.aggregate_rate(phase);
-            }
-        }
-        let Some(plane) = self
-            .data
-            .plane
-            .as_mut()
-            .filter(|plane| plane.is_connected())
-        else {
-            return Ok(false);
-        };
-        for tid in data::WmmUserPriority::ALL {
-            let agreement = self.station.tx_block_ack(tid);
-            let heard = tid.select_mut(&mut self.data.agreements);
-            if *heard != agreement {
-                *heard = agreement;
-                plane.agreement(
-                    tid,
-                    agreement.map(|agreement| TxWindow {
-                        head: agreement.starting_sequence,
-                        size: agreement.window,
-                    }),
-                );
-            }
-        }
-        Ok(ended)
-    }
-
-    /// Take the link back from the plane: every frame its arenas hold
-    /// unpublished and the waiting MSDU go back to the network; the arena on
-    /// the air settles at its completion.
+    /// Stop the data for the service's stop: every frame the arenas hold
+    /// unpublished and the waiting MSDU go back to the network; the arena
+    /// on the air settles at its completion.
     pub(super) fn stop_data<'p, P>(&mut self, phase: &mut P) -> Result<(), StepFailure<'id, B>>
     where
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
-        let DataTx {
-            plane,
-            epoch,
-            agreements,
-            deferred,
-            freed,
-        } = &mut self.data;
-        *epoch = None;
-        *agreements = [None; 8];
-        if let Some(msdu) = deferred.take() {
-            report(&mut self.events, || {
-                oer_protocols_ieee80211_core_roles_sta::events::StaEvent::DataLost(
-                    oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
-                )
-            });
-            free(freed, msdu.memory);
-        }
-        let Some(plane) = plane.as_mut() else {
-            return Ok(());
-        };
-        let mut station = phase.station();
-        let mut arena = station.data_arena();
-        plane
-            .stop(&mut arena, |memory| free(freed, memory), &mut self.events)
-            .map_err(ServiceFault::Backend)?;
-        Ok(())
+        stop::<B, P>(&mut self.data, phase, &mut self.events).map_err(StepFailure::from)
     }
+}
+
+/// Take the link's data back from the plane: every frame its arenas hold
+/// unpublished and the waiting MSDU go back to the network; the arena on
+/// the air settles at its completion.
+fn stop<'p, 'id: 'p, B, P>(
+    data: &mut DataTx<B::TxMemory>,
+    phase: &mut P,
+    events: &mut impl EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent>,
+) -> Result<(), ServiceFault<B>>
+where
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+{
+    let DataTx {
+        plane,
+        deferred,
+        freed,
+    } = data;
+    if let Some(msdu) = deferred.take() {
+        report(events, || {
+            oer_protocols_ieee80211_core_roles_sta::events::StaEvent::DataLost(
+                oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
+            )
+        });
+        free(freed, msdu.memory);
+    }
+    let Some(plane) = plane.as_mut() else {
+        return Ok(());
+    };
+    let mut station = phase.station();
+    let mut arena = station.data_arena();
+    plane
+        .stop(&mut arena, |memory| free(freed, memory), events)
+        .map_err(ServiceFault::Backend)?;
+    Ok(())
 }
 
 /// Withdraw the frames the arenas hold unpublished: they carry the packet

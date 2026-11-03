@@ -322,9 +322,7 @@ fn anti_clogging_response_waits_for_credit_without_extending_the_deadline() {
             .transition()
             .0
             .return_credit(second, &mut world.losses);
-        world
-            .station
-            .input(deadline, StaInput::Tick, &mut world.losses);
+        world.input(deadline, StaInput::Tick);
         world.run(deadline);
         assert!(world.seen.contains(&Seen::Notify(StaNotice::Disconnected(
             StaDisconnectReason::Sae(StaSaeFailure::Timeout)
