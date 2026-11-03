@@ -70,6 +70,22 @@ impl<T: Copy + Eq + Send + 'static, X: ExecutionContext> SignalCore<T, X> {
         }
     }
 
+    /// The pending and delivered facts, without consuming them; `None`
+    /// refuses context/nesting.
+    pub fn peek(&self, token: &Entered<X>) -> Option<u32> {
+        let pending = self.pending.load(Ordering::Acquire);
+        self.owned(token, |owned| {
+            #[cfg(oer_debug_control)]
+            {
+                self.deliverable(pending | owned.delivered)
+            }
+            #[cfg(not(oer_debug_control))]
+            {
+                pending | owned.delivered
+            }
+        })
+    }
+
     /// Take pending and delivered facts, retaining them on refused access.
     pub fn take(&self, token: &Entered<X>) -> Option<u32> {
         self.owned(token, |owned| {

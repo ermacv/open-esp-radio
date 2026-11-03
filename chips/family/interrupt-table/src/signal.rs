@@ -207,6 +207,14 @@ impl<E: SignalExecutor> IrqSignal<E> {
             .ok_or(ForeignContext)
     }
 
+    /// The facts raised so far, without consuming them.
+    ///
+    /// # Errors
+    /// The executor context is unavailable, including a nested state borrow.
+    pub fn peek(&'static self) -> Result<u32, ForeignContext> {
+        self.core.peek(&context::<E>()?.0).ok_or(ForeignContext)
+    }
+
     /// Take all facts raised so far.
     ///
     /// # Errors
