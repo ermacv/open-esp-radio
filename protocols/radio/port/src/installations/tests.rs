@@ -85,3 +85,71 @@ fn exhausted_generations_refuse_with_the_receipt() {
     }
     assert_eq!(installations.generation(), u32::MAX);
 }
+
+#[test]
+fn a_local_identity_lends_its_owned_tokens_within_its_scope() {
+    use crate::LocalId;
+    struct Owner;
+    impl<'scope> SlotOwner<LocalId<'scope>> for Owner {
+        type Pools = Layout;
+        type Queues = ();
+        const VACANT_QUEUES: Self::Queues = ();
+        type Vacant = ();
+        type Frontend<'s>
+            = ()
+        where
+            Self: 's,
+            LocalId<'scope>: 's;
+        type Invocation<'s>
+            = ()
+        where
+            Self: 's,
+            LocalId<'scope>: 's;
+        fn prepare_queues(
+            &mut self,
+            _: &mut Self::Queues,
+            _: Mint<'static, Self::Pools, LocalId<'scope>>,
+        ) {
+        }
+        fn split<'s>(
+            _: &'s mut Self::Queues,
+            _: crate::SlotWakes<'s, LocalId<'scope>>,
+        ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), crate::SlotInitError>
+        where
+            Self: 's,
+            LocalId<'scope>: 's,
+        {
+            Ok(((), ()))
+        }
+        async fn run<'s>(
+            &mut self,
+            _: &mut Self::Invocation<'s>,
+            _: crate::SlotRetire<'_, LocalId<'scope>, Self>,
+        ) -> crate::SlotStopped<LocalId<'scope>, Self>
+        where
+            Self: 's,
+            LocalId<'scope>: 's,
+        {
+            core::future::pending().await
+        }
+        fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Self::Vacant
+        where
+            Self: 's,
+            LocalId<'scope>: 's,
+        {
+        }
+    }
+    fn lent<'scope>(claim: SlotClaim<LocalId<'scope>>) -> [u8; 2] {
+        let mut installations = Installations::<LocalId<'scope>, Layout>::claim(claim);
+        let Minted { mint, installation } = installations.first().expect("first");
+        let loan: BodyLoan<'scope, _, Owner> = installation.loan();
+        let [first, second] = mint.into_pools();
+        let first: Slot<'scope, Tokens, _> = loan.lend_slot(first);
+        let second: Slot<'static, Tokens, _> = loan.reclaim_slot(loan.lend_slot(second));
+        [first.index(), second.index()]
+    }
+    let indices = lent(SlotClaim::<LocalId<'_>> {
+        identity: PhantomData,
+    });
+    assert_eq!(indices, [0, 1], "the conversion keeps each token's index");
+}

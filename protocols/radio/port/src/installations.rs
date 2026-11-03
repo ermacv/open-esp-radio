@@ -9,6 +9,9 @@
 //!
 //! - The authority is claimed once, from the slot's [`SlotClaim`].
 //! - [`Installations::first`] mints the first installation, once.
+//! - [`Installation::loan`] converts the installation's owned tokens to
+//!   the brand its port lends them under, which a local identity's scope
+//!   bounds.
 //! - [`Installations::remint`] mints the next one only in exchange for the
 //!   receipt of the current one. The backend holds that receipt for the
 //!   whole installation and gives it up only after its retire checks proved
@@ -154,10 +157,15 @@ impl<Id: SlotIdentity, P: PoolSet> Installation<Id, P> {
         self.generation
     }
 
-    /// The backend's private conversion authority for this installation's
-    /// `'static` brand. Its conversions keep each token's identity, path,
+    /// The backend's private conversion authority between this
+    /// installation's owned `'static` tokens and the brand `'p` its port
+    /// lends them under: `'static` for a static identity, at most the scope
+    /// of a local one. Its conversions keep each token's identity, path,
     /// kind and index; only the holder of the receipt makes one.
-    pub const fn loan<S: SlotOwner<Id>>(&self) -> BodyLoan<'static, Id, S> {
+    pub const fn loan<'p, S: SlotOwner<Id>>(&self) -> BodyLoan<'p, Id, S>
+    where
+        Id: 'p,
+    {
         BodyLoan::new()
     }
 }
