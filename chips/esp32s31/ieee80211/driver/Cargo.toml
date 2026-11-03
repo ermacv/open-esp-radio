@@ -30,6 +30,9 @@ oer-protocols-radio-regulatory = { path = "../../../../protocols/radio/regulator
 oer-portable-time = { path = "../../../../portable/time" }
 oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table" }
 
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-portable-riscv = { path = "../../../../portable/riscv" }
+
 [target.'cfg(oer_debug_control)'.dependencies]
 oer-chips-family-staged-runtime = { path = "../../../family/staged-runtime" }
 oer-portable-trace = { path = "../../../../portable/trace" }

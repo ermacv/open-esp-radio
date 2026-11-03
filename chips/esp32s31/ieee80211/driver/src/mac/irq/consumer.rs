@@ -160,6 +160,10 @@ impl<E: SignalExecutor> IrqStorage<E> {
 
     #[inline(always)]
     fn post(&self, events: u32) -> IrqPublication<E> {
+        #[cfg(oer_trace)]
+        if events & super::EVENT_TX_COMPLETE != 0 {
+            crate::port::cycle::tx_irq();
+        }
         let raise = |signal: &'static IrqSignal<E>, facts: u32| {
             (facts != 0).then(|| signal.raise_deferred(facts))
         };

@@ -1,7 +1,7 @@
-//! Diagnostic, with `oer_trace` only: the aggregate cycle's two spans in
-//! the driver, from an aggregate's end seen to the next publication (the
-//! gap) and from a publication to its end seen (the air), counted and
-//! summed in microseconds. Statics, so the driver's types stay the same.
+//! Diagnostic, with `oer_trace` only: from a TX completion interrupt to the
+//! driver seeing its aggregate's end (in CPU cycles, reported in
+//! microseconds at 320 MHz), and how often that end published the next
+//! aggregate at once. Statics, so the driver's types stay the same.
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// One span's count, sum and longest, in microseconds.
@@ -34,30 +34,40 @@ impl Span {
     }
 }
 
-/// From an aggregate's end seen to the next publication.
-pub static GAP: Span = Span::new();
-/// From a publication to its end seen.
-pub static AIR: Span = Span::new();
-/// The last end seen and the last publication, in microseconds; 0 none.
-static ENDED: AtomicU32 = AtomicU32::new(0);
-static PUBLISHED: AtomicU32 = AtomicU32::new(0);
+/// From a TX completion interrupt to the driver seeing the end.
+pub static SEEN: Span = Span::new();
+/// Ends that published the next aggregate at once (count only).
+pub static KICKED: Span = Span::new();
+/// The cycle of the first TX completion interrupt not seen yet; 0 none.
+static IRQ_AT: AtomicU32 = AtomicU32::new(0);
 
-/// An aggregate's end seen at `now_us`.
-pub(crate) fn ended(now_us: u64) {
-    let now = now_us as u32 | 1;
-    let published = PUBLISHED.swap(0, Ordering::Relaxed);
-    if published != 0 {
-        AIR.add(now.wrapping_sub(published));
+const CYCLES_PER_US: u32 = 320;
+
+fn cycles() -> u32 {
+    #[cfg(target_arch = "riscv32")]
+    {
+        oer_portable_riscv::cycle32() | 1
     }
-    ENDED.store(now, Ordering::Relaxed);
+    #[cfg(not(target_arch = "riscv32"))]
+    {
+        1
+    }
 }
 
-/// An aggregate published at `now_us`.
-pub(crate) fn published(now_us: u64) {
-    let now = now_us as u32 | 1;
-    let ended = ENDED.swap(0, Ordering::Relaxed);
-    if ended != 0 {
-        GAP.add(now.wrapping_sub(ended));
+/// A TX completion interrupt.
+pub(crate) fn tx_irq() {
+    let _first = IRQ_AT.compare_exchange(0, cycles(), Ordering::Relaxed, Ordering::Relaxed);
+}
+
+/// The driver saw an aggregate's end.
+pub(crate) fn seen() {
+    let at = IRQ_AT.swap(0, Ordering::Relaxed);
+    if at != 0 {
+        SEEN.add(cycles().wrapping_sub(at) / CYCLES_PER_US);
     }
-    PUBLISHED.store(now, Ordering::Relaxed);
+}
+
+/// An end published the next aggregate at once.
+pub(crate) fn kicked() {
+    KICKED.add(0);
 }

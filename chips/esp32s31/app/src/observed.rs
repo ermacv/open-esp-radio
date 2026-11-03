@@ -122,8 +122,8 @@ pub async fn parts() -> [PartReading; PARTS] {
     // The driver keeps the aggregate cycle's spans itself.
     #[cfg(all(feature = "wifi", oer_trace))]
     for (part, span) in [
-        (LibraryPart::TxGap, &oer_chips_esp32s31_wifi::cycle::GAP),
-        (LibraryPart::TxAir, &oer_chips_esp32s31_wifi::cycle::AIR),
+        (LibraryPart::TxGap, &oer_chips_esp32s31_wifi::cycle::SEEN),
+        (LibraryPart::TxAir, &oer_chips_esp32s31_wifi::cycle::KICKED),
     ] {
         let (polls, total, longest) = span.read();
         if let Some(reading) = readings.get_mut(part as usize) {

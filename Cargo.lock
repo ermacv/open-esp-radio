@@ -1509,6 +1509,7 @@ dependencies = [
  "oer-portable-embassy-net",
  "oer-portable-events",
  "oer-portable-memory",
+ "oer-portable-riscv",
  "oer-portable-sync",
  "oer-portable-time",
  "oer-portable-time-virtual",

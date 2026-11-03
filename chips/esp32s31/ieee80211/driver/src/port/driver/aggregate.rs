@@ -212,7 +212,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Ok(());
         }
         match self.take_open(index) {
-            Some(pending) => self.publish_aggregate(held, device, index, pending),
+            Some(pending) => {
+                #[cfg(oer_trace)]
+                crate::port::cycle::kicked();
+                self.publish_aggregate(held, device, index, pending)
+            }
             None => Ok(()),
         }
     }
@@ -407,11 +411,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         };
         match core.publish_ampdu(device.hardware()?, buffer, plan) {
-            Ok(published) => {
-                #[cfg(oer_trace)]
-                crate::port::cycle::published(device.timer().now().as_micros());
-                self.keep_running(index, Running::Aggregate { pending, published })
-            }
+            Ok(published) => self.keep_running(index, Running::Aggregate { pending, published }),
             Err(crate::lower_mac::ampdu::AmpduStartError::Expired(expired)) => {
                 // Aged at the publication edge: nothing reached the hardware.
                 let msdus = expired.expired_msdus();
@@ -542,7 +542,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 Ok(AmpduServed::Pending) => continue,
                 Ok(AmpduServed::Ended) => {
                     #[cfg(oer_trace)]
-                    crate::port::cycle::ended(device.timer().now().as_micros());
+                    crate::port::cycle::seen();
                 }
                 Err(error) => {
                     // The failed publication leaves its queue's place
