@@ -391,6 +391,13 @@ const fn span_part(span: station::Span) -> LibraryPart {
         station::Span::Terminal => LibraryPart::Terminal,
         station::Span::Transmit => LibraryPart::Transmit,
         station::Span::Recycle => LibraryPart::Recycle,
+        station::Span::Attempt => LibraryPart::Attempt,
+        station::Span::Extend => LibraryPart::Extend,
+        station::Span::Subframe => LibraryPart::Subframe,
+        station::Span::PortExtend => LibraryPart::PortExtend,
+        station::Span::Window => LibraryPart::Window,
+        station::Span::Submit => LibraryPart::Submit,
+        station::Span::Open => LibraryPart::Open,
     }
 }
 
