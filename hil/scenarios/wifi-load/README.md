@@ -15,7 +15,7 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 | `rx-tx` | Both at once, half the total each way |
 | `stop` | Leaves 2 s into an RX run of 65 Mbit/s and records how long the leave took. Fails unless the station answers `Down`: the IP service stops and closes the load socket, every lent receive buffer returns by the stop's 2 s deadline, and the radio retires; the run itself ends at its time without the socket. Runs last, because the image serves no station after a leave |
 
-Each load case offers 10, 30, 50 and 65 Mbit/s in total (1400-byte
+Each load case offers 10, 30, 50 and 65 Mbit/s in total (1472-byte
 datagrams); `OER_WIFI_LOAD_MBPS=10,65,100` replaces the levels (and `OER_WIFI_LOAD_WIDTH=ht20` the 40 MHz channel the path case asks the router for), e.g. to
 overload. Each level is one run of the image's load service: a 5 s
 measuring window after 300 ms, then 500 ms of drain, after which the image

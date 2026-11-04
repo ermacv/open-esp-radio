@@ -183,7 +183,7 @@ fn the_model_passes_every_arena_case() {
             assert_eq!(usize::from(report.passed), suite::Case::ALL.len());
             assert_eq!(report.model_only, 0);
             let report = check(|| fixture(single, aggregate), Environment::Hardware).unwrap();
-            assert_eq!((report.passed, report.model_only), (5, 3));
+            assert_eq!((report.passed, report.model_only), (6, 3));
         }
     }
     with_rates(Case);

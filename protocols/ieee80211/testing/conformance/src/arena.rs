@@ -45,13 +45,16 @@ pub enum Case {
     /// A protection failure republishes without the Retry bit, a missing
     /// response with it.
     ProtectionRepublish,
+    /// With a whole BlockAck, the other arena goes on the air before the
+    /// completed one settles, and each returns its memories in order.
+    PublishAheadOfSettlement,
     /// A fault fails every later operation and returns refused memory.
     Fault,
 }
 
 impl Case {
     /// Every arena case, in suite order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::IntakeUntilFull,
         Self::PartialBlockAck,
         Self::ReleaseOrder,
@@ -59,6 +62,7 @@ impl Case {
         Self::PublishRefusals,
         Self::SingleDrain,
         Self::ProtectionRepublish,
+        Self::PublishAheadOfSettlement,
         Self::Fault,
     ];
 
@@ -556,6 +560,31 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             let first = release(fixture, done, sent)?;
             withdraw(fixture, &first, &[])?;
             withdraw(fixture, &second, &[])
+        }
+        Case::PublishAheadOfSettlement => {
+            fill(fixture, &first, &[90, 91])?;
+            fill(fixture, &second, &[92, 93])?;
+            let aggregate = fixture.aggregate(first);
+            publish(fixture, aggregate)?;
+            fixture.answer(Answer::BlockAck(
+                FrameMask::first(2).ok_or(Violation::Fixture)?,
+            ));
+            let done = serve(fixture, ArenaId::First, 2)?;
+            // The second goes on the air with the first unsettled.
+            let aggregate = fixture.aggregate(second);
+            publish(fixture, aggregate)?;
+            expect_published(fixture, &[92, 93], true, false)?;
+            let first = release(fixture, done, &[90, 91])?;
+            if fixture.port().on_air() != Some(ArenaId::Second) {
+                return Err(Violation::Publication);
+            }
+            fixture.answer(Answer::BlockAck(
+                FrameMask::first(2).ok_or(Violation::Fixture)?,
+            ));
+            let done = serve(fixture, ArenaId::Second, 2)?;
+            let second = release(fixture, done, &[92, 93])?;
+            drop((first, second));
+            Ok(())
         }
         Case::Fault => {
             fill(fixture, &first, &[80, 81])?;

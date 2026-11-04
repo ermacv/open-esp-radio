@@ -17,9 +17,9 @@ use oer_hil_services_load::header::{self, Header};
 const BATCH: Duration = Duration::from_millis(1);
 
 /// The host's tally: 2^19 sequences, far more than the longest window
-/// sends (60 s at 65 Mbit/s of 1400-byte datagrams is about 350 000).
+/// sends (60 s at 65 Mbit/s of 1472-byte datagrams is about 330 000).
 pub type Tally = oer_hil_services_load::tally::Tally<8192>;
-const _: () = if Tally::CAPACITY < 60 * 65_000_000 / (1400 * 8) {
+const _: () = if Tally::CAPACITY < 60 * 65_000_000 / (1472 * 8) {
     panic!("the host tally covers the longest window");
 };
 
