@@ -15,6 +15,9 @@ pub(crate) const GRANULARITY_US: u64 = 1000;
 /// The most datagrams one batch sends before it yields to the executor:
 /// the IP stack's transmit credits.
 pub(crate) const MAX_BATCH: u32 = 16;
+/// The datagrams an unpaced sender sends between two looks at the clock
+/// and two yields: one blocked send already yields to the executor.
+pub(crate) const UNPACED_BATCH: u32 = 128;
 /// The most payload times a schedule runs behind before it starts again
 /// from the present: a sender held back by the socket catches up with at
 /// most this many datagrams at once.
