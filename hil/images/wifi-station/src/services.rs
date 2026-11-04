@@ -64,6 +64,7 @@ mod tests {
             profile: Some(oer_hil_services_load::Profile {
                 period_us: u32::MAX,
             }),
+            tune: [u32::MAX; oer_hil_services_load::TUNE_KNOBS],
         };
         let mut buffer = [0; 256];
         for encoded in [

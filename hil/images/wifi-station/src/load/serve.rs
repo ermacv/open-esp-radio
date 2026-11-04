@@ -45,6 +45,12 @@ use super::relay::{self, Client};
 use super::report::{self, Snapshot, Windows};
 use crate::{RX, TX};
 
+const _: () = if oer_hil_services_load::TUNE_KNOBS != oer_portable_trace::tune::KNOBS
+    || oer_hil_services_load::TUNE_UNSET != oer_portable_trace::tune::UNSET
+{
+    panic!("the load service names the image's knobs");
+};
+
 /// The run's tally remembers 8192 words, 524 288 sequence numbers in 64 KiB:
 /// some 90 s of 1400-byte datagrams at 65 Mbit/s, past the longest window
 /// with its delay and drain.
@@ -408,6 +414,7 @@ async fn measure(
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
 ) -> Ends {
+    oer_portable_trace::tune::set(start.tune);
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
     wait_until(planned_start).await;

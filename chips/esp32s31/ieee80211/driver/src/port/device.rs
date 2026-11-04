@@ -12,7 +12,7 @@ use crate::{
     },
     rx::{
         arena::WifiRxParts,
-        receive::{CONTINUATION_WAIT, IMMEDIATE_CONTINUATIONS, RecycledProbe},
+        receive::{CONTINUATION_WAIT, IMMEDIATE_CONTINUATIONS, RecycledProbe, ReturnQuiet},
         session::ReceiveSession,
         sink::{frame_control_preview, unclassified_preview},
         transaction::{CompletedUnit, Preview, Publisher},
@@ -150,6 +150,7 @@ pub struct RadioDevice<
     streak: u32,
     /// The wait of the drain's recycled appends.
     recycled: RecycledProbe,
+    returns: ReturnQuiet,
     marker: PhantomData<fn() -> C>,
 }
 
@@ -220,6 +221,11 @@ impl<
     }
 
     pub fn new(parts: RadioParts<T, W, V, D, N, RB, RS, Q, X>) -> Self {
+        const {
+            if ReturnQuiet::LIMIT as usize > Q {
+                panic!("a pass blocked on staging capacity hears its returns");
+            }
+        }
         let WifiRuntimeParts {
             platform,
             mut registers,
@@ -254,6 +260,7 @@ impl<
             continuation: None,
             streak: 0,
             recycled: RecycledProbe::default(),
+            returns: ReturnQuiet::default(),
             marker: PhantomData,
         }
     }
@@ -512,6 +519,7 @@ where
         self.cut = true;
         if receive_room != 0 {
             if let Some(frame) = self.received.0.get_mut().pop_front() {
+                self.returns.received();
                 return Poll::Ready(Ok(Some(StagedReceive(frame))));
             }
         }
@@ -541,6 +549,7 @@ where
             )
             .map_err(Fault::Receive)?;
         if let Some(frame) = self.received.0.get_mut().pop_front() {
+            self.returns.received();
             return Poll::Ready(Ok(Some(StagedReceive(frame))));
         }
         if matches!(
@@ -566,8 +575,10 @@ where
             Poll::Pending
         }
     }
-    fn ring_waits(&self) -> bool {
-        self.continuation.is_some()
+    fn returns_quiet(&mut self, held: usize, returned: bool) -> bool {
+        let rearm_due = returned || self.rx_pending;
+        let whole = self.returns.quiet(held, rearm_due);
+        whole || self.continuation.is_some()
     }
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
         if self.cut || self.pausing {
@@ -595,6 +606,7 @@ where
             return Ok(DevicePull::Empty);
         }
         if let Some(frame) = self.received.0.get_mut().pop_front() {
+            self.returns.received();
             return Ok(DevicePull::Unit(StagedReceive(frame)));
         }
         if !self.rx_pending {
@@ -632,7 +644,10 @@ where
             progress => again = self.keep_masked(progress, now),
         }
         Ok(match self.received.0.get_mut().pop_front() {
-            Some(frame) => DevicePull::Unit(StagedReceive(frame)),
+            Some(frame) => {
+                self.returns.received();
+                DevicePull::Unit(StagedReceive(frame))
+            }
             None if again => DevicePull::Again,
             None => self
                 .continuation

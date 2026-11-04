@@ -28,11 +28,11 @@ oer-protocols-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
 oer-protocols-ieee80211-contracts-security = { path = "../../../../protocols/ieee80211/contracts/security" }
 oer-protocols-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
 oer-portable-time = { path = "../../../../portable/time" }
+oer-portable-trace = { path = "../../../../portable/trace" }
 oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table" }
 
 [target.'cfg(oer_debug_control)'.dependencies]
 oer-chips-family-staged-runtime = { path = "../../../family/staged-runtime" }
-oer-portable-trace = { path = "../../../../portable/trace" }
 
 [features]
 default = []

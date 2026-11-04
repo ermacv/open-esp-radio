@@ -181,6 +181,12 @@ samples. The scenario holds the air exclusively. Executors' work spans and
 parts' polls include preemption and overlap: only a hart's idle time gives
 its utilisation. The router forwards the load: its CPU can limit it.
 
+`OER_WIFI_LOAD_TUNES=return-quiet=0;return-quiet=16,recycled-burst=1` runs
+each level once per `;`-separated set: the values go to the image at the
+run's start (`oer_portable_trace::tune`), so comparing them takes one build
+and one boot, with the code in one place. An empty set keeps the defaults;
+the level's name carries its set. Only a trace image reads them.
+
 A level's `ping`, in the cases that run one, has the shape of its `rtt`.
 Apart from the median ping of `ping` and `sparse`, the measurements decide
 nothing: a case fails only when the path or an exchange does not work. Each measurement is printed, and after the lease's

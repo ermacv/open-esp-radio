@@ -2131,3 +2131,30 @@ fn a_lone_frame_shows_no_burst_and_a_later_pass_keeps_the_drains_wait() {
     probe.reset();
     assert_eq!(probe.wait(0, 0), None);
 }
+
+#[test]
+fn a_return_stays_quiet_until_a_third_of_the_ring_came_since_it_was_whole() {
+    let mut quiet = ReturnQuiet::default();
+    for _ in 0..15 {
+        quiet.received();
+    }
+    assert!(quiet.quiet(1, false));
+    quiet.received();
+    assert!(!quiet.quiet(1, false), "the walker may be running short");
+    assert!(
+        !quiet.quiet(0, true),
+        "a pass is due: the ring is not whole"
+    );
+    assert!(quiet.quiet(0, false), "whole again");
+    quiet.received();
+    assert!(quiet.quiet(1, false));
+}
+
+#[test]
+fn units_outside_the_ring_past_the_limit_hear_their_returns() {
+    let mut quiet = ReturnQuiet::default();
+    for _ in 0..1000 {
+        quiet.received();
+    }
+    assert!(!quiet.quiet(32, false));
+}

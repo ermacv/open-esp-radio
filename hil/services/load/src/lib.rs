@@ -100,7 +100,15 @@ pub struct Start {
     pub drain_ms: u32,
     pub transmit: Option<Transmit>,
     pub profile: Option<Profile>,
+    /// The run's values of a trace image's constants
+    /// (`oer_portable_trace::tune`), by position.
+    pub tune: [u32; TUNE_KNOBS],
 }
+
+/// The constants a run names; the image checks them against its own.
+pub const TUNE_KNOBS: usize = 4;
+/// A constant that keeps its default.
+pub const TUNE_UNSET: u32 = u32::MAX;
 
 /// Sample the measured hart's interrupted program counter every `period_us`
 /// over the window, from a timer no executor or product timer uses. The
