@@ -54,6 +54,9 @@ pub mod lifecycle;
 pub mod monitor;
 pub mod station;
 
+#[cfg(test)]
+pub(crate) mod test_fixtures;
+
 pub use monitor::injection as monitor_injection;
 pub use monitor::{
     MonitorCaptureFrame, MonitorCaptureMetadata, MonitorCapturePool, MonitorCaptureReceiver,

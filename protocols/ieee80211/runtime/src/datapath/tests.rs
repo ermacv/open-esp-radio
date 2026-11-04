@@ -1367,3 +1367,71 @@ fn standing_ring_work_the_actor_cannot_take_reposts_a_bounded_number_of_turns() 
         assert_eq!(bench.wakes(), wakes);
     });
 }
+
+/// The port fails before the stop: the stop answers once, unconfirmed with
+/// the port's report, the actor keeps running until the image's reset and
+/// sleeps meanwhile.
+#[test]
+fn a_stop_of_a_failed_port_answers_unconfirmed_once_and_the_actor_sleeps() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench.air.poison();
+        let deadline = bench
+            .clock
+            .inner
+            .now()
+            .saturating_add(oer_portable_time::Duration::from_millis(50));
+        bench.send(ToActor::Stop { deadline });
+        let mut stopped = Vec::new();
+        while let Some(message) = bench.next() {
+            if let FromActor::Stopped(outcome) = message {
+                stopped.push(outcome);
+            }
+        }
+        match stopped.as_slice() {
+            [StopOutcome::Unconfirmed(observed)] => {
+                assert!(observed.port.is_some(), "{observed:?}");
+                assert!(!observed.deadline);
+            }
+            other => panic!("one unconfirmed stop: {other:?}"),
+        }
+        assert!(bench.end.is_none(), "only the image ends it");
+        let wakes = bench.wakes();
+        bench.poll();
+        bench.poll();
+        assert_eq!(bench.wakes(), wakes, "asleep");
+        assert!(bench.next().is_none());
+    });
+}
+
+/// The network queued its MSDUs before the actor ran: one turn takes every
+/// one the data machine holds.
+#[test]
+fn one_turn_takes_every_msdu_the_network_queued() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        // Nothing leaves for the air: the arenas keep what they take.
+        bench.air.hold(WmmAccessCategory::BestEffort, true);
+        for round in 0..2_u8 {
+            bench.send_msdu(msdu(0, &[round; 8]));
+        }
+        let polls = bench.polls;
+        bench.poll();
+        assert_eq!(bench.polls - polls, 1);
+        assert_eq!(
+            bench.transmit.free_capacity(),
+            TX_DEPTH,
+            "one turn took every queued MSDU"
+        );
+    });
+}
+
+#[test]
+fn every_actor_span_is_found_by_its_number_and_no_other_number_is() {
+    for span in ActorSpan::ALL {
+        assert_eq!(ActorSpan::from_number(span as u8), Some(span));
+    }
+    assert_eq!(ActorSpan::from_number(ActorSpan::ALL.len() as u8), None);
+}

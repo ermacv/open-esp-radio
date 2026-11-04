@@ -3,6 +3,12 @@
 //! join, the handshake's EAPOL through the actor, the station's frames on
 //! the link's numbers, the data both ways without the lifecycle, the
 //! group rekey, the end and the restart on the next installation.
+//!
+//! The submodules hold the cases by subject: the air and the rates
+//! ([`air`]), the keys ([`keys`]), the data ([`data`]), the Block Ack
+//! agreements ([`block_ack`]), the application's control ([`control`]),
+//! the lifecycle's ends ([`ends`]) and the contracts of what the actor
+//! returns ([`contracts`]).
 
 use super::*;
 use core::cell::{Cell, RefCell};
@@ -15,39 +21,56 @@ use std::sync::Arc;
 use std::vec::Vec;
 
 use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
+use oer_portable_events::EventSink;
 use oer_portable_memory::{SlotReceiver, SlotSender, WakingSlotQueue, WakingSpscQueue};
 use oer_portable_time::Duration;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{LowerMacBackend, ReturnedMpdu};
 use oer_protocols_ieee80211_core_arbiter::ArbiterPolicy;
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
+use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
 use oer_protocols_ieee80211_core_roles_sta::machine::{
     GroupCapacity, StaSecurity, StationResources,
 };
 use oer_protocols_ieee80211_core_security_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
+use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
+use oer_protocols_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_protocols_ieee80211_testing_model::{
     AirFrame, ModelAck, ModelAir, ModelAnyBuffer, ModelBackend, ModelBlockAckEvidence, ModelCaps24,
-    ModelCommands, ModelInstall, ModelLentRx, ModelPort, ModelResources, ModelSmall, ModelTypes,
+    ModelCommands, ModelInstall, ModelLentRx, ModelPort, ModelResources, ModelRxMeta, ModelSmall,
+    ModelTypes,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
-use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
+use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_protocols_ieee80211_wire::security::rsn::Akm;
 use oer_protocols_radio_port::{Installations, LocalId, with_local_slot};
 
-use crate::datapath::{Actor, ActorEnd, LifecycleEnds, NetworkEnds, PARCELS as ACTOR_PARCELS};
-use crate::station::contract::{
-    Command as StaCommand, DisconnectReason as StaDisconnectReason, Notice as StaNotice,
+use crate::datapath::{
+    Actor, ActorEnd, ActorEvent, LifecycleEnds, NetworkEnds, PARCELS as ACTOR_PARCELS,
 };
-use crate::station::tests::{
+use crate::station::contract::{
+    AccessPointCommand, Command as StaCommand, CommandOutcome as StaCommandOutcome,
+    CommandRefusal as StaCommandRefusal, DisconnectReason as StaDisconnectReason,
+    Notice as StaNotice,
+};
+use crate::station::{
+    Control, ControlCommand, NetworkStop, NetworkStopLost, Outgoing, RX_COPIED_DEPTH, Received,
+    RxBlockAckStorage, ServiceEvent, State, Status,
+};
+use crate::test_fixtures::{
     ANONCE, ASSOCIATION_REQUEST, AUTHENTICATION, BSSID, Callbacks, DATA, DEAUTHENTICATION, LOCAL,
     PMK, PROBE_REQUEST, SNONCE, SSID, ServiceContexts, TestConfig, association_response,
     authentication_response, beacon, channel6, config, decrypted, eapol_frame, kind, message3,
     meta, network_frame, protected_data, protected_group_message1,
 };
-use crate::station::{
-    Control, ControlCommand, NetworkStop, NetworkStopLost, Outgoing, RX_COPIED_DEPTH, Received,
-    RxBlockAckStorage, State,
-};
+
+mod air;
+mod block_ack;
+mod contracts;
+mod control;
+mod data;
+mod ends;
+mod keys;
 
 const TO: usize = 24;
 const FROM: usize = 64;
@@ -96,15 +119,173 @@ type P<'s> = PairPort<'s>;
 type Issuer<'s> = ModelCommands<'s, LocalId<'s>, ModelCaps24, ServiceContexts>;
 type Contexts<'s> =
     [Option<LifecycleTxContext<'s, P<'s>>>; oer_protocols_ieee80211_testing_model::MODEL_TICKETS];
-type TestLifecycle<'s> = Lifecycle<'s, P<'s>, Callbacks, Issuer<'s>, Contexts<'s>>;
-type Completed<'s> = LifecycleCompleted<'s, P<'s>, Callbacks, Issuer<'s>, Contexts<'s>, 2, ()>;
+type TestLifecycle<'s, const G: usize> =
+    Lifecycle<'s, P<'s>, Callbacks, Issuer<'s>, Contexts<'s>, G, Observed>;
+type Completed<'s, const G: usize = 2> =
+    LifecycleCompleted<'s, P<'s>, Callbacks, Issuer<'s>, Contexts<'s>, G, Observed>;
 
-/// A network side that takes every frame and stops at once.
-struct Network;
+/// One event the actor, the lifecycle or a core reported.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Observation {
+    Service(ServiceEvent),
+    Station(StaEvent),
+    BlockAck(RxBlockAckEvent),
+    Actor(ActorEvent),
+}
+
+/// The events of one case, in order: the actor and the lifecycle share
+/// the sink.
+#[derive(Clone, Default)]
+struct Observed(Rc<RefCell<Vec<Observation>>>);
+
+impl EventSink<ServiceEvent> for Observed {
+    fn event(&mut self, event: ServiceEvent) {
+        self.0.borrow_mut().push(Observation::Service(event));
+    }
+}
+impl EventSink<StaEvent> for Observed {
+    fn event(&mut self, event: StaEvent) {
+        self.0.borrow_mut().push(Observation::Station(event));
+    }
+}
+impl EventSink<RxBlockAckEvent> for Observed {
+    fn event(&mut self, event: RxBlockAckEvent) {
+        self.0.borrow_mut().push(Observation::BlockAck(event));
+    }
+}
+impl EventSink<ActorEvent> for Observed {
+    fn event(&mut self, event: ActorEvent) {
+        self.0.borrow_mut().push(Observation::Actor(event));
+    }
+}
+
+impl Observed {
+    fn contains(&self, observation: Observation) -> bool {
+        self.0.borrow().contains(&observation)
+    }
+
+    /// The service's events that `pick` takes.
+    fn service<T>(&self, pick: impl Fn(ServiceEvent) -> Option<T>) -> Vec<T> {
+        self.0
+            .borrow()
+            .iter()
+            .filter_map(|observation| match observation {
+                Observation::Service(event) => pick(*event),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn rx_frames_dropped(&self) -> usize {
+        self.service(|event| matches!(event, ServiceEvent::RxFrameDropped(_)).then_some(()))
+            .len()
+    }
+
+    fn tokens_lost(&self) -> usize {
+        self.0
+            .borrow()
+            .iter()
+            .filter(|observation| **observation == Observation::Station(StaEvent::TokenLost))
+            .count()
+    }
+}
+
+/// The actor's rates: the product's selection, with the case's refusal of
+/// the next plan of one class and a record of every completion it learns.
+struct TestRates {
+    inner: EspressifRateSelection<ModelCaps24>,
+    refuse: Rc<Cell<Option<FrameRates>>>,
+    completions: Rc<RefCell<Vec<FrameRates>>>,
+}
+
+impl RateSelection<ModelRxMeta, ModelAck, ModelBlockAckEvidence> for TestRates {
+    fn packet_number_step(
+        &self,
+    ) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::packet_number_step(&self.inner)
+    }
+
+    fn plan<R>(
+        &self,
+        frame: FrameRates,
+        carried: impl Fn(oer_protocols_ieee80211_wire::phy::PhyRate) -> Option<R>,
+    ) -> Option<oer_protocols_ieee80211_contracts_port::RetryPlan<R>> {
+        if self.refuse.get() == Some(frame) {
+            self.refuse.set(None);
+            return None;
+        }
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::plan(&self.inner, frame, carried)
+    }
+
+    fn associated(
+        &mut self,
+        peer: &oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer,
+        response: &ModelRxMeta,
+    ) {
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::associated(&mut self.inner, peer, response);
+    }
+
+    fn disconnected(&mut self) {
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::disconnected(&mut self.inner);
+    }
+
+    fn completed<D>(
+        &mut self,
+        now: Instant,
+        frame: FrameRates,
+        completion: &oer_protocols_ieee80211_contracts_port::SingleOutcome<ModelAck, D>,
+    ) {
+        self.completions.borrow_mut().push(frame);
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::completed(&mut self.inner, now, frame, completion);
+    }
+
+    fn completed_aggregate<D>(
+        &mut self,
+        now: Instant,
+        tally: oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally,
+        completion: &oer_protocols_ieee80211_contracts_port::AggregateOutcome<
+            ModelBlockAckEvidence,
+            D,
+        >,
+    ) {
+        self.completions.borrow_mut().push(FrameRates::Aggregate);
+        <EspressifRateSelection<ModelCaps24> as RateSelection<
+            ModelRxMeta,
+            ModelAck,
+            ModelBlockAckEvidence,
+        >>::completed_aggregate(&mut self.inner, now, tally, completion);
+    }
+}
+
+/// A network side that stops at once and takes every frame, unless the
+/// case's composition has none.
+struct Network {
+    absent: Rc<Cell<bool>>,
+}
 
 impl NetworkStop for Network {
     fn takes_frames(&self) -> bool {
-        true
+        !self.absent.get()
     }
     fn request_stop(&self) {}
     fn poll_stopped(&self, _: &mut core::task::Context<'_>) -> Poll<Result<(), NetworkStopLost>> {
@@ -137,15 +318,26 @@ struct Task<'a> {
 }
 
 /// Run `tasks` until each ended: a woken task is polled with its own
-/// waker; when none is woken, the clock moves to its next deadline.
+/// waker; when none is woken, the clock moves to its next deadline. The
+/// first task, the actor, may outlive the others: an actor no message
+/// retires (after a stop that proved nothing, or a broken contract) waits
+/// for the image's reset, so a bounded number of rounds after the others
+/// ended stops the run.
 fn run_tasks(tasks: &mut [Task<'_>], clock: &VirtualClock, air: &ModelAir) {
     for task in tasks.iter() {
         task.flag.woken.store(true, Ordering::Relaxed);
     }
     let mut idle = 0;
+    let mut outlived = 0;
     loop {
         if tasks.iter().all(|task| task.done) {
             return;
+        }
+        if tasks.iter().skip(1).all(|task| task.done) {
+            outlived += 1;
+            if outlived > 1_000 {
+                return;
+            }
         }
         let mut polled = false;
         for task in tasks.iter_mut() {
@@ -179,6 +371,34 @@ struct Heard {
     tx_refused: Cell<usize>,
     refusals: RefCell<Vec<crate::station::contract::TransmitRefusal>>,
     completed: Cell<usize>,
+    /// Each request's unique terminal: its correlation and outcome.
+    terminals: RefCell<Vec<(u64, StaCommandOutcome)>>,
+    /// Each refused request: its correlation, command and reason.
+    command_refusals: RefCell<Vec<(u64, StaCommand, StaCommandRefusal)>>,
+    /// The arbiter's commands to the access point beside the station.
+    access_point: RefCell<Vec<AccessPointCommand<ModelCaps24>>>,
+    msdu_refused: Cell<usize>,
+}
+
+impl Heard {
+    /// The terminals of the request `correlation`.
+    fn terminals_of(&self, correlation: u64) -> Vec<StaCommandOutcome> {
+        self.terminals
+            .borrow()
+            .iter()
+            .filter(|(of, _)| *of == correlation)
+            .map(|(_, outcome)| *outcome)
+            .collect()
+    }
+
+    /// The Disconnected notices.
+    fn disconnections(&self) -> usize {
+        self.notices
+            .borrow()
+            .iter()
+            .filter(|notice| matches!(notice, StaNotice::Disconnected(_)))
+            .count()
+    }
 }
 
 /// The world the script plays: the air, the clock, the application and
@@ -195,6 +415,18 @@ struct World<'b> {
     copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
     /// The lifecycle task's waker.
     lifecycle: Arc<Flag>,
+    /// The events of the actor, the lifecycle and the cores.
+    observed: Observed,
+    /// The class of the next rate plan the actor's rates refuse.
+    refuse_rate: Rc<Cell<Option<FrameRates>>>,
+    /// The completions the actor's rates learned.
+    completions: Rc<RefCell<Vec<FrameRates>>>,
+    /// The composition has no network.
+    network_absent: Rc<Cell<bool>>,
+    /// How many delivered frames the port lent in place.
+    lent: Cell<usize>,
+    /// How much memory the actor gave back to the network.
+    memory_back: Cell<usize>,
 }
 
 /// Let the other tasks run once.
@@ -212,28 +444,42 @@ async fn yield_now() {
     .await;
 }
 
-impl World<'_> {
+/// A copy of `security`, for one more profile of the same network.
+fn duplicate(security: &StaSecurity) -> StaSecurity {
+    match security {
+        StaSecurity::Open => StaSecurity::Open,
+        StaSecurity::Wpa2Personal { pmk } => StaSecurity::Wpa2Personal {
+            pmk: pmk.duplicate(),
+        },
+        StaSecurity::Personal { password, pmk } => StaSecurity::Personal {
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                password.as_bytes(),
+            )
+            .unwrap(),
+            pmk: pmk.duplicate(),
+        },
+    }
+}
+
+impl<'b> World<'b> {
     fn profile(&self) -> oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
-        let security = match &self.security {
-            StaSecurity::Open => StaSecurity::Open,
-            StaSecurity::Wpa2Personal { pmk } => StaSecurity::Wpa2Personal {
-                pmk: pmk.duplicate(),
-            },
-            StaSecurity::Personal { password, pmk } => StaSecurity::Personal {
-                password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
-                    password.as_bytes(),
-                )
-                .unwrap(),
-                pmk: pmk.duplicate(),
-            },
-        };
         oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
             ssid: heapless::Vec::from_slice(SSID).unwrap(),
-            security,
+            security: duplicate(&self.security),
         }
     }
 
-    async fn station_command(&self, command: StaCommand) {
+    /// Run `f` on the application's control.
+    fn with_control<R>(&self, f: impl FnOnce(&mut Control<'b, ModelCaps24, COMMANDS>) -> R) -> R {
+        let mut control = self.control.borrow_mut().take().unwrap();
+        let result = f(&mut control);
+        *self.control.borrow_mut() = Some(control);
+        result
+    }
+
+    /// Admit a station request through its operation and detach the
+    /// observer; the request's correlation names its terminal.
+    async fn station_command(&self, command: StaCommand) -> u64 {
         let mut control = self.control.borrow_mut().take().unwrap();
         let operation = match command {
             StaCommand::Connect => control.connect(self.profile()).await,
@@ -241,7 +487,16 @@ impl World<'_> {
             StaCommand::BackgroundScan => control.scan().await,
         }
         .expect("the request is admitted");
+        let correlation = operation.correlation();
         drop(operation);
+        *self.control.borrow_mut() = Some(control);
+        correlation
+    }
+
+    /// Send the application's `command`, which the lifecycle admits.
+    async fn command(&self, command: ControlCommand<ModelCaps24>) {
+        let mut control = self.control.borrow_mut().take().unwrap();
+        assert!(control.command(command).await.is_ok());
         *self.control.borrow_mut() = Some(control);
     }
 
@@ -250,6 +505,10 @@ impl World<'_> {
         // A lifecycle that already ended refuses it.
         let _refused = control.command(ControlCommand::Stop).await;
         *self.control.borrow_mut() = Some(control);
+    }
+
+    fn status(&self) -> Status {
+        self.with_control(|control| control.status())
     }
 
     /// The next frame of `subtype` the station sent after the first `seen`.
@@ -291,26 +550,53 @@ impl World<'_> {
         }
     }
 
+    /// Move the clock by `duration`.
+    fn advance_by(&self, duration: Duration) {
+        self.clock.advance(duration).unwrap();
+        self.air.clock_advanced();
+    }
+
     async fn settle(&self) {
         for _ in 0..50 {
             yield_now().await;
         }
     }
 
-    async fn associate(&self, seen: &mut usize, protected: bool) {
+    async fn associate(&self, seen: &mut usize, protected: bool) -> [AirFrame; 3] {
         self.associate_with(seen, beacon(protected), protected)
-            .await;
+            .await
     }
 
-    async fn associate_with(&self, seen: &mut usize, beacon: Vec<u8>, protected: bool) {
+    /// Scan, authenticate and associate after `beacon`: the probe, the
+    /// Authentication and the Association Request as they went.
+    async fn associate_with(
+        &self,
+        seen: &mut usize,
+        beacon: Vec<u8>,
+        protected: bool,
+    ) -> [AirFrame; 3] {
         self.station_command(StaCommand::Connect).await;
-        self.sent(seen, PROBE_REQUEST).await;
+        self.join(seen, beacon, protected).await
+    }
+
+    /// The join of an admitted Connect after `beacon`.
+    async fn join(&self, seen: &mut usize, beacon: Vec<u8>, protected: bool) -> [AirFrame; 3] {
+        let probe = self.sent(seen, PROBE_REQUEST).await;
         self.air.receive(&beacon, meta());
         let authentication = self.sent(seen, AUTHENTICATION).await;
         let response = authentication_response(&authentication.plaintext).unwrap();
         self.air.receive(&response, meta());
-        self.sent(seen, ASSOCIATION_REQUEST).await;
+        let association = self.sent(seen, ASSOCIATION_REQUEST).await;
         self.air.receive(&association_response(protected), meta());
+        [probe, authentication, association]
+    }
+
+    async fn connected(&self) {
+        self.notice(StaNotice::Connected {
+            bssid: BSSID,
+            channel: 6,
+        })
+        .await;
     }
 
     async fn handshake(&self, seen: &mut usize) -> oer_protocols_ieee80211_core_security_rsn::Ptk {
@@ -318,11 +604,8 @@ impl World<'_> {
         self.air.receive(&message3(&ptk), meta());
         let message4 = self.sent(seen, DATA).await;
         assert_eq!(message4.key, None, "Message 4 goes unprotected");
-        self.notice(StaNotice::Connected {
-            bssid: BSSID,
-            channel: 6,
-        })
-        .await;
+        assert_eq!(message4.plaintext[1] & 0x40, 0);
+        self.connected().await;
         ptk
     }
 
@@ -349,11 +632,17 @@ impl World<'_> {
         self.send_msdu_at(destination, 0)
     }
 
+    /// Take back every memory the actor returned, counted.
+    fn take_back_memory(&self) {
+        while let Ok(Some(_memory)) = self.returned.borrow_mut().try_receive_with(Option::take) {
+            self.memory_back.set(self.memory_back.get() + 1);
+        }
+    }
+
     /// The network stack sends an MSDU of user `priority`, if its queue
     /// has room.
     fn send_msdu_at(&self, destination: [u8; 6], priority: u8) -> bool {
-        while let Ok(Some(_memory)) = self.returned.borrow_mut().try_receive_with(Option::take) {}
-        let packet = network_frame(
+        self.send_packet(
             oer_protocols_ieee80211_wire::data::MsduParts {
                 destination,
                 source: LOCAL,
@@ -361,7 +650,17 @@ impl World<'_> {
                 payload: &[0xab; 100],
             },
             WmmUserPriority::new(priority).unwrap(),
-        );
+        )
+    }
+
+    /// The network stack sends `parts` at `priority`, if its queue has room.
+    fn send_packet(
+        &self,
+        parts: oer_protocols_ieee80211_wire::data::MsduParts<'_>,
+        priority: WmmUserPriority,
+    ) -> bool {
+        self.take_back_memory();
+        let packet = network_frame(parts, priority);
         self.stack
             .borrow_mut()
             .try_send_with(|slot| {
@@ -373,14 +672,41 @@ impl World<'_> {
 
     /// The MSDUs the network stack received.
     fn delivered(&self) -> usize {
-        let mut count = 0;
+        self.delivered_frames().len()
+    }
+
+    /// The Ethernet frames the network stack received, each given back.
+    fn delivered_frames(&self) -> Vec<Vec<u8>> {
+        let bytes = |parts: oer_protocols_network_port::EthernetFrameView<'_>| {
+            let mut bytes = Vec::from(parts.destination);
+            bytes.extend_from_slice(&parts.source);
+            bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
+            bytes.extend_from_slice(parts.payload);
+            bytes
+        };
+        let mut frames = Vec::new();
         while let Some(received) = self.delivered.borrow().try_receive() {
-            if matches!(received, Received::Copied(_)) {
-                let _copy = self.copies.borrow().try_receive();
-            }
-            count += 1;
+            frames.push(match received {
+                Received::Lent(frame) => {
+                    self.lent.set(self.lent.get() + 1);
+                    bytes(frame.view().unwrap())
+                }
+                Received::Copied(_) => {
+                    let copy = self.copies.borrow().try_receive().unwrap();
+                    bytes(oer_protocols_network_port::EthernetFrame::view(&copy).unwrap())
+                }
+            });
         }
-        count
+        frames
+    }
+
+    /// The last payload octet of each frame the network stack received.
+    async fn markers(&self) -> Vec<u8> {
+        self.settle().await;
+        self.delivered_frames()
+            .iter()
+            .map(|frame| *frame.last().unwrap())
+            .collect()
     }
 
     fn lifecycle_wakes(&self) -> usize {
@@ -400,11 +726,10 @@ fn script(script: impl for<'a, 'b> FnOnce(&'a World<'b>) -> Script<'a> + 'static
     Box::new(script)
 }
 
-/// The lifecycle of a fresh installation's `resources`.
 /// A lifecycle's parts before it is built: the station, its arbiter, the
 /// issuer, the first channel and the terminal access.
-struct Parts<'s> {
-    station: crate::lifecycle::LifecycleConstructed<'s, P<'s>, Callbacks, 2>,
+struct Parts<'s, const G: usize> {
+    station: crate::lifecycle::LifecycleConstructed<'s, P<'s>, Callbacks, G>,
     arbiter: LifecycleArbiter<'s, P<'s>>,
     issuer: Issuer<'s>,
     channel: SupportedChannel<ModelCaps24>,
@@ -415,7 +740,7 @@ struct Parts<'s> {
     >,
 }
 
-impl<'s> Parts<'s> {
+impl<'s, const G: usize> Parts<'s, G> {
     /// Run the lifecycle to its end: placed, as a composition places it,
     /// when placement is built.
     async fn run(
@@ -429,7 +754,8 @@ impl<'s> Parts<'s> {
             SameHart,
         >,
         clock: &VirtualClock,
-    ) -> Completed<'s> {
+        events: Observed,
+    ) -> Completed<'s, G> {
         let Self {
             station,
             arbiter,
@@ -440,7 +766,7 @@ impl<'s> Parts<'s> {
         #[cfg(feature = "placement")]
         {
             let (station, credits) = station;
-            let placed = Lifecycle::init_in_place(
+            let placed = TestLifecycle::<'s, G>::init_in_place(
                 Box::leak(Box::new(core::mem::MaybeUninit::uninit())),
                 |place| (place.write(station), credits),
                 arbiter,
@@ -448,38 +774,70 @@ impl<'s> Parts<'s> {
                 CcmpPacketNumberStep::ONE,
                 channel,
                 terminal_access,
-                (),
+                events,
             );
             let output = Box::leak(Box::new(core::mem::MaybeUninit::uninit()));
-            Lifecycle::run_placed(placed, output, actor, io, clock)
+            TestLifecycle::<'s, G>::run_placed(placed, output, actor, io, clock)
                 .await
                 .read()
         }
         #[cfg(not(feature = "placement"))]
         {
-            let lifecycle: TestLifecycle<'s> = Lifecycle::new(
+            let lifecycle: TestLifecycle<'s, G> = Lifecycle::new(
                 station,
                 arbiter,
                 issuer,
                 CcmpPacketNumberStep::ONE,
                 channel,
                 terminal_access,
-                (),
+                events,
             );
             lifecycle.run(actor, io, clock).await
         }
     }
 }
 
-fn lifecycle<'s>(
+/// The lifecycle of a fresh installation's `resources`, and its receive
+/// agreements' storage.
+fn lifecycle<'s, const G: usize>(
     config: TestConfig,
     resources: ModelResources<'s, Backend<'s>>,
     issuer: Issuer<'s>,
-) -> (Parts<'s>, RxBlockAckStorage<'s, Types<'s>, 2, 4>) {
+) -> (Parts<'s, G>, RxBlockAckStorage<'s, Types<'s>, 2, 4>) {
+    let (parts, storage, _spare) = lifecycle_spare(config, resources, issuer);
+    (parts, storage)
+}
+
+/// The installation's owners the station does not take: the access
+/// point's command permissions and the station's TSF permission.
+struct Spare<'s> {
+    access_point: oer_protocols_ieee80211_contracts_port::InterfacePermissions<
+        's,
+        oer_protocols_ieee80211_contracts_port::AccessPoint,
+        <Types<'s> as PhaseTypes<'s>>::AccessPointCommandPath,
+    >,
+    station_tsf: oer_protocols_ieee80211_contracts_port::TsfPermission<
+        's,
+        oer_protocols_ieee80211_contracts_port::Station,
+        <Types<'s> as PhaseTypes<'s>>::StationCommandPath,
+    >,
+}
+
+/// [`lifecycle`], and the owners the station does not take.
+fn lifecycle_spare<'s, const G: usize>(
+    config: TestConfig,
+    resources: ModelResources<'s, Backend<'s>>,
+    issuer: Issuer<'s>,
+) -> (
+    Parts<'s, G>,
+    RxBlockAckStorage<'s, Types<'s>, 2, 4>,
+    Spare<'s>,
+) {
     let ModelResources {
         connection_epoch,
         block_acks,
         station_commands,
+        access_point_commands,
         terminal_access,
         tickets,
         small,
@@ -504,7 +862,7 @@ fn lifecycle<'s>(
         gate,
     );
     let (sta_config, _security) = config;
-    let resources = StationResources::<_, 4, 4, 2> {
+    let resources = StationResources::<_, 4, 4, G> {
         configure: station_commands.configure,
         epochs: oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(
             connection_epoch,
@@ -531,24 +889,39 @@ fn lifecycle<'s>(
         terminal_access,
     };
     let storage = RxBlockAckStorage::new(block_acks, Duration::from_millis(100));
-    (lifecycle, storage)
+    let spare = Spare {
+        access_point: access_point_commands,
+        station_tsf: station_commands.tsf,
+    };
+    (lifecycle, storage, spare)
 }
 
 /// How a case's run ended.
-struct Ends<'s> {
-    lifecycle: Option<Completed<'s>>,
+struct Ends<'s, const G: usize = 2> {
+    lifecycle: Option<Completed<'s, G>>,
     actor: Option<ActorEnd<oer_protocols_ieee80211_testing_model::ModelPortFault>>,
 }
 
 /// Run the station of `config` with `script` on a fresh model, for as many
 /// installations as `script` runs: each script after the first plays the
-/// next installation after a restart. Returns the ends of every
-/// installation and the installations' generations.
-#[allow(clippy::type_complexity)]
+/// next installation after a restart. `check` takes the ends of every
+/// installation.
 fn pair(
     config: impl Fn() -> TestConfig,
     scripts: Vec<Scripted>,
     check: impl for<'s> FnOnce(&[Ends<'s>], &ModelAir),
+) {
+    pair_with::<2>(config, |_| {}, scripts, check);
+}
+
+/// [`pair`] of a station with `G` group slots, on an air `setup` prepared
+/// before the actor's first turn.
+#[allow(clippy::type_complexity)]
+fn pair_with<const G: usize>(
+    config: impl Fn() -> TestConfig,
+    setup: impl FnOnce(&ModelAir),
+    scripts: Vec<Scripted>,
+    check: impl for<'s> FnOnce(&[Ends<'s, G>], &ModelAir),
 ) {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Rc::new(VirtualClock::new());
@@ -563,20 +936,32 @@ fn pair(
             clock.clone(),
         )
         .unwrap();
+        setup(&air);
         let ModelInstall {
             port,
             commands,
             resources,
         } = install;
-        let (first, storage) = lifecycle(config(), resources, commands);
+        let (first, storage) = lifecycle::<G>(config(), resources, commands);
         let mut life = Some(first);
         let storage = Box::leak(Box::new(storage));
+        let observed = Observed::default();
+        let refuse_rate = Rc::new(Cell::new(None));
+        let completions = Rc::new(RefCell::new(Vec::new()));
         let mut actor = Some(Actor::<P<'_>, _, _>::new(
             port,
-            EspressifRateSelection::<ModelCaps24>::new(),
+            TestRates {
+                inner: EspressifRateSelection::<ModelCaps24>::new(),
+                refuse: refuse_rate.clone(),
+                completions: completions.clone(),
+            },
             storage.view(),
-            (),
+            observed.clone(),
         ));
+        let network_absent = Rc::new(Cell::new(false));
+        let network_side = Network {
+            absent: network_absent.clone(),
+        };
         let mut to_queue = WakingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
         let mut parcel_queue = WakingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
         let mut from_queue = WakingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
@@ -628,7 +1013,7 @@ fn pair(
             returned: returned_end,
             receive: receive_end,
             receive_copied: copies_end,
-            network: &Network,
+            network: &network_side,
         };
         let heard = Rc::new(Heard::default());
         let lifecycle_flag = Arc::new(Flag::default());
@@ -643,6 +1028,12 @@ fn pair(
             delivered: RefCell::new(delivered),
             copies: RefCell::new(copies),
             lifecycle: lifecycle_flag.clone(),
+            observed: observed.clone(),
+            refuse_rate,
+            completions,
+            network_absent,
+            lent: Cell::new(0),
+            memory_back: Cell::new(0),
         };
         let record = {
             let heard = heard.clone();
@@ -654,10 +1045,27 @@ fn pair(
                     heard.tx_refused.set(heard.tx_refused.get() + 1);
                     heard.refusals.borrow_mut().push(reason);
                 }
-                crate::station::ServiceOutput::CommandCompleted(_) => {
-                    heard.completed.set(heard.completed.get() + 1)
+                crate::station::ServiceOutput::CommandCompleted(terminal) => {
+                    heard.completed.set(heard.completed.get() + 1);
+                    heard
+                        .terminals
+                        .borrow_mut()
+                        .push((terminal.request.correlation(), terminal.outcome));
                 }
-                _ => {}
+                crate::station::ServiceOutput::CommandRefused(refused) => {
+                    heard.command_refusals.borrow_mut().push((
+                        refused.request.correlation(),
+                        refused.request.command(),
+                        refused.reason,
+                    ));
+                }
+                crate::station::ServiceOutput::AccessPoint(command) => {
+                    heard.access_point.borrow_mut().push(command)
+                }
+                crate::station::ServiceOutput::MsduRefused { .. } => {
+                    heard.msdu_refused.set(heard.msdu_refused.get() + 1)
+                }
+                crate::station::ServiceOutput::CommandStarted(_) => {}
             }
         };
         let mut output = world.control.borrow().as_ref().unwrap().events(record);
@@ -685,7 +1093,7 @@ fn pair(
                     *completed.borrow_mut() = Some(
                         life.take()
                             .unwrap()
-                            .run(&mut lifecycle_ends, &mut io, &clock)
+                            .run(&mut lifecycle_ends, &mut io, &clock, observed.clone())
                             .await,
                     );
                 };
@@ -752,7 +1160,7 @@ fn pair(
                     Err((_, reason)) => panic!("the stopped port reinstalls: {reason:?}"),
                 };
                 let (commands, resources) = minted.unwrap();
-                let (next_life, storage) = lifecycle(config(), resources, commands);
+                let (next_life, storage) = lifecycle::<G>(config(), resources, commands);
                 // The actor keeps its receive agreements' storage; the new
                 // installation's stays owned.
                 let _kept = Box::leak(Box::new(storage));
@@ -760,6 +1168,7 @@ fn pair(
                 actor = Some(actor_next);
             }
         }
+        assert_eq!(observed.tokens_lost(), 0, "no station token is lost");
         check(&ends, &air);
     }));
 }
@@ -787,13 +1196,35 @@ fn open_data(sequence: u16, source: [u8; 6]) -> Vec<u8> {
     frame
 }
 
-fn stopped(ends: &[Ends<'_>]) -> bool {
+/// Whether the last installation stopped as the application asked and its
+/// actor retired.
+fn stopped<const G: usize>(ends: &[Ends<'_, G>]) -> bool {
     matches!(
         ends.last()
             .and_then(|ends| ends.lifecycle.as_ref())
             .map(|completed| &completed.end),
         Some(LifecycleEnd::Stopped)
     ) && ends.last().and_then(|ends| ends.actor.as_ref()) == Some(&ActorEnd::Retired)
+}
+
+/// `config` with a second channel a scan visits.
+fn two_channels(mut config: TestConfig) -> TestConfig {
+    let channel1 = SupportedChannel::new(
+        oer_protocols_radio_regulatory::TEST_DOMAIN
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
+                        1,
+                        oer_protocols_ieee80211_contracts_port::ChannelWidth::Mhz20,
+                    )
+                    .unwrap(),
+                ),
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    config.0.channels.push(channel1).unwrap();
+    config
 }
 
 #[test]
@@ -904,26 +1335,6 @@ fn a_wpa2_station_handshakes_through_the_actor_and_its_pairwise_key_comes_back_a
             assert_eq!(air.pending_rx(), 0);
         },
     );
-}
-
-/// `config` with a second channel the scan visits.
-fn two_channels(mut config: TestConfig) -> TestConfig {
-    let channel1 = SupportedChannel::new(
-        oer_protocols_radio_regulatory::TEST_DOMAIN
-            .permit(
-                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
-                        1,
-                        oer_protocols_ieee80211_contracts_port::ChannelWidth::Mhz20,
-                    )
-                    .unwrap(),
-                ),
-            )
-            .unwrap(),
-    )
-    .unwrap();
-    config.0.channels.push(channel1).unwrap();
-    config
 }
 
 #[test]
@@ -1096,7 +1507,7 @@ fn a_group_rekey_installs_by_its_terminal_and_answers_under_the_links_key() {
 
 #[test]
 fn the_actor_numbers_the_stations_frames_and_the_data_of_one_tid_without_a_gap() {
-    use crate::station::tests::{QOS_DATA, WMM, carries_eapol, qos_sequence};
+    use crate::test_fixtures::{QOS_DATA, WMM, carries_eapol, qos_sequence};
     pair(
         wpa2,
         std::vec![script(|world| {
@@ -1142,7 +1553,7 @@ fn the_actor_numbers_the_stations_frames_and_the_data_of_one_tid_without_a_gap()
 
 #[test]
 fn a_receive_agreement_answers_through_the_station_and_reorders_in_the_actor() {
-    use crate::station::tests::block_ack::{addba, data, ht_beacon, ht_config, response};
+    use crate::test_fixtures::block_ack::{addba, data, ht_beacon, ht_config, response};
     use oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction;
     pair(
         ht_config,
@@ -1164,6 +1575,8 @@ fn a_receive_agreement_answers_through_the_station_and_reorders_in_the_actor() {
                         dialog_token: 7,
                         status: 0,
                         tid: 0,
+                        window: 4,
+                        amsdu: true,
                         ..
                     }
                 ));
@@ -1172,8 +1585,22 @@ fn a_receive_agreement_answers_through_the_station_and_reorders_in_the_actor() {
                 world.settle().await;
                 assert_eq!(world.delivered(), 0, "the hole holds the later frame");
                 world.air.receive(&data(4094, 0, 1), meta());
-                world.settle().await;
-                assert_eq!(world.delivered(), 2);
+                assert_eq!(world.markers().await, [1, 2], "in order");
+                // An old retry only goes back to the port; the window wraps.
+                world.air.receive(&data(4095, 0, 2), meta());
+                assert!(world.markers().await.is_empty());
+                world.air.receive(&data(0, 0, 3), meta());
+                assert_eq!(world.markers().await, [3]);
+                assert_eq!(world.observed.rx_frames_dropped(), 0);
+                assert!(
+                    world
+                        .observed
+                        .service(|event| match event {
+                            ServiceEvent::RxMsdusRefused(refused) => Some(refused),
+                            _ => None,
+                        })
+                        .is_empty()
+                );
                 world.stop().await;
             })
         })],
@@ -1186,7 +1613,7 @@ fn a_receive_agreement_answers_through_the_station_and_reorders_in_the_actor() {
 
 #[test]
 fn a_transmit_agreement_names_the_exact_next_number_and_ends_idle() {
-    use crate::station::tests::block_ack::{
+    use crate::test_fixtures::block_ack::{
         addba_response, ht_beacon, ht_config, response, tx_block_ack_config,
     };
     use oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction;
@@ -1207,6 +1634,9 @@ fn a_transmit_agreement_names_the_exact_next_number_and_ends_idle() {
                 let BlockAckAction::AddbaRequest {
                     dialog_token,
                     tid: 0,
+                    immediate: true,
+                    window: 32,
+                    timeout_tu: 0,
                     starting_sequence,
                     ..
                 } = response(&request)
@@ -1220,15 +1650,24 @@ fn a_transmit_agreement_names_the_exact_next_number_and_ends_idle() {
                     .receive(&addba_response(dialog_token, 0, 32), meta());
                 // The next MSDU takes the number the request named.
                 assert!(world.send_msdu(BSSID));
-                let next = world.sent(&mut seen, crate::station::tests::QOS_DATA).await;
-                assert_eq!(crate::station::tests::qos_sequence(&next), 1);
-                // No more data: the idle agreement ends with a DELBA.
+                let next = world.sent(&mut seen, crate::test_fixtures::QOS_DATA).await;
+                assert_eq!(crate::test_fixtures::qos_sequence(&next), 1);
+                // No more data: one idle second later the agreement ends.
                 let delba = world.sent(&mut seen, 0xd0).await;
-                assert!(
-                    matches!(response(&delba), BlockAckAction::Delba { tid: 0, .. }),
-                    "{:?}",
-                    response(&delba)
+                assert_eq!(
+                    response(&delba),
+                    BlockAckAction::Delba {
+                        tid: 0,
+                        initiator: true,
+                        reason: 39,
+                    }
                 );
+                // New data negotiates again.
+                assert!(world.send_msdu(BSSID));
+                assert!(matches!(
+                    response(&world.sent(&mut seen, 0xd0).await),
+                    BlockAckAction::AddbaRequest { tid: 0, .. }
+                ));
                 world.stop().await;
             })
         })],

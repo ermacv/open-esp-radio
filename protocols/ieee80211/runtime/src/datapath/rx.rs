@@ -465,3 +465,37 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order() {
+        let mut refused = RxMsdusRefused::default();
+        for refusal in [
+            Some(Refusal::QueueFull),
+            None,
+            Some(Refusal::TooLong),
+            Some(Refusal::QueueFull),
+            Some(Refusal::NoNetwork),
+        ] {
+            count(&mut refused, refusal);
+        }
+        assert_eq!(
+            refused,
+            RxMsdusRefused {
+                too_long: 1,
+                queue_full: 2,
+                no_network: 1,
+            }
+        );
+        let mut saturated = RxMsdusRefused {
+            too_long: u16::MAX,
+            queue_full: 0,
+            no_network: 0,
+        };
+        count(&mut saturated, Some(Refusal::TooLong));
+        assert_eq!(saturated.too_long, u16::MAX);
+    }
+}

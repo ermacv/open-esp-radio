@@ -1,0 +1,17 @@
+error[E0382]: use of moved value: `lifecycle`
+  --> tests/ui/lifecycle_run_owner.rs:31:10
+   |
+14 |     lifecycle: Lifecycle<'id, D, C, X, T, 2, O>,
+   |     --------- move occurs because `lifecycle` has type `Lifecycle<'_, D, C, X, T, 2, O>`, which does not implement the `Copy` trait
+...
+29 |     let run = lifecycle.run(actor, io, timer);
+   |                         --------------------- `lifecycle` moved due to this method call
+30 |     #[cfg(all())]
+31 |     drop(lifecycle); // ui-error: E0382
+   |          ^^^^^^^^^ value used here after move
+   |
+note: `Lifecycle::<'id, D, C, X, T, GROUPS, O>::run` takes ownership of the receiver `self`, which moves `lifecycle`
+  --> src/lifecycle.rs
+   |
+   |         mut self,
+   |             ^^^^
