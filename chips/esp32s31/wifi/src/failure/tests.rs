@@ -70,100 +70,6 @@ fn radio_origin_and_tracking_class_keep_their_original_clock_values() {
     );
 }
 #[test]
-fn a_failed_retirement_keeps_the_station_failure_and_every_lifecycle_observation() {
-    use oer_protocols_radio_port::{
-        LifecycleError as Source, SlotObservation as Observed, SlotStorageState,
-    };
-    let observed = Observed {
-        phase: 7,
-        storage: SlotStorageState::Vacant,
-        invocation_present: true,
-    };
-    assert_eq!(
-        super::convert::retirement(None, Source::InvalidState(observed), false),
-        RetirementFailure {
-            failure: None,
-            network: None,
-            cause: RetirementCause::InvalidState(SlotObservation {
-                phase: 7,
-                storage: SlotStorage::Vacant,
-                invocation_present: true,
-            }),
-            hardware_stopped: false,
-        }
-    );
-    let failure = StationFailure::Backend(BackendFault::Deadline);
-    for (source, cause) in [
-        (Source::Cancelled, RetirementCause::Cancelled),
-        (
-            Source::FailStopRequested,
-            RetirementCause::FailStopRequested,
-        ),
-        (Source::Construction, RetirementCause::Construction),
-        (
-            Source::BodyAlreadyIssued,
-            RetirementCause::BodyAlreadyIssued,
-        ),
-        (Source::Deadline, RetirementCause::Deadline),
-        (Source::StopUnconfirmed, RetirementCause::StopUnconfirmed),
-    ] {
-        let failed = FailedStation {
-            failure,
-            network: None,
-        };
-        assert_eq!(
-            super::convert::retirement(Some(failed), source, true),
-            RetirementFailure {
-                failure: Some(failure),
-                network: None,
-                cause,
-                hardware_stopped: true,
-            }
-        );
-    }
-}
-#[test]
-fn a_failed_network_drain_is_the_retirement_cause_beside_the_station_failure() {
-    use oer_protocols_radio_port::LifecycleError as Source;
-    let drain = NetworkDrain {
-        cause: NetworkDrainCause::Deadline,
-        held: 3,
-    };
-    let failure = StationFailure::Backend(BackendFault::Deadline);
-    // The port's refusal to retire is the drain's, and the original
-    // failure is kept beside it.
-    assert_eq!(
-        super::convert::retirement(
-            Some(FailedStation {
-                failure,
-                network: Some(drain),
-            }),
-            Source::StopUnconfirmed,
-            true,
-        ),
-        RetirementFailure {
-            failure: Some(failure),
-            network: Some(drain),
-            cause: RetirementCause::NetworkDrain(drain),
-            hardware_stopped: true,
-        }
-    );
-    // A requested stop fails with the drain itself.
-    let lost = NetworkDrain {
-        cause: NetworkDrainCause::ParticipantLost,
-        held: 1,
-    };
-    assert_eq!(
-        super::convert::network_drain(
-            oer_protocols_ieee80211_runtime::station::NetworkDrainFailure {
-                cause: oer_protocols_ieee80211_runtime::station::NetworkDrainCause::ParticipantLost,
-                held: 1,
-            }
-        ),
-        lost
-    );
-}
-#[test]
 fn a_release_into_a_poisoned_domain_or_with_an_active_mac_is_not_a_stop() {
     use oer_chips_esp32s31_hal::owner::maintenance::Error as Maintenance;
     use oer_chips_esp32s31_radio_client::DomainHealth;
@@ -198,41 +104,29 @@ fn a_release_into_a_poisoned_domain_or_with_an_active_mac_is_not_a_stop() {
     );
 }
 #[test]
-fn an_abandoned_station_keeps_the_lifecycle_cause_and_the_ports_first_fault_as_one_path() {
+fn a_port_fault_keeps_its_whole_path_under_the_lifecycle_failure() {
     use oer_chips_esp32s31_ieee80211_driver::{
         lower_mac::arena::ArenaFault as Arena, mac::tx::ampdu::HtAmpduTxError as Chain, port::Fault,
     };
-    use oer_protocols_radio_port::{LifecycleError, SlotInitError};
-    let abandoned = super::convert::abandoned(
-        SlotInitError::Lifecycle(LifecycleError::StopUnconfirmed),
-        Some(Fault::Arena(Arena::Chain(Chain::DetachFailed))),
-    );
+    let failure = LifecycleFailure::Port(super::convert::backend_fault(Fault::Arena(
+        Arena::Chain(Chain::DetachFailed),
+    )));
     assert_eq!(
-        abandoned,
-        Abandoned {
-            cause: AbandonCause::Lifecycle(RetirementCause::StopUnconfirmed),
-            fault: Some(BackendFault::Arena(ArenaFault::Chain(
-                AggregateTxError::DetachFailed
-            ))),
-        }
+        failure,
+        LifecycleFailure::Port(BackendFault::Arena(ArenaFault::Chain(
+            AggregateTxError::DetachFailed
+        )))
     );
-    let path = oer_portable_diagnostics::DiagPath::of(&abandoned);
-    assert_eq!(
-        path.names(),
-        [
-            "Lifecycle",
-            "StopUnconfirmed",
-            "Arena",
-            "Chain",
-            "DetachFailed"
-        ]
-    );
+    let path = oer_portable_diagnostics::DiagPath::of(&failure);
+    assert_eq!(path.names(), ["Port", "Arena", "Chain", "DetachFailed"]);
     assert!(path.words().is_empty() && !path.overflowed());
-    // A cancellation without a recorded fault names the lifecycle alone.
-    let cancelled =
-        super::convert::abandoned(SlotInitError::Lifecycle(LifecycleError::Cancelled), None);
-    let path = oer_portable_diagnostics::DiagPath::of(&cancelled);
-    assert_eq!(path.names(), ["Lifecycle", "Cancelled"]);
+    // A received buffer dropped without its recycle is named as such.
+    let lost = LifecycleFailure::Port(super::convert::backend_fault(Fault::ReceiveLost));
+    assert_eq!(lost, LifecycleFailure::Port(BackendFault::ReceiveLost));
+    assert_eq!(
+        oer_portable_diagnostics::DiagPath::of(&lost).names(),
+        ["Port", "ReceiveLost"]
+    );
 }
 #[test]
 fn a_named_driver_fault_keeps_its_queue_and_operation_across_the_boundary() {

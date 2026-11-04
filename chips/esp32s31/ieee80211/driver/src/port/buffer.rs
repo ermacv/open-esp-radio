@@ -90,11 +90,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Buffer<'_,
     pub fn index(&self) -> u8 {
         self.place.index()
     }
-    /// When the body admitted the MPDU in this memory, until it is renewed.
-    #[cfg(test)]
-    pub(crate) fn admitted_at(&self) -> Option<Instant> {
-        self.admission
-    }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMemory
     for Buffer<'_, Id, D, B, O>
@@ -126,11 +121,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Sent<'_, I
     }
     pub fn body(&self) -> Option<&D::Body> {
         self.mpdu.body.as_ref()
-    }
-    /// When the body admitted the MPDU; retransmission keeps it.
-    #[cfg(test)]
-    pub(crate) fn admitted_at(&self) -> Option<Instant> {
-        self.mpdu.buffer.admission
     }
     /// The encoded MPDU extent as its last publication left it in memory.
     #[cfg(test)]
@@ -277,7 +267,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     },
                     layout,
                 ) = fresh.into_parts();
-                // Only a buffer lent to the body enters its preparation.
+                // Only a buffer lent under the installation's brand enters
+                // its preparation.
                 let Some(loan) = buffer.loan else {
                     return Err(PreparationRefused {
                         reason: PreparationError::MissingBodyLoan,

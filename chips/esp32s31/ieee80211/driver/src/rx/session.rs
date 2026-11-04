@@ -483,9 +483,4 @@ where
     pub(crate) fn port_mask_all(&self, doorbell: &impl RadioDoorbell) {
         self.requests.ring(WifiIrqRequest::MaskAll, doorbell);
     }
-
-    pub(crate) fn port_abandon(&mut self, doorbell: &impl RadioDoorbell) {
-        self.requests.ring(WifiIrqRequest::MaskAll, doorbell);
-        self.frontier.require_reset();
-    }
 }

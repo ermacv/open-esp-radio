@@ -277,8 +277,8 @@ pub(crate) const fn executor_observer<const SLOT: usize>() -> ExecutorObserver<S
 }
 
 /// The library's observer of the station service, its driver, the shared
-/// RF actor and the PC sampler: the service's spans, receive decisions and
-/// link counts, the actor's tracking ticks and the sampler's samples.
+/// RF actor and the PC sampler: the service's receive decisions and link
+/// counts, the actor's tracking ticks and the sampler's samples.
 #[derive(Clone, Copy, Default)]
 pub struct Observer;
 
@@ -294,11 +294,6 @@ impl Observer {
 
 impl oer_portable_trace::Observer for Observer {
     fn event<E: oer_portable_trace::Event + Copy + 'static>(&self, event: E) {
-        if let Some(span) = Self::decoded::<E, station::ServiceSpan>(event)
-            && let Some(counter) = PART_COUNTERS.get(span_part(span.span) as usize)
-        {
-            counter.observe(now_us(), span.end, EPOCH.load(Ordering::Relaxed));
-        }
         if let Some(decision) = Self::decoded::<E, station::StationRx>(event) {
             receive_decision(decision);
         }
@@ -377,21 +372,6 @@ fn receive_decision(decision: station::StationRx) {
         WINDOW.store(decision.count, Ordering::Relaxed);
     } else if let Some(count) = STATION.get(usize::from(decision.kind as u8)) {
         bump(count, decision.count);
-    }
-}
-
-const fn span_part(span: station::Span) -> LibraryPart {
-    match span {
-        station::Span::Step => LibraryPart::Step,
-        station::Span::Pending => LibraryPart::Pending,
-        station::Span::Sources => LibraryPart::Sources,
-        station::Span::Received => LibraryPart::Received,
-        station::Span::Deliver => LibraryPart::Deliver,
-        station::Span::Queue => LibraryPart::Queue,
-        station::Span::Terminal => LibraryPart::Terminal,
-        station::Span::Transmit => LibraryPart::Transmit,
-        station::Span::Recycle => LibraryPart::Recycle,
-        station::Span::Attempt => LibraryPart::Attempt,
     }
 }
 

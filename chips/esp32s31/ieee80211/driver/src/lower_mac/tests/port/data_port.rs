@@ -16,6 +16,10 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+mod keys_receive;
+mod lifecycle;
+mod transmit;
+
 type Port<'id, Id> = Esp32s31Port<'id, Id, TestDevice, 512, Draws>;
 type Ticket<'id, Id> = radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>;
 type TestBuffer<'id, Id> = Buffer<'id, Id, TestDevice, 512, Draws>;
@@ -87,6 +91,8 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
     group_permission:
         Option<radio::Slot<'id, GroupPermission<Station>, radio::Child<radio::Root<Id>, 5>>>,
     gate: Option<GateOpen<'id, radio::Child<radio::Root<Id>, 1>>>,
+    /// The terminals' access, which opens a single MPDU's terminal.
+    access: Option<TerminalAccess<'id, Tickets, radio::Child<radio::Root<Id>, 2>>>,
 }
 
 fn supported(
@@ -146,6 +152,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             association: Some(resources.station_association),
             group_permission: Some(resources.station_group_permission),
             gate: Some(resources.gate),
+            access: Some(resources.terminal_access),
         }
     }
 

@@ -43,17 +43,13 @@ impl<const N: usize> AtomicWords<N> {
         let words = core::array::from_fn(|index| self.words[offset + index].load(Ordering::SeqCst));
         (before == self.generation.load(Ordering::SeqCst)).then_some(words)
     }
-
-    pub(super) fn word(&self, index: usize) -> u32 {
-        self.words[index].load(Ordering::SeqCst)
-    }
 }
 
-/// PTK creation stays in the body; GTK creation stays in the driver's task. Revocation owns the
-/// same affine key/permission before publishing its command, so two writers
-/// cannot overlap on one record. Returned GTK permissions follow the driver's completed
-/// publication. Initialization and retirement run outside all endpoint loans.
-/// Abandonment does not mutate these records: quarantine prevents later use.
+/// The port sets a key's record when its installation command runs and
+/// clears it when its removal begins, in its caller's turn. Revocation owns
+/// the same affine key/permission before its command, so two writers cannot
+/// overlap on one record. Retirement clears every record; a quarantine does
+/// not mutate them and prevents later use.
 #[derive(Debug)]
 pub(super) struct KeyActivity(AtomicWords<2>);
 

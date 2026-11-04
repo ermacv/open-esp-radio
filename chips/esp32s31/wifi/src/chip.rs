@@ -452,10 +452,7 @@ where
         Self {
             channels: Channels::across_harts(network, actor),
             driver: radio::DriverStorage::new(
-                oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers {
-                    driver: actor,
-                    returned: actor,
-                },
+                oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers { returned: actor },
             ),
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),

@@ -1,8 +1,8 @@
 # ESP32-S31 Wi-Fi station facade
 
 `station(resources, config) -> (Control, NetDevice, Runners)` assembles the
-S31 lower-MAC backend, arbiter, station/upper-MAC/RSN and portable station
-runtime. The separate crate keeps HIL wifi-station above that
+S31 data port (`Esp32s31Port`), the portable runtime's datapath actor over
+it and the station's lifecycle with its arbiter and station/upper-MAC/RSN. The separate crate keeps HIL wifi-station above that
 composition; its explicit layer role is `Facade`.
 
 Control and the affine neutral Ethernet end exist before installation. `Control::wait_started` gates image workload startup on
@@ -92,8 +92,7 @@ reset with. The facade has no diagnostic
 counters: its copied trace observations reach image-owned collectors, and its
 product events are immediate callbacks. Bridge timers, polling, protocol
 parameters, DMA geometry and rate-selection policy retain their values.
-The facade's own trace events (station activity, the station service's
-spans, the selected data rate, each received data MPDU's rate and A-MPDU
+The facade's own trace events (station activity, the selected data rate, each received data MPDU's rate and A-MPDU
 containment and each single data transmission's last rate, transmissions
 and end) are its `observation` module, reported to
 `Binding::Observer` and `Binding::DriverObserver`. The protocol's events go to `Binding::Sink`, which

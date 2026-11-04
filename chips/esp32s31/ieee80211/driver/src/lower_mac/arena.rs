@@ -342,36 +342,6 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
         self.fault
     }
 
-    /// The chain of `arena`, for host observation.
-    #[cfg(test)]
-    pub(crate) fn chain_mut(
-        &mut self,
-        arena: ArenaId,
-    ) -> Option<&mut Esp32s31AmpduOwner<'slot, L, SLOTS>> {
-        self.chains
-            .get_mut(arena.index())
-            .map(|chain| &mut chain.owner)
-    }
-
-    /// The arena on the air, the frames its PPDU carries and whether it is
-    /// a single MPDU, for host observation.
-    #[cfg(test)]
-    pub(crate) fn on_air_shape(&self) -> Option<(ArenaId, u8, bool)> {
-        let id = self.on_air()?;
-        match &self.chains.get(id.index())?.phase {
-            Phase::OnAir(on_air) => Some((id, on_air.published, on_air.single)),
-            Phase::Idle | Phase::Completed { .. } => None,
-        }
-    }
-
-    /// Whether `arena` holds a key right, for host observation.
-    #[cfg(test)]
-    pub(crate) fn holds_key(&self, arena: ArenaId) -> bool {
-        self.chains
-            .get(arena.index())
-            .is_some_and(|chain| matches!(chain.admission, Some(TxAdmission::Protected(_))))
-    }
-
     /// Whether an arena holds a key right: a frame it encrypted is on the
     /// air, awaits settlement or is retained. A key's removal waits for it.
     pub fn holds_key_right(&self) -> bool {

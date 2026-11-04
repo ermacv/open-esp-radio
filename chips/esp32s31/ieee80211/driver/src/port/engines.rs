@@ -5,8 +5,8 @@
 //! Every call takes the turn's `now`, never reads the clock and never
 //! wakes its caller: what must run again is in the returned value or in
 //! the cached [`DataPort::deadline`], which each call that changes a queue
-//! recomputes. The driver's steps are shared with the slot-loan path
-//! through [`DriverEnv`]: here they post to the turn's [`PortSink`].
+//! recomputes. The driver's steps post through [`DriverEnv`] to the
+//! turn's [`PortSink`].
 //!
 //! A broken contract of the port's own state is a named [`Fault`] that
 //! keeps its observations; the port keeps every owner it holds and
@@ -31,7 +31,7 @@ use oer_protocols_radio_port::{Installation as Receipt, Installations, Minted};
 /// The port's private conversion authority for its `'static` brand.
 type Loan<'id, Id, D, const B: usize, O> = BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>;
 
-/// The data port's command of the phase types `Types<Id, D, B, O>`.
+/// The data port's command over its types `Types<Id, D, B, O>`.
 type Cmd<'id, Id, D, const B: usize, O> = PortCommand<'id, Types<Id, D, B, O>, Esp32s31Caps<B>>;
 
 /// The events one [`DataPort::poll_facts`] takes at most: a transmit word
@@ -314,7 +314,7 @@ where
     fn count_expired(&mut self, msdus: u32) {
         *self.expired = self.expired.saturating_add(msdus);
     }
-    fn tx_completed(&mut self, _: u8, completed: owned::OwnedTxCompleted<'static, Id, D, B, O>) {
+    fn tx_completed(&mut self, _: u8, completed: brand::OwnedTxCompleted<'static, Id, D, B, O>) {
         self.sink.terminal(completed.lend(&self.loan));
     }
     fn tbtt(&mut self, event: TbttEvent) {
@@ -370,7 +370,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// # Errors
     ///
     /// The parts and the mint, unchanged, when the parts do not describe a
-    /// port this chip runs (as [`Esp32s31Backend::new`] checks).
+    /// port this chip runs: an address, publication bound, channel, buffer
+    /// size or bank it does not take, a busy descriptor, a driver that holds
+    /// work, a lost receive buffer or a transmit allocation still out.
     #[inline(never)]
     pub fn install(
         parts: PortParts<D, B, O>,
@@ -392,13 +394,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             || usize::from(parts.bank) > TX_BUFFERS
             || !parts.descriptors.idle()
             || !driver.0.retired()
-            || parts.storage.shared.poisoned.get().is_some()
-            || !parts.storage.shared.returned.none_out()
+            || parts.shared.lost()
+            || !parts.shared.returned.none_out()
         {
             return Err((parts, minted));
         }
         let PortParts {
-            storage,
+            device,
+            shared,
             transmitter,
             pool,
             bank,
@@ -408,9 +411,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             coex,
             observations,
         } = parts;
-        let PortStorage { device, shared, .. } = storage;
-        let device: &'static mut D = device.get_mut();
-        let shared: &'static mut PortSharedStorage<B, D::Lent> = shared;
         // The port takes each of its pool buffers at its place. A buffer
         // the pool does not give, or a place already held, quarantines the
         // installation with its allocation kept out of the bank.
@@ -456,7 +456,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             addresses,
             minted,
         } = parts;
-        let now = device.timer().now();
         let Fresh {
             issuer,
             loan,
@@ -472,7 +471,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             config,
             coex,
             minted,
-            now,
         );
         let port = Self {
             device,
@@ -565,7 +563,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         };
         self.config.channel = channel;
         self.config.tsf_epoch = tsf_epoch;
-        let now = self.device.timer().now();
         let Fresh {
             issuer,
             loan,
@@ -581,7 +578,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.config,
             self.coex,
             minted,
-            now,
         );
         self.settings = PortSettings::new();
         self.state = PortState::Stopped;
@@ -612,9 +608,21 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.expired
     }
 
-    /// The installation's first contract fault.
+    /// The installation's first contract fault, or the loss of a received
+    /// buffer, which every later call answers with.
     pub fn fault(&self) -> Option<Fault> {
-        self.fault
+        self.check().err()
+    }
+
+    /// The slot and permission of a rejected group replacement the driver
+    /// keeps with its quarantine, and its previous and attempted KeyIDs
+    /// with whether the rollback restored the previous entry.
+    #[cfg(test)]
+    pub(crate) fn retained_group(&self) -> (Option<(u8, u8)>, Option<(u8, u8, bool)>) {
+        (
+            self.shared.retained_group.get(),
+            self.shared.rolled_back.get(),
+        )
     }
 
     /// Whether the stopped installation passes its retire checks: no
@@ -661,10 +669,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         match self.fault {
             Some(fault) => Err(fault),
             // A received buffer dropped unrecycled marks its allocation lost.
-            None => match self.shared.poisoned.get() {
-                Some(fault) => Err(fault),
-                None => Ok(()),
-            },
+            None if self.shared.lost() => Err(Fault::ReceiveLost),
+            None => Ok(()),
         }
     }
 
@@ -920,7 +926,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             && let Some(permission) = driver.configuring.take()
         {
             env.sink
-                .terminal(owned::OwnedTerminal::Configured(permission).lend(&loan));
+                .terminal(brand::OwnedTerminal::Configured(permission).lend(&loan));
         }
         Ok(())
     }
@@ -1134,7 +1140,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 let loan = self.loan;
                 let terminal = {
                     let (driver, device, mut env) = self.parts(sink);
-                    driver.group(&mut env, device, since, owned)?
+                    driver.group(&mut env, device, owned)?
                 };
                 if let Err(cause) = self.device.finish_rx_cut() {
                     // The terminal stays with the quarantine.
@@ -1230,7 +1236,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     },
                 )?;
                 self.holding = None;
-                self.driver.configuring = Some(owned::OwnedConfigured::Station(
+                self.driver.configuring = Some(brand::OwnedConfigured::Station(
                     permission.into_owned(&self.loan),
                 ));
                 self.advance_configuration(sink)?;
@@ -1245,7 +1251,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     .install(self.device, identity, installation, &material)?;
                 identity.activity.set(identity.serial);
                 sink.terminal(
-                    owned::OwnedTerminal::PairwiseKeyInstalled(owned::OwnedInstalledPairwise::new(
+                    brand::OwnedTerminal::PairwiseKeyInstalled(brand::OwnedInstalledPairwise::new(
                         identity.role,
                         identity,
                     ))
@@ -1282,7 +1288,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 let terminal = self.driver.removed_terminal(removal, removed)?;
                 self.driver.barrier = None;
                 self.holding = None;
-                sink.terminal(owned::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
                 Ok(CommandProgress::Done)
             }
             group @ (PortCommand::InstallGroup(_)
@@ -1317,7 +1323,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         config: LowerMacConfig,
         coex: &'static D::Coex,
         minted: Minted<Id, InstallationPools>,
-        now: Instant,
     ) -> Self {
         let (transmitter, descriptors, observations) = reusable;
         let Minted { mint, installation } = minted;
@@ -1352,7 +1357,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 admission: None,
             }
         });
-        let prepared = driver.prepare(core, core_tickets, queues, descriptors, observations, now);
+        let prepared = driver.prepare(core, core_tickets, queues, descriptors, observations);
         // The lend credit outlives the previous installation: units the
         // network still holds stay counted and rejoin this ring.
         shared.network.reset();
@@ -1523,7 +1528,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         if let Some(reason) = reason {
             // The attempt ends at once, withdrawn and never published: its
             // terminal returns every owner.
-            let completed = owned::OwnedTxCompleted::Single(attempt.operation.complete(
+            let completed = brand::OwnedTxCompleted::Single(attempt.operation.complete(
                 oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(
                     oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
                 ),
@@ -1645,7 +1650,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     fn recycle(&mut self, unit: PortRxBuffer<'id, Self>) {
-        let (unit, _) = unit.into_unit();
+        let unit = unit.into_unit();
         self.device.recycle(unit);
         match self.rx_out.get().checked_sub(1) {
             Some(held) => self.rx_out.set(held),

@@ -24,9 +24,7 @@ name does not establish that its task runs on P2.
 
 | Place | Producer → waiter | Risk, mechanism and progress |
 | --- | --- | --- |
-| `chips/esp32s31/ieee80211/driver/src/port.rs`: driver notification, RX/TX returns | Station P1 and driver P2 → driver P2 | Upward wake, protected by `PriorityWaker`. P2 can preempt a P1 notification; the notification keeps its original slot until it returns. |
-| Same file: body notification | Driver P2 → station P1 | Ordinary `atomic_waker::AtomicWaker`. P1 cannot preempt P2; P2 may interrupt registration, which completes on resumption. |
-| `chips/esp32s31/ieee80211/driver/src/port/lent.rs`: network return | Lent receive owner dropped by the network P1 → station P1 waiting in `poll_lent_returned`; same drop → driver P2 | Ordinary AtomicWaker for the same-executor P1 waiter; the drop lowers the atomic count before it wakes. The driver's wake is the existing upward `PriorityWaker` notification above. The owner is dropped in a task, never in an interrupt handler. |
+| `chips/esp32s31/ieee80211/driver/src/port/lent.rs`: network return | Lent receive owner dropped by the network P1 → datapath actor P1 polling the port's facts, `poll_lend_room` or `poll_lent_returned` | Ordinary AtomicWaker for the same-executor P1 waiter; the drop lowers the atomic count before it wakes. A network on another hart raises the actor's executor signal instead. The owner is dropped in a task, never in an interrupt handler. |
 | `chips/esp32s31/ieee80211/driver/src/rx/control.rs`: runner | Stop handle P1 → receive runner P2 | Upward wake, protected by `PriorityWaker`; repeated stop requests publish the same atomic flag. |
 | Same file: reporter | Receive runner P2 → application P1 | Ordinary AtomicWaker, descending priority. |
 | `chips/esp32s31/ieee80211/driver/src/rx/upper.rs`: frame queue | Receive runner P2 → frame consumer P1 | Ordinary AtomicWaker, descending priority. Returning a held frame takes the separate typed-signal path below. |

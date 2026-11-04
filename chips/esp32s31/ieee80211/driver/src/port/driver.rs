@@ -1,18 +1,17 @@
 use super::*;
 use super::{
+    installation::PortCoreOwner,
     keys::{GroupCommand, Installation, Installed, RawKeyIdentity, Removal},
-    lifecycle::PortCoreOwner,
 };
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 pub(super) mod arena;
 pub(super) use arena::DataArenas;
-pub use arena::StationArena;
 pub(super) mod core_views;
 #[cfg(oer_debug_control)]
 mod key_replacement;
-// A single phase projection lends the shared command set. The operation
-// itself has one body; invalid body commands remain typed capacity refusals.
+// The idle core lends the shared command set; a core in another view is a
+// typed refusal.
 macro_rules! idle_command {
     ($owner:expr, |$view:ident| $command:expr) => {{
         let mut $view = $owner
@@ -43,7 +42,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
     fn key(&self) -> Option<RawKeyIdentity> {
         self.operation.payload().key
     }
-    /// When the body admitted its MPDU.
+    /// When the port admitted its MPDU.
     fn admission(&self) -> Option<Instant> {
         self.operation.payload().buffer.admission
     }
@@ -53,28 +52,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
             rate: self.air_rate?,
         })
     }
-}
-pub(super) enum Command<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    Submit(Pending<'id, Id, D, B, O>),
-    Configure {
-        permission: owned::OwnedConfigured<'id, Id, D, B>,
-        config: CoreVif,
-    },
-    CloseGate(GateOpen<'id, Part<Id, 1>>),
-    OpenGate,
-    Install {
-        identity: RawKeyIdentity,
-        installation: Installation<'id, Id>,
-        material: Ccmp128Key,
-    },
-    Remove {
-        identity: RawKeyIdentity,
-        removal: Removal<'id, Id>,
-    },
-    Group {
-        at: Instant,
-        command: GroupCommand<'id, Id>,
-    },
 }
 pub(super) struct Completion<'id, Id: SlotIdentity, const B: usize> {
     queue: FreeQueue<'id, CorePath<Id>>,
@@ -90,7 +67,7 @@ pub(super) struct Sink<'id, Id: SlotIdentity, const B: usize> {
     /// The first callback the port's core contract forbids: a second
     /// completion of a queue in one service or more removals than
     /// installed keys. Its owners are retained here,
-    /// never returned to a pool, and the service poisons.
+    /// never returned to a pool, and the service ends with the fault.
     refused: Option<(Fault, Refused<'id, Id, B>)>,
 }
 /// Owners of a refused callback, kept until the port's quarantine ends.
@@ -163,15 +140,14 @@ impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePa
     }
 }
 
-/// Where the driver's shared steps post what they produce and read the
-/// settings they need: the slot-loan path's [`Held`] queues, or the data
-/// port's own settings and its turn's sink.
 /// A received unit a receive rule admitted, and its metadata.
 pub(super) type Admitted<'id, Id, D, const B: usize> = (
     ReceiveBuffer<'id, Id, <D as Device<B>>::Receive>,
     Esp32s31RxMeta,
 );
 
+/// Where the driver's steps post what they produce and read the settings
+/// they need: the data port's settings and its turn's sink.
 pub(super) trait DriverEnv<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     /// Whether the radio stops: queued attempts end withdrawn.
     fn stopping(&self) -> bool;
@@ -180,7 +156,7 @@ pub(super) trait DriverEnv<'id, Id: SlotIdentity, D: Device<B>, const B: usize, 
     /// Count MSDUs that expired before publication.
     fn count_expired(&mut self, msdus: u32);
     /// A single MPDU's terminal, at its ticket's `place`.
-    fn tx_completed(&mut self, place: u8, completed: owned::OwnedTxCompleted<'id, Id, D, B, O>);
+    fn tx_completed(&mut self, place: u8, completed: brand::OwnedTxCompleted<'id, Id, D, B, O>);
     /// A TBTT of the station's schedule.
     fn tbtt(&mut self, event: TbttEvent);
     /// A unit a receive cut drained, ahead of the cut's terminal.
@@ -200,59 +176,6 @@ pub(super) trait DriverEnv<'id, Id: SlotIdentity, D: Device<B>, const B: usize, 
     fn reject_group_replacement(&mut self) -> bool;
 }
 
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
-    DriverEnv<'id, Id, D, B, O> for &Held<'_, 'id, Id, D, B, O>
-{
-    fn stopping(&self) -> bool {
-        !self.want_enabled.get()
-    }
-    fn lifetime(&self, vif: usize, category: WmmAccessCategory) -> Duration {
-        self.edca.lifetime(vif, category)
-    }
-    fn count_expired(&mut self, msdus: u32) {
-        self.storage
-            .expired
-            .set(self.storage.expired.get().saturating_add(msdus));
-    }
-    fn tx_completed(&mut self, place: u8, completed: owned::OwnedTxCompleted<'id, Id, D, B, O>) {
-        Held::tx_completed(self, place, completed);
-    }
-    fn tbtt(&mut self, event: TbttEvent) {
-        if self.events.push(owned::OwnedEvent::Tbtt(event)).is_err() {
-            self.loss.set(true);
-        }
-        self.storage.shared.wake_body();
-    }
-    fn received(
-        &mut self,
-        frame: ReceiveBuffer<'id, Id, D::Receive>,
-        meta: Esp32s31RxMeta,
-    ) -> Result<(), Fault> {
-        if let Err(event) = self
-            .events
-            .push(owned::OwnedEvent::Received { frame, meta })
-        {
-            core::mem::forget(event);
-            return Err(Fault::EventQueueFull);
-        }
-        self.storage.shared.wake_body();
-        Ok(())
-    }
-    fn serial(&mut self) -> u64 {
-        Held::serial(self)
-    }
-    fn shared(&self) -> &'static PortSharedStorage<B, D::Lent> {
-        &*self.storage.shared
-    }
-    fn rx_out(&self) -> &Cell<usize> {
-        self.rx_out
-    }
-    #[cfg(oer_debug_control)]
-    fn reject_group_replacement(&mut self) -> bool {
-        self.reject_group_replacement.replace(false)
-    }
-}
-
 pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) core: PortCoreOwner<'id, Id, D, B>,
     pub(super) tickets: [Option<TxTicket<'id, CorePath<Id>>>; TX_TICKETS],
@@ -264,18 +187,17 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     /// The station's two data arenas over the A-MPDU chains, from
     /// preparation until retirement returns their chains and tickets.
     pub(super) arena: Option<DataArenas<'id, Id, B>>,
-    pub(super) pending_command: Option<Command<'id, Id, D, B, O>>,
+    /// A group key replacement the hardware refused, kept with the port's
+    /// quarantine.
+    pub(super) retained_group: Option<GroupCommand<'id, Id>>,
     /// The key of a removal the data port's caller holds at its barrier:
-    /// queued attempts that name it end withdrawn, as behind
-    /// `pending_command`.
+    /// queued attempts that name it end withdrawn.
     pub(super) barrier: Option<RawKeyIdentity>,
-    pub(super) configuring: Option<owned::OwnedConfigured<'id, Id, D, B>>,
+    pub(super) configuring: Option<brand::OwnedConfigured<'id, Id, D, B>>,
     pub(super) closing: Option<GateOpen<'id, Part<Id, 1>>>,
     pub(super) closed: bool,
     pub(super) keys: [Option<(RawKeyIdentity, Installed<'id, Id>)>; 20],
     pub(super) applied_ba: [Option<RxBlockAckValues>; 8],
-    pub(super) transition: Option<Instant>,
-    pub(super) clock_deadline: Instant,
     /// The one receiver of this driver's publication observations, present
     /// from preparation until retirement.
     pub(super) observations: Option<O>,
@@ -338,15 +260,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             running: [const { None }; 4],
             descriptors: [const { None }; TX_DESCRIPTORS],
             arena: None,
-            pending_command: None,
+            retained_group: None,
             barrier: None,
             configuring: None,
             closing: None,
             closed: false,
             keys: [const { None }; 20],
             applied_ba: [None; 8],
-            transition: None,
-            clock_deadline: Instant::from_micros(0),
             observations: None,
         }
     }
@@ -364,7 +284,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         queues: [FreeQueue<'id, CorePath<Id>>; 4],
         descriptors: TxDescriptors<B>,
         observations: O,
-        now: Instant,
     ) -> Result<(), Fault> {
         // The one caller checked `retired` before taking any resource.
         self.core = core;
@@ -373,7 +292,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let TxDescriptors { single, chains } = descriptors;
         self.descriptors = single.map(Some);
         self.observations = Some(observations);
-        self.clock_deadline = now.saturating_add(Duration::from_secs(60));
         let mut taken = self.tickets.iter_mut().filter_map(Option::take);
         let (Some(first), Some(second)) = (taken.next(), taken.next()) else {
             core::mem::forget(chains);
@@ -410,48 +328,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         for key in &mut self.keys {
             drop(key.take());
         }
-        drop(self.pending_command.take());
+        drop(self.retained_group.take());
         self.barrier = None;
         drop(self.configuring.take());
         drop(self.closing.take());
         self.closed = false;
         self.applied_ba = [None; 8];
-        self.transition = None;
         let (transmitter, descriptors) = transmitter.zip(descriptors)?;
         Some((transmitter, descriptors, observations?))
-    }
-    pub(super) fn deadline(&mut self, held: &Held<'_, 'id, Id, D, B, O>) -> Result<Instant, Fault> {
-        // The clock sample waits for a start in flight; its own bound wakes
-        // the driver meanwhile.
-        let clock = if starting(held) {
-            Instant::from_micros(u64::MAX)
-        } else {
-            self.clock_deadline
-        };
-        let mut deadline = core_views::deadline::<Id, D, B>(self.core.view())
-            .unwrap_or(clock)
-            .min(clock);
-        if let Some(device) = held.storage.device()?.next_deadline() {
-            deadline = deadline.min(device);
-        }
-        if let Some(start) = self.transition {
-            deadline = deadline.min(start.saturating_add(COMMAND_BOUND));
-        }
-        if let Some(Command::Group { at, .. }) = self.pending_command.as_ref() {
-            deadline = deadline.min(at.saturating_add(COMMAND_BOUND));
-        }
-        if !core_views::configuring::<Id, D, B>(self.core.view()) {
-            for pending in self.queues.iter().flat_map(|q| q.iter()) {
-                if let Some(at) = pending.admission() {
-                    let lifetime = held.edca.lifetime(vif(pending.role()), pending.category);
-                    deadline = deadline.min(at.saturating_add(lifetime));
-                }
-            }
-        }
-        if let Some(at) = self.arena.as_ref().and_then(DataArenas::deadline) {
-            deadline = deadline.min(at);
-        }
-        Ok(deadline)
     }
     pub(super) fn finish(
         &mut self,
@@ -472,7 +356,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let place = pending.operation.ticket().index();
         env.tx_completed(
             place,
-            owned::OwnedTxCompleted::Single(pending.operation.complete(outcome)),
+            brand::OwnedTxCompleted::Single(pending.operation.complete(outcome)),
         );
     }
     // The retained barrier is also the withdrawal marker; no owner or result
@@ -482,18 +366,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         role: VifRole,
         key: Option<RawKeyIdentity>,
     ) -> Option<WithdrawCause> {
-        if self.configuring.as_ref().is_some_and(|p| p.role() == role) {
+        // A configuration is the station's.
+        if self.configuring.is_some() && role == VifRole::Station {
             return Some(WithdrawCause::Disabled);
         }
-        match &self.pending_command {
-            Some(Command::Remove { identity, .. })
-            | Some(Command::Group {
-                command: GroupCommand::Remove { identity, .. },
-                ..
-            }) if key == Some(*identity) => Some(WithdrawCause::KeyRemoved),
-            _ if key.is_some() && key == self.barrier => Some(WithdrawCause::KeyRemoved),
-            _ => None,
-        }
+        (key.is_some() && key == self.barrier).then_some(WithdrawCause::KeyRemoved)
     }
     #[inline(never)]
     pub(super) fn withdraw(&mut self, env: &mut impl DriverEnv<'id, Id, D, B, O>) -> bool {
@@ -506,16 +383,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         };
         // Without a global cause, a configuration or a key removal, no
         // owner is withdrawn (`withdrawal` names none): the common turn.
-        let selective = self.configuring.is_some()
-            || self.barrier.is_some()
-            || matches!(
-                self.pending_command,
-                Some(Command::Remove { .. })
-                    | Some(Command::Group {
-                        command: GroupCommand::Remove { .. },
-                        ..
-                    })
-            );
+        let selective = self.configuring.is_some() || self.barrier.is_some();
         if global.is_none() && !selective {
             return true;
         }
@@ -547,15 +415,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     #[inline(always)]
     pub(super) fn blocked(&self, pending: &Pending<'id, Id, D, B, O>) -> bool {
         self.withdrawal(pending.role(), pending.key()).is_some()
-            || match &self.pending_command {
-                Some(Command::Remove { .. })
-                | Some(Command::Group {
-                    command: GroupCommand::Remove { .. },
-                    ..
-                }) => false,
-                Some(_) => true,
-                None => false,
-            }
     }
     pub(super) fn expired(
         env: &impl DriverEnv<'id, Id, D, B, O>,
@@ -710,7 +569,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         wake: WifiTxWake,
         stopping: bool,
         now: Instant,
-    ) -> Result<Option<owned::ArenaDone>, Fault> {
+    ) -> Result<Option<brand::ArenaDone>, Fault> {
         if !self.arena_on_air() {
             // No arena on the air: the MPDUs' settles are the core's own.
             let mut sink = Sink::default();
@@ -747,7 +606,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         Ok(done)
     }
-    /// Queue one unit a cut drained for the body, ahead of the cut's
+    /// Post one unit a cut drained to the caller, ahead of the cut's
     /// terminal, or return it to the ring when no rule admits it.
     pub(super) fn receive(
         &mut self,
@@ -761,9 +620,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         Ok(())
     }
-    /// The body's event for one received unit, counted in `rx_out`, or
+    /// The caller's received unit, counted in `rx_out`, or
     /// `None` once the unit is back in the ring because no receive rule
-    /// admits it. The body's pull and the driver's cut both admit here.
+    /// admits it. The port's receive pull and its cut both admit here.
     pub(super) fn admit(
         &mut self,
         device: &mut D,
@@ -804,10 +663,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         unit.narrow(start, len).map_err(|_| Fault::ReceiveRange)?;
         rx_out.set(rx_out.get().saturating_add(1));
         Ok(Some((
-            ReceiveBuffer::new(
-                unit,
-                super::LossGuard::new(&shared.poisoned, &shared.driver),
-            ),
+            ReceiveBuffer::new(unit, super::LossGuard::new(&shared.lost)),
             meta,
         )))
     }
@@ -816,375 +672,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     Driver<'id, Id, D, B, O>
 {
-    pub(super) fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-        held: &Held<'_, 'id, Id, D, B, O>,
-        device: &mut D,
-    ) -> Result<(), Fault> {
-        let mut env = held;
-        settle_lent(&held.storage.shared.network, held.rx_out, device)?;
-        let now = device.timer().now();
-        // A start in flight may lend the device's registers to the radio
-        // actor (a retune): the clock is sampled once the start ended.
-        if !starting(held) && now >= self.clock_deadline {
-            device.radio_now().map_err(|_| Fault::Clock)?;
-            self.clock_deadline = now.saturating_add(Duration::from_secs(60));
-        }
-        if self
-            .transition
-            .is_some_and(|start| now.saturating_duration_since(start) >= COMMAND_BOUND)
-        {
-            return Err(Fault::Deadline);
-        }
-        if held.want_enabled.get() && !held.enabled.get() {
-            self.transition.get_or_insert(now);
-            let channel = held
-                .channel
-                .get()
-                .map_err(Fault::Setting)?
-                .wifi_channel()
-                .ok_or(Fault::Setting(settings::SettingFault::ChannelUnset))?;
-            match device.poll_start(cx, channel) {
-                Poll::Pending => return Ok(()),
-                Poll::Ready(Err(cause)) => return Err(cause),
-                Poll::Ready(Ok(())) => {
-                    core_views::tune::<Id, D, B>(
-                        self.core.view(),
-                        channel,
-                        device.take_power_profile(),
-                    )?;
-                    held.enabled.set(true);
-                    self.transition = None;
-                    held.storage.shared.wake_body();
-                }
-            }
-        }
-        if !held.enabled.get() {
-            return Ok(());
-        }
-        let stopping = !held.want_enabled.get();
-        if stopping {
-            self.transition.get_or_insert(now);
-        }
-        #[cfg(oer_debug_control)]
-        let completion_held = held.completion_hold.get();
-        #[cfg(not(oer_debug_control))]
-        let completion_held = false;
-        if !completion_held
-            && let Some(done) =
-                self.service_tx(&mut env, device, WifiTxWake::Deadline, stopping, now)?
-        {
-            held.arena_completed(done);
-        }
-        // One turn serves up to `EVENTS_PER_POLL` transmit and TBTT events.
-        // A turn that ends on `Pending` is registered for the next one; a
-        // turn that used its budget, or served a TX wake whose completions
-        // freed queues, polls again. Received units stay in the ring for the
-        // body's pull: the driver wakes the body when the ring has work.
-        let mut again = true;
-        let mut served_tx = false;
-        for _ in 0..EVENTS_PER_POLL {
-            match device.poll_event(cx) {
-                Poll::Ready(Ok(DeviceEvent::Tx(wake))) => {
-                    if let Some(done) = self.service_tx(&mut env, device, wake, stopping, now)? {
-                        held.arena_completed(done);
-                    }
-                    served_tx = true;
-                }
-                Poll::Ready(Ok(DeviceEvent::Tbtt)) => {
-                    let mut sink = Sink::default();
-                    if !core_views::configuring::<Id, D, B>(self.core.view()) {
-                        self.core
-                            .view()
-                            .commands()
-                            .ok_or(Fault::CoreViewUnavailable(CoreOp::Tbtt))?
-                            .station_tbtt(device.hardware()?, &mut sink);
-                    }
-                    self.collect(&mut env, &mut sink, stopping)?;
-                }
-                Poll::Ready(Err(cause)) => return Err(cause),
-                Poll::Pending => {
-                    again = false;
-                    break;
-                }
-            }
-        }
-        if device.receive_due() {
-            held.receive_due.set(true);
-            held.storage.shared.wake_body();
-        }
-        // Returns wake the driver only when it asks, with many units in
-        // the network, where the radio may run short. Otherwise the next
-        // interrupt's poll counts them.
-        let network = &held.storage.shared.network;
-        let short = network.held() >= D::LENT_RX / 2 && network.want_units(cx);
-        if again || served_tx || short {
-            cx.waker().wake_by_ref();
-        }
-        // A station configuration barrier waits for the station's published
-        // arena as the core waits for its MPDUs.
-        let configuring_arena = self
-            .configuring
-            .as_ref()
-            .is_some_and(|permission| permission.role() == VifRole::Station)
-            && self.arena_on_air();
-        if self.configuring.is_some() && !configuring_arena {
-            if core_views::configuring::<Id, D, B>(self.core.view()) {
-                let mut sink = Sink::default();
-                let done = core_views::advance_configuration::<Id, D, B>(
-                    self.core.view(),
-                    device.hardware()?,
-                    &mut sink,
-                );
-                self.collect(&mut env, &mut sink, stopping)?;
-                if !done {
-                    return Ok(());
-                }
-            }
-            if self.withdraw(&mut env)
-                && let Some(permission) = self.configuring.take()
-            {
-                held.terminal(owned::OwnedTerminal::Configured(permission));
-            }
-        }
-        if held.dirty_edca.replace(false) {
-            for role in [VifRole::Station, VifRole::AccessPoint] {
-                let Some(table) = held.edca.get(vif(role)) else {
-                    // The body is publishing it: its commit wake serves it again.
-                    held.dirty_edca.set(true);
-                    break;
-                };
-                let _installed = idle_command!(self.core, |view| view.set_checked_edca(
-                    role,
-                    SupportedEdca::<Esp32s31Caps<B>>::new(table).ok_or(Fault::EdcaUnsupported)?,
-                ))
-                .map_err(|_| Fault::EdcaUnsupported)?;
-                #[cfg(test)]
-                held.storage.installed_edca[vif(role)].set(Some(_installed.get()));
-            }
-        }
-        if let Some(color) = held.color.take() {
-            idle_command!(self.core, |view| view.set_checked_he_bss_color(color));
-        }
-        if held.dirty_ba.replace(false) {
-            for (index, old) in self.applied_ba.iter_mut().enumerate() {
-                let wanted = match held.block_acks.get(index) {
-                    Ok(wanted) => wanted,
-                    // The body is publishing it: its commit wake serves it again.
-                    Err(None) => {
-                        held.dirty_ba.set(true);
-                        break;
-                    }
-                    Err(Some(fault)) => return Err(Fault::Setting(fault)),
-                };
-                if *old == wanted {
-                    continue;
-                }
-                if let Some(old) = old.take() {
-                    idle_command!(self.core, |view| view.end_checked_rx_block_ack(
-                        device.hardware()?,
-                        old.role,
-                        old.peer,
-                        old.tid,
-                    ))?;
-                }
-                if let Some(agreement) = wanted {
-                    idle_command!(self.core, |view| view
-                        .start_checked_rx_block_ack(device.hardware()?, agreement))?;
-                }
-                *old = wanted;
-            }
-        }
-        // Every command is bounded by the affine capacities; a barrier retains
-        // its FIFO position and prevents later publication.
-        for _ in 0..COMMANDS {
-            if self.configuring.is_some() {
-                break;
-            }
-            // Without a held or an incoming command no command moves: the
-            // common turn checks the queue alone.
-            if self.pending_command.is_none() {
-                if held.commands.empty() {
-                    self.withdraw(&mut env);
-                    break;
-                }
-                self.pending_command = held.commands.pop();
-            }
-            let drained = self.withdraw(&mut env);
-            let Some(command) = self.pending_command.take() else {
-                break;
-            };
-            match command {
-                Command::Submit(pending) => {
-                    let index = queue(pending.category);
-                    if let Err(pending) = self.queues[index].push_back(pending) {
-                        // The attempt stays in custody with the quarantine.
-                        core::mem::forget(pending);
-                        return Err(Fault::QueueFull { queue: index as u8 });
-                    }
-                }
-                Command::Configure { permission, config } => {
-                    core_views::configure::<Id, D, B>(self.core.view(), config)?;
-                    self.configuring = Some(permission);
-                    cx.waker().wake_by_ref();
-                    break;
-                }
-                Command::CloseGate(gate) => {
-                    core_views::hold::<Id, D, B>(self.core.view());
-                    self.closing = Some(gate);
-                }
-                Command::OpenGate => {
-                    let mut sink = Sink::default();
-                    core_views::open::<Id, D, B>(self.core.view(), device.hardware()?, &mut sink)?;
-                    self.closed = false;
-                    self.collect(&mut env, &mut sink, stopping)?;
-                }
-                Command::Install {
-                    identity,
-                    installation,
-                    material,
-                } => {
-                    // FIFO behind a bounded group command, this command
-                    // completes within that bound: it waits for nothing.
-                    self.install(device, identity, installation, &material)?;
-                    identity.activity.set(identity.serial);
-                    held.terminal(owned::OwnedTerminal::PairwiseKeyInstalled(
-                        owned::OwnedInstalledPairwise::new(identity.role, identity),
-                    ));
-                }
-                Command::Remove { identity, removal } => {
-                    if !drained {
-                        self.pending_command = Some(Command::Remove { identity, removal });
-                        break;
-                    }
-                    let removed = self.remove(device, identity)?;
-                    held.terminal(owned::OwnedTerminal::KeyRemoved(
-                        self.removed_terminal(removal, removed)?,
-                    ));
-                }
-                Command::Group { at, command } => {
-                    if now.saturating_duration_since(at) >= COMMAND_BOUND {
-                        // The expired command stays in quarantine here.
-                        #[cfg(test)]
-                        let _first = held.storage.shared.retained_group.set(command.owners());
-                        self.pending_command = Some(Command::Group { at, command });
-                        return Err(Fault::Deadline);
-                    }
-                    if self
-                        .running
-                        .iter()
-                        .flatten()
-                        .any(|running| command.uses(running.key()))
-                        || !drained
-                    {
-                        self.pending_command = Some(Command::Group { at, command });
-                        break;
-                    }
-                    match device.poll_rx_cut(RX_HELD - held.rx_out.get(), cx) {
-                        Poll::Ready(Ok(Some(unit))) => {
-                            self.receive(&mut env, device, unit)?;
-                            self.pending_command = Some(Command::Group { at, command });
-                            cx.waker().wake_by_ref();
-                            break;
-                        }
-                        Poll::Pending => {
-                            self.pending_command = Some(Command::Group { at, command });
-                            break;
-                        }
-                        Poll::Ready(Err(cause)) => {
-                            self.pending_command = Some(Command::Group { at, command });
-                            return Err(cause);
-                        }
-                        Poll::Ready(Ok(None)) => {
-                            let terminal = self.group(&mut env, device, at, command)?;
-                            if let Err(cause) = device.finish_rx_cut() {
-                                handoff::retain_terminal(held.failed_terminal, terminal.into());
-                                return Err(cause);
-                            }
-                            // The resumed ring is the body's again; the
-                            // terminal's wake brings its next pull.
-                            held.receive_due.set(true);
-                            held.terminal(terminal);
-                        }
-                    }
-                }
-            }
-        }
-        self.withdraw(&mut env);
-        // A gate closes after the published arena ends, as after the MPDUs
-        // the core holds.
-        if self.closing.is_some()
-            && !self.arena_on_air()
-            && !core_views::configuring::<Id, D, B>(self.core.view())
-            && core_views::close::<Id, D, B>(self.core.view(), device.hardware()?)
-            && let Some(gate) = self.closing.take()
-        {
-            // The core has returned every published head. Existing AC queues
-            // retain their tails in order until those heads are terminal.
-            let gate = held.gate.close(gate);
-            self.closed = true;
-            held.terminal(owned::OwnedTerminal::GateClosed(gate));
-        }
-        for index in 0..4 {
-            // A published MPDU or arena holds the queue.
-            if self.running[index].is_some() || self.free[index].is_none() {
-                continue;
-            }
-            // Expiry continues behind a gate or a command barrier.
-            while self.queues[index]
-                .front()
-                .is_some_and(|p| Self::expired(&env, p, now))
-            {
-                let Some(pending) = self.queues[index].pop_front() else {
-                    break;
-                };
-                self.finish(&mut env, pending, TxOutcome::Expired { msdus: 1 });
-            }
-            if stopping
-                || self.closed
-                || self.closing.is_some()
-                || core_views::configuring::<Id, D, B>(self.core.view())
-                || self.queues[index].front().is_some_and(|p| self.blocked(p))
-            {
-                continue;
-            }
-            #[cfg(oer_debug_control)]
-            if held.publication_hold.get() & (1 << index) != 0 {
-                continue;
-            }
-            if let Some(pending) = self.queues[index].pop_front() {
-                self.publish(device, index, pending)?;
-            }
-        }
-        if stopping
-            && !self.arena_on_air()
-            && self.pending_command.is_none()
-            && held.commands.empty()
-            && !core_views::configuring::<Id, D, B>(self.core.view())
-            && self.configuring.is_none()
-            && self.closing.is_none()
-        {
-            let mut sink = Sink::default();
-            core_views::disable::<Id, D, B>(self.core.view(), device.hardware()?, &mut sink);
-            self.collect(&mut env, &mut sink, true)?;
-            let mut sink = Sink::default();
-            let disabled = core_views::finish_disable::<Id, D, B>(self.core.view(), &mut sink);
-            self.collect(&mut env, &mut sink, true)?;
-            if disabled {
-                match device.poll_stop(cx) {
-                    Poll::Ready(Ok(())) => {
-                        held.enabled.set(false);
-                        self.transition = None;
-                        held.storage.shared.wake_body();
-                    }
-                    Poll::Ready(Err(cause)) => return Err(cause),
-                    Poll::Pending => {}
-                }
-            }
-        }
-        Ok(())
-    }
     pub(super) fn publish(
         &mut self,
         device: &mut D,
@@ -1370,23 +857,23 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         &self,
         removal: Removal<'id, Id>,
         removed: KeyRemoved<'id, CorePath<Id>>,
-    ) -> Result<owned::OwnedRemoved<'id, Id>, Fault> {
+    ) -> Result<brand::OwnedRemoved<'id, Id>, Fault> {
         use core_mac::association::VacantKeySlot as Slot;
         let removed = match (removal, removed.into_slot()) {
             (Removal::StationPairwise(association), Slot::StationPairwise(slot)) => {
-                owned::OwnedRemoved::Station(owned::RemovedOwners::Pairwise { slot, association })
+                brand::OwnedRemoved::Station(brand::RemovedOwners::Pairwise { slot, association })
             }
             (Removal::AccessPointPairwise(association), Slot::AccessPointPairwise(slot)) => {
-                owned::OwnedRemoved::AccessPoint(owned::RemovedOwners::Pairwise {
+                brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Pairwise {
                     slot,
                     association,
                 })
             }
             (Removal::StationGroup(permission), Slot::StationGroup(slot)) => {
-                owned::OwnedRemoved::Station(owned::RemovedOwners::Group { slot, permission })
+                brand::OwnedRemoved::Station(brand::RemovedOwners::Group { slot, permission })
             }
             (Removal::AccessPointGroup(permission), Slot::AccessPointGroup(slot)) => {
-                owned::OwnedRemoved::AccessPoint(owned::RemovedOwners::Group { slot, permission })
+                brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Group { slot, permission })
             }
             _ => return Err(Fault::Capacity),
         };
@@ -1396,9 +883,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         device: &mut D,
-        at: Instant,
         command: GroupCommand<'id, Id>,
-    ) -> Result<owned::OwnedTerminal<'id, Id, D, B>, Fault> {
+    ) -> Result<brand::OwnedTerminal<'id, Id, D, B>, Fault> {
         match command {
             GroupCommand::InstallStation {
                 spp,
@@ -1421,8 +907,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     &material,
                 )?;
                 identity.activity.set(identity.serial);
-                return Ok(owned::OwnedTerminal::GroupKeyInstalled(
-                    owned::OwnedInstalledGroup::Station {
+                return Ok(brand::OwnedTerminal::GroupKeyInstalled(
+                    brand::OwnedInstalledGroup::Station {
                         key: GroupKey {
                             identity,
                             brand: PhantomData,
@@ -1459,8 +945,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     &material,
                 )?;
                 identity.activity.set(identity.serial);
-                return Ok(owned::OwnedTerminal::GroupKeyInstalled(
-                    owned::OwnedInstalledGroup::AccessPoint {
+                return Ok(brand::OwnedTerminal::GroupKeyInstalled(
+                    brand::OwnedInstalledGroup::AccessPoint {
                         key: GroupKey {
                             identity,
                             brand: PhantomData,
@@ -1500,28 +986,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     material.as_bytes(),
                 ));
                 if let Err(_error) = result {
-                    self.pending_command = Some(Command::Group {
-                        at,
-                        command: GroupCommand::Replace {
-                            permission,
-                            key,
-                            key_id,
-                            material,
-                        },
+                    self.retained_group = Some(GroupCommand::Replace {
+                        permission,
+                        key,
+                        key_id,
+                        material,
                     });
                     // Observe actual quarantined owners after moving them to
                     // permanent custody, never a synthetic success terminal.
                     #[cfg(test)]
-                    if let Some(Command::Group {
-                        command:
-                            GroupCommand::Replace {
-                                permission,
-                                key,
-                                key_id,
-                                ..
-                            },
+                    if let Some(GroupCommand::Replace {
+                        permission,
+                        key,
+                        key_id,
                         ..
-                    }) = &self.pending_command
+                    }) = &self.retained_group
                     {
                         let shared = env.shared();
                         let _first = shared
@@ -1539,16 +1018,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         ));
                     }
                     #[cfg(all(oer_trace, oer_debug_control))]
-                    if let Some(Command::Group {
-                        command:
-                            GroupCommand::Replace {
-                                permission,
-                                key,
-                                key_id,
-                                ..
-                            },
+                    if let Some(GroupCommand::Replace {
+                        permission,
+                        key,
+                        key_id,
                         ..
-                    }) = &self.pending_command
+                    }) = &self.retained_group
                     {
                         oer_chips_family_staged_runtime::trace::emit(&trace::GroupRollback {
                             owners: [key.identity.slot, permission.index()],
@@ -1573,7 +1048,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 };
                 entry.0 = identity;
                 identity.activity.set(identity.serial);
-                return Ok(owned::OwnedTerminal::GroupKeyReplaced {
+                return Ok(brand::OwnedTerminal::GroupKeyReplaced {
                     key: GroupKey {
                         identity,
                         brand: PhantomData,
@@ -1590,20 +1065,20 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 {
                     return Err(Fault::Capacity);
                 }
-                return Ok(owned::OwnedTerminal::GroupKeySelected { key, permission });
+                return Ok(brand::OwnedTerminal::GroupKeySelected { key, permission });
             }
             GroupCommand::Remove { identity, removal } => {
                 let removed = self.remove(device, identity)?;
-                return Ok(owned::OwnedTerminal::KeyRemoved(
+                return Ok(brand::OwnedTerminal::KeyRemoved(
                     self.removed_terminal(removal, removed)?,
                 ));
             }
         }
     }
 }
-/// Take the network's lends off the body's receive count and rearm the
-/// ring with the units it returned. The driver's turn and the body's pull
-/// both settle, whichever runs first.
+/// Take the network's lends off the caller's receive count and rearm the
+/// ring with the units it returned. The port's receive pull and its retire
+/// checks both settle, whichever runs first.
 pub(super) fn settle_lent<D: Device<B>, const B: usize>(
     network: &lent::NetworkCredit<D::Lent>,
     rx_out: &Cell<usize>,
@@ -1627,17 +1102,6 @@ pub(super) fn queue(category: WmmAccessCategory) -> usize {
 pub(super) fn vif(role: VifRole) -> usize {
     if role == VifRole::Station { 0 } else { 1 }
 }
-impl<Id: SlotIdentity> GroupCommand<'_, Id> {
-    fn uses(&self, key: Option<RawKeyIdentity>) -> bool {
-        key.is_some_and(|key| match self {
-            Self::Remove { identity, .. } => *identity == key,
-            Self::Replace { key: installed, .. } | Self::Select { key: installed, .. } => {
-                installed.identity == key
-            }
-            _ => false,
-        })
-    }
-}
 
 /// The installed key `identity` names, `None` for an open attempt.
 fn admitted_key<'a, 'id, Id: SlotIdentity>(
@@ -1652,11 +1116,4 @@ fn admitted_key<'a, 'id, Id: SlotIdentity>(
         .find(|(key, _)| *key == identity)
         .map(|(_, key)| Some(key))
         .ok_or(Fault::Capacity)
-}
-
-/// The port asked for the radio and the device has not started it yet.
-fn starting<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>(
-    held: &Held<'_, '_, Id, D, B, O>,
-) -> bool {
-    held.want_enabled.get() && !held.enabled.get()
 }

@@ -1,66 +1,9 @@
-//! The variant paths an abandoned station's record keeps: why the port
-//! ended the body loan, then the port's first fault. A subtree the path
-//! does not spell out marks the path cut (`DiagPath::truncated`).
+//! The variant paths a failed station's record keeps: the lifecycle's
+//! cause, then the port's named fault or the observations it kept. A
+//! subtree the path does not spell out marks the path cut
+//! (`DiagPath::truncated`).
 use super::*;
 use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
-
-impl DiagnosticPath for Abandoned {
-    fn push_path(&self, path: &mut DiagPath) {
-        self.cause.push_path(path);
-        if let Some(fault) = &self.fault {
-            fault.push_path(path);
-        }
-    }
-}
-
-impl DiagnosticPath for AbandonCause {
-    fn push_path(&self, path: &mut DiagPath) {
-        match self {
-            Self::QueuesUnprepared => path.name("QueuesUnprepared"),
-            Self::MissingResource(resource) => {
-                path.name("MissingResource");
-                path.name(*resource);
-            }
-            Self::BodyAlreadyIssued => path.name("BodyAlreadyIssued"),
-            Self::Lifecycle(cause) => {
-                path.name("Lifecycle");
-                cause.push_path(path);
-            }
-        }
-    }
-}
-
-impl DiagnosticPath for RetirementCause {
-    fn push_path(&self, path: &mut DiagPath) {
-        match self {
-            Self::Cancelled => path.name("Cancelled"),
-            Self::FailStopRequested => path.name("FailStopRequested"),
-            Self::Construction => path.name("Construction"),
-            Self::BodyAlreadyIssued => path.name("BodyAlreadyIssued"),
-            Self::Deadline => path.name("Deadline"),
-            Self::StopUnconfirmed => path.name("StopUnconfirmed"),
-            Self::NetworkDrain(drain) => {
-                path.name("NetworkDrain");
-                path.name(match drain.cause {
-                    NetworkDrainCause::Deadline => "Deadline",
-                    NetworkDrainCause::ParticipantLost => "ParticipantLost",
-                });
-                path.word(u32::try_from(drain.held).unwrap_or(u32::MAX));
-            }
-            Self::InvalidState(observed) => {
-                path.name("InvalidState");
-                path.name(match observed.storage {
-                    SlotStorage::Empty => "Empty",
-                    SlotStorage::Registered => "Registered",
-                    SlotStorage::Vacant => "Vacant",
-                    SlotStorage::Unavailable => "Unavailable",
-                });
-                path.word(u32::from(observed.phase));
-                path.word(u32::from(observed.invocation_present));
-            }
-        }
-    }
-}
 
 impl DiagnosticPath for BackendFault {
     fn push_path(&self, path: &mut DiagPath) {
@@ -86,7 +29,6 @@ impl DiagnosticPath for BackendFault {
                     path.truncated();
                 }
             }
-            Self::Deadline => path.name("Deadline"),
             Self::Capacity => path.name("Capacity"),
             Self::Clock => path.name("Clock"),
             Self::Retune(error) => {
@@ -114,15 +56,6 @@ impl DiagnosticPath for BackendFault {
                 }
             }
             Self::TuneNotRecorded => path.name("TuneNotRecorded"),
-            Self::Setting(fault) => {
-                path.name("Setting");
-                path.name(match fault {
-                    SettingFault::UnsupportedChannel => "UnsupportedChannel",
-                    SettingFault::ChannelUnset => "ChannelUnset",
-                    SettingFault::EdcaLifetime => "EdcaLifetime",
-                    SettingFault::BlockAckSequence => "BlockAckSequence",
-                });
-            }
             Self::HardwareUnavailable => path.name("HardwareUnavailable"),
             Self::CoreViewUnavailable(op) => {
                 path.name("CoreViewUnavailable");
@@ -149,7 +82,7 @@ impl DiagnosticPath for BackendFault {
             Self::QueueFull { queue } => queue_fault(path, "QueueFull", *queue),
             Self::ReceiveOverflow => path.name("ReceiveOverflow"),
             Self::ReceiveRange => path.name("ReceiveRange"),
-            Self::EventQueueFull => path.name("EventQueueFull"),
+            Self::ReceiveLost => path.name("ReceiveLost"),
             Self::ArenaCoreContract => path.name("ArenaCoreContract"),
             Self::InstallationResources => path.name("InstallationResources"),
             Self::EdcaUnsupported => path.name("EdcaUnsupported"),

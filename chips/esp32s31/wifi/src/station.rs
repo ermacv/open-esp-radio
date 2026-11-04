@@ -1,8 +1,8 @@
 //! Image-owned mapping; the station service and IP workload run on P1.
 use crate::chip::{
-    Binding, Config, InitializationError, Profile, ServiceRunner, StationExit, StationRunner, TX,
+    Binding, Config, InitializationError, Profile, ServiceRunner, StationExit, StationRunner,
 };
-use crate::radio::{self, Backend, Caps, Device, Family};
+use crate::radio::{self, Caps};
 use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeUninit};
 use oer_chips_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
@@ -13,7 +13,6 @@ use oer_protocols_ieee80211_runtime::lifecycle::{
     ActorEnds, Lifecycle, LifecycleArbiter, LifecycleCompleted, LifecycleEnd, LifecycleIo,
     LifecycleTxContext, RetiredLifecycle,
 };
-use oer_protocols_ieee80211_runtime::station::*;
 
 use oer_portable_memory::{Placed, StaticPlace};
 #[cfg(oer_trace)]
@@ -31,7 +30,7 @@ use oer_protocols_ieee80211_wire::{
     ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
     station::AssociationCapabilities,
 };
-use oer_protocols_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
+use oer_protocols_radio_port::{self as rp, Child, Root, SlotIdentity};
 
 pub type Epoch<Id> = Child<Root<Id>, 4>;
 pub struct ImageComposition<W: Binding>(PhantomData<W>);
@@ -48,7 +47,6 @@ impl<W: Binding> Composition for ImageComposition<W> {
     type ConfigureContext<'p, Id: SlotIdentity + 'p> =
         machine::StaConfigurationContext<'p, Epoch<Id>>;
 }
-pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>);
 /// The pool places the station's management frames take, holding the
 /// port's own buffers. Data goes through the port's data arenas, which hold
 /// the network's memory itself.
@@ -121,111 +119,6 @@ pub(crate) fn observe_received<W: Binding>(bytes: &[u8], meta: &RxMeta) {
         }
     }
 }
-impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
-    type Backend = Backend<Id, W>;
-    type SlotId = Id;
-    type Caps = Caps;
-    type Types<'id>
-        = Family<Id, W>
-    where
-        Self: 'id,
-        Id: 'id;
-    type LentRx = crate::LentRx<W::Notifies>;
-    type TerminalStorage<T> = heapless::Deque<T, { port::TERMINAL_CAPACITY }>;
-    type TxContextStorage<T> = [Option<T>; port::TX_TICKETS];
-    type Small = port::BufferClass<TX>;
-    type TxMemory = crate::TxMemory;
-    fn lend_phase<'a, 'id, 'r>(
-        phase: &'r mut <Backend<Id, W> as PortBackend<Id>>::Phase<'a, 'id>,
-    ) -> &'r mut impl LowerMacPhase<'a, 'id, Caps = Caps, Types = Family<Id, W>>
-    where
-        Self: 'id,
-        Id: 'id,
-        'id: 'a,
-    {
-        phase
-    }
-    fn terminal<'id>(
-        terminal: LowerMacTerminal<'id, Family<Id, W>>,
-    ) -> LowerMacTerminal<'id, Family<Id, W>>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        #[cfg(oer_trace)]
-        observe_terminal::<W, Id>(&terminal);
-        terminal
-    }
-    fn port_terminal<'id>(
-        terminal: LowerMacTerminal<'id, Family<Id, W>>,
-    ) -> LowerMacTerminal<'id, Family<Id, W>>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        terminal
-    }
-    fn tune<'a, 'id>(
-        setup: &mut <Backend<Id, W> as PortBackend<Id>>::Setup<'a, 'id>,
-        channel: SupportedChannel<Caps>,
-    ) where
-        Self: 'id,
-        Id: 'id,
-        'id: 'a,
-    {
-        setup.set_channel(channel);
-    }
-    fn event<'id>(event: LowerMacEvent<'id, Family<Id, W>>) -> LowerMacEvent<'id, Family<Id, W>>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        #[cfg(oer_trace)]
-        if let LowerMacEvent::Terminal(terminal) = &event {
-            observe_terminal::<W, Id>(terminal);
-        }
-        #[cfg(oer_trace)]
-        if let LowerMacEvent::Received { frame, meta } = &event {
-            observe_received::<W>(frame.bytes(), meta.common());
-        }
-        event
-    }
-    #[cfg_attr(
-        not(oer_trace),
-        allow(unused_variables, reason = "only a trace build observes the span")
-    )]
-    fn span(span: ServiceSpan, end: bool) {
-        let observer = W::DriverObserver::default();
-        oer_portable_trace::observe!(observer, crate::observation::ServiceSpan { span, end });
-    }
-    fn tx_buffer<'id>(
-        buffer: port::AnyBuffer<'id, Id, Device<W>, TX, ()>,
-    ) -> Result<StationTxBuffer<'id, Self>, port::AnyBuffer<'id, Id, Device<W>, TX, ()>>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        // The station takes the pool's first places; no buffer beyond
-        // them is ever submitted.
-        match buffer {
-            port::AnyBuffer::Fresh(buffer) if buffer.index() < MANAGEMENT => {
-                Ok(ReturnedMpdu::Fresh(buffer))
-            }
-            port::AnyBuffer::Sent(buffer) if buffer.index() < MANAGEMENT => {
-                Ok(ReturnedMpdu::Sent(buffer))
-            }
-            buffer => Err(buffer),
-        }
-    }
-    fn arena_ack<'id>(response: port::BlockAckAnswer) -> Option<port::Ack>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        response.snr_db.map(|snr_db| port::Ack { snr_db })
-    }
-}
-
 pub struct Rates<W: Binding>(
     pub(crate) EspressifRateSelection<Caps>,
     pub(crate) W::Observer,

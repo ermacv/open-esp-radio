@@ -73,7 +73,7 @@ where
     #[cfg(not(target_arch = "riscv32"))]
     type LentRx = Unlent;
     #[cfg(target_arch = "riscv32")]
-    type Lent = oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers<A, A>;
+    type Lent = oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers<A>;
 }
 
 /// The channels' notify types of `N`.
@@ -150,10 +150,9 @@ impl<'a, N: Notifies> Control<'a, N> {
     pub async fn scan(&mut self) -> Result<Operation<'a, N>, ControlError> {
         self.inner.scan().await
     }
-    /// Disconnect and stop. The network asked through its
-    /// [`NetworkStopper`] must return the station's lent receive buffers by
-    /// `deadline`, or the radio does not retire
-    /// ([`RetirementCause::NetworkDrain`](crate::RetirementCause::NetworkDrain)).
+    /// Disconnect and stop by `deadline`. A stop the radio does not confirm
+    /// by then ends the station
+    /// ([`LifecycleFailure::StopUnconfirmed`](crate::failure::LifecycleFailure::StopUnconfirmed)).
     pub fn stop(&mut self, deadline: oer_portable_time::Instant) {
         self.inner.stop_gracefully(deadline);
     }

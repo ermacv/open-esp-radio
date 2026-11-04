@@ -80,7 +80,6 @@ type Inner<W> = RadioDevice<
     DriverExecutor,
 >;
 pub struct Device<W: Binding>(Inner<W>);
-pub type Backend<Id, W> = Esp32s31Backend<Id, Device<W>, TX, ()>;
 pub type Caps = Esp32s31Caps<TX>;
 pub type Family<Id, W> = Types<Id, Device<W>, TX, ()>;
 /// How `W`'s lent receive units tell their returns.
@@ -89,7 +88,6 @@ pub(crate) struct DriverStorage<W: Binding> {
     /// The lent units' notifies, until the installation places them.
     lent: Option<Lent<W>>,
     shared: StaticCell<PortSharedStorage<TX, Lent<W>>>,
-    storage: StaticCell<PortStorage<Device<W>, TX>>,
     device: StaticCell<Device<W>>,
     /// The transmitter's descriptor and one per EDCA queue.
     slots: [StaticCell<TxSlot<TX>>; 5],
@@ -105,7 +103,6 @@ impl<W: Binding> DriverStorage<W> {
         Self {
             lent: Some(lent),
             shared: StaticCell::new(),
-            storage: StaticCell::new(),
             device: StaticCell::new(),
             slots: [const { StaticCell::new() }; 5],
             chains: [const { StaticCell::new() }; AMPDU_CHAINS],
@@ -650,25 +647,14 @@ async fn install<W: Binding>(
     })
     .into_idle()
     .map_err(|_| InitializationError::Tx)?;
+    let lent = storage.lent.take().ok_or(InitializationError::Storage)?;
+    let shared = storage
+        .shared
+        .try_init_with(|| PortSharedStorage::with_network(lent))
+        .ok_or(InitializationError::Storage)?;
     let parts = PortParts {
-        storage: storage
-            .storage
-            .try_init_with(|| {
-                PortStorage::new(
-                    device,
-                    storage
-                        .shared
-                        .try_init_with(|| {
-                            let lent = storage
-                                .lent
-                                .take()
-                                .unwrap_or_else(|| W::fail(InitializationError::Storage));
-                            PortSharedStorage::with_network(lent)
-                        })
-                        .unwrap_or_else(|| W::fail(InitializationError::Storage)),
-                )
-            })
-            .ok_or(InitializationError::Storage)?,
+        device,
+        shared,
         transmitter,
         pool,
         bank: crate::supply::PORT_BUFFERS,
@@ -708,9 +694,6 @@ impl<W: Binding> port::Device<TX> for Device<W> {
         <Inner<W> as port::Device<TX>>::ConfigureContext<'p, Id>;
     fn hardware(&mut self) -> Result<&mut Self::Hardware, Fault> {
         <Inner<W> as port::Device<TX>>::hardware(&mut self.0)
-    }
-    fn timer(&self) -> &EmbassyClock {
-        <Inner<W> as port::Device<TX>>::timer(&self.0)
     }
     fn next_deadline(&self) -> Option<Instant> {
         <Inner<W> as port::Device<TX>>::next_deadline(&self.0)
@@ -758,19 +741,6 @@ impl<W: Binding> port::Device<TX> for Device<W> {
         }
         result
     }
-    fn receive_due(&mut self) -> bool {
-        <Inner<W> as port::Device<TX>>::receive_due(&mut self.0)
-    }
-    fn poll_received_facts(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
-        <Inner<W> as port::Device<TX>>::poll_received_facts(&mut self.0, cx)
-    }
-    fn pull_received(
-        &mut self,
-        room: usize,
-        cx: &mut Context<'_>,
-    ) -> Result<Option<Self::Receive>, Fault> {
-        <Inner<W> as port::Device<TX>>::pull_received(&mut self.0, room, cx)
-    }
     fn poll_rx_cut(
         &mut self,
         room: usize,
@@ -796,9 +766,6 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     }
     fn returned(&mut self) {
         <Inner<W> as port::Device<TX>>::returned(&mut self.0)
-    }
-    fn abandon(&mut self) -> bool {
-        <Inner<W> as port::Device<TX>>::abandon(&mut self.0)
     }
     fn detach(&mut self) {
         <Inner<W> as port::Device<TX>>::detach(&mut self.0)

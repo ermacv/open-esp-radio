@@ -1,54 +1,9 @@
 //! Facade-owned failures. Every source variant and observation is retained.
 //! No backend, HAL, STA or RSN type appears in this public vocabulary.
-use oer_protocols_ieee80211_runtime::station::{
-    BackendContractViolation, PendingTerminal, Request,
-};
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StationFailure {
-    PolicyDeadlineOverflow,
-    /// A station request arrived without its kind's admission.
-    CommandAdmission(Request),
-    RxBlockAckCapacity,
-    RxBlockAckEncode,
-    EnableRefused(BackendFault),
-    Backend(BackendFault),
-    Submission(BackendFault),
-    Contract(BackendContractViolation),
-    DrainedWithOutstanding {
-        cause: BackendFault,
-        missing: PendingTerminal,
-    },
-    /// A requested stop's network drain failed.
-    NetworkDrain(NetworkDrain),
-    /// The stop's deadline passed while the port disabled.
-    StopDeadline,
-}
-/// The station's ended service: its failure, and the network drain before
-/// the port retired when that failed too.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FailedStation {
-    pub failure: StationFailure,
-    pub network: Option<NetworkDrain>,
-}
-/// The network did not return the station's lent receive buffers before
-/// the port retires: why, and the buffers it still held.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NetworkDrain {
-    pub cause: NetworkDrainCause,
-    pub held: usize,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NetworkDrainCause {
-    /// The stop's deadline passed.
-    Deadline,
-    /// The network's stopper was dropped without reporting its stop.
-    ParticipantLost,
-}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendFault {
     Core(LowerMacFault),
     Receive(ReceiveFault),
-    Deadline,
     Capacity,
     Clock,
     Retune(RetuneError),
@@ -56,7 +11,6 @@ pub enum BackendFault {
     /// The data arenas quarantined themselves.
     Arena(ArenaFault),
     TuneNotRecorded,
-    Setting(SettingFault),
     HardwareUnavailable,
     /// The lower-MAC core was not in the view a step needed.
     CoreViewUnavailable(CoreOperation),
@@ -102,8 +56,8 @@ pub enum BackendFault {
     ReceiveOverflow,
     /// A received unit's MPDU lay outside the unit.
     ReceiveRange,
-    /// A receive cut's unit found the event queue full.
-    EventQueueFull,
+    /// A received buffer was dropped without its recycle.
+    ReceiveLost,
     /// The data arenas' step completed an MPDU or removed a key.
     ArenaCoreContract,
     /// The installation's descriptors, chains, tickets or buffers were not
@@ -232,14 +186,6 @@ pub enum ChainStorageError {
     State,
     /// The chain's owner no longer held its arenas.
     Retired,
-}
-/// Why a P1 setting of the port could not be published or read back.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SettingFault {
-    UnsupportedChannel,
-    ChannelUnset,
-    EdcaLifetime,
-    BlockAckSequence,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LowerMacFault {
@@ -547,83 +493,8 @@ pub enum PlatformClock {
     ModemCoexistence,
     ModemLowPowerTimer,
 }
-/// The port ended the station's body loan from its own side before the
-/// station returned: why the loan ended, and the first fault the
-/// installation recorded, which ended it, when one did.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Abandoned {
-    pub cause: AbandonCause,
-    pub fault: Option<BackendFault>,
-}
-/// Why the port ended the station's body loan.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AbandonCause {
-    QueuesUnprepared,
-    /// The named initial resource was absent.
-    MissingResource(&'static str),
-    BodyAlreadyIssued,
-    /// The installation's lifecycle failed: its driver, its registration
-    /// or a cancellation.
-    Lifecycle(RetirementCause),
-}
-/// A station that ended for uninstall whose installation fail-stopped
-/// instead of retiring: the slot stays quarantined and the radio is not
-/// released.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RetirementFailure {
-    /// The station's own failure, when it ended with one.
-    pub failure: Option<StationFailure>,
-    /// The network drain before the port retired, when it failed.
-    pub network: Option<NetworkDrain>,
-    /// Why the ordinary retirement did not complete.
-    pub cause: RetirementCause,
-    /// The P2 owner confirmed the hardware stopped before quarantine.
-    pub hardware_stopped: bool,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RetirementCause {
-    Cancelled,
-    FailStopRequested,
-    Construction,
-    BodyAlreadyIssued,
-    Deadline,
-    StopUnconfirmed,
-    /// The network still held lent receive buffers when the port retired;
-    /// their memory stays quarantined with it, and a later return does not
-    /// publish it to DMA.
-    NetworkDrain(NetworkDrain),
-    InvalidState(SlotObservation),
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SlotObservation {
-    pub phase: u8,
-    pub storage: SlotStorage,
-    pub invocation_present: bool,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SlotStorage {
-    Empty,
-    Registered,
-    Vacant,
-    Unavailable,
-}
-/// A retired installation whose Wi-Fi radio release did not complete:
-/// every owner the release did not return stays quarantined.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ReleaseFailure {
-    /// The station's own failure, when it ended with one.
-    pub failure: Option<StationFailure>,
-    /// The network drain before the port retired, when it failed.
-    pub network: Option<NetworkDrain>,
-    pub cause: ReleaseCause,
-}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReleaseCause {
-    /// The radio driver task never answered the stop handoff; the
-    /// observations are its request kind, slot, epoch and sequence.
-    HandoffLost([u32; 4]),
-    /// The joined slot refused retirement.
-    Retire(RetirementCause),
     /// The stopped device still held a live or failed radio frontier.
     NotStopped,
     /// The MAC or its RX walker was still active; nothing was posted.
@@ -632,9 +503,9 @@ pub enum ReleaseCause {
     LeaveUnanswered([u32; 4]),
     /// The leave completed into a poisoned radio domain.
     DomainPoisoned(RadioPoison),
-    /// The stop's deadline passed before the radio driver task answered the
-    /// release. The task keeps what it was handed; a later answer is never
-    /// read, and nothing is reused.
+    /// The stop's deadline passed before the datapath actor's task answered
+    /// the release. The task keeps what it was handed; a later answer is
+    /// never read, and nothing is reused.
     Deadline,
 }
 /// Why the station's lifecycle, or the datapath actor under it, ended

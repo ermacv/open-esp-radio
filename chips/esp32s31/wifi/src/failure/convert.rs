@@ -1,38 +1,5 @@
 //! Exhaustive conversion at the facade's target boundary.
 use super::*;
-#[cfg(target_arch = "riscv32")]
-use oer_protocols_ieee80211_runtime::station::{ServiceFault, StationPort};
-#[cfg(target_arch = "riscv32")]
-use oer_protocols_radio_port::PortBackend;
-#[cfg(target_arch = "riscv32")]
-pub(crate) fn service<B: StationPort>(value: ServiceFault<B>) -> StationFailure
-where
-    B::Backend: PortBackend<
-            B::SlotId,
-            Fault = oer_chips_esp32s31_ieee80211_driver::port::Fault,
-            Refusal = oer_chips_esp32s31_ieee80211_driver::port::Fault,
-        >,
-{
-    match value {
-        ServiceFault::PolicyDeadlineOverflow => StationFailure::PolicyDeadlineOverflow,
-        ServiceFault::CommandAdmission(request) => StationFailure::CommandAdmission(request),
-        ServiceFault::RxBlockAckCapacity => StationFailure::RxBlockAckCapacity,
-        ServiceFault::RxBlockAckEncode => StationFailure::RxBlockAckEncode,
-        ServiceFault::EnableRefused(v) => StationFailure::EnableRefused(backend_fault(v)),
-        ServiceFault::Backend(v) => StationFailure::Backend(backend_fault(v)),
-        ServiceFault::Submission(v) => StationFailure::Submission(backend_fault(v)),
-        ServiceFault::Contract(v) => StationFailure::Contract(v),
-        ServiceFault::DrainedWithOutstanding { cause, missing } => {
-            StationFailure::DrainedWithOutstanding {
-                cause: backend_fault(cause),
-                missing,
-            }
-        }
-        ServiceFault::NetworkDrain(failure) => StationFailure::NetworkDrain(network_drain(failure)),
-        ServiceFault::StopDeadline => StationFailure::StopDeadline,
-    }
-}
-
 pub(crate) fn backend_fault(
     value: oer_chips_esp32s31_ieee80211_driver::port::Fault,
 ) -> BackendFault {
@@ -40,14 +7,12 @@ pub(crate) fn backend_fault(
     match value {
         Source::Core(v0) => BackendFault::Core(lower_mac_fault(v0)),
         Source::Receive(v0) => BackendFault::Receive(receive_fault(v0)),
-        Source::Deadline => BackendFault::Deadline,
         Source::Capacity => BackendFault::Capacity,
         Source::Clock => BackendFault::Clock,
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,
         Source::Arena(v0) => BackendFault::Arena(arena_fault(v0)),
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
-        Source::Setting(v0) => BackendFault::Setting(setting_fault(v0)),
         Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
         Source::CoreViewUnavailable(op) => BackendFault::CoreViewUnavailable(core_operation(op)),
         Source::DuplicateCompletion { queue } => BackendFault::DuplicateCompletion { queue },
@@ -64,7 +29,7 @@ pub(crate) fn backend_fault(
         Source::QueueFull { queue } => BackendFault::QueueFull { queue },
         Source::ReceiveOverflow => BackendFault::ReceiveOverflow,
         Source::ReceiveRange => BackendFault::ReceiveRange,
-        Source::EventQueueFull => BackendFault::EventQueueFull,
+        Source::ReceiveLost => BackendFault::ReceiveLost,
         Source::ArenaCoreContract => BackendFault::ArenaCoreContract,
         Source::InstallationResources => BackendFault::InstallationResources,
         Source::EdcaUnsupported => BackendFault::EdcaUnsupported,
@@ -231,18 +196,6 @@ pub(super) fn arena_fault(
         Source::Core(v0) => ArenaFault::Core(lower_mac_fault(v0)),
         Source::State => ArenaFault::State,
         Source::Watchdog => ArenaFault::Watchdog,
-    }
-}
-
-pub(super) fn setting_fault(
-    value: oer_chips_esp32s31_ieee80211_driver::port::SettingFault,
-) -> SettingFault {
-    use oer_chips_esp32s31_ieee80211_driver::port::SettingFault as Source;
-    match value {
-        Source::UnsupportedChannel => SettingFault::UnsupportedChannel,
-        Source::ChannelUnset => SettingFault::ChannelUnset,
-        Source::EdcaLifetime => SettingFault::EdcaLifetime,
-        Source::BlockAckSequence => SettingFault::BlockAckSequence,
     }
 }
 
@@ -732,81 +685,6 @@ pub(super) fn rx_stage_transaction_error(
             pool_slots: pool_slots as u64,
             queue_depth: queue_depth as u64,
         },
-    }
-}
-
-pub(crate) fn network_drain(
-    value: oer_protocols_ieee80211_runtime::station::NetworkDrainFailure,
-) -> crate::failure::NetworkDrain {
-    use crate::failure::{NetworkDrain, NetworkDrainCause};
-    use oer_protocols_ieee80211_runtime::station::NetworkDrainCause as Source;
-    NetworkDrain {
-        cause: match value.cause {
-            Source::Deadline => NetworkDrainCause::Deadline,
-            Source::ParticipantLost => NetworkDrainCause::ParticipantLost,
-        },
-        held: value.held,
-    }
-}
-
-pub(crate) fn retirement(
-    failed: Option<crate::failure::FailedStation>,
-    cause: oer_protocols_radio_port::LifecycleError,
-    hardware_stopped: bool,
-) -> RetirementFailure {
-    let failure = failed.map(|failed| failed.failure);
-    let network = failed.and_then(|failed| failed.network);
-    // The network kept lent receive buffers: the port's refusal to retire
-    // is that drain's, not an unconfirmed stop.
-    let cause = match network {
-        Some(drain) => RetirementCause::NetworkDrain(drain),
-        None => retirement_cause(cause),
-    };
-    RetirementFailure {
-        failure,
-        network,
-        cause,
-        hardware_stopped,
-    }
-}
-
-/// The port's end of the station's body loan, with the installation's first
-/// fault.
-pub(crate) fn abandoned(
-    cause: oer_protocols_radio_port::SlotInitError,
-    fault: Option<oer_chips_esp32s31_ieee80211_driver::port::Fault>,
-) -> Abandoned {
-    use oer_protocols_radio_port::SlotInitError as Source;
-    Abandoned {
-        cause: match cause {
-            Source::QueuesUnprepared => AbandonCause::QueuesUnprepared,
-            Source::MissingResource(resource) => AbandonCause::MissingResource(resource),
-            Source::BodyAlreadyIssued => AbandonCause::BodyAlreadyIssued,
-            Source::Lifecycle(cause) => AbandonCause::Lifecycle(retirement_cause(cause)),
-        },
-        fault: fault.map(backend_fault),
-    }
-}
-
-pub(crate) fn retirement_cause(cause: oer_protocols_radio_port::LifecycleError) -> RetirementCause {
-    use oer_protocols_radio_port::{LifecycleError as Source, SlotStorageState as Storage};
-    match cause {
-        Source::Cancelled => RetirementCause::Cancelled,
-        Source::FailStopRequested => RetirementCause::FailStopRequested,
-        Source::Construction => RetirementCause::Construction,
-        Source::BodyAlreadyIssued => RetirementCause::BodyAlreadyIssued,
-        Source::Deadline => RetirementCause::Deadline,
-        Source::StopUnconfirmed => RetirementCause::StopUnconfirmed,
-        Source::InvalidState(observed) => RetirementCause::InvalidState(SlotObservation {
-            phase: observed.phase,
-            storage: match observed.storage {
-                Storage::Empty => SlotStorage::Empty,
-                Storage::Registered => SlotStorage::Registered,
-                Storage::Vacant => SlotStorage::Vacant,
-                Storage::Unavailable => SlotStorage::Unavailable,
-            },
-            invocation_present: observed.invocation_present,
-        }),
     }
 }
 
