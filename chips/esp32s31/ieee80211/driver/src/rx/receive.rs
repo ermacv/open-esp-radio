@@ -78,6 +78,46 @@ pub const IMMEDIATE_CONTINUATIONS: u32 = 4;
 /// exercised on hardware (timed continuations 0 in the W1 runs of
 /// 2026-10-18).
 pub const CONTINUATION_WAIT: Duration = Duration::from_micros(20);
+/// The wait before a masked ring looks again at descriptors it recycled, by
+/// the frames of the pass before. While RX stays masked the descriptors fill
+/// unobserved, so one service takes a batch instead of a frame or two: long
+/// frames bound the packet rate well below the ring, which allows the longest
+/// wait at once; short frames wait less. Only a pass of several frames shows a
+/// burst: a lone frame's drain confirms at once and unmasks. A pass of fewer
+/// keeps the class the drain established.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RecycledProbe {
+    wait: Option<Duration>,
+}
+
+impl RecycledProbe {
+    /// The fewest frames of one pass that show a burst.
+    const BURST_UNITS: usize = 2;
+    /// Below this mean frame length a pass's frames are short.
+    const LONG_FRAME_BYTES: usize = 1024;
+    const SHORT_WAIT: Duration = Duration::from_micros(512);
+    const LONG_WAIT: Duration = Duration::from_micros(1024);
+
+    /// The wait after a pass that took `units` frames of `bytes` in all,
+    /// none while the drain showed no burst.
+    pub fn wait(&mut self, units: usize, bytes: usize) -> Option<Duration> {
+        if units >= Self::BURST_UNITS {
+            let mean = bytes.checked_div(units).unwrap_or(0);
+            self.wait = Some(if mean < Self::LONG_FRAME_BYTES {
+                Self::SHORT_WAIT
+            } else {
+                Self::LONG_WAIT
+            });
+        }
+        self.wait
+    }
+
+    /// The drain ended, or its pass was no recycled append.
+    pub fn reset(&mut self) {
+        self.wait = None;
+    }
+}
+
 /// How long a reload doorbell may be observed in one service transaction, a
 /// named settle. Measured: the W1 runs of 2026-10-19 saw the doorbell clear
 /// on the first observation every time (`max_attempts` 1).

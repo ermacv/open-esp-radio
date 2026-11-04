@@ -12,7 +12,7 @@ use crate::{
     },
     rx::{
         arena::WifiRxParts,
-        receive::{CONTINUATION_WAIT, IMMEDIATE_CONTINUATIONS},
+        receive::{CONTINUATION_WAIT, IMMEDIATE_CONTINUATIONS, RecycledProbe},
         session::ReceiveSession,
         sink::{frame_control_preview, unclassified_preview},
         transaction::{CompletedUnit, Preview, Publisher},
@@ -148,6 +148,8 @@ pub struct RadioDevice<
     pausing: bool,
     continuation: Option<Instant>,
     streak: u32,
+    /// The wait of the drain's recycled appends.
+    recycled: RecycledProbe,
     marker: PhantomData<fn() -> C>,
 }
 
@@ -186,6 +188,37 @@ impl<
     X: SignalExecutor,
 > RadioDevice<C, T, W, V, D, N, RB, RS, Q, X>
 {
+    /// RX stays masked after a pass that left `progress`: whether the ring
+    /// runs again at once, or else its continuation. Out of line: a turn
+    /// without received frames carries none of this.
+    #[inline(never)]
+    fn keep_masked(&mut self, progress: crate::datapath::DatapathRxProgress, now: Instant) -> bool {
+        use crate::datapath::DatapathRxProgress as Progress;
+        let wait = if progress == Progress::RecycledAppendPending {
+            let frames = self.received.0.get_mut();
+            let bytes = frames.iter().fold(0_usize, |sum, frame| {
+                sum.saturating_add(frame.segment().buffer.len())
+            });
+            self.recycled.wait(frames.len(), bytes)
+        } else {
+            self.recycled.reset();
+            None
+        };
+        if let Some(wait) = wait {
+            // The wait lets the ring fill behind the mask.
+            self.streak = 0;
+            self.continuation = Some(now.saturating_add(wait));
+            false
+        } else if self.streak < IMMEDIATE_CONTINUATIONS {
+            self.streak += 1;
+            true
+        } else {
+            self.streak = 0;
+            self.continuation = Some(now.saturating_add(CONTINUATION_WAIT));
+            false
+        }
+    }
+
     pub fn new(parts: RadioParts<T, W, V, D, N, RB, RS, Q, X>) -> Self {
         let WifiRuntimeParts {
             platform,
@@ -220,6 +253,7 @@ impl<
             pausing: false,
             continuation: None,
             streak: 0,
+            recycled: RecycledProbe::default(),
             marker: PhantomData,
         }
     }
@@ -588,18 +622,11 @@ where
             Progress::Drained | Progress::UpperLayerBlockedButDroppable => {
                 self.rx_pending = false;
                 self.streak = 0;
+                self.recycled.reset();
                 session.port_unmask(&self.doorbell);
             }
-            Progress::StageCapacityBlocked => {}
-            _ => {
-                if self.streak < IMMEDIATE_CONTINUATIONS {
-                    self.streak += 1;
-                    again = true;
-                } else {
-                    self.streak = 0;
-                    self.continuation = Some(now.saturating_add(CONTINUATION_WAIT));
-                }
-            }
+            Progress::StageCapacityBlocked => self.recycled.reset(),
+            progress => again = self.keep_masked(progress, now),
         }
         Ok(match self.received.0.get_mut().pop_front() {
             Some(frame) => DevicePull::Unit(StagedReceive(frame)),
