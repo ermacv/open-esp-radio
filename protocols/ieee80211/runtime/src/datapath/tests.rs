@@ -1430,6 +1430,68 @@ fn a_stop_of_a_failed_port_answers_unconfirmed_once_and_the_actor_sleeps() {
 /// The network queued its MSDUs before the actor ran: one turn takes every
 /// one the data machine holds.
 #[test]
+fn the_network_wakes_the_actor_per_batch_while_an_arena_is_on_the_air() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        // The first MSDU's arena stays on the air.
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[0; 8]));
+        bench.settle();
+        let _traffic = bench.next();
+        assert_eq!(bench.data_sent().len(), 1);
+        // Below half the queue the network's MSDUs wake nothing.
+        let batch = TX_DEPTH / 2;
+        let wakes = bench.wakes();
+        for round in 1..batch {
+            bench.send_msdu(msdu(0, &[round as u8; 8]));
+        }
+        assert_eq!(bench.wakes(), wakes, "no wake below the batch");
+        bench.send_msdu(msdu(0, &[batch as u8; 8]));
+        assert_eq!(bench.wakes(), wakes + 1, "one wake for the batch");
+        bench.settle();
+        assert_eq!(bench.data_sent().len(), 1, "the standby waits");
+        // The completion goes on with every queued MSDU, each in turn.
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, false);
+        bench.settle();
+        for _ in 0..batch {
+            bench.advance(1_000);
+            bench.settle();
+        }
+        assert_eq!(bench.data_sent().len(), batch + 1);
+    });
+}
+
+#[test]
+fn a_completion_takes_what_the_network_queued_below_its_batch_first() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.settle();
+        let _traffic = bench.next();
+        // One MSDU below the batch: no wake, it waits in the queue.
+        let wakes = bench.wakes();
+        bench.send_msdu(msdu(0, &[2; 8]));
+        assert_eq!(bench.wakes(), wakes);
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, false);
+        let polls = bench.settle();
+        assert_eq!(polls, 1, "taken, completed and published in one turn");
+        assert_eq!(bench.data_sent().len(), 2);
+        assert_eq!(bench.transmit.free_capacity(), TX_DEPTH);
+    });
+}
+
+#[test]
 fn one_turn_takes_every_msdu_the_network_queued() {
     bench(|bench| {
         bench.start();

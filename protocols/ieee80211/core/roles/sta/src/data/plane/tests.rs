@@ -263,6 +263,37 @@ cases! {
     a_tid_without_agreement_goes_one_mpdu_at_a_time => single,
     a_lone_frame_under_an_agreement_goes_alone_and_owes_a_block_ack_request_when_dropped => lone_frame,
     an_ended_agreement_drains_its_arenas_as_single_mpdus_without_drops => agreement_end,
+    the_standby_room_counts_down_to_the_tids_bound_while_an_arena_is_on_the_air => standby_room,
+}
+
+fn standby_room<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    let capacity = TxArena::capacity(&world.arena);
+    // Nothing on the air: the next frame goes out at once.
+    assert_eq!(world.plane.standby_room(capacity), None);
+    for tag in 0..2 {
+        world.taken(tag, BE);
+    }
+    assert_eq!(world.plane.standby_room(capacity), None);
+    world.publish();
+    // On the air with an empty standby: the whole arena.
+    assert_eq!(world.plane.standby_room(capacity), Some(capacity));
+    // The standby holds a BE frame: BE's bound of 8 subframes counts down.
+    for tag in 2..5 {
+        world.taken(tag, BE);
+    }
+    assert_eq!(world.plane.standby_room(capacity), Some(5));
+    for tag in 5..10 {
+        world.taken(tag, BE);
+    }
+    assert_eq!(world.plane.standby_room(capacity), Some(0));
+    assert!(matches!(world.take(10, BE), Intake::Wait(_)));
+    // The arena's own capacity bounds a wider TID bound.
+    assert_eq!(world.plane.standby_room(4), Some(0));
+    world.block_ack(all(2));
+    world.settle();
+    assert_eq!(world.plane.standby_room(capacity), None);
 }
 
 fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {

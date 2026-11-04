@@ -4,15 +4,16 @@
 //! never moved through the queue. Built from [`ClaimCell`] slots and two
 //! affine queues of slot indices, it needs no unsafe code of its own.
 //!
-//! An end wakes the other only while that one waits: the consumer on an
-//! empty queue, the producer on a full one. A fill or a read while the
-//! other end is busy raises no notify, so ends on different harts
-//! exchange one signal per burst, not one per value.
+//! An end wakes the other only while that one waits: the consumer until
+//! the queue holds as many filled slots as it asked for (one by default),
+//! the producer on a full queue. A fill or a read while the other end is
+//! busy raises no notify, so ends on different harts exchange one signal
+//! per burst, not one per value.
 
 use crate::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, ClaimCell, QueueNotify};
 use atomic_waker::AtomicWaker;
 use core::future::poll_fn;
-use core::sync::atomic::{AtomicBool, Ordering, fence};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering, fence};
 use core::task::Poll;
 
 #[cfg(test)]
@@ -28,8 +29,9 @@ pub struct WakingSlotQueue<T, const DEPTH: usize, C = AtomicWaker, P = AtomicWak
     free: AffineSpscQueue<u8, DEPTH>,
     consumer: C,
     producer: P,
-    /// The consumer found no filled slot after its registration.
-    consumer_waits: AtomicBool,
+    /// The filled slots the consumer waits for after its registration;
+    /// zero while it does not wait.
+    consumer_wants: AtomicUsize,
     /// The producer found no free slot after its registration.
     producer_waits: AtomicBool,
     installed: bool,
@@ -70,7 +72,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
             free: const { AffineSpscQueue::new() },
             consumer,
             producer,
-            consumer_waits: AtomicBool::new(false),
+            consumer_wants: AtomicUsize::new(0),
             producer_waits: AtomicBool::new(false),
             installed: false,
         }
@@ -123,11 +125,11 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
         }
         let (consumer, producer) = (&self.consumer, &self.producer);
         let waits = Waits {
-            consumer: &self.consumer_waits,
+            consumer: &self.consumer_wants,
             producer: &self.producer_waits,
         };
         // A new pair starts with neither end waiting: each registers again.
-        waits.consumer.store(false, Ordering::SeqCst);
+        waits.consumer.store(0, Ordering::SeqCst);
         waits.producer.store(false, Ordering::SeqCst);
         (
             SlotSender {
@@ -158,7 +160,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
 /// the flag and notifies: no wake is lost.
 #[derive(Clone, Copy)]
 struct Waits<'a> {
-    consumer: &'a AtomicBool,
+    consumer: &'a AtomicUsize,
     producer: &'a AtomicBool,
 }
 
@@ -171,6 +173,34 @@ fn arm(waits: &AtomicBool, ready: impl FnOnce() -> bool) -> bool {
         waits.store(false, Ordering::SeqCst);
     }
     ready
+}
+
+/// Set the consumer's `wants`, then whether `filled` already holds that
+/// many; a ready consumer waits no more.
+fn arm_wants(wants: &AtomicUsize, want: usize, filled: impl FnOnce() -> usize) -> bool {
+    wants.store(want, Ordering::SeqCst);
+    fence(Ordering::SeqCst);
+    let ready = filled() >= want;
+    if ready {
+        wants.store(0, Ordering::SeqCst);
+    }
+    ready
+}
+
+/// After a fill: notify the consumer only when it waits and `filled` slots
+/// reach what it wants. A consumer that registers again meanwhile runs and
+/// sees the slots itself.
+fn wake_wanting(wants: &AtomicUsize, filled: usize, notify: impl FnOnce()) {
+    fence(Ordering::SeqCst);
+    let want = wants.load(Ordering::SeqCst);
+    if want != 0
+        && filled >= want
+        && wants
+            .compare_exchange(want, 0, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    {
+        notify();
+    }
 }
 
 /// After a publication: notify the other end only when it waits.
@@ -240,7 +270,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
             .try_send(index)
             .map_err(|_| SlotSendError::Lost)?;
         let consumer = self.consumer;
-        wake_waiting(self.waits.consumer, || consumer.notify());
+        wake_wanting(self.waits.consumer, self.filled.len(), || consumer.notify());
         Ok(value)
     }
 
@@ -318,10 +348,18 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotReceiver<'_, T, 
 
     /// Wait for a filled slot without reading it. Cancellation leaves it.
     pub async fn ready(&mut self) {
+        self.ready_at_least(1).await;
+    }
+
+    /// Wait until `want` slots are filled (at least one, at most `DEPTH`)
+    /// without reading them: the producer notifies once its fills reach
+    /// that many, not at each. Cancellation leaves them.
+    pub async fn ready_at_least(&mut self, want: usize) {
+        let want = want.clamp(1, DEPTH);
         poll_fn(|cx| {
             self.consumer.register(cx);
             let filled = &self.filled;
-            if arm(self.waits.consumer, || !filled.is_empty()) {
+            if arm_wants(self.waits.consumer, want, || filled.len()) {
                 Poll::Ready(())
             } else {
                 Poll::Pending

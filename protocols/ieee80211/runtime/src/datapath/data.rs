@@ -44,6 +44,22 @@ where
         self.carries() && self.data.deferred.is_none()
     }
 
+    /// How many queued MSDUs wake the actor (of the network's `depth`): one
+    /// while no arena is on the air, so the next goes out at once; while
+    /// one is, the standby's room up to half the queue, since the
+    /// completion takes whatever is queued and the network should not fill
+    /// its queue while the actor sleeps; none while the standby is full.
+    pub(super) fn intake_want(&mut self, depth: usize) -> usize {
+        let Some(plane) = self.data.plane.as_ref() else {
+            return 1;
+        };
+        let capacity =
+            oer_protocols_ieee80211_contracts_port::arena::TxArena::capacity(&self.port.arena());
+        plane
+            .standby_room(capacity)
+            .map_or(1, |room| usize::from(room).min((depth / 2).max(1)))
+    }
+
     /// Whether the link carries data: the radio runs, the link carries
     /// data and the plane holds it.
     fn carries(&self) -> bool {
