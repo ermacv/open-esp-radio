@@ -284,6 +284,9 @@ impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSu
     fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
         self.inner.try_transmit(frame)
     }
+    fn flush(&mut self) {
+        self.inner.flush();
+    }
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
 /// copy [`Network`] keeps.

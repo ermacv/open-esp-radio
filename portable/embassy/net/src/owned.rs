@@ -181,6 +181,7 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize> OwnedEndpointResources<X,
                 rx: receiver,
                 tx: transmit,
                 waker: None,
+                unflushed: false,
                 link: &self.link,
                 checksum: ChecksumCapabilities::default(),
                 local: PhantomData,
@@ -228,6 +229,8 @@ pub struct OwnedNetworkDevice<'resources, X: ExecutionContext, const RX_QUEUE_DE
     tx: T,
     /// The stack's poll task: a full device wakes it once it has room.
     waker: Option<Waker>,
+    /// A burst went to the device and the stack's next poll ends it.
+    unflushed: bool,
     link: &'resources OwnedLinkState,
     checksum: ChecksumCapabilities,
     local: PhantomData<Entered<X>>,
@@ -244,6 +247,9 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, T: NetTransmit<Frame = Ow
     /// Register before each stack poll for link, RX and TX-capacity changes;
     /// memory the device returned comes back here too, sending or not.
     pub fn register_waker(&mut self, waker: &Waker) {
+        if core::mem::take(&mut self.unflushed) {
+            self.tx.flush();
+        }
         self.link.register_network_waker(waker);
         let _ = self.tx.poll_room(&mut Context::from_waker(waker));
         match &mut self.waker {
@@ -292,6 +298,21 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, T: NetTransmit<Frame = Ow
             .is_ready()
     }
 
+    /// A frame went to the device: the stack's next poll, on this executor
+    /// once the sender yields, ends the burst.
+    fn burst(&mut self) {
+        if self.unflushed {
+            return;
+        }
+        match &self.waker {
+            Some(waker) => {
+                self.unflushed = true;
+                waker.wake_by_ref();
+            }
+            None => self.tx.flush(),
+        }
+    }
+
     /// Hand one complete Ethernet packet to the device.
     ///
     /// Only a full device returns the unchanged owner: with the unique
@@ -302,7 +323,10 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, T: NetTransmit<Frame = Ow
     /// so does a frame the device refuses for its length.
     pub fn transmit(&mut self, packet: PacketBuf) -> Result<(), PacketBuf> {
         match self.tx.try_transmit(OwnedNetworkTxFrame { packet }) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                self.burst();
+                Ok(())
+            }
             Err(refused) => match refused.reason {
                 TransmitError::QueueFull => Err(refused.frame.into_packet()),
                 TransmitError::LinkDown | TransmitError::InvalidLength(_) => Ok(()),

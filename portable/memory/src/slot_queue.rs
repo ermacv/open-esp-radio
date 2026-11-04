@@ -8,7 +8,10 @@
 //! the queue holds as many filled slots as it asked for (one by default),
 //! the producer on a full queue. A fill or a read while the other end is
 //! busy raises no notify, so ends on different harts exchange one signal
-//! per burst, not one per value.
+//! per burst, not one per value. A producer that knows where its burst ends
+//! holds that signal for a consumer waiting for a single value
+//! ([`SlotSender::try_send_held_with`], [`SlotSender::flush`]), which then
+//! finds the burst, not its first value.
 
 use crate::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, ClaimCell, QueueNotify};
 use atomic_waker::AtomicWaker;
@@ -190,10 +193,10 @@ fn arm_wants(wants: &AtomicUsize, want: usize, filled: impl FnOnce() -> usize) -
 /// After a fill: notify the consumer only when it waits and `filled` slots
 /// reach what it wants. A consumer that registers again meanwhile runs and
 /// sees the slots itself.
-fn wake_wanting(wants: &AtomicUsize, filled: usize, notify: impl FnOnce()) {
+fn wake_wanting(wants: &AtomicUsize, filled: usize, least: usize, notify: impl FnOnce()) {
     fence(Ordering::SeqCst);
     let want = wants.load(Ordering::SeqCst);
-    if want != 0
+    if want >= least
         && filled >= want
         && wants
             .compare_exchange(want, 0, Ordering::SeqCst, Ordering::SeqCst)
@@ -249,6 +252,47 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
         &mut self,
         fill: impl FnOnce(&mut T) -> Result<R, E>,
     ) -> Result<R, SlotSendError<E>> {
+        let value = self.fill(fill)?;
+        let consumer = self.consumer;
+        wake_wanting(self.waits.consumer, self.filled.len(), 1, || {
+            consumer.notify();
+        });
+        Ok(value)
+    }
+
+    /// [`Self::try_send_with`] within a burst: a consumer waiting for a
+    /// single filled slot sleeps on until [`Self::flush`], so it finds the
+    /// burst, not its first value; one waiting for more wakes as usual.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::try_send_with`].
+    pub fn try_send_held_with<R, E>(
+        &mut self,
+        fill: impl FnOnce(&mut T) -> Result<R, E>,
+    ) -> Result<R, SlotSendError<E>> {
+        let value = self.fill(fill)?;
+        let consumer = self.consumer;
+        wake_wanting(self.waits.consumer, self.filled.len(), 2, || {
+            consumer.notify();
+        });
+        Ok(value)
+    }
+
+    /// End a burst: wake the consumer if what is filled is what it waits
+    /// for.
+    pub fn flush(&mut self) {
+        let consumer = self.consumer;
+        wake_wanting(self.waits.consumer, self.filled.len(), 1, || {
+            consumer.notify();
+        });
+    }
+
+    /// Fill the oldest free slot and publish it.
+    fn fill<R, E>(
+        &mut self,
+        fill: impl FnOnce(&mut T) -> Result<R, E>,
+    ) -> Result<R, SlotSendError<E>> {
         let Some(index) = self.spare.take().or_else(|| self.free.try_receive().ok()) else {
             return Err(SlotSendError::Full);
         };
@@ -269,8 +313,6 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
         self.filled
             .try_send(index)
             .map_err(|_| SlotSendError::Lost)?;
-        let consumer = self.consumer;
-        wake_wanting(self.waits.consumer, self.filled.len(), || consumer.notify());
         Ok(value)
     }
 

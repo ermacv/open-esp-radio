@@ -232,6 +232,9 @@ pub trait NetTransmit {
     /// memory before observing them.
     fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()>;
     fn try_transmit(&mut self, frame: Self::Frame) -> Result<(), TransmitRefused<Self::Frame>>;
+    /// End a burst of [`Self::try_transmit`]s: a frame it took may wait for
+    /// this call before its device acts on it.
+    fn flush(&mut self);
 }
 
 #[cfg(test)]

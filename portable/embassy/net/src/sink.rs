@@ -14,6 +14,8 @@ pub(crate) struct SinkState {
     pub refusal: Option<TransmitError>,
     /// Registered for the next room.
     pub waker: Option<Waker>,
+    /// The bursts it was told ended.
+    pub flushed: usize,
 }
 
 /// Keeps what it takes.
@@ -27,6 +29,7 @@ impl Sink {
             room,
             refusal: None,
             waker: None,
+            flushed: 0,
         })))
     }
 
@@ -53,6 +56,9 @@ impl NetTransmit for Sink {
         } else {
             Poll::Pending
         }
+    }
+    fn flush(&mut self) {
+        self.0.borrow_mut().flushed += 1;
     }
     fn try_transmit(
         &mut self,

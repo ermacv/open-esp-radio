@@ -694,6 +694,9 @@ impl<P: oer_protocols_network_port::EthernetFrame, S: TxSupply<P>, const TX: usi
         }
         core::pin::pin!(self.transmit.ready()).poll(cx)
     }
+    fn flush(&mut self) {
+        self.transmit.flush();
+    }
     fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
         let checked = if self.link.snapshot().state == LinkState::Down {
             Err(TransmitError::LinkDown)
@@ -741,7 +744,7 @@ impl<P: oer_protocols_network_port::EthernetFrame, S: TxSupply<P>, const TX: usi
             length,
             priority,
         });
-        let _sent = self.transmit.try_send_with(|slot| {
+        let _sent = self.transmit.try_send_held_with(|slot| {
             *slot = outgoing.take();
             Ok::<_, core::convert::Infallible>(())
         });

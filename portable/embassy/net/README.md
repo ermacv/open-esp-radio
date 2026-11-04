@@ -85,6 +85,10 @@ memory the device returned while nothing is sent. A `true` `can_transmit`
 followed by `transmit` finds room; a link-down meanwhile or a frame refused for
 its length ends the frame, as one lost on air.
 
+A frame the device takes may wait for `NetTransmit::flush`: its first frame
+wakes the stack's poll task, whose next poll, once the sender yields, ends the
+burst. A device no stack polled yet flushes each frame.
+
 The unique network device and radio runner are neither `Clone`, `Copy`,
 `Send` nor `Sync`. The runner stores one RX publisher and one link controller
 and lends each through `&mut`; no accessor can mint a second capability. RX
