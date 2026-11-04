@@ -86,6 +86,24 @@ pub struct QueuedStatus {
     pub ahead: usize,
     pub expected_start_secs: u64,
     pub claims: String,
+    /// The unavailable resources it waits for: no time tells its start
+    /// while one stays. Each with why.
+    #[serde(default)]
+    pub blocked_by: Vec<String>,
+}
+
+impl QueuedStatus {
+    /// When it starts, as far as the stand can tell.
+    fn start(&self) -> String {
+        if self.blocked_by.is_empty() {
+            format!("start in ~{}", duration(self.expected_start_secs))
+        } else {
+            format!(
+                "waits for {}: `cargo stand devices release` returns it",
+                self.blocked_by.join(", ")
+            )
+        }
+    }
 }
 
 impl Arbiter {
@@ -119,6 +137,7 @@ impl Arbiter {
                     ahead: *ahead,
                     expected_start_secs: *start,
                     claims: describe_claims(&ticket.claims),
+                    blocked_by: scheduler.blocked_by(ticket.id),
                 })
             })
             .collect();
@@ -275,7 +294,7 @@ impl std::fmt::Display for Status {
             writeln!(
                 text,
                 "queue {}: #{} {} `{}` on {} pid {}, balance {}, behind {}, waiting {}, \
-                 estimated {}, start in ~{}",
+                 estimated {}, {}",
                 position + 1,
                 entry.id,
                 entry.owner,
@@ -286,7 +305,7 @@ impl std::fmt::Display for Status {
                 entry.ahead,
                 duration(entry.waiting_secs),
                 duration(entry.estimate_secs),
-                duration(entry.expected_start_secs)
+                entry.start()
             )?;
         }
         if let Some(next) = self.queue.first() {
@@ -372,6 +391,29 @@ impl std::fmt::Display for Status {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_blocked_request_tells_what_it_waits_for_and_no_start() {
+        let mut entry = QueuedStatus {
+            id: 1,
+            owner: "amy".to_owned(),
+            work: "hil".to_owned(),
+            pid: 1,
+            waiting_secs: 0,
+            estimate_secs: 60,
+            balance_ms: 0,
+            ahead: 0,
+            expected_start_secs: 0,
+            claims: "router".to_owned(),
+            blocked_by: Vec::new(),
+        };
+        assert_eq!(entry.start(), format!("start in ~{}", duration(0)));
+        entry.blocked_by = vec!["router (its radio keeps mon0)".to_owned()];
+        assert_eq!(
+            entry.start(),
+            "waits for router (its radio keeps mon0): `cargo stand devices release` returns it"
+        );
+    }
 
     #[test]
     fn a_holder_past_its_estimate_is_shown_overdue() {

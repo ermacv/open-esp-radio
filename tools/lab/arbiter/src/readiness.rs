@@ -30,10 +30,10 @@ pub enum Readiness {
     /// Granted to lease `lease`.
     InUse { lease: u64, generation: u64 },
     /// Its driver brings it to an end state; `lease` is the lease that left
-    /// it, none after a restart or a person's release.
+    /// it, none after a restart or a return.
     Recovering { lease: Option<u64>, generation: u64 },
-    /// No end state was confirmed: nobody is granted it until a person
-    /// returns it. `emission` is what its driver still confirmed of what it
+    /// No end state was confirmed: nobody is granted it until it is
+    /// returned. `emission` is what its driver still confirmed of what it
     /// may put on the air.
     Unavailable {
         reason: String,

@@ -55,8 +55,11 @@ it.
 
 On a restart the service ends every lease still held as abandoned
 and recovers its resources, the ready ones and any unfinished recovery too,
-before it grants them again. A person returns an unavailable resource with
-`cargo stand devices release`.
+before it grants them again. A request a resource keeps waiting names it and
+why, in its answer and in `cargo stand queue`, instead of a start time. Once
+its cause is gone an unavailable board returns with `cargo stand devices
+release <board>`, the router with `cargo stand devices release router`, whose
+recovery parks it again and removes what a run left on its radio.
 
 A board under maintenance (`cargo stand devices maintenance`) serves only
 the owner who took it out; other requests wait, a tool that acts on one

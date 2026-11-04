@@ -783,9 +783,17 @@ impl Service {
         if let Some(maintenance) = maintenance {
             inner.maintenance.insert(ticket, maintenance);
         }
+        let blocked = inner.scheduler.blocked_by(ticket);
         outbox.push(&Reply::Waiting {
             ticket,
-            message: format!("queued as #{ticket}"),
+            message: if blocked.is_empty() {
+                format!("queued as #{ticket}")
+            } else {
+                format!(
+                    "queued as #{ticket}, waiting for {}: `cargo stand devices release` returns it",
+                    blocked.join(", ")
+                )
+            },
         });
         self.pump(&mut inner);
     }
