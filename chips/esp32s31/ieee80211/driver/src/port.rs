@@ -253,6 +253,9 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// alarm). It reads no clock; while a cut or a stop holds the ring it
     /// is `false`.
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault>;
+    /// Whether the ring's next service is timed: a unit coming back then
+    /// waits for it, and the caller need not hear each.
+    fn ring_waits(&self) -> bool;
     /// The data port's receive pull at the turn's `now`: a staged unit, or
     /// the ring serviced once, while the caller has `receive_room`. It
     /// never wakes: ring work left now is [`DevicePull::Again`], work

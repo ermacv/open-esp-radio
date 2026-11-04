@@ -566,6 +566,9 @@ where
             Poll::Pending
         }
     }
+    fn ring_waits(&self) -> bool {
+        self.continuation.is_some()
+    }
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
         if self.cut || self.pausing {
             return Ok(false);

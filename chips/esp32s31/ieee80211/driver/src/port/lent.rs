@@ -86,6 +86,9 @@ pub(super) struct NetworkCredit<P = SameHart> {
     transferred: AtomicUsize,
     /// A lent unit was dropped since the port last looked.
     returned: AtomicBool,
+    /// A return need not tell the waiting task: the ring's next service is
+    /// timed, and it rearms what came back.
+    quiet: AtomicBool,
     /// How a return tells the waiting task. The units'
     /// owners drop in tasks of the network's executor, never in an
     /// interrupt handler.
@@ -99,6 +102,7 @@ impl<P: LentNotifies> NetworkCredit<P> {
             held: AtomicUsize::new(0),
             transferred: AtomicUsize::new(0),
             returned: AtomicBool::new(false),
+            quiet: AtomicBool::new(false),
             notifies,
         }
     }
@@ -119,34 +123,39 @@ impl<P: LentNotifies> NetworkCredit<P> {
     }
 
     /// Whether the network returned a unit the ring has not rearmed yet;
-    /// the next return tells the polling task ([`LentNotifies::returned`]
-    /// runs on every return). The port's facts ask: a return may be the
-    /// only edge left when the walker ran out of armed descriptors.
-    pub(super) fn poll_returns(&self, cx: &mut Context<'_>) -> bool {
+    /// the next return tells the polling task unless `quiet`, when the
+    /// ring's next service is timed. The port's facts ask: a return may be
+    /// the only edge left when the walker ran out of armed descriptors.
+    pub(super) fn poll_returns(&self, cx: &mut Context<'_>, quiet: bool) -> bool {
+        self.quiet.store(quiet, Ordering::SeqCst);
         self.notifies.register_returned(cx);
         self.returned.load(Ordering::Acquire)
     }
 
-    /// Ready once the network holds no unit.
-    pub(super) fn poll_returned(&self, cx: &mut Context<'_>) -> Poll<()> {
+    /// Ready once `ready` holds of the network's count; otherwise the next
+    /// return tells the polling task. The count is read after the task
+    /// asked to hear: a return either sees that or is in the count.
+    fn poll_count(&self, cx: &mut Context<'_>, ready: impl Fn(usize) -> bool) -> Poll<()> {
         self.notifies.register_returned(cx);
-        if self.held() == 0 {
+        if ready(self.held()) {
+            return Poll::Ready(());
+        }
+        self.quiet.store(false, Ordering::SeqCst);
+        if ready(self.held.load(Ordering::SeqCst)) {
             Poll::Ready(())
         } else {
             Poll::Pending
         }
     }
 
-    /// Ready while the network holds fewer than `limit` units; otherwise
-    /// the next return tells the polling task ([`LentNotifies::returned`]
-    /// runs on every return).
+    /// Ready once the network holds no unit.
+    pub(super) fn poll_returned(&self, cx: &mut Context<'_>) -> Poll<()> {
+        self.poll_count(cx, |held| held == 0)
+    }
+
+    /// Ready while the network holds fewer than `limit` units.
     pub(super) fn poll_room(&self, cx: &mut Context<'_>, limit: usize) -> Poll<()> {
-        self.notifies.register_returned(cx);
-        if self.held() < limit {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
+        self.poll_count(cx, |held| held < limit)
     }
 
     /// Start a new installation's count. The lend credit outlives the
@@ -176,10 +185,12 @@ struct ReturnOnDrop<P: LentNotifies> {
 
 impl<P: LentNotifies> Drop for ReturnOnDrop<P> {
     fn drop(&mut self) {
-        self.credit.held.fetch_sub(1, Ordering::AcqRel);
+        self.credit.held.fetch_sub(1, Ordering::SeqCst);
         // The port takes the flag at its next facts.
         self.credit.returned.store(true, Ordering::Release);
-        self.credit.notifies.returned();
+        if !self.credit.quiet.load(Ordering::SeqCst) {
+            self.credit.notifies.returned();
+        }
     }
 }
 
@@ -287,15 +298,54 @@ mod tests {
         let mut cx = Context::from_waker(Waker::noop());
 
         // Polling registers the waiting task's signal before it reads.
-        assert!(!credit.poll_returns(&mut cx), "nothing returned yet");
+        assert!(!credit.poll_returns(&mut cx, false), "nothing returned yet");
         assert_eq!(returned.counts(), (1, 0));
         // Each return raises it and stays reported until the port takes it.
         return_one(credit);
         return_one(credit);
         assert_eq!(returned.counts(), (1, 2));
-        assert!(credit.poll_returns(&mut cx));
+        assert!(credit.poll_returns(&mut cx, false));
         assert!(credit.take_returned());
         assert!(!credit.take_returned(), "taken once");
+    }
+
+    #[test]
+    fn a_return_stays_quiet_while_the_ring_waits_and_is_still_reported() {
+        let returned = leaked(Counted::new());
+        let credit = leaked(NetworkCredit::with(NetworkPeers { returned }));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(!credit.poll_returns(&mut cx, true));
+        return_one(credit);
+        assert_eq!(returned.counts().1, 0, "the ring's timed service takes it");
+        assert!(credit.poll_returns(&mut cx, false), "the flag stays set");
+        return_one(credit);
+        assert_eq!(returned.counts().1, 1, "no timed service: the return tells");
+    }
+
+    #[test]
+    fn a_task_at_the_lend_limit_hears_the_next_return_while_the_ring_waits() {
+        let returned = leaked(Counted::new());
+        let credit = leaked(NetworkCredit::with(NetworkPeers { returned }));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(!credit.poll_returns(&mut cx, true));
+        credit.held.store(2, Ordering::SeqCst);
+        assert!(credit.poll_room(&mut cx, 2).is_pending());
+        drop(ReturnOnDrop { credit });
+        assert_eq!(returned.counts().1, 1, "the waiting task hears it");
+        assert!(credit.poll_room(&mut cx, 2).is_ready());
+    }
+
+    #[test]
+    fn a_task_waiting_for_the_last_unit_hears_it_while_the_ring_waits() {
+        let returned = leaked(Counted::new());
+        let credit = leaked(NetworkCredit::with(NetworkPeers { returned }));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(!credit.poll_returns(&mut cx, true));
+        credit.held.store(1, Ordering::SeqCst);
+        assert!(credit.poll_returned(&mut cx).is_pending());
+        drop(ReturnOnDrop { credit });
+        assert_eq!(returned.counts().1, 1);
+        assert!(credit.poll_returned(&mut cx).is_ready());
     }
 
     #[test]
