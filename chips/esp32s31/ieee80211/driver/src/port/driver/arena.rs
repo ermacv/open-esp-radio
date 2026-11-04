@@ -77,10 +77,23 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 .is_some_and(DataArenas::<Id, B>::holds_key_right)
     }
 
+    /// Whether a timeout abort settles: the arena's own or an MPDU's, which
+    /// forces CCA.
+    pub(in crate::port) fn arena_abort_settling(&mut self) -> bool {
+        self.arena
+            .as_ref()
+            .is_some_and(DataArenas::<Id, B>::settling)
+            || self
+                .core
+                .view()
+                .arena_core()
+                .is_some_and(|core| core.abort_settling())
+    }
+
     /// Offer one TX edge to the arena on the air at `now`: its completion,
     /// and `true` when its timeout abort settled, so the MPDUs' latched
     /// timeouts are offered again.
-    pub(super) fn service_arena(
+    pub(in crate::port) fn service_arena(
         &mut self,
         device: &mut D,
         wake: WifiTxWake,

@@ -481,6 +481,16 @@ impl MacHtTxProgram {
         self.parameters.control
     }
 
+    /// Backoff slots the queue counts down.
+    pub const fn contention_window(self) -> u16 {
+        self.parameters.contention_window
+    }
+
+    /// Arbitration interframe space number the queue waits before counting.
+    pub const fn aifsn(self) -> u8 {
+        self.parameters.aifsn
+    }
+
     /// Bind one semantic HT publication to its prepared DMA authority.
     pub fn new(
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,

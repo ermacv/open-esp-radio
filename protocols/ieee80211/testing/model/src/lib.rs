@@ -1635,6 +1635,10 @@ pub struct ModelAir {
     held: Cell<[bool; WmmAccessCategory::ALL.len()]>,
     /// Keep a published PPDU's result pending, independently of prepublication CCA.
     held_results: Cell<[bool; WmmAccessCategory::ALL.len()]>,
+    /// Arena ends served ahead of the port's transmit service.
+    relayed: Cell<usize>,
+    /// What [`TxArena::event_waiting`] of the port's arenas answers.
+    event_waiting: Cell<bool>,
     time: ModelTime,
     receive_agreements: Cell<BTreeMap<u8, ModelReceiveAgreement>>,
     expired_msdus: Cell<u32>,
@@ -1673,6 +1677,8 @@ impl ModelAir {
             edca: Default::default(),
             held: Default::default(),
             held_results: Default::default(),
+            relayed: Cell::new(0),
+            event_waiting: Cell::new(false),
             time: ModelTime::new(clock),
             receive_agreements: Default::default(),
             expired_msdus: Default::default(),
@@ -1927,6 +1933,17 @@ impl ModelAir {
         *access_category.select_mut(&mut queues) = held;
         self.held.set(queues);
         self.wake_world();
+    }
+
+    /// Say that an event waits, or no longer waits, for the port's next
+    /// poll.
+    pub fn set_event_waiting(&self, waiting: bool) {
+        self.event_waiting.set(waiting);
+    }
+
+    /// How many arena ends the port served ahead of its transmit service.
+    pub fn relayed_arenas(&self) -> usize {
+        self.relayed.get()
     }
 
     /// Delay the current publication's result until released or its bound

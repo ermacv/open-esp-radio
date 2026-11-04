@@ -83,7 +83,8 @@ const DEVICE_PORT: u16 = 5001;
 const PAYLOAD: usize = 1472;
 /// Total offered load of each level, Mbit/s; a mode with two directions
 /// offers half each way. `OER_WIFI_LOAD_MBPS` (comma-separated) replaces
-/// them, e.g. to offer more than these levels.
+/// them, e.g. to offer more than these levels; 0 measures the ceiling, a
+/// paced level above it stays behind the sender's own sleeps.
 const LEVELS_MBPS: [u64; 4] = [10, 30, 50, 65];
 const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
 /// Each level's measuring window, the time before it opens and the drain
@@ -340,7 +341,8 @@ fn parse_probes(text: &str) -> Result<bool, Failure> {
     }
 }
 
-/// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`, each 1 to
+/// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`, each 0 (as
+/// fast as the socket takes the datagrams) to
 /// [`MAX_LEVEL_MBPS`].
 fn levels_mbps() -> Result<Vec<u64>, Failure> {
     match std::env::var(LEVELS_ENV) {
@@ -356,13 +358,13 @@ fn parse_levels(text: &str) -> Result<Vec<u64>, Failure> {
                 .trim()
                 .parse::<u64>()
                 .ok()
-                .filter(|level| (1..=MAX_LEVEL_MBPS).contains(level))
+                .filter(|level| *level <= MAX_LEVEL_MBPS)
         })
         .collect::<Option<Vec<_>>>()
         .filter(|levels| !levels.is_empty())
         .ok_or_else(|| {
             Failure::Incomplete(format!(
-                "{LEVELS_ENV}=`{text}` is no list of 1 to {MAX_LEVEL_MBPS} Mbit/s"
+                "{LEVELS_ENV}=`{text}` is no list of 0 to {MAX_LEVEL_MBPS} Mbit/s"
             ))
         })
 }
@@ -1434,7 +1436,8 @@ mod tests {
     fn a_level_list_holds_only_representable_totals() {
         assert_eq!(LEVELS_MBPS.iter().max(), Some(&65));
         assert_eq!(parse_levels("10, 65,100").ok(), Some(vec![10, 65, 100]));
-        for refused in ["", "0", "1001", "18446744073709551615", "10,x"] {
+        assert_eq!(parse_levels("0").ok(), Some(vec![0]), "as fast as it goes");
+        for refused in ["", "1001", "18446744073709551615", "10,x"] {
             assert!(parse_levels(refused).is_err(), "{refused}");
         }
         assert!(u32::try_from(MAX_LEVEL_MBPS * 1_000_000).is_ok());

@@ -184,6 +184,11 @@ impl AmpduBudget {
         self.he
     }
 
+    /// The longest aggregate the budget admits.
+    pub const fn max_bytes(&self) -> u16 {
+        self.budget.max_bytes()
+    }
+
     /// Count one more subframe of `psdu` octets: its MPDU with the hardware
     /// MIC and FCS.
     ///
@@ -214,6 +219,7 @@ impl AmpduBudget {
 pub type Esp32s31AmpduOwner<'slot, B, const SLOTS: usize> = RetainedDmaAmpduTx<'slot, B, SLOTS>;
 
 /// Register values already derived from the owned admission.
+#[derive(Clone, Copy)]
 pub(super) struct AmpduSettings {
     pub queue: LegacyTxQueue,
     pub format: AmpduFormat,

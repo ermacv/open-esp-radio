@@ -384,6 +384,73 @@ fn an_aggregate_arena_ends_as_the_turns_completion_settles_and_the_stopped_port_
     });
 }
 
+/// Publish `tags` as an aggregate of the arena `arena`, answered whole, and
+/// settle it.
+fn aggregate_round<'id>(
+    fixture: &mut Fixture<'id, radio::LocalId<'id>>,
+    arena: Arena,
+    tags: &[u8],
+) -> Arena {
+    fixture.observed.borrow_mut().block_ack = Some((10, 0b111, true));
+    fixture.fill(&arena, tags, plain);
+    fixture
+        .publish_aggregate(arena, ht(7), MpduProtection::Open)
+        .expect("published");
+    let done = fixture.arena_end();
+    let mut returned = Returned::default();
+    fixture
+        .port
+        .arena()
+        .release(done, returned.take())
+        .expect("released")
+}
+
+#[test]
+fn each_aggregate_of_the_same_values_draws_its_own_backoff() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let [first, second] = fixture.arenas();
+        let _first = aggregate_round(fixture, first, &[10, 11, 12]);
+        let _second = aggregate_round(fixture, second, &[13, 14, 15]);
+        let observed = fixture.observed.borrow();
+        let draws = observed.draws.borrow();
+        assert_eq!(draws.len(), 2, "one draw per publication");
+        assert_eq!(
+            observed.ht_contention.last().map(|(backoff, _)| *backoff),
+            draws.last().map(|draw| draw.backoff_slots),
+            "the second program carries the second draw"
+        );
+    });
+}
+
+#[test]
+fn an_edca_change_reaches_the_aggregate_after_it() {
+    use oer_protocols_ieee80211_testing_conformance::edca::parameters;
+    with_fixture(|fixture| {
+        fixture.start();
+        let [first, second] = fixture.arenas();
+        let _first = aggregate_round(fixture, first, &[10, 11, 12]);
+        let table = parameters(VifRole::AccessPoint, false);
+        let edca = SupportedEdca::new(table).expect("EDCA");
+        assert!(matches!(
+            fixture.run(PortCommand::SetEdca(edca)),
+            Ok(CommandProgress::Done)
+        ));
+        let _second = aggregate_round(fixture, second, &[13, 14, 15]);
+        let wanted = table.access_category(WmmAccessCategory::BestEffort);
+        assert_eq!(
+            fixture
+                .observed
+                .borrow()
+                .ht_contention
+                .last()
+                .map(|(_, aifsn)| *aifsn),
+            Some(wanted.wmm.aifsn.get()),
+            "the program follows the table the command gave"
+        );
+    });
+}
+
 #[test]
 fn a_closed_gate_refuses_an_arena_and_its_frames_are_withdrawn() {
     with_installations(|mut fixture, installations| {

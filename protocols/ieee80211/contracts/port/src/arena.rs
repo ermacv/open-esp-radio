@@ -628,6 +628,12 @@ pub trait TxArena<'p, 'id: 'p> {
     /// The arena on the air: published and not yet completed.
     fn on_air(&self) -> Option<ArenaId>;
 
+    /// Whether the backend has an event for the caller to serve, for a
+    /// caller that fills an arena and owes the air a quick answer.
+    fn event_waiting(&self) -> bool {
+        false
+    }
+
     /// Put the arena's frames on the air as one PPDU, positions in order.
     ///
     /// # Errors

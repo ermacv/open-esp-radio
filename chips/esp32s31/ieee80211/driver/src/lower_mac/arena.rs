@@ -28,6 +28,7 @@
 //! failure, a collision detach a collision and a hardware timeout an
 //! aborted publication. Each publication's watchdog is the only deadline.
 
+use super::ampdu::{AmpduBudget, AmpduSettings};
 use super::{ArenaValues, ContentionDraw};
 use super::{
     CcmpKeyHardware, ESP32S31_AMPDU_MAX_LENGTH, Esp32s31AmpduOwner, FreeQueue, KeyHandle,
@@ -235,11 +236,28 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
     }
 }
 
+/// The program of the last HT aggregate and what it follows from: a
+/// saturated station publishes the same values aggregate after aggregate,
+/// and the air waits while the next one derives them again.
+#[derive(Clone, Copy)]
+struct AggregateProgram {
+    /// Its values, with no backoff: each publication draws its own.
+    values: ArenaValues,
+    spacing: u8,
+    /// The key selector and MIC length of its admission.
+    key: (u8, usize),
+    max_bytes: u16,
+    settings: AmpduSettings,
+}
+
 /// The S31's two TX arenas over two retained A-MPDU chains.
 pub struct Esp32s31TxArena<'core, 'slot, L, Path: PoolPath, const SLOTS: usize> {
     chains: [Chain<'core, 'slot, L, Path, SLOTS>; 2],
     claimed: bool,
     fault: Option<ArenaFault>,
+    /// Gone with any change the core's policy may have seen
+    /// ([`Self::forget_program`]).
+    program: Option<AggregateProgram>,
 }
 
 /// The chains and tickets an [`Esp32s31TxArena`] is made of.
@@ -294,7 +312,14 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
             chains: [chain(first, one), chain(second, two)],
             claimed: false,
             fault: None,
+            program: None,
         })
+    }
+
+    /// Derive the next aggregate's program anew: the core's policy, which
+    /// the last one followed, may have changed.
+    pub fn forget_program(&mut self) {
+        self.program = None;
     }
 
     /// Whether [`Self::into_parts`] gives the chains and tickets back: both
@@ -338,6 +363,7 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
                 ],
                 claimed: self.claimed,
                 fault: Some(ArenaFault::State),
+                program: None,
             }),
         }
     }
@@ -753,7 +779,17 @@ where
             ArenaFormat::Aggregate { spacing, .. } => (chain.len, Some(spacing.get()), None),
         };
         let key_held = matches!(chain.admission, Some(TxAdmission::Protected(_)));
+        let known = self
+            .arenas
+            .program
+            .filter(|program| program.values == values && Some(program.spacing) == spacing);
+        let plain = known.and_then(|program| Some((program, chain.owner.plain_length()?)));
         let budget = match spacing {
+            // The same rate's limit, the chain's length: no walk of its frames.
+            Some(_) if plain.is_some() => match plain {
+                Some((program, length)) if length.bytes <= program.max_bytes => Ok(None),
+                _ => Err(super::AmpduRefusal::Length),
+            },
             Some(spacing) => {
                 self.core
                     .arena_budget(values, spacing, SLOTS)
@@ -793,7 +829,13 @@ where
                 reason,
             });
         }
-        let he = budget.ok().flatten().and_then(|budget| budget.he_policy());
+        let budget = budget.ok().flatten();
+        let he = budget.as_ref().and_then(AmpduBudget::he_policy);
+        let max_bytes = known.map_or_else(
+            || budget.as_ref().map(AmpduBudget::max_bytes),
+            |program| Some(program.max_bytes),
+        );
+        let unchanged = values;
         let role = self.role;
         let backoff = self.core.draw_backoff(role, category, self.observations);
         let values = ArenaValues {
@@ -833,14 +875,23 @@ where
             ));
         };
         let cookie = chain.cookie;
+        let mut program = None;
         let result = (|| {
             let admission = chain.admission.as_ref().ok_or(ArenaFault::State)?;
             match spacing {
                 Some(spacing) => {
-                    let settings = self
-                        .core
-                        .arena_aggregate(values, admission, spacing, he)
-                        .map_err(|_| ArenaFault::State)?;
+                    let key = admission.hardware();
+                    let settings = match known.filter(|program| program.key == key) {
+                        Some(known) => {
+                            let mut settings = known.settings;
+                            settings.publication.contention_window = values.backoff_slots;
+                            settings
+                        }
+                        None => self
+                            .core
+                            .arena_aggregate(values, admission, spacing, he)
+                            .map_err(|_| ArenaFault::State)?,
+                    };
                     let delimiters = |psdu: u16| match he {
                         Some(policy) => {
                             policy.rate().ampdu_empty_delimiters(psdu, policy.density())
@@ -855,6 +906,16 @@ where
                         &settings,
                         length,
                     )?;
+                    program =
+                        max_bytes
+                            .filter(|_| he.is_none())
+                            .map(|max_bytes| AggregateProgram {
+                                values: unchanged,
+                                spacing,
+                                key,
+                                max_bytes,
+                                settings,
+                            });
                 }
                 None => {
                     let (length, mic) = chain.owner.frame_size(0).ok_or(ArenaFault::State)?;
@@ -897,7 +958,12 @@ where
             }),
         });
         match result {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                if program.is_some() {
+                    self.arenas.program = program;
+                }
+                Ok(())
+            }
             // The arena, its queue and its admission stay quarantined.
             Err(fault) => Err(PublishError::Fault(self.arenas.quarantine(fault))),
         }

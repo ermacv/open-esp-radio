@@ -785,6 +785,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// receive Block Ack agreements.
     fn apply_settings(&mut self) -> Result<(), Fault> {
         let driver = &mut self.driver;
+        if self.settings.dirty()
+            && let Some(arena) = driver.arena.as_mut()
+        {
+            arena.forget_program();
+        }
         if self.settings.edca_dirty {
             let [station, _] = self.settings.edca;
             let table =
@@ -1024,7 +1029,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         };
         let done = {
             let (driver, device, mut env) = self.parts(sink);
-            let done = driver.service_tx(&mut env, device, wake, stopping, now)?;
+            let done =
+                driver.service_tx(&mut env, device, wake, tx.is_arena_ended(), stopping, now)?;
             if tbtt {
                 let mut steps = Sink::default();
                 if !core_views::configuring::<Id, D, B>(driver.core.view()) {
@@ -1517,6 +1523,26 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         done
     }
 
+    fn service_arena(
+        &mut self,
+        tx: TxFacts,
+        now: Instant,
+    ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault> {
+        self.check()?;
+        if tx.bits() != crate::mac::irq::EVENT_TX_COMPLETE
+            || !matches!(self.state, PortState::Running)
+            || self.driver.arena_abort_settling()
+        {
+            return Ok(None);
+        }
+        self.now = now;
+        let wake = WifiTxWake::Interrupt { events: tx.bits() };
+        self.driver
+            .service_arena(&mut self.device, wake, now)
+            .map(|(done, _)| done)
+            .map_err(|fault| self.record(fault))
+    }
+
     fn arena(&mut self) -> Self::Arena<'_> {
         Esp32s31Arena { port: self }
     }
@@ -1743,6 +1769,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             return Err(fault);
         }
         self.now = now;
+        if let Some(arena) = self.driver.arena.as_mut() {
+            arena.forget_program();
+        }
         if !self.running() {
             return Ok(CommandProgress::Refused(
                 command,
@@ -2039,6 +2068,10 @@ impl<'t, 'id: 't, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
 
     fn on_air(&self) -> Option<ArenaId> {
         self.port.driver.arena.as_ref()?.on_air()
+    }
+
+    fn event_waiting(&self) -> bool {
+        self.port.device.event_waiting()
     }
 
     fn publish(

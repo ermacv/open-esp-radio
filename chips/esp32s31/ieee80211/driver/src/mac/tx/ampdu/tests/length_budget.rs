@@ -28,7 +28,13 @@ fn prefix_budget_matches_the_prepared_batch_with_final_padding_and_delimiters() 
         8,
     )
     .unwrap();
+    assert!(owner.plain_length().is_some(), "no delimiter yet");
     let before = owner.prepare_format(cookie, delimiters, false).unwrap();
+    assert_eq!(
+        owner.plain_length(),
+        None,
+        "a delimiter set: the frames decide"
+    );
     // The budget starts from the prepared prefix.
     let mut budget = owner.ht_length_budget(rate).unwrap();
     assert_eq!(budget.finish().unwrap(), before);

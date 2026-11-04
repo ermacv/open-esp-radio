@@ -142,6 +142,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
 pub enum ModelPortCall {
     /// [`DataPort::service_tx`].
     ServiceTx,
+    /// [`DataPort::service_arena`].
+    ServiceArena,
     /// [`DataPort::receive`] or a receive owner's return.
     Receive,
     /// [`DataPort::command`].
@@ -149,6 +151,9 @@ pub enum ModelPortCall {
     /// [`DataPort::poll_stop`].
     Stop,
 }
+
+/// The model's completion event in [`TxFacts`].
+const MODEL_TX_COMPLETION: u32 = 1;
 
 /// What the model port held when it faulted.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -855,6 +860,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
 pub struct ModelPortArena<'t, 'id, Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> {
     inner: arena::ModelDataArena<'t, 't, 'id, C, Backend<Id, C, X>>,
     channel: Channel,
+    air: &'t ModelAir,
 }
 
 impl<'t, 'id: 't, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContext + 'id>
@@ -901,6 +907,10 @@ impl<'t, 'id: 't, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: Mod
 
     fn on_air(&self) -> Option<ArenaId> {
         self.inner.on_air()
+    }
+
+    fn event_waiting(&self) -> bool {
+        self.air.event_waiting.get()
     }
 
     fn publish(
@@ -1009,8 +1019,20 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             self.air.rx_stream.set(stream);
             streaming
         };
+        // A held result gives no completion yet; the model's arena ends at
+        // once otherwise.
+        let completion = self
+            .held
+            .arenas
+            .try_borrow()
+            .is_ok_and(|a| a.on_air().is_some())
+            && !self.air.held_results.get().contains(&true);
         Facts {
-            tx: tx.then_some(TxFacts::DUE),
+            tx: tx.then_some(if completion {
+                TxFacts::events(MODEL_TX_COMPLETION)
+            } else {
+                TxFacts::DUE
+            }),
             tbtt: false,
             rx: self.radio == Radio::Running
                 && (!self.air.rx.is_empty() || group_ready || streaming),
@@ -1047,10 +1069,28 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         Ok(done)
     }
 
+    fn service_arena(
+        &mut self,
+        _: TxFacts,
+        now: Instant,
+    ) -> Result<Option<PortCompleted<'id, Self>>, ModelPortFault> {
+        self.check(ModelPortCall::ServiceArena)?;
+        let air = self.air.clone();
+        let _turn = Turn::at(&air, now);
+        let done = self.serve_arena(now)?;
+        if done.is_some() {
+            self.air
+                .relayed
+                .set(self.air.relayed.get().saturating_add(1));
+        }
+        Ok(done)
+    }
+
     fn arena(&mut self) -> ModelPortArena<'_, 'id, Id, C, X> {
         ModelPortArena {
             inner: arena::ModelDataArena::new(&self.held),
             channel: self.channel,
+            air: &self.air,
         }
     }
 

@@ -72,26 +72,53 @@ use crate::{
 /// The transmit events a port sampled: its interrupt word, or none for a
 /// service that a deadline asks for.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct TxFacts(u32);
+pub struct TxFacts {
+    events: u32,
+    arena_ended: bool,
+}
 
 impl TxFacts {
     /// No event: the service a due deadline asks for.
-    pub const DUE: Self = Self(0);
+    pub const DUE: Self = Self {
+        events: 0,
+        arena_ended: false,
+    };
 
     /// The backend's sampled event word `bits`.
     pub const fn events(bits: u32) -> Self {
-        Self(bits)
+        Self {
+            events: bits,
+            arena_ended: false,
+        }
     }
 
     /// The event word.
     pub const fn bits(self) -> u32 {
-        self.0
+        self.events
     }
 
     /// The events of both samples.
     #[must_use]
     pub const fn union(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+        Self {
+            events: self.events | other.events,
+            arena_ended: self.arena_ended || other.arena_ended,
+        }
+    }
+
+    /// These events, of which [`DataPort::service_arena`] already returned
+    /// the published arena's end: the arena on the air now is the next one.
+    #[must_use]
+    pub const fn arena_ended(self) -> Self {
+        Self {
+            arena_ended: true,
+            ..self
+        }
+    }
+
+    /// Whether [`Self::arena_ended`] marked these events.
+    pub const fn is_arena_ended(self) -> bool {
+        self.arena_ended
     }
 }
 
@@ -364,6 +391,22 @@ pub trait DataPort<'id> {
         tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault>;
+
+    /// Serve the published data arena alone on the completion events
+    /// `tx`, for a caller that publishes the next arena before anything
+    /// else: the arena's end when `tx` ended it. Every other service of
+    /// `tx`, an abort in progress and events other than a completion stay
+    /// with [`Self::service_tx`], which the caller runs next with the same
+    /// `tx`.
+    ///
+    /// # Errors
+    ///
+    /// The backend's contract fault.
+    fn service_arena(
+        &mut self,
+        tx: TxFacts,
+        now: Instant,
     ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault>;
 
     /// Lend the station's data arenas for this turn.

@@ -366,6 +366,16 @@ impl<E: SignalExecutor> IrqConsumer<'_, E> {
         Ok(self.storage.receive.has_pending()? || self.storage.signal.has_pending()?)
     }
 
+    /// Whether a fact other than a received unit waits, which stays for
+    /// its batch.
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn has_event(&self) -> Result<bool, ForeignContext> {
+        self.storage.signal.has_pending()
+    }
+
     /// # Errors
     ///
     /// The caller runs outside the signal's executor; the facts stay.

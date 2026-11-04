@@ -117,6 +117,7 @@ where
         let now = self.now;
         let mut tids = [false; 8];
         let mut taken = 0_usize;
+        let mut yielded = false;
         {
             let Self {
                 port,
@@ -172,6 +173,11 @@ where
                         free(freed, memory);
                     }
                 }
+                // The air waits for a completion, not for the next frame.
+                if arena.event_waiting() {
+                    yielded = true;
+                    break;
+                }
             }
             for tid in WmmUserPriority::ALL {
                 if !*tid.select(&tids) {
@@ -187,7 +193,7 @@ where
         }
         // The budget ran out while the network still has MSDUs the standby
         // may take.
-        if taken >= TX_DEPTH && self.accepts() && !network.transmit.is_empty() {
+        if (yielded || taken >= TX_DEPTH) && self.accepts() && !network.transmit.is_empty() {
             self.again = true;
         }
         self.publish()

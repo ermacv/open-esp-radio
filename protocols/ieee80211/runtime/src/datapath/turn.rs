@@ -2,6 +2,7 @@
 //! lifecycle's messages and the radio's start, move and stop.
 
 use super::*;
+use oer_protocols_ieee80211_contracts_port::PortCompleted;
 
 /// What [`Actor::collect`] found.
 pub(super) struct Collected {
@@ -243,6 +244,12 @@ where
         mut alarm: Pin<&mut Option<F>>,
         arm: &impl Fn(Option<Instant>) -> Option<F>,
     ) -> Collected {
+        let fresh = self.collect_facts(cx);
+        self.collect_sources(cx, fresh, lifecycle, network, alarm.as_mut(), arm)
+    }
+
+    /// Take the port's facts into the held ones; whether it gave any.
+    pub(super) fn collect_facts(&mut self, cx: &mut Context<'_>) -> bool {
         let facts = self.port.poll_facts(cx);
         let fresh = !facts.is_empty();
         self.facts = Facts {
@@ -253,6 +260,29 @@ where
             tbtt: self.facts.tbtt || facts.tbtt,
             rx: self.facts.rx || facts.rx,
         };
+        fresh
+    }
+
+    /// The [`Self::collect`] of every source but the port's facts, `fresh`
+    /// when the last call of [`Self::collect_facts`] took some.
+    pub(super) fn collect_sources<
+        F: Future<Output = ()>,
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        cx: &mut Context<'_>,
+        fresh: bool,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+        mut alarm: Pin<&mut Option<F>>,
+        arm: &impl Fn(Option<Instant>) -> Option<F>,
+    ) -> Collected {
         let signalled = !self.facts.is_empty();
         let mut ready = false;
         if self.takes_messages()
@@ -322,16 +352,6 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         let facts = core::mem::take(&mut self.facts);
-        // The standby takes what the network queued before a completion
-        // puts it on the air.
-        if facts.tx.is_some_and(|tx| tx.bits() != 0)
-            && self.data.plane.as_ref().is_some_and(DataPlane::on_air)
-        {
-            D::span(ActorSpan::Intake, false);
-            let taken = self.intake(lifecycle, network);
-            D::span(ActorSpan::Intake, true);
-            taken?;
-        }
         D::span(ActorSpan::Transmit, false);
         let transmitted = self.transmit(facts, lifecycle, network);
         D::span(ActorSpan::Transmit, true);
@@ -363,6 +383,63 @@ where
         self.connect_plane()?;
         self.flush(lifecycle);
         Ok(())
+    }
+
+    /// Put the next arena on the air the moment the published one ends,
+    /// ahead of everything else the actor owes: the air waits for nothing
+    /// but this. The standby first takes what the network queued. The held
+    /// transmit facts stay for the turn, which serves the rest of them.
+    pub(super) fn relay<
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> Result<(), Failed<'id, D>> {
+        let Some(tx) = self.facts.tx.filter(|tx| tx.bits() != 0) else {
+            return Ok(());
+        };
+        if !self.data.plane.as_ref().is_some_and(DataPlane::on_air) {
+            return Ok(());
+        }
+        D::span(ActorSpan::Intake, false);
+        let taken = self.intake(lifecycle, network);
+        D::span(ActorSpan::Intake, true);
+        taken?;
+        D::span(ActorSpan::Transmit, false);
+        let relayed = self.relay_arena(tx);
+        D::span(ActorSpan::Transmit, true);
+        relayed
+    }
+
+    /// The arena's end on `tx`, the next arena ahead of its settlement.
+    fn relay_arena(&mut self, tx: TxFacts) -> Result<(), Failed<'id, D>> {
+        let done = self
+            .port
+            .service_arena(tx, self.now)
+            .map_err(ActorFault::Port)?;
+        let Some(done) = done else {
+            return Ok(());
+        };
+        self.facts.tx = Some(tx.arena_ended());
+        self.finish_arena(done)?;
+        self.publish()
+    }
+
+    /// Publish the next arena ahead of `done` when the plane may, then
+    /// settle `done`.
+    fn finish_arena(&mut self, done: PortCompleted<'id, D::Port>) -> Result<(), Failed<'id, D>> {
+        if let Err(failed) = self.publish_ahead(&done) {
+            self.retained.completed = Some(done);
+            return Err(failed);
+        }
+        self.settle(done)
     }
 
     /// Serve the port's transmit facts, or its due deadline: terminals to
@@ -404,11 +481,7 @@ where
                 .map_err(ActorFault::Port)?;
             self.staged(lifecycle, network)?;
             if let Some(done) = done {
-                if let Err(failed) = self.publish_ahead(&done) {
-                    self.retained.completed = Some(done);
-                    return Err(failed);
-                }
-                self.settle(done)?;
+                self.finish_arena(done)?;
             }
         }
         self.publish()
