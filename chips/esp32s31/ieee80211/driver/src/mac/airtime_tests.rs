@@ -16,8 +16,6 @@ fn candidate(key: u8, minimum: u32) -> AirtimeCandidate<u8> {
     }
 }
 
-mod queues;
-
 #[test]
 fn unknown_receipt_keeps_the_reservation_until_an_explicit_charge_is_supplied() {
     let mut storage = AirtimeStorage::<_, 1, 1>::new(us(1000));

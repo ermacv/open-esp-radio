@@ -26,11 +26,10 @@ use std::{
 };
 
 use oer_hil_services_load::{
-    BridgeTx, CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectMac,
-    CollectParts, CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus,
-    Link, LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, PartWindow,
-    PartsCollected, Report, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected,
-    Transmit,
+    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectMac, CollectParts,
+    CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
+    LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, PartWindow, PartsCollected,
+    Report, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 use oer_protocols_hil_agent::base::Service as _;
@@ -485,28 +484,6 @@ fn utilisation(before: &Load, after: &Load) -> serde_json::Value {
         })
         .collect::<Vec<_>>();
     serde_json::json!({ "window_ms": round(window / 1000.0), "harts": harts, "executors": executors })
-}
-
-/// What the network bridge's turns did with the stack's transmissions:
-/// each outcome's turns, the shares of turns that began with the stack's
-/// queue full or with no buffer free for the stack, and the means of the
-/// stack's queued packets and of the buffers the station held.
-fn bridge_tx(bridge: &BridgeTx) -> serde_json::Value {
-    let mean =
-        |sum: u32| (bridge.turns != 0).then(|| round(f64::from(sum) / f64::from(bridge.turns)));
-    let share = |count: u32| {
-        (bridge.turns != 0).then(|| round(100.0 * f64::from(count) / f64::from(bridge.turns)))
-    };
-    serde_json::json!({
-        "turns": bridge.turns,
-        "moved": bridge.moved,
-        "held": bridge.held,
-        "dropped": bridge.dropped,
-        "queue_full_percent": share(bridge.queue_full),
-        "starved_percent": share(bridge.starved),
-        "queued_mean": mean(bridge.queued_sum),
-        "station_mean": mean(bridge.station_sum),
-    })
 }
 
 /// The run's measuring window as the image kept it.
@@ -1470,7 +1447,6 @@ fn measurement(
                 "device_send_refused": device.refused,
                 "device_send_missed": device.missed,
                 "device_send_failed": device.failed,
-                "bridge": bridge_tx(&report.bridge_tx),
                 "host_received_mbps": mbps(host.bytes, window),
                 "host_received_datagrams": host.datagrams,
                 "lost": device.datagrams.saturating_sub(host.datagrams),
@@ -1647,26 +1623,6 @@ mod tests {
             "a wake count that wrapped still differs"
         );
         assert_eq!(value["executors"][0]["rounds_per_s"], 3000.0);
-    }
-
-    #[test]
-    fn the_bridge_s_turns_give_shares_and_means_and_none_without_a_turn() {
-        let value = bridge_tx(&BridgeTx {
-            turns: 200,
-            moved: 150,
-            held: 10,
-            dropped: 0,
-            queue_full: 50,
-            starved: 20,
-            queued_sum: 1_000,
-            station_sum: 9_000,
-        });
-        assert_eq!(value["queue_full_percent"], 25.0);
-        assert_eq!(value["starved_percent"], 10.0);
-        assert_eq!(value["queued_mean"], 5.0);
-        assert_eq!(value["station_mean"], 45.0);
-        let none = bridge_tx(&BridgeTx::default());
-        assert!(none["queued_mean"].is_null());
     }
 
     #[test]

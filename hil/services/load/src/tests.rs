@@ -68,16 +68,6 @@ fn the_largest_reports_fit_one_response() {
             last_us: Some(u64::MAX),
             ..Sent::default()
         },
-        bridge_tx: BridgeTx {
-            turns: u32::MAX,
-            moved: u32::MAX,
-            held: u32::MAX,
-            dropped: u32::MAX,
-            queue_full: u32::MAX,
-            starved: u32::MAX,
-            queued_sum: u32::MAX,
-            station_sum: u32::MAX,
-        },
     });
     assert!(postcard::to_slice(&report, &mut buffer).unwrap().len() <= 512);
     let part = PartWindow {

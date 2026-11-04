@@ -31,7 +31,7 @@ use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
-    BridgeTx, Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError, Mac,
+    Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError, Mac,
     MacCollected, PartsCollected, Report, Request, SamplesCollected, Sent, Start, Started,
     Tracking, TrackingCollected, Transmit,
 };
@@ -43,7 +43,7 @@ use super::pace::{GRANULARITY_US, Next, Schedule, UNPACED_BATCH};
 use super::receive::{Datagram, Receiving, classify, echo};
 use super::relay::{self, Client};
 use super::report::{self, Snapshot, Windows};
-use crate::{RX, TX};
+use crate::RX;
 
 const _: () = if oer_hil_services_load::TUNE_KNOBS != oer_portable_trace::tune::KNOBS
     || oer_hil_services_load::TUNE_UNSET != oer_portable_trace::tune::UNSET
@@ -101,12 +101,12 @@ impl Answer {
     }
 }
 
-type Socket = UdpSocket<'static, IpDevice<RX, TX>>;
+type Socket = UdpSocket<'static, IpDevice<RX>>;
 
 /// Serve the load requests until the chip resets, sampling and reading
 /// the boot hart through `hart0` and sampling hart 1 with `hart1`.
 pub(crate) async fn serve(
-    net: &Net<RX, TX>,
+    net: &Net<RX>,
     mut requests: Requests,
     mut hart0: Client,
     mut hart1: observe::Hart1,
@@ -242,7 +242,7 @@ fn decided_answer(decided: Decided) -> Answer {
 }
 
 /// The run's socket, bound to `start.port` of the station's DHCP address.
-fn open(net: &Net<RX, TX>, start: &Start) -> Result<Socket, LoadError> {
+fn open(net: &Net<RX>, start: &Start) -> Result<Socket, LoadError> {
     let address = match net.status().ipv4 {
         Ipv4Status::Lease(configuration) | Ipv4Status::Static(configuration) => {
             configuration.address
@@ -280,7 +280,6 @@ struct Ends {
     cpu_end: Load,
     parts: Windows,
     counters: Counters,
-    bridge_tx: BridgeTx,
     link: Link,
     mac: Mac,
     tracking: Tracking,
@@ -312,7 +311,7 @@ async fn run(
     socket: Socket,
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
-    net: &Net<RX, TX>,
+    net: &Net<RX>,
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
 ) -> Ended {
@@ -356,7 +355,6 @@ async fn run(
         cpu_end: ends.cpu_end,
         received: receiving.received(tally),
         sent,
-        bridge_tx: ends.bridge_tx,
     };
     Ended {
         report,
@@ -418,7 +416,7 @@ async fn measure(
     start: &Start,
     window: &Window,
     sent: &mut Sent,
-    net: &Net<RX, TX>,
+    net: &Net<RX>,
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
 ) -> Ends {
@@ -474,7 +472,6 @@ async fn measure(
         cpu_end,
         parts: report::parts(&parts_start, &parts_end),
         counters: report::counters(&counters_start, &counters_end),
-        bridge_tx: report::bridge_tx(&counters_start, &counters_end),
         link: report::link_window(&counters_start, &counters_end),
         mac: report::mac_window(&counters_start, &counters_end),
         tracking: report::tracking(&tracking_start, &tracking_end),
@@ -485,7 +482,7 @@ async fn measure(
 /// One end's counters: the boot hart's and the library's, read there, and
 /// the frames the IP stack took; with `start`, the cache's counters
 /// cleared first.
-async fn snapshot(hart0: &mut Client, start: bool, net: &Net<RX, TX>) -> Snapshot {
+async fn snapshot(hart0: &mut Client, start: bool, net: &Net<RX>) -> Snapshot {
     let stack_received = net.stack().statistics().rx_frames;
     Snapshot {
         stack_received,

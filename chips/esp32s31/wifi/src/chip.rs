@@ -548,8 +548,10 @@ pub enum StationExit {
     /// The station never started.
     Unavailable(InitializationError),
 }
-/// The station's network end over `W`'s transmit memory and its packets.
-pub type StationNetwork<W> = Network<
+/// The station's link and receive end.
+pub type StationNetwork<W> = Network<'static, <W as Binding>::Notifies>;
+/// The station's transmit end over `W`'s transmit memory and its packets.
+pub type StationTransmit<W> = crate::NetworkTransmit<
     'static,
     <W as Binding>::Notifies,
     <<W as Binding>::TxSupply as crate::NetworkTxSupply>::Packet,
@@ -557,7 +559,7 @@ pub type StationNetwork<W> = Network<
 >;
 #[allow(
     clippy::type_complexity,
-    reason = "the four ends of the station's start"
+    reason = "the five ends of the station's start"
 )]
 pub fn station<W: Binding>(
     resources: Resources<W>,
@@ -565,6 +567,7 @@ pub fn station<W: Binding>(
 ) -> (
     Control<'static, W::Notifies>,
     StationNetwork<W>,
+    StationTransmit<W>,
     crate::NetworkStopper<'static, W::Notifies>,
     Runners<W>,
 ) {
@@ -604,7 +607,7 @@ pub fn station<W: Binding>(
     let supply = <W::TxSupply as crate::NetworkTxSupply>::new(
         crate::NetworkTx::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx)),
     );
-    let (mut control, network, stopper, connection) = storage
+    let (mut control, network, network_transmit, stopper, connection) = storage
         .channels
         .split(supply)
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
@@ -633,6 +636,7 @@ pub fn station<W: Binding>(
     (
         control,
         network,
+        network_transmit,
         stopper,
         Runners {
             datapath: Datapath {

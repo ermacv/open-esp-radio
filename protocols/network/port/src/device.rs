@@ -193,17 +193,12 @@ pub struct TransmitRefused<F> {
     pub reason: TransmitError,
 }
 
-/// One affine Ethernet port. Poll methods register before observing readiness.
-/// Cancelling a readiness wait consumes no frame or capacity. Only successful
-/// TX transfers the caller's owner, the stack's packet itself ([`Self::TxFrame`]):
-/// the device reads it where the stack wrote it and returns it for the
-/// stack to drop on its own executor; RX transfers its concrete owner by value.
-/// Readiness is an observation; a later TX refusal still returns the owner.
-/// The endpoints and their task wakers stay on their executor's hart.
+/// The link and receive half of one affine Ethernet port. Poll methods
+/// register before observing readiness. Cancelling a readiness wait consumes
+/// no frame. RX transfers its concrete owner by value. The endpoints and
+/// their task wakers stay on their executor's hart.
 pub trait NetDevice {
     type RxFrame: ReceivedFrame;
-    /// The stack's packet owner a transmission hands over.
-    type TxFrame: EthernetFrame;
     fn link(&self) -> LinkSnapshot;
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot>;
     fn receive_queue_len(&self) -> usize;
@@ -221,8 +216,22 @@ pub trait NetDevice {
         copied: <Self::RxFrame as ReceivedFrame>::Copied,
         read: impl FnOnce(EthernetFrameView<'_>) -> R,
     ) -> Result<R, FrameLengthError>;
-    fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
-    fn try_transmit(&mut self, frame: Self::TxFrame) -> Result<(), TransmitRefused<Self::TxFrame>>;
+}
+
+/// The transmit half of one affine Ethernet port, owned by the network
+/// stack's sending path: a frame goes to the device where the stack wrote
+/// it, in the call that sent it. Only a successful transmission transfers
+/// the caller's owner; a refusal returns it.
+pub trait NetTransmit {
+    /// The stack's packet owner a transmission hands over.
+    type Frame: EthernetFrame;
+    /// Whether the next [`Self::try_transmit`] finds room, without
+    /// registering anything: the sending path asks at every frame.
+    fn has_room(&mut self) -> bool;
+    /// As [`Self::has_room`], registering `cx` for the next room or returned
+    /// memory before observing them.
+    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()>;
+    fn try_transmit(&mut self, frame: Self::Frame) -> Result<(), TransmitRefused<Self::Frame>>;
 }
 
 #[cfg(test)]

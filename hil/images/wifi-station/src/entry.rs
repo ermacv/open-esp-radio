@@ -46,11 +46,10 @@ type Requests = Either<
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 
-/// The IP service's pools: receive slots and transmit credits, larger than
-/// the library's defaults for the stand's TCP load.
+/// The IP service's receive slots, more than the library's default for the
+/// stand's TCP load.
 const RX: usize = 32;
-const TX: usize = 16;
-static POOLS: wifi::Pools<RX, TX> = wifi::Pools::new();
+static POOLS: wifi::Pools<RX> = wifi::Pools::new();
 
 /// The worker hands each line exchange to the group's future and
 /// hears how it ended.
@@ -120,7 +119,7 @@ fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted
 
 /// The line exchanges beside the load server, which never ends.
 async fn sockets(
-    net: Net<RX, TX>,
+    net: Net<RX>,
     exchanges: GroupEnd<Exchange, Exchanged, 1>,
     load: load::serve::Requests,
     relay: load::relay::Client,
@@ -137,7 +136,7 @@ async fn sockets(
 
 /// Answer each line exchange the worker asks for.
 async fn exchange_lines(
-    net: &Net<RX, TX>,
+    net: &Net<RX>,
     mut requests: GroupEnd<Exchange, Exchanged, 1>,
 ) -> AppResult {
     loop {
@@ -350,7 +349,7 @@ fn ipv4(configuration: Ipv4Configuration) -> Ipv4 {
 }
 
 /// Send the line to the peer and read as many bytes back.
-async fn echo(net: &Net<RX, TX>, exchange: &Exchange) -> Exchanged {
+async fn echo(net: &Net<RX>, exchange: &Exchange) -> Exchanged {
     let mut rx = [0; 128];
     let mut tx = [0; 128];
     let Ok(mut socket) = embassy_net::tcp::TcpSocket::new(net.stack(), &mut rx, &mut tx) else {

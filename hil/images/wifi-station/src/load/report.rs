@@ -10,7 +10,7 @@ use oer::observe::link;
 use oer::observe::parts::{PARTS, PartReading};
 use oer::observe::tracking::TrackingSample;
 use oer_hil_services_load::{
-    BridgeTx, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, ExecutorLoad, HartLoad,
+    CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, ExecutorLoad, HartLoad,
     InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, Mac, PartWindow, Parts, Rates,
     RxCounts, RxLink, Sample, Samples, StationRx, Tracking, TxAmpdu, TxCounts, TxLink,
 };
@@ -207,22 +207,6 @@ fn data_window(start: &DataBus, end: &DataBus) -> DataBus {
         next_level_reads: end.next_level_reads.wrapping_sub(start.next_level_reads),
         next_level_writes: end.next_level_writes.wrapping_sub(start.next_level_writes),
         overflowed: start.overflowed || end.overflowed,
-    }
-}
-
-/// What the network bridge's turns did with the stack's transmissions
-/// between the window's ends `start` and `end`.
-pub(crate) fn bridge_tx(start: &Snapshot, end: &Snapshot) -> BridgeTx {
-    let (start, end) = (start.bridge.tx, end.bridge.tx);
-    BridgeTx {
-        turns: end.turns.wrapping_sub(start.turns),
-        moved: end.moved.wrapping_sub(start.moved),
-        held: end.held.wrapping_sub(start.held),
-        dropped: end.dropped.wrapping_sub(start.dropped),
-        queue_full: end.queue_full.wrapping_sub(start.queue_full),
-        starved: end.starved.wrapping_sub(start.starved),
-        queued_sum: end.queued_sum.wrapping_sub(start.queued_sum),
-        station_sum: end.station_sum.wrapping_sub(start.station_sum),
     }
 }
 

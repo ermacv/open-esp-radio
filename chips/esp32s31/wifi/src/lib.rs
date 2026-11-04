@@ -21,7 +21,7 @@ pub use credentials::{
 };
 use oer_portable_memory::{QueueNotify as _, WakingSpscQueue};
 use oer_protocols_ieee80211_runtime::station as runtime;
-use oer_protocols_network_port::{LinkSnapshot, NetDevice, TransmitRefused};
+use oer_protocols_network_port::{LinkSnapshot, NetDevice, NetTransmit, TransmitRefused};
 pub use runtime::StopPolicy;
 pub use runtime::{ControlError, OperationEnd};
 
@@ -261,11 +261,29 @@ impl oer_protocols_ieee80211_contracts_port::LentRxBuffer for Unlent {
 type Frame<N> = runtime::Received<LentRx<N>>;
 type EthernetCopy = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 
-/// Affine neutral Ethernet end over the network stack's packets `P`,
-/// whose frames go into the network's transmit memory `S`. The concrete
-/// station frame is private.
-pub struct Network<'a, N: Notifies, P, S: runtime::TxSupply<P>> {
-    inner: runtime::Device<'a, LentRx<N>, P, S, TX_DEPTH, RX_DEPTH, Ch<N>>,
+/// Affine neutral Ethernet link and receive end. The concrete station frame
+/// is private.
+pub struct Network<'a, N: Notifies> {
+    inner: runtime::Device<'a, LentRx<N>, RX_DEPTH, Ch<N>>,
+}
+/// Affine neutral Ethernet transmit end over the network stack's packets
+/// `P`, whose frames go into the network's transmit memory `S`.
+pub struct NetworkTransmit<'a, N: Notifies, P, S: runtime::TxSupply<P>> {
+    inner: runtime::DeviceTransmit<'a, P, S, TX_DEPTH, Ch<N>>,
+}
+impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSupply<P>> NetTransmit
+    for NetworkTransmit<'_, N, P, S>
+{
+    type Frame = P;
+    fn has_room(&mut self) -> bool {
+        self.inner.has_room()
+    }
+    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        self.inner.poll_room(cx)
+    }
+    fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
+        self.inner.try_transmit(frame)
+    }
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
 /// copy [`Network`] keeps.
@@ -303,11 +321,8 @@ impl<N: Notifies> oer_protocols_network_port::ReceivedFrame for Received<N> {
         }
     }
 }
-impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSupply<P>> NetDevice
-    for Network<'_, N, P, S>
-{
+impl<N: Notifies> NetDevice for Network<'_, N> {
     type RxFrame = Received<N>;
-    type TxFrame = P;
     fn link(&self) -> LinkSnapshot {
         self.inner.link()
     }
@@ -329,12 +344,6 @@ impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSu
         read: impl FnOnce(oer_protocols_network_port::EthernetFrameView<'_>) -> R,
     ) -> Result<R, oer_protocols_network_port::FrameLengthError> {
         self.inner.read_copied(copied.0, read)
-    }
-    fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.inner.poll_transmit_ready(cx)
-    }
-    fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
-        self.inner.try_transmit(frame)
     }
 }
 /// Caller-owned queues, valid before a port installation exists.
@@ -457,8 +466,12 @@ impl<N: Notifies> NetworkStopper<'_, N> {
     /// The composition has no network side: it gives up the station's
     /// network end, the station delivers no frame (each received MSDU's
     /// buffer goes back at once), and its stop needs no answer.
-    pub fn no_network<P, S: runtime::TxSupply<P>>(self, network: Network<'_, N, P, S>) {
-        drop(network);
+    pub fn no_network<P, S: runtime::TxSupply<P>>(
+        self,
+        network: Network<'_, N>,
+        transmit: NetworkTransmit<'_, N, P, S>,
+    ) {
+        drop((network, transmit));
         self.state.absent.store(true, Ordering::Release);
         self.report(|state| &state.stopped);
     }
@@ -537,16 +550,17 @@ where
     }
 }
 impl<N: Notifies, M> Channels<N, M> {
-    /// The four ends, the network's over the free memory `supply` and the
-    /// stack's packets `P`.
-    #[allow(clippy::type_complexity, reason = "the four ends of one split")]
+    /// The five ends, the network's transmit end over the free memory
+    /// `supply` and the stack's packets `P`.
+    #[allow(clippy::type_complexity, reason = "the five ends of one split")]
     pub fn split<P, S: runtime::TxSupply<P, Memory = M>>(
         &mut self,
         supply: S,
     ) -> Result<
         (
             Control<'_, N>,
-            Network<'_, N, P, S>,
+            Network<'_, N>,
+            NetworkTransmit<'_, N, P, S>,
             NetworkStopper<'_, N>,
             Connection<'_, N, M>,
         ),
@@ -559,7 +573,8 @@ impl<N: Notifies, M> Channels<N, M> {
         let (receive, rx) = self.rx.split();
         let (receive_copied, rx_copied) = self.rx_copied.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
-        let network = runtime::Device::new(tx, back, supply, rx, rx_copied, &self.state);
+        let network = runtime::Device::new(rx, rx_copied, &self.state);
+        let transmit_end = runtime::DeviceTransmit::new(tx, back, supply, &self.state);
         Ok((
             Control {
                 inner: control,
@@ -567,6 +582,9 @@ impl<N: Notifies, M> Channels<N, M> {
                 stop: &self.stop,
             },
             Network { inner: network },
+            NetworkTransmit {
+                inner: transmit_end,
+            },
             NetworkStopper {
                 state: &self.network_stop,
             },
@@ -795,9 +813,9 @@ mod tests {
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
         state.reset();
         let mut channels = Channels::<SameHart, ()>::new();
-        let (_, network, _, _) = channels.split::<Packet, _>(NoMemory).unwrap();
+        let (_, network, transmit, _, _) = channels.split::<Packet, _>(NoMemory).unwrap();
         assert!(state.takes_frames());
-        NetworkStopper { state: &state }.no_network(network);
+        NetworkStopper { state: &state }.no_network(network, transmit);
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
         assert!(!state.takes_frames(), "no network takes no frame");
         state.reset();
@@ -812,11 +830,15 @@ mod tests {
     fn control_and_neutral_device_exist_before_installation_without_minting_a_link_or_consuming_refused_owners()
      {
         let mut channels = Channels::new();
-        let (mut control, mut net, _stopper, connection) = channels.split(NoMemory).unwrap();
+        let (mut control, mut net, mut transmit, _stopper, connection) =
+            channels.split(NoMemory).unwrap();
         assert_eq!(control.link(), LinkSnapshot::DOWN);
         assert_eq!(net.link(), LinkSnapshot::DOWN);
         let dropped = Rc::new(Cell::new(0));
-        let refused = net.try_transmit(Packet(dropped.clone())).err().unwrap();
+        let refused = transmit
+            .try_transmit(Packet(dropped.clone()))
+            .err()
+            .unwrap();
         assert_eq!(
             refused.reason,
             oer_protocols_network_port::TransmitError::LinkDown
@@ -909,7 +931,7 @@ mod tests {
         let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
         let waker = core::task::Waker::from(wakes.clone());
         let mut channels = Channels::<SameHart, ()>::new();
-        let (mut control, _network, _stopper, connection) =
+        let (mut control, _network, _transmit, _stopper, connection) =
             channels.split::<Packet, _>(NoMemory).unwrap();
         let mut cx = Context::from_waker(&waker);
         {

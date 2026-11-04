@@ -34,7 +34,6 @@ fn every_status_reads_back_whole() {
         ServiceError::GatewayNotUnicast,
         ServiceError::RouteTableFull,
         ServiceError::DhcpMediumMismatch,
-        ServiceError::ContextAccessRefused,
     ];
     let lifecycles = [Lifecycle::Running, Lifecycle::Stopped]
         .into_iter()

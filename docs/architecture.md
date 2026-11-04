@@ -241,14 +241,13 @@ and `EthernetBridge` once. The service selects DHCPv4 or static IPv4 and
 reports link epoch, IPv4 configuration and stop/error through typed product
 values and synchronous status callbacks. Reassociation invalidates DHCP before
 the next stack poll, including a coalesced down/up, while retaining the stack
-and bridge. Stop wakes independently of queue capacity, clears configuration
-and reclaims pending/queued software TX; terminal services retain their device
-and stack owners. Socket applications use the pinned stack API. The HIL
+and bridge. Stop wakes independently of queue capacity and clears
+configuration; terminal services retain their device and stack owners. Socket applications use the pinned stack API. The HIL
 network vocabulary serializes the resulting values without constructing a
-stack. A refused TX retains its original owner. Neither the neutral device
+stack. The stack's sending path hands a frame straight to the device's
+transmit half; a full device returns its owner. Neither the neutral device
 nor the product status exposes a stack packet or Wi-Fi core type.
-The network bridges advance only on RX, TX publication/capacity and link
-level/epoch events, with bounded continuations for remaining work. They have
+The network bridges advance only on RX and link level/epoch events. They have
 no periodic safety timer. IP polling follows the stack's waker and protocol
 deadlines; application deadlines remain image policy.
 Finite connected-task shutdown lives in `oer-portable-time` behind its non-default

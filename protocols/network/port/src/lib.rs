@@ -15,17 +15,14 @@
 
 //! Adapter-neutral values and the owned Ethernet device contract at the network/radio ownership boundary.
 //!
-//! `NetDevice` transfers Ethernet owners and reports link epochs without an IP
+//! `NetDevice` and `NetTransmit` transfer Ethernet owners and report link epochs without an IP
 //! stack, queue implementation, allocator, Wi-Fi type or execution context.
 
 mod device;
 pub use device::{
     EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot, NetDevice,
-    ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused, TxStorage,
+    NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused, TxStorage,
 };
-
-mod flow;
-pub use flow::TransportFlow;
 
 /// Opaque identity of one logical network endpoint sharing a physical radio.
 ///

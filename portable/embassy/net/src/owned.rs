@@ -1,14 +1,12 @@
 //! Owned packet boundary used by the Xarxa/Embassy cutover.
 //!
 //! This module contains no Wi-Fi scheduler. It moves complete [`PacketBuf`]
-//! owners between the network and radio execution domains through bounded
-//! queues. TX is indexed by Ethernet destination before publication. Radio
-//! policy selects a destination before claiming owners and validates peer/TID
-//! eligibility before SRAM promotion.
+//! owners between the network and radio execution domains. RX goes through a
+//! bounded queue; TX goes from the stack's sending path straight to the
+//! device's transmit half, which holds the only queue on its way.
 
 use core::task::{Context, Poll, Waker};
 use core::{
-    future::{Future, poll_fn},
     marker::PhantomData,
     sync::atomic::{AtomicU32, Ordering},
 };
@@ -22,14 +20,7 @@ use xarxa_driver::{
     NotSupported, PacketBuf, PacketBufAllocator, PacketPoolWaiter,
 };
 
-use crate::datapath::{DestinationTxHead, DestinationTxQueues};
-
-mod tx_budget;
-mod tx_queue;
-use tx_budget::TxCredit;
-use tx_queue::TxQueue;
-
-use crate::{FrameLengthError, NetworkInterfaceId, RxEnqueueError};
+use crate::{FrameLengthError, NetTransmit, NetworkInterfaceId, RxEnqueueError, TransmitError};
 use oer_protocols_network_wire::ethernet::{
     EtherType, EthernetHeader, HEADER_LEN as ETHERNET_HEADER_LEN,
 };
@@ -114,11 +105,6 @@ struct QueuedPacket {
     packet: PacketBuf,
 }
 
-/// Access to endpoint metadata was refused: wrong execution context or nesting.
-/// No queued owner is consumed by a refused access.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AccessRefused;
-
 /// Refusal to split one endpoint into its network and radio owners.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EndpointSplitError {
@@ -128,79 +114,54 @@ pub enum EndpointSplitError {
     RxWaiterUnavailable,
 }
 
-/// Wake a displaced registration only after shared state has been restored.
-// The stack analyzer proves Waker calls from their DWARF method scopes.
-// Separate fixed-slot wake/drop calls keep scopes that merged calls can lose.
-fn wake_replaced(previous: Option<Waker>, current: &Waker) {
-    if let Some(previous) = previous {
-        if !previous.will_wake(current) {
-            previous.wake_by_ref();
-            drop(previous);
-        } else {
-            drop(previous);
-        }
-    }
-}
-
-/// Static bounded queues for one permanent logical network endpoint.
+/// Static bounded RX queue for one permanent logical network endpoint.
 ///
 /// Packet bytes do not live in this value. RX owners come from the allocator
-/// supplied to [`split`](Self::split); TX owners retain the general Xarxa pool
-/// selected by the application. `TX_QUEUE_DEPTH` bounds all admitted software
-/// owners, including frames retained by the radio after dequeue. Physical DMA
-/// storage has its own lifetime and budget.
-pub struct OwnedEndpointResources<
-    X: ExecutionContext,
-    const RX_QUEUE_DEPTH: usize,
-    const TX_QUEUE_DEPTH: usize,
-> {
+/// supplied to [`split`](Self::split).
+pub struct OwnedEndpointResources<X: ExecutionContext, const RX_QUEUE_DEPTH: usize> {
     rx: WakingSpscQueue<QueuedPacket, RX_QUEUE_DEPTH>,
-    tx: TxQueue<X, TX_QUEUE_DEPTH>,
     rx_waiter: Option<PacketPoolWaiter>,
     link: OwnedLinkState,
+    context: PhantomData<fn() -> X>,
 }
 
-impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usize>
-    OwnedEndpointResources<X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>
-{
-    /// Create an inactive, empty endpoint with nonzero queue depths.
+impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize> OwnedEndpointResources<X, RX_QUEUE_DEPTH> {
+    /// Create an inactive, empty endpoint with a nonzero queue depth.
     ///
     /// ```compile_fail,E0080
     /// use oer_portable_embassy_net::OwnedEndpointResources;
-    /// let _ = OwnedEndpointResources::<oer_portable_memory::Never, 0, 1>::new();
-    /// ```
-    /// ```compile_fail,E0080
-    /// use oer_portable_embassy_net::OwnedEndpointResources;
-    /// let _ = OwnedEndpointResources::<oer_portable_memory::Never, 1, 0>::new();
+    /// let _ = OwnedEndpointResources::<oer_portable_memory::Never, 0>::new();
     /// ```
     pub const fn new() -> Self {
         const {
-            if RX_QUEUE_DEPTH == 0 || TX_QUEUE_DEPTH == 0 {
+            if RX_QUEUE_DEPTH == 0 {
                 panic!("owned endpoint queues must not be empty");
             }
         }
         Self {
             rx: WakingSpscQueue::new(),
-            tx: TxQueue::new(),
             rx_waiter: None,
             link: OwnedLinkState::new(),
+            context: PhantomData,
         }
     }
 
-    /// Split one endpoint into its unique network device and radio owner.
+    /// Split one endpoint into its unique network device, which sends
+    /// through `transmit`, and radio owner.
     ///
     /// `rx_allocator` should normally point at an internal-SRAM pool reserved
     /// for frames retained by Xarxa. Its slots return to that pool on the final
     /// [`PacketBuf`] drop, independently of which core performs it.
-    pub fn split(
+    pub fn split<T: NetTransmit<Frame = OwnedNetworkTxFrame>>(
         &mut self,
         interface: NetworkInterfaceId,
         hardware_address: [u8; 6],
         rx_allocator: PacketBufAllocator,
+        transmit: T,
     ) -> Result<
         (
-            OwnedNetworkDevice<'_, X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>,
-            OwnedNetworkRunner<'_, X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>,
+            OwnedNetworkDevice<'_, X, RX_QUEUE_DEPTH, T>,
+            OwnedNetworkRunner<'_, X, RX_QUEUE_DEPTH>,
         ),
         EndpointSplitError,
     > {
@@ -218,7 +179,8 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
             OwnedNetworkDevice {
                 hardware_address,
                 rx: receiver,
-                tx: &self.tx,
+                tx: transmit,
+                waker: None,
                 link: &self.link,
                 checksum: ChecksumCapabilities::default(),
                 local: PhantomData,
@@ -232,8 +194,6 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
                     rx_waiter,
                     local: PhantomData,
                 },
-                tx: &self.tx,
-                link: &self.link,
                 control: OwnedLinkController {
                     interface,
                     link: &self.link,
@@ -245,8 +205,8 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
     }
 }
 
-impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usize> Default
-    for OwnedEndpointResources<X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>
+impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize> Default
+    for OwnedEndpointResources<X, RX_QUEUE_DEPTH>
 {
     fn default() -> Self {
         Self::new()
@@ -260,34 +220,36 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
 /// ```compile_fail,E0277
 /// use oer_portable_embassy_net::OwnedNetworkDevice;
 /// fn require_send<T: Send>() {}
-/// require_send::<OwnedNetworkDevice<'static, oer_portable_memory::Never, 1, 1>>();
+/// require_send::<OwnedNetworkDevice<'static, oer_portable_memory::Never, 1, ()>>();
 /// ```
-pub struct OwnedNetworkDevice<
-    'resources,
-    X: ExecutionContext,
-    const RX_QUEUE_DEPTH: usize,
-    const TX_QUEUE_DEPTH: usize,
-> {
+pub struct OwnedNetworkDevice<'resources, X: ExecutionContext, const RX_QUEUE_DEPTH: usize, T> {
     hardware_address: [u8; 6],
     rx: WakingSpscReceiver<'resources, QueuedPacket, RX_QUEUE_DEPTH>,
-    tx: &'resources TxQueue<X, TX_QUEUE_DEPTH>,
+    tx: T,
+    /// The stack's poll task: a full device wakes it once it has room.
+    waker: Option<Waker>,
     link: &'resources OwnedLinkState,
     checksum: ChecksumCapabilities,
     local: PhantomData<Entered<X>>,
 }
 
-impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usize>
-    OwnedNetworkDevice<'_, X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>
+impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, T: NetTransmit<Frame = OwnedNetworkTxFrame>>
+    OwnedNetworkDevice<'_, X, RX_QUEUE_DEPTH, T>
 {
     /// Ethernet address reported to the network stack.
     pub const fn hardware_address(&self) -> [u8; 6] {
         self.hardware_address
     }
 
-    /// Register before each stack poll for link, RX and TX-capacity changes.
+    /// Register before each stack poll for link, RX and TX-capacity changes;
+    /// memory the device returned comes back here too, sending or not.
     pub fn register_waker(&mut self, waker: &Waker) {
         self.link.register_network_waker(waker);
-        self.tx.register_sender(waker);
+        let _ = self.tx.poll_room(&mut Context::from_waker(waker));
+        match &mut self.waker {
+            Some(kept) if kept.will_wake(waker) => {}
+            kept => *kept = Some(waker.clone()),
+        }
     }
 
     /// Whether this interface currently belongs to an active role lifetime.
@@ -313,33 +275,44 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
         }
     }
 
-    /// Whether the shared software TX budget can admit one packet now.
-    pub fn can_transmit(&self) -> bool {
-        X::running() && self.link.snapshot().up && !self.tx.is_full()
+    /// Whether the device takes one frame now. A full device wakes the
+    /// stack's poll task once it has room.
+    pub fn can_transmit(&mut self) -> bool {
+        if !X::running() || !self.link.snapshot().up {
+            return false;
+        }
+        if self.tx.has_room() {
+            return true;
+        }
+        let Some(waker) = &self.waker else {
+            return false;
+        };
+        self.tx
+            .poll_room(&mut Context::from_waker(waker))
+            .is_ready()
     }
 
-    /// Transfer one complete Ethernet packet into the radio-owned queue.
+    /// Hand one complete Ethernet packet to the device.
     ///
-    /// Failure returns the unchanged owner. With the unique mutable device
-    /// reference, a `true` [`can_transmit`](Self::can_transmit) result followed
-    /// immediately by this call cannot fail because of another producer. A
-    /// concurrent link-down does not revoke that admission: the packet is
-    /// accepted with the observed epoch and is terminally dropped by the radio
-    /// consumer instead of violating the driver contract.
+    /// Only a full device returns the unchanged owner: with the unique
+    /// mutable device reference, a `true` [`can_transmit`](Self::can_transmit)
+    /// result followed immediately by this call does not find one. A
+    /// concurrent link-down does not revoke that admission: the packet ends
+    /// here, as one lost on air, instead of violating the driver contract;
+    /// so does a frame the device refuses for its length.
     pub fn transmit(&mut self, packet: PacketBuf) -> Result<(), PacketBuf> {
-        let snapshot = self.link.snapshot();
-        match self.tx.push(QueuedPacket {
-            epoch: snapshot.epoch,
-            packet,
-        }) {
+        match self.tx.try_transmit(OwnedNetworkTxFrame { packet }) {
             Ok(()) => Ok(()),
-            Err(queued) => Err(queued.packet),
+            Err(refused) => match refused.reason {
+                TransmitError::QueueFull => Err(refused.frame.into_packet()),
+                TransmitError::LinkDown | TransmitError::InvalidLength(_) => Ok(()),
+            },
         }
     }
 }
 
-impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usize> Driver
-    for OwnedNetworkDevice<'_, X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>
+impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, T: NetTransmit<Frame = OwnedNetworkTxFrame>>
+    Driver for OwnedNetworkDevice<'_, X, RX_QUEUE_DEPTH, T>
 {
     fn capabilities(&self) -> Capabilities {
         let mut capabilities = Capabilities::default();
@@ -377,17 +350,10 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
     }
 }
 
-/// One driver-owned TX packet claimed by the physical radio.
-///
-/// Its admission credit remains occupied through radio retention and rollback.
-/// Dropping the frame returns the packet first, then wakes a blocked producer.
-/// Borrowing the endpoint prevents either resource from outliving its storage.
-pub struct OwnedNetworkTxFrame<'resources> {
-    interface: NetworkInterfaceId,
+/// One complete Ethernet packet on its way to the device, in the storage the
+/// stack wrote it.
+pub struct OwnedNetworkTxFrame {
     packet: PacketBuf,
-    // Field order is intentional: return the packet to its pool before waking
-    // a producer which can immediately spend this software admission credit.
-    _credit: TxCredit<'resources>,
 }
 
 /// Affine RX-only capability for a physical datapath service.
@@ -533,32 +499,17 @@ impl<const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, RX_QUEUE_DEPTH> {
     }
 }
 
-impl OwnedNetworkTxFrame<'_> {
-    /// Logical VIF which accepted this owner.
-    pub const fn interface(&self) -> NetworkInterfaceId {
-        self.interface
-    }
-
-    pub const fn tag(&self) -> &NetworkInterfaceId {
-        &self.interface
-    }
-
+impl OwnedNetworkTxFrame {
     /// Complete Ethernet-II bytes.
     pub fn ethernet(&self) -> &[u8] {
         &self.packet
-    }
-
-    /// Complete Ethernet-II bytes before physical SRAM admission.
-    pub fn as_slice(&self) -> &[u8] {
-        self.ethernet()
     }
 
     pub(crate) fn packet(&self) -> &PacketBuf {
         &self.packet
     }
 
-    /// The packet, its software credit released: the device holds it from
-    /// here on.
+    /// The packet.
     pub(crate) fn into_packet(self) -> PacketBuf {
         self.packet
     }
@@ -594,51 +545,21 @@ impl OwnedLinkController<'_> {
 /// ```compile_fail,E0499
 /// use oer_portable_embassy_net::OwnedNetworkRunner;
 /// use oer_portable_memory::ExecutionContext;
-/// fn two<X: ExecutionContext>(runner: &mut OwnedNetworkRunner<'_, X, 1, 1>) {
+/// fn two<X: ExecutionContext>(runner: &mut OwnedNetworkRunner<'_, X, 1>) {
 ///     let first = runner.rx_publisher();
 ///     let second = runner.rx_publisher();
 ///     drop((first, second));
 /// }
 /// ```
-/// Publication waits also retain the unique runner borrow.
-/// ```compile_fail,E0499
-/// use oer_portable_embassy_net::OwnedNetworkRunner;
-/// use oer_portable_memory::ExecutionContext;
-/// fn two<X: ExecutionContext>(runner: &mut OwnedNetworkRunner<'_, X, 1, 1>) {
-///     let first = runner.wait_tx_publication();
-///     let second = runner.wait_tx_publication();
-///     drop((first, second));
-/// }
-/// ```
-pub struct OwnedNetworkRunner<
-    'resources,
-    X: ExecutionContext,
-    const RX_QUEUE_DEPTH: usize,
-    const TX_QUEUE_DEPTH: usize,
-> {
+pub struct OwnedNetworkRunner<'resources, X: ExecutionContext, const RX_QUEUE_DEPTH: usize> {
     interface: NetworkInterfaceId,
     rx: OwnedRxPublisher<'resources, RX_QUEUE_DEPTH>,
-    tx: &'resources TxQueue<X, TX_QUEUE_DEPTH>,
-    link: &'resources OwnedLinkState,
     control: OwnedLinkController<'resources>,
     local: PhantomData<Entered<X>>,
 }
 
-/// Object-safe radio-side view of one bounded owned TX frontier.
-///
-/// The trait deliberately exposes no physical memory or scheduler policy. It
-/// lets a radio adapter compose the software owner queue with its private SRAM
-/// allocator without depending on the queue's compile-time depth.
-pub trait OwnedTxFrameSource<'resources>:
-    DestinationTxQueues<Frame = OwnedNetworkTxFrame<'resources>, Error = AccessRefused>
-{
-    fn interface(&self) -> NetworkInterfaceId;
-    fn queue_len(&self) -> Result<usize, AccessRefused>;
-    fn try_receive(&self) -> Result<Option<OwnedNetworkTxFrame<'resources>>, AccessRefused>;
-}
-
-impl<'resources, X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usize>
-    OwnedNetworkRunner<'resources, X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>
+impl<'resources, X: ExecutionContext, const RX_QUEUE_DEPTH: usize>
+    OwnedNetworkRunner<'resources, X, RX_QUEUE_DEPTH>
 {
     /// Exclusively lend the endpoint's link controller.
     pub fn link_controller(&mut self) -> &mut OwnedLinkController<'resources> {
@@ -655,11 +576,6 @@ impl<'resources, X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEU
         &mut self.rx
     }
 
-    /// Number of complete TX owners waiting in destination queues.
-    pub fn tx_queue_len(&self) -> Result<usize, AccessRefused> {
-        self.tx.len()
-    }
-
     /// Copy one received Ethernet frame directly into its final Xarxa owner.
     pub fn try_send_rx(&mut self, frame: &[u8]) -> Result<(), RxEnqueueError> {
         self.rx_publisher().try_send(frame)
@@ -668,125 +584,6 @@ impl<'resources, X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEU
     /// Publish an already-owned RX packet without copying it again.
     pub fn try_publish_rx(&mut self, packet: PacketBuf) -> Result<(), RxEnqueueError> {
         self.rx_publisher().try_publish(packet)
-    }
-
-    /// Claim the next current-lifetime TX owner, dropping stale lifetimes.
-    pub fn try_receive_tx(&self) -> Result<Option<OwnedNetworkTxFrame<'resources>>, AccessRefused> {
-        self.take_tx(None)
-    }
-
-    fn take_tx(
-        &self,
-        destination: Option<[u8; 6]>,
-    ) -> Result<Option<OwnedNetworkTxFrame<'resources>>, AccessRefused> {
-        // Bound stale disposal even if another core keeps publishing during
-        // teardown. Packet destruction never runs under the metadata lock.
-        for _ in 0..TX_QUEUE_DEPTH {
-            let Some((queued, credit)) = self.tx.pop(destination)? else {
-                return Ok(None);
-            };
-            let current = self.link.snapshot();
-            if current.up && current.epoch == queued.epoch {
-                return Ok(Some(OwnedNetworkTxFrame {
-                    interface: self.interface,
-                    packet: queued.packet,
-                    _credit: credit,
-                }));
-            }
-            drop(queued);
-            drop(credit);
-        }
-        Ok(None)
-    }
-
-    /// Wait for and claim the next current-lifetime TX owner.
-    pub async fn receive_tx(&mut self) -> Result<OwnedNetworkTxFrame<'resources>, AccessRefused> {
-        loop {
-            if let Some(frame) = self.try_receive_tx()? {
-                return Ok(frame);
-            }
-            poll_fn(|cx| self.tx.poll_publication(cx)).await?;
-        }
-    }
-
-    /// Wait until some TX publication exists, or return a context refusal.
-    ///
-    /// This deliberately has no "wait for BA-sized queue" variant: sparse
-    /// work must become eligible immediately. Aggregation policy belongs to
-    /// the radio scheduler after it claims the owner.
-    pub async fn wait_tx_publication(&mut self) -> Result<(), AccessRefused> {
-        if self.tx.is_empty()? {
-            poll_fn(|cx| self.tx.poll_publication(cx)).await?;
-        }
-        Ok(())
-    }
-
-    /// Wait until the submission frontier reaches `minimum` packets.
-    ///
-    /// This observes publication events rather than repeatedly polling a
-    /// nonempty channel, so a burst collector cannot spin while waiting for
-    /// another frame. Callers must still apply their own sparse-traffic
-    /// deadline; this method does not require a BA-sized burst.
-    pub async fn wait_tx_queue_len_at_least(
-        &mut self,
-        minimum: usize,
-    ) -> Result<(), AccessRefused> {
-        while self.tx.len()? < minimum {
-            poll_fn(|cx| self.tx.poll_publication(cx)).await?;
-        }
-        Ok(())
-    }
-}
-
-impl<'resources, X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usize>
-    DestinationTxQueues for OwnedNetworkRunner<'resources, X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>
-{
-    type Frame = OwnedNetworkTxFrame<'resources>;
-    type Error = AccessRefused;
-
-    fn next_head_after(
-        &self,
-        after: Option<[u8; 6]>,
-    ) -> Result<Option<([u8; 6], DestinationTxHead)>, Self::Error> {
-        self.tx.next_head_after(after)
-    }
-
-    fn head_for(&self, destination: [u8; 6]) -> Result<Option<DestinationTxHead>, Self::Error> {
-        self.tx.head_for(destination)
-    }
-
-    fn try_take_for(&self, destination: [u8; 6]) -> Result<Option<Self::Frame>, Self::Error> {
-        self.take_tx(Some(destination))
-    }
-
-    fn poll_ready_for(
-        &self,
-        destination: [u8; 6],
-        minimum: usize,
-        context: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
-        self.tx.poll_ready_for(destination, minimum, context)
-    }
-
-    fn poll_ready_any(&self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.tx.poll_ready_any(context)
-    }
-}
-
-impl<'resources, X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usize>
-    OwnedTxFrameSource<'resources>
-    for OwnedNetworkRunner<'resources, X, RX_QUEUE_DEPTH, TX_QUEUE_DEPTH>
-{
-    fn interface(&self) -> NetworkInterfaceId {
-        OwnedNetworkRunner::interface(self)
-    }
-
-    fn queue_len(&self) -> Result<usize, AccessRefused> {
-        OwnedNetworkRunner::tx_queue_len(self)
-    }
-
-    fn try_receive(&self) -> Result<Option<OwnedNetworkTxFrame<'resources>>, AccessRefused> {
-        OwnedNetworkRunner::try_receive_tx(self)
     }
 }
 
