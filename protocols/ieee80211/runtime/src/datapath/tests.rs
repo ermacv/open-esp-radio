@@ -627,8 +627,12 @@ fn a_waiting_event_stops_intake_at_the_next_frame() {
         for tag in 2..5 {
             bench.send_msdu(msdu(0, &[tag; 8]));
         }
-        let polls = bench.settle();
-        assert_eq!(polls, 3, "one frame per poll, the rest left queued for it");
+        bench.poll();
+        assert_eq!(
+            bench.transmit.free_capacity(),
+            TX_DEPTH - 2,
+            "one frame taken, the rest left queued for the event"
+        );
     });
 }
 
