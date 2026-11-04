@@ -126,6 +126,32 @@ impl<T: Copy + Eq + Send + 'static, X: ExecutionContext> SignalCore<T, X> {
         }
     }
 
+    /// Register the task in `list` and leave pending facts for
+    /// [`Self::service`], which wakes it for them: the facts of a signal
+    /// several queue ends share belong to whichever end they name, so no end
+    /// may take them. Facts already delivered served their wake and clear.
+    pub fn poll_register(
+        &'static self,
+        task: T,
+        list: &'static SignalList<T, X>,
+        token: &Entered<X>,
+    ) -> Result<(), AccessRefused> {
+        if self.register(task, list, token).is_none() {
+            return Err(AccessRefused);
+        }
+        self.owned(token, |owned| {
+            #[cfg(oer_debug_control)]
+            {
+                owned.delivered &= !self.deliverable(owned.delivered);
+            }
+            #[cfg(not(oer_debug_control))]
+            {
+                owned.delivered = 0;
+            }
+        })
+        .ok_or(AccessRefused)
+    }
+
     /// Link on the first poll and register the polling task.
     fn register(
         &'static self,
