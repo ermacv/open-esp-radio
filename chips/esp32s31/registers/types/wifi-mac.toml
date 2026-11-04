@@ -270,7 +270,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."ADDRESS_HIGH%s.BITS_17_31_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_SET_ADDR", "BLOB_LIBPP_RX_POLICY"]
+sources = ["BLOB_LIBPP_HAL_MAC_SET_ADDR", "BLOB_LIBPP_RX_POLICY", "BLOB_MAC_ROLE_CONTEXT_PATHS_20261104"]
 
 [review.entity."WORD_007C_OPAQUE"]
 sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
@@ -647,12 +647,23 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."MISC_PACKET_POLICY.BITS_0_7_OPAQUE"]
-sources = ["S31_MMIO_USE_201040F4", "S31_MMIO_DECLARED_201040F4"]
+sources = ["S31_MMIO_USE_201040F4", "S31_MMIO_DECLARED_201040F4", "BLOB_MAC_MISC_FCS_FILTER_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
-[review.entity."MISC_PACKET_POLICY.BITS_17_31_OPAQUE"]
-sources = ["S31_MMIO_USE_201040F4", "S31_MMIO_DECLARED_201040F4"]
+[review.entity."MISC_PACKET_POLICY.BITS_17_25_OPAQUE"]
+sources = ["S31_MMIO_USE_201040F4", "S31_MMIO_DECLARED_201040F4", "BLOB_MAC_MISC_FCS_FILTER_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."MISC_PACKET_POLICY.EXCLUDE_FCS_FAILURE"]
+sources = ["BLOB_MAC_MISC_FCS_FILTER_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."MISC_PACKET_POLICY.BITS_27_31_OPAQUE"]
+sources = ["BLOB_MAC_MISC_FCS_FILTER_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -7383,13 +7394,25 @@ description = "Project-assigned name. Nonzero input to hal_sniffer_set_promis_mi
 name = "BITS_0_7_OPAQUE"
 bits = "7:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "The vendor misc setter publishes 0x78 when enabled and zero when disabled. Units and individual hardware meaning remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104."
 
 [[registers.fields]]
-name = "BITS_17_31_OPAQUE"
-bits = "31:17"
+name = "BITS_17_25_OPAQUE"
+bits = "25:17"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Constant lanes of the vendor misc-packet-dump profile; individual functions remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104."
+
+[[registers.fields]]
+name = "EXCLUDE_FCS_FAILURE"
+bits = "26"
+class = "plain"
+description = "Project-assigned name for the vendor miscellaneous-dump filter intent. With misc dumping enabled, hal_sniffer_set_promis_misc_pkt clears this bit when WIFI_PROMIS_FILTER_MASK_FCSFAIL is requested and otherwise sets it; disable also sets it. This does not establish global RX acceptance or measured delivery of FCS-failed packets. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104."
+
+[[registers.fields]]
+name = "BITS_27_31_OPAQUE"
+bits = "31:27"
+class = "plain"
+description = "Preserved by the inspected misc-packet-dump setter; individual hardware functions remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104."
 
 [[registers]]
 name = "RX_CONTROL_FRAME_DUMP%s"

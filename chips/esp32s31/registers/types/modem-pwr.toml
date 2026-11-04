@@ -509,7 +509,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20
 completeness = "unknown"
 
 [review.entity."SOFTAP_CONTROL.BIT_30_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_2010D860", "VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL"]
+sources = ["S31_MMIO_DECLARED_2010D860", "VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL", "BLOB_MAC_TSF_ROLE_API_MASKS_20261104"]
 accuracy = "unknown"
 completeness = "unknown"
 
@@ -900,7 +900,7 @@ sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "S31_MMIO_USE_2010D860", "S31_MMI
 completeness = "partial"
 
 [review.entity."SOFTAP_CONTROL.BIT_27_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860"]
+sources = ["S31_MMIO_USE_2010D860", "S31_MMIO_DECLARED_2010D860", "BLOB_MAC_TSF_ROLE_API_MASKS_20261104"]
 completeness = "partial"
 
 [review.entity."SOFTAP_CONTROL.TBTT_MODEM_WAKEUP_ENABLE"]
@@ -2024,7 +2024,7 @@ description = "Complete hal_disable_softap_tsf clears bits 31:30. Generic TSF en
 name = "BIT_30_OPAQUE"
 bits = "30"
 class = "plain"
-description = "hal_mac_tsf_reset clears this bit together with TSF_ENABLE (bit 31), requests the SoftAP TSF load, then sets both bits. hal_disable_softap_tsf also clears the pair. This is a directly observed coupled start/stop lane; its individual hardware function remains unknown. SOURCE: VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL."
+description = "The dedicated SoftAP reset/start path clears this bit with bit 31, loads zero TSF and sets the pair; hal_disable_softap_tsf clears both. Generic domain-one TSF enable/disable changes bit 27 with bit 31 instead. These API masks do not establish equivalent gates or an individual hardware identity. SOURCE: BLOB_MAC_TSF_ROLE_API_MASKS_20261104."
 
 [[registers.fields]]
 name = "TSF_ENABLE"
@@ -2059,7 +2059,7 @@ description = "Project-assigned name. TSF-domain1 TBTT Run gate independently ch
 name = "BIT_27_OPAQUE"
 bits = "27"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "The generic tsf_hal_set_tsf_enable/disable domain-one path changes this bit with bit 31. The dedicated SoftAP reset/start and stop paths instead change bits 30/31. Its individual hardware function and relation to bit 30 remain unknown. SOURCE: BLOB_MAC_TSF_ROLE_API_MASKS_20261104."
 
 [[registers.fields]]
 name = "TBTT_MODEM_WAKEUP_ENABLE"

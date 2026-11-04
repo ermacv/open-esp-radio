@@ -105,6 +105,42 @@ EOF is already one during initialization; neither it nor OWNER establishes
 a completion or detach/release predicate for this special descriptor.
 The model supplies no beacon-memory access owner or running offload lifecycle.
 
+## MAC role contexts
+
+The pinned role callers select these receive/VIF contexts:
+
+| Role | Receive/VIF context | Crypto profile | Generic TSF domain |
+| --- | --- | --- | --- |
+| STA | 0 | 0 | 0 |
+| AP | 1 | 1 | 1 |
+| AP+STA | 0 and 1 | 0 and 1 | 0 and 1 |
+| NAN | 2 | 2 | 2 |
+| Monitor/sniffer | 3 | No separate profile established | No separate domain selected by this path |
+
+The role selector, receive-policy operation, generic TSF index and legacy
+TSF reset/time selector are different domains. In particular, legacy reset
+selector 3 addresses NAN, while receive context 3 is sniffer. AP+STA composes
+the two contexts; this mapping does not establish an independent APSTA
+hardware bit or qualify the complete concurrent lifecycle. The open HAL's
+combined receive plan covers the register publication only; the vendor NAN
+paths do not supply an open NAN lifecycle.
+
+All roles retain common opaque cold-init fields. Protected STA/AP also use
+the opaque crypto lanes and ordinary BA-policy lanes; AP has extra BA-policy
+lanes and the dedicated SoftAP TSF bit-30 sequence. NAN uses the distinct
+context-two crypto profile. Its TSF enable/disable leaves preserve the
+remaining opaque TSF lanes. The generic SoftAP TSF API changes bits 27/31,
+whereas the dedicated AP start/stop path changes bits 30/31; those masks do
+not identify either unknown gate individually.
+
+Monitor misc dumping also programs opaque profile constants. Its separately
+identified `MISC_PACKET_POLICY.EXCLUDE_FCS_FAILURE` bit 26 is cleared when
+the vendor's enabled misc filter requests FCS-failed packets and set
+otherwise. This names the filter intent; actual delivery is unqualified.
+The open receive frontier only changes its existing class mask and preserves
+this field. Pinned paths and isolated execution limits are in
+[`blobray-mac-role-paths.toml`](evidence/blobray-mac-role-paths.toml).
+
 ## MAC receive filters and diagnostics
 
 `RX_CONTROL_FRAME_DUMP` names the nine control-frame classes admitted by

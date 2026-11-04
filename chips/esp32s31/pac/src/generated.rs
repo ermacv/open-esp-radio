@@ -140177,7 +140177,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// hal_mac_tsf_reset clears this bit together with TSF_ENABLE (bit 31), requests the SoftAP TSF load, then sets both bits. hal_disable_softap_tsf also clears the pair. This is a directly observed coupled start/stop lane; its individual hardware function remains unknown. SOURCE: VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL.
+            /// The dedicated SoftAP reset/start path clears this bit with bit 31, loads zero TSF and sets the pair; hal_disable_softap_tsf clears both. Generic domain-one TSF enable/disable changes bit 27 with bit 31 instead. These API masks do not establish equivalent gates or an individual hardware identity. SOURCE: BLOB_MAC_TSF_ROLE_API_MASKS_20261104.
             #[inline]
             pub const fn bit_30_opaque(self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -140213,7 +140213,7 @@ pub mod modem_pwr {
                 (self.0 & 0x04000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The generic tsf_hal_set_tsf_enable/disable domain-one path changes this bit with bit 31. The dedicated SoftAP reset/start and stop paths instead change bits 30/31. Its individual hardware function and relation to bit 30 remain unknown. SOURCE: BLOB_MAC_TSF_ROLE_API_MASKS_20261104.
             #[inline]
             pub const fn bit_27_opaque(self) -> bool {
                 (self.0 & 0x08000000) != 0
@@ -140236,7 +140236,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// hal_mac_tsf_reset clears this bit together with TSF_ENABLE (bit 31), requests the SoftAP TSF load, then sets both bits. hal_disable_softap_tsf also clears the pair. This is a directly observed coupled start/stop lane; its individual hardware function remains unknown. SOURCE: VENDOR_WIFI_SOFTAP_TSF_COUPLED_CONTROL.
+            /// The dedicated SoftAP reset/start path clears this bit with bit 31, loads zero TSF and sets the pair; hal_disable_softap_tsf clears both. Generic domain-one TSF enable/disable changes bit 27 with bit 31 instead. These API masks do not establish equivalent gates or an individual hardware identity. SOURCE: BLOB_MAC_TSF_ROLE_API_MASKS_20261104.
             #[inline]
             pub const fn bit_30_opaque(&self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -140272,7 +140272,7 @@ pub mod modem_pwr {
                 (self.0 & 0x04000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The generic tsf_hal_set_tsf_enable/disable domain-one path changes this bit with bit 31. The dedicated SoftAP reset/start and stop paths instead change bits 30/31. Its individual hardware function and relation to bit 30 remain unknown. SOURCE: BLOB_MAC_TSF_ROLE_API_MASKS_20261104.
             #[inline]
             pub const fn bit_27_opaque(&self) -> bool {
                 (self.0 & 0x08000000) != 0
@@ -275279,12 +275279,26 @@ pub mod wifi_mac {
         /// Positioned bits of `BITS_0_7_OPAQUE`.
         pub const BITS_0_7_OPAQUE_MASK: u32 = 0xff;
 
-        /// Width of `BITS_17_31_OPAQUE` in bits.
-        pub const BITS_17_31_OPAQUE_WIDTH: u32 = 15;
-        /// Greatest unsigned image of `BITS_17_31_OPAQUE`.
-        pub const BITS_17_31_OPAQUE_MAX: u32 = 0x7fff;
-        /// Positioned bits of `BITS_17_31_OPAQUE`.
-        pub const BITS_17_31_OPAQUE_MASK: u32 = 0xfffe0000;
+        /// Width of `BITS_17_25_OPAQUE` in bits.
+        pub const BITS_17_25_OPAQUE_WIDTH: u32 = 9;
+        /// Greatest unsigned image of `BITS_17_25_OPAQUE`.
+        pub const BITS_17_25_OPAQUE_MAX: u32 = 0x1ff;
+        /// Positioned bits of `BITS_17_25_OPAQUE`.
+        pub const BITS_17_25_OPAQUE_MASK: u32 = 0x3fe0000;
+
+        /// Width of `EXCLUDE_FCS_FAILURE` in bits.
+        pub const EXCLUDE_FCS_FAILURE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `EXCLUDE_FCS_FAILURE`.
+        pub const EXCLUDE_FCS_FAILURE_MAX: u32 = 0x1;
+        /// Positioned bits of `EXCLUDE_FCS_FAILURE`.
+        pub const EXCLUDE_FCS_FAILURE_MASK: u32 = 0x4000000;
+
+        /// Width of `BITS_27_31_OPAQUE` in bits.
+        pub const BITS_27_31_OPAQUE_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `BITS_27_31_OPAQUE`.
+        pub const BITS_27_31_OPAQUE_MAX: u32 = 0x1f;
+        /// Positioned bits of `BITS_27_31_OPAQUE`.
+        pub const BITS_27_31_OPAQUE_MASK: u32 = 0xf8000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -275303,16 +275317,28 @@ pub mod wifi_mac {
                 (self.0 & 0x00010000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The vendor misc setter publishes 0x78 when enabled and zero when disabled. Units and individual hardware meaning remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
                 self.0 as u8
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Constant lanes of the vendor misc-packet-dump profile; individual functions remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
             #[inline]
-            pub const fn bits_17_31_opaque(self) -> oer_portable_mmio::Bits<15> {
+            pub const fn bits_17_25_opaque(self) -> oer_portable_mmio::Bits<9> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// Project-assigned name for the vendor miscellaneous-dump filter intent. With misc dumping enabled, hal_sniffer_set_promis_misc_pkt clears this bit when WIFI_PROMIS_FILTER_MASK_FCSFAIL is requested and otherwise sets it; disable also sets it. This does not establish global RX acceptance or measured delivery of FCS-failed packets. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
+            #[inline]
+            pub const fn exclude_fcs_failure(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Preserved by the inspected misc-packet-dump setter; individual hardware functions remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
+            #[inline]
+            pub const fn bits_27_31_opaque(self) -> oer_portable_mmio::Bits<5> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 27)
             }
         }
 
@@ -275332,16 +275358,28 @@ pub mod wifi_mac {
                 (self.0 & 0x00010000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The vendor misc setter publishes 0x78 when enabled and zero when disabled. Units and individual hardware meaning remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Constant lanes of the vendor misc-packet-dump profile; individual functions remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
             #[inline]
-            pub const fn bits_17_31_opaque(&self) -> oer_portable_mmio::Bits<15> {
+            pub const fn bits_17_25_opaque(&self) -> oer_portable_mmio::Bits<9> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// Project-assigned name for the vendor miscellaneous-dump filter intent. With misc dumping enabled, hal_sniffer_set_promis_misc_pkt clears this bit when WIFI_PROMIS_FILTER_MASK_FCSFAIL is requested and otherwise sets it; disable also sets it. This does not establish global RX acceptance or measured delivery of FCS-failed packets. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
+            #[inline]
+            pub const fn exclude_fcs_failure(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Preserved by the inspected misc-packet-dump setter; individual hardware functions remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
+            #[inline]
+            pub const fn bits_27_31_opaque(&self) -> oer_portable_mmio::Bits<5> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 27)
             }
 
             /// Set `OPEN_MISC_PACKET_CLASSES`.
@@ -275365,13 +275403,30 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BITS_17_31_OPAQUE`.
+            /// Set `BITS_17_25_OPAQUE`.
             #[inline]
-            pub fn set_bits_17_31_opaque(
+            pub fn set_bits_17_25_opaque(
                 &mut self,
-                value: oer_portable_mmio::Bits<15>,
+                value: oer_portable_mmio::Bits<9>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0x0001ffff) | (value.get() << 17);
+                self.0 = (self.0 & 0xfc01ffff) | (value.get() << 17);
+                self
+            }
+
+            /// Set `EXCLUDE_FCS_FAILURE`.
+            #[inline]
+            pub fn set_exclude_fcs_failure(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `BITS_27_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_27_31_opaque(
+                &mut self,
+                value: oer_portable_mmio::Bits<5>,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0x07ffffff) | (value.get() << 27);
                 self
             }
         }
