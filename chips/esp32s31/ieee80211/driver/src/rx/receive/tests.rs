@@ -2111,3 +2111,23 @@ fn a_runner_outside_its_signals_executor_ends_instead_of_waiting_forever() {
         })
     ));
 }
+
+#[test]
+fn a_pass_of_long_frames_waits_longest_and_short_ones_less() {
+    let mut probe = RecycledProbe::default();
+    assert_eq!(probe.wait(3, 3 * 1500), Some(Duration::from_micros(1024)));
+    let mut probe = RecycledProbe::default();
+    assert_eq!(probe.wait(3, 3 * 100), Some(Duration::from_micros(512)));
+}
+
+#[test]
+fn a_lone_frame_shows_no_burst_and_a_later_pass_keeps_the_drains_wait() {
+    let mut probe = RecycledProbe::default();
+    assert_eq!(probe.wait(1, 1500), None);
+    assert_eq!(probe.wait(0, 0), None);
+    assert_eq!(probe.wait(2, 3000), Some(Duration::from_micros(1024)));
+    assert_eq!(probe.wait(0, 0), Some(Duration::from_micros(1024)));
+    assert_eq!(probe.wait(1, 100), Some(Duration::from_micros(1024)));
+    probe.reset();
+    assert_eq!(probe.wait(0, 0), None);
+}
