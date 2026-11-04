@@ -24,7 +24,7 @@ use oer::observe::parts::{PARTS, PartReading};
 use oer::observe::tracking::TrackingSample;
 use oer::time::{Instant, Timer};
 use oer::wifi::embassy_net::TryError;
-use oer::wifi::embassy_net::udp::UdpSocket;
+use oer::wifi::embassy_net::udp::{SendError, UdpSocket};
 use oer::wifi::embassy_net::wire::{ListenSocketAddr, SocketAddr};
 use oer::wifi::{IpDevice, Ipv4Status, Net};
 use oer::{Channel, GroupEnd};
@@ -38,7 +38,7 @@ use oer_hil_services_load::{
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
 
-use super::action::{Action, Answer as Decided, Kept, MAX_PAYLOAD, Phase, action};
+use super::action::{Action, Answer as Decided, Kept, Phase, action};
 use super::pace::{GRANULARITY_US, MAX_BATCH, Next, Schedule};
 use super::receive::{Datagram, Receiving, classify, echo};
 use super::relay::{self, Client};
@@ -498,21 +498,10 @@ fn millis(ms: u32) -> u64 {
     u64::from(ms).saturating_mul(1000)
 }
 
-/// Where a UDP payload starts within a 4-octet word of the station's
-/// word-aligned transmit buffer: after the Ethernet payload's offset 42
-/// (the longest data MPDU header), the IPv4 header's 20 octets and the UDP
-/// header's 8, at 70.
-const PAYLOAD_LANE: usize = 2;
-const SOURCE_LEN: usize = MAX_PAYLOAD as usize + PAYLOAD_LANE;
-
-/// The datagrams' source, word-aligned: its octets from [`PAYLOAD_LANE`] lie
-/// in the same lanes of their words as the payload the socket copies them
-/// to, so the copy moves whole words.
-#[repr(C, align(4))]
-struct Source([u8; SOURCE_LEN]);
-
 /// Send `transmit`'s datagrams from `begin` until `end`: paced to its rate,
-/// or as fast as the socket takes them.
+/// or as fast as the socket takes them. Each datagram is built where it
+/// leaves: the header in place, the payload behind it as the packet buffer
+/// last held it, and the clock read once per batch.
 async fn send(
     socket: &Socket,
     run: u32,
@@ -522,36 +511,24 @@ async fn send(
     sent: &mut Sent,
 ) {
     let peer = SocketAddr::from((Ipv4Addr::from(transmit.peer), transmit.peer_port));
-    let mut source = Source([0; SOURCE_LEN]);
-    // The start's payload was validated against the buffer.
-    let Some(datagram) = source
-        .0
-        .get_mut(PAYLOAD_LANE..)
-        .and_then(|lane| lane.get_mut(..usize::from(transmit.payload)))
-    else {
-        return;
-    };
+    let size = usize::from(transmit.payload);
     match Schedule::new(begin, end, transmit.payload, transmit.rate_bps) {
         Some(mut schedule) => loop {
-            let next = schedule.batch(now_us(), || {
-                let now = now_us();
-                match write(datagram, run, sent.datagrams, now) {
-                    Some(datagram) => match socket.try_send_to(datagram, peer) {
-                        Ok(()) => {
-                            taken(sent, datagram.len(), now);
-                            true
-                        }
-                        Err(TryError::WouldBlock) => {
-                            sent.refused = sent.refused.saturating_add(1);
-                            false
-                        }
-                        // The datagram is lost; its time passes.
-                        Err(TryError::Other(_)) => {
-                            sent.failed = sent.failed.saturating_add(1);
-                            true
-                        }
-                    },
-                    None => {
+            let now = now_us();
+            let next = schedule.batch(now, || {
+                let sequence = sent.datagrams;
+                let header = |payload: &mut [u8]| write(payload, run, sequence, now);
+                match socket.try_send_to_with(size, peer, header) {
+                    Ok(Some(())) => {
+                        taken(sent, size, now);
+                        true
+                    }
+                    Err(TryError::WouldBlock) => {
+                        sent.refused = sent.refused.saturating_add(1);
+                        false
+                    }
+                    // The datagram is lost; its time passes.
+                    Ok(None) | Err(TryError::Other(_)) => {
                         sent.failed = sent.failed.saturating_add(1);
                         true
                     }
@@ -563,17 +540,13 @@ async fn send(
                 // The socket had no room: the due datagram waits for it,
                 // as an application's send does.
                 Next::Blocked => {
-                    let Some(datagram) = write(datagram, run, sent.datagrams, now_us()) else {
-                        sent.failed = sent.failed.saturating_add(1);
-                        sent.missed = schedule.missed();
-                        return;
-                    };
-                    match select(socket.send_to(datagram, peer), wait_until(end)).await {
+                    let datagram = blocking(socket, size, peer, run, sent.datagrams);
+                    match select(datagram, wait_until(end)).await {
                         Either::First(result) => {
                             let now = now_us();
                             match result {
-                                Ok(()) => taken(sent, datagram.len(), now),
-                                Err(_) => sent.failed = sent.failed.saturating_add(1),
+                                Ok(Some(())) => taken(sent, size, now),
+                                Ok(None) | Err(_) => sent.failed = sent.failed.saturating_add(1),
                             }
                             schedule.taken(now);
                         }
@@ -589,8 +562,23 @@ async fn send(
                 }
             }
         },
-        None => unpaced(socket, run, datagram, peer, end, sent).await,
+        None => unpaced(socket, run, size, peer, end, sent).await,
     }
+}
+
+/// Datagram `sequence`, once the socket has room for it.
+async fn blocking(
+    socket: &Socket,
+    size: usize,
+    peer: SocketAddr,
+    run: u32,
+    sequence: u64,
+) -> Result<Option<()>, SendError> {
+    socket
+        .send_to_with(size, peer, |payload| {
+            (size, write(payload, run, sequence, now_us()))
+        })
+        .await
 }
 
 /// Send as fast as the socket takes the datagrams until `end`, yielding to
@@ -599,7 +587,7 @@ async fn send(
 async fn unpaced(
     socket: &Socket,
     run: u32,
-    datagram: &mut [u8],
+    size: usize,
     peer: SocketAddr,
     end: u64,
     sent: &mut Sent,
@@ -610,13 +598,10 @@ async fn unpaced(
         if now >= end {
             return;
         }
-        let Some(datagram) = write(datagram, run, sent.datagrams, now) else {
-            sent.failed = sent.failed.saturating_add(1);
-            return;
-        };
-        match select(socket.send_to(datagram, peer), wait_until(end)).await {
-            Either::First(Ok(())) => taken(sent, datagram.len(), now),
-            Either::First(Err(_)) => {
+        let datagram = blocking(socket, size, peer, run, sent.datagrams);
+        match select(datagram, wait_until(end)).await {
+            Either::First(Ok(Some(()))) => taken(sent, size, now),
+            Either::First(Ok(None) | Err(_)) => {
                 sent.failed = sent.failed.saturating_add(1);
                 wait_until(now.saturating_add(GRANULARITY_US).min(end)).await;
             }
@@ -630,8 +615,9 @@ async fn unpaced(
     }
 }
 
-/// `datagram` with the header of sequence `sequence` sent at `now`.
-fn write(datagram: &mut [u8], run: u32, sequence: u64, now: u64) -> Option<&[u8]> {
+/// The header of sequence `sequence` sent at `now`, at the front of
+/// `payload`; `None` when it is shorter.
+fn write(payload: &mut [u8], run: u32, sequence: u64, now: u64) -> Option<()> {
     Header {
         run,
         sequence,
@@ -639,8 +625,7 @@ fn write(datagram: &mut [u8], run: u32, sequence: u64, now: u64) -> Option<&[u8]
         echo_request: false,
         echo_reply: false,
     }
-    .write(datagram)?;
-    Some(datagram)
+    .write(payload)
 }
 
 /// The socket took a datagram of `bytes` at `now`.
