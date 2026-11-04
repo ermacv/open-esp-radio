@@ -255,6 +255,19 @@ impl<E: SignalExecutor> IrqSignal<E> {
             .map(|result| result.map_err(|_| ForeignContext))
     }
 
+    /// Register the polling task and leave raised facts to
+    /// [`service`](Self::service), which wakes it for them. The first poll
+    /// links the signal into its executor's list.
+    ///
+    /// # Errors
+    /// As [`poll_take`](Self::poll_take).
+    pub fn poll_register(&'static self, cx: &mut Context<'_>) -> Result<(), ForeignContext> {
+        let (token, task) = context_task::<E>(cx)?;
+        self.core
+            .poll_register(task, E::list(), &token.0)
+            .map_err(|_| ForeignContext)
+    }
+
     /// Wait for facts.
     ///
     /// # Errors
@@ -293,6 +306,15 @@ impl<E: SignalExecutor> PeerNotify<E> {
     pub const fn new(signal: &'static IrqSignal<E>) -> Self {
         Self(signal)
     }
+
+    /// Make the polling task the one a raise wakes. It takes no fact: every
+    /// queue end of the task shares this signal, and a fact raised for an
+    /// end the poll already checked would go with its wake. A poll outside
+    /// the signal's executor registers nothing; the composition places every
+    /// end that notifies through a signal on that signal's executor.
+    fn register_task(&self, cx: &mut Context<'_>) {
+        let _registered = self.0.poll_register(cx);
+    }
 }
 
 impl<E: SignalExecutor> oer_portable_memory::QueueNotify for PeerNotify<E>
@@ -300,11 +322,7 @@ where
     IrqSignal<E>: Sync,
 {
     fn register(&self, cx: &mut Context<'_>) {
-        // Registering takes the facts raised so far: the caller checks its
-        // queue next, so a fact taken here is not lost. A poll outside the
-        // signal's executor registers nothing; the composition places every
-        // end that notifies through a signal on that signal's executor.
-        let _facts = self.0.poll_take(cx);
+        self.register_task(cx);
     }
     fn notify(&self) {
         let _pended = self.0.raise(1);

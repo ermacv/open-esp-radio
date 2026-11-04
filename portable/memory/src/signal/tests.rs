@@ -41,6 +41,21 @@ fn nested_access_refuses_reads_and_polls_without_consuming_facts() {
 }
 
 #[test]
+fn registering_leaves_pending_facts_to_the_service_and_clears_delivered_ones() {
+    let (signal, list, token) = storage();
+    assert_eq!(signal.poll_register(7, list, &token), Ok(()));
+    signal.raise(0b1);
+    assert_eq!(signal.poll_register(7, list, &token), Ok(()));
+    let mut woken = Vec::new();
+    signal.service(&token, |task| woken.push(task));
+    assert_eq!(woken, [7]);
+    assert_eq!(signal.has_pending(&token), Some(true));
+    assert_eq!(signal.poll_register(7, list, &token), Ok(()));
+    assert_eq!(signal.has_pending(&token), Some(false));
+    assert_eq!(signal.poll_take(7, list, &token), Poll::Pending);
+}
+
+#[test]
 fn borrowed_list_refuses_registration_without_publishing_a_partial_link() {
     let (signal, list, token) = storage();
     signal.raise(0b10);

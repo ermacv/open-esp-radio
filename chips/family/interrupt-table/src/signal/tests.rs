@@ -149,6 +149,29 @@ fn raised_facts_coalesce_into_one_pend_and_one_wake() {
 }
 
 #[test]
+fn a_fact_for_an_end_the_poll_passed_survives_the_next_ends_registration() {
+    let signal = signal();
+    let notify = PeerNotify::new(signal);
+    let (counting, waker) = counting(None);
+    let mut cx = Context::from_waker(&waker);
+    // The task's first queue end registers and finds its queue empty.
+    notify.register_task(&mut cx);
+    // The other hart fills that queue, and its wait flag is spent.
+    signal.raise(1);
+    // The task's next queue end registers on the same signal.
+    notify.register_task(&mut cx);
+    signal.service();
+    assert_eq!(
+        counting.wakes.load(Ordering::Relaxed),
+        1,
+        "the fact wakes the task to check the first queue again"
+    );
+    // The wake served the fact: the next poll leaves the executor idle.
+    notify.register_task(&mut cx);
+    assert_eq!(signal.has_pending(), Ok(false));
+}
+
+#[test]
 fn a_fact_raised_while_the_executor_walks_its_signals_is_not_lost() {
     let signal = signal();
     let (counting, waker) = counting(Some(signal));
