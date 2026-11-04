@@ -103,8 +103,9 @@ Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
 - **CPU** (`GetCpu` and the window's ends): each executor's work and idle
   since boot (`observe::executors`): one hart row per hart with idle time,
   one executor row per executor with work.
-- **Parts:** the library's (`application`, `watchdog`, `aes`, `station`,
-  `radio-actor`, `driver`, `ip`, `second` and the station's spans) and the
+- **Parts:** the library's (`application`, `watchdog`, `station`,
+  `datapath`, `radio-actor`, `ip`, `group` and the datapath actor's spans
+  `turn`, `transmit`, `receive`, `intake`, `messages`) and the
   image's two, `relay` on the boot hart and `load` on hart 1, twelve an
   answer.
 - **Counters, link, tracking:** the window's differences of the boot

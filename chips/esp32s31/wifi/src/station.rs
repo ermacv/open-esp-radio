@@ -56,7 +56,7 @@ pub(crate) static TARGET: oer_portable_memory::OnceValue<([u8; 6], Option<[u8; 6
     oer_portable_memory::OnceValue::new();
 #[cfg(oer_trace)]
 pub(crate) fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
-    terminal: &LowerMacTerminal<'id, Family<Id, W>>,
+    terminal: &LowerMacTerminal<'id, radio::Family<Id, W>>,
 ) {
     if let LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) = terminal
         && matches!(completed.outcome(), TxOutcome::Indeterminate(_))

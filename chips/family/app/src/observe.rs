@@ -68,26 +68,6 @@ pub struct BridgeTx {
     pub starved: u32,
     pub queued_sum: u32,
     pub station_sum: u32,
-    /// Of the station's buffers, summed likewise by where they waited at
-    /// the station's latest pass: in the queue to the station, owed by its
-    /// data machine, members of aggregates out at the port, freed and not
-    /// yet given back, and in the queue back to the network.
-    pub incoming_sum: u32,
-    pub owed_sum: u32,
-    pub members_sum: u32,
-    pub freed_sum: u32,
-    pub returning_sum: u32,
-}
-
-/// Where the network's transmit buffers the station holds waited at its
-/// latest pass ([`BridgeTx`]'s parts).
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct StationHeld {
-    pub incoming: u8,
-    pub owed: u8,
-    pub members: u8,
-    pub freed: u8,
-    pub returning: u8,
 }
 
 /// The network bridge's counts; the IP service is their one writer, and a
@@ -95,24 +75,23 @@ pub struct StationHeld {
 pub struct BridgeCounter {
     /// Received, refused for the pool, the queue and otherwise, copied,
     /// then [`BridgeTx`]'s in its order.
-    counts: [core::sync::atomic::AtomicU32; 18],
+    counts: [core::sync::atomic::AtomicU32; 13],
 }
 
 impl BridgeCounter {
     pub const fn new() -> Self {
         Self {
-            counts: [const { core::sync::atomic::AtomicU32::new(0) }; 18],
+            counts: [const { core::sync::atomic::AtomicU32::new(0) }; 13],
         }
     }
 
     /// One bridge turn, while the station held `station` of the network's
-    /// `buffers` transmit buffers, `held` where its latest pass saw them.
+    /// `buffers` transmit buffers.
     pub fn turned(
         &self,
         turn: oer_portable_embassy_net::ethernet::TxTurn,
         station: u32,
         buffers: u32,
-        held: StationHeld,
     ) {
         use oer_portable_embassy_net::ethernet::TxOutcome;
         let queued = u32::try_from(turn.queued).unwrap_or(u32::MAX);
@@ -138,11 +117,6 @@ impl BridgeCounter {
         }
         self.add(11, queued);
         self.add(12, station);
-        self.add(13, held.incoming.into());
-        self.add(14, held.owed.into());
-        self.add(15, held.members.into());
-        self.add(16, held.freed.into());
-        self.add(17, held.returning.into());
     }
 
     /// The bridge took a frame from the station.
@@ -192,11 +166,6 @@ impl BridgeCounter {
             starved,
             queued_sum,
             station_sum,
-            incoming_sum,
-            owed_sum,
-            members_sum,
-            freed_sum,
-            returning_sum,
         ] = self
             .counts
             .each_ref()
@@ -216,11 +185,6 @@ impl BridgeCounter {
                 starved,
                 queued_sum,
                 station_sum,
-                incoming_sum,
-                owed_sum,
-                members_sum,
-                freed_sum,
-                returning_sum,
             },
         }
     }

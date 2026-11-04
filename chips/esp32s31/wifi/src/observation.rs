@@ -1,5 +1,5 @@
-//! The facade's own trace events: what the composed station saw at the port
-//! and in its rate selection. They are the facade's vocabulary on the image's
+//! The facade's own trace events: what the composed station saw at the port,
+//! its datapath actor's spans and its rate selection. They are the facade's vocabulary on the image's
 //! trace observer; the protocol's events reach the image's event sink
 //! instead ([`crate::Binding::Sink`]).
 //!
@@ -354,13 +354,48 @@ impl core::fmt::Display for TxData {
     }
 }
 
+/// The datapath actor's spans, which [`ActorSpan`] reports.
+pub use oer_protocols_ieee80211_runtime::datapath::ActorSpan as Span;
+
+/// The start or end of a stretch of the datapath actor's work.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ActorSpan {
+    pub span: Span,
+    pub end: bool,
+}
+
+impl Event for ActorSpan {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 29);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [u32::from(self.span as u8), u32::from(self.end)]
+    }
+
+    fn decode([span, end]: [u32; 2]) -> Option<Self> {
+        Some(Self {
+            span: Span::from_number(u8::try_from(span).ok()?)?,
+            end: match end {
+                0 => false,
+                1 => true,
+                _ => return None,
+            },
+        })
+    }
+}
+
+impl core::fmt::Display for ActorSpan {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let edge = if self.end { "end" } else { "start" };
+        write!(f, "station.span {:?} {edge}", self.span)
+    }
+}
+
 /// What the station service decided about received frames: the kind of
 /// one decision, which [`StationRx`] counts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum StationRxKind {
-    /// The port reported lost events.
-    PortEventsLost,
     /// The station dropped a frame, by its receive drop reason, a security
     /// refusal or the drain of a poisoned port.
     DroppedHeader,
@@ -405,8 +440,7 @@ pub enum StationRxKind {
 }
 
 impl StationRxKind {
-    pub const ALL: [Self; 31] = [
-        Self::PortEventsLost,
+    pub const ALL: [Self; 30] = [
         Self::DroppedHeader,
         Self::DroppedFrameKind,
         Self::DroppedAddress,
@@ -556,51 +590,6 @@ impl core::fmt::Display for StationTxAmpdu {
     }
 }
 
-/// The network's transmit memory the station service holds, by where it
-/// waits,
-/// after one pass of the service.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct StationTxMemory {
-    pub incoming: u8,
-    pub owed: u8,
-    pub members: u8,
-    pub freed: u8,
-    pub returning: u8,
-}
-
-impl Event for StationTxMemory {
-    const KIND: Kind = Kind::new(Domain::Ieee80211, 34);
-    const CHANNEL: Channel = SERVICE;
-
-    fn encode(&self) -> [u32; 2] {
-        [
-            u32::from_le_bytes([self.incoming, self.owed, self.members, self.freed]),
-            u32::from(self.returning),
-        ]
-    }
-
-    fn decode([counts, returning]: [u32; 2]) -> Option<Self> {
-        let [incoming, owed, members, freed] = counts.to_le_bytes();
-        Some(Self {
-            incoming,
-            owed,
-            members,
-            freed,
-            returning: u8::try_from(returning).ok()?,
-        })
-    }
-}
-
-impl core::fmt::Display for StationTxMemory {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "station.tx-memory incoming={} owed={} members={} freed={} returning={}",
-            self.incoming, self.owed, self.members, self.freed, self.returning
-        )
-    }
-}
-
 /// The station's event sink of a trace build: it reports each receive
 /// decision of the service, the station and its receive agreements as
 /// [`StationRx`], and each data aggregate's settlement and BlockAckReq as
@@ -626,14 +615,6 @@ impl<O: oer_portable_trace::Observer> TracedStationEvents<O> {
     )]
     fn report_tx(&self, settled: StationTxAmpdu) {
         oer_portable_trace::observe!(self.0, settled);
-    }
-
-    #[cfg_attr(
-        not(oer_trace),
-        allow(unused_variables, reason = "only a trace build reports")
-    )]
-    fn report_memory(&self, held: StationTxMemory) {
-        oer_portable_trace::observe!(self.0, held);
     }
 }
 
@@ -832,6 +813,7 @@ mod tests {
             TxHardwareTimeout::KIND,
             TxQueueCollision::KIND,
             ControlDelivered::KIND,
+            ActorSpan::KIND,
             StationRx::KIND,
             RxData::KIND,
             TxData::KIND,
@@ -1007,14 +989,16 @@ mod tests {
         round_trip(TxRateSelected { kbps: Some(65_000) });
         assert_eq!(StationBeacon::decode([7, 1]), None);
         assert_eq!(TxRateSelected::decode([1, 0]), None);
-        round_trip(StationTxMemory {
-            incoming: 1,
-            owed: 2,
-            members: 32,
-            freed: 4,
-            returning: 16,
-        });
-        assert_eq!(StationTxMemory::decode([0, 256]), None);
+        for span in Span::ALL {
+            round_trip(ActorSpan { span, end: false });
+            round_trip(ActorSpan { span, end: true });
+        }
+        assert_eq!(ActorSpan::decode([0, 2]), None, "an unknown edge");
+        assert_eq!(
+            ActorSpan::decode([Span::ALL.len() as u32, 0]),
+            None,
+            "an unknown span"
+        );
         for kind in StationRxKind::ALL {
             round_trip(StationRx { kind, count: 9 });
         }

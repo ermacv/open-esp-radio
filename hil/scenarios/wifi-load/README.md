@@ -28,7 +28,7 @@ refused and missed sends, RTT of 20 probes per second within the window
 p95, max, replies; `OER_WIFI_LOAD_PROBES=off` sends no probes), each hart's busy share (1 − idle/window: the boot hart's
 radio and station, hart 1's network and load) with each executor's work
 share, each named part's polls (tasks, the station work's and the network's
-futures and the station service's spans: count, rate, share of the window
+futures and the datapath actor's spans: count, rate, share of the window
 with an open poll's part, and the mean and longest of the ended polls), and
 the window's counters (the boot hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the network bridge's taken and refused
@@ -49,7 +49,7 @@ a wait, and the RX-control prefix's refusals: `rx_failures` (a failed RX
 state, the FCS among them), `mic_failures`, `quarantined` and
 `prefix_other`. The driver keeps no count of the MAC's hardware
 buffer-full events. `station` is the station service's receive decisions:
-`port_events_lost`, frames `dropped_…` by reason (`replay`, `integrity`,
+frames `dropped_…` by reason (`replay`, `integrity`,
 `security`, …), MSDUs `refused_…` (`too_long`, `queue_full`,
 `no_network`) and `copied_…` (`aggregated`, `kept`), the MPDUs the
 receive agreements admitted `mpdus_in_ampdu`, `mpdus_single` or

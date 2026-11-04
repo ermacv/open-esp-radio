@@ -53,8 +53,8 @@ use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
 use oer_protocols_ieee80211_core_roles_sta::link::LinkReturn;
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
 use oer_protocols_ieee80211_runtime::datapath::{
-    Actor, ActorEnd, ActorEpochPath, ActorEvent, ActorLink, DatapathPort, FromActor, GroupPending,
-    LIFECYCLE_FRAMES, LifecycleEnds, NetworkEnds, PARCELS, Parcel, Returned, ToActor,
+    Actor, ActorEnd, ActorEpochPath, ActorEvent, ActorLink, ActorSpan, DatapathPort, FromActor,
+    GroupPending, LIFECYCLE_FRAMES, LifecycleEnds, NetworkEnds, PARCELS, Parcel, Returned, ToActor,
     from_actor_depth, returns_depth,
 };
 use oer_protocols_ieee80211_runtime::lifecycle::{ActorEnds, LifecyclePort, LifecycleTxBuffer};
@@ -218,6 +218,17 @@ impl<W: Binding> DatapathPort<'static> for ActorPort<W> {
     const RX_HELD: u8 = ACTOR_RX_HELD;
     fn arena_ack(response: port::BlockAckAnswer) -> Option<port::Ack> {
         response.snr_db.map(|snr_db| port::Ack { snr_db })
+    }
+    #[cfg_attr(
+        not(oer_trace),
+        allow(unused_variables, reason = "only a trace build observes the span")
+    )]
+    fn span(span: ActorSpan, end: bool) {
+        #[cfg(oer_trace)]
+        {
+            let observer = W::DriverObserver::default();
+            oer_portable_trace::observe!(observer, crate::observation::ActorSpan { span, end });
+        }
     }
     #[cfg_attr(
         not(oer_trace),

@@ -36,7 +36,7 @@ use crate::observe::cpu::{Boundary, CpuCounter, ExecutorSample, Phase};
 use crate::observe::link::{Containment, LinkCounter, Rate, Settled, TxEnd};
 use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading};
 use crate::observe::tracking::{Branches, Ran, Tick, TrackingCounter, TrackingSample};
-use crate::observe::{Bridge, BridgeCounter, Concurrent, StationHeld};
+use crate::observe::{Bridge, BridgeCounter, Concurrent};
 
 pub use crate::observe::link::{Link, TxAmpdu};
 pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
@@ -276,9 +276,10 @@ pub(crate) const fn executor_observer<const SLOT: usize>() -> ExecutorObserver<S
     ExecutorObserver
 }
 
-/// The library's observer of the station service, its driver, the shared
-/// RF actor and the PC sampler: the service's receive decisions and link
-/// counts, the actor's tracking ticks and the sampler's samples.
+/// The library's observer of the station service, its datapath actor and
+/// driver, the shared RF actor and the PC sampler: the datapath actor's
+/// spans, the service's receive decisions and link counts, the RF actor's
+/// tracking ticks and the sampler's samples.
 #[derive(Clone, Copy, Default)]
 pub struct Observer;
 
@@ -294,6 +295,11 @@ impl Observer {
 
 impl oer_portable_trace::Observer for Observer {
     fn event<E: oer_portable_trace::Event + Copy + 'static>(&self, event: E) {
+        if let Some(span) = Self::decoded::<E, station::ActorSpan>(event)
+            && let Some(counter) = PART_COUNTERS.get(span_part(span.span) as usize)
+        {
+            counter.observe(now_us(), span.end, EPOCH.load(Ordering::Relaxed));
+        }
         if let Some(decision) = Self::decoded::<E, station::StationRx>(event) {
             receive_decision(decision);
         }
@@ -310,14 +316,6 @@ impl oer_portable_trace::Observer for Observer {
                     dropped: settled.dropped,
                 });
             }
-        }
-        if let Some(held) = Self::decoded::<E, station::StationTxMemory>(event) {
-            let [counts, returning] = &STATION_PARTS;
-            counts.store(
-                u32::from_le_bytes([held.incoming, held.owed, held.members, held.freed]),
-                Ordering::Relaxed,
-            );
-            returning.store(u32::from(held.returning), Ordering::Relaxed);
         }
         if let Some(data) = Self::decoded::<E, station::RxData>(event) {
             LINK.received(
@@ -372,6 +370,17 @@ fn receive_decision(decision: station::StationRx) {
         WINDOW.store(decision.count, Ordering::Relaxed);
     } else if let Some(count) = STATION.get(usize::from(decision.kind as u8)) {
         bump(count, decision.count);
+    }
+}
+
+/// The part a datapath actor's span counts in.
+const fn span_part(span: station::Span) -> LibraryPart {
+    match span {
+        station::Span::Turn => LibraryPart::Turn,
+        station::Span::Transmit => LibraryPart::Transmit,
+        station::Span::Receive => LibraryPart::Receive,
+        station::Span::Intake => LibraryPart::Intake,
+        station::Span::Messages => LibraryPart::Messages,
     }
 }
 
@@ -453,31 +462,11 @@ pub(crate) fn station_gave_tx() {
     );
 }
 
-/// Where the station's latest pass saw the network transmit buffers it
-/// holds: incoming, owed, members and freed in one word's bytes, returning
-/// in another. The station service is their one writer; a reader on the
-/// other hart may take the two words of different passes.
-static STATION_PARTS: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
-
 /// One bridge turn of the stack's transmissions.
 #[cfg(feature = "wifi")]
 pub(crate) fn bridge_turned(turn: oer_portable_embassy_net::ethernet::TxTurn) {
     const BUFFERS: u32 = oer_chips_esp32s31_wifi::NETWORK_BUFFERS as u32;
-    let [counts, returning] = &STATION_PARTS;
-    let [incoming, owed, members, freed] = counts.load(Ordering::Relaxed).to_le_bytes();
-    let [returning, ..] = returning.load(Ordering::Relaxed).to_le_bytes();
-    BRIDGE.turned(
-        turn,
-        STATION_TX.load(Ordering::Relaxed),
-        BUFFERS,
-        StationHeld {
-            incoming,
-            owed,
-            members,
-            freed,
-            returning,
-        },
-    );
+    BRIDGE.turned(turn, STATION_TX.load(Ordering::Relaxed), BUFFERS);
 }
 
 /// The samples one session of one hart's sampler keeps.

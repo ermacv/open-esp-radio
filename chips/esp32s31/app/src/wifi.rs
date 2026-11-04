@@ -270,7 +270,7 @@ pub(crate) type Datapath = wifi::Datapath<binding::Binding>;
 /// decision here: the station's task hears it and decides.
 pub(crate) async fn datapath(datapath: Datapath) {
     observed!(
-        Driver,
+        Datapath,
         datapath.run(StationObserver::default(), STATION_SINK)
     )
     .await;
