@@ -512,7 +512,14 @@ async fn send(
 ) {
     let peer = SocketAddr::from((Ipv4Addr::from(transmit.peer), transmit.peer_port));
     let size = usize::from(transmit.payload);
-    match Schedule::new(begin, end, transmit.payload, transmit.rate_bps) {
+    let schedule = Schedule::new(
+        begin,
+        end,
+        transmit.payload,
+        transmit.rate_bps,
+        transmit.burst,
+    );
+    match schedule {
         Some(mut schedule) => loop {
             let now = now_us();
             let next = schedule.batch(now, || {

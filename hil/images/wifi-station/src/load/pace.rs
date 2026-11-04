@@ -5,7 +5,8 @@
 //! the socket has no room for waits for room: the schedule moves on only
 //! with a datagram the socket took, and once room came, a schedule further
 //! behind than one batch's sleep or [`CATCH_UP`] payload times starts
-//! again from the present.
+//! again from the present. A burst's datagrams all fall due at its first
+//! one's time, which keeps the rate on average.
 //! Nothing is sent once the window ended: what the window held and was not
 //! sent by then is missed.
 
@@ -58,12 +59,24 @@ pub(crate) struct Schedule {
     /// the rest, below `rate_bps`; `None` past `u64`.
     after_us: Option<u64>,
     after_rest: u64,
+    /// The datagrams due together, and how many of the current burst are
+    /// still to go; the current burst's first time after `begin_us`.
+    burst: u16,
+    burst_left: u16,
+    burst_after_us: Option<u64>,
 }
 
 impl Schedule {
     /// The schedule of `payload`-byte datagrams at `rate_bps` from `begin_us`
-    /// until `end_us`; `None` at the rate 0, which sends unpaced.
-    pub(crate) fn new(begin_us: u64, end_us: u64, payload: u16, rate_bps: u32) -> Option<Self> {
+    /// until `end_us`, `burst` of them due together (a `burst` of 0 counts
+    /// as 1); `None` at the rate 0, which sends unpaced.
+    pub(crate) fn new(
+        begin_us: u64,
+        end_us: u64,
+        payload: u16,
+        rate_bps: u32,
+        burst: u16,
+    ) -> Option<Self> {
         // At most 65 535 × 8 000 000 bit·µs/s: within a u64.
         let bits = u64::from(payload).saturating_mul(8_000_000);
         let rate = u64::from(rate_bps);
@@ -78,14 +91,18 @@ impl Schedule {
             step_rest: bits.checked_rem(rate)?,
             after_us: Some(0),
             after_rest: 0,
+            burst: burst.max(1),
+            burst_left: burst.max(1),
+            burst_after_us: Some(0),
         })
     }
 
     /// When the next datagram is due, before the window ends: datagram `n`
-    /// at `begin_us` plus `n` payload times, rounded down.
+    /// at `begin_us` plus `n` payload times, rounded down, or its burst's
+    /// first datagram's time.
     fn due(&self) -> Option<u64> {
         self.begin_us
-            .checked_add(self.after_us?)
+            .checked_add(self.burst_after_us?)
             .filter(|due| *due < self.end_us)
     }
 
@@ -110,6 +127,11 @@ impl Schedule {
             .after_us
             .and_then(|after| after.checked_add(self.step_us))
             .and_then(|after| after.checked_add(carry));
+        self.burst_left = self.burst_left.saturating_sub(1);
+        if self.burst_left == 0 {
+            self.burst_left = self.burst;
+            self.burst_after_us = self.after_us;
+        }
     }
 
     /// Datagrams the window holds that the socket never took: the sender
@@ -133,7 +155,7 @@ impl Schedule {
     pub(crate) fn taken(&mut self, now_us: u64) {
         self.sent_one();
         let Some(due) = self
-            .after_us
+            .burst_after_us
             .and_then(|after| self.begin_us.checked_add(after))
         else {
             return;
@@ -191,13 +213,13 @@ mod tests {
 
     #[test]
     fn a_rate_of_zero_has_no_schedule() {
-        assert!(Schedule::new(0, 1000, 1400, 0).is_none());
+        assert!(Schedule::new(0, 1000, 1400, 0, 1).is_none());
     }
 
     #[test]
     fn a_batch_sends_what_is_due_and_sleeps_at_least_the_granularity() {
         // 1400 bytes at 11.2 Mbit/s: one datagram each 1000 µs.
-        let mut schedule = Schedule::new(10_000, 20_000, 1400, 11_200_000).unwrap();
+        let mut schedule = Schedule::new(10_000, 20_000, 1400, 11_200_000, 1).unwrap();
         assert_eq!(batch(&mut schedule, 9_999), (0, Next::Wait(10_999)));
         assert_eq!(batch(&mut schedule, 10_000), (1, Next::Wait(11_000)));
         assert_eq!(batch(&mut schedule, 13_500), (3, Next::Wait(14_500)));
@@ -213,7 +235,7 @@ mod tests {
     #[test]
     fn a_fast_rate_sends_in_batches_of_at_most_the_bound() {
         // 1400 bytes at 65 Mbit/s: one datagram each 172.3 µs.
-        let mut schedule = Schedule::new(0, 1_000_000, 1400, 65_000_000).unwrap();
+        let mut schedule = Schedule::new(0, 1_000_000, 1400, 65_000_000, 1).unwrap();
         assert_eq!(batch(&mut schedule, 1_000), (6, Next::Wait(2_000)));
         // 53 more are due at 10 ms (0..=58): batches of 16, 16, 16 and 5.
         for _ in 0..3 {
@@ -226,7 +248,7 @@ mod tests {
     #[test]
     fn each_datagram_is_due_at_its_exact_payload_time_rounded_down() {
         // 1472 bytes at 100 Mbit/s: 117.76 µs each, whose rests carry.
-        let mut schedule = Schedule::new(7, u64::MAX, 1472, 100_000_000).unwrap();
+        let mut schedule = Schedule::new(7, u64::MAX, 1472, 100_000_000, 1).unwrap();
         for attempt in 0..100_000_u64 {
             let exact = attempt * 1472 * 8_000_000 / 100_000_000;
             assert_eq!(schedule.due(), Some(7 + exact));
@@ -237,7 +259,7 @@ mod tests {
     #[test]
     fn a_refused_datagram_waits_and_a_late_schedule_starts_again_from_the_present() {
         // 1400 bytes at 11.2 Mbit/s: one datagram each 1000 µs.
-        let mut schedule = Schedule::new(0, 100_000, 1400, 11_200_000).unwrap();
+        let mut schedule = Schedule::new(0, 100_000, 1400, 11_200_000, 1).unwrap();
         assert_eq!(schedule.batch(0, || false), Next::Blocked);
         assert_eq!(schedule.attempts, 0, "a refused datagram is still due");
         // Room came 2.5 payload times later: the schedule catches up.
@@ -253,17 +275,50 @@ mod tests {
     #[test]
     fn a_slow_rate_sleeps_until_the_next_datagram() {
         // 100 bytes at 8 kbit/s: one datagram each 100 ms.
-        let mut schedule = Schedule::new(0, 1_000_000, 100, 8_000).unwrap();
+        let mut schedule = Schedule::new(0, 1_000_000, 100, 8_000, 1).unwrap();
         assert_eq!(batch(&mut schedule, 0), (1, Next::Wait(100_000)));
         assert_eq!(batch(&mut schedule, 950_000), (9, Next::Done));
         assert_eq!(schedule.missed(), 0);
     }
 
     #[test]
+    fn a_burst_falls_due_together_and_keeps_the_mean_rate() {
+        // 1400 bytes at 11.2 Mbit/s, four together: a burst each 4000 µs.
+        let mut schedule = Schedule::new(0, 12_000, 1400, 11_200_000, 4).unwrap();
+        assert_eq!(batch(&mut schedule, 0), (4, Next::Wait(4_000)));
+        assert_eq!(batch(&mut schedule, 3_999), (0, Next::Wait(4_999)));
+        assert_eq!(batch(&mut schedule, 4_000), (4, Next::Wait(8_000)));
+        assert_eq!(batch(&mut schedule, 8_000), (4, Next::Done));
+        assert_eq!(schedule.missed(), 0);
+    }
+
+    #[test]
+    fn a_burst_longer_than_a_batch_yields_and_stays_due() {
+        // 1400 bytes at 11.2 Mbit/s, 20 together: a burst each 20 ms.
+        let mut schedule = Schedule::new(0, 40_000, 1400, 11_200_000, 20).unwrap();
+        assert_eq!(batch(&mut schedule, 0), (MAX_BATCH, Next::Yield));
+        assert_eq!(batch(&mut schedule, 10), (4, Next::Wait(20_000)));
+    }
+
+    #[test]
+    fn a_refused_datagram_of_a_burst_stays_at_the_bursts_time() {
+        let mut schedule = Schedule::new(0, 40_000, 1400, 11_200_000, 4).unwrap();
+        let mut left = 2;
+        let next = schedule.batch(0, || {
+            left -= 1;
+            left >= 0
+        });
+        assert_eq!(next, Next::Blocked);
+        assert_eq!(schedule.due(), Some(0));
+        schedule.taken(100);
+        assert_eq!(schedule.due(), Some(0), "the burst's last one is still due");
+    }
+
+    #[test]
     fn an_empty_or_overflowing_window_sends_nothing() {
-        let mut empty = Schedule::new(5, 5, 1400, 1).unwrap();
+        let mut empty = Schedule::new(5, 5, 1400, 1, 1).unwrap();
         assert_eq!(batch(&mut empty, 5), (0, Next::Done));
-        let mut late = Schedule::new(u64::MAX - 1, u64::MAX, 1400, 1).unwrap();
+        let mut late = Schedule::new(u64::MAX - 1, u64::MAX, 1400, 1, 1).unwrap();
         assert_eq!(batch(&mut late, u64::MAX - 1), (1, Next::Done));
         assert_eq!(batch(&mut late, u64::MAX), (0, Next::Done));
     }

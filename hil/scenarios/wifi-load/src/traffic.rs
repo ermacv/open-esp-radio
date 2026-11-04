@@ -144,15 +144,25 @@ pub struct Sent {
     pub elapsed: Duration,
 }
 
+/// The datagrams due `elapsed` into a run of one each `interval`, `burst`
+/// of them together: the bursts begun by then, whole.
+fn due(elapsed: Duration, interval: Duration, burst: u16) -> u64 {
+    let burst = u64::from(burst.max(1));
+    let begun = (elapsed.as_secs_f64() / (interval.as_secs_f64() * burst as f64)) as u64 + 1;
+    begun.saturating_mul(burst)
+}
+
 /// Send run `run`'s load to `peer` from `endpoint`: datagrams of `payload`
-/// bytes at `rate_bps` of UDP payload for `duration`, in batches. Nothing
-/// is sent once `duration` passed, also within a batch that catches up.
+/// bytes at `rate_bps` of UDP payload on average for `duration`, `burst` of
+/// them together, in batches. Nothing is sent once `duration` passed, also
+/// within a batch that catches up.
 pub fn send(
     endpoint: &Endpoint,
     peer: SocketAddrV4,
     run: u32,
     payload: usize,
     rate_bps: u64,
+    burst: u16,
     duration: Duration,
 ) -> Sent {
     let mut buffer = vec![0x5a; payload.max(header::LENGTH)];
@@ -162,7 +172,7 @@ pub fn send(
     let mut sequence = 0_u64;
     while started.elapsed() < duration {
         // Every datagram due by now goes in this batch.
-        let due = (started.elapsed().as_secs_f64() / interval.as_secs_f64()) as u64 + 1;
+        let due = due(started.elapsed(), interval, burst);
         while sequence < due && started.elapsed() < duration {
             let header = Header {
                 run,
@@ -213,4 +223,19 @@ pub fn probe(
         std::thread::sleep(period);
     }
     sequence
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_burst_falls_due_whole_when_it_begins() {
+        let interval = Duration::from_millis(10);
+        assert_eq!(due(Duration::ZERO, interval, 1), 1);
+        assert_eq!(due(Duration::from_millis(25), interval, 1), 3);
+        assert_eq!(due(Duration::ZERO, interval, 4), 4);
+        assert_eq!(due(Duration::from_millis(39), interval, 4), 4);
+        assert_eq!(due(Duration::from_millis(40), interval, 4), 8);
+    }
 }
