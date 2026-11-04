@@ -200,6 +200,7 @@ fn full_link() -> Link {
             delivered: all,
             ack_timeouts: all,
             other_ends: all,
+            missing: [all; 7],
             unsent: all,
         },
     }

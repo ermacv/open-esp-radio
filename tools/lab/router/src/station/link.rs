@@ -3,13 +3,17 @@
 //! (`iw dev <ap> station get`), the AP's channel and width (`iw dev <ap>
 //! info`), the survey of the channel in use (`iw dev <ap> survey dump`) and
 //! the station's TID 0 queue drops (mac80211's per-station `aqm` debugfs
-//! file). Directions are the AP's: `tx` is what the AP sent the station.
+//! file) and the radio's own counters (mac80211's `statistics` debugfs
+//! files and mt76's BlockAck misses, when the router has them). Directions
+//! are the AP's: `tx` is what the AP sent the station.
 //!
 //! The router filters before anything leaves it: the station line that
 //! names the peer, every `info` line but the channel's and every survey
 //! block but the one in use stay there. The host parses the rest; an `iw`
 //! line this parser does not know is ignored, a known one it cannot read
 //! refuses the observation.
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +57,10 @@ pub struct StationLink {
     /// The packets the AP's queue for the station's TID 0 dropped; absent
     /// without a readable debugfs file.
     pub tid0_aqm_drops: Option<u64>,
+    /// The radio's counters by the name its driver gives them, not the
+    /// station's: FCS errors, A-MPDUs and the like. Empty on a router
+    /// without them.
+    pub radio: BTreeMap<String, u64>,
 }
 
 /// The survey of the channel in use: the radio's time on it, busy, receiving
@@ -126,7 +134,13 @@ fn script(interface: &str, target: Mac) -> Result<String> {
          echo '[aqm]'\n\
          for aqm in /sys/kernel/debug/ieee80211/*/netdev:\"$iface\"/stations/\"$mac\"/aqm; do\n\
          if test -r \"$aqm\"; then awk '$1 == \"0\" {{ print \"tid0 drops:\", $6 }}' \"$aqm\"; fi\n\
-         done\n",
+         done\n\
+         echo '[radio]'\n\
+         phy=/sys/kernel/debug/ieee80211/phy$(printf '%s\\n' \"$info\" | awk '$1 == \"wiphy\" {{ print $2 }}')\n\
+         for counter in \"$phy\"/statistics/*; do\n\
+         if test -r \"$counter\"; then echo \"${{counter##*/}}: $(cat \"$counter\")\"; fi\n\
+         done\n\
+         awk -F': ' '/^BA miss count/ {{ print \"ba_miss: \" $2 }}' \"$phy\"/mt76/tx_stats 2>/dev/null || true\n",
         quote(interface)?,
         quote(&mac_text(target))?
     ))
@@ -139,6 +153,7 @@ struct Sections<'a> {
     channel: Vec<&'a str>,
     survey: Vec<&'a str>,
     aqm: Vec<&'a str>,
+    radio: Vec<&'a str>,
 }
 
 fn sections(text: &str) -> Result<Sections<'_>> {
@@ -150,6 +165,7 @@ fn sections(text: &str) -> Result<Sections<'_>> {
             "[channel]" => current = Some(&mut sections.channel),
             "[survey]" => current = Some(&mut sections.survey),
             "[aqm]" => current = Some(&mut sections.aqm),
+            "[radio]" => current = Some(&mut sections.radio),
             _ => match current.as_mut() {
                 Some(section) => section.push(line),
                 None => {
@@ -204,6 +220,7 @@ pub fn parse_link(text: &str) -> Result<StationLink> {
         width_mhz: None,
         survey: None,
         tid0_aqm_drops: None,
+        radio: BTreeMap::new(),
     };
     let mut required = [false; 6];
     for (key, value) in pairs(&sections.station) {
@@ -256,6 +273,10 @@ pub fn parse_link(text: &str) -> Result<StationLink> {
             link.tid0_aqm_drops = Some(number(key, value)?);
         }
     }
+    // A driver's counters are its own: one that reads no number is not one.
+    link.radio = pairs(&sections.radio)
+        .filter_map(|(key, value)| Some((key.to_owned(), value.parse().ok()?)))
+        .collect();
     Ok(link)
 }
 

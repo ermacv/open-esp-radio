@@ -144,6 +144,7 @@ pub(crate) fn link(link: &link::Link) -> Link {
             ack_timeouts: link.tx.ack_timeouts,
             other_ends: link.tx.other_ends,
             unsent: link.tx.unsent,
+            missing: link.tx.missing,
         },
     }
 }

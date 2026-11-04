@@ -55,6 +55,30 @@ fn settlements_and_block_ack_requests_count_apart() {
 }
 
 #[test]
+fn an_aggregate_counts_by_the_members_its_block_ack_left_missing() {
+    let counter = LinkCounter::new();
+    for (members, acknowledged) in [
+        (32, 32),
+        (32, 31),
+        (32, 30),
+        (32, 28),
+        (32, 24),
+        (32, 1),
+        (32, 0),
+    ] {
+        counter.settled(Settled {
+            rate: Rate::Unknown,
+            members,
+            refused: false,
+            acknowledged,
+            retried: 0,
+            dropped: 0,
+        });
+    }
+    assert_eq!(counter.link().tx.missing, [1; MISSING_BINS]);
+}
+
+#[test]
 fn each_rate_counts_in_its_own_bucket() {
     let counter = LinkCounter::new();
     let ht = |mcs, width40, short_gi| Rate::Ht {
