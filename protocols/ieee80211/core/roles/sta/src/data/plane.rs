@@ -598,7 +598,9 @@ impl DataPlane {
             return Some(capacity);
         }
         let bound = (*book.tid.select(&self.limits)).map_or(0, |limit| {
-            u8::try_from(limit.subframes()).unwrap_or(u8::MAX).min(capacity)
+            u8::try_from(limit.subframes())
+                .unwrap_or(u8::MAX)
+                .min(capacity)
         });
         Some(bound.saturating_sub(count))
     }
