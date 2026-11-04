@@ -286697,7 +286697,7 @@ pub mod wifi_mac {
 
     /// The `ENABLE` register.
     ///
-    /// Complete hal_init first publishes 0x19a879e0 here before its remaining tail. Complete hal_enable_mac independently publishes its argument after clearing the shared MAC disable gates. The common FIQ samples it with each interrupt status snapshot.
+    /// Complete hal_init first publishes 0x19a879e0 here before its remaining tail. Complete hal_enable_mac independently publishes its argument after clearing the shared MAC disable gates. The diagnostic print_isr_regs samples it alongside STATUS and RAW; the common FIQ reads STATUS without separately reading this enable image. SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
     pub mod enable {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -286866,7 +286866,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
+            /// Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. RF-test tx_a_frame enables bit1, requests CLEAR0/1 and waits for STATUS1 after its TX configuration/PLCP writes; trig_tx_frame uses STATUS1 plus an elapsed-time condition to permit another such trigger. This is distinct from tx_data_frame polling the known bit7. These software uses do not identify physical causes 0/1/2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027, BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104.
             #[inline]
             pub const fn bits_0_4_opaque(self) -> oer_portable_mmio::Bits<5> {
                 oer_portable_mmio::Bits::truncate(self.0)
@@ -287003,7 +287003,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
+            /// Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. RF-test tx_a_frame enables bit1, requests CLEAR0/1 and waits for STATUS1 after its TX configuration/PLCP writes; trig_tx_frame uses STATUS1 plus an elapsed-time condition to permit another such trigger. This is distinct from tx_data_frame polling the known bit7. These software uses do not identify physical causes 0/1/2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027, BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104.
             #[inline]
             pub const fn bits_0_4_opaque(&self) -> oer_portable_mmio::Bits<5> {
                 oer_portable_mmio::Bits::truncate(self.0)
@@ -287529,7 +287529,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Masked event bits whose identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
+            /// Masked event bits whose identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. RF-test tx_a_frame enables bit1, requests CLEAR0/1 and waits for STATUS1 after its TX configuration/PLCP writes; trig_tx_frame uses STATUS1 plus an elapsed-time condition to permit another such trigger. This is distinct from tx_data_frame polling the known bit7. These software uses do not identify physical causes 0/1/2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027, BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104.
             #[inline]
             pub const fn bits_0_4_opaque(self) -> oer_portable_mmio::Bits<5> {
                 oer_portable_mmio::Bits::truncate(self.0)

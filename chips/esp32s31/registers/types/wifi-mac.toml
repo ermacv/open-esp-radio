@@ -2403,13 +2403,13 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."ENABLE"]
-sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL"]
+sources = ["BLOB_LIBPP_HAL_ENABLE_MAC", "BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_INIT_TAIL", "BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
 [review.entity."ENABLE.BITS_0_4_OPAQUE"]
-sources = ["BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
+sources = ["BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027", "BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104"]
 
 [review.entity."ENABLE.RX_ASSOCIATED_AUXILIARY_5"]
 sources = ["HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_HAL_INIT_TAIL", "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"]
@@ -2511,7 +2511,7 @@ accuracy = "exact"
 completeness = "complete"
 
 [review.entity."STATUS.BITS_0_4_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48", "BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027"]
+sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT", "BLOB_LIBPP_HAL_ENABLE_MAC", "S31_MMIO_DECLARED_20104C48", "BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027", "BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027", "BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104"]
 accuracy = "exact"
 
 [review.entity."STATUS.RX_ASSOCIATED_AUXILIARY_5"]
@@ -2619,7 +2619,7 @@ accuracy = "exact"
 completeness = "complete"
 
 [review.entity."CLEAR.EVENTS"]
-sources = ["HW24_RX_MASKED_W1C_20261027", "HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
+sources = ["HW24_RX_MASKED_W1C_20261027", "HW20_RX_RAW_RETENTION_20261027", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT", "BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -10026,13 +10026,13 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "ENABLE"
 offset = 0xc40
-description = "Complete hal_init first publishes 0x19a879e0 here before its remaining tail. Complete hal_enable_mac independently publishes its argument after clearing the shared MAC disable gates. The common FIQ samples it with each interrupt status snapshot."
+description = "Complete hal_init first publishes 0x19a879e0 here before its remaining tail. Complete hal_enable_mac independently publishes its argument after clearing the shared MAC disable gates. The diagnostic print_isr_regs samples it alongside STATUS and RAW; the common FIQ reads STATUS without separately reading this enable image. SOURCE: BLOB_LIBPP_ISR_REGISTER_DUMP, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
 
 [[registers.fields]]
 name = "BITS_0_4_OPAQUE"
 bits = "4:0"
 class = "plain"
-description = "Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
+description = "Interrupt-enable bits whose event identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. RF-test tx_a_frame enables bit1, requests CLEAR0/1 and waits for STATUS1 after its TX configuration/PLCP writes; trig_tx_frame uses STATUS1 plus an elapsed-time condition to permit another such trigger. This is distinct from tx_data_frame polling the known bit7. These software uses do not identify physical causes 0/1/2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027, BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104."
 
 [[registers.fields]]
 name = "RX_ASSOCIATED_AUXILIARY_5"
@@ -10192,7 +10192,7 @@ description = "Masked MAC event snapshot read by the complete hal_mac_interrupt_
 name = "BITS_0_4_OPAQUE"
 bits = "4:0"
 class = "read-only"
-description = "Masked event bits whose identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. These software uses do not identify physical causes 2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027."
+description = "Masked event bits whose identities remain unknown. In the vendor sniffer accessor, argument zero selects ENABLE2; RF-test polling uses STATUS2 to select inspection of sampled RX end state and packet metadata and STATUS3 before sampling WIFI_BB+0x6c low8, and requests CLEAR2/3. RF-test mac_init enables all low five lanes. RF-test tx_a_frame enables bit1, requests CLEAR0/1 and waits for STATUS1 after its TX configuration/PLCP writes; trig_tx_frame uses STATUS1 plus an elapsed-time condition to permit another such trigger. This is distinct from tx_data_frame polling the known bit7. These software uses do not identify physical causes 0/1/2/3/4; the common FIQ only includes them in its aggregate test and full-snapshot acknowledgement. SOURCE: BLOB_WIFI_MAC_LOW_CAUSE_CONSUMERS_20261027, BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027, BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104."
 
 [[registers.fields]]
 name = "RX_ASSOCIATED_AUXILIARY_5"
@@ -10329,7 +10329,7 @@ description = "Full event snapshot written by the complete clear leaf to acknowl
 name = "EVENTS"
 bits = "31:0"
 class = "write-trigger"
-description = "Ones acknowledge the corresponding event bits."
+description = "Ones acknowledge the corresponding event bits. RF-test tx_a_frame and trig_tx_frame RMW-OR 3 here before their TX configuration/PLCP writes and use STATUS1 as their polling/gating condition; this does not identify bit0 or establish a safe general read-modify-write contract. SOURCE: BLOB_WIFI_MAC_RFTEST_TX_IRQ1_20261104."
 write-range = { min = 0x0, max = 0xffffffff }
 
 [[registers]]
