@@ -660,6 +660,10 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, S: BorrowMut<ModelArenas>> TxArena<'
         self.state.borrow().on_air()
     }
 
+    fn event_waiting(&self) -> bool {
+        false
+    }
+
     fn publish(
         &mut self,
         publication: ArenaPublication<'p, C>,
@@ -897,6 +901,10 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
 
     fn on_air(&self) -> Option<ArenaId> {
         self.state.as_ref().and_then(|state| state.arenas.on_air())
+    }
+
+    fn event_waiting(&self) -> bool {
+        false
     }
 
     fn publish(

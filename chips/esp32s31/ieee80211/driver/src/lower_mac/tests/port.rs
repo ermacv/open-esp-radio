@@ -296,6 +296,9 @@ impl Device<512> for TestDevice {
             .rx_continuation
             .filter(|at| self.timer.now() < *at)
     }
+    fn event_waiting(&self) -> bool {
+        false
+    }
     fn take_power_profile(&mut self) -> Option<Self::Power> {
         None
     }

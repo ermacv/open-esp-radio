@@ -732,6 +732,11 @@ where
         self.arenas.on_air()
     }
 
+    // This arena sees no device: only the port's, which does, answers.
+    fn event_waiting(&self) -> bool {
+        false
+    }
+
     fn publish(
         &mut self,
         publication: ArenaPublication<'p, K>,

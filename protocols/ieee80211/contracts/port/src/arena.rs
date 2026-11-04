@@ -630,9 +630,7 @@ pub trait TxArena<'p, 'id: 'p> {
 
     /// Whether the backend has an event for the caller to serve, for a
     /// caller that fills an arena and owes the air a quick answer.
-    fn event_waiting(&self) -> bool {
-        false
-    }
+    fn event_waiting(&self) -> bool;
 
     /// Put the arena's frames on the air as one PPDU, positions in order.
     ///
