@@ -956,7 +956,7 @@ const SPARSE: [Sparse; 6] = [
     },
     Sparse {
         datagrams: 32,
-        every_ms: 10,
+        every_ms: 50,
         payload: PAYLOAD,
     },
     Sparse {
