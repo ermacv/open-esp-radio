@@ -196,6 +196,56 @@ fn an_unconfirmed_request_leaves_the_rest_of_its_boot_incomplete() {
 }
 
 #[test]
+fn a_console_that_answers_is_told_from_a_silent_one_after_a_lost_response() {
+    use crate::fakes::{Behavior, device};
+    use crate::run::print_link_probe;
+    use oer_protocols_hil_protocol::base::{GetLinkHealth, LinkHealth};
+
+    let probe = |link: &oer_tools_hil_link::Link| {
+        let boot = link.boot(Duration::from_secs(5)).unwrap();
+        let mut out = Vec::new();
+        print_link_probe(link, &boot, 25, Duration::from_millis(100), &mut out);
+        String::from_utf8(out).unwrap()
+    };
+
+    let silent = device(1, Behavior::Mute);
+    let line = probe(&silent);
+    assert!(
+        line.starts_with("request 25: the console does not answer"),
+        "{line}"
+    );
+
+    let (mut answering, link) = Device::new(2);
+    answering.send(0, hello());
+    let server = thread::spawn(move || {
+        while let Some(request) = answering.request() {
+            if request.decode::<GetLinkHealth>().is_some() {
+                answering.send(
+                    request.request_id,
+                    LinkHealth {
+                        rx_frames: 9,
+                        rx_cobs_errors: 0,
+                        rx_checksum_errors: 0,
+                        rx_decode_errors: 0,
+                        rx_overflows: 0,
+                        tx_frames: 0,
+                        tx_dropped: 0,
+                        notes_dropped: 0,
+                    },
+                );
+            }
+        }
+    });
+    let line = probe(&link);
+    assert!(
+        line.starts_with("request 25: the console answers after") && line.contains("rx_frames: 9"),
+        "{line}"
+    );
+    drop(link);
+    server.join().unwrap();
+}
+
+#[test]
 fn another_image_than_the_built_one_runs_no_case() {
     let (mut device, link) = Device::new(40);
     let server = thread::spawn(move || {

@@ -1,8 +1,11 @@
 //! Running a scenario's cases on a connected device and its verdict.
 
-use std::{io::Write, time::Duration};
+use std::{
+    io::Write,
+    time::{Duration, Instant},
+};
 
-use oer_protocols_hil_protocol::base::GetBootStatus;
+use oer_protocols_hil_protocol::base::{GetBootStatus, GetLinkHealth};
 use oer_tools_hil_link::{Boot, Link, LinkError};
 
 use crate::dut::{Device, Dut};
@@ -11,6 +14,9 @@ use crate::{Case, Cx, Failure, Scenario, keys};
 
 /// How long the running boot may take to say Hello.
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long the link may take to answer after a request got no response.
+const LINK_PROBE_TIMEOUT: Duration = Duration::from_millis(if cfg!(test) { 100 } else { 5000 });
 
 /// What one case, or the stand before any case, came to.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -114,6 +120,7 @@ pub(crate) fn cases(
     };
     let mut unconfirmed = None;
     for case in cases {
+        let mut lost = None;
         let verdict = if let Some(request_id) = unconfirmed {
             Verdict::Incomplete(format!(
                 "request {request_id} of boot {:016x} is unconfirmed",
@@ -129,6 +136,7 @@ pub(crate) fn cases(
             // A reset during the case moved it to a later boot.
             boot = cx.boot;
             unconfirmed = cx.unconfirmed;
+            lost = cx.unconfirmed;
             measurements.extend(
                 cx.measurements
                     .into_iter()
@@ -155,6 +163,9 @@ pub(crate) fn cases(
             break;
         };
         print_notes(link);
+        if let Some(request_id) = lost {
+            print_link_probe(link, &boot, request_id, LINK_PROBE_TIMEOUT, out);
+        }
         record(
             Outcome {
                 case: Some(case.name),
@@ -243,6 +254,29 @@ fn print_notes(link: &Link) {
     if notes.lost > 0 {
         eprintln!("device: {} diagnostic lines lost", notes.lost);
     }
+}
+
+/// Print to `out` whether the console of `boot` still answers after
+/// `request_id` got no response, and how long it took: its base module
+/// answers apart from the image's services, so an answer tells a stuck
+/// service from a stopped console or a stalled line.
+pub(crate) fn print_link_probe(
+    link: &Link,
+    boot: &Boot,
+    request_id: u32,
+    timeout: Duration,
+    out: &mut dyn Write,
+) {
+    let asked = Instant::now();
+    let line = match link.call(boot, GetLinkHealth, timeout) {
+        Ok(health) => format!(
+            "request {request_id}: the console answers after {:?}: {health:?}",
+            asked.elapsed()
+        ),
+        Err(error) => format!("request {request_id}: the console does not answer: {error}"),
+    };
+    let _ = writeln!(out, "{line}");
+    let _ = out.flush();
 }
 
 /// Print to `out` how the boot before `next` ended: its reset reason and
