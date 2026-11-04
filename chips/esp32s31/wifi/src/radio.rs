@@ -709,6 +709,9 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     fn next_deadline(&self) -> Option<Instant> {
         <Inner<W> as port::Device<TX>>::next_deadline(&self.0)
     }
+    fn event_waiting(&self) -> bool {
+        <Inner<W> as port::Device<TX>>::event_waiting(&self.0)
+    }
     fn take_power_profile(&mut self) -> Option<Self::Power> {
         <Inner<W> as port::Device<TX>>::take_power_profile(&mut self.0)
     }

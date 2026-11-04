@@ -225,9 +225,7 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// ([`Self::pull_unit`]).
     fn next_deadline(&self) -> Option<Instant>;
     /// Whether a transmit or other event waits for the next poll.
-    fn event_waiting(&self) -> bool {
-        false
-    }
+    fn event_waiting(&self) -> bool;
     fn take_power_profile(&mut self) -> Option<Self::Power>;
     fn radio_now(&mut self) -> Result<Ieee80211Instant, ClockError>;
     fn poll_start(
