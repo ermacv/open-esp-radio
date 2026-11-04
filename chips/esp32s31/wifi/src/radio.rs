@@ -234,7 +234,7 @@ impl<W: Binding> DatapathPort<'static> for ActorPort<W> {
         not(oer_trace),
         allow(unused_variables, reason = "only a trace build observes the unit")
     )]
-    fn received(frame: &[u8], meta: &<Family<W::Id, W> as PhaseTypes<'static>>::RxMeta) {
+    fn received(frame: &[u8], meta: &<Family<W::Id, W> as PortTypes<'static>>::RxMeta) {
         #[cfg(oer_trace)]
         crate::station::observe_received::<W>(frame, meta.common());
     }

@@ -1,7 +1,7 @@
 #![no_std]
-use oer_protocols_ieee80211_contracts_port::{Attempt, DataPort, PhaseTypes, Station};
+use oer_protocols_ieee80211_contracts_port::{Attempt, DataPort, PortTypes, Station};
 
-type Prepared<'k, 'p, 'id, P> = <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::Prepared<
+type Prepared<'k, 'p, 'id, P> = <<P as DataPort<'id>>::Types as PortTypes<'id>>::Prepared<
     'k,
     'p,
     Station,
@@ -12,11 +12,11 @@ pub fn submit<'k, 'p, 'id: 'k + 'p, P: DataPort<'id>>(
     port: &P,
     attempt: Attempt<
         'id,
-        <P::Types as PhaseTypes<'id>>::TicketKind,
+        <P::Types as PortTypes<'id>>::TicketKind,
         Prepared<'k, 'p, 'id, P>,
         P::Caps,
-        <P::Types as PhaseTypes<'id>>::Context,
-        <P::Types as PhaseTypes<'id>>::TicketPath,
+        <P::Types as PortTypes<'id>>::Context,
+        <P::Types as PortTypes<'id>>::TicketPath,
     >,
 ) -> P::Admitted {
     #[cfg(ui_reject)]

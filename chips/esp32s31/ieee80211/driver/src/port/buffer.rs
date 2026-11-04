@@ -377,7 +377,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 }
 
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> PhaseTypes<'id>
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> PortTypes<'id>
     for Types<Id, D, B, O>
 {
     const COMMAND_CAPACITY: usize = COMMANDS;

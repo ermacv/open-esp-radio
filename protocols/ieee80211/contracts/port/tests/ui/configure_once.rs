@@ -1,13 +1,13 @@
 #![no_std]
 use oer_protocols_ieee80211_contracts_port::{
-    ConfigurePermission, DataPort, PhaseTypes, PortCommand, Station, StationReceive,
+    ConfigurePermission, DataPort, PortTypes, PortCommand, Station, StationReceive,
 };
 pub fn configure<'id, P: DataPort<'id>>(
     permission: ConfigurePermission<
         'id,
         Station,
-        <P::Types as PhaseTypes<'id>>::StationCommandPath,
-        <P::Types as PhaseTypes<'id>>::StationConfigureContext,
+        <P::Types as PortTypes<'id>>::StationCommandPath,
+        <P::Types as PortTypes<'id>>::StationConfigureContext,
     >,
 ) -> PortCommand<'id, P::Types, P::Caps> {
     let first = PortCommand::Configure { permission, receive: StationReceive::Off };

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_protocols_ieee80211_contracts_port::PhaseTypes;
+use oer_protocols_ieee80211_contracts_port::PortTypes;
 use oer_protocols_ieee80211_core_upper_mac::rate_selection::RateSelection;
 use oer_protocols_ieee80211_runtime::datapath::{Actor, ActorEvents, ActorRxMeta, DatapathPort};
 
@@ -8,8 +8,8 @@ where
     D: DatapathPort<'id>,
     S: RateSelection<
             ActorRxMeta<'id, D>,
-            <D::Types as PhaseTypes<'id>>::AckEvidence,
-            <D::Types as PhaseTypes<'id>>::BlockAckEvidence,
+            <D::Types as PortTypes<'id>>::AckEvidence,
+            <D::Types as PortTypes<'id>>::BlockAckEvidence,
         >,
     O: ActorEvents,
 {

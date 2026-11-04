@@ -98,8 +98,8 @@ It takes facts and returns actions for the port owner to execute.
 [`contracts/port`](contracts/port/README.md) holds only the peripheral boundary: lifecycle, VIF
 configuration, the monitor tap, operation ownership, capabilities, the
 backend's service description and normalized statuses. One submission is one
-hardware attempt; data goes through the station phase's two data arenas
-(`arena`). The backend draws EDCA contention below the port (the S31
+hardware attempt; data goes through the data port's two data arenas
+(`arena`), which the datapath actor alone fills. The backend draws EDCA contention below the port (the S31
 MAC's `edca::contention`); an attempt carries no backoff. The port depends on
 no core. [`core/upper-mac`](core/upper-mac/README.md) owns retry ladders, Retry bits,
 aggregate retry selection, the reading of a BlockAck, protection and the BSS

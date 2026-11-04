@@ -1,15 +1,15 @@
 #![no_std]
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateOutcome, InFlight, PhaseSingleOutcome, PhaseTypes, TxCompleted,
+    AggregateOutcome, InFlight, PortSingleOutcome, PortTypes, TxCompleted,
 };
 use oer_protocols_radio_port::Slot;
 
 type Ticket<'id, P> =
-    Slot<'id, <P as PhaseTypes<'id>>::TicketKind, <P as PhaseTypes<'id>>::TicketPath>;
+    Slot<'id, <P as PortTypes<'id>>::TicketKind, <P as PortTypes<'id>>::TicketPath>;
 
-pub fn finish<'id, P: PhaseTypes<'id>>(
+pub fn finish<'id, P: PortTypes<'id>>(
     operation: InFlight<P::Context, Ticket<'id, P>, P::TxMpdu>,
-    single: PhaseSingleOutcome<'id, P>,
+    single: PortSingleOutcome<'id, P>,
     aggregate: AggregateOutcome<P::BlockAckEvidence, P::AirDenied>,
 ) -> TxCompleted<'id, P> {
     let _ = (&single, &aggregate);

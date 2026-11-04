@@ -8,7 +8,7 @@
 //! returns it unchanged with the permission: a station's connection epoch does
 //! not wait in a second table indexed by a runtime role. Unconsumed context
 //! cannot be overwritten; consuming `into_parts` recovers both values.
-use crate::{AccessPoint, InterfaceRole, PhaseTypes, Station, VifRole};
+use crate::{AccessPoint, InterfaceRole, PortTypes, Station, VifRole};
 use core::marker::PhantomData;
 use oer_protocols_radio_port::{BodyLoan, LoanedContext, PortContext};
 use oer_protocols_radio_port::{PoolPath, PoolSet, Root, Slot, Slots};
@@ -132,7 +132,7 @@ impl<R: InterfaceRole, Path: PoolPath> InterfacePermissions<'static, R, Path> {
 }
 /// Configuration terminals preserve the statically selected interface.
 #[must_use]
-pub enum Configured<'id, P: PhaseTypes<'id>> {
+pub enum Configured<'id, P: PortTypes<'id>> {
     /// Station interface.
     Station(ConfigurePermission<'id, Station, P::StationCommandPath, P::StationConfigureContext>),
     /// Access-point interface.
@@ -145,7 +145,7 @@ pub enum Configured<'id, P: PhaseTypes<'id>> {
         >,
     ),
 }
-impl<'id, P: PhaseTypes<'id>> Configured<'id, P> {
+impl<'id, P: PortTypes<'id>> Configured<'id, P> {
     /// Diagnostic role; command correlation uses the owned permission instead.
     pub fn role(&self) -> VifRole {
         match self {

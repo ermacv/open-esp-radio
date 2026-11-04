@@ -123,7 +123,7 @@ impl<K, const N: usize, Path: PoolPath> BlockAckSlot<'_, K, N, Path> {
 
 /// The pool of an install's receive Block Ack slots, with its capacity and
 /// slot type. Only [`BlockAckSlots`] implements it, so
-/// [`PhaseTypes::BlockAckPool`](crate::PhaseTypes::BlockAckPool) names the
+/// [`PortTypes::BlockAckPool`](crate::PortTypes::BlockAckPool) names the
 /// slots the backend mints: a slot of a pool of another size is another
 /// type.
 ///

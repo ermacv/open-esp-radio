@@ -1,4 +1,4 @@
-//! The types a data port's owners and terminals carry ([`PhaseTypes`]),
+//! The types a data port's owners and terminals carry ([`PortTypes`]),
 //! and the values that move through it: tokens, attempts, keys and
 //! terminals.
 //!
@@ -13,7 +13,7 @@
 //!
 //! | Token | Taken by | Given back by |
 //! | --- | --- | --- |
-//! | a transmit ticket ([`PhaseTypes::TicketKind`]) | [`DataPort::submit`](crate::DataPort::submit) | [`LowerMacTerminal::TxCompleted`] |
+//! | a transmit ticket ([`PortTypes::TicketKind`]) | [`DataPort::submit`](crate::DataPort::submit) | [`LowerMacTerminal::TxCompleted`] |
 //! | a transmit buffer of a class ([`TxBufferClass`]), its memory ([`TxBufferMemory`]) | [`DataPort::submit`](crate::DataPort::submit), together with its [`ClassFrame`] | [`LowerMacTerminal::TxCompleted`], every buffer of the attempt |
 //! | a key slot of a role's kind | [`PortCommands`](crate::PortCommands)' installations (the installed key, returned by its installation terminal, holds it) | [`LowerMacTerminal::KeyRemoved`], after a removal |
 //! | one GTK mutation permission per interface ([`KeyTypes::GroupPermission`]) | install/replace/select/remove GTK | the corresponding FIFO success terminal |
@@ -79,13 +79,13 @@
 //! Its compiling twin moves the token on, as an operation takes it:
 //!
 //! ```
-//! # use oer_protocols_ieee80211_contracts_port::{DataPort, GateClosed, GateOpen, PhaseTypes, PortCommand};
+//! # use oer_protocols_ieee80211_contracts_port::{DataPort, GateClosed, GateOpen, PortTypes, PortCommand};
 //! fn close<'id, P: DataPort<'id>>(
-//!     gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>,
+//!     gate: GateOpen<'id, <P::Types as PortTypes<'id>>::GatePath>,
 //! ) -> PortCommand<'id, P::Types, P::Caps> {
 //!     PortCommand::CloseGate(gate)
 //! }
-//! fn open<'id, P: DataPort<'id>>(port: &mut P, gate: GateClosed<'id, <P::Types as PhaseTypes<'id>>::GatePath>) -> GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath> {
+//! fn open<'id, P: DataPort<'id>>(port: &mut P, gate: GateClosed<'id, <P::Types as PortTypes<'id>>::GatePath>) -> GateOpen<'id, <P::Types as PortTypes<'id>>::GatePath> {
 //!     port.open_gate(gate)
 //! }
 //! ```
@@ -93,8 +93,8 @@
 //! The open gate does not open a gate:
 //!
 //! ```compile_fail,E0308
-//! # use oer_protocols_ieee80211_contracts_port::{DataPort, GateOpen, PhaseTypes};
-//! fn reopen<'id, P: DataPort<'id>>(port: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
+//! # use oer_protocols_ieee80211_contracts_port::{DataPort, GateOpen, PortTypes};
+//! fn reopen<'id, P: DataPort<'id>>(port: &mut P, gate: GateOpen<'id, <P::Types as PortTypes<'id>>::GatePath>) {
 //!     let _ = port.open_gate(gate);
 //! }
 //! ```
@@ -126,7 +126,7 @@
 //! # use oer_protocols_ieee80211_contracts_port::*;
 //! # use oer_protocols_radio_port::PoolPath;
 //! fn twice<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath>(attempt: Attempt<'id, T, M, K, X, Path>)
-//! where M::Types: PhaseTypes<'id, TicketKind = T, TicketPath = Path, Context = X> {
+//! where M::Types: PortTypes<'id, TicketKind = T, TicketPath = Path, Context = X> {
 //!     let _ = attempt.admit();
 //!     let _ = attempt.admit();
 //! }
@@ -138,7 +138,7 @@
 //! # use oer_protocols_ieee80211_contracts_port::*;
 //! # use oer_protocols_radio_port::PoolPath;
 //! fn one<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath>(attempt: Attempt<'id, T, M, K, X, Path>)
-//! where M::Types: PhaseTypes<'id, TicketKind = T, TicketPath = Path, Context = X> {
+//! where M::Types: PortTypes<'id, TicketKind = T, TicketPath = Path, Context = X> {
 //!     let _ = attempt.admit();
 //! }
 //! ```
@@ -326,7 +326,7 @@ impl<'p, Path: PoolPath> GateClosed<'p, Path> {
 
 /// A terminal: the end of one operation, carrying every owner it took.
 /// Received units and TBTTs are not terminals.
-pub enum LowerMacTerminal<'id, P: PhaseTypes<'id>> {
+pub enum LowerMacTerminal<'id, P: PortTypes<'id>> {
     /// The terminal preserves the submitted shape and all of its owners.
     TxCompleted(TxCompleted<'id, P>),
     /// The transmit gate closed: no attempt is published.
@@ -367,27 +367,27 @@ pub enum LowerMacTerminal<'id, P: PhaseTypes<'id>> {
 /// exchange their components before that terminal boundary. A data arena's
 /// end is not a terminal: [`DataPort::service_tx`](crate::DataPort::service_tx)
 /// returns it.
-pub enum TxCompleted<'id, P: PhaseTypes<'id>> {
+pub enum TxCompleted<'id, P: PortTypes<'id>> {
     /// Exactly one submitted MPDU, including its original body owner.
     Single(SingleCompleted<'id, P>),
 }
 
 /// A backend's single terminal, with its original accepted owner.
 pub type SingleCompleted<'id, P> = crate::Completed<
-    <P as PhaseTypes<'id>>::Context,
-    Slot<'id, <P as PhaseTypes<'id>>::TicketKind, <P as PhaseTypes<'id>>::TicketPath>,
-    <P as PhaseTypes<'id>>::TxMpdu,
-    PhaseSingleOutcome<'id, P>,
+    <P as PortTypes<'id>>::Context,
+    Slot<'id, <P as PortTypes<'id>>::TicketKind, <P as PortTypes<'id>>::TicketPath>,
+    <P as PortTypes<'id>>::TxMpdu,
+    PortSingleOutcome<'id, P>,
 >;
 /// A receive Block Ack slot of the phase types `P`.
-pub type PhaseBlockAckSlot<'id, P> =
-    <<P as PhaseTypes<'id>>::BlockAckPool as crate::association::RxBlockAckPool>::Slot<
+pub type PortBlockAckSlot<'id, P> =
+    <<P as PortTypes<'id>>::BlockAckPool as crate::association::RxBlockAckPool>::Slot<
         'id,
-        <P as PhaseTypes<'id>>::BlockAckPath,
+        <P as PortTypes<'id>>::BlockAckPath,
     >;
 /// The outcome of a single MPDU in the phase types `P`.
-pub type PhaseSingleOutcome<'id, P> =
-    crate::SingleOutcome<<P as PhaseTypes<'id>>::AckEvidence, <P as PhaseTypes<'id>>::AirDenied>;
+pub type PortSingleOutcome<'id, P> =
+    crate::SingleOutcome<<P as PortTypes<'id>>::AckEvidence, <P as PortTypes<'id>>::AirDenied>;
 
 /// The keys of one role and their slots, which a phase's types name: they
 /// depend on the install alone, so a caller holds them across the phase's
@@ -482,7 +482,7 @@ pub enum RemovedKey<'id, K: KeyTypes<'id>> {
 
 /// The successful installation and the permission for the next mutation.
 /// Only the driver creates this proof after establishing the RX boundary.
-pub enum InstalledGroup<'id, P: PhaseTypes<'id>> {
+pub enum InstalledGroup<'id, P: PortTypes<'id>> {
     /// The station's group installation.
     Station {
         /// The installed owner, returned exactly once.
@@ -501,7 +501,7 @@ pub enum InstalledGroup<'id, P: PhaseTypes<'id>> {
 
 /// The pairwise installation, of its role. Only the driver creates it,
 /// after the hardware write took effect.
-pub enum InstalledPairwise<'id, P: PhaseTypes<'id>> {
+pub enum InstalledPairwise<'id, P: PortTypes<'id>> {
     /// The station's pairwise installation.
     Station(<P::StationKeys as KeyTypes<'id>>::PairwiseKey),
     /// The access point's pairwise installation.
@@ -509,7 +509,7 @@ pub enum InstalledPairwise<'id, P: PhaseTypes<'id>> {
 }
 
 /// A removed key's slot, of its role.
-pub enum Removed<'id, P: PhaseTypes<'id>> {
+pub enum Removed<'id, P: PortTypes<'id>> {
     /// The station's.
     Station(RemovedKey<'id, P::StationKeys>),
     /// The access point's.
@@ -517,7 +517,7 @@ pub enum Removed<'id, P: PhaseTypes<'id>> {
 }
 
 /// The keys of a role in the phase types `P`.
-pub trait RoleKeys<'id, P: PhaseTypes<'id>>: InterfaceRole + Sized {
+pub trait RoleKeys<'id, P: PortTypes<'id>>: InterfaceRole + Sized {
     /// The role's keys.
     type Keys: KeyTypes<'id, Identity = P::KeyIdentity>;
     /// Keys this role may use for TX. Station has only a pairwise key.
@@ -542,7 +542,7 @@ pub trait RoleKeys<'id, P: PhaseTypes<'id>>: InterfaceRole + Sized {
     ) -> InstalledPairwise<'id, P>;
 }
 
-impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for Station {
+impl<'id, P: PortTypes<'id>> RoleKeys<'id, P> for Station {
     type Keys = P::StationKeys;
     type TxKey<'k>
         = &'k <P::StationKeys as KeyTypes<'id>>::PairwiseKey
@@ -571,7 +571,7 @@ impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for Station {
     }
 }
 
-impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for AccessPoint {
+impl<'id, P: PortTypes<'id>> RoleKeys<'id, P> for AccessPoint {
     type Keys = P::AccessPointKeys;
     type TxKey<'k>
         = AttemptKey<
@@ -608,7 +608,7 @@ impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for AccessPoint {
 }
 
 /// The types a backend's data port carries in its owners and terminals.
-pub trait PhaseTypes<'id>: Sized {
+pub trait PortTypes<'id>: Sized {
     /// Maximum queued commands, derived in const evaluation from the mint's pools.
     const COMMAND_CAPACITY: usize;
     /// Pool component owning the station's configure and TSF permissions.
@@ -773,7 +773,7 @@ impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath> AdmittedAttempt<'id, T, M
 impl<'id, T, M, K, X, Path: PoolPath> Attempt<'id, T, M, K, X, Path>
 where
     M: PreparedTx<'id>,
-    M::Types: PhaseTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
+    M::Types: PortTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
 {
     /// Lower the body loans before sealing the whole operation for backend custody.
     pub fn admit(self) -> AdmittedAttempt<'id, T, M, K, X, Path> {
@@ -814,7 +814,7 @@ pub enum AttemptKey<'k, P, G> {
 ///
 /// ```compile_fail,E0308
 /// use oer_protocols_ieee80211_contracts_port::*;
-/// fn group<'k, 'id: 'k, T: PhaseTypes<'id>>(
+/// fn group<'k, 'id: 'k, T: PortTypes<'id>>(
 ///     key: &'k <T::StationKeys as KeyTypes<'id>>::GroupKey,
 /// ) -> TxProtection<<Station as RoleKeys<'id, T>>::TxKey<'k>> {
 ///     TxProtection::Ccmp(key)
@@ -842,7 +842,7 @@ pub type PoolSource<'k, 'p, 'id, T, C, K, R> = TxSource<
     <T as TxBufferPool<'id, C>>::Buffer,
     <T as TxBufferPool<'id, C>>::Sent,
     ClassFrame<'p, C, K>,
-    <T as PhaseTypes<'id>>::TxBody,
+    <T as PortTypes<'id>>::TxBody,
     <R as RoleKeys<'id, T>>::TxKey<'k>,
     RetransmissionPlan<'p, K>,
 >;
@@ -852,14 +852,14 @@ pub type CheckedPoolSource<'k, 'p, 'id, T, C, K, R> = crate::CheckedTxSource<
     <T as TxBufferPool<'id, C>>::Buffer,
     <T as TxBufferPool<'id, C>>::Sent,
     ClassFrame<'p, C, K>,
-    <T as PhaseTypes<'id>>::TxBody,
+    <T as PortTypes<'id>>::TxBody,
     <R as RoleKeys<'id, T>>::TxKey<'k>,
     RetransmissionPlan<'p, K>,
 >;
 
 /// Preparation returns a port-bound MPDU or its unchanged class-specific source.
 pub type PoolPreparation<'k, 'p, 'id, T, C, K, R> = Result<
-    <T as PhaseTypes<'id>>::Prepared<'k, 'p, R, K>,
+    <T as PortTypes<'id>>::Prepared<'k, 'p, R, K>,
     PreparationRefused<PoolSource<'k, 'p, 'id, T, C, K, R>>,
 >;
 
@@ -871,7 +871,7 @@ pub type PoolMpdu<'id, T, C> =
 /// without creating a TX terminal; submission consumes the proof itself.
 pub trait PreparedTx<'id>: Sized {
     /// The backend's resource family.
-    type Types: PhaseTypes<'id>;
+    type Types: PortTypes<'id>;
     /// The backend's tag: only the holder of its private loan
     /// ([`BodyLoan`](oer_protocols_radio_port::BodyLoan) of this tag) can
     /// consume this sealed admission.
@@ -886,19 +886,19 @@ pub trait PreparedTx<'id>: Sized {
     /// admission authority is constructed only by `Attempt::admit`.
     fn into_admission(
         self,
-        context: <Self::Types as PhaseTypes<'id>>::Context,
+        context: <Self::Types as PortTypes<'id>>::Context,
         ticket: Slot<
             'id,
-            <Self::Types as PhaseTypes<'id>>::TicketKind,
-            <Self::Types as PhaseTypes<'id>>::TicketPath,
+            <Self::Types as PortTypes<'id>>::TicketKind,
+            <Self::Types as PortTypes<'id>>::TicketPath,
         >,
         admission: crate::Admission<Self>,
     ) -> crate::AdmissionOwners<
         Self::OwnedContext,
         Slot<
             'static,
-            <Self::Types as PhaseTypes<'id>>::TicketKind,
-            <Self::Types as PhaseTypes<'id>>::TicketPath,
+            <Self::Types as PortTypes<'id>>::TicketKind,
+            <Self::Types as PortTypes<'id>>::TicketPath,
         >,
         Self::OwnedPayload,
         Self::Execution,
@@ -908,8 +908,8 @@ pub trait PreparedTx<'id>: Sized {
     fn into_parts(
         self,
     ) -> (
-        <Self::Types as PhaseTypes<'id>>::AnyTxBuffer,
-        Option<<Self::Types as PhaseTypes<'id>>::TxBody>,
+        <Self::Types as PortTypes<'id>>::AnyTxBuffer,
+        Option<<Self::Types as PortTypes<'id>>::TxBody>,
     );
 }
 
@@ -986,7 +986,7 @@ pub trait TxBufferClass {
 }
 
 /// The phase types of a backend that keeps a pool of the buffer class `C`.
-pub trait TxBufferPool<'id, C: TxBufferClass>: PhaseTypes<'id> {
+pub trait TxBufferPool<'id, C: TxBufferClass>: PortTypes<'id> {
     /// A buffer of the class: its memory, which the body holds and writes
     /// while it is not submitted. The backend owns its type and mints it
     /// only in the install's resources.

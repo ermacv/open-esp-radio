@@ -735,8 +735,8 @@ struct Parts<'s, const G: usize> {
     channel: SupportedChannel<ModelCaps24>,
     terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
         's,
-        <Types<'s> as PhaseTypes<'s>>::TicketKind,
-        <Types<'s> as PhaseTypes<'s>>::TicketPath,
+        <Types<'s> as PortTypes<'s>>::TicketKind,
+        <Types<'s> as PortTypes<'s>>::TicketPath,
     >,
 }
 
@@ -809,7 +809,7 @@ fn lifecycle<'s, const G: usize>(
 }
 
 /// The access point's group key keys of [`Spare`].
-type AccessPointKeys<'s> = <Types<'s> as PhaseTypes<'s>>::AccessPointKeys;
+type AccessPointKeys<'s> = <Types<'s> as PortTypes<'s>>::AccessPointKeys;
 
 /// The installation's owners the station does not take: the access
 /// point's command permissions, one of its group key slots and its group
@@ -818,7 +818,7 @@ struct Spare<'s> {
     access_point: oer_protocols_ieee80211_contracts_port::InterfacePermissions<
         's,
         oer_protocols_ieee80211_contracts_port::AccessPoint,
-        <Types<'s> as PhaseTypes<'s>>::AccessPointCommandPath,
+        <Types<'s> as PortTypes<'s>>::AccessPointCommandPath,
     >,
     access_point_group: (
         <AccessPointKeys<'s> as KeyTypes<'s>>::GroupSlot,

@@ -78,8 +78,8 @@ use oer_portable_memory::{SlotReceiver, SlotSender, WakingSpscReceiver, WakingSp
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed, GateOpen,
-    Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, PhaseBlockAckSlot,
-    PhaseSingleOutcome, PhaseTypes, PortCommand, PortSink, RxBuffer, StartRefused, StopUnconfirmed,
+    Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, PortBlockAckSlot, PortCommand,
+    PortSingleOutcome, PortSink, PortTypes, RxBuffer, StartRefused, StopUnconfirmed,
     SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool, TxFacts,
 };
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
@@ -169,8 +169,8 @@ pub trait DatapathPort<'id>: Sized + 'id {
     /// What a data arena's ACK evidence tells the rate selection of a
     /// single MPDU's response; `None` when it carries nothing it reads.
     fn arena_ack(
-        response: <Self::Types as PhaseTypes<'id>>::BlockAckEvidence,
-    ) -> Option<<Self::Types as PhaseTypes<'id>>::AckEvidence>;
+        response: <Self::Types as PortTypes<'id>>::BlockAckEvidence,
+    ) -> Option<<Self::Types as PortTypes<'id>>::AckEvidence>;
 
     /// Observe the start (`end` false) or end of a stretch of the actor's
     /// work; by default nothing observes it.
@@ -178,7 +178,7 @@ pub trait DatapathPort<'id>: Sized + 'id {
 
     /// Observe a unit the port gave (`frame` from its header), before the
     /// reordering and the link take it; by default nothing observes it.
-    fn received(_frame: &[u8], _meta: &<Self::Types as PhaseTypes<'id>>::RxMeta) {}
+    fn received(_frame: &[u8], _meta: &<Self::Types as PortTypes<'id>>::RxMeta) {}
 
     /// Observe a terminal the port gave, before the lifecycle takes it; by
     /// default nothing observes it.
@@ -221,35 +221,34 @@ impl ActorSpan {
 type Ty<'id, D> = <D as DatapathPort<'id>>::Types;
 
 /// A received unit of the port of `D`.
-pub type ActorRxBuffer<'id, D> = <Ty<'id, D> as PhaseTypes<'id>>::RxBuffer;
+pub type ActorRxBuffer<'id, D> = <Ty<'id, D> as PortTypes<'id>>::RxBuffer;
 /// What the port of `D` observed of a received unit.
-pub type ActorRxMeta<'id, D> = <Ty<'id, D> as PhaseTypes<'id>>::RxMeta;
+pub type ActorRxMeta<'id, D> = <Ty<'id, D> as PortTypes<'id>>::RxMeta;
 /// The path of the station's connection epochs on the port of `D`.
-pub type ActorEpochPath<'id, D> = <Ty<'id, D> as PhaseTypes<'id>>::EpochPath;
+pub type ActorEpochPath<'id, D> = <Ty<'id, D> as PortTypes<'id>>::EpochPath;
 /// The path of the port's gate.
-pub type ActorGatePath<'id, D> = <Ty<'id, D> as PhaseTypes<'id>>::GatePath;
+pub type ActorGatePath<'id, D> = <Ty<'id, D> as PortTypes<'id>>::GatePath;
 /// A transmit ticket of the port of `D`.
 pub type ActorTicket<'id, D> = Slot<
     'id,
-    <Ty<'id, D> as PhaseTypes<'id>>::TicketKind,
-    <Ty<'id, D> as PhaseTypes<'id>>::TicketPath,
+    <Ty<'id, D> as PortTypes<'id>>::TicketKind,
+    <Ty<'id, D> as PortTypes<'id>>::TicketPath,
 >;
 /// A fresh buffer of the station's class.
 pub type ActorStationBuffer<'id, D> =
     <Ty<'id, D> as TxBufferPool<'id, <D as DatapathPort<'id>>::Small>>::Buffer;
 /// A transmit buffer of any class, as a terminal or a refusal returns it.
-pub type ActorAnyBuffer<'id, D> = <Ty<'id, D> as PhaseTypes<'id>>::AnyTxBuffer;
+pub type ActorAnyBuffer<'id, D> = <Ty<'id, D> as PortTypes<'id>>::AnyTxBuffer;
 /// A command of the lifecycle to the port of `D`.
 pub type ActorCommand<'id, D> = PortCommand<'id, Ty<'id, D>, <D as DatapathPort<'id>>::Caps>;
 /// A terminal of the port of `D`.
 pub type ActorTerminal<'id, D> = LowerMacTerminal<'id, Ty<'id, D>>;
 /// A single MPDU's outcome on the port of `D`.
-pub type ActorSingleOutcome<'id, D> = PhaseSingleOutcome<'id, Ty<'id, D>>;
+pub type ActorSingleOutcome<'id, D> = PortSingleOutcome<'id, Ty<'id, D>>;
 /// The transmit half of the station's pairwise key on the port of `D`,
 /// which the link numbers its protected MPDUs with.
-pub type ActorLinkKey<'id, D> = InstalledCcmpTxKey<
-    <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::PairwiseKey,
->;
+pub type ActorLinkKey<'id, D> =
+    InstalledCcmpTxKey<<<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::PairwiseKey>;
 /// The station's link on the port of `D`, while the actor holds it.
 pub type ActorLink<'id, D> = LinkHandover<'id, ActorEpochPath<'id, D>, ActorLinkKey<'id, D>>;
 
@@ -428,8 +427,8 @@ impl<'id, D: DatapathPort<'id>, S, O> Actor<'id, D, S, O>
 where
     S: RateSelection<
             ActorRxMeta<'id, D>,
-            <Ty<'id, D> as PhaseTypes<'id>>::AckEvidence,
-            <Ty<'id, D> as PhaseTypes<'id>>::BlockAckEvidence,
+            <Ty<'id, D> as PortTypes<'id>>::AckEvidence,
+            <Ty<'id, D> as PortTypes<'id>>::BlockAckEvidence,
         >,
     O: ActorEvents,
 {
@@ -645,7 +644,7 @@ where
         timer: &impl Timer,
     ) -> ActorEnd<<D::Port as DataPort<'id>>::Fault> {
         const {
-            if RETURNS < returns_depth(<Ty<'id, D> as PhaseTypes<'id>>::TERMINAL_CAPACITY) {
+            if RETURNS < returns_depth(<Ty<'id, D> as PortTypes<'id>>::TERMINAL_CAPACITY) {
                 panic!("the return queue holds every terminal the port can owe");
             }
             if FROM < from_actor_depth(RETURNS) {

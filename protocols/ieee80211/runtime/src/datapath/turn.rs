@@ -44,7 +44,7 @@ pub(super) struct Outbox<'a, 'c, 'id, D: DatapathPort<'id>, const FROM: usize, c
 }
 
 /// Whether `terminal` ends a station group key change.
-fn is_group<'id, T: PhaseTypes<'id>>(terminal: &LowerMacTerminal<'id, T>) -> bool {
+fn is_group<'id, T: PortTypes<'id>>(terminal: &LowerMacTerminal<'id, T>) -> bool {
     use oer_protocols_ieee80211_contracts_port::{InstalledGroup, Removed, RemovedKey};
     matches!(
         terminal,
@@ -114,20 +114,20 @@ impl<'id, P: DataPort<'id>> RxBlockAckPort<PortRxBlockAck<'id, P::Types>> for Po
 
     fn add(
         &mut self,
-        slot: PhaseBlockAckSlot<'id, P::Types>,
+        slot: PortBlockAckSlot<'id, P::Types>,
         agreement: SupportedBlockAck<P::Caps>,
-    ) -> <P::Types as PhaseTypes<'id>>::BlockAck {
+    ) -> <P::Types as PortTypes<'id>>::BlockAck {
         self.0.add_block_ack(slot, agreement)
     }
 
     fn remove(
         &mut self,
-        running: <P::Types as PhaseTypes<'id>>::BlockAck,
-    ) -> PhaseBlockAckSlot<'id, P::Types> {
+        running: <P::Types as PortTypes<'id>>::BlockAck,
+    ) -> PortBlockAckSlot<'id, P::Types> {
         self.0.remove_block_ack(running)
     }
 
-    fn recycle(&mut self, frame: <P::Types as PhaseTypes<'id>>::RxBuffer) {
+    fn recycle(&mut self, frame: <P::Types as PortTypes<'id>>::RxBuffer) {
         self.0.recycle(frame);
     }
 }
@@ -136,8 +136,8 @@ impl<'id, D: DatapathPort<'id>, S, O> Actor<'id, D, S, O>
 where
     S: RateSelection<
             ActorRxMeta<'id, D>,
-            <Ty<'id, D> as PhaseTypes<'id>>::AckEvidence,
-            <Ty<'id, D> as PhaseTypes<'id>>::BlockAckEvidence,
+            <Ty<'id, D> as PortTypes<'id>>::AckEvidence,
+            <Ty<'id, D> as PortTypes<'id>>::BlockAckEvidence,
         >,
     O: ActorEvents,
 {

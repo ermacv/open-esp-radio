@@ -66,7 +66,7 @@ use oer_portable_events::report;
 use oer_portable_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
-    CommandKind, CommandRefusal, KeyTypes, PhaseTypes, PoolMpdu, PortCommands, StartRefused,
+    CommandKind, CommandRefusal, KeyTypes, PoolMpdu, PortCommands, PortTypes, StartRefused,
     StopUnconfirmed, SupportedChannel, TerminalAccess,
 };
 use oer_protocols_ieee80211_core_arbiter::{
@@ -120,7 +120,7 @@ pub type LifecycleConstructed<'id, D, C, const GROUPS: usize> = (
     LifecycleStation<'id, D, C, GROUPS>,
     oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<
         'id,
-        <Ty<'id, D> as PhaseTypes<'id>>::StationCommandPath,
+        <Ty<'id, D> as PortTypes<'id>>::StationCommandPath,
     >,
 );
 
@@ -320,8 +320,8 @@ pub enum Rejected<'id, D: DatapathPort<'id>> {
 /// A transmit ticket of the port of `D`.
 pub type LifecycleTicket<'id, D> = Slot<
     'id,
-    <Ty<'id, D> as PhaseTypes<'id>>::TicketKind,
-    <Ty<'id, D> as PhaseTypes<'id>>::TicketPath,
+    <Ty<'id, D> as PortTypes<'id>>::TicketKind,
+    <Ty<'id, D> as PortTypes<'id>>::TicketPath,
 >;
 
 /// The radio as the lifecycle commanded it.
@@ -398,12 +398,12 @@ struct PendingPairwise<'id, D: DatapathPort<'id>> {
         'id,
         ActorEpochPath<'id, D>,
     >,
-    key: PendingStationPairwiseKey<'id, <Ty<'id, D> as PhaseTypes<'id>>::StationKeys>,
+    key: PendingStationPairwiseKey<'id, <Ty<'id, D> as PortTypes<'id>>::StationKeys>,
 }
 
 /// The station's group change, until its terminal and token come back.
 struct PendingGroup<'id, D: DatapathPort<'id>> {
-    slot: <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
+    slot: <<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
     key_id: Option<oer_protocols_ieee80211_contracts_port::GroupKeyId>,
 }
 
@@ -427,15 +427,15 @@ pub struct Lifecycle<
 /// borrow beside it.
 struct Inner<'id, D: DatapathPort<'id>, X, T, O> {
     arbiter: Option<ArbiterCell<'id, D>>,
-    commands: CommandCredits<'id, <Ty<'id, D> as PhaseTypes<'id>>::StationCommandPath>,
+    commands: CommandCredits<'id, <Ty<'id, D> as PortTypes<'id>>::StationCommandPath>,
     issuer: X,
     step: CcmpPacketNumberStep,
     channel: SupportedChannel<D::Caps>,
     events: O,
     terminal_access: TerminalAccess<
         'id,
-        <Ty<'id, D> as PhaseTypes<'id>>::TicketKind,
-        <Ty<'id, D> as PhaseTypes<'id>>::TicketPath,
+        <Ty<'id, D> as PortTypes<'id>>::TicketKind,
+        <Ty<'id, D> as PortTypes<'id>>::TicketPath,
     >,
     tx_contexts: T,
     admissions: Admissions,
@@ -521,7 +521,7 @@ pub struct LifecycleCompleted<
 impl<'id, D, C, X, T, const GROUPS: usize, O> Lifecycle<'id, D, C, X, T, GROUPS, O>
 where
     D: LifecyclePort<'id>,
-    Ty<'id, D>: PhaseTypes<
+    Ty<'id, D>: PortTypes<
             'id,
             StationConfigureContext = StaConfigurationContext<'id, ActorEpochPath<'id, D>>,
         >,
@@ -542,8 +542,8 @@ where
         channel: SupportedChannel<D::Caps>,
         terminal_access: TerminalAccess<
             'id,
-            <Ty<'id, D> as PhaseTypes<'id>>::TicketKind,
-            <Ty<'id, D> as PhaseTypes<'id>>::TicketPath,
+            <Ty<'id, D> as PortTypes<'id>>::TicketKind,
+            <Ty<'id, D> as PortTypes<'id>>::TicketPath,
         >,
         events: O,
     ) -> Self {
@@ -645,7 +645,7 @@ where
             &'a mut LifecycleStation<'id, D, C, GROUPS>,
             oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<
                 'id,
-                <Ty<'id, D> as PhaseTypes<'id>>::StationCommandPath,
+                <Ty<'id, D> as PortTypes<'id>>::StationCommandPath,
             >,
         ),
         arbiter: LifecycleArbiter<'id, D>,
@@ -654,8 +654,8 @@ where
         channel: SupportedChannel<D::Caps>,
         terminal_access: TerminalAccess<
             'id,
-            <Ty<'id, D> as PhaseTypes<'id>>::TicketKind,
-            <Ty<'id, D> as PhaseTypes<'id>>::TicketPath,
+            <Ty<'id, D> as PortTypes<'id>>::TicketKind,
+            <Ty<'id, D> as PortTypes<'id>>::TicketPath,
         >,
         events: O,
     ) -> oer_portable_memory::Placed<'s, Self> {
@@ -855,7 +855,7 @@ where
         mut arbiter: Option<
             &mut RetiredArbiter<'id, D::Caps, NoReservation, ActorGatePath<'id, D>>,
         >,
-        commands: &mut CommandCredits<'id, <Ty<'id, D> as PhaseTypes<'id>>::StationCommandPath>,
+        commands: &mut CommandCredits<'id, <Ty<'id, D> as PortTypes<'id>>::StationCommandPath>,
         io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
     ) {
         while let Some(notice) = arbiter.as_deref_mut().and_then(RetiredArbiter::poll_notice) {
@@ -1205,7 +1205,7 @@ fn alarm_at<T: Timer>(timer: &T, at: Option<Instant>) -> Option<impl Future<Outp
 impl<'id, D, X, T, O> Inner<'id, D, X, T, O>
 where
     D: LifecyclePort<'id>,
-    Ty<'id, D>: PhaseTypes<
+    Ty<'id, D>: PortTypes<
             'id,
             StationConfigureContext = StaConfigurationContext<'id, ActorEpochPath<'id, D>>,
         >,

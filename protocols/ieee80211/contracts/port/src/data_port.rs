@@ -63,9 +63,9 @@ use oer_protocols_radio_port::ClockError;
 
 use crate::{
     AdmittedAttempt, AmpduCapabilities, AmpduRate, Channel, CommandTypes, GateClosed, GateOpen,
-    Ieee80211Capabilities, Ieee80211Instant, LendRefused, LowerMacTerminal, PhaseBlockAckSlot,
-    PhaseTypes, PhyRate, PortCommand, PortRate, Station, SupportedBlockAck, SupportedChannel,
-    TbttEvent,
+    Ieee80211Capabilities, Ieee80211Instant, LendRefused, LowerMacTerminal, PhyRate,
+    PortBlockAckSlot, PortCommand, PortRate, PortTypes, Station, SupportedBlockAck,
+    SupportedChannel, TbttEvent,
     arena::{ArenaCompleted, TxArena},
 };
 
@@ -135,7 +135,7 @@ pub enum RxPull<F, M> {
 /// the order it produced it: the turn's outbox. A sink takes every value;
 /// one it cannot hold it keeps and reports itself, so the port never gets
 /// an owner back.
-pub trait PortSink<'id, T: PhaseTypes<'id>> {
+pub trait PortSink<'id, T: PortTypes<'id>> {
     /// A command's or a single MPDU's terminal.
     fn terminal(&mut self, terminal: LowerMacTerminal<'id, T>);
     /// A TBTT of the station's schedule.
@@ -271,30 +271,30 @@ pub trait PortArena<'t, 'id: 't>: TxArena<'t, 'id> {
 /// [`crate::Attempt::admit`] makes it.
 pub type StationSubmission<'k, 'p, 'id, P> = AdmittedAttempt<
     'id,
-    <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::TicketKind,
-    <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::Prepared<
+    <<P as DataPort<'id>>::Types as PortTypes<'id>>::TicketKind,
+    <<P as DataPort<'id>>::Types as PortTypes<'id>>::Prepared<
         'k,
         'p,
         Station,
         <P as DataPort<'id>>::Caps,
     >,
     <P as DataPort<'id>>::Caps,
-    <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::Context,
-    <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::TicketPath,
+    <<P as DataPort<'id>>::Types as PortTypes<'id>>::Context,
+    <<P as DataPort<'id>>::Types as PortTypes<'id>>::TicketPath,
 >;
 
 /// A data arena's end on the port `P`.
 pub type PortCompleted<'id, P> = ArenaCompleted<
-    <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::BlockAckEvidence,
-    <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::AirDenied,
+    <<P as DataPort<'id>>::Types as PortTypes<'id>>::BlockAckEvidence,
+    <<P as DataPort<'id>>::Types as PortTypes<'id>>::AirDenied,
 >;
 
 /// A received unit of the port `P`.
-pub type PortRxBuffer<'id, P> = <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::RxBuffer;
+pub type PortRxBuffer<'id, P> = <<P as DataPort<'id>>::Types as PortTypes<'id>>::RxBuffer;
 
 /// The one receive pull of the port `P`.
 pub type PortRxPull<'id, P> =
-    RxPull<PortRxBuffer<'id, P>, <<P as DataPort<'id>>::Types as PhaseTypes<'id>>::RxMeta>;
+    RxPull<PortRxBuffer<'id, P>, <<P as DataPort<'id>>::Types as PortTypes<'id>>::RxMeta>;
 
 /// The radio of one installation `'id`, owned by the station's datapath
 /// actor and called only in its turns.
@@ -315,9 +315,9 @@ pub trait DataPort<'id> {
             't,
             'id,
             Caps = Self::Caps,
-            Memory = <Self::Types as PhaseTypes<'id>>::DataMemory,
-            Response = <Self::Types as PhaseTypes<'id>>::BlockAckEvidence,
-            Denial = <Self::Types as PhaseTypes<'id>>::AirDenied,
+            Memory = <Self::Types as PortTypes<'id>>::DataMemory,
+            Response = <Self::Types as PortTypes<'id>>::BlockAckEvidence,
+            Denial = <Self::Types as PortTypes<'id>>::AirDenied,
             Fault = Self::Fault,
         >
     where
@@ -406,7 +406,7 @@ pub trait DataPort<'id> {
     fn lend(
         &mut self,
         unit: PortRxBuffer<'id, Self>,
-    ) -> Result<<Self::Types as PhaseTypes<'id>>::LentRx, LendRefused<PortRxBuffer<'id, Self>>>;
+    ) -> Result<<Self::Types as PortTypes<'id>>::LentRx, LendRefused<PortRxBuffer<'id, Self>>>;
 
     /// Whether [`Self::lend`] refuses no unit for capacity now.
     fn lend_room(&self) -> bool;
@@ -427,30 +427,30 @@ pub trait DataPort<'id> {
     #[must_use = "an agreement holds its slot"]
     fn add_block_ack(
         &mut self,
-        slot: PhaseBlockAckSlot<'id, Self::Types>,
+        slot: PortBlockAckSlot<'id, Self::Types>,
         agreement: SupportedBlockAck<Self::Caps>,
-    ) -> <Self::Types as PhaseTypes<'id>>::BlockAck;
+    ) -> <Self::Types as PortTypes<'id>>::BlockAck;
 
     /// Replace `running` with `agreement` of the same peer and TID.
     #[must_use = "an agreement holds its slot"]
     fn replace_block_ack(
         &mut self,
-        running: <Self::Types as PhaseTypes<'id>>::BlockAck,
+        running: <Self::Types as PortTypes<'id>>::BlockAck,
         agreement: SupportedBlockAck<Self::Caps>,
-    ) -> <Self::Types as PhaseTypes<'id>>::BlockAck;
+    ) -> <Self::Types as PortTypes<'id>>::BlockAck;
 
     /// End `agreement`, giving its slot back.
     #[must_use = "an ended agreement's slot is capacity"]
     fn remove_block_ack(
         &mut self,
-        agreement: <Self::Types as PhaseTypes<'id>>::BlockAck,
-    ) -> PhaseBlockAckSlot<'id, Self::Types>;
+        agreement: <Self::Types as PortTypes<'id>>::BlockAck,
+    ) -> PortBlockAckSlot<'id, Self::Types>;
 
     /// Open the closed gate, a register write that cannot fail.
     fn open_gate(
         &mut self,
-        gate: GateClosed<'id, <Self::Types as PhaseTypes<'id>>::GatePath>,
-    ) -> GateOpen<'id, <Self::Types as PhaseTypes<'id>>::GatePath>;
+        gate: GateClosed<'id, <Self::Types as PortTypes<'id>>::GatePath>,
+    ) -> GateOpen<'id, <Self::Types as PortTypes<'id>>::GatePath>;
 
     /// Run one command, or hold it at its barrier.
     ///

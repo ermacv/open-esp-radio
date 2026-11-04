@@ -2,7 +2,7 @@ error[E0382]: use of moved value: `permission`
   --> tests/ui/configure_once.rs:15:70
    |
  6 |     permission: ConfigurePermission<
-   |     ---------- move occurs because `permission` has type `ConfigurePermission<'_, oer_protocols_ieee80211_contracts_port::Station, <<P as DataPort<'_>>::Types as PhaseTypes<'_>>::StationCommandPath, <<P as DataPort<'_>>::Types as PhaseTypes<'_>>::StationConfigureContext>`, which does not implement the `Copy` trait
+   |     ---------- move occurs because `permission` has type `ConfigurePermission<'_, oer_protocols_ieee80211_contracts_port::Station, <<P as DataPort<'_>>::Types as PortTypes<'_>>::StationCommandPath, <<P as DataPort<'_>>::Types as PortTypes<'_>>::StationConfigureContext>`, which does not implement the `Copy` trait
 ...
 13 |     let first = PortCommand::Configure { permission, receive: StationReceive::Off };
    |                                          ---------- value moved here

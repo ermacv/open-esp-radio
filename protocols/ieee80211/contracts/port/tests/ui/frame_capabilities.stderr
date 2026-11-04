@@ -12,7 +12,7 @@ error[E0308]: mismatched types
    = note: expected struct `PortRate<'_, K>`
               found struct `PortRate<'_, <P as DataPort<'id>>::Caps>`
 note: associated function defined here
-  --> src/phase.rs
+  --> src/types.rs
    |
    |     pub fn group(
    |            ^^^^^

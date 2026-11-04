@@ -28,12 +28,12 @@ use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::{address::IndividualAddress, ccmp::GroupKeyId};
 
 use crate::{
-    BssColor, ConfigurePermission, GateOpen, Ieee80211Capabilities, KeyTypes, PhaseTypes, Station,
+    BssColor, ConfigurePermission, GateOpen, Ieee80211Capabilities, KeyTypes, PortTypes, Station,
     StationReceive, SupportedEdca,
 };
 
 /// The station's keys of the phase types `T`.
-type StationKeys<'id, T> = <T as PhaseTypes<'id>>::StationKeys;
+type StationKeys<'id, T> = <T as PortTypes<'id>>::StationKeys;
 
 /// A pairwise installation command and the identity its installed key
 /// will carry.
@@ -44,7 +44,7 @@ pub type PairwiseIssue<'id, T, K> = (
 
 /// The phase types of a backend that runs [`PortCommand`]s: the payloads
 /// only its issuer makes.
-pub trait CommandTypes<'id>: PhaseTypes<'id> {
+pub trait CommandTypes<'id>: PortTypes<'id> {
     /// An accepted pairwise installation: its vacant slot, peer, key
     /// material and the identity its installed key will carry.
     type PairwiseInstall;

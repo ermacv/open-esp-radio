@@ -1,6 +1,6 @@
 #![no_std]
 use oer_portable_time::Timer;
-use oer_protocols_ieee80211_contracts_port::{PhaseTypes, PortCommands};
+use oer_protocols_ieee80211_contracts_port::{PortTypes, PortCommands};
 use oer_protocols_ieee80211_core_roles_sta::machine::{StaCallbacks, StaConfigurationContext};
 use oer_protocols_ieee80211_runtime::datapath::ActorEpochPath;
 use oer_protocols_ieee80211_runtime::lifecycle::{
@@ -17,7 +17,7 @@ pub fn run_once<'id, D, C, X, T, O>(
     timer: &impl Timer,
 ) where
     D: LifecyclePort<'id>,
-    D::Types: PhaseTypes<
+    D::Types: PortTypes<
             'id,
             StationConfigureContext = StaConfigurationContext<'id, ActorEpochPath<'id, D>>,
         >,

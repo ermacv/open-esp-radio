@@ -87,8 +87,8 @@ pub mod control;
 pub mod extensions;
 pub mod operation;
 pub mod owner;
-pub mod phase;
 pub mod regulated;
+pub mod types;
 pub use regulated::RegulatedChannel;
 pub mod rx;
 pub mod tsf;
@@ -157,15 +157,6 @@ mod interface_commands;
 pub use interface_commands::{
     ConfigurePermission, Configured, InterfaceCommandPool, InterfacePermissions,
 };
-pub use phase::{
-    AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt, AttemptKey,
-    BufferMemoryUnavailable, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed,
-    GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
-    PhaseBlockAckSlot, PhaseSingleOutcome, PhaseTypes, PoolMpdu, PoolPreparation, PoolSource,
-    PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
-    RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
-    TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
-};
 pub use rx::{
     AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus,
     RxEvidence, RxMeta, RxMetadata, SignalMetadata,
@@ -174,6 +165,15 @@ pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
     Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody, TxOutcome,
     TxPower, TxResponse, TxStatus, WithdrawCause,
+};
+pub use types::{
+    AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt, AttemptKey,
+    BufferMemoryUnavailable, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed,
+    GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
+    PoolMpdu, PoolPreparation, PoolSource, PortBlockAckSlot, PortSingleOutcome, PortTypes,
+    PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
+    RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
+    TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
 };
 
 #[cfg(test)]
@@ -210,4 +210,4 @@ pub use monitor::{
 
 pub mod backend;
 
-pub use phase::NumberedKey;
+pub use types::NumberedKey;

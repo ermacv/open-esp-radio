@@ -35,7 +35,7 @@ enum Follow<'id, D: DatapathPort<'id>, const GROUPS: usize> {
 impl<'id, D, C, X, T, const GROUPS: usize, O> Lifecycle<'id, D, C, X, T, GROUPS, O>
 where
     D: LifecyclePort<'id>,
-    Ty<'id, D>: PhaseTypes<
+    Ty<'id, D>: PortTypes<
             'id,
             StationConfigureContext = StaConfigurationContext<'id, ActorEpochPath<'id, D>>,
         >,
@@ -242,7 +242,7 @@ where
 impl<'id, D, X, T, O> Inner<'id, D, X, T, O>
 where
     D: LifecyclePort<'id>,
-    Ty<'id, D>: PhaseTypes<
+    Ty<'id, D>: PortTypes<
             'id,
             StationConfigureContext = StaConfigurationContext<'id, ActorEpochPath<'id, D>>,
         >,
@@ -462,7 +462,7 @@ where
                 key,
             } => {
                 let identity =
-                    <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::vacant_group_slot_identity(&slot);
+                    <<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::vacant_group_slot_identity(&slot);
                 let command = self
                     .issuer
                     .install_group(association, permission, slot, key_id, key);
@@ -483,7 +483,7 @@ where
                 key,
             } => {
                 let identity =
-                    <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::group_slot_identity(&installed);
+                    <<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::group_slot_identity(&installed);
                 self.group_change(
                     actor,
                     identity,
@@ -504,7 +504,7 @@ where
                 permission,
             } => {
                 let identity =
-                    <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::group_slot_identity(&installed);
+                    <<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::group_slot_identity(&installed);
                 self.group_change(
                     actor,
                     identity,
@@ -523,7 +523,7 @@ where
                 permission,
             } => {
                 let identity =
-                    <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::group_slot_identity(&key);
+                    <<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::group_slot_identity(&key);
                 self.group_change(
                     actor,
                     identity,
@@ -580,7 +580,7 @@ where
     fn group_change<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         actor: &ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
-        slot: <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
+        slot: <<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
         key_id: Option<oer_protocols_ieee80211_contracts_port::GroupKeyId>,
         command: ActorCommand<'id, D>,
         pending: GroupPending<'id, ActorEpochPath<'id, D>>,

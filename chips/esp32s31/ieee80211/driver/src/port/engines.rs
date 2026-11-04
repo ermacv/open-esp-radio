@@ -1701,7 +1701,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 
     fn add_block_ack(
         &mut self,
-        slot: PhaseBlockAckSlot<'id, Self::Types>,
+        slot: PortBlockAckSlot<'id, Self::Types>,
         agreement: SupportedBlockAck<Self::Caps>,
     ) -> ReceiveAgreement<'id, Id> {
         self.set_block_ack(slot.index(), Some(agreement));
@@ -1720,7 +1720,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     fn remove_block_ack(
         &mut self,
         agreement: ReceiveAgreement<'id, Id>,
-    ) -> PhaseBlockAckSlot<'id, Self::Types> {
+    ) -> PortBlockAckSlot<'id, Self::Types> {
         self.set_block_ack(agreement.slot.index(), None);
         agreement.slot
     }

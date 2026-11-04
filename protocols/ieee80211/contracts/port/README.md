@@ -26,15 +26,15 @@ every owner. Installation commands come only from the backend's issuer
 (`PortCommands`), which mints the identity the installed key will carry.
 Terminals, TBTTs and the units a group mutation's receive cut drained go to
 the turn's `PortSink`, in the order the port produced them; a data arena's
-end returns from `service_tx` itself. `PhaseTypes` (module `phase`) names
+end returns from `service_tx` itself. `PortTypes` (module `types`) names
 the types the port's owners and terminals carry:
 
 - **Tickets and buffers.** A transmission takes a ticket (a place in
   flight and its terminal's place) and the buffer of its frame, of a
   class sized by the composition (`TxBufferClass`, `ClassFrame`); its
-  `TxCompleted` terminal gives both back with `PhaseTypes::Context`,
-  chosen by the composition with `type Context: 'id` in `PhaseTypes<'id>`.
-  `PhaseTypes` also owns the single body type and backend fault type.
+  `TxCompleted` terminal gives both back with `PortTypes::Context`,
+  chosen by the composition with `type Context: 'id` in `PortTypes<'id>`.
+  `PortTypes` also owns the single body type and backend fault type.
   Before submission, `Attempt::admit` seals context, ticket and the
   prepared MPDU into one closed `InFlight`; `DataPort::admit` accepts the
   sealed `StationSubmission` and `DataPort::submit` queues it.
@@ -104,7 +104,7 @@ the types the port's owners and terminals carry:
   `renew` returns memory and body explicitly.
 - **Data arenas.** The station's data goes through two DMA arenas the
   port lends for one turn (`DataPort::arena`, a `PortArena` whose memory is
-  `PhaseTypes::DataMemory`, the network's own frame memory, and whose
+  `PortTypes::DataMemory`, the network's own frame memory, and whose
   evidence and fault are the port's). The caller writes each frame once as
   an arena takes it and publishes one arena at a time as an A-MPDU at an
   `AmpduRate` or as the single MPDU of its position 0 under a `RetryPlan`,
@@ -139,11 +139,11 @@ the types the port's owners and terminals carry:
   single MPDU names its response: unsolicited, an ACK, or a BlockAckReq's
   BlockAck with its report. A delivered aggregate always carries its
   BlockAck report. The backend's evidence of the response is its own type:
-  `PhaseTypes::AckEvidence` for a single MPDU, which a policy needing the
-  ACK's SNR requires as `AckSnr`, and `PhaseTypes::BlockAckEvidence` for an
+  `PortTypes::AckEvidence` for a single MPDU, which a policy needing the
+  ACK's SNR requires as `AckSnr`, and `PortTypes::BlockAckEvidence` for an
   aggregate, split by `BlockAckSnr` into a measured sample or none, because
   hardware may accept a BlockAck without a measurement.
-  The outcome carries no RSSI. `AirDenied` carries `PhaseTypes::AirDenied`,
+  The outcome carries no RSSI. `AirDenied` carries `PortTypes::AirDenied`,
   `Infallible` for a backend that cannot tell a coexistence abort apart.
   A hardware timeout with no completion ends as `Indeterminate`;
   the backend does not republish that MPDU, stop the queue, or return its
@@ -187,7 +187,7 @@ the types the port's owners and terminals carry:
   `AssociationSlot`, and `KeyTypes::Pool` must be that pool (`KeyPool`'s
   `PAIRWISE_SLOTS` and `GROUP_SLOTS`). A receive Block Ack slot is a
   `BlockAckSlot<'id, K, N>` that only the pool `BlockAckSlots<K, N>` mints,
-  and `PhaseTypes::BlockAckPool` must be that pool (`RxBlockAckPool::LEN`).
+  and `PortTypes::BlockAckPool` must be that pool (`RxBlockAckPool::LEN`).
   A declared capacity other than the minted one does not compile, the
   capabilities carry no copy of these counts, and running out is a missing
   slot token, never a comparison. A pairwise slot has one installation or
@@ -197,7 +197,7 @@ the types the port's owners and terminals carry:
   + two gate commands. The terminal bound is tickets + pairwise slots + GTK
   permissions + gate closing + configure permissions; received units are
   bounded separately.
-  `PhaseTypes` exposes these bounds. `InterfaceCommandPool` derives both of
+  `PortTypes` exposes these bounds. `InterfaceCommandPool` derives both of
   its contributions from the same constants used to mint its slots.
 - **Interface commands.** `Mint` gives each interface one affine
   `ConfigurePermission`, branded by installation, role and pool path.
@@ -305,7 +305,7 @@ frame but Action No Ack), an individual frame without an ACK (a
 
 The module `owner`'s table maps every refusal a caller's own state explains
 to its type, and lists the world's outcomes that stay. Compile-fail tests in
-`owner`, `phase`, `command`, `data_port` and `tests/ui` pin each rule a type
+`owner`, `types`, `command`, `data_port` and `tests/ui` pin each rule a type
 carries.
 
 ## Data on two arenas

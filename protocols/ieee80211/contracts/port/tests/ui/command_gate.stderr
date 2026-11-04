@@ -1,4 +1,4 @@
-error[E0271]: type mismatch resolving `<<P as DataPort<'id>>::Types as PhaseTypes<'_>>::GatePath == Child<Root<LocalId<'id>>, 1>`
+error[E0271]: type mismatch resolving `<<P as DataPort<'id>>::Types as PortTypes<'_>>::GatePath == Child<Root<LocalId<'id>>, 1>`
   --> tests/ui/command_gate.rs:12:12
    |
 12 |     return PortCommand::CloseGate(second); // ui-error: E0271

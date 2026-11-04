@@ -19,7 +19,7 @@ const ANSWER_MESSAGES: usize = 2;
 impl<'id, D, C, X, T, const GROUPS: usize, O> Lifecycle<'id, D, C, X, T, GROUPS, O>
 where
     D: LifecyclePort<'id>,
-    Ty<'id, D>: PhaseTypes<
+    Ty<'id, D>: PortTypes<
             'id,
             StationConfigureContext = StaConfigurationContext<'id, ActorEpochPath<'id, D>>,
         >,
@@ -587,12 +587,12 @@ where
         };
         let identity = match &terminal {
             LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Group { slot, .. })) => {
-                <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::vacant_group_slot_identity(slot)
+                <<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::vacant_group_slot_identity(slot)
             }
             LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { key, .. })
             | LowerMacTerminal::GroupKeyReplaced { key, .. }
             | LowerMacTerminal::GroupKeySelected { key, .. } => {
-                <<Ty<'id, D> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::group_slot_identity(key)
+                <<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::group_slot_identity(key)
             }
             _ => {
                 self.inner.group = Some(pending);
@@ -688,7 +688,7 @@ where
 impl<'id, D, X, T, O> Inner<'id, D, X, T, O>
 where
     D: LifecyclePort<'id>,
-    Ty<'id, D>: PhaseTypes<
+    Ty<'id, D>: PortTypes<
             'id,
             StationConfigureContext = StaConfigurationContext<'id, ActorEpochPath<'id, D>>,
         >,

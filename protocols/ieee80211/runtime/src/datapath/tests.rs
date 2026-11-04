@@ -757,7 +757,7 @@ fn station_frame_under<'s>(
 /// Install the station's pairwise key through the actor; its transmit half.
 fn install_key<'s>(bench: &mut Bench<'_, 's>) -> ActorLinkKey<'s, P<'s>> {
     let association =
-        <<Types<'s> as PhaseTypes<'s>>::StationKeys as KeyTypes<'s>>::begin_association(
+        <<Types<'s> as PortTypes<'s>>::StationKeys as KeyTypes<'s>>::begin_association(
             bench.association.take().unwrap(),
             oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
@@ -778,7 +778,7 @@ fn install_key<'s>(bench: &mut Bench<'_, 's>) -> ActorLinkKey<'s, P<'s>> {
             identity,
             CcmpPacketNumberStep::ONE,
         )
-        .installed::<<Types<'s> as PhaseTypes<'s>>::StationKeys>(key)
+        .installed::<<Types<'s> as PortTypes<'s>>::StationKeys>(key)
         .ok()
         .unwrap(),
         _ => panic!("the key's installation terminal"),

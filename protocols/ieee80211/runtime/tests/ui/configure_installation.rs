@@ -1,6 +1,6 @@
 #![no_std]
 use oer_protocols_ieee80211_contracts_port::{
-    ConfigurePermission, PhaseTypes, PortCommand, Station, StationReceive,
+    ConfigurePermission, PortTypes, PortCommand, Station, StationReceive,
 };
 use oer_protocols_ieee80211_testing_model::{ModelBackend, ModelCaps, ModelTypes};
 use oer_protocols_radio_port::StaticId;
@@ -8,7 +8,7 @@ use oer_protocols_radio_port::StaticId;
 pub enum Own {}
 pub enum Foreign {}
 type Types<I> = ModelTypes<ModelBackend<StaticId<I>>>;
-type Path<'id, I> = <Types<I> as PhaseTypes<'id>>::StationCommandPath;
+type Path<'id, I> = <Types<I> as PortTypes<'id>>::StationCommandPath;
 
 // A configure permission configures only the installation that minted it.
 pub fn configure<'a, 'b>(

@@ -165,7 +165,7 @@ use oer_protocols_ieee80211_contracts_port::{
     CheckedTxSource, ConfigurePermission, ConnectionEpochKind, ExecutionPayload, FreshSource,
     GateClosed, GateIssuer, GateOpen, HardwareServices, Ieee80211Capabilities, Ieee80211Radio,
     InFlight, IndeterminateCause, InterfaceCommandPool, InterfacePermissions, KeyTypes, LinkMetric,
-    LowerMacCapabilities, MpduKind, MpduLayout, PhaseTypes, PhyFormatSet, PreparationError,
+    LowerMacCapabilities, MpduKind, MpduLayout, PhyFormatSet, PortTypes, PreparationError,
     PreparationRefused, PreparedTx, RateSupport, ReceiveFilter, RetransmissionPlan, RoleKeys,
     RxBuffer, RxEvidence, RxMeta, RxMetadata, SignalMetadata, Station, SupportedBlockAck,
     SupportedChannel, TxBody, TxBufferClass, TxBufferMemory, TxBufferPool, TxFrame, TxMpdu,
@@ -398,7 +398,7 @@ enum ModelMemory {
     Large(Box<[u8; ModelLarge::CAPACITY]>),
 }
 /// The memory a network fills with one data frame, which a model data
-/// arena's slot holds ([`PhaseTypes::DataMemory`]).
+/// arena's slot holds ([`PortTypes::DataMemory`]).
 pub type ModelNetworkMemory = Box<[u8; ModelLarge::CAPACITY]>;
 impl core::ops::Deref for ModelMemory {
     type Target = [u8];
@@ -991,7 +991,7 @@ type ModelStationContextOf<B> =
 /// The types the model's events carry.
 pub struct ModelTypes<B: ModelComposition>(PhantomData<fn() -> B>);
 
-impl<'id, B: ModelComposition + 'id> PhaseTypes<'id> for ModelTypes<B> {
+impl<'id, B: ModelComposition + 'id> PortTypes<'id> for ModelTypes<B> {
     const COMMAND_CAPACITY: usize = MODEL_COMMANDS;
     type StationCommandPath =
         oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>;
@@ -2929,7 +2929,7 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
     type Execution = ModelTxExecution;
     fn into_admission(
         self,
-        context: <Self::Types as PhaseTypes<'id>>::Context,
+        context: <Self::Types as PortTypes<'id>>::Context,
         ticket: Slot<'id, ModelTickets, ModelPool<B::Identity, 1>>,
         _: oer_protocols_ieee80211_contracts_port::Admission<Self>,
     ) -> oer_protocols_ieee80211_contracts_port::AdmissionOwners<

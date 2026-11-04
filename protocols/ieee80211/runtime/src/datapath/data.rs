@@ -33,8 +33,8 @@ impl<'id, D: DatapathPort<'id>, S, O> Actor<'id, D, S, O>
 where
     S: RateSelection<
             ActorRxMeta<'id, D>,
-            <Ty<'id, D> as PhaseTypes<'id>>::AckEvidence,
-            <Ty<'id, D> as PhaseTypes<'id>>::BlockAckEvidence,
+            <Ty<'id, D> as PortTypes<'id>>::AckEvidence,
+            <Ty<'id, D> as PortTypes<'id>>::BlockAckEvidence,
         >,
     O: ActorEvents,
 {

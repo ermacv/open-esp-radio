@@ -5,7 +5,7 @@
 use core::marker::PhantomData;
 use oer_protocols_ieee80211_contracts_port::association::{KEY_BANK_CAPACITY, KeyPool};
 use oer_protocols_ieee80211_contracts_port::{
-    KeyTypes, NumberedKey, PhaseTypes, TxBufferClass, TxBufferPool,
+    KeyTypes, NumberedKey, PortTypes, TxBufferClass, TxBufferPool,
 };
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, ForeignCcmpTxKey, InstalledCcmpTxKey, PendingCcmpTxKey,
@@ -106,7 +106,7 @@ impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
 
 impl<'id, Ty, S, const GROUPS: usize> StaTokens for PortStaTokens<'id, Ty, S, GROUPS>
 where
-    Ty: PhaseTypes<'id, TxBody = core::convert::Infallible> + TxBufferPool<'id, S>,
+    Ty: PortTypes<'id, TxBody = core::convert::Infallible> + TxBufferPool<'id, S>,
     S: TxBufferClass,
 {
     const PAIRWISE_SLOTS: usize =

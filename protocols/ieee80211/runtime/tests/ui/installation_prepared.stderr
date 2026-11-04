@@ -7,7 +7,7 @@ error[E0599]: the method `admit` exists for struct `Attempt<'_, ModelTickets, Mo
   ::: $WORKSPACE/protocols/ieee80211/testing/model/src/lib.rs
    |
    | pub struct ModelTypes<B: ModelComposition>(PhantomData<fn() -> B>);
-   | ------------------------------------------ doesn't satisfy `<_ as PhaseTypes<'_>>::TicketPath = Child<Root<StaticId<Target>>, 1>`
+   | ------------------------------------------ doesn't satisfy `<_ as PortTypes<'_>>::TicketPath = Child<Root<StaticId<Target>>, 1>`
    |
    = note: the following trait bounds were not satisfied:
-           `<ModelTypes<ModelBackend<StaticId<Source>>> as PhaseTypes<'_>>::TicketPath = oer_protocols_radio_port::Child<Root<StaticId<Target>>, 1>`
+           `<ModelTypes<ModelBackend<StaticId<Source>>> as PortTypes<'_>>::TicketPath = oer_protocols_radio_port::Child<Root<StaticId<Target>>, 1>`
