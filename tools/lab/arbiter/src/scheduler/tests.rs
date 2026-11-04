@@ -404,3 +404,30 @@ fn a_router_of_unknown_emission_closes_the_air_but_not_work_without_it() {
     assert!(scheduler.confirm(&again, Confirmation::Ready));
     assert_eq!(grant(&mut scheduler), vec![radio]);
 }
+
+#[test]
+fn a_waiting_request_names_the_unavailable_resource_it_waits_for() {
+    let mut scheduler = ready();
+    let first = scheduler.enqueue(queued("amy", vec![Claim::exclusive(readiness::ROUTER)]), 1);
+    assert_eq!(grant(&mut scheduler), vec![first]);
+    let router = scheduler
+        .end(first, LeaseOutcome::Released, NOW)
+        .unwrap()
+        .recoveries
+        .remove(0);
+    assert!(scheduler.confirm(
+        &router,
+        Confirmation::Unavailable {
+            reason: "its radio keeps mon0".to_owned(),
+            emission: crate::readiness::Emission::Unknown,
+        }
+    ));
+    let claims_it = scheduler.enqueue(queued("bob", vec![Claim::exclusive(readiness::ROUTER)]), 2);
+    let on_air = scheduler.enqueue(queued("cat", vec![Claim::shared(AIR)]), 3);
+    let wired = scheduler.enqueue(queued("dan", vec![Claim::board(&B[6..])]), 4);
+    let named = vec!["router (its radio keeps mon0)".to_owned()];
+    assert_eq!(scheduler.blocked_by(claims_it), named);
+    assert_eq!(scheduler.blocked_by(on_air), named);
+    assert!(scheduler.blocked_by(wired).is_empty());
+    assert!(scheduler.blocked_by(999).is_empty());
+}

@@ -355,6 +355,28 @@ impl Scheduler {
     /// Whether every stateful resource ticket `id` holds is ready and, when
     /// it uses the air, what every other stateful resource of the stand may
     /// put on the air is known.
+    /// What keeps the waiting ticket `id` from any grant until someone
+    /// returns it: each unavailable resource it claims, and with the air
+    /// each one that may radiate unknown to the stand, with its reason.
+    pub fn blocked_by(&self, id: u64) -> Vec<String> {
+        let Some(ticket) = self.state.queue.iter().find(|ticket| ticket.id == id) else {
+            return Vec::new();
+        };
+        let held = readiness::held(&ticket.claims, &self.stand);
+        let air = readiness::uses_air(&ticket.claims);
+        self.stand
+            .iter()
+            .filter_map(|resource| {
+                let readiness = self.state.readiness.get(resource)?;
+                let Readiness::Unavailable { reason, .. } = readiness else {
+                    return None;
+                };
+                (held.contains(&resource.as_str()) || (air && !readiness.emission_known()))
+                    .then(|| format!("{resource} ({reason})"))
+            })
+            .collect()
+    }
+
     fn ready(&self, id: u64) -> bool {
         let Some(ticket) = self.state.queue.iter().find(|ticket| ticket.id == id) else {
             return false;

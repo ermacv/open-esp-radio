@@ -188,8 +188,9 @@ const AP_DOWN: Duration = Duration::from_secs(20);
 
 /// Park the router: its end state after a lease is the stand's AP section
 /// disabled, the rest of its configuration kept, and no wireless interface
-/// on its radio's PHY, so it does not radiate between leases. A run's
-/// profile enables the section again.
+/// on its radio's PHY, so it does not radiate between leases: one netifd
+/// does not own, as a monitor a run added, is removed. A run's profile
+/// enables the section again.
 pub(crate) fn park(stand: &Stand) -> Result<()> {
     let mut router = fixture(stand)?;
     let section =
@@ -213,6 +214,7 @@ pub(crate) fn park(stand: &Stand) -> Result<()> {
             Radio::Quiet => return Ok(()),
             Radio::Pending => "its radio's reload is still pending".to_owned(),
             Radio::Interfaces(names) => {
+                router.ssh.run(&removal(&names)?)?;
                 format!("its radio still has the interfaces {}", names.join(", "))
             }
         };
@@ -224,6 +226,15 @@ pub(crate) fn park(stand: &Stand) -> Result<()> {
         }
         std::thread::sleep(Duration::from_secs(1));
     }
+}
+
+/// The script that removes `names`, wherever they still are: the next look
+/// tells what stayed.
+fn removal(names: &[String]) -> Result<String> {
+    names.iter().try_fold(String::new(), |script, name| {
+        let name = oer_tools_lab_router::router::quote(name)?;
+        Ok(format!("{script}iw dev {name} del 2>/dev/null || true\n"))
+    })
 }
 
 /// What the router's radio does, as its views tell.
@@ -296,6 +307,18 @@ fn phy_interfaces(listing: &str, index: u32) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stray_interface_goes_by_its_quoted_name_and_a_gone_one_is_no_failure() {
+        assert_eq!(
+            removal(&["mon0".to_owned(), "phy0-sta0".to_owned()]).unwrap(),
+            "iw dev mon0 del 2>/dev/null || true\niw dev phy0-sta0 del 2>/dev/null || true\n"
+        );
+        assert_eq!(
+            removal(&["a b".to_owned()]).unwrap(),
+            "iw dev 'a b' del 2>/dev/null || true\n"
+        );
+    }
 
     const SETTLED: &str = r#"{"radio0":{"up":true,"pending":false,"interfaces":[]}}"#;
     const IW: &str = "phy#1\n\tInterface phy1-ap0\n\t\ttype AP\n\

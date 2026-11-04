@@ -534,8 +534,16 @@ pub(crate) fn devices(
             }
             return Ok(std::process::ExitCode::SUCCESS);
         }
+        Some(DevicesCommand::Release {
+            board: Some(board), ..
+        }) if board == oer_tools_lab_arbiter::readiness::ROUTER => {
+            // Its recovery checks the radio again: nothing to confirm.
+            client.return_resource(oer_tools_lab_arbiter::readiness::ROUTER)?;
+            println!("the router is being recovered");
+            return Ok(std::process::ExitCode::SUCCESS);
+        }
         Some(DevicesCommand::Release { board, confirm, .. }) => {
-            let board = board.ok_or("name a board or pass --stand")?;
+            let board = board.ok_or("name a board, `router` or pass --stand")?;
             let mac = stand()?.resolve(&board)?.device_id()?.to_string();
             let resource = format!("board:{mac}");
             let unavailable = client
@@ -668,7 +676,7 @@ enum DevicesCommand {
         #[arg(long)]
         reason: String,
     },
-    /// Return a board, or the whole stand, to service.
+    /// Return a board, the router, or the whole stand to service.
     #[command(group(clap::ArgGroup::new("what").required(true).args(["board", "stand"])))]
     Release {
         #[arg(value_name = "NAME|MAC")]
