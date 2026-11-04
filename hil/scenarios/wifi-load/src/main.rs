@@ -310,7 +310,11 @@ fn mac_counts(mac: &Mac) -> serde_json::Value {
         .filter(|(_, count)| *count != 0)
         .map(|(name, count)| (name, count.into()))
         .collect();
-    serde_json::json!({ "counts": moved, "frequency_offset": mac.frequency_offset })
+    serde_json::json!({
+        "counts": moved,
+        "frequency_offset": mac.frequency_offset,
+        "holes_by_position": mac.holes,
+    })
 }
 
 /// What the image's periodic PHY tracking did over a window; its one-line

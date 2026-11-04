@@ -165,7 +165,7 @@ fn the_largest_reports_fit_one_response() {
         postcard::from_bytes::<TrackingCollected>(encoded).unwrap(),
         tracking
     );
-    let mac = MacCollected::Report(Mac::new([u32::MAX; MAC_COUNTS], i32::MIN));
+    let mac = MacCollected::Report(Mac::new([u32::MAX; MAC_COUNTS], i32::MIN, [u32::MAX; 32]));
     assert!(postcard::to_slice(&mac, &mut buffer).unwrap().len() <= 512);
     let link = LinkCollected::Report(full_link());
     let encoded = postcard::to_slice(&link, &mut buffer).unwrap();
@@ -446,7 +446,13 @@ fn a_mac_count_wraps_at_its_own_width() {
     start[at("nrx")] = 0x3ff;
     end[at("nrx")] = 2;
     start[at("tx_rts")] = u32::MAX;
-    let window = Mac::window(&Mac::new(start, 7), &Mac::new(end, -40));
+    let mut holes = [0; 32];
+    holes[3] = 1;
+    let window = Mac::window(
+        &Mac::new(start, 7, [u32::MAX; 32]),
+        &Mac::new(end, -40, holes),
+    );
+    assert_eq!(window.holes[3], 2, "a position wraps at 2^32");
     assert_eq!(window.count(at("fcs_error")), 3);
     assert_eq!(window.count(at("nrx")), 3);
     assert_eq!(window.count(at("tx_rts")), 1);

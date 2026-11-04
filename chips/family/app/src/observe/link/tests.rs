@@ -143,3 +143,13 @@ fn a_transmission_counts_its_rate_end_and_attempts() {
     );
     assert_eq!((link.rx.single, link.rx.containment_unknown), (1, 1));
 }
+
+#[test]
+fn each_hole_counts_at_its_position() {
+    let counter = LinkCounter::new();
+    counter.holes(0b101);
+    counter.holes(1 << 31 | 1);
+    let holes = counter.link().tx.holes;
+    assert_eq!((holes[0], holes[1], holes[2], holes[31]), (2, 0, 1, 1));
+    assert_eq!(holes.iter().sum::<u32>(), 4);
+}

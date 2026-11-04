@@ -850,16 +850,21 @@ pub struct Mac {
     head: [u32; 32],
     tail: [u32; MAC_COUNTS - 32],
     pub frequency_offset: i32,
+    /// Unacknowledged subframes of first transmissions by their position on
+    /// air, the first one at index 0: what a BlockAck told, beside what the
+    /// MAC itself counted.
+    pub holes: [u32; 32],
 }
 
 impl Mac {
-    /// The reading of `counts` and `frequency_offset`.
-    pub fn new(counts: [u32; MAC_COUNTS], frequency_offset: i32) -> Self {
+    /// The reading of `counts`, `frequency_offset` and `holes`.
+    pub fn new(counts: [u32; MAC_COUNTS], frequency_offset: i32, holes: [u32; 32]) -> Self {
         let at = |index: usize| counts.get(index).copied().unwrap_or(0);
         Self {
             head: core::array::from_fn(at),
             tail: core::array::from_fn(|index| at(index.saturating_add(32))),
             frequency_offset,
+            holes,
         }
     }
 
@@ -884,7 +889,11 @@ impl Mac {
                     .checked_shr(32u32.saturating_sub(u32::from(bits)))
                     .unwrap_or(u32::MAX)
         });
-        Self::new(counts, end.frequency_offset)
+        let holes = core::array::from_fn(|position| {
+            let at = |reading: &Self| reading.holes.get(position).copied().unwrap_or(0);
+            at(end).wrapping_sub(at(start))
+        });
+        Self::new(counts, end.frequency_offset, holes)
     }
 }
 
