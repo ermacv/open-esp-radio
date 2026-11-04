@@ -15,6 +15,11 @@ use std::{path::PathBuf, process::ExitCode};
 /// One vendor-comparison scenario and its inputs.
 #[derive(Subcommand)]
 pub enum Scenario {
+    /// Check the captured multicast BA scalar/array pointer contract, without production firmware.
+    WifiBaContract {
+        #[command(flatten)]
+        options: crate::esp32s31::wifi::ba_contract::Options,
+    },
     /// Vendor gain characterization, calibration storage and the RF-test
     /// power producer (`--rftest`).
     Gain {
@@ -518,6 +523,7 @@ fn split<T>(outcomes: Outcomes<'_, T>) -> Split<'_, T> {
 /// Run `scenario`, handing each suite's findings to `report`.
 pub fn run(scenario: Scenario, report: &dyn RunReport) -> ExitCode {
     let result = match scenario {
+        Scenario::WifiBaContract { options } => crate::esp32s31::wifi::ba_contract::run(options),
         Scenario::Gain { common, rftest } => single(gain(common, Some(rftest), report)),
         Scenario::WifiMac {
             common,

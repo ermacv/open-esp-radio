@@ -123,7 +123,7 @@ fn publishing_the_station_mask_writes_its_image_and_reads_back_as_station() {
             .mac_interrupt
             .publish_mac_interrupt_mask(MacInterruptMask::STATION);
         let enable = owners.mac_interrupt.mac.read_enable();
-        assert!(enable.tx_complete() && !enable.bss_color_collision());
+        assert!(enable.tx_complete() && !enable.tx_queue_collision());
         assert_eq!(
             owners.mac_interrupt.mac_interrupt_enable(),
             MacInterruptEnableState::Station
@@ -258,7 +258,7 @@ fn a_full_status_reads_every_cause() {
     let owners = words.owners();
     let observation = owners.mac_interrupt.mac_interrupt_status().observation();
     assert!(observation.work_events().tx_complete());
-    assert!(observation.work_events().bss_color_collision());
+    assert!(observation.work_events().tx_queue_collision());
     assert!(observation.work_events().rx_success());
     assert!(observation.work_events().tx_timeout());
     assert!(observation.has_auxiliary_event() && observation.has_unhandled_event());
@@ -292,7 +292,9 @@ fn preparing_a_connected_station_clears_the_beacon_filter_control_alone() {
         assert!(!control.beacon_filter_enable());
         assert!(!control.broadcast_wakeup_enable());
         assert!(!control.unicast_wakeup_enable());
-        assert_ne!(control.bits_3_31_opaque().get(), 0, "kept");
+        assert!(control.abort_enable(), "kept");
+        assert_ne!(control.abort_length().get(), 0, "kept");
+        assert_ne!(control.bits_16_31_opaque(), 0, "kept");
     }
     // The interrupt enable word is the handler's: it is not written here.
     let changes = before.changes(&after);

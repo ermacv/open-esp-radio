@@ -78,6 +78,143 @@ similarity is not sufficient evidence for an ESP32-S31 address or bit. Reviewed
 source assertions, vendor comparison and dated hardware observations retain
 their distinct strength.
 
+## MAC offload formats
+
+The RX-control timestamp source, beacon-memory mapping and reload selection,
+transmitted-BSSID abort, beacon-filter abort and beacon-memory tag fields
+have function-derived names. Their sources are in
+[`blobray-mac-offload-names.toml`](evidence/blobray-mac-offload-names.toml).
+Abort-length units and the tag-offset reset request's self-clear behavior
+remain unestablished; the reset lane retains its existing ordinary RMW class.
+
+`LENGTH_CONTROL.TXOP_LIST_SELECT` admits the three list slots the vendor
+publishes. The software no-slot sentinel is not a writable hardware selector.
+`WIFI_TXOP_ENTRY`, `WIFI_TXOP_LIST` and `WIFI_TXOP_LISTS` describe the
+continuation format and its fifteen-entry/three-list geometry. They are
+unplaced formats: the aperture at `WIFI_MAC.TXOP_LIST_MEMORY_OFFSET` overlaps
+the first six HE MPLEN words, and these formats grant no second MMIO owner
+or concurrent-use authority.
+
+`WIFI_BEACON_RX_DESCRIPTOR` describes the twelve-byte descriptor at the start
+of the fixed 1-KiB beacon memory. The root records its CPU/APB and DMA bus
+views as `wifi-beacon-apb` and `wifi-beacon-dma`; these are two views of the
+same backing, not independent allocations or general alias mappings. Its
+buffer and next words retain raw address images outside the allocatable
+`dma-window`. The descriptor is memory, not a MAC configuration register.
+EOF is already one during initialization; neither it nor OWNER establishes
+a completion or detach/release predicate for this special descriptor.
+The model supplies no beacon-memory access owner or running offload lifecycle.
+
+## MAC role contexts
+
+The pinned role callers select these receive/VIF contexts:
+
+| Role | Receive/VIF context | Crypto profile | Generic TSF domain |
+| --- | --- | --- | --- |
+| STA | 0 | 0 | 0 |
+| AP | 1 | 1 | 1 |
+| AP+STA | 0 and 1 | 0 and 1 | 0 and 1 |
+| NAN | 2 | 2 | 2 |
+| Monitor/sniffer | 3 | No separate profile established | No separate domain selected by this path |
+
+The role selector, receive-policy operation, generic TSF index and legacy
+TSF reset/time selector are different domains. In particular, legacy reset
+selector 3 addresses NAN, while receive context 3 is sniffer. AP+STA composes
+the two contexts; this mapping does not establish an independent APSTA
+hardware bit or qualify the complete concurrent lifecycle. The open HAL's
+combined receive plan covers the register publication only; the vendor NAN
+paths do not supply an open NAN lifecycle.
+
+All roles retain common opaque cold-init fields. Protected STA/AP also use
+the opaque crypto lanes and ordinary BA-policy lanes; AP has extra BA-policy
+lanes and the dedicated SoftAP TSF bit-30 sequence. NAN uses the distinct
+context-two crypto profile. Its TSF enable/disable leaves preserve the
+remaining opaque TSF lanes. The generic SoftAP TSF API changes bits 27/31,
+whereas the dedicated AP start/stop path changes bits 30/31; those masks do
+not identify either unknown gate individually.
+
+Monitor misc dumping also programs opaque profile constants. Its separately
+identified `MISC_PACKET_POLICY.EXCLUDE_FCS_FAILURE` bit 26 is cleared when
+the vendor's enabled misc filter requests FCS-failed packets and set
+otherwise. This names the filter intent; actual delivery is unqualified.
+The open receive frontier only changes its existing class mask and preserves
+this field. Pinned paths and isolated execution limits are in
+[`blobray-mac-role-paths.toml`](evidence/blobray-mac-role-paths.toml).
+
+## MAC receive filters and diagnostics
+
+`RX_CONTROL_FRAME_DUMP` names the nine control-frame classes admitted by
+the hardware dump filters. Its low half and the other high-half bits stay
+opaque. `RX_ERROR_DUMP` describes only the two words decoded and configured
+by the vendor's error-dump routine; the adjacent `WORD_00F0_OPAQUE` remains
+an observation without that format. `NRX_ERROR` combines the existing count
+with its fixed-error-code selector and enable. Configuration fields retain
+the vendor's fresh-read RMW contract; code dictionaries and counter lifecycle
+remain unestablished.
+
+The pinned VHT bandwidth-signaling RTS leaf changes bit 18. Bit 22 stays
+opaque and is preserved by the HAL initializer. RX-hang timing, the
+BSS-color-collision producer gate and CCA
+SND20 configuration also have function-derived names. Their evidence is in
+[`blobray-mac-rx-controls.toml`](evidence/blobray-mac-rx-controls.toml); timing
+units and the internal CCA-byte format remain unestablished.
+
+## MAC collision interrupt banks
+
+Primary `ENABLE/STATUS.TX_QUEUE_COLLISION` is bit 8. The vendor FIQ posts
+TX queue collision service, whose task inspects the per-queue collision
+bitmap before selecting queues for retry processing. This event alone
+does not identify a queue, prove DMA detachment or establish automatic
+hardware retries. HE BSS-color collision instead uses secondary INT1 bit
+12. The pinned local paths and their coverage limits are recorded in
+[`blobray-mac-tx-collision-irq.toml`](evidence/blobray-mac-tx-collision-irq.toml).
+
+The station primary mask remains `0x19a878e0`, with TX queue collision
+disabled. HE initialization separately enables INT1 BSS-color; the open
+IRQ path does not yet service INT1. The primary mask cannot suppress that
+secondary source. On-air consequences have not been measured.
+
+## MAC key material and receive-crypto boundaries
+
+`ENTRY_KEY_WORD_4..7` hold bytes 16..31 of the inspected GCMP-256 and
+32-byte TKIP publications. The TKIP tail contains Michael MIC-key material;
+its storage alone does not establish hardware MIC computation. The
+16-byte CCMP/GCMP setter leaves these words unchanged. The separate entry
+clear operation zeros all ten words, as the open CCMP path does before
+installation. The source and concrete execution boundaries are in
+[`blobray-mac-execution-boundaries.toml`](evidence/blobray-mac-execution-boundaries.toml).
+
+The STA/AP management-RX indicator selects framing/key-metadata handling
+in its inspected consumer. The separate `ieee80211_ccmp_decrypt` path
+invokes a configurable CCMP callback. This does not prove that the indicator
+controls callback execution, that its AES backend runs entirely on the CPU,
+or a quantified CPU saving. Selector-two bits 16/17 remain opaque.
+
+Selector-two bits 16 and 17 are independently published. Enable always sets
+bit 16; bit 17 follows a separate argument. The vendor NAN CCMP installer
+selects this bank with bit 17 clear, while a generic key path derives that
+argument from PMF state. Their individual hardware functions remain unknown;
+the STA/AP management getter does not read this bank. The open HAL retains
+its existing bit-17-set association profile and does not implement NAN key
+policy. Low bits 0/1/8 only have correlated enable/disable publications, and
+bit 30 has no independently asserted profile. The pinned paths and 82
+isolated register-publication cases are recorded in
+[`blobray-mac-crypto-interface.toml`](evidence/blobray-mac-crypto-interface.toml).
+
+The ordinary BA restore leaf expects three software arrays indexed by
+hardware index. Its captured multicast caller passes three scalar pointers;
+the isolated active-index-one case reads unrelated stack data. The
+vendor-only characterization runs with:
+
+```console
+cargo vendor-check scenario --chip esp32s31 wifi-ba-contract --linker path/to/ld.lld --output target/mac-ba-contract
+```
+
+Success means the pinned conditional observations match, including one
+explicit unknown-data stop. It is not a production equivalence or an on-air
+fault claim. The scenario needs only the pinned libpp/libnet80211 and the
+selected linker; it requires no production or vendor firmware image.
+
 ## Shared TSF snapshot words
 
 `MODEM_PWR.TSF_LOAD_CONTROL` publishes separate station and SoftAP snapshot

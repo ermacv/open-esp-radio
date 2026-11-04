@@ -1284,7 +1284,7 @@ where
         }
 
         use crate::mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
-        // A global HE BSS-color event is never evidence about this queue.
+        // The global TX queue collision event does not identify this queue.
         // The PAC detaches only when its per-queue collision state is set.
         if self
             .slot

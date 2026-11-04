@@ -40,9 +40,11 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   prepared RX ring's DMA proof, then opens the gates with MAC stop held,
   publishes BASE once, enables the walker and resumes RX, each step after its
   predecessor's proof. Promiscuous policy does not release MAC stop.
-- **BSS-color collision** is an HE event, independent of TX queue collisions.
-  The station keeps it masked until an HE consumer exists; only a queue's
-  `collision_pending` qualifies a TX collision detach.
+- **TX queue collision** uses primary MAC event bit 8. The current station
+  mask keeps it disabled; only a queue's `collision_pending` qualifies a TX
+  collision detach. HE BSS-color collision uses INT1 bit 12 instead. HE
+  initialization enables that separate source, but the open IRQ path has no
+  INT1 service; the primary station mask does not suppress it.
 - **Keys and timeouts.** After an unconfirmed stop the port keeps every
   owner and the installation stays quarantined until the image resets; a
   retired installation's device masks the ring's interrupts and erases its

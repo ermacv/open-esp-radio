@@ -206,14 +206,14 @@ impl MacPowerInterrupt for MacPowerInterruptRegisters {
 
 pub const EVENT_TX_COMPLETE: u32 = 0x01;
 pub const EVENT_TX_TIMEOUT: u32 = 0x02;
-pub const EVENT_BSS_COLOR_COLLISION: u32 = 0x04;
+pub const EVENT_TX_QUEUE_COLLISION: u32 = 0x04;
 pub const EVENT_RX_SUCCESS: u32 = 0x08;
 pub const EVENT_KNOWN_MASK: u32 = 0x0f;
 
-/// One MAC action; the independent HE color event follows RX and TX work.
+/// One primary MAC action; TX queue collision service follows RX and TX work.
 ///
-/// This is deliberately not an arbitrary bit mask. Complete
-/// `libpp.a[wdev.o]::wDev_ProcessFiq` handles RX success before TX
+/// This is deliberately not an arbitrary bit mask. The inspected branches of
+/// `libpp.a[wdev.o]::wDev_ProcessFiq` handle RX success before TX
 /// completion and TX timeout when one interrupt snapshot contains
 /// several causes. The pinned body routes RX success to
 /// `lmacProcessModemStateRxBeacon` instead while power raw-signal bits 17:18
@@ -227,7 +227,7 @@ pub enum IrqWork {
     RxSuccess,
     TxComplete,
     TxTimeout,
-    BssColorCollision,
+    TxQueueCollision,
 }
 
 impl IrqWork {
@@ -236,7 +236,7 @@ impl IrqWork {
             Self::RxSuccess => EVENT_RX_SUCCESS,
             Self::TxComplete => EVENT_TX_COMPLETE,
             Self::TxTimeout => EVENT_TX_TIMEOUT,
-            Self::BssColorCollision => EVENT_BSS_COLOR_COLLISION,
+            Self::TxQueueCollision => EVENT_TX_QUEUE_COLLISION,
         }
     }
 }
@@ -283,8 +283,8 @@ pub const fn next_irq_work(pending: u32) -> Option<IrqWork> {
         Some(IrqWork::TxComplete)
     } else if pending & EVENT_TX_TIMEOUT != 0 {
         Some(IrqWork::TxTimeout)
-    } else if pending & EVENT_BSS_COLOR_COLLISION != 0 {
-        Some(IrqWork::BssColorCollision)
+    } else if pending & EVENT_TX_QUEUE_COLLISION != 0 {
+        Some(IrqWork::TxQueueCollision)
     } else {
         None
     }
@@ -298,8 +298,8 @@ pub const fn event_mask(causes: MacInterruptEvents) -> u32 {
     if causes.tx_timeout() {
         mask |= EVENT_TX_TIMEOUT;
     }
-    if causes.bss_color_collision() {
-        mask |= EVENT_BSS_COLOR_COLLISION;
+    if causes.tx_queue_collision() {
+        mask |= EVENT_TX_QUEUE_COLLISION;
     }
     if causes.rx_success() {
         mask |= EVENT_RX_SUCCESS;

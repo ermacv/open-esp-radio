@@ -954,11 +954,11 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
     let OrdinaryTxAccess::Active(active) = owner.access() else {
         panic!("a published transaction lends only its active phase");
     };
-    let color = crate::mac::irq::event_mask(
-        oer_chips_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
+    let collision = crate::mac::irq::event_mask(
+        oer_chips_esp32s31_hal::types::MacInterruptEvents::TX_QUEUE_COLLISION,
     );
     assert_eq!(
-        active.service(&mut hardware, interrupt(color)).unwrap(),
+        active.service(&mut hardware, interrupt(collision)).unwrap(),
         WifiTxProgress::Pending
     );
     assert_eq!(owner.slot_state(), TxDmaState::HardwareOwned);
@@ -1670,7 +1670,7 @@ fn an_invalid_retry_header_returns_its_slot_without_publishing_or_rewriting() {
 }
 
 #[test]
-fn bss_color_only_interrupt_never_detaches_a_published_queue() {
+fn global_collision_without_queue_state_never_detaches_a_published_queue() {
     installed(|pools| {
         use crate::mac::irq::event_mask;
         use WmmAccessCategory::{Background, BestEffort, Video, Voice};
@@ -1681,7 +1681,7 @@ fn bss_color_only_interrupt_never_detaches_a_published_queue() {
         for category in [Voice, Video, BestEffort, Background] {
             submit(&mut core, &mut hardware, values_on(category)).unwrap();
         }
-        let events = event_mask(MacInterruptEvents::BSS_COLOR_COLLISION);
+        let events = event_mask(MacInterruptEvents::TX_QUEUE_COLLISION);
         assert!(service(&mut core, &mut hardware, interrupt(events)).is_empty());
         assert!(core.queues.iter().all(Option::is_some));
         assert_eq!(hardware.publications(), 4);

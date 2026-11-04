@@ -45,16 +45,16 @@ impl MacRxNextDescriptorObservation {
     }
 }
 
-/// The receive-buffer geometry `mac_rxbuf_init` publishes before its
-/// descriptor base: the opaque twenty-bit limit of `0x0c68`.
+/// The opaque twenty-bit initialization image published to `0x0c68` before
+/// the descriptor base. Its units and hardware function are not established.
 ///
 /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_rxbuf_init`.
-const RX_BUFFER_LIMIT: u32 = 0x000f_ffff;
+const RX_C68_INIT_IMAGE: u32 = 0x000f_ffff;
 
 /// The opaque twenty-bit value `mac_rxbuf_init` publishes to `0x0c6c`.
 ///
 /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_rxbuf_init`.
-const RX_BUFFER_UNIT: u32 = 4;
+const RX_C6C_INIT_IMAGE: u32 = 4;
 
 impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     /// Snapshot the complete published RX walker frontier without changing it.
@@ -71,17 +71,17 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
         }
     }
 
-    /// Initialize the RX buffer geometry without publishing a descriptor.
+    /// Initialize the RX walker configuration without publishing a descriptor.
     ///
     /// SOURCE: first four RMWs of complete pinned
     /// `libpp.a[hal_mac.o]::mac_rxbuf_init`. Its final descriptor-base store
     /// is deliberately excluded because the RX ring owner publishes it later.
     pub fn initialize_mac_rx_buffer_prefix(&mut self) {
         self.dma.modify_word_0c68_opaque(|w| {
-            w.set_bits_0_19_opaque(bits(RX_BUFFER_LIMIT));
+            w.set_bits_0_19_opaque(bits(RX_C68_INIT_IMAGE));
         });
         self.dma.modify_word_0c6c_opaque(|w| {
-            w.set_bits_0_19_opaque(bits(RX_BUFFER_UNIT));
+            w.set_bits_0_19_opaque(bits(RX_C6C_INIT_IMAGE));
         });
         self.dma.modify_rx_descriptor_high_window(|w| {
             w.set_address_high_prefix();
@@ -157,14 +157,14 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
         !self.mac_rx_walker_enabled()
     }
 
-    /// Set `RX_CONTROL` bit 27, the edge complete `hal_init` takes on the
-    /// walker's control word.
+    /// Enable the hardware-beacon selection for RX-buffer reload, the edge
+    /// complete `hal_init` takes on the walker's control word.
     ///
     /// SOURCE: complete pinned `libpp.a[hal_mac.o]::hal_init`, offsets
     /// `0xcc..0x12a`.
-    pub(crate) fn set_mac_rx_control_bit_27(&mut self) {
+    pub(crate) fn enable_mac_rx_hw_beacon_reload(&mut self) {
         self.dma.modify_rx_control(|w| {
-            w.set_bit_27_opaque(true);
+            w.set_rxbuf_reload_use_hw_beacon_enable(true);
         });
     }
 

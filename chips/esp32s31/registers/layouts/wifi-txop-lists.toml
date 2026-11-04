@@ -1,0 +1,15 @@
+schema = 1
+
+[layout]
+name = "WIFI_TXOP_LISTS"
+description = "Project-assigned name. The three continuation lists selected by TXOP_LIST_SELECT, starting at WIFI_MAC.TXOP_LIST_MEMORY_OFFSET. Slots are ascending; positions are reversed within each slot. The top six words overlap HE_SCRATCH elements zero through five. This unplaced format grants no independent owner or concurrent-use authority."
+size = 180
+align = 4
+array = { element = "WIFI_TXOP_ENTRY", count = 45 }
+
+[layout.review]
+sources = ["BLOB_MAC_TXOP_LIST_20261103"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"

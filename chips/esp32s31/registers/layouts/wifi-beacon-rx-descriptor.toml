@@ -1,0 +1,114 @@
+schema = 1
+
+[layout]
+name = "WIFI_BEACON_RX_DESCRIPTOR"
+description = "Project-assigned name. The twelve-byte descriptor at the start of the fixed 1-KiB beacon receive memory. wDev_BeaconMemory_Init initializes it through the CPU/APB view; wdevProcessModemStateRxBeacon copies it and substitutes the CPU buffer address before delivery. The two sourced bus views are not independently allocatable. No completion predicate, release protocol or general alias mapping is established."
+size = 12
+align = 4
+
+[layout.review]
+sources = ["BLOB_MAC_BEACON_RX_MEMORY_20261103"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[layout.words]]
+name = "CONTROL"
+offset = 0
+access = "shared"
+
+[[layout.words.fields]]
+name = "SIZE"
+bits = "13:0"
+writer = "cpu"
+description = "Project-assigned name. Buffer capacity initialized to 0x3f0 bytes."
+
+[[layout.words.fields]]
+name = "LENGTH"
+bits = "27:14"
+writer = "phased"
+phases = [{ name = "initialize", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Project-assigned name. Init copies SIZE here; beacon delivery consumes this field as the received byte count. Hardware participation during receive is conservative and establishes no commit frontier."
+
+[[layout.words.fields]]
+name = "OFFSET"
+bits = "28"
+writer = "phased"
+phases = [{ name = "initialize", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Vendor diagnostic spelling transferred from the matching ordinary RX descriptor geometry. The initial memory clear writes zero; later init RMWs preserve it. Units, one-valued modes and hardware writeback are unestablished."
+
+[[layout.words.fields]]
+name = "SOSF"
+bits = "29"
+writer = "phased"
+phases = [{ name = "initialize", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Vendor diagnostic spelling transferred from the matching ordinary RX descriptor geometry. Beacon init explicitly clears it. The acronym, physical effect and hardware writeback are unestablished."
+
+[[layout.words.fields]]
+name = "EOF"
+bits = "30"
+writer = "phased"
+phases = [{ name = "initialize", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Vendor diagnostic spelling for this layout lane. Beacon init already sets it to one, so it is not an established receive-completion predicate. Hardware participation is conservative."
+
+[[layout.words.fields]]
+name = "OWNER"
+bits = "31"
+writer = "phased"
+phases = [{ name = "initialize", writer = "cpu" }, { name = "receive", writer = "hardware" }]
+description = "Vendor diagnostic spelling for this layout lane. Beacon init sets it to one. No owner-clear, CPU barrier or detach/release contract is established for this special descriptor. Hardware participation is conservative."
+
+[[layout.words]]
+name = "BUFFER"
+offset = 4
+access = "shared"
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Project-assigned name. Init stores the fixed DMA-view payload address, sixteen bytes after the region start. The CPU consumer substitutes the corresponding CPU/APB address. This raw image is not a pointer into the allocatable dma-window."
+
+[[layout.words]]
+name = "NEXT"
+offset = 8
+access = "shared"
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "Project-assigned name. Init stores the fixed descriptor's own DMA-view address. A general linked-list or live-reload contract is not established."
+
+[[review]]
+entity = "WIFI_BEACON_RX_DESCRIPTOR.CONTROL.OFFSET"
+sources = ["BLOB_MAC_BEACON_RX_MEMORY_20261103"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_BEACON_RX_DESCRIPTOR.CONTROL.SOSF"
+sources = ["BLOB_MAC_BEACON_RX_MEMORY_20261103"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_BEACON_RX_DESCRIPTOR.CONTROL.EOF"
+sources = ["BLOB_MAC_BEACON_RX_MEMORY_20261103"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_BEACON_RX_DESCRIPTOR.CONTROL.OWNER"
+sources = ["BLOB_MAC_BEACON_RX_MEMORY_20261103"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"

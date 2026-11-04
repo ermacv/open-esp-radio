@@ -209,6 +209,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         init.modify_dump_complete_hesigb(|w| {
             w.set_enable(false);
         });
+        // SOURCE: BLOB_MAC_VHT_BW_SIGNALING_20261103. The current pinned
+        // leaf changes the named enable and preserves the opaque bit 22.
         init.modify_ersu_and_vht_control(|w| {
             w.set_vht_bw_signaling_rts(false);
         });
@@ -235,7 +237,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 w.set_bssid_byte_5(0);
             });
             init.modify_multi_bssid_high(|w| {
-                w.set_bits_16_23_opaque(0);
+                w.set_bssid_index(0);
             });
             for physical in (0..8).rev() {
                 init.modify_queue_control(element(physical), |w| {

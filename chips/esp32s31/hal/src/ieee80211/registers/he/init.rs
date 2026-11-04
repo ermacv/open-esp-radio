@@ -110,8 +110,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         init.modify_rx_field_control(|w| {
             w.set_timeout_seconds(Bits::constant::<0x3c>());
         });
-        init.modify_parent_enable(|w| {
-            w.set_bit_12_opaque(true);
+        init.modify_interrupt_1_enable(|w| {
+            w.set_bss_color_collision_enable(true);
         });
         init.modify_tb_tx_control(|w| {
             w.set_clear_15(false);

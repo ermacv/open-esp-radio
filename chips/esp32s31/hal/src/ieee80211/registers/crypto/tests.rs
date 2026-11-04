@@ -1,9 +1,10 @@
 //! The CCMP key-table transactions over host memory.
 
 use oer_chips_esp32s31_pac::wifi_mac::{
-    entry_key_word_0, entry_key_word_1, entry_key_word_2, entry_key_word_3, entry_peer_control,
-    entry_peer_low, entry_tail_word_0, entry_tail_word_1, entry_tail_word_2, entry_tail_word_3,
-    interface_control, key_valid_bitmap, policy_control, word_080c_opaque,
+    context2_crypto_control, entry_key_word_0, entry_key_word_1, entry_key_word_2,
+    entry_key_word_3, entry_key_word_4, entry_key_word_5, entry_key_word_6, entry_key_word_7,
+    entry_peer_control, entry_peer_low, interface_control, key_valid_bitmap, policy_control,
+    word_080c_opaque,
 };
 use oer_portable_mmio::Index;
 
@@ -37,10 +38,10 @@ fn entry_words(index: usize) -> [usize; 10] {
         entry_key_word_1::OFFSET,
         entry_key_word_2::OFFSET,
         entry_key_word_3::OFFSET,
-        entry_tail_word_0::OFFSET,
-        entry_tail_word_1::OFFSET,
-        entry_tail_word_2::OFFSET,
-        entry_tail_word_3::OFFSET,
+        entry_key_word_4::OFFSET,
+        entry_key_word_5::OFFSET,
+        entry_key_word_6::OFFSET,
+        entry_key_word_7::OFFSET,
     ]
     .map(|offset| offset + index * entry_peer_low::STRIDE)
 }
@@ -55,20 +56,25 @@ fn the_cold_bypass_stores_each_interface_control_then_clears_two_words() {
         [
             ("wifi_mac_crypto_control", interface_control::OFFSET),
             ("wifi_mac_crypto_control", interface_control::OFFSET + 4),
-            ("wifi_mac_crypto_control", interface_control::OFFSET + 8),
+            ("wifi_mac_crypto_control", context2_crypto_control::OFFSET),
             ("wifi_mac_crypto_control", word_080c_opaque::OFFSET),
             ("wifi_mac_crypto_control", policy_control::OFFSET),
         ]
     );
     let owners = words.owners();
     let control = &owners.registers.mac.wifi_mac_crypto_control;
-    for (position, bits_16_17) in [(0, 3), (1, 3), (2, 0)] {
+    for position in 0..interface_control::COUNT {
         let word = control.read_interface_control(Index::new(position).expect("an interface"));
         assert_eq!(word.bits_0_1_opaque().get(), 0);
-        assert!(!(word.bit_8_opaque() || word.spp_amsdu() || word.bit_28_opaque()));
-        assert_eq!(word.bits_16_17_opaque().get(), bits_16_17);
-        assert_eq!(word.bits_30_31_opaque().get(), 0);
+        assert!(!(word.bit_8_opaque() || word.spp_amsdu() || word.wep_mode()));
+        assert!(word.bit_16_opaque() && word.mgmt_rx_crypto_enabled());
+        assert!(!(word.bit_30_opaque() || word.sms4_mode()));
     }
+    let context2 = control.read_context2_crypto_control();
+    assert_eq!(context2.bits_0_1_opaque().get(), 0);
+    assert!(!(context2.bit_16_opaque() || context2.bit_17_opaque()));
+    assert!(!(context2.bit_8_opaque() || context2.spp_amsdu() || context2.wep_mode()));
+    assert!(!(context2.bit_30_opaque() || context2.sms4_mode()));
     assert_eq!(control.read_word_080c_opaque().bits_0_31_opaque(), 0);
     assert_eq!(control.read_policy_control().bits_6_21_opaque(), 0);
 }
@@ -93,9 +99,37 @@ fn an_association_enables_ccmp_with_its_spp_decision() {
         .read_interface_control(Index::constant::<1>());
     assert_eq!(word.bits_0_1_opaque().get(), 3);
     assert!(word.bit_8_opaque() && word.spp_amsdu());
-    assert_eq!(word.bits_16_17_opaque().get(), 3);
-    assert!(!word.bit_28_opaque());
-    assert_eq!(word.bits_30_31_opaque().get(), 0);
+    assert!(word.bit_16_opaque() && word.mgmt_rx_crypto_enabled());
+    assert!(!(word.wep_mode() || word.bit_30_opaque() || word.sms4_mode()));
+}
+
+#[test]
+fn a_context_two_association_keeps_the_station_and_ap_profiles() {
+    let mut words = HostWords::filled(u32::MAX);
+    let (station, ap) = {
+        let owners = words.owners();
+        let control = &owners.registers.mac.wifi_mac_crypto_control;
+        (
+            control.read_interface_control(Index::constant::<0>()),
+            control.read_interface_control(Index::constant::<1>()),
+        )
+    };
+    words
+        .owners()
+        .registers
+        .configure_mac_ccmp_association(MacInterface::Context2, MacSppMode::Authenticated);
+    let owners = words.owners();
+    let control = &owners.registers.mac.wifi_mac_crypto_control;
+    assert_eq!(
+        control.read_interface_control(Index::constant::<0>()),
+        station
+    );
+    assert_eq!(control.read_interface_control(Index::constant::<1>()), ap);
+    let context2 = control.read_context2_crypto_control();
+    assert!(context2.bit_8_opaque() && context2.spp_amsdu());
+    assert_eq!(context2.bits_0_1_opaque().get(), 3);
+    assert!(context2.bit_16_opaque() && context2.bit_17_opaque());
+    assert!(!(context2.wep_mode() || context2.bit_30_opaque() || context2.sms4_mode()));
 }
 
 #[test]
@@ -148,8 +182,7 @@ fn a_pairwise_station_key_is_written_validated_and_enabled() {
     assert_eq!(control.interface(), MacInterface::Station.field());
     assert!(control.logical_index_not_three());
     assert_eq!(control.logical_key_index().get(), 0);
-    assert!(!(control.bit_20_opaque() || control.bit_26_opaque()));
-    assert_eq!(control.bits_16_17_opaque().get(), 0);
+    assert!(!(control.wep104() || control.bit_17_opaque() || control.gcmp_256_bit_key()));
     assert!(owners.registers.mac_key_entry_is_valid(entry(2)));
     let interface = owners
         .registers
@@ -229,7 +262,7 @@ fn clearing_an_entry_invalidates_it_and_zeroes_its_ten_words() {
         0
     );
     assert_eq!(
-        table.read_entry_tail_word_3(Index::constant::<7>()).value(),
+        table.read_entry_key_word_7(Index::constant::<7>()).value(),
         0
     );
 }

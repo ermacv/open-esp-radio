@@ -63,7 +63,11 @@ fn the_doorbell_sets_only_its_request_and_reads_back_pending() {
     assert!(owners.rx_dma.mac_rx_reload_pending());
     let control = owners.rx_dma.dma.read_rx_control();
     assert!(!control.walker_enable());
-    assert_eq!(control.bits_1_26_opaque().get(), 0);
+    assert!(!control.timestamp_use_tsf());
+    assert_eq!(control.beacon_memory_address_map(), 0);
+    assert_eq!(control.bits_10_16_opaque().get(), 0);
+    assert!(!control.abort_frames_from_trans_bssid());
+    assert_eq!(control.bits_18_26_opaque().get(), 0);
 }
 
 #[test]
@@ -75,17 +79,17 @@ fn the_walker_enable_edges_keep_every_other_control_bit() {
         assert!(owners.rx_dma.try_enable_mac_rx_walker());
         assert!(!owners.rx_dma.try_enable_mac_rx_walker(), "already enabled");
         assert!(owners.rx_dma.mac_rx_dma_snapshot().walker_enabled);
-        owners.rx_dma.set_mac_rx_control_bit_27();
+        owners.rx_dma.enable_mac_rx_hw_beacon_reload();
     }
     let control = after.owners().rx_dma.dma.read_rx_control();
-    assert!(control.walker_enable() && control.bit_27_opaque());
+    assert!(control.walker_enable() && control.rxbuf_reload_use_hw_beacon_enable());
     assert!(!control.append_descriptor_reload());
     assert_eq!(before.changes(&after).len(), 1);
 
     let mut owners = after.owners();
     assert!(owners.rx_dma.try_disable_mac_rx_walker());
     let control = owners.rx_dma.dma.read_rx_control();
-    assert!(!control.walker_enable() && control.bit_27_opaque());
+    assert!(!control.walker_enable() && control.rxbuf_reload_use_hw_beacon_enable());
     owners.rx_dma.publish_mac_rx_walker_enable();
     owners.rx_dma.clear_mac_rx_walker_enable();
     assert!(!owners.rx_dma.mac_rx_walker_enabled());

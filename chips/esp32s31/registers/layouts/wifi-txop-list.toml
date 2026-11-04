@@ -1,0 +1,15 @@
+schema = 1
+
+[layout]
+name = "WIFI_TXOP_LIST"
+description = "Project-assigned name. Fifteen continuation entries in ascending physical order. The vendor's one-based continuation position p selects element 15-p. ppCalTxopDur caps the software continuation count at fifteen."
+size = 60
+align = 4
+array = { element = "WIFI_TXOP_ENTRY", count = 15 }
+
+[layout.review]
+sources = ["BLOB_MAC_TXOP_LIST_20261103"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"

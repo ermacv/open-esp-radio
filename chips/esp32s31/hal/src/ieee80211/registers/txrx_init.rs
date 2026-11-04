@@ -60,25 +60,30 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
 
         for queue in 0..4 {
-            init.modify_rx_queue_default(element(queue), |w| {
-                w.set_bits_16_23_opaque(0)
-                    .set_bit_24_opaque(false)
-                    .set_bit_25_opaque(false)
-                    .set_bit_26_opaque(false)
-                    .set_bits_27_31_opaque(Bits::constant::<0>());
+            init.modify_rx_control_frame_dump(element(queue), |w| {
+                w.set_bits_16_22_opaque(Bits::constant::<0>())
+                    .set_control_wrapper_enable(false)
+                    .set_block_ack_request_enable(false)
+                    .set_block_ack_enable(false)
+                    .set_ps_poll_enable(false)
+                    .set_rts_enable(false)
+                    .set_cts_enable(false)
+                    .set_ack_enable(false)
+                    .set_cf_end_enable(false)
+                    .set_cf_end_ack_enable(false);
             });
         }
-        init.modify_rx_queue_default(element(0), |w| {
-            w.set_bit_24_opaque(true);
+        init.modify_rx_control_frame_dump(element(0), |w| {
+            w.set_block_ack_request_enable(true);
         });
-        init.modify_rx_queue_default(element(1), |w| {
-            w.set_bit_24_opaque(true);
+        init.modify_rx_control_frame_dump(element(1), |w| {
+            w.set_block_ack_request_enable(true);
         });
-        init.modify_rx_queue_default(element(0), |w| {
-            w.set_bit_26_opaque(true);
+        init.modify_rx_control_frame_dump(element(0), |w| {
+            w.set_ps_poll_enable(true);
         });
-        init.modify_rx_queue_default(element(1), |w| {
-            w.set_bit_26_opaque(true);
+        init.modify_rx_control_frame_dump(element(1), |w| {
+            w.set_ps_poll_enable(true);
         });
 
         init.modify_txrx_prefix_feature_edges(|w| {
@@ -179,7 +184,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             );
         });
         callbacks.modify_bb_rx_hang_control(|w| {
-            w.set_bits_0_11_opaque(Bits::constant::<0x00f>());
+            w.set_hang_time(Bits::constant::<0x00f>());
         });
     }
 
