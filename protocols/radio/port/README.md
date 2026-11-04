@@ -203,8 +203,6 @@ The final `EventEnd` remains stable across phase loans. An ordinary fault
 can return Drained only after all admitted terminals were delivered.
 Accounting quarantine preserves missing owners and ends delivery immediately;
 it does not itself decide whether later P2 cleanup can prove Stopped.
-`station::Runner` accounts every admitted terminal before accepting Drained and
-fail-stops on Quarantined without another drain or ordinary disable.
 
 Local models can end their entire hardware world through `ModelSlotOwner`.
 `end_model_world` consumes the local slot after every endpoint and P2 loan
