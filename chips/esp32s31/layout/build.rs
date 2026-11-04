@@ -20,9 +20,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(script, oer_chips_family_facts::generate::rom_script(rom)?)?;
 
     // The shared linker binding takes one directory containing the chip's
-    // ROM script and its register-model-generated DMA window.
+    // ROM script, its register-model-generated DMA window and its hot code.
     let dma = root.join("chips/esp32s31/layout/linker/dma-window.x");
     println!("cargo:rerun-if-changed={}", dma.display());
     std::fs::copy(dma, out.join("dma-window.x"))?;
+    let hot_code = root.join("chips/esp32s31/layout/linker/hot-code.x");
+    println!("cargo:rerun-if-changed={}", hot_code.display());
+    std::fs::copy(hot_code, out.join("hot-code.x"))?;
     Ok(())
 }

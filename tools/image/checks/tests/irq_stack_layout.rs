@@ -58,7 +58,7 @@ fn link_stacks(
         vectors.stack_linker(),
     )
     .unwrap();
-    for fragment in ["strict-text.x", "dma-window.x"] {
+    for fragment in ["strict-text.x", "dma-window.x", "hot-code.x"] {
         fs::write(path.join(fragment), "").unwrap();
     }
     fs::write(

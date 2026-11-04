@@ -35,7 +35,13 @@ facts at build time; the host checks read the same facts.
 - `.hot.text` places code in SRAM for performance, from semantic
   `.hot.text.*` input sections written in code:
   [`place_rx_hot_path!`](../chips/esp32s31/hal/src/ieee80211/dma.rs) for
-  the RX path and [the PHY engine](../chips/esp32s31/hal/src/phy.rs).
+  the RX path and [the PHY engine](../chips/esp32s31/hal/src/phy.rs). The
+  Wi-Fi datapath's generic code carries no section of its own: the chip's
+  [`hot-code.x`](../chips/esp32s31/layout/linker/hot-code.x) names its
+  functions, because a turn reaches more code than the L1 instruction cache
+  holds and PSRAM behind it sets the turn's time. What goes on the list
+  is code a data turn runs, chosen by what it does; it never comes from a
+  profile.
 - The staged platform uses `.trap`, `.rwtext` and
   `.flash.critical.text` conventions collected by the
   [runtime linker script](../chips/family/staged-layout/linker/runtime/sections.x).
