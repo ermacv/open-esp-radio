@@ -170,7 +170,8 @@ pub enum RxPull<F, M> {
     /// receive signal.
     Empty,
     /// The ring has work only from this instant on, which the caller's
-    /// alarm keeps.
+    /// alarm keeps; an instant not after the call's is work the call left
+    /// at its own bound, which the caller takes after a repost.
     Later(Instant),
 }
 

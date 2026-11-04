@@ -9,6 +9,8 @@ pub(super) struct Collected {
     pub(super) signalled: bool,
     /// Another source has work.
     pub(super) ready: bool,
+    /// The port's signals gave facts in this call.
+    pub(super) fresh: bool,
 }
 
 /// The port's fault of the actor of `D`.
@@ -134,9 +136,12 @@ where
         self.held.is_none() && !(self.stash.is_some() && self.radio.changing())
     }
 
-    /// The earliest instant the actor must run without a signal: the port's
-    /// deadline and its data arenas', the receive agreements', the ring's
-    /// continuation and the stop's deadline.
+    /// The earliest instant after the turn's at which the actor must run
+    /// without a signal: the port's deadline and its data arenas', the
+    /// receive agreements', the ring's continuation and the stop's deadline.
+    /// A deadline the turn left passed is not one: the turn served it, or
+    /// it takes its bounded reposts ([`Self::due_again`]); it never hides
+    /// a later one.
     fn deadline(&mut self) -> Option<Instant> {
         let stop = match self.radio {
             Radio::Stopping { deadline } => Some(deadline),
@@ -156,6 +161,7 @@ where
         ]
         .into_iter()
         .flatten()
+        .filter(|at| *at > self.now)
         .min()
     }
 
@@ -178,10 +184,33 @@ where
         self.due_streak <= DUE_REPOSTS
     }
 
+    /// Whether the facts the port's signals gave after the turn take a
+    /// repost: taking them took the wake their signal owed (a unit or a
+    /// transmit event that came during the turn), so the next turn serves
+    /// them after one repost. A port that gives standing work rather than
+    /// new facts (a ring waiting for its continuation, a ring the caller
+    /// has no room for) gives it again after a turn that served none of the
+    /// port's work: after [`DUE_REPOSTS`] such turns in a row the actor
+    /// sleeps, and that work's own source (its alarm, the network's return,
+    /// the lifecycle's frame) wakes it.
+    pub(super) fn facts_again(&mut self, fresh: bool) -> bool {
+        let progressed = core::mem::take(&mut self.progressed);
+        if !fresh || progressed {
+            self.fact_streak = 0;
+        }
+        if !fresh {
+            return false;
+        }
+        self.fact_streak = self.fact_streak.saturating_add(1);
+        self.fact_streak <= DUE_REPOSTS
+    }
+
     /// Register on every source the next turn serves and say whether one
     /// has work now: the port's facts (which wait here for the turn), and
-    /// the other sources. A fact the port signalled during a turn already
-    /// woke the actor; another source made ready by the turn itself did not.
+    /// the other sources. Taking a fact the port signalled during a turn
+    /// takes the wake its signal owed, so the facts this call gave say so
+    /// ([`Collected::fresh`], [`Self::facts_again`]); another source made
+    /// ready by the turn itself did not wake the actor either.
     pub(super) fn collect<
         F: Future<Output = ()>,
         const TO: usize,
@@ -200,6 +229,7 @@ where
         arm: &impl Fn(Option<Instant>) -> Option<F>,
     ) -> Collected {
         let facts = self.port.poll_facts(cx);
+        let fresh = !facts.is_empty();
         self.facts = Facts {
             tx: match (self.facts.tx, facts.tx) {
                 (Some(held), Some(new)) => Some(held.union(new)),
@@ -239,7 +269,7 @@ where
         }
         // One alarm, re-armed only when its deadline changes; a deadline the
         // last turn left behind is not armed again.
-        let deadline = self.deadline().filter(|at| *at > self.now);
+        let deadline = self.deadline();
         if deadline != self.armed {
             self.armed = deadline;
             alarm.set(arm(deadline));
@@ -251,7 +281,11 @@ where
             self.armed = None;
             ready = true;
         }
-        Collected { signalled, ready }
+        Collected {
+            signalled,
+            ready,
+            fresh,
+        }
     }
 
     /// One turn at `self.now`.
@@ -313,6 +347,9 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         let due = self.port.deadline().is_some_and(|at| at <= self.now);
+        if facts.tx.is_some_and(|tx| tx.bits() != 0) || facts.tbtt {
+            self.progressed = true;
+        }
         if facts.tx.is_some() || facts.tbtt || due {
             let mut outbox = Outbox {
                 from_actor: &lifecycle.from_actor,

@@ -1809,6 +1809,14 @@ pub struct ModelAir {
     /// The data port's actor, which the air's world wakes; the port's own
     /// steps never do.
     actor: Cell<Option<Waker>>,
+    /// The data port's receive pulls answer that the ring has work from
+    /// this instant on: before it, and at least once (whether it answered).
+    rx_later: Cell<Option<(Instant, bool)>>,
+    /// The data port's deadline stays at this instant across its services.
+    kept_due: Cell<Option<Instant>>,
+    /// Frames that land once a receive pull found the ring empty, without
+    /// a wake.
+    landing: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
 }
 impl ModelAir {
     /// Inspect P2's last published snapshot without borrowing its driver.
@@ -1850,6 +1858,9 @@ impl ModelAir {
             retirement_held: Default::default(),
             turn: Cell::new(None),
             actor: Cell::new(None),
+            rx_later: Cell::new(None),
+            kept_due: Cell::new(None),
+            landing: Default::default(),
         }
     }
 
@@ -2194,6 +2205,53 @@ impl ModelAir {
     /// recycling through the phase.
     pub fn stop_continuous_receive(&self) {
         self.rx_stream.take();
+    }
+
+    /// Make the data port's receive pulls answer that the ring has work
+    /// only from `at` on, as a ring that waits for its continuation does:
+    /// every pull before `at`, and the next one in any case (`at` at the
+    /// pull's instant is work beyond the one call). The first pull from
+    /// `at` on after that answer takes the ring's units again.
+    pub fn defer_receive(&self, at: Instant) {
+        self.rx_later.set(Some((at, false)));
+    }
+
+    /// The deferred receive's answer to a pull at `now`, if it still
+    /// defers.
+    fn receive_later(&self, now: Instant) -> Option<Instant> {
+        let (at, answered) = self.rx_later.get()?;
+        if answered && now >= at {
+            self.rx_later.set(None);
+            return None;
+        }
+        self.rx_later.set(Some((at, true)));
+        Some(at)
+    }
+
+    /// Keep the data port's deadline at `at` or earlier across its
+    /// services, as a port whose service leaves work due does; `None`
+    /// ends it.
+    pub fn keep_due(&self, at: Option<Instant>) {
+        self.kept_due.set(at);
+        self.wake_world();
+    }
+
+    /// Deliver `frame` to the radio once the data port's next receive pull
+    /// found the ring empty, waking nobody: a unit that lands during the
+    /// actor's turn, whose signal's wake the actor's own next poll of the
+    /// facts takes.
+    pub fn receive_during_pull(&self, frame: &[u8], meta: ModelRxMeta) {
+        self.landing.push_back((frame.into(), meta));
+    }
+
+    /// Move the landing frames to the ring; whether one landed.
+    fn land(&self) -> bool {
+        let landing = self.landing.take_batch();
+        let landed = !landing.is_empty();
+        for frame in landing {
+            self.rx.push_back(frame);
+        }
+        landed
     }
 
     /// Deliver `frame` to the radio.

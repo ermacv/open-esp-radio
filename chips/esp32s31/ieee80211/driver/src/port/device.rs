@@ -424,6 +424,9 @@ where
         self.paused = true;
         self.rx_pending = false;
         self.cut = false;
+        // The paused ring's continuation ended with it.
+        self.continuation = None;
+        self.streak = 0;
         Poll::Ready(Ok(()))
     }
     fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Result<DeviceEvent, Fault>> {
@@ -598,7 +601,10 @@ where
             // fills it: both are ring work.
             self.rx_pending |= !facts.is_empty();
         }
-        Ok(!self.received.0.get_mut().is_empty() || self.rx_pending)
+        // Ring work that waits for its continuation is the caller's alarm's
+        // (the pull answered `Later`): it is no fact before then.
+        Ok(!self.received.0.get_mut().is_empty()
+            || (self.rx_pending && self.continuation.is_none()))
     }
     fn pull_unit(
         &mut self,

@@ -577,6 +577,68 @@ fn a_receive_pull_stops_at_the_held_units_and_keeps_the_rest_on_the_ring() {
 }
 
 #[test]
+fn a_served_receive_continuation_leaves_the_ports_deadline() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.deliver(8);
+        fixture.observed.borrow_mut().continuous_rx = true;
+        let now = fixture.now();
+        let mut held = Vec::new();
+        let at = loop {
+            match fixture.port.receive(32, now).expect("receive") {
+                RxPull::Unit { frame, .. } => held.push(frame),
+                RxPull::Later(at) => break at,
+                RxPull::Empty => panic!("the ring continues later"),
+            }
+        };
+        assert!(at > now);
+        assert_eq!(fixture.port.deadline(), Some(at), "the alarm keeps it");
+        // The caller comes back at the continuation and takes one unit.
+        fixture.advance(at.saturating_duration_since(now));
+        let now = fixture.now();
+        assert!(matches!(
+            fixture.port.receive(32, now),
+            Ok(RxPull::Unit { .. })
+        ));
+        // The served continuation no longer bounds the port: a passed
+        // deadline is work for the port's next service.
+        assert!(
+            fixture
+                .port
+                .deadline()
+                .is_none_or(|deadline| deadline > now),
+            "{:?} at {now:?}",
+            fixture.port.deadline()
+        );
+        fixture.observed.borrow_mut().continuous_rx = false;
+        for frame in held {
+            fixture.port.recycle(frame);
+        }
+    });
+}
+
+#[test]
+fn a_network_return_is_one_receive_fact() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.deliver(1);
+        let now = fixture.now();
+        let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+            panic!("a unit");
+        };
+        let lent = fixture.port.lend(frame).ok().expect("lent");
+        let waker = fixture.waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(!fixture.port.poll_facts(&mut cx).rx, "the ring is empty");
+        drop(lent);
+        assert!(fixture.port.poll_facts(&mut cx).rx, "the return rearms");
+        // A caller that does not pull now hears the return once.
+        assert!(!fixture.port.poll_facts(&mut cx).rx);
+        assert_eq!(fixture.observed.borrow().returned, 1);
+    });
+}
+
+#[test]
 fn a_refused_submission_and_command_return_their_owners_unchanged() {
     with_fixture(|fixture| {
         let attempt = fixture.station_mpdu().expect("attempt");

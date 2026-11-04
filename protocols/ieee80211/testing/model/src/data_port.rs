@@ -1044,7 +1044,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.deadline
+        [self.deadline, self.air.kept_due.get()]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     fn service_tx(
@@ -1138,6 +1141,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
+        if let Some(at) = air.receive_later(now) {
+            return Ok(RxPull::Later(at));
+        }
         let unit = if let Some((frame, meta)) = air.rx.pop_front() {
             Some((frame, meta, false))
         } else {
@@ -1159,6 +1165,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             }
         };
         let Some((bytes, meta, streamed)) = unit else {
+            // A unit may land right after the ring was read, unannounced.
+            air.land();
             return Ok(RxPull::Empty);
         };
         if !self.held.charge_rx() {

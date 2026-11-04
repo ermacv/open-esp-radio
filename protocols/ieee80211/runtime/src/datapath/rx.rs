@@ -170,6 +170,7 @@ where
                 match self.port.receive(room, now).map_err(ActorFault::Port)? {
                     RxPull::Unit { frame, meta } => {
                         pulled = pulled.saturating_add(1);
+                        self.progressed = true;
                         if matches!(self.radio, Radio::Stopping { .. }) {
                             // A stopping radio's units go back unread.
                             self.port.recycle(frame);
@@ -181,6 +182,15 @@ where
                         }
                     }
                     RxPull::Empty => break,
+                    RxPull::Later(at) if at <= now => {
+                        // The port's call ended at its own bound with the
+                        // ring's work left: no alarm keeps an instant
+                        // already reached, so the next turn pulls on after
+                        // one repost.
+                        self.facts.rx = true;
+                        self.again = true;
+                        break;
+                    }
                     RxPull::Later(at) => {
                         self.rx_later = Some(at);
                         break;

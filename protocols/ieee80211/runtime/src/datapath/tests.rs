@@ -582,17 +582,17 @@ fn a_completion_publishes_the_sealed_standby_in_the_same_turn() {
     bench(|bench| {
         bench.start();
         bench.connect(link(true, None));
-        bench.send_msdu(msdu(0, &[1; 8]));
-        bench.settle();
-        let _traffic = bench.next();
+        // The first MSDU's arena stays on the air.
         bench
             .air
             .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[1; 8]));
         bench.settle();
+        let _traffic = bench.next();
         bench.send_msdu(msdu(0, &[2; 8]));
         bench.settle();
         let first = bench.data_sent().len();
-        // The second MSDU waits in the standby behind the held arena.
+        assert_eq!(first, 1, "the second MSDU waits in the standby");
         bench
             .air
             .hold_completion(WmmAccessCategory::BestEffort, false);
@@ -830,6 +830,10 @@ fn a_port_fault_ends_the_actor_and_tells_the_lifecycle() {
     bench(|bench| {
         bench.start();
         bench.connect(link(true, None));
+        // An arena stays on the air: the next turn serves the port.
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
         bench.send_msdu(msdu(0, &[1; 8]));
         bench.settle();
         bench.air.poison();
@@ -1243,4 +1247,98 @@ fn a_reinstall_in_place_runs_on_the_placed_port_and_a_refusal_leaves_the_actor()
         assert_eq!(actor.reinstall_in_place(|_| Ok::<(), ()>(())), Ok(()));
         assert_eq!(seen, 1);
     }));
+}
+
+#[test]
+fn ring_work_beyond_one_pull_reposts_the_actor() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        // The port's pull ended at its own bound with the ring's work left:
+        // it names the turn's instant, which no alarm can keep.
+        let now = bench.clock.inner.now();
+        bench.air.defer_receive(now);
+        bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
+        bench.settle();
+        assert!(
+            matches!(bench.receive.try_receive(), Some(Received::Lent(_))),
+            "the next turn pulled the ring on"
+        );
+    });
+}
+
+#[test]
+fn a_passed_port_deadline_hides_no_later_receive_continuation() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        // The port's deadline stays passed: the actor reposts it a bounded
+        // number of turns, then sleeps.
+        let now = bench.clock.inner.now();
+        bench.air.keep_due(Some(now));
+        bench.settle();
+        // The ring continues only later, at its own instant.
+        let at = now.saturating_add(oer_portable_time::Duration::from_millis(1));
+        bench.air.defer_receive(at);
+        bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
+        bench.settle();
+        assert!(bench.receive.try_receive().is_none());
+        assert_eq!(
+            bench.clock.inner.next_deadline(),
+            Some(at),
+            "the alarm keeps the ring's continuation"
+        );
+        // Only the clock moves: the alarm alone wakes the actor.
+        let wakes = bench.wakes();
+        bench
+            .clock
+            .inner
+            .advance(oer_portable_time::Duration::from_millis(1))
+            .unwrap();
+        assert!(bench.wakes() > wakes, "the alarm woke the actor");
+        bench.settle();
+        assert!(matches!(
+            bench.receive.try_receive(),
+            Some(Received::Lent(_))
+        ));
+    });
+}
+
+#[test]
+fn a_unit_that_lands_during_a_turn_takes_a_repost() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench.air.receive(&data_from_ap(1, &[1, 1, 1, 1]), meta());
+        // The second unit lands after the turn found the ring empty: the
+        // actor's own poll of the facts after the turn takes its signal,
+        // so no wake comes for it.
+        bench
+            .air
+            .receive_during_pull(&data_from_ap(2, &[2, 2, 2, 2]), meta());
+        bench.settle();
+        let mut lent = 0;
+        while let Some(Received::Lent(_)) = bench.receive.try_receive() {
+            lent += 1;
+        }
+        assert_eq!(lent, 2, "the repost pulled the landed unit");
+    });
+}
+
+#[test]
+fn standing_ring_work_the_actor_cannot_take_reposts_a_bounded_number_of_turns() {
+    bench(|bench| {
+        bench.start();
+        // The lifecycle keeps the frames it got: the port holds the rest
+        // and keeps giving the ring's work as a fact.
+        for sequence in 0..6 {
+            bench.air.receive(&management(sequence), meta());
+        }
+        let polls = bench.settle();
+        assert!(polls <= 1 + usize::from(DUE_REPOSTS), "{polls} polls");
+        // Asleep: a poll serves the standing fact and wakes nothing.
+        let wakes = bench.wakes();
+        bench.poll();
+        assert_eq!(bench.wakes(), wakes);
+    });
 }

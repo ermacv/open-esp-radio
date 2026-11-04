@@ -1468,8 +1468,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 facts.tx = Some(TxFacts::DUE);
             }
         }
-        // A unit the network returned rearms the ring at the next pull.
-        if self.shared.network.poll_returns(cx) {
+        // A unit the network returned rearms the ring at the next pull. The
+        // return is taken here, so it is one fact: a caller that cannot pull
+        // now (the network holds all it may) does not hear it again.
+        if self.shared.network.poll_returns(cx) && self.shared.network.take_returned() {
+            self.device.returned();
             facts.rx = true;
         }
         facts
@@ -1598,6 +1601,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         settle_lent(&self.shared.network, &self.rx_out, self.device)
             .map_err(|fault| self.record(fault))?;
+        // This pull serves the continuation the last one named: a passed
+        // one no longer bounds the deadline, which would otherwise ask for
+        // a transmit service at every turn.
+        if self.rx_later.is_some_and(|at| at <= now) {
+            self.rx_later = None;
+            self.recompute_deadline();
+        }
         for _ in 0..RECEIVE_STEPS {
             let room = usize::from(room).min(RX_HELD.saturating_sub(self.rx_out.get()));
             let pulled = self

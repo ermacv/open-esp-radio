@@ -38,8 +38,11 @@
 //!    holds at its barrier stops the messages until it ran;
 //! 6. the coalesced facts for the lifecycle.
 //!
-//! The actor wakes itself only when a budget ran out with work left: one
-//! repost, then it yields. An idle actor sleeps until a source wakes it.
+//! The actor wakes itself only when a budget ran out with work left, or
+//! when its own poll after the turn took facts of the port's signals (a
+//! unit or an event that came during the turn: taking them took the wake
+//! their signal owed): one repost, then it yields. An idle actor sleeps
+//! until a source wakes it.
 //!
 //! # Errors
 //!
@@ -386,6 +389,12 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     armed: Option<Instant>,
     /// The turns in a row whose port deadline stayed due.
     due_streak: u8,
+    /// The turns in a row after which the port's signals gave facts again
+    /// although the turn served none of its work.
+    fact_streak: u8,
+    /// The turn served the port's work: a received unit, transmit events
+    /// or a TBTT.
+    progressed: bool,
     /// The turn's instant, read once.
     now: Instant,
     /// Owners the actor keeps after a broken contract.
@@ -456,6 +465,8 @@ where
             again: false,
             armed: None,
             due_streak: 0,
+            fact_streak: 0,
+            progressed: false,
             now: Instant::EPOCH,
             retained: Retained {
                 link: None,
@@ -516,6 +527,8 @@ where
                 again: false,
                 armed: None,
                 due_streak: 0,
+                fact_streak: 0,
+                progressed: false,
                 now: Instant::EPOCH,
                 retained: Retained {
                     link: None,
@@ -683,13 +696,12 @@ where
             return Poll::Ready(end);
         }
         // Register for what the turn left waiting. Work a budget left, a
-        // source the turn made ready or a port service the turn made due
-        // takes one repost: the other tasks run first.
-        if self
-            .collect(cx, lifecycle, network, alarm.as_mut(), arm)
-            .ready
-            || self.due_again()
-        {
+        // source the turn made ready, facts the port's signals gave after
+        // the turn or a port service the turn made due takes one repost:
+        // the other tasks run first.
+        let after = self.collect(cx, lifecycle, network, alarm.as_mut(), arm);
+        let facts_again = self.facts_again(after.fresh);
+        if after.ready || facts_again || self.due_again() {
             self.again = true;
         }
         if self.again {

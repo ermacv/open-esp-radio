@@ -294,9 +294,11 @@ pub trait Device<const B: usize>: Sized + 'static {
     ) -> Poll<Result<Option<Self::Receive>, Fault>>;
     fn finish_rx_cut(&mut self) -> Result<(), Fault>;
     /// The data port's receive facts: take them, registering `cx` alone
-    /// on their signal, and report whether the ring holds work (a staged
-    /// unit, or ring work, however long its continuation waits). It
-    /// reads no clock; while a cut or a stop holds the ring it is `false`.
+    /// on their signal, and report whether the ring holds work: a staged
+    /// unit, or ring work that waits for no continuation (the pull that
+    /// answered [`DevicePull::Later`] left that work to the caller's
+    /// alarm). It reads no clock; while a cut or a stop holds the ring it
+    /// is `false`.
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault>;
     /// The data port's receive pull at the turn's `now`: a staged unit, or
     /// the ring serviced once, while the caller has `receive_room`. It
