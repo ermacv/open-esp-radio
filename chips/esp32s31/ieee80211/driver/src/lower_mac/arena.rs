@@ -297,6 +297,17 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
         })
     }
 
+    /// Whether [`Self::into_parts`] gives the chains and tickets back: both
+    /// arenas are idle and empty, hold no key right and never faulted.
+    pub fn returnable(&self) -> bool {
+        self.fault.is_none()
+            && self.chains.iter().all(|chain| {
+                matches!(chain.phase, Phase::Idle)
+                    && chain.owner.is_fully_free()
+                    && matches!(chain.admission, Some(TxAdmission::Open(_)))
+            })
+    }
+
     /// The chains and tickets back, when both arenas are idle and empty,
     /// hold no key right and never faulted.
     ///
@@ -305,13 +316,7 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
     /// The arenas, unchanged.
     #[allow(clippy::result_large_err, reason = "the arenas go back by value")]
     pub fn into_parts(self) -> Result<ArenaParts<'core, 'slot, L, Path, SLOTS>, Self> {
-        let returnable = self.fault.is_none()
-            && self.chains.iter().all(|chain| {
-                matches!(chain.phase, Phase::Idle)
-                    && chain.owner.is_fully_free()
-                    && matches!(chain.admission, Some(TxAdmission::Open(_)))
-            });
-        if !returnable {
+        if !self.returnable() {
             return Err(self);
         }
         let [first, second] = self.chains;
@@ -340,36 +345,6 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
     /// The fault the arenas quarantined themselves for.
     pub const fn fault(&self) -> Option<ArenaFault> {
         self.fault
-    }
-
-    /// The chain of `arena`, for host observation.
-    #[cfg(test)]
-    pub(crate) fn chain_mut(
-        &mut self,
-        arena: ArenaId,
-    ) -> Option<&mut Esp32s31AmpduOwner<'slot, L, SLOTS>> {
-        self.chains
-            .get_mut(arena.index())
-            .map(|chain| &mut chain.owner)
-    }
-
-    /// The arena on the air, the frames its PPDU carries and whether it is
-    /// a single MPDU, for host observation.
-    #[cfg(test)]
-    pub(crate) fn on_air_shape(&self) -> Option<(ArenaId, u8, bool)> {
-        let id = self.on_air()?;
-        match &self.chains.get(id.index())?.phase {
-            Phase::OnAir(on_air) => Some((id, on_air.published, on_air.single)),
-            Phase::Idle | Phase::Completed { .. } => None,
-        }
-    }
-
-    /// Whether `arena` holds a key right, for host observation.
-    #[cfg(test)]
-    pub(crate) fn holds_key(&self, arena: ArenaId) -> bool {
-        self.chains
-            .get(arena.index())
-            .is_some_and(|chain| matches!(chain.admission, Some(TxAdmission::Protected(_))))
     }
 
     /// Whether an arena holds a key right: a frame it encrypted is on the
@@ -733,9 +708,9 @@ where
 
     fn publish(
         &mut self,
-        publication: ArenaPublication<'p, 'id, K>,
+        publication: ArenaPublication<'p, K>,
         now: Instant,
-    ) -> Result<(), PublishError<'p, 'id, K, ArenaFault>> {
+    ) -> Result<(), PublishError<'p, K, ArenaFault>> {
         if let Some(fault) = self.arenas.fault {
             return Err(PublishError::Fault(fault));
         }

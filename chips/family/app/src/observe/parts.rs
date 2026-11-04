@@ -1,7 +1,7 @@
 //! Named parts of the image's work and their polls.
 //!
 //! A part is a task or a future inside one: the library's own
-//! ([`LibraryPart`]), the station service's spans, and up to
+//! ([`LibraryPart`]), the Wi-Fi datapath actor's spans among them, and up to
 //! [`IMAGE_PARTS`] the image names. Each part has one writer, the context
 //! of the executor that polls it. A poll's time includes its preemption by
 //! higher executors and interrupts, so nested parts and the parts of
@@ -23,27 +23,25 @@ use super::{Concurrent, bump};
 pub enum LibraryPart {
     /// The application's future, on the application executor.
     Application,
-    /// The library's tasks on the application executor: the RTC
-    /// watchdog's feed and the station's runner.
+    /// The library's tasks on the application executor: the RTC watchdog's
+    /// feed, the Wi-Fi station's lifecycle and its datapath actor.
     Watchdog,
     Station,
-    /// The radio executor's tasks: the shared RF actor and the Wi-Fi driver.
+    Datapath,
+    /// The radio executor's task: the shared RF actor.
     RadioActor,
-    Driver,
     /// The group's IP service and future.
     Ip,
     Group,
-    /// Inside the station: its service's spans.
-    Step,
-    Pending,
-    Sources,
-    Received,
-    Deliver,
-    Queue,
-    Terminal,
+    /// Inside the datapath actor: its spans, one whole turn and, within
+    /// it, the transmit service with the data arena's settlement, the
+    /// received units, the network's MSDUs into the standby arena and the
+    /// lifecycle's messages.
+    Turn,
     Transmit,
-    Recycle,
-    Attempt,
+    Receive,
+    Intake,
+    Messages,
 }
 
 impl LibraryPart {
@@ -51,20 +49,15 @@ impl LibraryPart {
         LibraryPart::Application,
         LibraryPart::Watchdog,
         LibraryPart::Station,
+        LibraryPart::Datapath,
         LibraryPart::RadioActor,
-        LibraryPart::Driver,
         LibraryPart::Ip,
         LibraryPart::Group,
-        LibraryPart::Step,
-        LibraryPart::Pending,
-        LibraryPart::Sources,
-        LibraryPart::Received,
-        LibraryPart::Deliver,
-        LibraryPart::Queue,
-        LibraryPart::Terminal,
+        LibraryPart::Turn,
         LibraryPart::Transmit,
-        LibraryPart::Recycle,
-        LibraryPart::Attempt,
+        LibraryPart::Receive,
+        LibraryPart::Intake,
+        LibraryPart::Messages,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -72,26 +65,21 @@ impl LibraryPart {
             LibraryPart::Application => "application",
             LibraryPart::Watchdog => "watchdog",
             LibraryPart::Station => "station",
+            LibraryPart::Datapath => "datapath",
             LibraryPart::RadioActor => "radio-actor",
-            LibraryPart::Driver => "driver",
             LibraryPart::Ip => "ip",
             LibraryPart::Group => "group",
-            LibraryPart::Step => "step",
-            LibraryPart::Pending => "pending",
-            LibraryPart::Sources => "sources",
-            LibraryPart::Received => "received",
-            LibraryPart::Deliver => "deliver",
-            LibraryPart::Queue => "queue",
-            LibraryPart::Terminal => "terminal",
+            LibraryPart::Turn => "turn",
             LibraryPart::Transmit => "transmit",
-            LibraryPart::Recycle => "recycle",
-            LibraryPart::Attempt => "attempt",
+            LibraryPart::Receive => "receive",
+            LibraryPart::Intake => "intake",
+            LibraryPart::Messages => "messages",
         }
     }
 }
 
 /// The library's parts.
-pub const LIBRARY_PARTS: usize = 17;
+pub const LIBRARY_PARTS: usize = 12;
 /// The parts an image names, after the library's.
 pub const IMAGE_PARTS: usize = 4;
 /// Every part: the library's, then the image's.

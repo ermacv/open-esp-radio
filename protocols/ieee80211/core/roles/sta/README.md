@@ -156,17 +156,19 @@ Module map:
   composition builds from its `StaTxBlockAckPolicy` and hands over in
   `StaConfig::tx_block_ack` (`None` negotiates nothing). Each association
   starts it afresh and admits agreements only with an HT access point of a
-  QoS BSS. Data of a TID (`Station::tx_block_ack_traffic`) queues that TID's
+  QoS BSS. Data of a TID (`Station::tx_traffic`, with the TID's next
+  sequence number as the link's holder numbers it) queues that TID's
   negotiation; the station sends the ADDBA Request with its control TX
-  credit, from the TID's next sequence number, and retries an unanswered or
+  credit, from that next sequence number, and retries an unanswered or
   unsent request after the policy's interval while attempts remain. A
   refusal, spent attempts or a response outside the request (which owes a
   DELBA) close the TID for the association. The access point's DELBA as the
   recipient ends an agreement without an answer; an agreement idle for the
   policy's inactivity ends with the station's DELBA (reason 39), and new
-  data negotiates again. `Station::tx_block_ack` reads an operational
-  agreement, whose window the data plane keeps from its starting sequence
-  on; `Station::tx_block_ack_request` owes the BlockAckReq the plane names
+  data negotiates again. Each change of an operational agreement goes to
+  the link's holder (`LinkAction::Agreement`), whose window the data plane
+  keeps from its starting sequence on; `Station::tx_block_ack_request` owes
+  the BlockAckReq the plane names
   after a drop, owed again at that head when it goes unanswered. Other
   Block Ack actions stay with the receive agreements;
 - `data`: the connected station's data: the network boundary's checked
@@ -178,17 +180,42 @@ Module map:
   the retry policy (`AggregateRetry`, `StaTxBlockAckPolicy::retry_members`)
   under the station's transmit agreements. No reorder, replay check or
   power save yet;
+- `link`: the connected station's link as it hands it to the holder that
+  carries its data (`LinkAction::HandOver` with a `LinkHandover`). The
+  holder keeps the link's numbers (`TxNumbers`: each TID's QoS sequence
+  space, the station's own space, which management frames and non-QoS
+  data share, and the pairwise key's transmit half, `StaTokens::LinkKey`,
+  with its CCMP packet numbers) and its receive admission (`RxLink`: own
+  address, BSSID, protection and the replay epoch). It numbers the data
+  and every station frame of the link (`StaTransmit::number`,
+  `FrameNumber::Link`: the station writes zero, `TxNumbers::number` writes
+  the Sequence Number into the frame's header as it is submitted; its
+  packet number follows its rate), and admits received data without the
+  station (`LinkHandover::receive`): data to the network, EAPOL to
+  `Station::eapol`, management frames to `Station::receive`. The station
+  holds and releases the link's data (`LinkAction::Hold`/`Release`: key
+  confirmation, sleep, absences), tells each transmit agreement's change
+  and asks for the link back once it leaves (`LinkAction::Return`); the
+  holder returns it (`LinkReturn`, `Station::link_returned`), which the
+  station numbers on from. `Station::poll_link` gives the hand-over, hold,
+  release and return the holder applies right after an input; every
+  change also comes first from `Station::poll_action`. The station keeps
+  the PTK's association owner while the link holds its transmit half
+  (`KeyCell::Lent`). A group key's installation, replacement, selection
+  or removal terminal switches the replay lane in the link
+  (`LinkHandover::group_terminal`) before the station takes it; the
+  station switches it itself only before its link exists. The service
+  returns the link before the station finishes;
 - `data::plane`: the station's data transmission over the port's two DMA
   arenas (`TxArena`). `DataPlane::handover` takes one link's `DataLink`
-  (`DataLink::for_link`: header template, `AcAdmission`, retry policy, HT
-  limits and each TID's `TxWindow`) and `DataPlane::stop` returns it,
+  (from the `LinkHandover`: header template, `AcAdmission`, retry policy,
+  HT limits and each TID's `TxWindow`) and `DataPlane::stop` returns it,
   after returning the frames of unpublished arenas;
   `DataPlane::withdraw_unpublished` returns them alone, before a pairwise
   key changes. `DataPlane::intake` writes an MSDU once, as the standby
   arena takes it: the next sequence number of its TID and packet number of
-  the key, drawn from the station's link (`LinkNumbers`: its `LinkMode`
-  spaces and its `StationPairwiseKey::packet_numbers`, which the station's
-  own EAPOL and Block Ack negotiation share), the header from the template
+  the key, drawn from the link's `TxNumbers`, which the station's own EAPOL
+  and Block Ack negotiation share, the header from the template
   and the CCMP header. The standby belongs to one TID, holds
   consecutive sequence numbers inside its window, within the TID's
   `PpduLimit` (computed when the aggregate rate or the agreement changes)
@@ -212,10 +239,11 @@ Module map:
 - `port`: the station's tokens on a lower-MAC port (`PortStaTokens`) and
   the installed pairwise key
   (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
-  CCMP packet-number allocator; a retransmission keeps its number. Its
-  request (`StationPairwiseKey::request`) enqueues the installation and
-  returns a `PendingStationPairwiseKey` holding the association; only the
-  key its installation terminal returns makes it installed;
+  CCMP packet-number allocator; a retransmission keeps its number. The
+  identity the port's command issuer mints with the installation command
+  makes a `PendingStationPairwiseKey` holding the association
+  (`StationPairwiseKey::issued`); only the key its installation terminal
+  returns makes it installed;
 - the transmit decisions of a station frame travel with its action:
   `StaRatePlan` selects its rate record and transmissions, `StaFrameClass`
   its coexistence class, and `StaTransmit` its access category (Voice), its
@@ -410,16 +438,18 @@ The data plane keeps each arena's frames in a book beside its arena right:
 their TID, first sequence number, admission instants and the attempts on
 the air; the arena holds their memory. An arena of an ended link settles
 by releasing every frame, without moving any window or teaching rate
-selection. `LinkView` lends the sequence spaces, replay check and key only
-for a synchronous step; the plane borrows the spaces and the key's packet
-numbers through `LinkNumbers` for one intake.
+selection. Each intake draws from the link's `TxNumbers`, which the
+link's holder keeps.
 
-`Station::receive` admits Data and EAPOL together through MAC's checked
-`DecodedHeader` and `AdmittedData`. The header owns the MAC/QoS/HT boundary;
-CCMP admission requires integrity evidence and commits replay once before
-EtherType dispatch. The service delivers non-EAPOL MSDUs from this same
-admission and reports each checked protocol drop as an `RxFrameDropped`
-observation with its reason.
+The link's holder admits a connected station's Data and EAPOL together
+(`LinkHandover::receive`) through MAC's checked `DecodedHeader` and
+`AdmittedData`; before the link exists, `Station::receive` admits the
+handshake's EAPOL the same way and refuses its data. The header owns the
+MAC/QoS/HT boundary; CCMP admission requires integrity evidence and commits
+replay once before EtherType dispatch, also while the link holds its data.
+The service delivers non-EAPOL MSDUs from this same admission and reports
+each checked protocol drop as an `RxFrameDropped` observation with its
+reason.
 Malformed A-MSDU subframes retain their error instead of disappearing from
 an iterator.
 
@@ -466,12 +496,13 @@ while earlier operations can return. Issuance is total with a wrapping `u64`.
 An outstanding operation must not survive an entire cycle of 2^64 connections;
 this lifecycle condition is documented on `LinkEpochSource::begin`. The
 ticket bound limits concurrent operations, not their age. Ending a link
-closes its epoch without allocating another. Data takes this same epoch
-from `LinkView`; temporary sleep or a channel absence does not close it.
+closes its epoch without allocating another. The link's holder takes this
+same epoch with the link (`LinkHandover::epoch`); temporary sleep or a
+channel absence does not close it.
 
 Station and Data construct `ClassSizedFrame` while encoding into their class's
 buffer, then retain that proof through the operation. The service only adds
-the phase's rates; it cannot replace the checked header or length.
+the port's checked rates; it cannot replace the checked header or length.
 `TxRefusal::NoRate` belongs to service selection, while
 `TxRefusal::Preparation` carries a pool refusal. Neither is a radio terminal.
 
@@ -642,7 +673,7 @@ configuration replies.
   `BeaconLoss` reason. A lost AP is never noticed.
 - **M4 is confirmed only by `Ended(Delivered)`.** `machine.rs::confirming_step`
   does not take the first verified CCMP frame under the new PTK as
-  confirmation; `Station::link` is `None` in `Confirming`, so protected data
+  confirmation; the link holds its data in `Confirming`, so protected data
   received meanwhile is dropped as `NotConnected`, and `leave_handshake`
   sends a protected Deauthentication before confirmation.
 - **Unprotected Deauthentication/Disassociation before PTK install is
@@ -688,7 +719,7 @@ configuration replies.
   masks raw frame-control bits and silently ignores a frame over 96 bytes;
   `SaQueryStep::TimedOut` is discarded; raw `u16` reason codes (no reason 17
   for an M3 RSN mismatch; `leave_handshake` derives a local reason from the
-  wire code); `pub` fields on `StaTransmit`, `LinkView`,
+  wire code); `pub` fields on `StaTransmit`,
   `StaCommandTerminal`, `StaSaeTransmission`, `StaSaePmk`; `Unsent` mapped
   to `NullOutcome::Unconfirmed`; `data.rs::DataRefusal::NoTokens` without a
   typed wake; one EAPOL error aborts the rest of an A-MSDU; dead

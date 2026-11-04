@@ -1,5 +1,5 @@
 //! How the station's network channels tell their two ends, in one type the
-//! composition names: the station end (its runner and control) and the
+//! composition names: the station end (its datapath actor and control) and the
 //! network end (the network device and the network's stop), on one hart or
 //! on two.
 //!

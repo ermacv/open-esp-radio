@@ -2,7 +2,7 @@
 
 use core::marker::PhantomData;
 
-use crate::{BodyLoan, SlotIdentity, SlotOwner};
+use crate::{BodyLoan, SlotIdentity};
 
 /// A domain context's opaque representation at the body/queue boundary.
 ///
@@ -57,12 +57,12 @@ impl<'p, Id: SlotIdentity, T> PortContext<'p, Id, T> {
 
     /// Move the complete opaque context into its backend's owned queue state.
     /// Conversion authority is private in the concrete backend frontend.
-    pub fn into_owned<S: SlotOwner<Id>>(self, _: &BodyLoan<'p, Id, S>) -> T {
+    pub fn into_owned<S>(self, _: &BodyLoan<'p, Id, S>) -> T {
         self.value
     }
 
     /// Return owned queue context under the consumer's body loan.
-    pub fn from_owned<S: SlotOwner<Id>>(value: T, _: &BodyLoan<'p, Id, S>) -> Self {
+    pub fn from_owned<S>(value: T, _: &BodyLoan<'p, Id, S>) -> Self {
         Self::new(value)
     }
 

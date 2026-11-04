@@ -169,12 +169,15 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         if self.epoch != Some(reply.epoch) || !self.is_connected() {
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
-        if self.link().is_none() {
-            return Err((reply, BlockAckReplyRefusal::Busy));
-        }
         let State::Connected(connected) = &self.state else {
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         };
+        // Its data waits while the station sleeps or is away; so does this.
+        if !connected.as_ref().is_some_and(|connected| {
+            super::data_link_up(connected, self.absence.is_some(), &self.keys)
+        }) {
+            return Err((reply, BlockAckReplyRefusal::Busy));
+        }
         if connected.bssid != reply.bssid {
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
@@ -204,7 +207,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             Err(Unsent::Encode) => return Err((reply, BlockAckReplyRefusal::Encode)),
             Err(Unsent::NoConnection) => return Err((reply, BlockAckReplyRefusal::LinkChanged)),
         };
-        if protected && !matches!(&self.keys.pairwise, KeyCell::Installed(_)) {
+        if protected && !self.keys.keyed() {
             self.tickets.put(transmit.ticket, events);
             self.buffers.put(transmit.buffer, events);
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
@@ -213,9 +216,17 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             connected.sending = true;
         }
         if protected {
-            match &self.keys.pairwise {
-                KeyCell::Installed(key) => Ok(StaAction::TransmitProtected { transmit, key }),
-                _ => {
+            match (transmit.number, &self.keys.pairwise) {
+                // The handed-over link numbers and keys its own frames; the
+                // key its holder kept after the link came back keys them.
+                (crate::link::FrameNumber::Link { .. }, _)
+                | (crate::link::FrameNumber::Keyed, KeyCell::Lent(_)) => {
+                    Ok(StaAction::Transmit(transmit))
+                }
+                (crate::link::FrameNumber::Open, KeyCell::Installed(key)) => {
+                    Ok(StaAction::TransmitProtected { transmit, key })
+                }
+                (crate::link::FrameNumber::Open | crate::link::FrameNumber::Keyed, _) => {
                     self.tickets.put(transmit.ticket, events);
                     self.buffers.put(transmit.buffer, events);
                     Err((reply, BlockAckReplyRefusal::LinkChanged))

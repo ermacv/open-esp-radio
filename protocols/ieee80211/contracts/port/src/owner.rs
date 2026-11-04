@@ -1,21 +1,16 @@
-//! The lower-MAC port on the owner shape of `oer-protocols-radio-port`
-//! ([`Owner`](oer_protocols_radio_port::Owner), [`PortBody`](oer_protocols_radio_port::PortBody)):
-//! its validated values and its disabled-only settings. The running phase
-//! and its tokens are [`phase`](crate::phase)'s.
+//! The lower-MAC port's validated values: what a caller states to a
+//! [`DataPort`](crate::DataPort) or a [`PortCommand`](crate::PortCommand)
+//! is checked here once, when it is made.
 //!
-//! Every refusal of the old lower-MAC port trait that a caller's own state
-//! explains is a type here or in the phase (`docs/architecture.md`,
-//! "Ownership"); what the world controls (the air, time, the hardware) stays a typed
-//! outcome. A backend implements [`LowerMacBackend`].
+//! Every refusal a caller's own state explains is a type here or in the
+//! port's types (`docs/architecture.md`, "Ownership"); what the world
+//! controls (the air, time, the hardware) stays a typed outcome.
 //!
-//! | Refusal of the old port trait | Form here |
+//! | Refusal | Form here |
 //! | --- | --- |
-//! | lifecycle refusals, "disabled", "port enabled" | the owner's state: the install gives the port its channel and addresses, [`LowerMacSetup`] changes the channel only while disabled, a backend whose addresses change implements [`AddressSetup`], a phase exists only while enabled |
 //! | an unsupported channel | [`SupportedChannel`] |
-//! | an unknown interface or role | the phase's interface of each role ([`StationPhase`](crate::StationPhase), [`AccessPointPhase`](crate::AccessPointPhase)) with only that role's operations; an attempt names no interface |
 //! | the receive rules a role may not request, a BSSID the role cannot take | [`SupportedFilter`] of the role, and the station's [`StationReceive`]; an access point's BSSID is its address |
-//! | busy (configuring an interface, removing a key an attempt in flight uses, closing the gate) | the operation returns at once and its end arrives as an event; never refused |
-//! | an unsupported rate | [`PhaseRate`], checked against the phase's channel; a BlockAckReq takes a [`LegacyPhaseRate`]; a retry plan's stages take checked rates |
+//! | an unsupported rate | [`PortRate`], checked against the port's channel; a BlockAckReq takes a [`LegacyPortRate`]; a retry plan's stages take checked rates |
 //! | an unsupported power | [`SupportedPower`] |
 //! | a response the frame or rate cannot carry | the buffer's [`TxFrame`] kind: an [`IndividualAddress`] or [`GroupAddress`] receiver, and for no ACK a [`NoAckHeader`] at a [`SupportedNoAck`] rate; the backend writes the QoS Ack Policy from the kind ([`QosControl`]) |
 //! | a busy queue, no free buffer | a transmit ticket and buffers of a class ([`TxBufferClass`](crate::TxBufferClass)), tokens the caller holds; the backend keeps an attempt its queue cannot take yet |
@@ -26,11 +21,10 @@
 //! | no Block Ack slot, an invalid agreement | a Block Ack slot, [`SupportedBlockAck`] and the agreement token that holds the slot |
 //! | an unsupported EDCA record or BSS color | [`SupportedEdca`], [`BssColor`] |
 //!
-//! These stay the world's outcomes: [`Poisoned`](oer_protocols_radio_port::Poisoned),
-//! [`EventsLost`](oer_protocols_radio_port::EventsLost) (only unsolicited reception),
-//! a clock that could not be read, a TSF that failed its timing check, and
-//! hardware that rejects a key or misreads a programmed agreement (a
-//! fault).
+//! These stay the world's outcomes: a port's
+//! [`DataPort::Fault`](crate::DataPort::Fault), a clock that could not be
+//! read, a TSF that failed its timing check, and hardware that rejects a
+//! key or misreads a programmed agreement (a fault).
 //!
 //! # Capabilities
 //!
@@ -142,19 +136,19 @@
 //! assert!(SupportedChannel::<TwoFourOnly>::new(permitted).is_some());
 //! ```
 //!
-//! No caller or backend mints a rate past the phase's check:
+//! No caller or backend mints a rate past the port's check:
 //!
 //! ```compile_fail,E0624
-//! # use oer_protocols_ieee80211_contracts_port::{PhaseRate, PhyRate};
+//! # use oer_protocols_ieee80211_contracts_port::{PortRate, PhyRate};
 //! # use oer_protocols_ieee80211_wire::phy::LegacyRate;
-//! let _ = PhaseRate::checked(PhyRate::Legacy(LegacyRate::Ofdm6M));
+//! let _ = PortRate::<()>::checked(PhyRate::Legacy(LegacyRate::Ofdm6M));
 //! ```
 //!
 //! ```
-//! # use oer_protocols_ieee80211_contracts_port::{LowerMacPhase, PhaseRate, PhyRate};
+//! # use oer_protocols_ieee80211_contracts_port::{DataPort, PortRate, PhyRate};
 //! # use oer_protocols_ieee80211_wire::phy::LegacyRate;
-//! fn rate<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &P) -> Option<PhaseRate<'p, 'id, P::Caps>> {
-//!     phase.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+//! fn rate<'id, P: DataPort<'id>>(port: &P) -> Option<PortRate<'_, P::Caps>> {
+//!     port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
 //! }
 //! ```
 //!
@@ -177,7 +171,6 @@ use oer_protocols_ieee80211_wire::frame::{
 
 use crate::EdcaParameterSet;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-use oer_protocols_radio_port::PortBackend;
 use oer_protocols_radio_regulatory::Permitted;
 
 use crate::{
@@ -534,39 +527,38 @@ impl BssColor {
     }
 }
 
-/// A rate the phase's channel carries: [`LowerMacPhase::rate`](crate::LowerMacPhase::rate) checks it
-/// against the capabilities and the channel the phase runs on.
+/// A rate the port's channel carries, for one borrow `'t` of the port:
+/// only [`DataPort::rate`](crate::DataPort::rate) checks it against the
+/// capabilities and the channel the port runs on.
 ///
-/// The invariant installation brand, capabilities and phase loan remain in
-/// every derived rate, retry plan and frame. A second installation with the
-/// same capabilities cannot consume it; keeping it also keeps the enabled
-/// owner borrowed, so disable and retune cannot invalidate its channel check.
-pub struct PhaseRate<'p, 'id, K> {
+/// The capabilities and the port borrow remain in every derived rate,
+/// retry plan and frame, so a rate checked in one turn is not used after
+/// the port moved on (a start retunes it only under `&mut`).
+pub struct PortRate<'t, K> {
     rate: PhyRate,
-    loan: PhantomData<fn(&'p ()) -> &'p ()>,
-    install: PhantomData<fn(&'id ()) -> &'id ()>,
+    turn: PhantomData<fn(&'t ()) -> &'t ()>,
     capabilities: PhantomData<fn(K) -> K>,
 }
 
-impl<K> Copy for PhaseRate<'_, '_, K> {}
-impl<K> Clone for PhaseRate<'_, '_, K> {
+impl<K> Copy for PortRate<'_, K> {}
+impl<K> Clone for PortRate<'_, K> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<K> core::fmt::Debug for PhaseRate<'_, '_, K> {
+impl<K> core::fmt::Debug for PortRate<'_, K> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("PhaseRate").field(&self.rate).finish()
+        f.debug_tuple("PortRate").field(&self.rate).finish()
     }
 }
 
-impl<'p, 'id, K> PhaseRate<'p, 'id, K> {
-    /// A rate [`LowerMacPhase::rate`](crate::LowerMacPhase::rate) checked; nothing else mints one.
+impl<'t, K> PortRate<'t, K> {
+    /// A rate [`DataPort::rate`](crate::DataPort::rate) checked; nothing
+    /// else mints one.
     pub(crate) const fn checked(rate: PhyRate) -> Self {
         Self {
             rate,
-            loan: PhantomData,
-            install: PhantomData,
+            turn: PhantomData,
             capabilities: PhantomData,
         }
     }
@@ -581,9 +573,25 @@ impl<'p, 'id, K> PhaseRate<'p, 'id, K> {
     /// # Errors
     ///
     /// The rate, when it is not.
-    pub fn legacy(self) -> Result<LegacyPhaseRate<'p, 'id, K>, Self> {
+    pub fn legacy(self) -> Result<LegacyPortRate<'t, K>, Self> {
         if matches!(self.rate, PhyRate::Legacy(_)) {
-            Ok(LegacyPhaseRate(self))
+            Ok(LegacyPortRate(self))
+        } else {
+            Err(self)
+        }
+    }
+}
+
+impl<'t, K: Ieee80211Capabilities> PortRate<'t, K> {
+    /// The rate, when the capabilities carry an individual frame without
+    /// an ACK at it.
+    ///
+    /// # Errors
+    ///
+    /// The rate, when they do not.
+    pub fn no_ack(self) -> Result<SupportedNoAck<'t, K>, Self> {
+        if K::CAPS.individual_no_ack.contains_rate(self.rate) {
+            Ok(SupportedNoAck(self))
         } else {
             Err(self)
         }
@@ -801,27 +809,27 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
     }
 }
 
-/// A rate of the phase that carries an individual frame without an ACK,
+/// A rate of the port that carries an individual frame without an ACK,
 /// as the capabilities' individual no-ACK formats state:
-/// [`LowerMacPhase::no_ack`](crate::LowerMacPhase::no_ack) checks it.
+/// [`PortRate::no_ack`] checks it.
 #[derive(Debug)]
-pub struct SupportedNoAck<'p, 'id, K>(pub(crate) PhaseRate<'p, 'id, K>);
+pub struct SupportedNoAck<'p, K>(PortRate<'p, K>);
 
-impl<'p, 'id, K> SupportedNoAck<'p, 'id, K> {
+impl<'p, K> SupportedNoAck<'p, K> {
     /// The rate.
-    pub const fn rate(&self) -> &PhaseRate<'p, 'id, K> {
+    pub const fn rate(&self) -> &PortRate<'p, K> {
         &self.0
     }
 }
 
-/// A non-HT rate of the phase, the only rates a BlockAckReq goes at:
-/// [`PhaseRate::legacy`] checks it.
+/// A non-HT rate of the port, the only rates a BlockAckReq goes at:
+/// [`PortRate::legacy`] checks it.
 #[derive(Debug)]
-pub struct LegacyPhaseRate<'p, 'id, K>(PhaseRate<'p, 'id, K>);
+pub struct LegacyPortRate<'p, K>(PortRate<'p, K>);
 
-impl<'p, 'id, K> LegacyPhaseRate<'p, 'id, K> {
+impl<'p, K> LegacyPortRate<'p, K> {
     /// The rate.
-    pub const fn rate(&self) -> &PhaseRate<'p, 'id, K> {
+    pub const fn rate(&self) -> &PortRate<'p, K> {
         &self.0
     }
 }
@@ -969,28 +977,28 @@ impl ResponseHeader for HeaderSpec<GroupAddress> {
 /// rate, from which its response follows. Only the kinds the hardware
 /// sends exist, so a frame and its response never disagree.
 #[derive(Debug)]
-pub enum TxFrame<'p, 'id, K> {
+pub enum TxFrame<'p, K> {
     /// An individual data or management frame, which solicits an ACK.
     Individual {
         /// Checked acknowledged header and complete MPDU length.
         frame: SizedFrame<AckHeader, K>,
-        /// The phase-bound rates and retry budget of this attempt.
-        plan: crate::RetryPlan<PhaseRate<'p, 'id, K>>,
+        /// The port-bound rates and retry budget of this attempt.
+        plan: crate::RetryPlan<PortRate<'p, K>>,
     },
     /// An individual frame that solicits no ACK and says so, at a rate that
     /// carries one without it.
     IndividualNoAck {
         /// Checked unacknowledged header and complete MPDU length.
         frame: SizedFrame<NoAckHeader, K>,
-        /// A phase-bound rate that supports individual No Ack frames.
-        rate: SupportedNoAck<'p, 'id, K>,
+        /// A port-bound rate that supports individual No Ack frames.
+        rate: SupportedNoAck<'p, K>,
     },
     /// A group data or management frame, which solicits no response.
     Group {
         /// Checked group receiver, header and complete MPDU length.
         frame: SizedFrame<HeaderSpec<GroupAddress>, K>,
-        /// The phase-bound rate of this group transmission.
-        rate: PhaseRate<'p, 'id, K>,
+        /// The port-bound rate of this group transmission.
+        rate: PortRate<'p, K>,
     },
     /// A BlockAckReq, which solicits a BlockAck, at a non-HT rate.
     BlockAckRequest {
@@ -1003,11 +1011,11 @@ pub enum TxFrame<'p, 'id, K> {
         /// The first sequence number requested in the Block Ack window.
         starting_sequence: SequenceNumber,
         /// The non-HT rates and retry budget of the request.
-        plan: crate::RetryPlan<LegacyPhaseRate<'p, 'id, K>>,
+        plan: crate::RetryPlan<LegacyPortRate<'p, K>>,
     },
 }
 
-impl<K> TxFrame<'_, '_, K> {
+impl<K> TxFrame<'_, K> {
     /// The MPDU's length without its FCS: the length its buffer holds.
     pub const fn mpdu_len(&self) -> usize {
         match self {
@@ -1082,61 +1090,9 @@ impl<H: FrameHeader, K: Ieee80211Capabilities> SizedFrame<H, K> {
     }
 }
 
-/// A lower-MAC backend on the owner shape. Its disabled-only settings are a
-/// [`LowerMacSetup`] and its running phase a
-/// [`LowerMacPhase`](crate::LowerMacPhase); the body's resources give its
-/// transmit tickets, buffers, key and Block Ack slots and its gate once.
-pub trait LowerMacBackend<Id: oer_protocols_radio_port::SlotIdentity>: PortBackend<Id> {
-    /// The backend's capabilities marker.
-    type Caps: Ieee80211Capabilities;
-
-    /// The depth of the driver's software queue of each access category, a
-    /// composition parameter. A service keeps at most this many data attempts
-    /// of a category at the port, across all its data sources, so a station
-    /// frame submitted at once waits for at most this depth plus the one on
-    /// the air.
-    const TX_QUEUE_DEPTH: core::num::NonZeroU8;
-
-    /// Longest current publication: PPDU plus response wait or hardware
-    /// timeout. Gate/key/disable barriers never wait for the remaining plan.
-    /// Composition passes this constant to the channel arbiter.
-    const PUBLICATION_BOUND: oer_portable_time::Duration;
-
-    /// Maximum admission-to-terminal time of a GTK mutation, including
-    /// queued publications and the finite DMA/ISR/software RX cut. The driver
-    /// owns a completion wake and a deadline wake. Expiry poisons with all
-    /// resources retained; it never returns a usable mutation permission.
-    /// Disable must finish or poison within this same bound under continuous RX.
-    const GROUP_COMMAND_BOUND: oer_portable_time::Duration;
-}
-
-/// The disabled-only settings of a lower-MAC port.
-pub trait LowerMacSetup {
-    /// The backend's capabilities marker.
-    type Caps: Ieee80211Capabilities;
-
-    /// Tune to `channel`, which every interface shares, in place of the
-    /// channel the install or an earlier call set: a port always has one,
-    /// so no phase runs untuned. The next `Enable` retunes. Nothing refuses
-    /// it: the port is disabled and the channel is supported.
-    fn set_channel(&mut self, channel: SupportedChannel<Self::Caps>);
-}
-
-/// The disabled-only setting of a backend whose interface addresses change
-/// after its install; one whose hardware fixes them (a station
-/// address, set by its cold start) does not implement it.
-pub trait AddressSetup: LowerMacSetup {
-    /// Set the address of the interface of the role `R`, in place of the
-    /// one the install or an earlier call gave it.
-    fn set_address<R: InterfaceRole>(&mut self, address: IndividualAddress);
-}
-
 mod extensions;
 
-pub use extensions::{
-    AirReservationPhase, AmpduPhase, AmpduRate, BeaconTimingPhase, BeaconWindow, MonitorPhase,
-    MpduStartSpacing, TbttPlan,
-};
+pub use extensions::{AmpduRate, MpduStartSpacing};
 
 #[cfg(test)]
 mod tests;

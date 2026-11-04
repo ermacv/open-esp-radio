@@ -1,0 +1,23 @@
+error[E0502]: cannot borrow `*port` as mutable because it is also borrowed as immutable
+  --> tests/ui/port_rate_turn.rs:10:13
+   |
+ 8 |     let rate = port.rate(raw)?;
+   |                ---- immutable borrow occurs here
+ 9 |     #[cfg(all())]
+10 |     let _ = port.receive(1, now); // ui-error: E0502
+   |             ^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
+...
+13 |     Some(rate.get())
+   |          ---- immutable borrow later used here
+
+error: lifetime may not live long enough
+  --> tests/ui/port_rate_turn.rs:19:5
+   |
+18 | pub fn keep<'id, P: DataPort<'id>>(port: &P, raw: PhyRate) -> Option<PortRate<'static, P::Caps>> {
+   |                                          - let's call the lifetime of this reference `'1`
+19 |     port.rate(raw) // ui-error: lifetime may not live long enough
+   |     ^^^^^^^^^^^^^^ returning this value requires that `'1` must outlive `'static`
+   |
+   = note: requirement occurs because of the type `PortRate<'_, <P as DataPort<'_>>::Caps>`, which makes the generic argument `'_` invariant
+   = note: the struct `PortRate<'t, K>` is invariant over the parameter `'t`
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance

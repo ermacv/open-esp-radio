@@ -1,20 +1,23 @@
 //! Image-owned mapping; the station service and IP workload run on P1.
 use crate::chip::{
-    Binding, Config, InitializationError, Output, Profile, ServiceRunner, StationExit,
-    StationRunner, TX, UnavailableCause,
+    Binding, Config, InitializationError, Profile, ServiceRunner, StationExit, StationRunner,
 };
-use crate::radio::{self, Backend, Caps, Device, Family};
+use crate::radio::{self, Caps};
 use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeUninit};
 use oer_chips_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_embassy_time::EmbassyClock;
 use oer_protocols_ieee80211_contracts_port::*;
-use oer_protocols_ieee80211_runtime::station::*;
+use oer_protocols_ieee80211_runtime::datapath::ActorRxMeta;
+use oer_protocols_ieee80211_runtime::lifecycle::{
+    ActorEnds, Lifecycle, LifecycleArbiter, LifecycleCompleted, LifecycleEnd, LifecycleIo,
+    LifecycleTxContext, RetiredLifecycle,
+};
 
 use oer_portable_memory::{Placed, StaticPlace};
 #[cfg(oer_trace)]
 use oer_portable_time::Clock;
-use oer_portable_time::{Duration, Instant};
+use oer_portable_time::Instant;
 use oer_protocols_ieee80211_core_roles_sta::{
     epoch::{EpochContext, LinkEpochSource},
     machine::{self, Station, StationResources},
@@ -27,7 +30,7 @@ use oer_protocols_ieee80211_wire::{
     ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
     station::AssociationCapabilities,
 };
-use oer_protocols_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
+use oer_protocols_radio_port::{self as rp, Child, Root, SlotIdentity};
 
 pub type Epoch<Id> = Child<Root<Id>, 4>;
 pub struct ImageComposition<W: Binding>(PhantomData<W>);
@@ -44,17 +47,16 @@ impl<W: Binding> Composition for ImageComposition<W> {
     type ConfigureContext<'p, Id: SlotIdentity + 'p> =
         machine::StaConfigurationContext<'p, Epoch<Id>>;
 }
-pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>);
 /// The pool places the station's management frames take, holding the
 /// port's own buffers. Data goes through the port's data arenas, which hold
 /// the network's memory itself.
-const MANAGEMENT: u8 = crate::supply::PORT_BUFFERS;
+pub(crate) const MANAGEMENT: u8 = crate::supply::PORT_BUFFERS;
 #[cfg(oer_trace)]
 pub(crate) static TARGET: oer_portable_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
     oer_portable_memory::OnceValue::new();
 #[cfg(oer_trace)]
-fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
-    terminal: &LowerMacTerminal<'id, Family<Id, W>>,
+pub(crate) fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
+    terminal: &LowerMacTerminal<'id, radio::Family<Id, W>>,
 ) {
     if let LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) = terminal
         && matches!(completed.outcome(), TxOutcome::Indeterminate(_))
@@ -85,147 +87,42 @@ fn observe_received_data<W: Binding>(bytes: &[u8], meta: &RxMeta, local: [u8; 6]
         );
     }
 }
-impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
-    type Backend = Backend<Id, W>;
-    type SlotId = Id;
-    type Caps = Caps;
-    type Types<'id>
-        = Family<Id, W>
-    where
-        Self: 'id,
-        Id: 'id;
-    type LentRx = crate::LentRx<W::Notifies>;
-    type TerminalStorage<T> = heapless::Deque<T, { port::TERMINAL_CAPACITY }>;
-    type TxContextStorage<T> = [Option<T>; port::TX_TICKETS];
-    type Small = port::BufferClass<TX>;
-    type TxMemory = crate::TxMemory;
-    fn lend_phase<'a, 'id, 'r>(
-        phase: &'r mut <Backend<Id, W> as PortBackend<Id>>::Phase<'a, 'id>,
-    ) -> &'r mut impl LowerMacPhase<'a, 'id, Caps = Caps, Types = Family<Id, W>>
-    where
-        Self: 'id,
-        Id: 'id,
-        'id: 'a,
-    {
-        phase
+/// Report a unit the port gave: a data MPDU addressed to the station
+/// ([`observe_received_data`]), and the target's successful open
+/// authentication and its beacons.
+#[cfg(oer_trace)]
+pub(crate) fn observe_received<W: Binding>(bytes: &[u8], meta: &RxMeta) {
+    if let Some((local, _)) = TARGET.get() {
+        observe_received_data::<W>(bytes, meta, local);
     }
-    fn terminal<'id>(
-        terminal: LowerMacTerminal<'id, Family<Id, W>>,
-    ) -> LowerMacTerminal<'id, Family<Id, W>>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        #[cfg(oer_trace)]
-        observe_terminal::<W, Id>(&terminal);
-        terminal
-    }
-    fn port_terminal<'id>(
-        terminal: LowerMacTerminal<'id, Family<Id, W>>,
-    ) -> LowerMacTerminal<'id, Family<Id, W>>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        terminal
-    }
-    fn tune<'a, 'id>(
-        setup: &mut <Backend<Id, W> as PortBackend<Id>>::Setup<'a, 'id>,
-        channel: SupportedChannel<Caps>,
-    ) where
-        Self: 'id,
-        Id: 'id,
-        'id: 'a,
-    {
-        setup.set_channel(channel);
-    }
-    fn event<'id>(event: LowerMacEvent<'id, Family<Id, W>>) -> LowerMacEvent<'id, Family<Id, W>>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        #[cfg(oer_trace)]
-        if let LowerMacEvent::Terminal(terminal) = &event {
-            observe_terminal::<W, Id>(terminal);
+    if let Some((local, Some(target))) = TARGET.get() {
+        if oer_protocols_ieee80211_wire::station::parse_open_authentication_response(
+            bytes, local, target,
+        )
+        .is_some_and(|r| r.status_code == 0)
+        {
+            let observer = W::DriverObserver::default();
+            oer_portable_trace::observe!(observer, crate::observation::StationAuthenticated);
         }
-        #[cfg(oer_trace)]
-        if let LowerMacEvent::Received { frame, meta } = &event {
-            let bytes = frame.bytes();
-            if let Some((local, _)) = TARGET.get() {
-                observe_received_data::<W>(bytes, meta.common(), local);
-            }
-            if let Some((local, Some(target))) = TARGET.get() {
-                if oer_protocols_ieee80211_wire::station::parse_open_authentication_response(
-                    bytes, local, target,
-                )
-                .is_some_and(|r| r.status_code == 0)
-                {
-                    #[cfg(oer_trace)]
-                    {
-                        let observer = W::DriverObserver::default();
-                        oer_portable_trace::observe!(
-                            observer,
-                            crate::observation::StationAuthenticated
-                        );
-                    }
+        if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
+            .is_some_and(|h| h.control().subtype() == 8)
+            && oer_protocols_ieee80211_wire::scan::parse_management(bytes)
+                .is_some_and(|r| r.bssid.get() == target)
+        {
+            let observer = W::DriverObserver::default();
+            oer_portable_trace::observe!(
+                observer,
+                crate::observation::StationBeacon {
+                    at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
                 }
-                if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
-                    .is_some_and(|h| h.control().subtype() == 8)
-                    && oer_protocols_ieee80211_wire::scan::parse_management(bytes)
-                        .is_some_and(|r| r.bssid.get() == target)
-                {
-                    #[cfg(oer_trace)]
-                    {
-                        let observer = W::DriverObserver::default();
-                        oer_portable_trace::observe!(
-                            observer,
-                            crate::observation::StationBeacon {
-                                at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
-                            }
-                        );
-                    }
-                }
-            }
+            );
         }
-        event
-    }
-    #[cfg_attr(
-        not(oer_trace),
-        allow(unused_variables, reason = "only a trace build observes the span")
-    )]
-    fn span(span: ServiceSpan, end: bool) {
-        let observer = W::DriverObserver::default();
-        oer_portable_trace::observe!(observer, crate::observation::ServiceSpan { span, end });
-    }
-    fn tx_buffer<'id>(
-        buffer: port::AnyBuffer<'id, Id, Device<W>, TX, ()>,
-    ) -> Result<StationTxBuffer<'id, Self>, port::AnyBuffer<'id, Id, Device<W>, TX, ()>>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        // The station takes the pool's first places; no buffer beyond
-        // them is ever submitted.
-        match buffer {
-            port::AnyBuffer::Fresh(buffer) if buffer.index() < MANAGEMENT => {
-                Ok(ReturnedMpdu::Fresh(buffer))
-            }
-            port::AnyBuffer::Sent(buffer) if buffer.index() < MANAGEMENT => {
-                Ok(ReturnedMpdu::Sent(buffer))
-            }
-            buffer => Err(buffer),
-        }
-    }
-    fn arena_ack<'id>(response: port::BlockAckAnswer) -> Option<port::Ack>
-    where
-        Self: 'id,
-        Id: 'id,
-    {
-        response.snr_db.map(|snr_db| port::Ack { snr_db })
     }
 }
-
-pub struct Rates<W: Binding>(EspressifRateSelection<Caps>, W::Observer);
+pub struct Rates<W: Binding>(
+    pub(crate) EspressifRateSelection<Caps>,
+    pub(crate) W::Observer,
+);
 impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAnswer> for Rates<W> {
     fn packet_number_step(
         &self,
@@ -380,135 +277,104 @@ pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities
     he20_extended: [0; 14],
     wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
 };
-pub struct Body<W: Binding> {
-    runner: ServiceRunner<W>,
-    profile: Profile<W>,
-}
+/// The station's contexts at their tickets' places.
+type Contexts<W> = [Option<LifecycleTxContext<'static, radio::ActorPort<W>>>; port::TX_TICKETS];
+/// The station's lifecycle of `W`.
+type LifecycleOf<W> = Lifecycle<
+    'static,
+    radio::ActorPort<W>,
+    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
+    radio::Commands<W>,
+    Contexts<W>,
+    1,
+    <W as Binding>::Sink,
+>;
+/// A finished lifecycle of `W` and what it keeps.
+type CompletedOf<W> = LifecycleCompleted<
+    'static,
+    radio::ActorPort<W>,
+    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
+    radio::Commands<W>,
+    Contexts<W>,
+    1,
+    <W as Binding>::Sink,
+>;
+/// The station's configuration and callbacks, which every installation's
+/// station takes again.
+type StationConfig<W> =
+    machine::StaConfig<Caps, crate::chip::CoreCallbacks<<W as Binding>::Callbacks>>;
 
-type Service<'id, W> = Runner<
-    'id,
-    StationComposition<W, <W as Binding>::Id>,
-    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
-    Rates<W>,
-    1,
-    <W as Binding>::Sink,
->;
-type Completed<'p, 'id, W> = ServiceCompleted<
-    'p,
-    'id,
-    StationComposition<W, <W as Binding>::Id>,
-    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
-    Rates<W>,
-    1,
-    <W as Binding>::Sink,
->;
-type Io<'c, W> = ServiceIo<
-    'c,
-    Caps,
-    Events<'static, Output<<W as Binding>::Events, <W as Binding>::Notifies>, Ch<W>>,
-    crate::LentRx<<W as Binding>::Notifies>,
-    crate::NetworkStopState<<W as Binding>::Notifies>,
-    crate::TxMemory,
-    { crate::TX_DEPTH },
-    { crate::RX_DEPTH },
-    2,
-    Ch<W>,
->;
-/// The channels' notify types of `W`'s station.
-type Ch<W> = <<W as Binding>::Notifies as crate::Notifies>::Channels;
-type Running<'s, 'c: 's, 'p: 's, 'id: 'p, W: Binding> =
-    impl Future<Output = Placed<'s, Completed<'p, 'id, W>>>;
-const RX_BA_BANKS: usize = 8;
-const RX_BA_FRAMES: usize = port::RX_HELD;
+/// The lifecycle's places: one lifecycle and its end at a time, reused by
+/// every installation.
 pub(crate) struct ServiceStorage<W: Binding> {
-    service: StaticPlace<Service<'static, W>>,
-    receive: StaticPlace<RxBlockAckStorage<'static, Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>>,
-    completed: StaticPlace<Completed<'static, 'static, W>>,
-    running: StaticPlace<Running<'static, 'static, 'static, 'static, W>>,
+    lifecycle: StaticPlace<LifecycleOf<W>>,
+    completed: StaticPlace<CompletedOf<W>>,
 }
 impl<W: Binding> ServiceStorage<W> {
     pub(crate) const fn new() -> Self {
         Self {
-            service: StaticPlace::new(),
-            receive: StaticPlace::new(),
+            lifecycle: StaticPlace::new(),
             completed: StaticPlace::new(),
-            running: StaticPlace::new(),
         }
     }
 }
-#[define_opaque(Running)]
-fn running_future<'s, 'c, 'p, 'id, W: Binding>(
-    service: Placed<'s, Service<'id, W>>,
-    output: &'s mut MaybeUninit<Completed<'p, 'id, W>>,
-    owner: rp::Owner<'p, 'id, W::Id, Backend<W::Id, W>, rp::Disabled>,
-    io: &'s mut Io<'c, W>,
-) -> Running<'s, 'c, 'p, 'id, W>
-where
-    'id: 'p,
-    'p: 's,
-    'c: 's,
-{
-    Runner::run_placed(service, output, owner, io, &EmbassyClock)
-}
-fn initialize_service<'id, W: Binding>(
-    profile: Profile<W>,
-    config: Config,
-    resources: <Backend<W::Id, W> as PortBackend<W::Id>>::Resources<'id>,
-    storage: &'static mut StaticPlace<Service<'static, W>>,
-    receive: &'static mut StaticPlace<
-        RxBlockAckStorage<'static, Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>,
-    >,
-) -> Placed<'id, Service<'id, W>> {
-    const {
-        if core::mem::size_of::<
-            RxBlockAckStorage<'static, Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>,
-        >() > 8192
-        {
-            // A 32-MPDU window's reorder slots: placed static storage,
-            // never a stack value.
-            panic!("RX block-ack owner exceeds 8 KiB");
-        }
-    }
-    let (arbiter, place, absence_place) = PortArbiter::<StationComposition<W, W::Id>>::new(
+
+/// Build the lifecycle of one installation in `place`: the station of
+/// `station` on the installation's `tokens`, its arbiter, and the port's
+/// `issuer`.
+fn initialize<'s, W: Binding>(
+    place: &'s mut MaybeUninit<LifecycleOf<W>>,
+    station: StationConfig<W>,
+    sink: W::Sink,
+    config: &Config,
+    issuer: radio::Commands<W>,
+    tokens: radio::Tokens<W>,
+) -> Placed<'s, LifecycleOf<W>> {
+    let radio::Tokens {
+        tickets,
+        terminal_access,
+        buffers,
+        connection_epoch,
+        station_association,
+        station_commands,
+        station_group_permission,
+        gate,
+        arbiter_authority,
+    } = tokens;
+    let (arbiter, place_back, absence_place) = LifecycleArbiter::<radio::ActorPort<W>>::new(
         crate::policy::arbiter(port::PUBLICATION_BOUND)
             .unwrap_or_else(|_| W::fail(InitializationError::Arbiter)),
         config.supported,
-        resources.arbiter_authority,
-        resources.gate,
+        arbiter_authority,
+        gate,
     );
     // The station's frames take four tickets and the pool's first four
     // buffers; the port's other tickets and buffer places have no owner
     // here: data goes through the port's data arenas.
-    let [t0, t1, t2, t3, ..] = resources.tickets;
-    let [b0, b1, b2, b3, ..] = resources.buffers;
+    let [t0, t1, t2, t3, ..] = tickets;
+    let [b0, b1, b2, b3, ..] = buffers;
     const {
         if MANAGEMENT != 4 {
             panic!("four management buffers");
         }
     }
-    let Profile {
-        station,
-        observer,
-        sink,
-    } = profile;
-    let receive = RxBlockAckStorage::<Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>::init_in_place(
-        receive.uninit(),
-        resources.block_acks,
-        Duration::from_millis(100),
-    )
-    .view();
-    Runner::<StationComposition<W, W::Id>, _, _, 1, W::Sink>::init_in_place(
-        storage.uninit(),
+    let step = <EspressifRateSelection<Caps> as RateSelection<
+        ActorRxMeta<'static, radio::ActorPort<W>>,
+        port::Ack,
+        port::BlockAckAnswer,
+    >>::packet_number_step(&EspressifRateSelection::new());
+    LifecycleOf::<W>::init_in_place(
+        place,
         |station_storage| {
             let station_resources = StationResources::<_, 4, 4, 1> {
-                configure: resources.station_commands.configure,
-                epochs: LinkEpochSource::new(resources.connection_epoch),
+                configure: station_commands.configure,
+                epochs: LinkEpochSource::new(connection_epoch),
                 tickets: [t0, t1, t2, t3],
                 buffers: [b0, b1, b2, b3],
-                place,
+                place: place_back,
                 absence_place,
-                keys: resources.station_association,
-                group_permission: resources.station_group_permission,
+                keys: station_association,
+                group_permission: station_group_permission,
             };
             Station::init(
                 station_storage,
@@ -518,192 +384,187 @@ fn initialize_service<'id, W: Binding>(
             )
         },
         arbiter,
-        Rates(EspressifRateSelection::new(), observer),
-        resources.terminal_access,
-        receive,
+        issuer,
+        step,
+        config.supported,
+        terminal_access,
         sink,
     )
 }
-impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
-    type Output = StationExit;
-    async fn run<'p, 'id>(
-        self,
-        owner: rp::Owner<'p, 'id, W::Id, Backend<W::Id, W>, rp::Disabled>,
-        resources: <Backend<W::Id, W> as PortBackend<W::Id>>::Resources<'id>,
-    ) -> rp::Ended<W::Id, Backend<W::Id, W>, StationExit>
-    where
-        Backend<W::Id, W>: 'id,
-        W::Id: 'id,
-        'id: 'p,
-    {
-        let Body { runner, profile } = self;
-        let ServiceRunner {
-            config,
-            connection,
-            storage,
-            mut output,
-            ..
-        } = runner;
-        let crate::ServiceConnection {
-            network_stop,
-            start,
-            commands,
-            transmit,
-            returned,
-            receive,
-            receive_copied,
-            runner: control,
-        } = connection;
-        let ServiceStorage {
-            service,
-            receive: receive_storage,
-            completed,
-            running,
-        } = storage;
-        let stop = config.stop;
-        let service = initialize_service::<W>(profile, config, resources, service, receive_storage);
-        start.complete(Ok(()));
-        let mut io = ServiceIo {
-            commands,
-            transmit,
-            returned,
-            receive,
-            receive_copied,
-            control,
-            output: &mut output,
-            network: network_stop,
-            stop,
-        };
-        let done = running
-            .future(|| running_future::<W>(service, completed.uninit(), owner, &mut io))
-            .await;
-        let (end, _retired, network) = oer_portable_memory::unpack_placed!(
-            done,
-            ServiceCompleted {
-                end,
-                retired,
-                network
-            }
-        );
-        let network = network.read().map(crate::failure::convert::network_drain);
-        let failed = |fault| crate::failure::FailedStation {
-            failure: crate::failure::convert::service::<StationComposition<W, W::Id>>(fault),
-            network,
-        };
-        oer_portable_memory::match_placed!(end,ServiceEnd{
-        Stopped(owner)=>rp::Ended::uninstall(owner.read(),(),StationExit::Stopped),
-        Failed{owner,fault,custody}=>{drop(custody);owner.read().uninstall((),StationExit::Failed(failed(fault.read())))},
-        Poisoned{owner,fault,custody}=>{drop(custody);rp::Ended::fail_stop(owner.read().fail_stop(),StationExit::Poisoned(failed(fault.read())))},
-        Quarantined{request,fault,custody}=>{drop(custody);rp::Ended::fail_stop(request.read(),StationExit::Quarantined(failed(fault.read())))}
-        })
+
+/// The next news of the actor's task.
+async fn news<W: Binding>(
+    news: &mut oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
+) -> radio::News<W> {
+    loop {
+        if let Some(news) = news.try_receive() {
+            return news;
+        }
+        news.ready().await;
     }
 }
+
+/// The actor's next news, once it came.
+fn poll_news<W: Binding>(
+    news: &mut oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
+    cx: &mut core::task::Context<'_>,
+) -> core::task::Poll<radio::News<W>> {
+    if let Some(news) = news.try_receive() {
+        return core::task::Poll::Ready(news);
+    }
+    if core::pin::pin!(news.ready()).poll(cx).is_ready() {
+        match news.try_receive() {
+            Some(news) => return core::task::Poll::Ready(news),
+            None => cx.waker().wake_by_ref(),
+        }
+    }
+    core::task::Poll::Pending
+}
+
+/// The station lifecycle's task: it builds the station on each
+/// installation the actor's task hands it, runs the lifecycle, and on a
+/// restart waits for the next installation. The exit is published to
+/// Control once final: after an ordinary stop, once the radio's release
+/// ended.
 pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) -> StationExit {
     let StationRunner {
-        service: mut runner,
-        retire,
+        service,
+        mut actor,
+        news: mut mailbox,
         stop,
     } = runner;
-    let mut pending = runner.frontend.post(());
-    let (poster, front) = core::future::poll_fn(|cx| pending.poll_answer(cx))
-        .await
-        .unwrap_or_else(|error| W::fail(InitializationError::Request(error)));
-    runner.frontend = poster;
-    let exit = match front {
-        Ok(mut front) => {
-            let first_fault = front.ports().first_fault();
-            match rp::run_port(front, Body { runner, profile }).await {
-                rp::PortEnd::Uninstalled {
-                    joined,
-                    output,
-                    deadline,
-                } => {
-                    // The exit is published only after the radio release ended,
-                    // or once the stop's deadline passed first.
-                    let mut pending = retire.post(joined);
-                    let released = release_answer::<W>(&mut pending, deadline).await;
-                    released_exit(output, released)
-                }
-                rp::PortEnd::FailStopped { outcome, output } => {
-                    // A body that ended for uninstall reports the fail-stop; a
-                    // body that requested one already reports its own cause.
-                    let retirement = |failure| {
-                        StationExit::RetirementFailed(crate::failure::convert::retirement(
-                            failure,
-                            outcome.cause(),
-                            matches!(outcome.outcome(), rp::Abandon::Stopped(_)),
-                        ))
-                    };
-                    match output {
-                        StationExit::Stopped => retirement(None),
-                        StationExit::Failed(failed) => retirement(Some(failed)),
-                        StationExit::Poisoned(_)
-                        | StationExit::Quarantined(_)
-                        | StationExit::RetirementFailed(_)
-                        | StationExit::ReleaseFailed(_)
-                        | StationExit::Unavailable(_) => output,
-                    }
-                }
-                rp::PortEnd::Abandoned { cause, .. } => {
-                    StationExit::Unavailable(UnavailableCause::Abandoned(
-                        crate::failure::convert::abandoned(cause, first_fault.get()),
-                    ))
-                }
-            }
-        }
-        Err(error) => {
-            runner
-                .connection
-                .start
-                .complete(Err(crate::StartError::Unavailable));
-            StationExit::Unavailable(UnavailableCause::Initialization(error))
-        }
-    };
-    // Every release and retirement step ended: Control reads this copy.
+    let exit = lifecycles::<W>(service, &mut actor, &mut mailbox, profile).await;
     stop.publish(exit);
     exit
 }
 
-/// The radio driver task's release answer, waited for until `deadline`
-/// ([`crate::release::within`]): an answer after it is never read, the
-/// release reports `Deadline`, and the spent poster is never reused.
-async fn release_answer<W: Binding>(
-    pending: &mut oer_portable_memory::Awaiting<
-        radio::Retire<W>,
-        Result<(), crate::failure::ReleaseCause>,
+async fn lifecycles<W: Binding>(
+    service: ServiceRunner<W>,
+    actor: &mut ActorEnds<
+        'static,
+        'static,
+        radio::ActorPort<W>,
+        { radio::TO },
+        { radio::FROM },
+        { radio::RETURNS },
     >,
-    deadline: rp::StopDeadline,
-) -> Result<(), crate::failure::ReleaseCause> {
-    use crate::failure::ReleaseCause;
-    match crate::release::within(&EmbassyClock, deadline, |cx| pending.poll_answer(cx)).await {
-        Some(answer) => answer
-            .map_err(|lost| ReleaseCause::HandoffLost(lost.observations()))
-            .and_then(|(_, released)| released),
-        None => Err(ReleaseCause::Deadline),
-    }
-}
-
-/// An uninstalled station's exit once its radio release ended: a failed
-/// release never reports the ordinary Stopped.
-fn released_exit(
-    output: StationExit,
-    released: Result<(), crate::failure::ReleaseCause>,
+    mailbox: &mut oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
+    profile: Profile<W>,
 ) -> StationExit {
-    let Err(cause) = released else {
-        return output;
+    let ServiceRunner {
+        config,
+        connection,
+        storage,
+        mut output,
+    } = service;
+    let crate::ServiceConnection {
+        start,
+        commands,
+        runner: control,
+    } = connection;
+    let mut io = LifecycleIo {
+        commands,
+        output: &mut output,
+        control,
+        stop: config.stop,
     };
-    let failed = match output {
-        StationExit::Stopped => None,
-        StationExit::Failed(failed) => Some(failed),
-        StationExit::Poisoned(_)
-        | StationExit::Quarantined(_)
-        | StationExit::RetirementFailed(_)
-        | StationExit::ReleaseFailed(_)
-        | StationExit::Unavailable(_) => return output,
-    };
-    StationExit::ReleaseFailed(crate::failure::ReleaseFailure {
-        failure: failed.map(|failed| failed.failure),
-        network: failed.and_then(|failed| failed.network),
-        cause,
-    })
+    let ServiceStorage {
+        lifecycle: lifecycle_place,
+        completed: completed_place,
+    } = storage;
+    let lifecycle_place = lifecycle_place.uninit();
+    let completed_place = completed_place.uninit();
+    let Profile {
+        station: mut station_config,
+        mut sink,
+    } = profile;
+    let mut start = Some(start);
+    loop {
+        let (issuer, tokens) = match news(mailbox).await {
+            radio::News::Installed(issuer, tokens) => (issuer, tokens),
+            radio::News::Unavailable(error) => {
+                if let Some(start) = start.take() {
+                    start.complete(Err(crate::StartError::Unavailable));
+                }
+                return StationExit::Unavailable(error);
+            }
+            radio::News::Reinstall(cause) => {
+                return StationExit::Failed(crate::failure::LifecycleFailure::Reinstall(cause));
+            }
+            radio::News::Released(_) => {
+                return StationExit::Failed(crate::failure::LifecycleFailure::Mailbox);
+            }
+        };
+        let lifecycle = initialize::<W>(
+            &mut *lifecycle_place,
+            station_config,
+            sink,
+            &config,
+            issuer,
+            tokens,
+        );
+        if let Some(start) = start.take() {
+            start.complete(Ok(()));
+        }
+        let completed = LifecycleOf::<W>::run_placed(
+            lifecycle,
+            &mut *completed_place,
+            actor,
+            &mut io,
+            &EmbassyClock,
+        )
+        .await;
+        let (end, retired) =
+            oer_portable_memory::unpack_placed!(completed, LifecycleCompleted { end, retired });
+        let end = end.read();
+        match end {
+            LifecycleEnd::Stopped => {
+                drop(retired);
+                // The exit is published only after the radio's release
+                // ended, or once the stop's drain passed first.
+                let deadline =
+                    oer_portable_time::Clock::now(&EmbassyClock).saturating_add(config.stop.drain);
+                let released = crate::release::within(&EmbassyClock, Some(deadline), |cx| {
+                    poll_news(mailbox, cx)
+                })
+                .await;
+                return match released {
+                    Some(radio::News::Released(Ok(()))) => StationExit::Stopped,
+                    Some(radio::News::Released(Err(cause))) => StationExit::ReleaseFailed(cause),
+                    None => StationExit::ReleaseFailed(crate::failure::ReleaseCause::Deadline),
+                    Some(
+                        radio::News::Installed(..)
+                        | radio::News::Unavailable(_)
+                        | radio::News::Reinstall(_),
+                    ) => StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
+                };
+            }
+            LifecycleEnd::Restart(_) => {
+                // The next installation's station takes the configuration
+                // and the events' sink back; this installation's owners
+                // drop with the retired banks.
+                let (station, _places, _arbiter, _issuer, _contexts, _rejected, events) = oer_portable_memory::unpack_placed!(
+                    retired,
+                    RetiredLifecycle {
+                        station,
+                        places,
+                        arbiter,
+                        issuer,
+                        tx_contexts,
+                        rejected,
+                        events
+                    }
+                );
+                station_config = station.read().into_config();
+                sink = events.read();
+            }
+            end => {
+                drop(retired);
+                return match crate::failure::convert::lifecycle(end) {
+                    Some(failure) => StationExit::Failed(failure),
+                    None => StationExit::Stopped,
+                };
+            }
+        }
+    }
 }

@@ -1,54 +1,101 @@
 //! Exhaustive conversion at the facade's target boundary.
 use super::*;
-#[cfg(target_arch = "riscv32")]
-use oer_protocols_ieee80211_runtime::station::{ServiceFault, StationPort};
-#[cfg(target_arch = "riscv32")]
-use oer_protocols_radio_port::PortBackend;
-#[cfg(target_arch = "riscv32")]
-pub(crate) fn service<B: StationPort>(value: ServiceFault<B>) -> StationFailure
-where
-    B::Backend: PortBackend<
-            B::SlotId,
-            Fault = oer_chips_esp32s31_ieee80211_driver::port::Fault,
-            Refusal = oer_chips_esp32s31_ieee80211_driver::port::Fault,
-        >,
-{
-    match value {
-        ServiceFault::PolicyDeadlineOverflow => StationFailure::PolicyDeadlineOverflow,
-        ServiceFault::CommandAdmission(request) => StationFailure::CommandAdmission(request),
-        ServiceFault::RxBlockAckCapacity => StationFailure::RxBlockAckCapacity,
-        ServiceFault::RxBlockAckEncode => StationFailure::RxBlockAckEncode,
-        ServiceFault::EnableRefused(v) => StationFailure::EnableRefused(backend_fault(v)),
-        ServiceFault::Backend(v) => StationFailure::Backend(backend_fault(v)),
-        ServiceFault::Submission(v) => StationFailure::Submission(backend_fault(v)),
-        ServiceFault::Contract(v) => StationFailure::Contract(v),
-        ServiceFault::DrainedWithOutstanding { cause, missing } => {
-            StationFailure::DrainedWithOutstanding {
-                cause: backend_fault(cause),
-                missing,
-            }
-        }
-        ServiceFault::NetworkDrain(failure) => StationFailure::NetworkDrain(network_drain(failure)),
-        ServiceFault::StopDeadline => StationFailure::StopDeadline,
-    }
-}
-
-pub(super) fn backend_fault(
+pub(crate) fn backend_fault(
     value: oer_chips_esp32s31_ieee80211_driver::port::Fault,
 ) -> BackendFault {
     use oer_chips_esp32s31_ieee80211_driver::port::Fault as Source;
     match value {
         Source::Core(v0) => BackendFault::Core(lower_mac_fault(v0)),
         Source::Receive(v0) => BackendFault::Receive(receive_fault(v0)),
-        Source::Deadline => BackendFault::Deadline,
         Source::Capacity => BackendFault::Capacity,
         Source::Clock => BackendFault::Clock,
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,
         Source::Arena(v0) => BackendFault::Arena(arena_fault(v0)),
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
-        Source::Setting(v0) => BackendFault::Setting(setting_fault(v0)),
         Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
+        Source::CoreViewUnavailable(op) => BackendFault::CoreViewUnavailable(core_operation(op)),
+        Source::DuplicateCompletion { queue } => BackendFault::DuplicateCompletion { queue },
+        Source::RemovalOverflow => BackendFault::RemovalOverflow,
+        Source::CompletionWithoutPending { queue } => {
+            BackendFault::CompletionWithoutPending { queue }
+        }
+        Source::DescriptorMissing { queue } => BackendFault::DescriptorMissing { queue },
+        Source::ReturnRefused { queue } => BackendFault::ReturnRefused { queue },
+        Source::BlockAckReportMissing { queue } => BackendFault::BlockAckReportMissing { queue },
+        Source::AirMissing { queue } => BackendFault::AirMissing { queue },
+        Source::AttemptCounter { queue } => BackendFault::AttemptCounter { queue },
+        Source::StageMissing { queue } => BackendFault::StageMissing { queue },
+        Source::QueueFull { queue } => BackendFault::QueueFull { queue },
+        Source::ReceiveOverflow => BackendFault::ReceiveOverflow,
+        Source::ReceiveRange => BackendFault::ReceiveRange,
+        Source::ReceiveLost => BackendFault::ReceiveLost,
+        Source::ArenaCoreContract => BackendFault::ArenaCoreContract,
+        Source::InstallationResources => BackendFault::InstallationResources,
+        Source::EdcaUnsupported => BackendFault::EdcaUnsupported,
+        Source::ChannelNotPermitted => BackendFault::ChannelNotPermitted,
+        Source::ChannelUnsupported => BackendFault::ChannelUnsupported,
+        Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
+        Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
+        Source::CommandExpired(kind) => BackendFault::CommandExpired(command_kind(kind)),
+    }
+}
+
+/// A refused start, with a refused retune's cause.
+pub(crate) fn start_refused(
+    value: oer_protocols_ieee80211_contracts_port::StartRefused<
+        oer_chips_esp32s31_ieee80211_driver::port::Fault,
+    >,
+) -> oer_protocols_ieee80211_contracts_port::StartRefused<BackendFault> {
+    use oer_protocols_ieee80211_contracts_port::StartRefused as Source;
+    match value {
+        Source::Running => Source::Running,
+        Source::Retune(cause) => Source::Retune(backend_fault(cause)),
+        Source::Deadline => Source::Deadline,
+        Source::Device => Source::Device,
+    }
+}
+
+pub(super) fn core_operation(
+    value: oer_chips_esp32s31_ieee80211_driver::port::CoreOp,
+) -> CoreOperation {
+    use oer_chips_esp32s31_ieee80211_driver::port::CoreOp as Source;
+    match value {
+        Source::Command => CoreOperation::Command,
+        Source::Tbtt => CoreOperation::Tbtt,
+        Source::Arena => CoreOperation::Arena,
+        Source::Publish => CoreOperation::Publish,
+    }
+}
+
+pub(super) fn key_operation(
+    value: oer_chips_esp32s31_ieee80211_driver::port::KeyOp,
+) -> KeyOperation {
+    use oer_chips_esp32s31_ieee80211_driver::port::KeyOp as Source;
+    match value {
+        Source::Install => KeyOperation::Install,
+        Source::Remove => KeyOperation::Remove,
+        Source::Replace => KeyOperation::Replace,
+        Source::Select => KeyOperation::Select,
+        Source::Transmit => KeyOperation::Transmit,
+    }
+}
+
+pub(super) fn command_kind(
+    value: oer_protocols_ieee80211_contracts_port::CommandKind,
+) -> PortCommandKind {
+    use oer_protocols_ieee80211_contracts_port::CommandKind as Source;
+    match value {
+        Source::InstallPairwise => PortCommandKind::InstallPairwise,
+        Source::InstallGroup => PortCommandKind::InstallGroup,
+        Source::ReplaceGroup => PortCommandKind::ReplaceGroup,
+        Source::SelectGroup => PortCommandKind::SelectGroup,
+        Source::RemovePairwise => PortCommandKind::RemovePairwise,
+        Source::RemoveGroup => PortCommandKind::RemoveGroup,
+        Source::Configure => PortCommandKind::Configure,
+        Source::CloseGate => PortCommandKind::CloseGate,
+        Source::SetEdca => PortCommandKind::SetEdca,
+        Source::SetBssColor => PortCommandKind::SetBssColor,
     }
 }
 
@@ -165,18 +212,6 @@ pub(super) fn arena_fault(
         Source::Core(v0) => ArenaFault::Core(lower_mac_fault(v0)),
         Source::State => ArenaFault::State,
         Source::Watchdog => ArenaFault::Watchdog,
-    }
-}
-
-pub(super) fn setting_fault(
-    value: oer_chips_esp32s31_ieee80211_driver::port::SettingFault,
-) -> SettingFault {
-    use oer_chips_esp32s31_ieee80211_driver::port::SettingFault as Source;
-    match value {
-        Source::UnsupportedChannel => SettingFault::UnsupportedChannel,
-        Source::ChannelUnset => SettingFault::ChannelUnset,
-        Source::EdcaLifetime => SettingFault::EdcaLifetime,
-        Source::BlockAckSequence => SettingFault::BlockAckSequence,
     }
 }
 
@@ -669,81 +704,6 @@ pub(super) fn rx_stage_transaction_error(
     }
 }
 
-pub(crate) fn network_drain(
-    value: oer_protocols_ieee80211_runtime::station::NetworkDrainFailure,
-) -> crate::failure::NetworkDrain {
-    use crate::failure::{NetworkDrain, NetworkDrainCause};
-    use oer_protocols_ieee80211_runtime::station::NetworkDrainCause as Source;
-    NetworkDrain {
-        cause: match value.cause {
-            Source::Deadline => NetworkDrainCause::Deadline,
-            Source::ParticipantLost => NetworkDrainCause::ParticipantLost,
-        },
-        held: value.held,
-    }
-}
-
-pub(crate) fn retirement(
-    failed: Option<crate::failure::FailedStation>,
-    cause: oer_protocols_radio_port::LifecycleError,
-    hardware_stopped: bool,
-) -> RetirementFailure {
-    let failure = failed.map(|failed| failed.failure);
-    let network = failed.and_then(|failed| failed.network);
-    // The network kept lent receive buffers: the port's refusal to retire
-    // is that drain's, not an unconfirmed stop.
-    let cause = match network {
-        Some(drain) => RetirementCause::NetworkDrain(drain),
-        None => retirement_cause(cause),
-    };
-    RetirementFailure {
-        failure,
-        network,
-        cause,
-        hardware_stopped,
-    }
-}
-
-/// The port's end of the station's body loan, with the installation's first
-/// fault.
-pub(crate) fn abandoned(
-    cause: oer_protocols_radio_port::SlotInitError,
-    fault: Option<oer_chips_esp32s31_ieee80211_driver::port::Fault>,
-) -> Abandoned {
-    use oer_protocols_radio_port::SlotInitError as Source;
-    Abandoned {
-        cause: match cause {
-            Source::QueuesUnprepared => AbandonCause::QueuesUnprepared,
-            Source::MissingResource(resource) => AbandonCause::MissingResource(resource),
-            Source::BodyAlreadyIssued => AbandonCause::BodyAlreadyIssued,
-            Source::Lifecycle(cause) => AbandonCause::Lifecycle(retirement_cause(cause)),
-        },
-        fault: fault.map(backend_fault),
-    }
-}
-
-pub(crate) fn retirement_cause(cause: oer_protocols_radio_port::LifecycleError) -> RetirementCause {
-    use oer_protocols_radio_port::{LifecycleError as Source, SlotStorageState as Storage};
-    match cause {
-        Source::Cancelled => RetirementCause::Cancelled,
-        Source::FailStopRequested => RetirementCause::FailStopRequested,
-        Source::Construction => RetirementCause::Construction,
-        Source::BodyAlreadyIssued => RetirementCause::BodyAlreadyIssued,
-        Source::Deadline => RetirementCause::Deadline,
-        Source::StopUnconfirmed => RetirementCause::StopUnconfirmed,
-        Source::InvalidState(observed) => RetirementCause::InvalidState(SlotObservation {
-            phase: observed.phase,
-            storage: match observed.storage {
-                Storage::Empty => SlotStorage::Empty,
-                Storage::Registered => SlotStorage::Registered,
-                Storage::Vacant => SlotStorage::Vacant,
-                Storage::Unavailable => SlotStorage::Unavailable,
-            },
-            invocation_present: observed.invocation_present,
-        }),
-    }
-}
-
 /// The answer of a release that left the actor and its domain as named.
 pub(crate) fn released(
     domain: oer_chips_esp32s31_radio_client::DomainHealth,
@@ -760,4 +720,40 @@ pub(crate) fn still_active(
     error: oer_chips_esp32s31_hal::owner::maintenance::Error,
 ) -> ReleaseCause {
     ReleaseCause::StillActive(maintenance_error(error))
+}
+
+/// The terminal cause of a lifecycle's end; `None` for an ordinary stop
+/// and a restart, which the facade serves itself.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn lifecycle(
+    end: oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd<
+        oer_chips_esp32s31_ieee80211_driver::port::Fault,
+    >,
+) -> Option<LifecycleFailure> {
+    use oer_protocols_ieee80211_runtime::datapath::ActorFault;
+    use oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd as End;
+    Some(match end {
+        End::Stopped | End::Restart(_) => return None,
+        End::StartRefused(refused) => LifecycleFailure::StartRefused(start_refused(refused)),
+        End::StopUnconfirmed(observed) => LifecycleFailure::StopUnconfirmed(observed),
+        End::RetuneUnconfirmed(unconfirmed) => LifecycleFailure::RetuneUnconfirmed(unconfirmed),
+        End::Faulted(ActorFault::Port(fault)) => LifecycleFailure::Port(backend_fault(fault)),
+        End::Faulted(ActorFault::Contract(violation)) => LifecycleFailure::Actor(violation),
+        End::Contract(violation) => LifecycleFailure::Contract(violation),
+    })
+}
+
+/// Why the port did not reinstall.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn reinstall(
+    refused: oer_chips_esp32s31_ieee80211_driver::port::ReinstallRefused,
+) -> ReinstallCause {
+    use oer_chips_esp32s31_ieee80211_driver::port::ReinstallRefused as Source;
+    match refused {
+        Source::NotRetired => ReinstallCause::NotRetired,
+        Source::SameEpoch => ReinstallCause::SameEpoch,
+        Source::ChannelUnset => ReinstallCause::ChannelUnset,
+        Source::Receipt => ReinstallCause::Receipt,
+        Source::Resources => ReinstallCause::Resources,
+    }
 }

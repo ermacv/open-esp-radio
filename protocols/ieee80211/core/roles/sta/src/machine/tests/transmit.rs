@@ -76,7 +76,7 @@ fn each_plan_selects_its_record_and_a_null_keeps_its_own_transmissions() {
         *rates.0.borrow(),
         [FrameRates::Control, FrameRates::Control, FrameRates::Probe]
     );
-    // A rate the phase does not carry refuses the frame.
+    // A rate the port does not carry refuses the frame.
     assert!(
         StaRatePlan::Management
             .individual(&rates, |_| None::<PhyRate>)

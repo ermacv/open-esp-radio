@@ -2,7 +2,7 @@
 use super::*;
 
 #[inline]
-pub(super) fn configuring<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn configuring<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
 ) -> bool {
     match view {
@@ -17,7 +17,7 @@ pub(super) fn configuring<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn deadline<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn deadline<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
 ) -> Option<Instant> {
     match view {
@@ -45,7 +45,7 @@ pub(super) fn deadline<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn reset_contention<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn reset_contention<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     role: VifRole,
     category: WmmAccessCategory,
@@ -110,7 +110,7 @@ pub(super) fn reset_contention<'id, Id: SlotIdentity, D: Device<B>, const B: usi
 }
 
 #[inline]
-pub(super) fn service<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn service<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
     wake: WifiTxWake,
@@ -141,7 +141,7 @@ pub(super) fn service<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn received<'frame, 'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn received<'frame, 'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &D::Hardware,
     frame: &NormalizedRxFrame<'frame>,
@@ -158,7 +158,7 @@ pub(super) fn received<'frame, 'id, Id: SlotIdentity, D: Device<B>, const B: usi
 }
 
 #[inline]
-pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
     power: Option<D::Power>,
@@ -205,7 +205,7 @@ pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn configure<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn configure<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     config: CoreVif,
 ) -> Result<(), Fault> {
@@ -227,7 +227,12 @@ pub(super) fn configure<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn advance_configuration<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn advance_configuration<
+    'id,
+    Id: SlotIdentity,
+    D: Device<B>,
+    const B: usize,
+>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
     sink: &mut Sink<'id, Id, B>,
@@ -274,7 +279,7 @@ pub(super) fn advance_configuration<'id, Id: SlotIdentity, D: Device<B>, const B
 }
 
 #[inline]
-pub(super) fn hold<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn hold<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
 ) {
     match view {
@@ -286,7 +291,7 @@ pub(super) fn hold<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn close<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn close<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
 ) -> bool {
@@ -300,7 +305,7 @@ pub(super) fn close<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn open<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn open<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
     sink: &mut Sink<'id, Id, B>,
@@ -315,7 +320,7 @@ pub(super) fn open<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     hardware: &mut D::Hardware,
     sink: &mut Sink<'id, Id, B>,
@@ -335,7 +340,7 @@ pub(super) fn disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
 }
 
 #[inline]
-pub(super) fn finish_disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+pub(in crate::port) fn finish_disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     sink: &mut Sink<'id, Id, B>,
 ) -> bool {

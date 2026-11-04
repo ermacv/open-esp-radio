@@ -1,8 +1,8 @@
 # ESP32-S31 Wi-Fi station facade
 
 `station(resources, config) -> (Control, NetDevice, Runners)` assembles the
-S31 lower-MAC backend, arbiter, station/upper-MAC/RSN and portable station
-runtime. The separate crate keeps HIL wifi-station above that
+S31 data port (`Esp32s31Port`), the portable runtime's datapath actor over
+it and the station's lifecycle with its arbiter and station/upper-MAC/RSN. The separate crate keeps HIL wifi-station above that
 composition; its explicit layer role is `Facade`.
 
 Control and the affine neutral Ethernet end exist before installation. `Control::wait_started` gates image workload startup on
@@ -21,11 +21,13 @@ The image declares `bind_station!` with its interrupt entries, station
 callbacks, collectors and handled-error terminal policy.
 The binding names where the station's network end runs (`Binding::Notifies`):
 `SameHart`, local wakers throughout, or, with the macro's `across_harts`
-arm, `AcrossHarts<N, S, D>`, whose three notify types raise the network
-task's, the station task's and the radio driver's executor signals. Every
-queue end, the link, the network stop and the lent receive buffers' returns
-name their notify types, so a wake across harts is a direct call and no
-waker crosses harts.
+arm, `AcrossHarts<N, A>`, whose two notify types raise the network task's
+and the datapath actor's executor signals. The actor polls every station
+end of the network's channels, the network's stop answer and the lent
+receive buffers' returns; the station's lifecycle shares its executor and
+hears it only in same-executor queues. Every queue end, the link, the
+network stop and the lent buffers' returns name their notify types, so a
+wake across harts is a direct call and no waker crosses harts.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
 the facade's affine `DmaResources` claim, signals and declared storage. The
 station unwraps EAPOL-Key data (RFC 3394) synchronously in its step over the
@@ -36,12 +38,22 @@ its `STATE` flag, which the image hands to the station's `Profile`.
 The permanent RX ring and nine TX allocations have one declaration in the
 facade. Their HAL placement proof stays in the existing HAL macro; image IRQ
 modules hold only their line and signals. `Resources` consumes the opaque
-`WifiHardware` and DMA owners without exposing their backend field types. `Runners::driver` and
-`Runners::station` run on one thread-mode executor (`DriverExecutor`, the
-station's), so neither preempts the other. The driver's signals name that
-executor; the station's lent-buffer returns raise them as its own tasks
-(`FromOwnTask`), and the driver rings the radio doorbell from its wake entry.
-The image supplies the station runner's start-time `Profile`: the station's address, scan channels and callbacks and AES engine.
+`WifiHardware` and DMA owners without exposing their backend field types.
+`Runners::datapath` and `Runners::station` run on one thread-mode executor
+(`DriverExecutor`), so neither preempts the other. The datapath task installs
+the S31 data port on the declaration's first minted installation
+(`declare_installations!`), places the datapath actor (`Actor`) in the
+facade's storage and runs it: the actor owns the radio and carries the data
+both ways. The station task runs the station's lifecycle (`Lifecycle`),
+placed in the facade's storage, which commands the actor in messages. The
+actor's task hands each installation's command issuer and tokens to the
+station's task through a one-slot mailbox: at the first install and after
+every reinstall. The actor's signals name its executor; lent-buffer returns
+on its own hart raise them as its own task (`FromOwnTask`), and the radio
+doorbell rings from the executor's wake entry.
+The image supplies the station's start-time `Profile`: the station's address,
+scan channels, callbacks, AES engine and event sink; the actor takes the
+rate selection's observer and its own copy of the sink.
 The network comes with each connect: `Control::connect(credentials)` takes
 the `PreparedCredentials` of one network, which only an idle station takes
 and keeps for its reconnections; a refused, stopped or cancelled connect
@@ -58,10 +70,13 @@ personal policy that upgrades to SAE.
 The facade's `Callbacks` and boot-seeded `NonceSource` hide the STA callbacks
 and RSN nonce implementation. Stream exhaustion returns `NonceExhausted` for
 the image's terminal policy; the stream never restarts at reassociation.
-`StationExit` distinguishes stopped, failed, poisoned, quarantined,
-retirement-failed, release-failed and unavailable results. Its facade-owned `failure` vocabulary exhaustively
-converts the backend's nested causes, preserving numeric observations,
-tracking classes and radio request identity. It contains no backend type.
+`StationExit` distinguishes stopped, failed (`LifecycleFailure`: a refused
+first start, an unconfirmed stop or retune, the port's named fault, the
+actor's or the lifecycle's broken contract, a refused reinstall),
+release-failed and unavailable results. Its facade-owned `failure` vocabulary
+exhaustively converts the backend's nested causes, preserving numeric
+observations, tracking classes and radio request identity. It contains no
+backend type.
 Runtime's existing nominal command and status values remain the Control
 vocabulary. HIL can obtain credentials after spawning without
 moving an installation credit into its command handler.
@@ -77,8 +92,7 @@ reset with. The facade has no diagnostic
 counters: its copied trace observations reach image-owned collectors, and its
 product events are immediate callbacks. Bridge timers, polling, protocol
 parameters, DMA geometry and rate-selection policy retain their values.
-The facade's own trace events (station activity, the station service's
-spans, the selected data rate, each received data MPDU's rate and A-MPDU
+The facade's own trace events (station activity, the selected data rate, each received data MPDU's rate and A-MPDU
 containment and each single data transmission's last rate, transmissions
 and end) are its `observation` module, reported to
 `Binding::Observer` and `Binding::DriverObserver`. The protocol's events go to `Binding::Sink`, which
@@ -109,16 +123,20 @@ it was. A connect credit
 stays with Runner until refusal or completion, including policy attempts.
 
 `Control::stop` requests graceful shutdown independently of command queue
-capacity: disconnect once, wait for link-down, then retire Runner and its
-installation owners. Terminal errors do not reconnect or recreate resources.
-After an ordinary uninstall the station runner hands `Joined` to the driver
-task, which retires the slot, takes the stopped device's Wi-Fi frontier and
-membership cell and releases the radio. The station's exit is published only
-after that release: a lost handoff, a refused retirement, a still-active MAC,
-an unanswered leave or a poisoned domain is `ReleaseFailed`, and an
-installation that fail-stopped instead of retiring is `RetirementFailed`;
-neither reports `Stopped`. Owners a failed step does not return stay
-quarantined in their static backing.
+capacity: disconnect once, wait for link-down, then stop the radio and
+retire the actor's installation. A failed station never ends the task: its
+lifecycle stops the radio and ends for a restart, the actor's task
+reinstalls the port in place on the next installation (the network's lent
+units stay counted and rejoin the new ring), and the station's task builds
+the station and its arbiter again on the new tokens, with the configuration
+and callbacks the retired station gives back; no reset follows. A refused
+reinstall is `Failed(Reinstall)`. After an ordinary stop the actor's task
+takes the stopped device's Wi-Fi frontier and membership cell and releases
+the radio. The station's exit is published only after that release, or once
+the stop's drain passed first: a still-active MAC, an unanswered leave, a
+poisoned domain or the passed drain is `ReleaseFailed`, never `Stopped`.
+Owners a failed step does not return stay quarantined in their static
+backing.
 `StationExit` retains the facade's original typed failure. Its public failure
 values carry no transport encoding; no HIL dependency, observation counter or
 collector is part of the facade.

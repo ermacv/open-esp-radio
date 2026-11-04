@@ -69,6 +69,11 @@ impl<'id, const GROUPS: usize> StaTokens for Tokens<'id, GROUPS> {
     fn association(key: &()) -> &() {
         key
     }
+    type LinkKey = ();
+    fn lend((): ()) -> ((), ()) {
+        ((), ())
+    }
+    fn reunite((): (), (): ()) {}
     fn split_vacant(group: Self::VacantAssociation) -> ((), (), Self::VacantKeyBank) {
         (
             (),

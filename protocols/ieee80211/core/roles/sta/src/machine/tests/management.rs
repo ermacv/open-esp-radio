@@ -130,7 +130,7 @@ fn rekey(ptk: &Ptk, counter: u64, gtk: u8, igtk: u8) -> Vec<u8> {
 
 fn assert_released(world: &mut World<'_>) {
     assert!(matches!(world.station.state, State::Idle));
-    assert!(world.station.link().is_none());
+    assert!(world.link.is_none());
     assert!(world.station.keys.clear());
     assert_eq!(world.station.tickets.len(), 2);
     assert_eq!(world.station.buffers.len(), 2);
@@ -169,7 +169,7 @@ fn sa_query_deadline_overflow_disconnects_once_and_returns_every_key_and_credit(
             "no unschedulable SA Query is sent"
         );
         assert!(world.station.poll_deadline().is_none());
-        assert!(world.station.poll_action(late, &mut world.losses).is_none());
+        assert!(world.poll(late).is_none());
     });
 }
 
@@ -346,7 +346,7 @@ fn same_igtk_rekey_keeps_its_ipn_and_a_new_igtk_activates_at_the_terminal() {
         );
         world.hold_key_installs = false;
         for input in world.pending_installs.drain(..).collect::<Vec<_>>() {
-            world.station.input(at(45), input, &mut world.losses);
+            world.input(at(45), input);
         }
         world.run(at(45));
         world.receive(at(46), &wire(GROUP_DEAUTH_NEXT));
@@ -397,23 +397,29 @@ fn query_timeout_and_local_leave_keep_the_pairwise_key_until_protected_tx_return
                 let (mut world, _, _) = connected(mint);
                 let now = if timeout {
                     world.receive(at(50), &plain_disconnect(0xa0, 6));
-                    world
-                        .station
-                        .input(at(1074), StaInput::Tick, &mut world.losses);
+                    world.input(at(1074), StaInput::Tick);
                     at(1074)
                 } else {
                     world.command(at(50), 8, StaCommand::Disconnect).unwrap();
                     at(50)
                 };
-                let Some(StaAction::TransmitProtected { transmit, .. }) =
-                    world.station.poll_action(now, &mut world.losses)
-                else {
+                // A station that leaves on its own deadline asks for its link
+                // back in the same step, before it owes the frame.
+                let mut polled = world.poll(now);
+                if let Some(StaAction::Link(action)) = polled {
+                    world.link_action(action);
+                    polled = world.poll(now);
+                }
+                // It goes under the key the link's holder kept, which the
+                // station asks back only after the frame ended.
+                let Some(StaAction::Transmit(transmit)) = polled else {
                     panic!("protected Deauthentication");
                 };
+                assert_eq!(transmit.number, crate::link::FrameNumber::Keyed);
                 world.transmitted(transmit, true);
                 assert_eq!(world.frames.last().unwrap()[..2], [0xc0, 0x40]);
-                assert!(matches!(world.station.keys.pairwise, KeyCell::Installed(_)));
-                assert!(world.station.poll_action(now, &mut world.losses).is_none());
+                assert!(matches!(world.station.keys.pairwise, KeyCell::Lent(_)));
+                assert!(world.poll(now).is_none());
                 match outcome {
                     Some(outcome) => world.outcomes.push_back((outcome, true)),
                     None => world.unsend_next = true,
@@ -432,4 +438,55 @@ fn query_timeout_and_local_leave_keep_the_pairwise_key_until_protected_tx_return
             });
         }
     }
+}
+
+#[test]
+fn a_protected_deauthentication_after_the_links_return_draws_the_kept_keys_next_packet_number() {
+    installed(|mint| {
+        let (mut world, _, _) = connected(mint);
+        // Data drew the link key's packet numbers up to here.
+        let data = world
+            .link
+            .as_ref()
+            .unwrap()
+            .numbers()
+            .key()
+            .unwrap()
+            .packet_numbers()
+            .allocate()
+            .unwrap()
+            .value();
+        world.hold_transmissions = true;
+        world.command(at(50), 8, StaCommand::Disconnect).unwrap();
+        world.run(at(50));
+        // The link came back; its holder kept the key, and the station's
+        // protected Deauthentication drew the key's next packet number.
+        assert!(world.link.is_none());
+        assert!(world.kept_key.is_some());
+        assert_eq!(world.frames.last().unwrap()[..2], [0xc0, 0x40]);
+        assert_eq!(world.packet_numbers.last(), Some(&(data + 1)));
+        assert!(matches!(world.station.keys.pairwise, KeyCell::Lent(_)));
+        // The frame ends; the station asks for the key before it removes
+        // it, and removes nothing while the holder keeps it.
+        world.hold_transmissions = false;
+        world.keep_key = true;
+        world.end_transmissions(at(51));
+        world.run(at(51));
+        assert_eq!(world.link_actions.last(), Some(&LinkSeen::ReturnKey));
+        // Only the group keys went.
+        assert!(matches!(world.station.keys.pairwise, KeyCell::Recalled(_)));
+        let removals = |world: &World<'_>| {
+            world
+                .seen
+                .iter()
+                .filter(|seen| **seen == Seen::RemoveKey)
+                .count()
+        };
+        let groups = removals(&world);
+        let key = world.kept_key.take().unwrap();
+        world.station.key_returned(key);
+        world.run(at(52));
+        assert_eq!(removals(&world), groups + 1, "the pairwise key went");
+        assert_released(&mut world);
+    });
 }

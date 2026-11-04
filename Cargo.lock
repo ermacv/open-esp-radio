@@ -2661,7 +2661,6 @@ dependencies = [
 name = "oer-protocols-ieee80211-testing-conformance"
 version = "0.1.0"
 dependencies = [
- "heapless",
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-portable-wire",

@@ -26,7 +26,7 @@ pub fn forged() -> Option<Arena> {
 pub fn published<'p, 'id: 'p, A: TxArena<'p, 'id>>(
     port: &mut A,
     arena: Arena,
-    format: ArenaFormat<'p, 'id, A::Caps>,
+    format: ArenaFormat<'p, A::Caps>,
     power: SupportedPower<A::Caps>,
     memory: A::Memory,
     now: Instant,

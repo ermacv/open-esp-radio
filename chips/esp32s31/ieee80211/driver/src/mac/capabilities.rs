@@ -37,10 +37,11 @@ use crate::mac::{
 /// after replacement. The hardware helper
 /// [`oer_chips_esp32s31_ieee80211_driver::mac::crypto::replace_sta_group_ccmp_with_rollback`] restores the old
 /// entry if a replacement write fails; it does not own replay state. The
-/// portable phase's replacement terminal defines that state transition.
-/// The S31 lower-MAC port implements the phase lifecycle and key operations.
-/// Its `AMPDU` capability is `None`: it implements no `AmpduPhase`, so these
-/// hardware BA limits do not advertise aggregate service through that port.
+/// port's replacement terminal defines that state transition.
+/// The S31 data port implements the key operations. Its `AMPDU` capability
+/// is `None`: the station's data arenas state their own aggregation
+/// (`PortArena::ampdu_capabilities`), so these hardware BA limits do not
+/// advertise aggregate service through this description.
 pub const ESP32S31_MAC_SERVICE_CAPABILITIES: MacServiceCapabilities = MacServiceCapabilities {
     interfaces: MacInterfaceCapabilities {
         // These are implemented owner graphs, not merely address-match slots

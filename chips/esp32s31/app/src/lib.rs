@@ -183,11 +183,12 @@ oer_chips_family_executor::tasks! {
         /// Feeds the RTC watchdog while the executor polls.
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
         #[cfg(feature = "wifi")]
-        /// The Wi-Fi station's runner.
+        /// The Wi-Fi station's lifecycle.
         station(launch: wifi::StationStart) = wifi::serve_station;
         #[cfg(feature = "wifi")]
-        /// The Wi-Fi MAC driver, beside the station's runner.
-        driver(driver: wifi::Driver) = wifi::drive;
+        /// The Wi-Fi datapath actor, which owns the radio, beside the
+        /// station's lifecycle.
+        datapath(datapath: wifi::Datapath) = wifi::datapath;
     }
 }
 
@@ -309,9 +310,9 @@ pub(crate) fn draw_boot_id(
 pub(crate) struct Pending {
     #[cfg(feature = "wifi")]
     pub(crate) station: Option<wifi::StationStart>,
-    /// The Wi-Fi MAC driver, started beside the station.
+    /// The Wi-Fi datapath actor, started beside the station.
     #[cfg(feature = "wifi")]
-    pub(crate) driver: Option<wifi::Driver>,
+    pub(crate) datapath: Option<wifi::Datapath>,
 }
 
 impl Boot {
@@ -958,8 +959,8 @@ impl Starts {
         #[cfg(feature = "wifi")]
         let started = started
             && pending
-                .driver
-                .is_none_or(|driver| SdkTasks::driver(library, driver).is_ok())
+                .datapath
+                .is_none_or(|datapath| SdkTasks::datapath(library, datapath).is_ok())
             && pending
                 .station
                 .is_none_or(|start| SdkTasks::station(library, start).is_ok());

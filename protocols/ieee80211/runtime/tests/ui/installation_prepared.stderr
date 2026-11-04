@@ -1,13 +1,13 @@
-error[E0599]: the method `admit` exists for struct `Attempt<'_, ModelTickets, ModelPrepared<'_, '_, '_, oer_protocols_ieee80211_contracts_port::Station, ModelCaps, ModelBackend<OuterId>>, _, (), oer_protocols_radio_port::Child<Root<Id>, 1>>`, but its trait bounds were not satisfied
-   --> tests/ui/installation_prepared.rs:112:52
-    |
-112 |             destination.station().submit((attempt).admit()).unwrap(); // ui-error: E0599
-    |                                                    ^^^^^ method cannot be called due to unsatisfied trait bounds
-    |
-   ::: $WORKSPACE/protocols/ieee80211/testing/model/src/lib.rs
-    |
-    | pub struct ModelTypes<B: ModelComposition>(PhantomData<fn() -> B>);
-    | ------------------------------------------ doesn't satisfy `<_ as PhaseTypes<'_>>::TicketPath = Child<Root<Id>, 1>`
-    |
-    = note: the following trait bounds were not satisfied:
-            `<ModelTypes<ModelBackend<OuterId>> as PhaseTypes<'_>>::TicketPath = oer_protocols_radio_port::Child<Root<Id>, 1>`
+error[E0599]: the method `admit` exists for struct `Attempt<'_, ModelTickets, ModelPrepared<'_, 'p, 'a, oer_protocols_ieee80211_contracts_port::Station, ModelCaps, ModelBackend<StaticId<Source>>>, ModelCaps, (), oer_protocols_radio_port::Child<Root<StaticId<Target>>, 1>>`, but its trait bounds were not satisfied
+  --> tests/ui/installation_prepared.rs:35:18
+   |
+35 |     drop(attempt.admit()); // ui-error: E0599
+   |                  ^^^^^ method cannot be called due to unsatisfied trait bounds
+   |
+  ::: $WORKSPACE/protocols/ieee80211/testing/model/src/lib.rs
+   |
+   | pub struct ModelTypes<B: ModelComposition>(PhantomData<fn() -> B>);
+   | ------------------------------------------ doesn't satisfy `<_ as PortTypes<'_>>::TicketPath = Child<Root<StaticId<Target>>, 1>`
+   |
+   = note: the following trait bounds were not satisfied:
+           `<ModelTypes<ModelBackend<StaticId<Source>>> as PortTypes<'_>>::TicketPath = oer_protocols_radio_port::Child<Root<StaticId<Target>>, 1>`

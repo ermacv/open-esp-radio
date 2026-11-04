@@ -37,13 +37,14 @@ const _: () = {
     }
 };
 pub const TX: usize = crate::FRAME_CAPACITY;
-/// The executor that polls the MAC driver: the station's, on the boot hart.
+/// The executor of the datapath actor and the station's lifecycle, on the
+/// boot hart.
 pub type DriverExecutor = oer_chips_family_executor::Executor<Esp32s31, 0>;
 /// Image-selected entries, callbacks, observers and event sink.
 pub trait Binding: Sized + 'static {
     type Id: SlotIdentity + 'static;
     type Wifi: Entry<Part = WifiIrqPart<Lower>>;
-    /// The entry of the driver's executor ([`DriverExecutor`]): its wake
+    /// The entry of the actor's executor ([`DriverExecutor`]): its wake
     /// entry, which rings the radio doorbell.
     type DriverEntry: Entry<Part: oer_chips_family_interrupt_table::InterruptSource>;
     type Callbacks: crate::Callbacks + 'static;
@@ -56,12 +57,13 @@ pub trait Binding: Sized + 'static {
     type Events: Events + 'static;
     /// Where the station's network end runs: [`crate::SameHart`], or
     /// [`crate::AcrossHarts`] with the executor signals the two harts raise
-    /// for each other's tasks and the driver.
+    /// for the network's task and the datapath actor.
     type Notifies: crate::Notifies;
     /// The network end's transmit memory over the pool buffers the port
     /// does not hold, and the network stack's packets it takes.
     type TxSupply: crate::NetworkTxSupply;
-    fn take_slot() -> Option<&'static mut radio::Slot<Self>>;
+    /// The minting authority of the port's installations, once.
+    fn take_installations() -> Option<radio::Installations<Self>>;
     /// Image-owned terminal policy, called with a handled construction error.
     fn fail(error: InitializationError) -> !;
 }
@@ -279,7 +281,6 @@ impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
 /// with its connect ([`crate::Control::connect`]).
 pub struct Profile<W: Binding> {
     pub(crate) station: StaConfig<Caps, CoreCallbacks<W::Callbacks>>,
-    pub(crate) observer: W::Observer,
     pub(crate) sink: W::Sink,
 }
 impl<W: Binding> Profile<W> {
@@ -290,7 +291,6 @@ impl<W: Binding> Profile<W> {
         address: [u8; 6],
         callbacks: W::Callbacks,
         aes: oer_chips_esp32s31_compose::crypto::AesEngine,
-        observer: W::Observer,
         sink: W::Sink,
     ) -> Result<Self, InitializationError> {
         let mut channels = heapless::Vec::new();
@@ -370,7 +370,6 @@ impl<W: Binding> Profile<W> {
                 ),
                 callbacks: CoreCallbacks { callbacks, aes },
             },
-            observer,
             sink,
         })
     }
@@ -436,35 +435,28 @@ pub struct Storage<W: Binding> {
     /// the network the rest ([`crate::NetworkTx`]).
     pub(crate) pool: static_cell::StaticCell<oer_chips_esp32s31_ieee80211_driver::port::TxPool<TX>>,
     pub(crate) driver: radio::DriverStorage<W>,
+    pub(crate) actor: radio::ActorStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
-    pub(crate) bell: oer_portable_memory::Doorbell,
-    pub(crate) ready: static_cell::StaticCell<radio::ReadySlot<W>>,
-    pub(crate) retire: static_cell::StaticCell<radio::RetireSlot<W>>,
 }
-impl<W, N, S, D> Storage<W>
+impl<W, N, A> Storage<W>
 where
-    W: Binding<Notifies = crate::AcrossHarts<N, S, D>>,
+    W: Binding<Notifies = crate::AcrossHarts<N, A>>,
     N: oer_portable_memory::QueueNotify + Copy + 'static,
-    S: oer_portable_memory::QueueNotify + Copy + 'static,
-    D: oer_portable_memory::QueueNotify + Copy + 'static,
+    A: oer_portable_memory::QueueNotify + Copy + 'static,
 {
     /// The storage of a station whose network end runs on another hart
     /// ([`Channels::across_harts`]): `network` raises the network task's
-    /// signal, `station` the station task's, `driver` the radio driver's.
-    pub const fn across_harts(network: N, station: S, driver: D) -> Self {
+    /// signal, `actor` the datapath actor's, which polls every station end,
+    /// the network's stop answer and the lent units' returns.
+    pub const fn across_harts(network: N, actor: A) -> Self {
         Self {
-            channels: Channels::across_harts(network, station),
+            channels: Channels::across_harts(network, actor),
             driver: radio::DriverStorage::new(
-                oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers {
-                    driver,
-                    returned: station,
-                },
+                oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers { returned: actor },
             ),
+            actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
             pool: static_cell::StaticCell::new(),
-            bell: oer_portable_memory::Doorbell::new(),
-            ready: static_cell::StaticCell::new(),
-            retire: static_cell::StaticCell::new(),
         }
     }
 }
@@ -475,11 +467,9 @@ impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
             driver: radio::DriverStorage::new(
                 oer_chips_esp32s31_ieee80211_driver::port::SameHart::new(),
             ),
+            actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
             pool: static_cell::StaticCell::new(),
-            bell: oer_portable_memory::Doorbell::new(),
-            ready: static_cell::StaticCell::new(),
-            retire: static_cell::StaticCell::new(),
         }
     }
 }
@@ -508,29 +498,37 @@ pub struct Resources<W: Binding> {
     pub dma: crate::DmaResources,
 }
 pub struct Runners<W: Binding> {
-    pub driver: Driver<W>,
+    /// The datapath actor's task.
+    pub datapath: Datapath<W>,
+    /// The station lifecycle's task.
     pub station: StationRunner<W>,
 }
-pub struct Driver<W: Binding> {
+/// The datapath actor's task: it owns the radio.
+pub struct Datapath<W: Binding> {
     pub(crate) boot: radio::Boot<W>,
-    pub(crate) ready: &'static radio::ReadySlot<W>,
-    pub(crate) retire: &'static radio::RetireSlot<W>,
-    pub(crate) bell: &'static oer_portable_memory::Doorbell,
+    pub(crate) places: radio::ActorPlaces<W>,
+    pub(crate) network: radio::NetworkSide<W>,
 }
+/// The station lifecycle's task: it commands the actor.
 pub struct StationRunner<W: Binding> {
     pub(crate) service: ServiceRunner<W>,
-    /// Hands the ordinary join to the driver task, which answers once its
-    /// radio release has ended.
-    pub(crate) retire:
-        oer_portable_memory::Poster<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
+    /// The lifecycle's ends to the actor.
+    pub(crate) actor: oer_protocols_ieee80211_runtime::lifecycle::ActorEnds<
+        'static,
+        'static,
+        radio::ActorPort<W>,
+        { radio::TO },
+        { radio::FROM },
+        { radio::RETURNS },
+    >,
+    /// The installation mailbox the actor's task fills.
+    pub(crate) news: oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
     /// Publishes the exit to Control once it is final.
     pub(crate) stop: crate::StopGuard<'static, StationExit>,
 }
 pub(crate) struct ServiceRunner<W: Binding> {
-    pub(crate) frontend:
-        oer_portable_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
-    pub(crate) connection: ServiceConnection<'static, W::Notifies, crate::TxMemory>,
+    pub(crate) connection: ServiceConnection<'static, W::Notifies>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
     pub(crate) output: runtime::Events<
         'static,
@@ -538,24 +536,17 @@ pub(crate) struct ServiceRunner<W: Binding> {
         <W::Notifies as crate::Notifies>::Channels,
     >,
 }
-/// Terminal result owns every typed cause, with no backend identity.
+/// How the station ended: an ordinary stop, or a typed cause the image
+/// records before it resets. A restart of the station never ends it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationExit {
     Stopped,
-    Failed(crate::failure::FailedStation),
-    Poisoned(crate::failure::FailedStation),
-    Quarantined(crate::failure::FailedStation),
-    /// Ended for uninstall, but the installation fail-stopped instead.
-    RetirementFailed(crate::failure::RetirementFailure),
-    /// Retired, but the Wi-Fi radio release did not complete.
-    ReleaseFailed(crate::failure::ReleaseFailure),
-    Unavailable(UnavailableCause),
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UnavailableCause {
-    /// The port ended the station's body loan before the station returned.
-    Abandoned(crate::failure::Abandoned),
-    Initialization(InitializationError),
+    /// The lifecycle or the datapath actor under it ended terminally.
+    Failed(crate::failure::LifecycleFailure),
+    /// Stopped, but the Wi-Fi radio release did not complete.
+    ReleaseFailed(crate::failure::ReleaseCause),
+    /// The station never started.
+    Unavailable(InitializationError),
 }
 /// The station's network end over `W`'s transmit memory and its packets.
 pub type StationNetwork<W> = Network<
@@ -619,6 +610,7 @@ pub fn station<W: Binding>(
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
     let crate::Connection {
         service: connection,
+        actor: actor_connection,
         stop,
     } = connection;
     #[cfg(oer_trace)]
@@ -630,26 +622,20 @@ pub fn station<W: Binding>(
         events,
         status: control.status_reader(),
     });
-    let ready = storage
-        .ready
-        .try_init_with(|| radio::ReadySlot::<W>::new(&storage.bell, 1, 0x100))
-        .unwrap_or_else(|| W::fail(InitializationError::Storage));
-    let frontend = ready
-        .claim()
-        .unwrap_or_else(|| W::fail(InitializationError::Frontend));
-    let retire = storage
-        .retire
-        .try_init_with(|| radio::RetireSlot::<W>::new(&storage.bell, 2, 0x101))
-        .unwrap_or_else(|| W::fail(InitializationError::Storage));
-    let retire_poster = retire
-        .claim()
-        .unwrap_or_else(|| W::fail(InitializationError::Frontend));
+    let (places, actor, news) = storage.actor.split();
+    let crate::ActorConnection {
+        network_stop,
+        transmit,
+        returned,
+        receive: received,
+        receive_copied,
+    } = actor_connection;
     (
         control,
         network,
         stopper,
         Runners {
-            driver: Driver {
+            datapath: Datapath {
                 boot: radio::Boot {
                     cell,
                     wifi,
@@ -670,27 +656,34 @@ pub fn station<W: Binding>(
                     chains,
                     storage: &mut storage.driver,
                 },
-                ready,
-                retire,
-                bell: &storage.bell,
+                places,
+                network: oer_protocols_ieee80211_runtime::datapath::NetworkEnds {
+                    transmit,
+                    returned,
+                    receive: received,
+                    receive_copied,
+                    network: network_stop,
+                },
             },
             station: StationRunner {
                 service: ServiceRunner {
-                    frontend,
                     config,
                     connection,
                     storage: &mut storage.service,
                     output,
                 },
-                retire: retire_poster,
+                actor,
+                news,
                 stop,
             },
         },
     )
 }
-impl<W: Binding> Driver<W> {
-    pub async fn run(self) {
-        radio::drive(self).await
+impl<W: Binding> Datapath<W> {
+    /// Run the datapath actor: its rates report to `observer`, its
+    /// station events go to `sink`.
+    pub async fn run(self, observer: W::Observer, sink: W::Sink) {
+        radio::drive(self, observer, sink).await
     }
 }
 impl<W: Binding> StationRunner<W> {

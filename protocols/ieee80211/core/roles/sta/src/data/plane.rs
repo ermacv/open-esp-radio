@@ -9,10 +9,9 @@
 //! frames the arena holds (their TID, first sequence number, subframe
 //! octets, each MSDU's admission and the attempts on the air).
 //!
-//! The sequence spaces and the pairwise key's packet numbers stay the
-//! station's, which numbers its own frames (EAPOL, Block Ack negotiation) in
-//! the same spaces: each intake borrows them from the station's link
-//! ([`LinkNumbers`]).
+//! The sequence spaces and the pairwise key's packet numbers are the link's
+//! ([`TxNumbers`]), which its holder numbers the station's own frames from
+//! too (EAPOL, Block Ack negotiation): each intake draws from them.
 //!
 //! An MSDU becomes an MPDU once, written into the network's memory as the
 //! arena takes it ([`DataPlane::intake`]): its sequence number and packet
@@ -52,7 +51,7 @@ use super::{
     PpduLimit, WmmAccessCategory, WmmUserPriority, aggregate, move_down,
 };
 use crate::events::{AggregateSettled, DataLoss, StaEvent};
-use crate::machine::LinkMode;
+use crate::link::{TxKey, TxNumbers};
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::arena::{
@@ -96,32 +95,6 @@ pub struct OutboundMsdu<M> {
     pub length: usize,
     /// Its user priority.
     pub priority: WmmUserPriority,
-}
-
-/// The numbers one intake draws from the station's link: its sequence
-/// spaces and, on a protected link, the pairwise key's packet numbers.
-pub struct LinkNumbers<'a> {
-    /// The link's sequence spaces: per TID on a QoS link, the station's one
-    /// space otherwise.
-    pub sequences: LinkMode<'a>,
-    /// The pairwise key's packet numbers; `None` while the link holds no
-    /// key.
-    pub packet_numbers: Option<&'a CcmpTxPacketNumber>,
-}
-
-impl LinkNumbers<'_> {
-    /// The counter of `tid`'s space.
-    fn counter(&mut self, tid: WmmUserPriority) -> &mut SequenceCounter {
-        match &mut self.sequences {
-            LinkMode::Qos(counters) => tid.select_mut(counters),
-            LinkMode::NonQos(counter) => counter,
-        }
-    }
-
-    /// Whether the spaces are a QoS link's.
-    const fn qos(&self) -> bool {
-        matches!(self.sequences, LinkMode::Qos(_))
-    }
 }
 
 /// What the access point's HT Capabilities ask of the station's A-MPDUs.
@@ -172,35 +145,6 @@ pub struct DataLink {
     pub ht: Option<HtLimits>,
     /// Each TID's operational transmit Block Ack window.
     pub windows: [Option<TxWindow>; 8],
-}
-
-impl DataLink {
-    /// The data state of the station's `link`, without operational
-    /// transmit agreements: frames a BlockAck missed are retried by `retry`,
-    /// and `ht` are the access point's A-MPDU limits. `None` for a BSSID a
-    /// station sends no data to.
-    pub fn for_link<T: crate::machine::StaTokens>(
-        link: &crate::machine::LinkView<'_, '_, T>,
-        retry: Option<AggregateRetry>,
-        ht: Option<HtLimits>,
-    ) -> Option<Self> {
-        let header = StaDataHeaderTemplate::new(
-            link.address,
-            link.bssid,
-            matches!(link.mode, LinkMode::Qos(_)),
-            match link.protection {
-                crate::machine::LinkProtection::Open => LinkProtection::Open,
-                crate::machine::LinkProtection::Ccmp { .. } => LinkProtection::Ccmp,
-            },
-        )?;
-        Some(Self {
-            header,
-            admission: link.admission,
-            retry,
-            ht,
-            windows: [None; 8],
-        })
-    }
 }
 
 /// Why the plane did not take a link.
@@ -552,6 +496,18 @@ impl DataPlane {
         self.link.is_some()
     }
 
+    /// The TID an MSDU of user priority `priority` goes in on the plane's
+    /// link: its admitted user priority on a QoS link, UP0 otherwise;
+    /// `None` without a link or an admitted access category.
+    pub fn tid(&self, priority: WmmUserPriority) -> Option<WmmUserPriority> {
+        let link = self.link.as_ref()?;
+        if link.header.peer_qos() {
+            link.admission.admitted_user_priority(priority)
+        } else {
+            Some(WmmUserPriority::UP0)
+        }
+    }
+
     /// The operational window of `tid`.
     pub fn window(&self, tid: WmmUserPriority) -> Option<TxWindow> {
         *tid.select(&self.link.as_ref()?.windows)
@@ -719,11 +675,11 @@ impl DataPlane {
     /// on a protected link, the CCMP header of the key's next packet number.
     /// No sequence number is drawn for an MSDU that waits or is refused, and
     /// no packet number before the arena's writer runs.
-    pub fn intake<'p, 'id: 'p, A: TxArena<'p, 'id>>(
+    pub fn intake<'p, 'id: 'p, A: TxArena<'p, 'id>, P: TxKey>(
         &mut self,
         arena: &mut A,
         msdu: OutboundMsdu<A::Memory>,
-        mut numbers: LinkNumbers<'_>,
+        numbers: &mut TxNumbers<P>,
         now: Instant,
     ) -> Intake<A::Memory> {
         let refused = |msdu: OutboundMsdu<A::Memory>, reason| Intake::Refused {
@@ -751,7 +707,7 @@ impl DataPlane {
         if header.peer_qos() != numbers.qos() {
             return refused(msdu, IntakeRefusal::Numbering);
         }
-        if protection == DataProtection::Ccmp(()) && numbers.packet_numbers.is_none() {
+        if protection == DataProtection::Ccmp(()) && numbers.key().is_none() {
             return refused(msdu, IntakeRefusal::NoKey);
         }
         let Some(payload) = msdu.length.checked_sub(ETHERNET_HEADER_LEN) else {
@@ -764,7 +720,7 @@ impl DataPlane {
         else {
             return refused(msdu, IntakeRefusal::TooLong);
         };
-        let sequence = numbers.counter(tid).peek();
+        let sequence = numbers.next(tid);
         let window = *tid.select(&link.windows);
         let Some(id) = self.standby() else {
             return Intake::Wait(msdu);
@@ -804,8 +760,8 @@ impl DataPlane {
         let Some(right) = book.right.as_ref() else {
             return Intake::Wait(msdu);
         };
-        let packet_numbers = numbers.packet_numbers;
-        let counter = numbers.counter(tid);
+        let (counter, key) = numbers.data_and_key(tid);
+        let packet_numbers = key.map(TxKey::packet_numbers);
         let saved = *counter;
         let mut written = None;
         let taken = arena.intake(right, msdu.memory, |region| {
@@ -863,8 +819,8 @@ impl DataPlane {
     /// plan's kind.
     pub fn publication<'p, 'id, K: Ieee80211Capabilities>(
         &mut self,
-        rate: impl FnOnce(PpduPlan) -> Option<ArenaFormat<'p, 'id, K>>,
-    ) -> Option<ArenaPublication<'p, 'id, K>> {
+        rate: impl FnOnce(PpduPlan) -> Option<ArenaFormat<'p, K>>,
+    ) -> Option<ArenaPublication<'p, K>> {
         let link = self.link.as_ref()?;
         let id = self.publishable()?;
         let book = self.book(id);
@@ -911,7 +867,7 @@ impl DataPlane {
 
     /// The backend refused `publication`: its arena's right comes back, and
     /// the arena goes again at the next publication.
-    pub fn refused<K>(&mut self, publication: ArenaPublication<'_, '_, K>) {
+    pub fn refused<K>(&mut self, publication: ArenaPublication<'_, K>) {
         let book = self.book_mut(publication.arena.id());
         if book.right.is_none() {
             book.published = None;

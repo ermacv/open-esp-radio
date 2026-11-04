@@ -90,7 +90,7 @@ occupy no runtime storage and use no registry or claim latch.
 
 | Consumer | Authority retained | Runtime cost of the path | Construction and cancellation |
 | --- | --- | --- | --- |
-| Wi-Fi | Gate and issuer, TX and Block Ack tickets, buffer/key pools, station connection source and its contexts | Zero additional bytes; indices remain `u8`, the epoch remains a `u64` | The phase accepts its associated gate path; terminals retain the submitted slots and connection context |
+| Wi-Fi | Gate and issuer, TX and Block Ack tickets, buffer/key pools, station connection source and its contexts | Zero additional bytes; indices remain `u8`, the epoch remains a `u64` | The data port's commands accept their gate path; terminals retain the submitted slots and connection context |
 | Bluetooth LE | The backend's declared layout; the port test backend has a standalone slot component, production layouts without pools use `()` | Empty layout and Mint remain zero sized | Consuming issuance introduces no waits or cancellation state |
 | IEEE 802.15.4 | Nested interface/configuration/pending-table paths and the separate radio-operation path | Zero additional bytes; each slot/permit/seat remains one byte | Configured and pending-entry owners retain their slot; operation guards release only to their source pool |
 | FIFO pool | Independent permit and waiter paths; opaque initial supply | No registry, allocation or new synchronization; line receipt remains zero sized | The whole supply constructs one pool; cancelled takes release their queue place and keep the borrowed seat |
@@ -106,8 +106,9 @@ cancellation, empty layouts and all 256 indices.
 A claim places one `PortSlot<Id, State>`. `with_local_slot` supplies a fresh
 invariant `LocalId<'scope>` without a global declaration latch; repeated,
 nested and parallel model scopes remain independent. The executor's
-`declare_port_slot!` supplies one nominal `StaticId<Declaration>` and one
-irreversible `take_static()`. Neither reset nor quarantine reissues that Id.
+`declare_installations!` supplies one nominal `StaticId<Declaration>` and one
+irreversible `take_static()` of its `Installations`. Neither reset nor
+quarantine reissues that Id.
 Unclaimed `VacantPortSlot` backing cannot register an owner.
 
 `PortSlot::register` stores the P2 owner before queue construction. Queues
@@ -202,8 +203,6 @@ The final `EventEnd` remains stable across phase loans. An ordinary fault
 can return Drained only after all admitted terminals were delivered.
 Accounting quarantine preserves missing owners and ends delivery immediately;
 it does not itself decide whether later P2 cleanup can prove Stopped.
-`station::Runner` accounts every admitted terminal before accepting Drained and
-fail-stops on Quarantined without another drain or ordinary disable.
 
 Local models can end their entire hardware world through `ModelSlotOwner`.
 `end_model_world` consumes the local slot after every endpoint and P2 loan

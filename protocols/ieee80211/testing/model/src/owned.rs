@@ -2,8 +2,8 @@
 
 use super::*;
 use oer_protocols_ieee80211_contracts_port::{
-    Configured, InstalledGroup, InstalledPairwise, LowerMacEvent, LowerMacTerminal, Removed,
-    RemovedKey, TxCompleted,
+    Configured, InstalledGroup, InstalledPairwise, LowerMacTerminal, Removed, RemovedKey,
+    TxCompleted,
 };
 
 pub(super) enum OwnedConfigured<'o, B: ModelComposition> {
@@ -13,14 +13,6 @@ pub(super) enum OwnedConfigured<'o, B: ModelComposition> {
             Station,
             oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 1>,
             ModelStationContextOf<B>,
-        >,
-    ),
-    AccessPoint(
-        ConfigurePermission<
-            'o,
-            AccessPoint,
-            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 2>,
-            ModelAccessPointContextOf<B>,
         >,
     ),
 }
@@ -63,18 +55,6 @@ impl<B: ModelComposition> OwnedInstalledPairwise<'static, B> {
             Self::AccessPoint(key) => InstalledPairwise::AccessPoint(key.lend(loan)),
         }
     }
-    fn retain<'p>(
-        key: InstalledPairwise<'p, ModelTypes<B>>,
-        loan: &BodyLoan<'p, B::Identity, B>,
-    ) -> Self
-    where
-        B: 'p,
-    {
-        match key {
-            InstalledPairwise::Station(key) => Self::Station(key.into_owned(loan)),
-            InstalledPairwise::AccessPoint(key) => Self::AccessPoint(key.into_owned(loan)),
-        }
-    }
 }
 
 pub(super) enum OwnedInstalledGroup<'o, B: ModelComposition> {
@@ -100,32 +80,9 @@ type SingleTerminal<'o, B> = oer_protocols_ieee80211_contracts_port::Completed<
 >;
 pub(super) enum OwnedTxCompleted<'o, B: ModelComposition> {
     Single(SingleTerminal<'o, B>),
-    /// A data arena's end: it names no install, so it needs no loan.
-    Arena(ModelArenaCompleted),
-}
-
-pub(super) enum OwnedSampledTsfPermission<'o, B: ModelComposition> {
-    Station(
-        oer_protocols_ieee80211_contracts_port::TsfPermission<
-            'o,
-            Station,
-            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 1>,
-        >,
-    ),
-    AccessPoint(
-        oer_protocols_ieee80211_contracts_port::TsfPermission<
-            'o,
-            AccessPoint,
-            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 2>,
-        >,
-    ),
 }
 
 pub(super) enum OwnedLowerMacTerminal<'o, B: ModelComposition> {
-    TsfSampled {
-        sample: oer_protocols_ieee80211_contracts_port::TsfSample,
-        permission: OwnedSampledTsfPermission<'o, B>,
-    },
     TxCompleted(OwnedTxCompleted<'o, B>),
     GateClosed(GateClosed<'o, ModelPool<B::Identity, 0>>),
     Configured(OwnedConfigured<'o, B>),
@@ -150,15 +107,6 @@ pub(super) enum OwnedLowerMacEvent<'o, B: ModelComposition> {
     },
 }
 
-impl<B: ModelComposition> OwnedConfigured<'_, B> {
-    pub(super) fn role(&self) -> VifRole {
-        match self {
-            Self::Station(_) => VifRole::Station,
-            Self::AccessPoint(_) => VifRole::AccessPoint,
-        }
-    }
-}
-
 impl<B: ModelComposition> OwnedConfigured<'static, B> {
     pub(super) fn lend<'p>(
         self,
@@ -169,19 +117,6 @@ impl<B: ModelComposition> OwnedConfigured<'static, B> {
     {
         match self {
             Self::Station(permission) => Configured::Station(permission.lend(loan)),
-            Self::AccessPoint(permission) => Configured::AccessPoint(permission.lend(loan)),
-        }
-    }
-    pub(super) fn retain<'p>(
-        context: Configured<'p, ModelTypes<B>>,
-        loan: &BodyLoan<'p, B::Identity, B>,
-    ) -> Self
-    where
-        B: 'p,
-    {
-        match context {
-            Configured::Station(permission) => Self::Station(permission.into_owned(loan)),
-            Configured::AccessPoint(permission) => Self::AccessPoint(permission.into_owned(loan)),
         }
     }
 }
@@ -268,24 +203,6 @@ impl<B: ModelComposition> OwnedInstalledGroup<'static, B> {
             },
         }
     }
-    fn retain<'p>(
-        key: InstalledGroup<'p, ModelTypes<B>>,
-        loan: &BodyLoan<'p, B::Identity, B>,
-    ) -> Self
-    where
-        B: 'p,
-    {
-        match key {
-            InstalledGroup::Station { key, permission } => Self::Station {
-                key: key.into_owned(loan),
-                permission: loan.reclaim_slot(permission),
-            },
-            InstalledGroup::AccessPoint { key, permission } => Self::AccessPoint {
-                key: key.into_owned(loan),
-                permission: loan.reclaim_slot(permission),
-            },
-        }
-    }
 }
 
 impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
@@ -297,26 +214,8 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
         B: 'p,
     {
         match self {
-            Self::TsfSampled { sample, permission } => LowerMacTerminal::TsfSampled {
-                sample,
-                permission: match permission {
-                    OwnedSampledTsfPermission::Station(permission) => {
-                        oer_protocols_ieee80211_contracts_port::SampledTsfPermission::Station(
-                            permission.lend(loan),
-                        )
-                    }
-                    OwnedSampledTsfPermission::AccessPoint(permission) => {
-                        oer_protocols_ieee80211_contracts_port::SampledTsfPermission::AccessPoint(
-                            permission.lend(loan),
-                        )
-                    }
-                },
-            },
             Self::TxCompleted(OwnedTxCompleted::Single(done)) => {
                 LowerMacTerminal::TxCompleted(TxCompleted::Single(done.lend(loan)))
-            }
-            Self::TxCompleted(OwnedTxCompleted::Arena(done)) => {
-                LowerMacTerminal::TxCompleted(TxCompleted::Arena(done))
             }
             Self::GateClosed(gate) => LowerMacTerminal::GateClosed(gate.lend(loan)),
             Self::Configured(context) => LowerMacTerminal::Configured(context.lend(loan)),
@@ -333,70 +232,6 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
             Self::PairwiseKeyInstalled(key) => {
                 LowerMacTerminal::PairwiseKeyInstalled(key.lend(loan))
             }
-        }
-    }
-    pub(super) fn retain<'p>(
-        terminal: LowerMacTerminal<'p, ModelTypes<B>>,
-        loan: &BodyLoan<'p, B::Identity, B>,
-    ) -> Self
-    where
-        B: 'p,
-    {
-        match terminal {
-            LowerMacTerminal::TxCompleted(TxCompleted::Single(done)) => {
-                Self::TxCompleted(OwnedTxCompleted::Single(done.into_owned(loan)))
-            }
-            LowerMacTerminal::TxCompleted(TxCompleted::Arena(done)) => {
-                Self::TxCompleted(OwnedTxCompleted::Arena(done))
-            }
-            LowerMacTerminal::GateClosed(gate) => Self::GateClosed(gate.into_owned(loan)),
-            LowerMacTerminal::Configured(context) => {
-                Self::Configured(OwnedConfigured::retain(context, loan))
-            }
-            LowerMacTerminal::KeyRemoved(key) => Self::KeyRemoved(OwnedRemoved::retain(key, loan)),
-            LowerMacTerminal::GroupKeyReplaced { key, permission } => Self::GroupKeyReplaced {
-                key: key.into_owned(loan),
-                permission: loan.reclaim_slot(permission),
-            },
-            LowerMacTerminal::GroupKeySelected { key, permission } => Self::GroupKeySelected {
-                key: key.into_owned(loan),
-                permission: loan.reclaim_slot(permission),
-            },
-            LowerMacTerminal::GroupKeyInstalled(key) => {
-                Self::GroupKeyInstalled(OwnedInstalledGroup::retain(key, loan))
-            }
-            LowerMacTerminal::PairwiseKeyInstalled(key) => {
-                Self::PairwiseKeyInstalled(OwnedInstalledPairwise::retain(key, loan))
-            }
-            LowerMacTerminal::TsfSampled { sample, permission } => Self::TsfSampled {
-                sample,
-                permission: match permission {
-                    oer_protocols_ieee80211_contracts_port::SampledTsfPermission::Station(
-                        permission,
-                    ) => OwnedSampledTsfPermission::Station(permission.into_owned(loan)),
-                    oer_protocols_ieee80211_contracts_port::SampledTsfPermission::AccessPoint(
-                        permission,
-                    ) => OwnedSampledTsfPermission::AccessPoint(permission.into_owned(loan)),
-                },
-            },
-        }
-    }
-}
-
-impl<B: ModelComposition> OwnedLowerMacEvent<'static, B> {
-    pub(super) fn lend<'p>(
-        self,
-        loan: &BodyLoan<'p, B::Identity, B>,
-    ) -> LowerMacEvent<'p, ModelTypes<B>>
-    where
-        B: 'p,
-    {
-        match self {
-            Self::Terminal(terminal) => LowerMacEvent::Terminal(terminal.lend(loan)),
-            Self::Received { frame, meta } => LowerMacEvent::Received {
-                frame: frame.lend(loan),
-                meta,
-            },
         }
     }
 }

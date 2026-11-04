@@ -1,0 +1,17 @@
+error[E0382]: use of moved value: `actor`
+  --> tests/ui/actor_reinstall_owner.rs:18:10
+   |
+ 6 | pub fn reinstall_once<'id, D, S, O>(actor: Actor<'id, D, S, O>)
+   |                                     ----- move occurs because `actor` has type `Actor<'_, D, S, O>`, which does not implement the `Copy` trait
+...
+16 |     let next = actor.reinstall(Ok::<D::Port, (D::Port, ())>);
+   |                      --------------------------------------- `actor` moved due to this method call
+17 |     #[cfg(all())]
+18 |     drop(actor); // ui-error: E0382
+   |          ^^^^^ value used here after move
+   |
+note: `Actor::<'id, D, S, O>::reinstall` takes ownership of the receiver `self`, which moves `actor`
+  --> src/datapath.rs
+   |
+   |         mut self,
+   |             ^^^^

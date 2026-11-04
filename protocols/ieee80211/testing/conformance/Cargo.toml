@@ -15,7 +15,6 @@ oer-protocols-ieee80211-wire = { path = "../../wire" }
 oer-portable-time = { path = "../../../../portable/time" }
 
 [dev-dependencies]
-heapless = "0.9.3"
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 
 [lints]

@@ -2,16 +2,13 @@
 //!
 //! A ticket's public index is `u8`, so four words cover its entire domain
 //! without an allocation or a fallible capacity increase. The control
-//! operations each consume a unique affine permission, and one data arena
-//! is on the air at a time. This is accounting
+//! operations each consume a unique affine permission. This is accounting
 //! of a backend's external promises, not another owner of those permissions.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PendingTerminal {
     Transmit(u8),
     Control(ControlTerminal),
-    /// The completion of the data arena on the air.
-    Arena,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,10 +33,9 @@ impl ControlTerminal {
 }
 
 #[derive(Default)]
-pub(super) struct Admissions {
+pub(crate) struct Admissions {
     transmit: [u64; 4],
     control: u8,
-    arena: bool,
 }
 
 impl Admissions {
@@ -54,18 +50,17 @@ impl Admissions {
         (word, 1_u64.rotate_left(u32::from(index)))
     }
 
-    pub(super) fn insert(&mut self, operation: PendingTerminal) {
+    pub(crate) fn insert(&mut self, operation: PendingTerminal) {
         match operation {
             PendingTerminal::Transmit(index) => {
                 let (word, mask) = self.place(index);
                 *word |= mask;
             }
             PendingTerminal::Control(operation) => self.control |= operation.mask(),
-            PendingTerminal::Arena => self.arena = true,
         }
     }
 
-    pub(super) fn remove(&mut self, operation: PendingTerminal) -> bool {
+    pub(crate) fn remove(&mut self, operation: PendingTerminal) -> bool {
         match operation {
             PendingTerminal::Transmit(index) => {
                 let (word, mask) = self.place(index);
@@ -79,28 +74,6 @@ impl Admissions {
                 self.control &= !mask;
                 present
             }
-            PendingTerminal::Arena => core::mem::replace(&mut self.arena, false),
         }
-    }
-
-    pub(super) fn first(&self) -> Option<PendingTerminal> {
-        for (offset, word) in [0_u8, 64, 128, 192].into_iter().zip(&self.transmit) {
-            if *word != 0 {
-                return Some(PendingTerminal::Transmit(
-                    offset | word.trailing_zeros() as u8,
-                ));
-            }
-        }
-        [
-            ControlTerminal::Configure,
-            ControlTerminal::PairwiseInstall,
-            ControlTerminal::PairwiseRemoval,
-            ControlTerminal::GroupChange,
-            ControlTerminal::GateClosed,
-        ]
-        .into_iter()
-        .find(|operation| self.control & operation.mask() != 0)
-        .map(PendingTerminal::Control)
-        .or(self.arena.then_some(PendingTerminal::Arena))
     }
 }

@@ -226,7 +226,7 @@ image translates them into whatever reports them:
 | Reader | What |
 | --- | --- |
 | `executors()` | each executor's work and idle microseconds since boot (application, radio, hart 1) |
-| `parts()` | each part's polls and their time, and the longest of the epoch: the library's tasks and futures, the station service's spans, and up to four futures the image names (`Part::claim(name)?.polled(future)`) |
+| `parts()` | each part's polls and their time, and the longest of the epoch: the library's tasks and futures, the Wi-Fi datapath actor's spans, and up to four futures the image names (`Part::claim(name)?.polled(future)`) |
 | `counters()` | the network bridge's frames, the station's receive decisions, its transmit agreements' settlements, the link's rates and the receive driver's counters |
 | `tracking()` | the RF actor's PHY tracking ticks, with the epoch's temperatures and longest tick |
 | `Boot::observe` | the boot hart's handle (`Hart0`, `!Send`): its cycle and instruction counters, the L1 cache's counters and the PC sampler on TIMG1 T0, once |

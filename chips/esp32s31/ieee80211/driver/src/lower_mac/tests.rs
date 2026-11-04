@@ -8,7 +8,6 @@ use crate::mac::{
     rx::RxPhyInfo,
     tx::{
         HardwareOwnedTxDma, PreparedTxDma, TxDmaState, TxError, TxHardware,
-        ampdu::{HtAmpduTxStorage, RetainedAmpduDmaStorage, RetainedDmaAmpduTx},
         runtime::WifiTxRuntimePolicy,
     },
 };
@@ -28,11 +27,6 @@ use oer_protocols_ieee80211_wire::{
     phy::{FecCoding, HeGiLtf, LegacyRate, PpduBandwidth, SpatialStreams},
     qos::WmmAccessCategory,
     sequence::SequenceNumber,
-};
-
-use oer_chips_esp32s31_hal::memory::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
-use oer_portable_memory::{
-    DmaIndexReturn, PinnedDmaTxPool, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
 };
 
 use super::*;
@@ -3062,68 +3056,8 @@ fn each_interface_contends_with_its_own_edca_set() {
     });
 }
 
-/// Subframes of one aggregate.
-const SUBFRAMES: usize = 4;
 /// Bytes of one subframe backing.
 const BACKING: usize = 2048;
-const BACKINGS: usize = 8;
-
-type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, BACKING, 0, 0>>;
-type Backing = ReturningStableDmaBacking<Lease, &'static FreeBackings>;
-
-/// The pool indices of free backings.
-#[derive(Default)]
-struct FreeBackings(RefCell<Vec<u8>>);
-
-impl DmaIndexReturn for &'static FreeBackings {
-    fn return_index(&self, index: u8) {
-        self.0.borrow_mut().push(index);
-    }
-}
-
-/// Subframe memory from a pinned DMA TX pool, as the station's network TX
-/// path lends it.
-struct Backings {
-    pool: PlacedTxPool<BACKING, 0, 0, BACKINGS>,
-    free: &'static FreeBackings,
-}
-
-impl Backings {
-    fn free(&self) -> usize {
-        self.free.0.borrow().len()
-    }
-}
-
-impl Backings {
-    /// A free backing, or `None` when every one is in use.
-    fn backing(&self) -> Option<Backing> {
-        let index = self.free.0.borrow_mut().pop()?;
-        self.pool.claim_network(index).unwrap().publish(
-            oer_portable_memory::FrameLen::new(BACKING).expect("test frame length"),
-            |_| (),
-        );
-        Some(ReturningStableDmaBacking::new(
-            self.pool.claim_radio(index).expect("ready placed slot"),
-            self.free,
-        ))
-    }
-}
-
-fn backings() -> &'static Backings {
-    let pool = PlacedTxPool::pin(Placed::host(Box::leak(Box::new(PinnedDmaTxPool::new()))))
-        .unwrap_or_else(|_| panic!("placed pool geometry"));
-    let free: &'static FreeBackings = Box::leak(Box::default());
-    free.0.borrow_mut().extend((0..BACKINGS as u8).rev());
-    Box::leak(Box::new(Backings { pool, free }))
-}
-
-fn ampdu_owner() -> Esp32s31AmpduOwner<'static, Backing, SUBFRAMES> {
-    RetainedDmaAmpduTx::new_model(
-        Pin::static_mut(Box::leak(Box::new(HtAmpduTxStorage::new()))),
-        Box::leak(Box::new(RetainedAmpduDmaStorage::new())),
-    )
-    .unwrap()
-}
 
 fn ht_rate(mcs: u8) -> PhyRate {
     PhyRate::Ht(

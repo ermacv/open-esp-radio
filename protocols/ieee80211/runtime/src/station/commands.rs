@@ -1,4 +1,4 @@
-//! Installation-independent requests; affine permissions never leave Runner.
+//! Installation-independent requests; affine permissions never leave the lifecycle.
 use super::contract::{Command, CommandOutcome, CommandRefusal};
 use oer_protocols_ieee80211_core_roles_sta::machine::{
     self, StaCommandCredit, StaCommandCredits, StaCommandPermission, StaRequest,
@@ -36,7 +36,7 @@ pub struct CommandTerminal {
     pub outcome: CommandOutcome,
 }
 
-pub(super) struct CommandCredits<'id, P: PoolPath> {
+pub(crate) struct CommandCredits<'id, P: PoolPath> {
     connect: Option<StaCommandCredit<'id, P, machine::ConnectCommand>>,
     scan: Option<StaCommandCredit<'id, P, machine::ScanCommand>>,
     disconnect: Option<StaCommandCredit<'id, P, machine::DisconnectCommand>>,

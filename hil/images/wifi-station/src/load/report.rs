@@ -221,11 +221,6 @@ pub(crate) fn bridge_tx(start: &Snapshot, end: &Snapshot) -> BridgeTx {
         starved: end.starved.wrapping_sub(start.starved),
         queued_sum: end.queued_sum.wrapping_sub(start.queued_sum),
         station_sum: end.station_sum.wrapping_sub(start.station_sum),
-        incoming_sum: end.incoming_sum.wrapping_sub(start.incoming_sum),
-        owed_sum: end.owed_sum.wrapping_sub(start.owed_sum),
-        members_sum: end.members_sum.wrapping_sub(start.members_sum),
-        freed_sum: end.freed_sum.wrapping_sub(start.freed_sum),
-        returning_sum: end.returning_sum.wrapping_sub(start.returning_sum),
     }
 }
 
@@ -412,7 +407,6 @@ mod chip {
         use StationRxKind as Kind;
         let at = |kind: Kind| counts.count(kind);
         wire::StationRx {
-            port_events_lost: at(Kind::PortEventsLost),
             dropped_header: at(Kind::DroppedHeader),
             dropped_frame_kind: at(Kind::DroppedFrameKind),
             dropped_address: at(Kind::DroppedAddress),

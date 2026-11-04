@@ -32,6 +32,8 @@
 //! [`LocalExecution`] keeps registration and body in the same context without
 //! requiring `Send`; registration precedes construction or polling of the body.
 //! [`Mint::into_pools`] issues each installation's complete capacity once.
+//! [`Installations`] mints successive installations of one claimed slot
+//! identity under the `'static` brand, for a port whose tasks share it.
 //! Queues contain complete owned Id payloads, with a separate invariant body
 //! loan on every public resource and protected context.
 //! See [`lifecycle`] for retirement, poisoning and cancellation.
@@ -44,6 +46,7 @@ pub mod conformance;
 mod context;
 mod execution;
 mod identity;
+mod installations;
 pub mod lifecycle;
 pub mod pool;
 mod relation;
@@ -53,6 +56,7 @@ mod work;
 pub use context::{ContextChoice, ContextLoan, ContextProjection, LoanedContext, PortContext};
 pub use execution::LocalExecution;
 pub use identity::{LocalId, SlotIdentity, StaticId};
+pub use installations::{Installation, Installations, Minted, RemintRefused};
 pub use lifecycle::*;
 pub use slot::{
     DriverFuture, Joined, LifecycleError, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner,

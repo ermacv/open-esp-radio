@@ -9,9 +9,9 @@ description = "Scheduler-free static task executor and time driver for Espressif
 
 [features]
 default = []
-# Nominal static radio-slot declarations. Images without a port slot retain
+# Nominal static installation identities. Images without a radio port retain
 # their dependency graph and linked bytes.
-port-slots = ["dep:oer-protocols-radio-port"]
+installations = ["dep:oer-protocols-radio-port"]
 # The executor and time driver over a chip binding (`bind!`), which the
 # chip's composition crate selects together with the HAL's chip.
 chip = [
@@ -55,8 +55,8 @@ oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
 workspace = true
 
 [[test]]
-name = "slots"
-required-features = ["port-slots"]
+name = "installations"
+required-features = ["installations"]
 
 [package.metadata.docs.rs]
 # Chip APIs exist only for the chip target; document them there alone.

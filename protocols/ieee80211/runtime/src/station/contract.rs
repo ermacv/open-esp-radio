@@ -576,12 +576,16 @@ impl<K> From<AccessPointFact<K>> for oer_protocols_ieee80211_core_arbiter::Acces
 pub enum KeyContractViolation {
     IncompleteBank,
     MissingAssociation,
+    /// The link returned a pairwise key the station did not lend it, or
+    /// none for the one it lent.
+    LinkKeyMismatch,
 }
 impl From<core_station::StaKeyContractViolation> for KeyContractViolation {
     fn from(value: core_station::StaKeyContractViolation) -> Self {
         match value {
             core_station::StaKeyContractViolation::IncompleteBank => Self::IncompleteBank,
             core_station::StaKeyContractViolation::MissingAssociation => Self::MissingAssociation,
+            core_station::StaKeyContractViolation::LinkKeyMismatch => Self::LinkKeyMismatch,
         }
     }
 }

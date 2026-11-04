@@ -1,0 +1,8 @@
+error[E0271]: type mismatch resolving `<<P as DataPort<'id>>::Types as PortTypes<'_>>::GatePath == Child<Root<LocalId<'id>>, 1>`
+  --> tests/ui/command_gate.rs:12:12
+   |
+12 |     return PortCommand::CloseGate(second); // ui-error: E0271
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `1`, found `0`
+   |
+   = note: expected struct `oer_protocols_radio_port::Child<Root<LocalId<'id>>, 1>`
+              found struct `oer_protocols_radio_port::Child<Root<LocalId<'id>>, 0>`

@@ -4,22 +4,18 @@ use alloc::boxed::Box;
 use core::any::Any;
 use oer_protocols_ieee80211_testing_model::{ModelBackend, ModelResources};
 use oer_protocols_ieee80211_contracts_port::TxBufferMemory;
-use oer_protocols_radio_port::{Disabled, Ended, Owner, PortBody, StaticId};
+use oer_protocols_radio_port::StaticId;
 
 pub enum Declaration {}
 type Id = StaticId<Declaration>;
 type Backend = ModelBackend<Id>;
-pub struct Body;
 
-impl PortBody<Id, Backend> for Body {
-    type Output = Box<dyn Any>;
-    async fn run<'a, 'p>(self, owner: Owner<'a, 'p, Id, Backend, Disabled>, mut resources: ModelResources<'p, Backend>) -> Ended<Id, Backend, Self::Output>
-    where Backend: 'p, Id: 'p, 'p: 'a {
-        let mut buffer = resources.small.pop().expect("one model body resource");
-        #[cfg(ui_reject)]
-        let output: Box<dyn Any> = Box::new(buffer); // ui-error: lifetime may not live long enough
-        #[cfg(not(ui_reject))]
-        let output: Box<dyn Any> = Box::new(buffer.bytes_mut().map(|bytes| bytes.len()));
-        Ended::uninstall(owner, (), output)
-    }
+// An installation's tokens carry its brand `'p` even under a static
+// identity: none escapes into an owner without that brand.
+pub fn escape<'p>(mut resources: ModelResources<'p, Backend>) -> Box<dyn Any> {
+    let mut buffer = resources.small.pop().expect("one model resource");
+    #[cfg(ui_reject)]
+    return Box::new(buffer); // ui-error: lifetime may not live long enough
+    #[cfg(not(ui_reject))]
+    Box::new(buffer.bytes_mut().map(|bytes| bytes.len()))
 }

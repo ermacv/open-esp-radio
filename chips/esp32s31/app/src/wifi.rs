@@ -230,7 +230,7 @@ wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,call
 // The station's network end runs on hart 1, with the group's IP
 // service.
 #[cfg(feature = "group")]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,actor:ActorNotify=&DATAPATH}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.
@@ -240,24 +240,21 @@ type Notifies = <binding::Binding as wifi::Binding>::Notifies;
 type NetworkNotify =
     &'static oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor>;
 #[cfg(feature = "group")]
-type StationNotify =
-    &'static oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor>;
-#[cfg(feature = "group")]
-type DriverNotify =
+type ActorNotify =
     &'static oer_chips_family_interrupt_table::signal::PeerNotify<wifi::DriverExecutor>;
 
 // One signal wakes one task: the IP service's on hart 1 (every network end
-// and the network's stop), the station runner's on hart 0 (every station
-// end, the stop's answer and the lent buffers' return) and the radio
-// driver's (its request for its lent buffers).
+// and the network's stop) and the datapath actor's on hart 0 (every station
+// end of the network's channels, the network's stop answer and the lent
+// buffers' returns, which the network drops on hart 1 and the actor itself
+// on its own). The station's lifecycle shares the actor's executor and
+// hears it in same-executor queues; nothing on hart 1 wakes it.
 #[cfg(feature = "group")]
 oer_chips_family_staged_runtime::placed_static! {
     static NETWORK_SIGNAL: IrqSignal<super::hart1::Hart1Executor> = IrqSignal::new::<oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::AppExecutor, WakeToken>, super::Hart1WakeToken>(), in critical_data "hart_peers";
-    static STATION_SIGNAL: IrqSignal<super::hart1::AppExecutor> = IrqSignal::new::<oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, WakeToken>(), in critical_data "hart_peers";
-    static DRIVER_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "hart_peers";
+    static ACTOR_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "hart_peers";
     static NETWORK: oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor> = oer_chips_family_interrupt_table::signal::PeerNotify::new(&NETWORK_SIGNAL), in critical_data "hart_peers";
-    static STATION: oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor> = oer_chips_family_interrupt_table::signal::PeerNotify::new(&STATION_SIGNAL), in critical_data "hart_peers";
-    static DRIVER: oer_chips_family_interrupt_table::signal::PeerNotify<wifi::DriverExecutor> = oer_chips_family_interrupt_table::signal::PeerNotify::new(&DRIVER_SIGNAL), in critical_data "hart_peers";
+    static DATAPATH: oer_chips_family_interrupt_table::signal::PeerNotify<wifi::DriverExecutor> = oer_chips_family_interrupt_table::signal::PeerNotify::new(&ACTOR_SIGNAL), in critical_data "hart_peers";
 }
 
 /// Run the shared RF actor until its periodic PHY tracking fails; the PHY
@@ -266,16 +263,22 @@ async fn radio_actor(actor: &'static mut Actor) {
     observed!(RadioActor, actor.run()).await.reset()
 }
 
-/// The MAC driver, polled on the station's executor.
-pub(crate) type Driver = wifi::Driver<binding::Binding>;
+/// The datapath actor, which owns the radio, on the station's executor.
+pub(crate) type Datapath = wifi::Datapath<binding::Binding>;
 
-/// The MAC driver's task, on the station's executor.
-pub(crate) async fn drive(driver: Driver) {
-    observed!(Driver, driver.run()).await;
+/// The datapath actor's task, on the station's executor. Its end needs no
+/// decision here: the station's task hears it and decides.
+pub(crate) async fn datapath(datapath: Datapath) {
+    observed!(
+        Datapath,
+        datapath.run(StationObserver::default(), STATION_SINK)
+    )
+    .await;
 }
 
-/// The station runner's task: an ordinary stop ends it, every other exit
-/// records and resets.
+/// The station lifecycle's task: an ordinary stop ends it; a restart of
+/// the station stays inside the facade; every terminal exit records its
+/// typed cause and resets.
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
         runner,
@@ -284,38 +287,15 @@ pub(crate) async fn serve_station(start: StationStart) {
         nonces,
         aes,
     } = start;
-    let profile = wifi::Profile::new(
-        &config,
-        address,
-        Callbacks(nonces),
-        aes,
-        StationObserver::default(),
-        STATION_SINK,
-    )
-    .unwrap_or_else(|error| failure(error));
+    let profile = wifi::Profile::new(&config, address, Callbacks(nonces), aes, STATION_SINK)
+        .unwrap_or_else(|error| failure(error));
     match observed!(Station, runner.run(profile)).await {
         wifi::StationExit::Stopped => {}
-        wifi::StationExit::Unavailable(wifi::UnavailableCause::Initialization(error)) => {
-            failure(error)
-        }
-        wifi::StationExit::Unavailable(wifi::UnavailableCause::Abandoned(abandoned)) => {
-            super::fail_path(
-                oer_portable_diagnostics::name!("wifi-abandoned"; 32),
-                &oer_portable_diagnostics::DiagPath::of(&abandoned),
-            )
-        }
-        wifi::StationExit::Failed(_) => {
-            super::fail(oer_portable_diagnostics::name!("wifi-failed"; 32))
-        }
-        wifi::StationExit::Poisoned(_) => {
-            super::fail(oer_portable_diagnostics::name!("wifi-poisoned"; 32))
-        }
-        wifi::StationExit::Quarantined(_) => {
-            super::fail(oer_portable_diagnostics::name!("wifi-quarantined"; 32))
-        }
-        wifi::StationExit::RetirementFailed(_) => {
-            super::fail(oer_portable_diagnostics::name!("wifi-retirement"; 32))
-        }
+        wifi::StationExit::Unavailable(error) => failure(error),
+        wifi::StationExit::Failed(failed) => super::fail_path(
+            oer_portable_diagnostics::name!("wifi-failed"; 32),
+            &oer_portable_diagnostics::DiagPath::of(&failed),
+        ),
         wifi::StationExit::ReleaseFailed(_) => {
             super::fail(oer_portable_diagnostics::name!("wifi-release"; 32))
         }
@@ -694,7 +674,7 @@ impl Station {
             return Err(Error::AlreadyStarted);
         }
         boot.urgent = Some(urgent);
-        boot.pending.driver = Some(runners.driver);
+        boot.pending.datapath = Some(runners.datapath);
         boot.pending.station = Some(StationStart {
             runner: runners.station,
             config: config.chip,

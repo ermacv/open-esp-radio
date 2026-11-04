@@ -131,7 +131,7 @@ agreements, their retained frames and the replies they owe. `banks` parses
 ADDBA, DELBA and the Compressed BlockAckReq and selects the QoS Data it
 reorders with the wire codecs; it calls the port only through the caller's
 `RxBlockAckPort` (install an agreement, end one, return a frame), which the
-runtime implements over its phase. A credit stays free to close a reorder
+runtime implements over its data port. A credit stays free to close a reorder
 gap, and a management Action whose reply would find no place waits retained. `ccmp` owns transmit PN allocation and receive replay frontiers for every
 CCMP user: one strictly increasing `CcmpReplayFrontier` per lane, key or
 peer, borrowed by an admission candidate until commit, for the station's
@@ -174,9 +174,9 @@ receive candidates commit only after authentication.
 
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
 number and reserves its CCMP PN with the key's unique `ccmp::CcmpTxPacketNumber`.
-`ccmp::request_ccmp_pairwise_key` enqueues new material through the port and
-returns a `PendingCcmpTxKey` holding the installation identity the port
-returned; only that token, spent with the key the installation terminal
+A pairwise installation command comes with a `PendingCcmpTxKey`
+(`PendingCcmpTxKey::issued`) holding the installation identity the port's
+command issuer minted; only that token, spent with the key the installation terminal
 returns, creates the allocator and retains it in `InstalledCcmpTxKey` with
 that backend key. A key whose `pairwise_identity` differs, another
 installation's, is refused as `ForeignCcmpTxKey` with the token and the key;

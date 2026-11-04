@@ -87,7 +87,8 @@ impl<K> InstalledCcmpTxKey<K> {
 /// Key material whose only owner is software: installing it means moving it
 /// into that owner, as the ESP-NOW peer table owns its peers' local master
 /// keys. A lower-MAC port key is not one; it pairs with its packet numbers
-/// only through the [`PendingCcmpTxKey`] of [`request_ccmp_pairwise_key`].
+/// only through the [`PendingCcmpTxKey`] its installation command was
+/// issued with ([`PendingCcmpTxKey::issued`]).
 pub trait SoftwareCcmpKey {}
 
 impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
@@ -107,25 +108,6 @@ impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
     }
 }
 
-/// Request the installation of new key material. The returned token is the
-/// only way the port key that the installation terminal returns gains its
-/// PN allocator, so each real installation starts exactly one numbering.
-/// This does not accept an already installed backend key or an initial PN.
-pub fn request_ccmp_pairwise_key<'p, 'id: 'p, P>(
-    phase: &mut P,
-    association: &<oer_protocols_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_protocols_ieee80211_contracts_port::KeyTypes<'id>>::Association,
-    slot: <oer_protocols_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_protocols_ieee80211_contracts_port::KeyTypes<'id>>::PairwiseSlot,
-    peer: oer_protocols_ieee80211_wire::address::IndividualAddress,
-    key: oer_protocols_ieee80211_contracts_security::Ccmp128Key,
-    step: CcmpPacketNumberStep,
-) -> PendingCcmpTxKey<<oer_protocols_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_protocols_ieee80211_contracts_port::KeyTypes<'id>>::Identity>
-where
-    P: oer_protocols_ieee80211_contracts_port::InterfacePhase<'p, 'id>,
-{
-    let installation = phase.install_pairwise_key(association, slot, peer, key);
-    PendingCcmpTxKey { step, installation }
-}
-
 /// A pairwise installation the port accepted, until its terminal returns
 /// the installed key: the step of its numbering and the identity `I` of
 /// the installation, which only that installation's key carries.
@@ -142,6 +124,16 @@ pub struct PendingCcmpTxKey<I> {
 pub struct ForeignCcmpTxKey<I, K> {
     pub pending: PendingCcmpTxKey<I>,
     pub key: K,
+}
+
+impl<I> PendingCcmpTxKey<I> {
+    /// The pending key of the installation `installation` that the port's
+    /// command issuer
+    /// ([`PortCommands::install_pairwise`](oer_protocols_ieee80211_contracts_port::PortCommands::install_pairwise))
+    /// minted with its command, numbering its MPDUs by `step`.
+    pub const fn issued(installation: I, step: CcmpPacketNumberStep) -> Self {
+        Self { step, installation }
+    }
 }
 
 impl<I: PartialEq> PendingCcmpTxKey<I> {

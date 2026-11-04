@@ -21,7 +21,7 @@ impl RawKeyIdentity {
         self.activity.matches(self.serial)
     }
 }
-/// A read-only identity bound to both the slot and this body's loan.
+/// A read-only identity bound to both the slot and its installation's brand.
 #[derive(Debug)]
 pub struct KeyIdentity<'p, Id: SlotIdentity> {
     pub(super) owned: RawKeyIdentity,
@@ -195,33 +195,6 @@ pub(super) enum GroupCommand<'id, Id: SlotIdentity> {
         identity: RawKeyIdentity,
         removal: Removal<'id, Id>,
     },
-}
-
-#[cfg(test)]
-impl<Id: SlotIdentity> GroupCommand<'_, Id> {
-    /// The slot and permission identities this command holds.
-    pub(super) fn owners(&self) -> (u8, u8) {
-        match self {
-            Self::InstallStation {
-                slot, permission, ..
-            } => (slot.index(), permission.index()),
-            Self::InstallAccessPoint {
-                slot, permission, ..
-            } => (slot.index(), permission.index()),
-            Self::Replace {
-                permission, key, ..
-            }
-            | Self::Select { permission, key } => (key.identity.slot, permission.index()),
-            Self::Remove { identity, removal } => (
-                identity.slot,
-                match removal {
-                    Removal::StationGroup(permission) => permission.index(),
-                    Removal::AccessPointGroup(permission) => permission.index(),
-                    Removal::StationPairwise(_) | Removal::AccessPointPairwise(_) => u8::MAX,
-                },
-            ),
-        }
-    }
 }
 
 pub(super) trait Role<'id, Id: SlotIdentity + 'id>: InterfaceRole + Sized

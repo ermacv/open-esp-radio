@@ -1,17 +1,17 @@
 #![no_std]
 use oer_protocols_ieee80211_contracts_port::{
-    ConfigurePermission, PhaseTypes, Station, StationPhase, StationReceive,
+    ConfigurePermission, DataPort, PortTypes, PortCommand, Station, StationReceive,
 };
-pub fn configure<'p, 'id: 'p, P: StationPhase<'p, 'id>>(
-    phase: &mut P,
+pub fn configure<'id, P: DataPort<'id>>(
     permission: ConfigurePermission<
         'id,
         Station,
-        <P::Types as PhaseTypes<'id>>::StationCommandPath,
-        <P::Types as PhaseTypes<'id>>::StationConfigureContext,
+        <P::Types as PortTypes<'id>>::StationCommandPath,
+        <P::Types as PortTypes<'id>>::StationConfigureContext,
     >,
-) {
-    phase.configure(permission, StationReceive::Off);
+) -> PortCommand<'id, P::Types, P::Caps> {
+    let first = PortCommand::Configure { permission, receive: StationReceive::Off };
     #[cfg(ui_reject)]
-    phase.configure(permission, StationReceive::Off); // ui-error: E0382
+    let _second = PortCommand::<'id, P::Types, P::Caps>::Configure { permission, receive: StationReceive::Off }; // ui-error: E0382
+    first
 }
