@@ -662,8 +662,10 @@ where
         poll_fn(|cx| self.poll(cx, lifecycle, network, timer, alarm.as_mut(), &arm)).await
     }
 
-    /// One poll: collect what is ready, run one turn, and sleep unless a
-    /// budget ran out with work left.
+    /// One poll: take the port's facts, put the next arena on the air when
+    /// they ended the published one ([`Self::relay`]), collect what else
+    /// is ready, run one turn, and sleep unless a budget ran out with work
+    /// left.
     #[allow(
         clippy::too_many_arguments,
         reason = "the poll's ends, clock and alarm are distinct borrows"
@@ -690,12 +692,25 @@ where
             return Poll::Ready(end);
         }
         let reposted = core::mem::take(&mut self.again);
-        let collected = self.collect(cx, lifecycle, network, alarm.as_mut(), arm);
+        let fresh = self.collect_facts(cx);
+        // The turn's one clock read: a transmit event's relay needs it first.
+        let relaying = self.facts.tx.is_some_and(|tx| tx.bits() != 0);
+        if relaying {
+            self.now = timer.now();
+            if let Err(fault) = self.relay(lifecycle, network) {
+                self.fault(lifecycle, fault);
+            }
+            if let Some(end) = self.end.take() {
+                return Poll::Ready(end);
+            }
+        }
+        let collected = self.collect_sources(cx, fresh, lifecycle, network, alarm.as_mut(), arm);
         if !collected.signalled && !collected.ready && !reposted {
             return Poll::Pending;
         }
-        // The turn's one clock read.
-        self.now = timer.now();
+        if !relaying {
+            self.now = timer.now();
+        }
         D::span(ActorSpan::Turn, false);
         let turned = self.turn(cx, lifecycle, network);
         D::span(ActorSpan::Turn, true);

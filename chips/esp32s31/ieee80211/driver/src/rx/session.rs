@@ -153,6 +153,12 @@ where
             .map(|r| r.map_err(|_| WifiRxCause::ForeignExecutor))
     }
 
+    /// Whether the MAC raised an event other than a received unit, which
+    /// stays for [`Self::poll`].
+    pub fn has_event(&self) -> bool {
+        self.irq.has_event().unwrap_or(false)
+    }
+
     /// The receive facts alone, for the task that takes received units: it
     /// alone waits on their signal.
     pub fn poll_received(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, WifiRxCause>> {

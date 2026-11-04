@@ -92,6 +92,8 @@ struct Observed {
     cut_calls: usize,
     resumed_cuts: usize,
     backoffs: Vec<u16>,
+    /// Each HT publication's backoff and AIFSN, in order.
+    ht_contention: Vec<(u16, u8)>,
     /// Each legacy publication program's AIFSN, in publication order.
     aifsns: Vec<u8>,
     received: std::collections::VecDeque<TestReceive>,
@@ -363,6 +365,12 @@ impl Device<512> for TestDevice {
             .legacy
             .iter()
             .map(|(_, program)| program.aifsn())
+            .collect();
+        self.observed.borrow_mut().ht_contention = self
+            .hardware
+            .ht
+            .iter()
+            .map(|(_, program)| (program.contention_window(), program.aifsn()))
             .collect();
         self.observed.borrow_mut().publications = publications;
         self.done.resize(publications, false);

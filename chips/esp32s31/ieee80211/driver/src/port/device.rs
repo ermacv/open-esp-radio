@@ -307,6 +307,9 @@ where
         .flatten()
         .min()
     }
+    fn event_waiting(&self) -> bool {
+        self.session.as_ref().is_ok_and(ReceiveSession::has_event)
+    }
     fn take_power_profile(&mut self) -> Option<Power> {
         self.power.take()
     }

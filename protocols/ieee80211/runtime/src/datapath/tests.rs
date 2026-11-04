@@ -608,6 +608,27 @@ fn a_completion_publishes_the_sealed_standby_in_the_same_turn() {
         let polls = bench.settle();
         assert_eq!(polls, 1, "completion and publication in one turn");
         assert_eq!(bench.data_sent().len(), first + 1);
+        assert_eq!(bench.air.relayed_arenas(), 1, "ahead of the port's service");
+    });
+}
+
+#[test]
+fn a_waiting_event_stops_intake_at_the_next_frame() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.settle();
+        let _traffic = bench.next();
+        bench.air.set_event_waiting(true);
+        for tag in 2..5 {
+            bench.send_msdu(msdu(0, &[tag; 8]));
+        }
+        let polls = bench.settle();
+        assert_eq!(polls, 3, "one frame per poll, the rest left queued for it");
     });
 }
 

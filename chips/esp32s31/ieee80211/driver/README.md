@@ -342,10 +342,14 @@ found at retirement refuses reinstallation with a resource fault. The actor reac
 (`port::Esp32s31Arena`), lent for its turn: it fills, publishes, withdraws
 and settles them, and a publication is refused as busy while the gate is
 closed or closing, a configuration or a barrier command is pending, or the
-port stops. The port serves the arena on the air in its transmit service
-(`DataPort::service_tx`), on a transmit edge and at the arena's deadline,
-and returns the arena's end to the actor, whose settlement returns its
-frames' memory. The arena on the air holds its access category's queue:
+port stops. The actor offers a completion edge to the arena on the air
+first (`DataPort::service_arena`), so the next arena goes out ahead of the
+port's other transmit work; the port serves everything else, and the arena
+on any other edge and at its deadline, in its transmit service
+(`DataPort::service_tx`). Either returns the arena's end to the actor, whose
+settlement returns its frames' memory. An HT aggregate whose values match
+the last one's takes that one's program with a backoff of its own; a command
+or a changed setting forgets the program. The arena on the air holds its access category's queue:
 an MPDU of that category waits for the arena's end. A stop serves a
 published arena to its end (its watchdog's timeout abort when the
 hardware gives no completion) before it disables the core. A station

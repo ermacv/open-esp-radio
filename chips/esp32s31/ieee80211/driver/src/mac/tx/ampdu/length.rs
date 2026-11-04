@@ -113,6 +113,11 @@ impl HtAmpduLengthAccumulator {
         Ok(())
     }
 
+    /// The longest aggregate this accumulator admits.
+    pub const fn max_bytes(&self) -> u16 {
+        self.max_bytes
+    }
+
     pub const fn finish(&self) -> Result<HtAmpduLength, HtAmpduLengthError> {
         if self.count == 0 {
             return Err(HtAmpduLengthError::Empty);
@@ -262,6 +267,20 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         let aggregate = length.finish().map_err(HtAmpduTxError::Length)?;
         *self.project().prepared_length = aggregate.bytes;
         Ok(aggregate)
+    }
+
+    /// The batch's length when no frame carries an empty delimiter or a
+    /// hardware HE-Control field: an HT publication's, read without a walk
+    /// of the frames' lengths.
+    pub(super) fn plain_length(&self) -> Option<HtAmpduLength> {
+        let count = usize::from(self.count);
+        let plain = self
+            .empty_delimiters
+            .iter()
+            .take(count)
+            .all(|empty| *empty == 0)
+            && !self.hardware_he_control.iter().take(count).any(|he| *he);
+        plain.then(|| self.calculate_aggregate().ok()).flatten()
     }
 
     pub(super) fn calculate_aggregate(&self) -> Result<HtAmpduLength, HtAmpduTxError> {

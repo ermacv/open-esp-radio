@@ -567,11 +567,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         device: &mut D,
         wake: WifiTxWake,
+        arena_ended: bool,
         stopping: bool,
         now: Instant,
     ) -> Result<Option<brand::ArenaDone>, Fault> {
-        if !self.arena_on_air() {
-            // No arena on the air: the MPDUs' settles are the core's own.
+        if arena_ended || !self.arena_on_air() {
+            // No arena to offer the edge: the MPDUs' settles are the core's
+            // own.
             let mut sink = Sink::default();
             core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink)?;
             self.collect(env, &mut sink, stopping)?;

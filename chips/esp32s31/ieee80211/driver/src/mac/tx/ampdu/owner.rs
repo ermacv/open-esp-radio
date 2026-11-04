@@ -814,6 +814,12 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             .is_some_and(|octet| octet & 1 == 0)
     }
 
+    /// The batch's length, when no frame carries an empty delimiter or a
+    /// hardware HE-Control field.
+    pub fn plain_length(&self) -> Option<super::HtAmpduLength> {
+        self.storage.as_ref()?.as_ref().get_ref().plain_length()
+    }
+
     /// The MPDU length and hardware MIC length of the frame at `position`.
     pub fn frame_size(&self, position: usize) -> Option<(u16, u8)> {
         self.storage
