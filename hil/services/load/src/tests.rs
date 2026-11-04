@@ -155,7 +155,7 @@ fn the_largest_reports_fit_one_response() {
         postcard::from_bytes::<TrackingCollected>(encoded).unwrap(),
         tracking
     );
-    let mac = MacCollected::Report(Mac::new([u32::MAX; MAC_COUNTS], i32::MIN, [u32::MAX; 32]));
+    let mac = MacCollected::Report(Mac::new([u32::MAX; MAC_COUNTS], i32::MIN));
     assert!(postcard::to_slice(&mac, &mut buffer).unwrap().len() <= 512);
     let link = LinkCollected::Report(full_link());
     let encoded = postcard::to_slice(&link, &mut buffer).unwrap();
@@ -436,13 +436,7 @@ fn a_mac_count_wraps_at_its_own_width() {
     start[at("nrx")] = 0x3ff;
     end[at("nrx")] = 2;
     start[at("tx_rts")] = u32::MAX;
-    let mut holes = [0; 32];
-    holes[3] = 1;
-    let window = Mac::window(
-        &Mac::new(start, 7, [u32::MAX; 32]),
-        &Mac::new(end, -40, holes),
-    );
-    assert_eq!(window.holes[3], 2, "a position wraps at 2^32");
+    let window = Mac::window(&Mac::new(start, 7), &Mac::new(end, -40));
     assert_eq!(window.count(at("fcs_error")), 3);
     assert_eq!(window.count(at("nrx")), 3);
     assert_eq!(window.count(at("tx_rts")), 1);
@@ -475,9 +469,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_nine_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_ten_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 18);
+    assert_eq!(keys.len(), 20);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
@@ -518,4 +512,30 @@ fn a_cleared_tally_counts_the_next_run_afresh() {
         Arrival::New,
         "no sequence is remembered"
     );
+}
+
+#[test]
+fn a_positions_window_takes_wrapping_differences_and_fits_one_response() {
+    let start = Positions {
+        sent: [u32::MAX; 32],
+        interior: u32::MAX,
+        ..Positions::default()
+    };
+    let mut end = Positions {
+        interior: 1,
+        ..Positions::default()
+    };
+    end.sent[3] = 1;
+    end.tail_runs[2] = 4;
+    let window = Positions::window(&start, &end);
+    assert_eq!((window.sent[3], window.sent[0]), (2, 1));
+    assert_eq!((window.tail_runs[2], window.interior), (4, 2));
+    let mut buffer = [0; 1024];
+    let largest = PositionsCollected::Report(Positions {
+        sent: [u32::MAX; 32],
+        holes: [u32::MAX; 32],
+        tail_runs: [u32::MAX; 32],
+        interior: u32::MAX,
+    });
+    assert!(postcard::to_slice(&largest, &mut buffer).unwrap().len() <= 512);
 }

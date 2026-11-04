@@ -276,11 +276,11 @@ impl<'p, 'id: 'p> World<'p, 'id> {
     }
 
     /// The holes of the aggregate that ended, as its settlement reports them.
-    fn settled_holes(&mut self) -> u32 {
+    fn settled_holes(&mut self) -> Option<u32> {
         let now = self.now();
         let done = self.arena.service((), now).unwrap().unwrap();
         let returned = &mut self.returned;
-        let mut holes = Holes(None);
+        let mut holes = Holes(Some(None));
         self.plane
             .completed(
                 &mut self.arena,
@@ -291,7 +291,7 @@ impl<'p, 'id: 'p> World<'p, 'id> {
             )
             .ok()
             .unwrap();
-        holes.0.unwrap()
+        holes.0.flatten()
     }
 
     fn returned_sequences(&mut self) -> Vec<u16> {
@@ -303,7 +303,7 @@ impl<'p, 'id: 'p> World<'p, 'id> {
 }
 
 /// The holes of the settlement it saw.
-struct Holes(Option<u32>);
+struct Holes(Option<Option<u32>>);
 
 impl EventSink<StaEvent> for Holes {
     const ENABLED: bool = true;
@@ -527,11 +527,11 @@ fn holes_of_first_transmissions<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     }
     world.publish();
     world.block_ack(mask(&[0, 2]));
-    assert_eq!(world.settled_holes(), 0b1010);
+    assert_eq!(world.settled_holes(), Some(0b1010));
     // The retransmission's own hole is no position of the first aggregate.
     world.publish();
     world.block_ack(mask(&[0]));
-    assert_eq!(world.settled_holes(), 0);
+    assert_eq!(world.settled_holes(), None);
 }
 
 fn attempt_limit<'p, 'id: 'p>(rates: Rates<'p, 'id>) {

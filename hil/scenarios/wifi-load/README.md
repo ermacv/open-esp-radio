@@ -143,9 +143,15 @@ transmissions per MPDU. RX and TX stay the image's.
 names of the service's `MAC_COUNT_NAMES`: the decoder's errors, the
 responses it counted and `frequency_offset` at the window's end. The
 image samples the bank every 50 ms from the port's turn, so a window's
-ends lag by up to that much. `holes_by_position` counts the subframes of
-first transmissions that a BlockAck left unacknowledged by their position
-on air, the first one at index 0.
+ends lag by up to that much.
+
+`positions` holds the aggregates a BlockAck answered at their first
+transmission, by position on air, the first one at index 0; a lost
+aggregate or BlockAck and a retransmission count in none of it. `sent` has
+the subframes that went at each position, `holes` those left
+unacknowledged, `tail_runs` the aggregates whose last subframes went
+missing together by the length of that run, a run of one at index 0, and
+`interior` the aggregates with a hole whose last subframe was acknowledged.
 
 `cache` holds one entry per cache bus the image counts, cleared at the
 window's start: `ibus0` (hart 0's instruction fetches through L1-ICache0)

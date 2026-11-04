@@ -1010,6 +1010,8 @@ impl DataPlane {
         };
         let lesson = lesson(end, kind, done.frames(), decision.delivered);
         let rate = end.air().map(|air| air.rate);
+        let holes =
+            (attempts == 1 && matches!(end, AttemptEnd::Answered { .. })).then_some(decision.holes);
         let frames = done.frames();
         let retried = decision.retry.count();
         let right = if decision.retry.is_empty() {
@@ -1040,7 +1042,7 @@ impl DataPlane {
                     retried,
                     dropped: decision.dropped,
                     refused: false,
-                    holes: decision.holes,
+                    holes,
                     rate,
                 })
             });
@@ -1128,10 +1130,8 @@ impl DataPlane {
                 decision.delivered = decision.delivered.saturating_add(1);
                 continue;
             }
-            if attempts == 1 && matches!(end, AttemptEnd::Answered { .. }) {
-                let bit = 1_u32.checked_shl(u32::from(position.get()));
-                decision.holes |= bit.unwrap_or(0);
-            }
+            let bit = 1_u32.checked_shl(u32::from(position.get()));
+            decision.holes |= bit.unwrap_or(0);
             let admitted = usize::try_from(original)
                 .ok()
                 .and_then(|original| book.admitted.get(original))
@@ -1209,7 +1209,7 @@ struct Decision {
     retry: FrameMask,
     /// Their original positions.
     pending: u64,
-    /// The positions a first transmission's answer left unacknowledged.
+    /// The positions this attempt left unacknowledged.
     holes: u32,
 }
 

@@ -33,7 +33,7 @@ use static_cell::ConstStaticCell;
 
 use super::{Boot, Error, SamplerToken};
 use crate::observe::cpu::{Boundary, CpuCounter, ExecutorSample, Phase};
-use crate::observe::link::{Containment, LinkCounter, Rate, Settled, TxEnd};
+use crate::observe::link::{Containment, LinkCounter, Positions, Rate, Settled, TxEnd};
 use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading};
 use crate::observe::tracking::{Branches, Ran, Tick, TrackingCounter, TrackingSample};
 use crate::observe::{Bridge, BridgeCounter, Concurrent};
@@ -159,6 +159,8 @@ pub struct Counters {
     pub station_rx: StationRxCounts,
     pub ampdu: TxAmpdu,
     pub link: Link,
+    /// The answered aggregates by position.
+    pub positions: Positions,
     /// The receive driver's counters, once the station's receive path was
     /// bound.
     pub driver: Option<WifiRxReport>,
@@ -178,6 +180,7 @@ pub fn counters() -> Counters {
         },
         ampdu: LINK.ampdu(),
         link: LINK.link(),
+        positions: LINK.positions(),
         driver: oer_chips_esp32s31_wifi::rx_counters(),
         mac: oer_chips_esp32s31_wifi::mac_counters(),
     }
@@ -306,8 +309,8 @@ impl oer_portable_trace::Observer for Observer {
         if let Some(decision) = Self::decoded::<E, station::StationRx>(event) {
             receive_decision(decision);
         }
-        if let Some(station::StationTxHoles(holes)) = Self::decoded::<E, _>(event) {
-            LINK.holes(holes);
+        if let Some(answered) = Self::decoded::<E, station::StationTxHoles>(event) {
+            LINK.answered(answered.members, answered.holes);
         }
         if let Some(settled) = Self::decoded::<E, station::StationTxAmpdu>(event) {
             if settled.block_ack_request {
