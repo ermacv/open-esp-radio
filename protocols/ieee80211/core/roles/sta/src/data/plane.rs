@@ -55,8 +55,8 @@ use crate::link::{TxKey, TxNumbers};
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::arena::{
-    ARENA_FRAMES, Arena, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd, CompletedOf,
-    FrameMask, IntakeRefused, RetainError, TxArena,
+    ARENA_FRAMES, Arena, ArenaCompleted, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd,
+    CompletedOf, FrameMask, IntakeRefused, RetainError, TxArena,
 };
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Ieee80211Capabilities, IndeterminateCause, MpduProtection,
@@ -845,8 +845,60 @@ impl DataPlane {
         &mut self,
         rate: impl FnOnce(PpduPlan) -> Option<ArenaFormat<'p, K>>,
     ) -> Option<ArenaPublication<'p, K>> {
-        let link = self.link.as_ref()?;
         let id = self.publishable()?;
+        self.publication_of(id, rate)
+    }
+
+    /// The other arena's publication ahead of the settlement of `done`, an
+    /// aggregate the port ended and the plane has not settled: when its
+    /// BlockAck acknowledged every frame, the settlement can only empty its
+    /// arena, and the other arena is the next one whatever the settlement
+    /// finds. `None` otherwise, or when the other arena holds no frame: the
+    /// settlement decides.
+    pub fn publication_ahead<'p, 'id, R, D, K: Ieee80211Capabilities>(
+        &mut self,
+        done: &ArenaCompleted<R, D>,
+        rate: impl FnOnce(PpduPlan) -> Option<ArenaFormat<'p, K>>,
+    ) -> Option<ArenaPublication<'p, K>> {
+        if !self.acknowledged_whole(done) {
+            return None;
+        }
+        let id = done.id().other();
+        let book = self.book(id);
+        if book.right.is_none() || book.pending == 0 {
+            return None;
+        }
+        self.publication_of(id, rate)
+    }
+
+    /// Whether the BlockAck of `done`, this link's unsettled aggregate,
+    /// acknowledged each of its frames.
+    fn acknowledged_whole<R, D>(&self, done: &ArenaCompleted<R, D>) -> bool {
+        let book = self.book(done.id());
+        let AttemptEnd::Answered { report, .. } = done.end() else {
+            return false;
+        };
+        matches!(book.published, Some(PpduKind::Aggregate { .. }))
+            && book.right.is_none()
+            && book.epoch == self.epoch
+            && self.link.is_some()
+            && done.frames() == book.count()
+            && Originals(book.pending).all(|original| {
+                let sequence = book
+                    .first
+                    .wrapping_add(u16::try_from(original).unwrap_or(u16::MAX));
+                oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(*report, sequence)
+            })
+    }
+
+    /// The publication of arena `id`, which holds a frame and which the
+    /// plane has the right of.
+    fn publication_of<'p, 'id, K: Ieee80211Capabilities>(
+        &mut self,
+        id: ArenaId,
+        rate: impl FnOnce(PpduPlan) -> Option<ArenaFormat<'p, K>>,
+    ) -> Option<ArenaPublication<'p, K>> {
+        let link = self.link.as_ref()?;
         let book = self.book(id);
         let frames = book.count();
         // More frames than one of a TID without agreement go as single

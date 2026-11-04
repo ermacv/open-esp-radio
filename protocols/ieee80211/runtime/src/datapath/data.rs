@@ -198,6 +198,23 @@ where
     /// rate; a refusal returns the arena to the plane, which publishes it
     /// again at the next turn.
     pub(super) fn publish(&mut self) -> Result<(), Failed<'id, D>> {
+        self.publish_next(None)
+    }
+
+    /// Publish the other arena ahead of the settlement of `done` when the
+    /// plane finds it the next one whatever the settlement does: the air
+    /// waits for none of the settlement's work.
+    pub(super) fn publish_ahead(
+        &mut self,
+        done: &PortCompleted<'id, D::Port>,
+    ) -> Result<(), Failed<'id, D>> {
+        self.publish_next(Some(done))
+    }
+
+    fn publish_next(
+        &mut self,
+        ended: Option<&PortCompleted<'id, D::Port>>,
+    ) -> Result<(), Failed<'id, D>> {
         if !self.radio.running() || !self.link.as_ref().is_some_and(LinkHandover::carries) {
             return Ok(());
         }
@@ -211,13 +228,13 @@ where
         let Some(plane) = plane.as_mut() else {
             return Ok(());
         };
-        if plane.publishable().is_none() {
+        if ended.is_none() && plane.publishable().is_none() {
             return Ok(());
         }
         let mut arena = port.arena();
         let publication = {
             let arena = &arena;
-            plane.publication(|plan| {
+            let format = |plan: oer_protocols_ieee80211_core_roles_sta::data::plane::PpduPlan| {
                 let rates = rates.plan(plan.frame_rates(), |rate| arena.rate(rate))?;
                 Some(match plan.kind {
                     // A single MPDU goes by the whole plan, as any data MPDU.
@@ -227,7 +244,11 @@ where
                         spacing,
                     },
                 })
-            })
+            };
+            match ended {
+                Some(done) => plane.publication_ahead(done, format),
+                None => plane.publication(format),
+            }
         };
         let Some(publication) = publication else {
             return Ok(());

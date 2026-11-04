@@ -80,7 +80,7 @@ const ROUTER_ADDRESS: [u8; 4] = [10, 231, 0, 1];
 /// The image's load port.
 const DEVICE_PORT: u16 = 5001;
 /// UDP payload of a load datagram.
-const PAYLOAD: usize = 1400;
+const PAYLOAD: usize = 1472;
 /// Total offered load of each level, Mbit/s; a mode with two directions
 /// offers half each way. `OER_WIFI_LOAD_MBPS` (comma-separated) replaces
 /// them, e.g. to offer more than these levels.

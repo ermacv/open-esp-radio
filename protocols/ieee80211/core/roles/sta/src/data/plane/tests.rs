@@ -120,6 +120,9 @@ fn retried(frame: &[u8]) -> bool {
     FrameControlFields::from_bytes(*frame.first_chunk::<2>().unwrap()).retry()
 }
 
+/// An arena's end the plane has not settled.
+type Done<'p, 'id> = CompletedOf<'p, 'id, ModelArena<ModelCaps>>;
+
 struct World<'p, 'id> {
     rates: Rates<'p, 'id>,
     /// The link's QoS sequence spaces, which each intake draws from.
@@ -210,6 +213,46 @@ impl<'p, 'id: 'p> World<'p, 'id> {
         (planned.unwrap(), frames)
     }
 
+    /// Publish the arena the plane puts ahead of settling `done`: its plan.
+    fn publish_ahead(&mut self, done: &Done<'p, 'id>) -> Option<PpduPlan> {
+        let rates = self.rates;
+        let mut planned = None;
+        let publication = self.plane.publication_ahead(done, |plan| {
+            planned = Some(plan);
+            Some(match plan.kind {
+                PpduKind::Single => ArenaFormat::Single(once(rates.single)),
+                PpduKind::Aggregate { spacing } => ArenaFormat::Aggregate {
+                    rate: rates.aggregate,
+                    spacing,
+                },
+            })
+        })?;
+        let now = self.now();
+        assert!(self.arena.publish(publication, now).is_ok());
+        planned
+    }
+
+    /// The arena on the air's end, which the plane has not settled.
+    fn ended(&mut self) -> Done<'p, 'id> {
+        let now = self.now();
+        self.arena.service((), now).unwrap().unwrap()
+    }
+
+    fn settle_ended(&mut self, done: Done<'p, 'id>) {
+        let now = self.now();
+        let returned = &mut self.returned;
+        self.plane
+            .completed(
+                &mut self.arena,
+                done,
+                now,
+                |memory| returned.push(memory),
+                &mut (),
+            )
+            .ok()
+            .unwrap();
+    }
+
     fn block_ack(&mut self, acked: FrameMask) {
         let on_air = self.arena.on_air().unwrap();
         let report = self.arena.block_ack(on_air, acked).unwrap();
@@ -264,6 +307,9 @@ cases! {
     a_lone_frame_under_an_agreement_goes_alone_and_owes_a_block_ack_request_when_dropped => lone_frame,
     an_ended_agreement_drains_its_arenas_as_single_mpdus_without_drops => agreement_end,
     the_standby_room_counts_down_to_the_tids_bound_while_an_arena_is_on_the_air => standby_room,
+    a_whole_block_ack_puts_the_standby_on_the_air_before_the_settlement => ahead_whole,
+    a_partial_block_ack_leaves_the_order_to_the_settlement => ahead_partial,
+    nothing_goes_ahead_of_a_settlement_without_frames_in_the_other_arena => ahead_empty,
 }
 
 fn standby_room<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
@@ -334,6 +380,66 @@ fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(world.returned_sequences(), [0, 1, 2, 3]);
     assert_eq!(world.plane.window(BE).unwrap().head.get(), 4);
     assert_eq!(world.plane.publishable(), None);
+}
+
+fn ahead_whole<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..2 {
+        world.taken(tag, BE);
+    }
+    let (first, _) = world.publish();
+    for tag in 2..4 {
+        world.taken(tag, BE);
+    }
+    world.block_ack(all(2));
+    let done = world.ended();
+    let ahead = world.publish_ahead(&done).expect("the standby goes first");
+    assert_eq!(ahead.arena, first.arena.other());
+    assert_eq!(ahead.frames, 2);
+    assert_eq!(world.arena.on_air(), Some(ahead.arena));
+    assert!(world.returned_sequences().is_empty());
+    world.settle_ended(done);
+    assert_eq!(world.returned_sequences(), [0, 1]);
+    assert_eq!(world.plane.window(BE).unwrap().head.get(), 2);
+    // The settled arena takes the next frame while the standby is on the air.
+    world.taken(4, BE);
+    world.block_ack(all(2));
+    let settled = world.settle();
+    assert_eq!(settled.delivered, 2);
+    assert_eq!(world.returned_sequences(), [2, 3]);
+    assert_eq!(world.plane.publishable(), Some(first.arena));
+}
+
+fn ahead_partial<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..2 {
+        world.taken(tag, BE);
+    }
+    let (first, _) = world.publish();
+    world.taken(2, BE);
+    world.taken(3, BE);
+    world.block_ack(mask(&[0]));
+    let done = world.ended();
+    assert!(world.publish_ahead(&done).is_none());
+    world.settle_ended(done);
+    // The missing frame goes first, as the settlement decided.
+    assert_eq!(world.plane.publishable(), Some(first.arena));
+}
+
+fn ahead_empty<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..2 {
+        world.taken(tag, BE);
+    }
+    world.publish();
+    world.block_ack(all(2));
+    let done = world.ended();
+    assert!(world.publish_ahead(&done).is_none());
+    world.settle_ended(done);
+    assert_eq!(world.returned_sequences(), [0, 1]);
 }
 
 fn partial_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {

@@ -404,6 +404,10 @@ where
                 .map_err(ActorFault::Port)?;
             self.staged(lifecycle, network)?;
             if let Some(done) = done {
+                if let Err(failed) = self.publish_ahead(&done) {
+                    self.retained.completed = Some(done);
+                    return Err(failed);
+                }
                 self.settle(done)?;
             }
         }
