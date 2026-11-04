@@ -2136,18 +2136,18 @@ sources = ["BLOB_LIBPP_HAL_HE_TRIGGER_RX_DIAGNOSTICS"]
 provenance = "observed"
 
 [review.entity."INTERFACE_CONTROL%s"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_CRYPTO_PROFILE_MODES_20261104", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_CRYPTO_PROFILE_MODES_20261104", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
 [review.entity."INTERFACE_CONTROL%s.BITS_0_1_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
 [review.entity."INTERFACE_CONTROL%s.BIT_8_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -6498,7 +6498,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."INTERFACE_CONTROL%s.BIT_16_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -6515,7 +6515,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."INTERFACE_CONTROL%s.BIT_30_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -6526,18 +6526,18 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."CONTEXT2_CRYPTO_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_CRYPTO_PROFILE_MODES_20261104", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_CRYPTO_PROFILE_MODES_20261104", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
 [review.entity."CONTEXT2_CRYPTO_CONTROL.BITS_0_1_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
 [review.entity."CONTEXT2_CRYPTO_CONTROL.BIT_8_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -6547,8 +6547,13 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[review.entity."CONTEXT2_CRYPTO_CONTROL.BITS_16_17_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+[review.entity."CONTEXT2_CRYPTO_CONTROL.BIT_16_OPAQUE"]
+sources = ["BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL.BIT_17_OPAQUE"]
+sources = ["BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -6559,7 +6564,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."CONTEXT2_CRYPTO_CONTROL.BIT_30_OPAQUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104", "BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -9588,14 +9593,14 @@ description = "STA (index 0) and AP (index 1) interface-wide crypto profiles, se
 name = "BITS_0_1_OPAQUE"
 bits = "1:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "The complete enable leaf publishes both low bits as three for all inspected cipher profiles, while cold init and STA/AP disable clear both. No independent value one/two or separate TX/RX function is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "BIT_8_OPAQUE"
 bits = "8"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Set together with low bits 1:0 in all inspected enable profiles and cleared in cold init and STA/AP disable. Its individual hardware function cannot be separated from that correlated publication. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 
 [[registers.fields]]
 name = "SPP_AMSDU"
@@ -9607,7 +9612,7 @@ description = "Authenticate the QoS A-MSDU-present bit in CCMP for this interfac
 name = "BIT_16_OPAQUE"
 bits = "16"
 class = "plain"
-description = "Ordinary enable/disable images include this bit; its individual hardware meaning remains unknown."
+description = "Set in every inspected STA/AP enable, cold-init and disable profile. It is not an established general crypto-enabled indicator; its individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 
 [[registers.fields]]
 name = "MGMT_RX_CRYPTO_ENABLED"
@@ -9625,7 +9630,7 @@ description = "Project-assigned name. The vendor interface profile sets this bit
 name = "BIT_30_OPAQUE"
 bits = "30"
 class = "plain"
-description = "Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown."
+description = "Zero in all inspected init, enable and disable profiles, including SMS4 where bit 31 is set. No independent assertion or hardware purpose is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 
 [[registers.fields]]
 name = "SMS4_MODE"
@@ -9636,20 +9641,20 @@ description = "Project-assigned name. The vendor interface profile sets this bit
 [[registers]]
 name = "CONTEXT2_CRYPTO_CONTROL"
 offset = 0x808
-description = "Project-assigned name for hardware crypto selector two. Unlike STA/AP, its bit-17 publication depends on an argument derived upstream from PMF state. The management-RX getter never reads this word; the individual meanings of bits 16/17 remain unknown."
+description = "Project-assigned name for hardware crypto selector two, positively selected by the vendor NAN CCMP-key installer. Enable always sets bit 16 while bit 17 follows a separate argument; NAN passes zero, whereas the generic key path derives the argument from PMF state. The STA/AP management-RX getter never reads this word. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 
 [[registers.fields]]
 name = "BITS_0_1_OPAQUE"
 bits = "1:0"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "The complete enable leaf publishes both low bits as three for all inspected cipher profiles, while cold init and STA/AP disable clear both. No independent value one/two or separate TX/RX function is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "BIT_8_OPAQUE"
 bits = "8"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Set together with low bits 1:0 in all inspected enable profiles and cleared in cold init and STA/AP disable. Its individual hardware function cannot be separated from that correlated publication. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 
 [[registers.fields]]
 name = "SPP_AMSDU"
@@ -9658,11 +9663,16 @@ class = "plain"
 description = "Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream."
 
 [[registers.fields]]
-name = "BITS_16_17_OPAQUE"
-bits = "17:16"
+name = "BIT_16_OPAQUE"
+bits = "16"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
-write-range = { min = 0x0, max = 0x3 }
+description = "Zero in cold init and one in every inspected enable profile, independently of bit 17. The individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
+
+[[registers.fields]]
+name = "BIT_17_OPAQUE"
+bits = "17"
+class = "plain"
+description = "Zero in cold init. Enable follows argument two independently of bit 16: the NAN key installer supplies zero; the generic key path supplies whether STA PMF state is zero. The STA/AP management-RX getter does not identify this lane. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 
 [[registers.fields]]
 name = "WEP_MODE"
@@ -9674,7 +9684,7 @@ description = "Project-assigned name. The vendor interface profile sets this bit
 name = "BIT_30_OPAQUE"
 bits = "30"
 class = "plain"
-description = "Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown."
+description = "Zero in all inspected init, enable and disable profiles, including SMS4 where bit 31 is set. No independent assertion or hardware purpose is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104."
 
 [[registers.fields]]
 name = "SMS4_MODE"

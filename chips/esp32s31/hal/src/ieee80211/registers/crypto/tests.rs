@@ -72,7 +72,7 @@ fn the_cold_bypass_stores_each_interface_control_then_clears_two_words() {
     }
     let context2 = control.read_context2_crypto_control();
     assert_eq!(context2.bits_0_1_opaque().get(), 0);
-    assert_eq!(context2.bits_16_17_opaque().get(), 0);
+    assert!(!(context2.bit_16_opaque() || context2.bit_17_opaque()));
     assert!(!(context2.bit_8_opaque() || context2.spp_amsdu() || context2.wep_mode()));
     assert!(!(context2.bit_30_opaque() || context2.sms4_mode()));
     assert_eq!(control.read_word_080c_opaque().bits_0_31_opaque(), 0);
@@ -128,7 +128,7 @@ fn a_context_two_association_keeps_the_station_and_ap_profiles() {
     let context2 = control.read_context2_crypto_control();
     assert!(context2.bit_8_opaque() && context2.spp_amsdu());
     assert_eq!(context2.bits_0_1_opaque().get(), 3);
-    assert_eq!(context2.bits_16_17_opaque().get(), 3);
+    assert!(context2.bit_16_opaque() && context2.bit_17_opaque());
     assert!(!(context2.wep_mode() || context2.bit_30_opaque() || context2.sms4_mode()));
 }
 

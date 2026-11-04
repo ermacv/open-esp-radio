@@ -154,6 +154,17 @@ invokes a configurable CCMP callback. This does not prove that the indicator
 controls callback execution, that its AES backend runs entirely on the CPU,
 or a quantified CPU saving. Selector-two bits 16/17 remain opaque.
 
+Selector-two bits 16 and 17 are independently published. Enable always sets
+bit 16; bit 17 follows a separate argument. The vendor NAN CCMP installer
+selects this bank with bit 17 clear, while a generic key path derives that
+argument from PMF state. Their individual hardware functions remain unknown;
+the STA/AP management getter does not read this bank. The open HAL retains
+its existing bit-17-set association profile and does not implement NAN key
+policy. Low bits 0/1/8 only have correlated enable/disable publications, and
+bit 30 has no independently asserted profile. The pinned paths and 82
+isolated register-publication cases are recorded in
+[`blobray-mac-crypto-interface.toml`](evidence/blobray-mac-crypto-interface.toml).
+
 The ordinary BA restore leaf expects three software arrays indexed by
 hardware index. Its captured multicast caller passes three scalar pointers;
 the isolated active-index-one case reads unrelated stack data. The

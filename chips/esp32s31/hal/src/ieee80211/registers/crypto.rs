@@ -146,7 +146,8 @@ struct InterfaceControl {
     bits_0_1: u32,
     bit_8: bool,
     spp_amsdu: bool,
-    upper_flags: bool,
+    bit_16: bool,
+    bit_17: bool,
 }
 
 /// Store one interface-control word: the zero-based
@@ -164,8 +165,8 @@ fn store_interface_control<P: Placement>(
             w.set_bits_0_1_opaque(bits(value.bits_0_1))
                 .set_bit_8_opaque(value.bit_8)
                 .set_spp_amsdu(value.spp_amsdu)
-                .set_bit_16_opaque(value.upper_flags)
-                .set_mgmt_rx_crypto_enabled(value.upper_flags)
+                .set_bit_16_opaque(value.bit_16)
+                .set_mgmt_rx_crypto_enabled(value.bit_17)
                 .set_wep_mode(false)
                 .set_bit_30_opaque(false)
                 .set_sms4_mode(false);
@@ -174,7 +175,8 @@ fn store_interface_control<P: Placement>(
             w.set_bits_0_1_opaque(bits(value.bits_0_1))
                 .set_bit_8_opaque(value.bit_8)
                 .set_spp_amsdu(value.spp_amsdu)
-                .set_bits_16_17_opaque(bits(if value.upper_flags { 3 } else { 0 }))
+                .set_bit_16_opaque(value.bit_16)
+                .set_bit_17_opaque(value.bit_17)
                 .set_wep_mode(false)
                 .set_bit_30_opaque(false)
                 .set_sms4_mode(false);
@@ -283,7 +285,8 @@ fn enable_ccmp<P: Placement>(control: &mut WifiMacCryptoControl<P>, index: Index
             bits_0_1: 3,
             bit_8: true,
             spp_amsdu: spp,
-            upper_flags: true,
+            bit_16: true,
+            bit_17: true,
         },
     );
     control.modify_policy_control(|w| {
@@ -312,7 +315,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// `libpp.a[hal_crypto.o]::hal_crypto_init`.
     pub fn initialize_mac_crypto_bypass(&mut self) {
         let control = &mut self.mac.wifi_mac_crypto_control;
-        for (position, upper_flags) in [true, true, false].into_iter().enumerate() {
+        for (position, initial_flags) in [true, true, false].into_iter().enumerate() {
             store_interface_control(
                 control,
                 element::<3>(position),
@@ -320,7 +323,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     bits_0_1: 0,
                     bit_8: false,
                     spp_amsdu: false,
-                    upper_flags,
+                    bit_16: initial_flags,
+                    bit_17: initial_flags,
                 },
             );
         }
@@ -335,6 +339,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Apply an association's SPP mode before installing any of its keys.
     /// The driver establishes removal of every previous key before changing
     /// this per-interface field; installation itself preserves the decision.
+    ///
+    /// Context2 uses the bit-17-set profile. The vendor NAN key profile clears
+    /// that bit independently of bit 16; this method does not implement that
+    /// separate policy. SOURCE: `BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104`.
     ///
     /// SOURCE: complete `libpp[hal_crypto.o]::hal_crypto_enable` consumes
     /// SPP from `libpp[wdev.o]::wDev_Insert_KeyEntry` at +0x2e..+0x34.

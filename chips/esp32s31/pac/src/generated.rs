@@ -284859,13 +284859,13 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The complete enable leaf publishes both low bits as three for all inspected cipher profiles, while cold init and STA/AP disable clear both. No independent value one/two or separate TX/RX function is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bits_0_1_opaque(self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set together with low bits 1:0 in all inspected enable profiles and cleared in cold init and STA/AP disable. Its individual hardware function cannot be separated from that correlated publication. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_8_opaque(self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -284877,7 +284877,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Ordinary enable/disable images include this bit; its individual hardware meaning remains unknown.
+            /// Set in every inspected STA/AP enable, cold-init and disable profile. It is not an established general crypto-enabled indicator; its individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_16_opaque(self) -> bool {
                 (self.0 & 0x00010000) != 0
@@ -284895,7 +284895,7 @@ pub mod wifi_mac {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown.
+            /// Zero in all inspected init, enable and disable profiles, including SMS4 where bit 31 is set. No independent assertion or hardware purpose is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_30_opaque(self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -284912,13 +284912,13 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The complete enable leaf publishes both low bits as three for all inspected cipher profiles, while cold init and STA/AP disable clear both. No independent value one/two or separate TX/RX function is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bits_0_1_opaque(&self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set together with low bits 1:0 in all inspected enable profiles and cleared in cold init and STA/AP disable. Its individual hardware function cannot be separated from that correlated publication. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_8_opaque(&self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -284930,7 +284930,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Ordinary enable/disable images include this bit; its individual hardware meaning remains unknown.
+            /// Set in every inspected STA/AP enable, cold-init and disable profile. It is not an established general crypto-enabled indicator; its individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_16_opaque(&self) -> bool {
                 (self.0 & 0x00010000) != 0
@@ -284948,7 +284948,7 @@ pub mod wifi_mac {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown.
+            /// Zero in all inspected init, enable and disable profiles, including SMS4 where bit 31 is set. No independent assertion or hardware purpose is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_30_opaque(&self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -285020,7 +285020,7 @@ pub mod wifi_mac {
 
     /// The `CONTEXT2_CRYPTO_CONTROL` register.
     ///
-    /// Project-assigned name for hardware crypto selector two. Unlike STA/AP, its bit-17 publication depends on an argument derived upstream from PMF state. The management-RX getter never reads this word; the individual meanings of bits 16/17 remain unknown.
+    /// Project-assigned name for hardware crypto selector two, positively selected by the vendor NAN CCMP-key installer. Enable always sets bit 16 while bit 17 follows a separate argument; NAN passes zero, whereas the generic key path derives the argument from PMF state. The STA/AP management-RX getter never reads this word. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
     pub mod context2_crypto_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xd0030303;
@@ -285051,12 +285051,19 @@ pub mod wifi_mac {
         /// Positioned bits of `SPP_AMSDU`.
         pub const SPP_AMSDU_MASK: u32 = 0x200;
 
-        /// Width of `BITS_16_17_OPAQUE` in bits.
-        pub const BITS_16_17_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_16_17_OPAQUE`.
-        pub const BITS_16_17_OPAQUE_MAX: u32 = 0x3;
-        /// Positioned bits of `BITS_16_17_OPAQUE`.
-        pub const BITS_16_17_OPAQUE_MASK: u32 = 0x30000;
+        /// Width of `BIT_16_OPAQUE` in bits.
+        pub const BIT_16_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MASK: u32 = 0x10000;
+
+        /// Width of `BIT_17_OPAQUE` in bits.
+        pub const BIT_17_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_17_OPAQUE`.
+        pub const BIT_17_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_17_OPAQUE`.
+        pub const BIT_17_OPAQUE_MASK: u32 = 0x20000;
 
         /// Width of `WEP_MODE` in bits.
         pub const WEP_MODE_WIDTH: u32 = 1;
@@ -285084,13 +285091,13 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The complete enable leaf publishes both low bits as three for all inspected cipher profiles, while cold init and STA/AP disable clear both. No independent value one/two or separate TX/RX function is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bits_0_1_opaque(self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set together with low bits 1:0 in all inspected enable profiles and cleared in cold init and STA/AP disable. Its individual hardware function cannot be separated from that correlated publication. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_8_opaque(self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -285102,10 +285109,16 @@ pub mod wifi_mac {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Zero in cold init and one in every inspected enable profile, independently of bit 17. The individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
-            pub const fn bits_16_17_opaque(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
+            pub const fn bit_16_opaque(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Zero in cold init. Enable follows argument two independently of bit 16: the NAN key installer supplies zero; the generic key path supplies whether STA PMF state is zero. The STA/AP management-RX getter does not identify this lane. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
+            #[inline]
+            pub const fn bit_17_opaque(self) -> bool {
+                (self.0 & 0x00020000) != 0
             }
 
             /// Project-assigned name. The vendor interface profile sets this bit only for the inspected WEP40/WEP104 key types (API 1/5); the more specific electrical function is not established.
@@ -285114,7 +285127,7 @@ pub mod wifi_mac {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown.
+            /// Zero in all inspected init, enable and disable profiles, including SMS4 where bit 31 is set. No independent assertion or hardware purpose is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_30_opaque(self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -285131,13 +285144,13 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The complete enable leaf publishes both low bits as three for all inspected cipher profiles, while cold init and STA/AP disable clear both. No independent value one/two or separate TX/RX function is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bits_0_1_opaque(&self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Set together with low bits 1:0 in all inspected enable profiles and cleared in cold init and STA/AP disable. Its individual hardware function cannot be separated from that correlated publication. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_8_opaque(&self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -285149,10 +285162,16 @@ pub mod wifi_mac {
                 (self.0 & 0x00000200) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Zero in cold init and one in every inspected enable profile, independently of bit 17. The individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
-            pub const fn bits_16_17_opaque(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
+            pub const fn bit_16_opaque(&self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Zero in cold init. Enable follows argument two independently of bit 16: the NAN key installer supplies zero; the generic key path supplies whether STA PMF state is zero. The STA/AP management-RX getter does not identify this lane. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
+            #[inline]
+            pub const fn bit_17_opaque(&self) -> bool {
+                (self.0 & 0x00020000) != 0
             }
 
             /// Project-assigned name. The vendor interface profile sets this bit only for the inspected WEP40/WEP104 key types (API 1/5); the more specific electrical function is not established.
@@ -285161,7 +285180,7 @@ pub mod wifi_mac {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown.
+            /// Zero in all inspected init, enable and disable profiles, including SMS4 where bit 31 is set. No independent assertion or hardware purpose is established. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
             #[inline]
             pub const fn bit_30_opaque(&self) -> bool {
                 (self.0 & 0x40000000) != 0
@@ -285194,13 +285213,17 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BITS_16_17_OPAQUE`.
+            /// Set `BIT_16_OPAQUE`.
             #[inline]
-            pub fn set_bits_16_17_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<2>,
-            ) -> &mut Self {
-                self.0 = (self.0 & 0xfffcffff) | (value.get() << 16);
+            pub fn set_bit_16_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `BIT_17_OPAQUE`.
+            #[inline]
+            pub fn set_bit_17_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
                 self
             }
 
