@@ -765,8 +765,8 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {
         <Inner<W> as port::Device<TX>>::finish_rx_cut(&mut self.0)
     }
-    fn ring_waits(&self) -> bool {
-        <Inner<W> as port::Device<TX>>::ring_waits(&self.0)
+    fn returns_quiet(&mut self, held: usize, returned: bool) -> bool {
+        <Inner<W> as port::Device<TX>>::returns_quiet(&mut self.0, held, returned)
     }
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
         <Inner<W> as port::Device<TX>>::poll_rx_work(&mut self.0, cx)

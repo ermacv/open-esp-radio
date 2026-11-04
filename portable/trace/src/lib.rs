@@ -28,6 +28,7 @@ mod event;
 mod observe;
 pub mod profile;
 mod store;
+pub mod tune;
 
 pub use decode::{Described, Describer, EventSet};
 pub use event::{Channel, Domain, Event, InvalidChannel, Kind};

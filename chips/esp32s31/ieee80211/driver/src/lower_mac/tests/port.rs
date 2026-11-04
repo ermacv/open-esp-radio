@@ -444,7 +444,7 @@ impl Device<512> for TestDevice {
         self.observed.borrow_mut().resumed_cuts += 1;
         Ok(())
     }
-    fn ring_waits(&self) -> bool {
+    fn returns_quiet(&mut self, _held: usize, _returned: bool) -> bool {
         self.observed.borrow().rx_continuation.is_some()
     }
     fn poll_rx_work(&mut self, _: &mut Context<'_>) -> Result<bool, Fault> {

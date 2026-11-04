@@ -86,8 +86,8 @@ pub(super) struct NetworkCredit<P = SameHart> {
     transferred: AtomicUsize,
     /// A lent unit was dropped since the port last looked.
     returned: AtomicBool,
-    /// A return need not tell the waiting task: the ring's next service is
-    /// timed, and it rearms what came back.
+    /// A return need not tell the waiting task: the ring's next service
+    /// comes anyway, timed or with a frame, and rearms what came back.
     quiet: AtomicBool,
     /// How a return tells the waiting task. The units'
     /// owners drop in tasks of the network's executor, never in an
@@ -117,6 +117,11 @@ impl<P: LentNotifies> NetworkCredit<P> {
         self.transferred.swap(0, Ordering::AcqRel)
     }
 
+    /// Whether a lent unit was dropped since [`Self::take_returned`].
+    pub(super) fn returned_unseen(&self) -> bool {
+        self.returned.load(Ordering::Acquire)
+    }
+
     /// Whether a lent unit was dropped since the last call.
     pub(super) fn take_returned(&self) -> bool {
         self.returned.swap(false, Ordering::AcqRel)
@@ -124,8 +129,8 @@ impl<P: LentNotifies> NetworkCredit<P> {
 
     /// Whether the network returned a unit the ring has not rearmed yet;
     /// the next return tells the polling task unless `quiet`, when the
-    /// ring's next service is timed. The port's facts ask: a return may be
-    /// the only edge left when the walker ran out of armed descriptors.
+    /// ring's next service comes anyway. The port's facts ask: a return may
+    /// be the only edge left when the walker ran out of armed descriptors.
     pub(super) fn poll_returns(&self, cx: &mut Context<'_>, quiet: bool) -> bool {
         self.quiet.store(quiet, Ordering::SeqCst);
         self.notifies.register_returned(cx);

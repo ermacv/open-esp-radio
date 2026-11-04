@@ -1493,7 +1493,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // A unit the network returned rearms the ring at the next pull. The
         // return is taken here, so it is one fact: a caller that cannot pull
         // now (the network holds all it may) does not hear it again.
-        let quiet = self.device.ring_waits();
+        let quiet = self.device.returns_quiet(
+            self.shared.network.held(),
+            self.shared.network.returned_unseen(),
+        );
         if self.shared.network.poll_returns(cx, quiet) && self.shared.network.take_returned() {
             self.device.returned();
             facts.rx = true;

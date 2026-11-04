@@ -28,8 +28,8 @@ use std::{
 use oer_hil_services_load::{
     BridgeTx, CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts,
     CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
-    LinkCollected, Load, MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Tracking,
-    TrackingCollected, Transmit,
+    LinkCollected, Load, MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, TUNE_KNOBS,
+    TUNE_UNSET, Tracking, TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 use oer_protocols_hil_agent::base::Service as _;
@@ -752,6 +752,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
                 burst: 1,
             }),
             profile: None,
+            tune: [TUNE_UNSET; TUNE_KNOBS],
         },
         CALL,
     )?;
@@ -824,6 +825,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             drain_ms: 0,
             transmit: None,
             profile: None,
+            tune: [TUNE_UNSET; TUNE_KNOBS],
         },
         CALL,
     )?;
@@ -1002,7 +1004,7 @@ fn both_ways(cx: &mut Cx<'_>, name: &str, each_mbps: u64) -> Result<(), Failure>
         ping: true,
         ..Offer::level(Mode::RxTx, each_mbps * 2, probes()?)?
     };
-    level(cx, &path, &offer).map(|_| ())
+    tuned(cx, &path, offer).map(|_| ())
 }
 
 /// Every shape of [`SPARSE`] both ways at once, a ping beside it and no
@@ -1012,17 +1014,20 @@ fn sparse(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let path = Path::of(cx)?;
     let mut over = Ok(());
     for shape in SPARSE {
+        let name = shape.name();
         let offer = Offer {
-            name: shape.name(),
+            name,
             mode: Mode::RxTx,
             each_bps: shape.rate_bps(),
             payload: shape.payload,
             burst: shape.datagrams,
             probing: false,
             ping: true,
+            tune: [TUNE_UNSET; TUNE_KNOBS],
         };
-        let echoes = level(cx, &path, &offer)?;
-        over = over.and(ping_within_limit(&offer.name, &echoes));
+        for (name, echoes) in tuned(cx, &path, offer)? {
+            over = over.and(ping_within_limit(&name, &echoes));
+        }
     }
     over
 }
@@ -1050,6 +1055,7 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
             drain_ms: DRAIN_MS,
             transmit: None,
             profile: None,
+            tune: [TUNE_UNSET; TUNE_KNOBS],
         },
         CALL,
     )?;
@@ -1099,9 +1105,76 @@ fn levels(cx: &mut Cx<'_>, mode: Mode) -> Result<(), Failure> {
     let path = Path::of(cx)?;
     let probing = probes()?;
     for total in levels_mbps()? {
-        level(cx, &path, &Offer::level(mode, total, probing)?)?;
+        tuned(cx, &path, Offer::level(mode, total, probing)?)?;
     }
     Ok(())
+}
+
+/// The knobs of a trace image a run may set (`oer_portable_trace::tune`),
+/// in order.
+const TUNE_NAMES: [&str; 2] = ["return-quiet", "recycled-burst"];
+const TUNES_ENV: &str = "OER_WIFI_LOAD_TUNES";
+
+/// `OER_WIFI_LOAD_TUNES`: each level once per `;`-separated set of
+/// `name=value`, an empty set keeping the defaults. Values go to the image
+/// at the run's start: comparing them takes one build and one boot.
+fn tunes() -> Result<Vec<[u32; TUNE_KNOBS]>, Failure> {
+    match std::env::var(TUNES_ENV) {
+        Err(_) => Ok(vec![[TUNE_UNSET; TUNE_KNOBS]]),
+        Ok(text) => parse_tunes(&text),
+    }
+}
+
+fn parse_tunes(text: &str) -> Result<Vec<[u32; TUNE_KNOBS]>, Failure> {
+    let refused = |what: &str| Failure::Incomplete(format!("{TUNES_ENV}: `{what}`"));
+    text.split(';')
+        .map(|set| {
+            let mut tune = [TUNE_UNSET; TUNE_KNOBS];
+            for item in set
+                .split(',')
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+            {
+                let (name, value) = item.split_once('=').ok_or_else(|| refused(item))?;
+                let place = TUNE_NAMES
+                    .iter()
+                    .position(|known| *known == name)
+                    .and_then(|place| tune.get_mut(place))
+                    .ok_or_else(|| refused(item))?;
+                *place = value.parse().map_err(|_| refused(item))?;
+            }
+            Ok(tune)
+        })
+        .collect()
+}
+
+/// `tune`'s `name=value` list, the level's name's tail.
+fn tune_name(tune: &[u32; TUNE_KNOBS]) -> String {
+    TUNE_NAMES
+        .iter()
+        .zip(tune)
+        .filter(|(_, value)| **value != TUNE_UNSET)
+        .map(|(name, value)| format!(" {name}={value}"))
+        .collect()
+}
+
+/// `offer` once per set of [`tunes`]: each level's name and its ping.
+fn tuned(
+    cx: &mut Cx<'_>,
+    path: &Path,
+    offer: Offer,
+) -> Result<Vec<(String, traffic::Echoes)>, Failure> {
+    let mut ends = Vec::new();
+    for tune in tunes()? {
+        let tuned = Offer {
+            name: format!("{}{}", offer.name, tune_name(&tune)),
+            tune,
+            ..offer
+        };
+        let echoes = level(cx, path, &tuned)?;
+        ends.push((tuned.name, echoes));
+    }
+    Ok(ends)
 }
 
 /// Who a level runs between.
@@ -1134,6 +1207,8 @@ struct Offer {
     probing: bool,
     /// Whether a `ping` runs through the window beside the load.
     ping: bool,
+    /// The run's values of the image's constants.
+    tune: [u32; TUNE_KNOBS],
 }
 
 impl Offer {
@@ -1152,6 +1227,7 @@ impl Offer {
             burst: 1,
             probing,
             ping: false,
+            tune: [TUNE_UNSET; TUNE_KNOBS],
         })
     }
 }
@@ -1194,6 +1270,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
             drain_ms: DRAIN_MS,
             transmit,
             profile,
+            tune: offer.tune,
         },
         CALL,
     )?;
@@ -1421,6 +1498,25 @@ mod tests {
         assert!(ping_within_limit("x", &echoes(&[900, 2900, 9000])).is_ok());
         assert!(ping_within_limit("x", &echoes(&[900, 3100, 9000])).is_err());
         assert!(ping_within_limit("x", &echoes(&[])).is_err());
+    }
+
+    #[test]
+    fn tunes_name_known_knobs_and_an_empty_set_keeps_the_defaults() {
+        let unset = TUNE_UNSET;
+        let tunes = parse_tunes(";return-quiet=0,recycled-burst=1;return-quiet=32").unwrap();
+        assert_eq!(
+            tunes,
+            [
+                [unset, unset, unset, unset],
+                [0, 1, unset, unset],
+                [32, unset, unset, unset]
+            ]
+        );
+        assert_eq!(tune_name(&tunes[1]), " return-quiet=0 recycled-burst=1");
+        assert_eq!(tune_name(&tunes[0]), "");
+        assert!(parse_tunes("nothing=1").is_err());
+        assert!(parse_tunes("return-quiet").is_err());
+        assert!(parse_tunes("return-quiet=x").is_err());
     }
 
     #[test]

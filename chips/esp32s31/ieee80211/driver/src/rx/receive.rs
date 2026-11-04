@@ -92,7 +92,7 @@ pub struct RecycledProbe {
 
 impl RecycledProbe {
     /// The fewest frames of one pass that show a burst.
-    const BURST_UNITS: usize = 2;
+    const BURST_UNITS: u32 = 2;
     /// Below this mean frame length a pass's frames are short.
     const LONG_FRAME_BYTES: usize = 1024;
     const SHORT_WAIT: Duration = Duration::from_micros(512);
@@ -101,7 +101,11 @@ impl RecycledProbe {
     /// The wait after a pass that took `units` frames of `bytes` in all,
     /// none while the drain showed no burst.
     pub fn wait(&mut self, units: usize, bytes: usize) -> Option<Duration> {
-        if units >= Self::BURST_UNITS {
+        let burst = oer_portable_trace::tune::value(
+            oer_portable_trace::tune::Knob::RecycledBurstUnits,
+            Self::BURST_UNITS,
+        );
+        if units >= burst as usize {
             let mean = bytes.checked_div(units).unwrap_or(0);
             self.wait = Some(if mean < Self::LONG_FRAME_BYTES {
                 Self::SHORT_WAIT
@@ -115,6 +119,44 @@ impl RecycledProbe {
     /// The drain ended, or its pass was no recycled append.
     pub fn reset(&mut self) {
         self.wait = None;
+    }
+}
+
+/// Whether a lent unit's return may leave the ring's task asleep. A return
+/// wakes it to rearm the ring, and a walker that ran out of armed descriptors
+/// raises no interrupt, so the return may be the last edge. But the ring was
+/// fully armed when the network held nothing and no rearm was due, and every
+/// unit outside the ring was received since: until [`Self::LIMIT`] units
+/// came, the walker still has armed descriptors, each frame it fills raises
+/// the interrupt whose pass takes the return, and a lone frame costs one
+/// turn instead of two.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReturnQuiet {
+    received: usize,
+}
+
+impl ReturnQuiet {
+    /// A third of the ring, and no more than the staging slots: a pass
+    /// blocked on staging capacity holds them all, so its returns wake.
+    pub(crate) const LIMIT: u32 = 16;
+
+    /// A unit left the ring.
+    pub fn received(&mut self) {
+        self.received = self.received.saturating_add(1);
+    }
+
+    /// Whether a return may stay quiet while the network holds `held` units
+    /// and `rearm_due` tells a pass is due. Idle with nothing out, the ring
+    /// is whole again.
+    pub fn quiet(&mut self, held: usize, rearm_due: bool) -> bool {
+        if held == 0 && !rearm_due {
+            self.received = 0;
+        }
+        let limit = oer_portable_trace::tune::value(
+            oer_portable_trace::tune::Knob::ReturnQuietUnits,
+            Self::LIMIT,
+        );
+        self.received < limit as usize
     }
 }
 

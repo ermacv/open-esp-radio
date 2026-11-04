@@ -142,6 +142,7 @@ mod tests {
             drain_ms: 1_000,
             transmit,
             profile: None,
+            tune: [0; 4],
         }
     }
 
@@ -182,6 +183,7 @@ mod tests {
         for period_us in [MIN_SAMPLE_PERIOD_US, MAX_SAMPLE_PERIOD_US] {
             let sampled = Start {
                 profile: Some(Profile { period_us }),
+                tune: [0; 4],
                 ..start(None)
             };
             assert_eq!(
@@ -217,12 +219,14 @@ mod tests {
                 profile: Some(Profile {
                     period_us: MIN_SAMPLE_PERIOD_US - 1,
                 }),
+                tune: [0; 4],
                 ..start(None)
             },
             Start {
                 profile: Some(Profile {
                     period_us: MAX_SAMPLE_PERIOD_US + 1,
                 }),
+                tune: [0; 4],
                 ..start(None)
             },
         ]);
