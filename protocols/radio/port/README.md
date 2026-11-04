@@ -106,8 +106,9 @@ cancellation, empty layouts and all 256 indices.
 A claim places one `PortSlot<Id, State>`. `with_local_slot` supplies a fresh
 invariant `LocalId<'scope>` without a global declaration latch; repeated,
 nested and parallel model scopes remain independent. The executor's
-`declare_port_slot!` supplies one nominal `StaticId<Declaration>` and one
-irreversible `take_static()`. Neither reset nor quarantine reissues that Id.
+`declare_installations!` supplies one nominal `StaticId<Declaration>` and one
+irreversible `take_static()` of its `Installations`. Neither reset nor
+quarantine reissues that Id.
 Unclaimed `VacantPortSlot` backing cannot register an owner.
 
 `PortSlot::register` stores the P2 owner before queue construction. Queues

@@ -68,8 +68,8 @@ jobs:
           cargo test --locked -p oer-chips-esp32s31-ieee80211-driver
           cargo test --locked -p oer-portable-time --features serde
           cargo test --locked -p oer-portable-time --features schema
-          cargo test --locked -p oer-chips-family-executor --features port-slots --lib --test slots
-          cargo clippy --locked -p oer-chips-family-executor --features port-slots --all-targets
+          cargo test --locked -p oer-chips-family-executor --features installations --lib --test installations
+          cargo clippy --locked -p oer-chips-family-executor --features installations --all-targets
       - name: Tests under each instrumentation cfg
         # The default members whose sources hold code under an
         # instrumentation class's cfg, tested once with it, each cfg in a

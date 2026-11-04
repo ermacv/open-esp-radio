@@ -42,7 +42,7 @@ oer-chips-esp32s31-phy = { path = "../phy" }
 oer-chips-esp32s31-radio-client = { path = "../radio/client" }
 oer-chips-esp32s31-radio-system = { path = "../radio/system" }
 oer-chips-esp32s31-ieee80211-driver = { path = "../ieee80211/driver" }
-oer-chips-family-executor = { path = "../../family/executor", features = ["port-slots"] }
+oer-chips-family-executor = { path = "../../family/executor", features = ["installations"] }
 oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 

@@ -884,26 +884,17 @@ The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
 
 ## Firmware and platform code below the boundary
 
-`oer-chips-family-executor::port_slot` binds a nominal port identity to one
-static allocation. `declare_port_slot!` and `declare_installations!` each
-irreversibly claim their private `StaticCell` before constructing
-`SlotClaim<StaticId<Declaration>>` at one unsafe site; the second turns the
-claim at once into the identity's `Installations`, the minting authority of
-its successive installations. The claim has only invariant `PhantomData`; its private safe
-constructor remains inside the portable contract. The declaration must
-never issue a second authority for the same type, including after software
-reset or quarantine, because owned queue permissions rely on that identity
-having exactly one backing store. Static placement itself uses `StaticCell`'s
-safe initialization; no reference lifetime or owner is cast. Local scope
-claims have no static latch and use no unsafe code.
-
-`StaticPortSlot` keeps the declaration's permanent allocation in its P2 task.
-It lends that allocation once initially, and again only after consuming its
-nominal `Joined`. That proof follows the end of P1 endpoint loans and P2
-owner/invocation destruction and unregistration; quarantine issues no proof.
-The adapter's two pointer dereferences extend no stack allocation's lifetime.
-The S31 composition sends only frontend endpoints to P1 and retains the slot
-manager and registration in its P2 task, establishing the cleanup Drop context.
+`oer-chips-family-executor::installations` binds a nominal port identity to
+the minting authority of its successive installations.
+`declare_installations!` irreversibly claims its private `StaticCell` before
+constructing `SlotClaim<StaticId<Declaration>>` at one unsafe site, and turns
+the claim at once into the identity's `Installations`. The claim has only
+invariant `PhantomData`; its private safe constructor remains inside the
+portable contract. The declaration must never issue a second authority for
+the same type, including after software reset or quarantine, because owned
+queue permissions and installation tokens rely on that identity being
+unique. No reference lifetime or owner is cast. Local scope claims have no
+static latch and use no unsafe code.
 
 The platform crates (the boards and `chips/family/staged-*`), the bootstrap images
 (`chips/esp32s31/bootstrap`) and the probe images (`hil/probes/*`) own the
