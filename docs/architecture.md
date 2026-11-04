@@ -216,12 +216,12 @@ has its own typed admission refusal. The lifecycle runs the station and
 arbiter cores and commands the actor in messages; the actor alone calls the
 generic data port. The chip facade `oer-chips-esp32s31-wifi` assembles the S31 backend,
 arbiter, station and runtime as `station(resources, config) -> (Control,
-NetDevice, Runners)`. The station runs its EAPOL-Key data unwrap, its
+network end, network stopper, Runners { datapath, station })`. The station runs its EAPOL-Key data unwrap, its
 AES-CMAC EAPOL-Key MIC and its protected-management CCMP and BIP
 synchronously in its step over the engine its callbacks supply
 (`StaCallbacks::AesEngine`); the facade's is the AES accelerator,
 which the image hands to the station's `Profile`. Images select the interrupt entries, callbacks and observers, and
-spawn the returned runners.
+spawn the two returned tasks.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
 is the default, which the HIL station image keeps: it joins once per boot.
@@ -231,9 +231,9 @@ policy never connects first and reconnects with the kept profile. The
 policy becomes active when an application's connect links; one that ends
 without a link leaves the station idle and the retries to the application.
 Explicit Disconnect pauses reconnect.
-Policy requests use the Runner's existing affine command credits and normal
-Control events. A facade Stop disconnects once, waits for link-down and then
-retires Runner. HIL retains command correlation and socket workload lifetime,
+Policy requests use the lifecycle's existing affine command credits and
+normal Control events. A facade Stop disconnects once, waits for link-down
+and then retires the lifecycle and the actor. HIL retains command correlation and socket workload lifetime,
 without its own station policy loop or product counters.
 The neutral `oer-protocols-network-port::NetDevice` transfers Ethernet owners and publishes
 the link epoch. `oer_portable_embassy_net::ip` builds its pools, one pinned IP stack
@@ -407,7 +407,7 @@ run its own executor.
 | P3, boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
-| P1 / thread, boot hart | role bodies, network stack, application; the Wi-Fi driver beside the station on the station's executor | the Wi-Fi driver and the station never preempt each other; the driver's work waits for the station's turn, and the station takes received units from the ring in its own turn |
+| P1 / thread, boot hart | role bodies, network stack, application; the Wi-Fi datapath actor and the station lifecycle, two tasks on one executor | the actor and the lifecycle never preempt each other and share no lock: they talk only in single-producer queues of that executor. One signal wakes the actor (`ACTOR_SIGNAL`: its own task, and hart 1's IP service through `FromPeerHart`); nothing on hart 1 wakes the lifecycle. The actor alone touches the data port; each turn reads the clock once and serves bounded units, and it wakes itself only when a budget ran out with work left |
 | hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The entry's task group (`oer`, `group`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the station's IP service and the image's future, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
 
 - `oer-portable-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
@@ -765,6 +765,13 @@ The terminal policy is:
 - Retained diagnostics use best-effort LP RAM alongside raw, per-hart reset
   causes. There is no guarantee after power loss. A valid old record need
   not explain the most recent brownout, watchdog or debugger reset.
+- The Wi-Fi station's terminal exits are the lifecycle's ends other than a
+  stop or a restart: `StartRefused` (the first start, with its cause),
+  `StopUnconfirmed`, `RetuneUnconfirmed`, `Faulted` (the actor ended on the
+  port's named fault or its own broken contract, owners kept) and
+  `Contract` (an owner the lifecycle did not send), plus a failed reinstall
+  and a failed radio release (`ReleaseFailed`). The image records each with
+  its typed cause path and resets; air input never ends the actor.
 - Repeated boot failure requires a record and explicit reset with the
   watchdog preserved. An implicit watchdog expiry, diagnostic idle mode or
   a retained "three failures" counter does not implement this policy.
@@ -1118,14 +1125,23 @@ its model and conformance case.
   `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists; IEEE 802.15.4
   currently describes hardware offload through its port.
-- One owner holds a lower-MAC core and its phase; every lifecycle transition
-  is a method of a borrowed typestate view.
+- The Wi-Fi data port (`DataPort`) has one owner, the datapath actor. The
+  station lifecycle never borrows the port: it sends `PortCommand`s and
+  frames to the actor and takes back their terminals and owners in
+  messages. A refused submission returns its owners; a port's named fault
+  ends the actor with every owner kept. Installations of one static identity
+  are minted by `radio_port::Installations`; a token of another installation
+  is refused at run time.
 - A caller that drops an admitted request detaches only its waker; the port
   keeps the registration and buffer lease until the terminal event and
   reclaims exactly once. Event streams end with the uninstall.
-- Abandonment is requested through a static typed signal and executed only
-  in the driver's context, which erases keys and silences routes; a stop the
-  driver does not confirm in its bound leaves the installation quarantined.
+- A slot installation (Bluetooth LE) is abandoned through a static typed
+  signal, executed only in the driver's context, which silences routes; a
+  stop the driver does not confirm in its bound leaves the installation
+  quarantined. The Wi-Fi port answers `StopUnconfirmed` when its stop
+  cannot prove the MAC and its DMA quiet; the installation then stays
+  quarantined. A retired Wi-Fi installation masks the ring's interrupts and
+  erases the keys.
 - No radio-system token crosses a port; PHY membership stays inside the
   backend. The Bluetooth LE port takes the form of the Wi-Fi lower-MAC port.
 
@@ -1138,7 +1154,13 @@ its model and conformance case.
   machine: no fixed data or control-frame rate; frames before association and
   to a group use the lowest rate the BSS basic set allows. MSDU age starts at
   software admission. Monitor is a tap in the shared lower-MAC loop, not a
-  role; ESP-NOW and FTM are clients of the lower-MAC port. A STA+AP pair keeps
+  role; ESP-NOW and FTM are clients of the lower-MAC port. The station runs
+  as two tasks: the datapath actor owns the data port, carries the data both
+  ways, numbers the link's frames, owns the receive agreements and the rate
+  selection; the lifecycle runs the station and arbiter cores and commands
+  the actor in messages. The station hands its link (keys and numbers) to
+  the actor at connection and takes it back at disconnection. A station
+  failure restarts the station on the next installation without a reset. A STA+AP pair keeps
   the access point running when the upstream cannot rejoin.
 - **Bluetooth LE** (`protocols/bluetooth`, driver `chips/esp32s31/bluetooth`).
   Wire formats carry no protocol state or clock domain. The port owns radio
