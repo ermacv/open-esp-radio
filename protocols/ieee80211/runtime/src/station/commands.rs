@@ -1,4 +1,4 @@
-//! Installation-independent requests; affine permissions never leave Runner.
+//! Installation-independent requests; affine permissions never leave the lifecycle.
 use super::contract::{Command, CommandOutcome, CommandRefusal};
 use oer_protocols_ieee80211_core_roles_sta::machine::{
     self, StaCommandCredit, StaCommandCredits, StaCommandPermission, StaRequest,

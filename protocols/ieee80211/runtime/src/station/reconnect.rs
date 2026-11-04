@@ -1,4 +1,4 @@
-//! Product reconnect policy. Runner owns admission; Control only supplies intent.
+//! Product reconnect policy. The lifecycle owns admission; Control only supplies intent.
 use super::{Request, ServiceCommand, ServiceOutput, contract::Command};
 use oer_portable_time::{Duration, Instant};
 

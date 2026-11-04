@@ -168,6 +168,49 @@ pub struct ActorEnds<
 }
 
 /// The lifecycle's ends to the application.
+///
+/// Commands require an exclusive SPSC receiver rather than a shareable channel:
+///
+/// ```compile_fail,E0308
+/// use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
+/// use oer_protocols_ieee80211_runtime::lifecycle::LifecycleIo;
+/// use oer_protocols_ieee80211_runtime::station::{
+///     Control, ServiceCommand, ServiceOutput, State, StopPolicy,
+/// };
+/// use oer_portable_memory::WakingSpscQueue;
+/// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
+/// let mut output = |_: ServiceOutput<()>| {};
+/// let mut control_queue = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+/// let (application, _) = control_queue.split();
+/// let state = State::new();
+/// let (_control, control) = Control::new(application, &state).unwrap();
+/// let io = LifecycleIo {
+///     commands: commands.dyn_receiver(), output: &mut output, control,
+///     stop: StopPolicy { drain: oer_portable_time::Duration::from_secs(1) },
+/// };
+/// ```
+///
+/// The composition moves one receiver into the lifecycle and retains its
+/// sole sender:
+///
+/// ```
+/// use oer_protocols_ieee80211_runtime::lifecycle::LifecycleIo;
+/// use oer_protocols_ieee80211_runtime::station::{
+///     Control, ControlCommand, ServiceCommand, ServiceOutput, State, StopPolicy,
+/// };
+/// use oer_portable_memory::WakingSpscQueue;
+/// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+/// let (application, commands) = commands.split();
+/// let mut output = |_: ServiceOutput<()>| {};
+/// let state = State::new();
+/// let (mut application, control) = Control::new(application, &state).unwrap();
+/// let io = LifecycleIo {
+///     commands, output: &mut output, control,
+///     stop: StopPolicy { drain: oer_portable_time::Duration::from_secs(1) },
+/// };
+/// assert!(application.try_command(ControlCommand::Stop).is_ok());
+/// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
+/// ```
 pub struct LifecycleIo<
     'c,
     K,

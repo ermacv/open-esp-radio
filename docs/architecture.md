@@ -198,7 +198,8 @@ from `oer-portable-time`, interrupt signals from `portable/`, no executor,
 `embassy-time`, `embassy-net`, `embassy-sync` or HAL dependency
 (`embassy-futures` is allowed). The firmware composition declares the tasks
 that poll the futures.
-The Wi-Fi station runtime exposes `station::Control` and `station::Runner`.
+The Wi-Fi station runtime exposes `station::Control`, the station's
+`lifecycle::Lifecycle` and its `datapath::Actor`.
 Control and the neutral network end are constructed before port installation.
 The runtime owns the nominal command, status, event and failure vocabulary of
 Control. Exhaustive conversions from core values run inside the runtime;
@@ -208,11 +209,12 @@ traffic originates at the host or peer; the device uses the IP stack's normal
 ICMP echo reply service. Instrumented image collectors retain diagnostic
 observations separately from the product contract.
 Commands contain a kind and correlation, with no installation lifetime or pool
-path. Runner receives the station's affine command credits at installation,
-retains each through its refusal or terminal, and restores it before delivering
-the lossless concrete callback. A duplicate in-flight kind has its own typed
-admission refusal. Runner selects inputs over the generic port and executes
-the existing cores. The chip facade `oer-chips-esp32s31-wifi` assembles the S31 backend,
+path. The lifecycle receives the station's affine command credits at
+installation, retains each through its refusal or terminal, and restores it
+before delivering the lossless concrete callback. A duplicate in-flight kind
+has its own typed admission refusal. The lifecycle runs the station and
+arbiter cores and commands the actor in messages; the actor alone calls the
+generic data port. The chip facade `oer-chips-esp32s31-wifi` assembles the S31 backend,
 arbiter, station and runtime as `station(resources, config) -> (Control,
 NetDevice, Runners)`. The station runs its EAPOL-Key data unwrap, its
 AES-CMAC EAPOL-Key MIC and its protected-management CCMP and BIP

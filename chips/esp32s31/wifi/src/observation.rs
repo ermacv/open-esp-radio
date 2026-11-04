@@ -557,7 +557,7 @@ impl core::fmt::Display for StationTxAmpdu {
 }
 
 /// The network's transmit memory the station service holds, by where it
-/// waits ([`TxMemoryHeld`](oer_protocols_ieee80211_runtime::station::TxMemoryHeld)),
+/// waits,
 /// after one pass of the service.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct StationTxMemory {
@@ -644,7 +644,6 @@ fn service_rx(
 ) {
     use oer_protocols_ieee80211_runtime::station::ServiceEvent;
     match event {
-        ServiceEvent::PortEventsLost => emit(StationRxKind::PortEventsLost, 1),
         ServiceEvent::RxFrameDropped(drop) => emit(dropped(drop), 1),
         ServiceEvent::RxMsdusRefused(refused) => {
             emit(StationRxKind::RefusedTooLong, refused.too_long.into());
@@ -655,7 +654,7 @@ fn service_rx(
             emit(StationRxKind::CopiedAggregated, copied.aggregated.into());
             emit(StationRxKind::CopiedKept, copied.kept.into());
         }
-        ServiceEvent::GroupKeyInstalled { .. } | ServiceEvent::TxMemory(_) => {}
+        ServiceEvent::GroupKeyInstalled { .. } => {}
     }
 }
 
@@ -750,17 +749,6 @@ impl<O: oer_portable_trace::Observer>
     const ENABLED: bool = cfg!(oer_trace);
 
     fn event(&mut self, event: oer_protocols_ieee80211_runtime::station::ServiceEvent) {
-        use oer_protocols_ieee80211_runtime::station::ServiceEvent;
-        if let ServiceEvent::TxMemory(held) = event {
-            self.report_memory(StationTxMemory {
-                incoming: held.incoming,
-                owed: held.owed,
-                members: held.members,
-                freed: held.freed,
-                returning: held.returning,
-            });
-            return;
-        }
         service_rx(event, &mut |kind, count| self.report(kind, count));
     }
 }

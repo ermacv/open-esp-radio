@@ -8,7 +8,7 @@
 //! A ticket is affine and its index is its place in the backend's ticket
 //! pool, so one place per ticket of that pool holds every context in
 //! flight. A place beyond the storage, a taken place at submission or an
-//! empty one at completion is a backend contract violation; the service
+//! empty one at completion is a backend contract violation; the lifecycle
 //! retains the context it holds in the fault.
 
 /// Fixed storage of one context per transmit ticket of the backend's pool.

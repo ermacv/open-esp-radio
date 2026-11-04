@@ -82,25 +82,4 @@ impl Admissions {
             PendingTerminal::Arena => core::mem::replace(&mut self.arena, false),
         }
     }
-
-    pub(crate) fn first(&self) -> Option<PendingTerminal> {
-        for (offset, word) in [0_u8, 64, 128, 192].into_iter().zip(&self.transmit) {
-            if *word != 0 {
-                return Some(PendingTerminal::Transmit(
-                    offset | word.trailing_zeros() as u8,
-                ));
-            }
-        }
-        [
-            ControlTerminal::Configure,
-            ControlTerminal::PairwiseInstall,
-            ControlTerminal::PairwiseRemoval,
-            ControlTerminal::GroupChange,
-            ControlTerminal::GateClosed,
-        ]
-        .into_iter()
-        .find(|operation| self.control & operation.mask() != 0)
-        .map(PendingTerminal::Control)
-        .or(self.arena.then_some(PendingTerminal::Arena))
-    }
 }

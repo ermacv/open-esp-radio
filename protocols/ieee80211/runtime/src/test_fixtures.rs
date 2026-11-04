@@ -21,7 +21,6 @@ use crate::station::Outgoing;
 pub(crate) mod block_ack;
 
 pub(crate) const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
-pub(crate) const ACCESS_POINT_ADDRESS: [u8; 6] = [0x02, 0, 0, 0, 0, 0x99];
 pub(crate) const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
 pub(crate) const SSID: &[u8] = b"open-net";
 pub(crate) const SNONCE: [u8; 32] = [3; 32];

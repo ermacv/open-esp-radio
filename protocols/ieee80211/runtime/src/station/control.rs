@@ -37,7 +37,7 @@ pub struct Status {
     pub stopped: bool,
 }
 
-/// One station's shared state. Keep it for the complete Runner/Control
+/// One station's shared state. Keep it for the complete lifecycle/Control
 /// lifetime. `N` names how its link tells the network device.
 pub struct State<N: Notifies = SameHart> {
     status: Cell<Status>,
@@ -50,7 +50,7 @@ pub struct State<N: Notifies = SameHart> {
     /// The deadline the last stop request named.
     stop_deadline: Cell<Option<oer_portable_time::Instant>>,
     /// The profile of the one Connect in the queue, published in the same
-    /// poll as that request; the runner takes it with the request.
+    /// poll as that request; the lifecycle takes it with the request.
     profile: Cell<Option<StaProfile>>,
 }
 
@@ -98,7 +98,7 @@ impl<N: Notifies> State<N> {
         self.status.set(status);
         self.network.publish(status.link);
     }
-    /// The service retired or its runner was lost.
+    /// The service retired or its lifecycle was lost.
     fn ended(&self) -> bool {
         self.status.get().stopped || self.tasks.is_poisoned()
     }
@@ -172,7 +172,8 @@ pub enum ControlCommand<K> {
     AccessPoint(super::contract::AccessPointFact<K>),
     /// The access point beside the station is wanted.
     WantAccessPoint,
-    /// Stop: the service disables the port and returns its owner.
+    /// Stop: the lifecycle stops the station and the radio, and the actor
+    /// retires its installation.
     Stop,
 }
 impl<K> From<ControlCommand<K>> for ServiceCommand<K> {
@@ -226,7 +227,7 @@ pub struct Control<'c, K, const DEPTH: usize, N: Notifies = SameHart> {
     task: ConnectedTaskController<'c, ()>,
 }
 
-/// The Runner's affine side of the control connection.
+/// The lifecycle's affine side of the control connection.
 pub struct RunnerControl<'c, N: Notifies = SameHart> {
     pub(crate) state: &'c State<N>,
     endpoint: Option<ConnectedTaskEndpoint<'c, ()>>,
@@ -265,9 +266,6 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
             return None;
         }
         self.state.policy.get().deadline()
-    }
-    pub(crate) fn policy_ready(&self, now: oer_portable_time::Instant) -> bool {
-        self.policy_admissible() && self.state.policy.get().ready(now, self.linked())
     }
     pub(crate) fn policy_register(&self, cx: &Context<'_>) {
         self.state.policy_waker.register(cx.waker());
@@ -314,7 +312,7 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
 
 impl<N: Notifies> Drop for RunnerControl<'_, N> {
     fn drop(&mut self) {
-        // A lost runner poisons the epoch; its waiting operations read that.
+        // A lost lifecycle poisons the epoch; its waiting operations read that.
         self.state.operations.service_ended();
     }
 }
@@ -354,7 +352,7 @@ impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
         self.state.policy.set(super::reconnect::Policy::new(policy));
         self.state.policy_waker.wake();
     }
-    /// Disconnect once, then retire Runner after the link is down. Stop is
+    /// Disconnect once, then retire the lifecycle after the link is down. Stop is
     /// independent of command queue capacity and never schedules a reconnect.
     /// Disconnect, then stop; the network must return the station's lent
     /// receive buffers by `deadline` ([`Self::stop`]).
@@ -543,7 +541,7 @@ impl<K, O: ServiceOutputSink<K>, N: Notifies> ServiceOutputSink<K> for Events<'_
 /// the station gives back once an MSDU ended.
 pub trait TxSupply<P> {
     /// The memory the station holds for one MSDU
-    /// ([`StationPort::TxMemory`](super::StationPort::TxMemory)).
+    /// ([`DatapathPort::TxMemory`](crate::datapath::DatapathPort::TxMemory)).
     type Memory;
     /// Whether the frame [`Self::write`] last refused for want of memory
     /// may go now: memory came back since, or none was refused.
@@ -573,7 +571,7 @@ pub enum TxRefused<P> {
 }
 
 /// The Wi-Fi implementation of the neutral Ethernet contract. `L` is the
-/// backend's lent receive buffer ([`StationPort::LentRx`](super::StationPort::LentRx)),
+/// port's lent receive buffer ([`DatapathPort::LentRx`](crate::datapath::DatapathPort::LentRx)),
 /// `P` the network stack's packet a transmission hands over and `S` the
 /// memory its frame goes into for the station.
 pub struct Device<
