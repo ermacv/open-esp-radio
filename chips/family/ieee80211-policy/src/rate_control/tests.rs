@@ -608,10 +608,10 @@ mod seam {
     }
 
     #[test]
-    fn a_short_guard_interval_is_used_only_where_the_peer_supports_it() {
+    fn every_ht_schedule_rate_takes_the_short_guard_interval_exactly_where_the_peer_supports_it() {
         let with = EspressifRateControl::for_peer((), &ht20_peer(true), metric(60)).decode;
         let without = EspressifRateControl::for_peer((), &ht20_peer(false), metric(60)).decode;
-        let mut short = 0;
+        let mut long_in_schedule = 0;
         for index in 0..14 {
             let Some(schedule) =
                 crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, index)
@@ -624,19 +624,29 @@ mod seam {
                 PpduBandwidth::Mhz20,
                 oer_protocols_ieee80211_wire::phy::HeGiLtf::Ltf2xGi800Ns,
             );
-            if let Some(raw @ PhyRate::Ht(rate)) = raw {
-                assert_eq!(with.rate(schedule), raw);
-                let PhyRate::Ht(qualified) = without.rate(schedule) else {
+            if let Some(PhyRate::Ht(rate)) = raw {
+                let (PhyRate::Ht(short), PhyRate::Ht(long)) =
+                    (with.rate(schedule), without.rate(schedule))
+                else {
                     panic!("an HT schedule decodes to HT");
                 };
-                assert!(!qualified.short_gi());
-                assert_eq!(qualified.mcs(), rate.mcs());
-                short += usize::from(rate.short_gi());
+                assert!(short.short_gi());
+                assert!(!long.short_gi());
+                assert_eq!(short.mcs(), rate.mcs());
+                assert_eq!(long.mcs(), rate.mcs());
+                long_in_schedule += usize::from(!rate.short_gi());
             }
         }
-        // The 802.11n schedules do name short-GI rates.
-        assert!(short > 0);
-        let _ = (HtMcs::new(0), HtRate::new);
+        // The schedule itself names long-GI rates, MCS 7 among them.
+        assert!(long_in_schedule > 0);
+    }
+
+    #[test]
+    fn an_association_at_the_long_guard_mcs7_record_sends_with_the_short_guard_interval() {
+        let decode = EspressifRateControl::for_peer((), &ht40_peer(true), metric(60)).decode;
+        let schedule = crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 1)
+            .expect("the long-GI MCS 7 record");
+        assert_eq!(decode.rate(schedule).nominal_kbps(), 150_000);
     }
 
     /// An HT40 peer, with or without the 40 MHz short guard interval.

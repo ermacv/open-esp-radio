@@ -33,28 +33,32 @@ pub fn legacy_retry_rate(initial: LegacyRate, failed_attempts: u8) -> Option<Leg
 /// The 802.11n ladder of an HT rate; the rate may leave the HT domain.
 ///
 /// The records cover every one-stream long-GI MCS 0-7 and short-GI MCS 7,
-/// the vendor's maximum-throughput starting point. Other short-GI MCSs have
-/// no record in the complete `rcUpdatePhyMode` mapping and return `None`
-/// instead of an invented fallback, as do rates of more than one stream.
+/// the vendor's maximum-throughput starting point. Another short-GI MCS
+/// walks its MCS's long-GI record and keeps its guard interval while the
+/// record stays at that MCS, so the walk has the record's stages. A rate of
+/// more than one stream has no record and returns `None` instead of an
+/// invented fallback.
 pub fn ht_retry_rate(initial: HtRate, failed_attempts: u8) -> Option<PhyRate> {
     let mcs = initial.mcs().index();
     if mcs > 7 {
         return None;
     }
     let index = match initial.short_gi() {
-        // mcs <= 7 above, so this is the exact record index 1..=8.
-        false => 8_u8.wrapping_sub(mcs),
         true if mcs == 7 => 0,
-        true => return None,
+        // mcs <= 7 above, so this is the exact record index 1..=8.
+        _ => 8_u8.wrapping_sub(mcs),
     };
     let schedule = crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, index)?;
     let code = schedule_rate_after_failures(schedule, failed_attempts)?;
-    phy_rate(
+    match phy_rate(
         RateScheduleKind::Dot11N,
         code,
         initial.bandwidth(),
         HeGiLtf::Ltf2xGi800Ns,
-    )
+    )? {
+        PhyRate::Ht(rate) if rate.mcs() == initial.mcs() => Some(PhyRate::Ht(initial)),
+        rate => Some(rate),
+    }
 }
 
 /// The 802.11ax ladder of an HE20 SU one-stream rate; the rate may leave
@@ -147,7 +151,9 @@ mod tests {
         assert!(matches!(ht_retry_rate(ht40, 2), Some(PhyRate::Ht(rate))
             if rate.bandwidth() == PpduBandwidth::Mhz40 && rate.mcs().index() == 5));
         let sgi_mcs3 = HtRate::new(HtMcs::new(3).unwrap(), PpduBandwidth::Mhz20, true).unwrap();
-        assert_eq!(ht_retry_rate(sgi_mcs3, 0), None);
+        assert_eq!(ht_retry_rate(sgi_mcs3, 0), Some(PhyRate::Ht(sgi_mcs3)));
+        assert!(matches!(ht_retry_rate(sgi_mcs3, 2), Some(PhyRate::Ht(rate))
+            if !rate.short_gi() && rate.mcs().index() == 2));
 
         let he = HeRate::new(
             HeMcs::new(9).unwrap(),
@@ -172,7 +178,7 @@ mod tests {
             for short in [false, true] {
                 let initial =
                     HtRate::new(HtMcs::new(index).unwrap(), PpduBandwidth::Mhz20, short).unwrap();
-                let expected = if index <= 7 && (!short || index == 7) {
+                let expected = if index <= 7 {
                     Some(PhyRate::Ht(initial))
                 } else {
                     None
