@@ -73,6 +73,8 @@ oer_protocols_hil_protocol::messages! {
     topic LinkCollected = "load/link-report";
     endpoint CollectTracking = "load/tracking" => TrackingCollected;
     topic TrackingCollected = "load/tracking-report";
+    endpoint CollectMac = "load/mac" => MacCollected;
+    topic MacCollected = "load/mac-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -769,6 +771,123 @@ impl Link {
     }
 }
 
+/// The counts of [`Mac`].
+pub const MAC_COUNTS: usize = 42;
+
+/// Each of [`Mac`]'s counts: its name, as the vendor's decoders print it
+/// or the register model names it, and the bits it wraps at.
+pub const MAC_COUNT_NAMES: [(&str, u8); MAC_COUNTS] = [
+    ("mpdu", 16),
+    ("fcs_error", 16),
+    ("abort", 16),
+    ("abort_fcs_pass", 16),
+    ("power_drop_error", 16),
+    ("he_sig_b_error", 16),
+    ("same_bm_error", 16),
+    ("signal_field", 16),
+    ("end", 16),
+    ("data_success", 16),
+    ("other_unicast", 16),
+    ("buffer_full", 16),
+    ("fifo_overflow", 16),
+    ("tkip_error", 16),
+    ("bt_block_error", 16),
+    ("frequency_hop_error", 16),
+    ("last_unmatched_error", 16),
+    ("ack_interrupt", 16),
+    ("rts_interrupt", 16),
+    ("brx_agc", 10),
+    ("brx", 10),
+    ("nrx", 10),
+    ("nrx_abort", 10),
+    ("nrx_agc_exit", 10),
+    ("nrx_baseband_off", 10),
+    ("nrx_fdm_watchdog", 10),
+    ("nrx_restart", 10),
+    ("nrx_service", 10),
+    ("nrx_tx_over", 10),
+    ("nrx_unsupported", 10),
+    ("nrx_he_format", 10),
+    ("nrx_ht_sig", 10),
+    ("nrx_he_unsupported", 10),
+    ("nrx_he_sig_a_crc", 10),
+    ("hang_rx", 8),
+    ("hang_tx", 8),
+    ("rx_tx_hang", 32),
+    ("rx_tx_panic", 32),
+    ("tx_rts", 32),
+    ("tx_cts", 32),
+    ("track", 32),
+    ("trcts", 32),
+];
+
+/// What the MAC itself counted within run `run`'s window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectMac {
+    pub run: u32,
+}
+
+/// The answer to [`CollectMac`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the counts go by value"
+)]
+pub enum MacCollected {
+    Report(Mac),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// The MAC's own statistics, by [`MAC_COUNT_NAMES`], and its frequency
+/// offset at their sample: a trace build samples the bank every 50 ms from
+/// the port's turn, so a window's ends lag by up to that much. Others
+/// report zeros.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Mac {
+    /// The counts in two arrays: the wire's traits stop at 32.
+    head: [u32; 32],
+    tail: [u32; MAC_COUNTS - 32],
+    pub frequency_offset: i32,
+}
+
+impl Mac {
+    /// The reading of `counts` and `frequency_offset`.
+    pub fn new(counts: [u32; MAC_COUNTS], frequency_offset: i32) -> Self {
+        let at = |index: usize| counts.get(index).copied().unwrap_or(0);
+        Self {
+            head: core::array::from_fn(at),
+            tail: core::array::from_fn(|index| at(index.saturating_add(32))),
+            frequency_offset,
+        }
+    }
+
+    /// Count `index`, by [`MAC_COUNT_NAMES`].
+    pub fn count(&self, index: usize) -> u32 {
+        self.head
+            .iter()
+            .chain(&self.tail)
+            .nth(index)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// The counts between readings `start` and `end`, each wrapping at its
+    /// own width; the frequency offset is `end`'s.
+    pub fn window(start: &Self, end: &Self) -> Self {
+        let counts = core::array::from_fn(|index| {
+            let bits = MAC_COUNT_NAMES.get(index).map_or(32, |(_, bits)| *bits);
+            let moved = end.count(index).wrapping_sub(start.count(index));
+            moved
+                & u32::MAX
+                    .checked_shr(32u32.saturating_sub(u32::from(bits)))
+                    .unwrap_or(u32::MAX)
+        });
+        Self::new(counts, end.frequency_offset)
+    }
+}
+
 /// What the shared RF actor's periodic PHY tracking did within run `run`'s
 /// window.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -984,6 +1103,7 @@ oer_protocols_hil_agent::service! {
         CollectSamples(CollectSamples) => samples,
         CollectLink(CollectLink) => link,
         CollectTracking(CollectTracking) => tracking,
+        CollectMac(CollectMac) => mac,
     }
 }
 

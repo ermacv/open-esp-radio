@@ -11,8 +11,8 @@ use oer::observe::parts::{PARTS, PartReading};
 use oer::observe::tracking::TrackingSample;
 use oer_hil_services_load::{
     BridgeTx, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, ExecutorLoad, HartLoad,
-    InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, PartWindow, Parts, Rates, RxCounts,
-    RxLink, Sample, Samples, StationRx, Tracking, TxAmpdu, TxCounts, TxLink,
+    InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, Mac, PartWindow, Parts, Rates,
+    RxCounts, RxLink, Sample, Samples, StationRx, Tracking, TxAmpdu, TxCounts, TxLink,
 };
 use oer_portable_trace::profile::Thinning;
 
@@ -186,6 +186,7 @@ pub(crate) struct Snapshot {
     pub rx: RxCounts,
     pub tx: TxCounts,
     pub link: Link,
+    pub mac: Mac,
 }
 
 fn instruction_window(start: &InstructionBus, end: &InstructionBus) -> InstructionBus {
@@ -253,6 +254,11 @@ pub(crate) fn counters(start: &Snapshot, end: &Snapshot) -> Counters {
             ampdu: TxAmpdu::window(&start.tx.ampdu, &end.tx.ampdu),
         },
     }
+}
+
+/// The MAC's counts between the window's ends `start` and `end`.
+pub(crate) fn mac_window(start: &Snapshot, end: &Snapshot) -> Mac {
+    Mac::window(&start.mac, &end.mac)
 }
 
 /// The link's counts between the window's ends `start` and `end`.
@@ -333,6 +339,7 @@ mod chip {
                 ampdu: super::tx_ampdu(&counters.ampdu),
             },
             link: super::link(&counters.link),
+            mac: wire::Mac::new(counters.mac.0, counters.mac.1),
         }
     }
 

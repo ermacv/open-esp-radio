@@ -1,8 +1,8 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_hil_services_load::{
-    Collect, CollectCounters, CollectLink, CollectParts, CollectSamples, CollectTracking,
-    LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US,
+    Collect, CollectCounters, CollectLink, CollectMac, CollectParts, CollectSamples,
+    CollectTracking, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US,
     MIN_SAMPLE_PERIOD_US, Request, Start, Started, header,
 };
 
@@ -44,6 +44,7 @@ pub(crate) enum Kept {
     },
     Counters,
     Link,
+    Mac,
     Tracking,
     /// Hart `hart`'s samples from the one numbered `from`.
     Samples {
@@ -87,6 +88,7 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
         (phase, Request::CollectTracking(CollectTracking { run })) => {
             collect(phase, run, Kept::Tracking)
         }
+        (phase, Request::CollectMac(CollectMac { run })) => collect(phase, run, Kept::Mac),
     }
 }
 
@@ -258,7 +260,7 @@ mod tests {
     #[test]
     fn a_collect_answers_running_then_what_its_own_run_kept_only() {
         type Asks = fn(u32) -> Request;
-        let requests: [(Kept, Asks); 6] = [
+        let requests: [(Kept, Asks); 7] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
             (Kept::Parts { from: 12 }, |run| {
                 Request::CollectParts(CollectParts { run, from: 12 })
@@ -274,6 +276,7 @@ mod tests {
                 })
             }),
             (Kept::Link, |run| Request::CollectLink(CollectLink { run })),
+            (Kept::Mac, |run| Request::CollectMac(CollectMac { run })),
             (Kept::Tracking, |run| {
                 Request::CollectTracking(CollectTracking { run })
             }),

@@ -162,6 +162,8 @@ pub struct Counters {
     /// The receive driver's counters, once the station's receive path was
     /// bound.
     pub driver: Option<WifiRxReport>,
+    /// The MAC's statistics at their last sample, and its frequency offset.
+    pub mac: oer_chips_esp32s31_wifi::MacCounters,
 }
 
 /// The counts now.
@@ -177,6 +179,7 @@ pub fn counters() -> Counters {
         ampdu: LINK.ampdu(),
         link: LINK.link(),
         driver: oer_chips_esp32s31_wifi::rx_counters(),
+        mac: oer_chips_esp32s31_wifi::mac_counters(),
     }
 }
 

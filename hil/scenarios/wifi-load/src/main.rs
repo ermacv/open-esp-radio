@@ -26,10 +26,11 @@ use std::{
 };
 
 use oer_hil_services_load::{
-    BridgeTx, CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts,
-    CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
-    LinkCollected, Load, MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, TUNE_KNOBS,
-    TUNE_UNSET, Tracking, TrackingCollected, Transmit,
+    BridgeTx, CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectMac,
+    CollectParts, CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus,
+    Link, LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, PartWindow,
+    PartsCollected, Report, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected,
+    Transmit,
 };
 use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 use oer_protocols_hil_agent::base::Service as _;
@@ -242,6 +243,7 @@ struct Ended {
     parts: Vec<PartWindow>,
     counters: Counters,
     link: Link,
+    mac: Mac,
     tracking: Tracking,
 }
 
@@ -281,16 +283,34 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         LinkCollected::Report(link) => link,
         other => return Err(Failure::Fail(format!("the image's link: {other:?}"))),
     };
+    let mac = match cx.call(CollectMac { run }, CALL)? {
+        MacCollected::Report(mac) => mac,
+        other => return Err(Failure::Fail(format!("the image's MAC: {other:?}"))),
+    };
     match cx.call(CollectTracking { run }, CALL)? {
         TrackingCollected::Report(tracking) => Ok(Ended {
             report,
             parts,
             counters,
             link,
+            mac,
             tracking,
         }),
         other => Err(Failure::Fail(format!("the image's tracking: {other:?}"))),
     }
+}
+
+/// The MAC's counts that moved over a window, by name, and its frequency
+/// offset.
+fn mac_counts(mac: &Mac) -> serde_json::Value {
+    let moved: serde_json::Map<_, _> = MAC_COUNT_NAMES
+        .iter()
+        .enumerate()
+        .map(|(index, (name, _))| ((*name).to_owned(), mac.count(index)))
+        .filter(|(_, count)| *count != 0)
+        .map(|(name, count)| (name, count.into()))
+        .collect();
+    serde_json::json!({ "counts": moved, "frequency_offset": mac.frequency_offset })
 }
 
 /// What the image's periodic PHY tracking did over a window; its one-line
@@ -1409,6 +1429,7 @@ fn measurement(
         "cpu": utilisation(&report.cpu_start, &report.cpu_end),
         "polls": polls(&ended.parts, window_us(report)),
         "counters": counters(&ended.counters, window_us(report)),
+        "mac": mac_counts(&ended.mac),
     });
     let mut sides = serde_json::Map::new();
     if mode != Mode::Tx {
@@ -1580,6 +1601,7 @@ mod tests {
             parts: Vec::new(),
             counters: Counters::default(),
             link: Link::default(),
+            mac: Mac::default(),
             tracking: Tracking::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
