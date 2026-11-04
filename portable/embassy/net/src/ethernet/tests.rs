@@ -179,6 +179,70 @@ fn successful_tx_hands_the_owner_to_the_device_whose_drop_returns_packet_and_cre
     assert!(stack.can_transmit());
 }
 
+#[test]
+fn one_turn_moves_every_queued_packet_and_arms_without_waking_itself() {
+    // Below the budget: a full one's first release is its capacity edge,
+    // which wakes the waiting sender.
+    const FILLS: u8 = 2;
+    use core::future::Future;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    struct Wakes(AtomicUsize);
+    impl std::task::Wake for Wakes {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let storage = Box::leak(Box::new(PacketPoolStorage::<3>::new()));
+    let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
+    let mut resources = OwnedEndpointResources::<HostContext, 1, 3>::new();
+    let (mut stack, mut radio) = resources
+        .split(NetworkInterfaceId::new(0), [2; 6], pool)
+        .unwrap();
+    let port = Port(
+        LinkSnapshot {
+            state: LinkState::Up,
+            epoch: 1,
+        },
+        true,
+        core::marker::PhantomData,
+    );
+    radio.link_controller().set_link_up(true);
+    for fill in 0..FILLS {
+        let mut packet = pool.try_alloc().unwrap();
+        packet.set_len(18);
+        packet.fill(fill);
+        assert!(stack.transmit(packet).is_ok());
+    }
+    let mut bridge = EthernetBridge::new(radio, port, None::<&'static LentSlots<_, 1>>);
+    let mut moved = 0;
+    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+    let waker = core::task::Waker::from(Arc::clone(&wakes));
+    {
+        let mut future = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
+            cx,
+            |_| {},
+            |_| {},
+            |_| {},
+            |turn| moved += usize::from(turn.outcome == TxOutcome::Moved)
+        )));
+        assert!(
+            future
+                .as_mut()
+                .poll(&mut Context::from_waker(&waker))
+                .is_pending()
+        );
+    }
+    assert_eq!(moved, FILLS as usize, "one turn moves the whole queue");
+    assert_eq!(
+        wakes.0.load(Ordering::Relaxed),
+        0,
+        "and waits without a self-wake"
+    );
+    assert!(pool.has_available());
+    assert!(stack.can_transmit());
+}
+
 /// A lent DMA-like buffer: its bytes and a count of its drops.
 struct Lent {
     bytes: Box<[u8; 1664]>,

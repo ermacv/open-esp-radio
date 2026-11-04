@@ -298,8 +298,9 @@ impl crate::OwnedLinkController<'_> {
 )]
 mod tests;
 
-/// Ethernet translation for an image whose existing bridge drains RX, serves
-/// one TX per turn. RX, TX publication/capacity and link changes wake it.
+/// Ethernet translation for an image whose existing bridge drains RX and
+/// moves up to its queue's capacity of TX frames per turn. RX, TX
+/// publication/capacity and link changes wake it.
 /// The adapter owns every packet and retains a refused TX across readiness
 /// waits. Observations are callbacks owned by the image, never counters here.
 pub struct EthernetBridge<
@@ -397,9 +398,11 @@ impl<
         }
     }
 
-    /// One drain/one-TX turn. Always arm link and RX before observing them;
-    /// a blocked TX remains owned here while RX and link keep progressing.
-    /// No timer or time driver is needed to make an idle bridge run again.
+    /// One turn: drain RX, then move TX frames until none is published or
+    /// the device holds one, at most the queue's capacity. Always arm link
+    /// and RX before observing them; a blocked TX remains owned here while
+    /// RX and link keep progressing. No timer or time driver is needed to
+    /// make an idle bridge run again.
     pub fn poll(
         &mut self,
         cx: &mut core::task::Context<'_>,
@@ -458,17 +461,19 @@ impl<
                 refused(reason);
             }
         }
-        match self.poll_transmit_one(cx, &mut transmitted) {
-            Err(error) => Poll::Ready(Err(error)),
-            Ok(progress) => {
-                if progress {
-                    // A consumed publication hint or packet needs a fresh turn
-                    // to arm the next wait, and yields to other P1 futures.
-                    cx.waker().wake_by_ref();
-                }
-                Poll::Pending
+        // Each pass that made progress tries again, which arms the next
+        // wait when nothing more is ready: a full queue moves and then arms
+        // in one turn. A turn that used its whole budget yields to other P1
+        // futures and runs again.
+        for _ in 0..=TX {
+            match self.poll_transmit_one(cx, &mut transmitted) {
+                Err(error) => return Poll::Ready(Err(error)),
+                Ok(false) => return Poll::Pending,
+                Ok(true) => {}
             }
         }
+        cx.waker().wake_by_ref();
+        Poll::Pending
     }
 
     fn poll_transmit_one(
