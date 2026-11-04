@@ -110,10 +110,7 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
     assert_eq!(multi.bssid_byte_5(), 0);
     assert!(multi.bss_color_enable(), "the clear leaves keep the color");
     let high = suffix.read_multi_bssid_high();
-    assert_eq!(
-        (high.bits_16_23_opaque(), high.bits_24_31_opaque()),
-        (0, 0xff)
-    );
+    assert_eq!((high.bssid_index(), high.bits_24_31_opaque()), (0, 0xff));
     assert!(!suffix.read_dump_complete_hesigb().enable());
     let control = suffix.read_ersu_and_vht_control();
     assert!(!control.vht_bw_signaling_rts());

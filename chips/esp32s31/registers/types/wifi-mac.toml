@@ -132,12 +132,10 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."MULTI_BSSID_HIGH"]
-sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_MAC_MBSSID_INDEX_20261104"]
 provenance = "observed"
 accuracy = "exact"
-
-[review.entity."MULTI_BSSID_HIGH.BITS_16_23_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20104028"]
+completeness = "partial"
 
 [review.entity."MULTI_BSSID_HIGH.BITS_24_31_OPAQUE"]
 sources = ["S31_MMIO_USE_20104028", "S31_MMIO_DECLARED_20104028"]
@@ -906,7 +904,7 @@ completeness = "partial"
 [review.entity."RX_BLOCK_ACK_ENTRY%s_CONTROL"]
 # Vendor publication layout and bounded HW11 quiet/staging observations only;
 # HW11 does not establish live agreement acceptance or opaque-bit evolution.
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HIL_OPEN_RX_BLOCK_ACK_DIRECT_BANK_2026_07_30", "HW11_S31_BLOCK_ACK_20261027"]
+sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "HIL_OPEN_RX_BLOCK_ACK_DIRECT_BANK_2026_07_30", "HW11_S31_BLOCK_ACK_20261027", "BLOB_MAC_BA_CALLER_CONTEXT_20261104"]
 accuracy = "bounded"
 completeness = "partial"
 
@@ -2138,18 +2136,18 @@ sources = ["BLOB_LIBPP_HAL_HE_TRIGGER_RX_DIAGNOSTICS"]
 provenance = "observed"
 
 [review.entity."INTERFACE_CONTROL%s"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_CRYPTO_PROFILE_MODES_20261104", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
 [review.entity."INTERFACE_CONTROL%s.BITS_0_1_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20104800"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
 [review.entity."INTERFACE_CONTROL%s.BIT_8_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20104800"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
 accuracy = "exact"
 completeness = "partial"
 
@@ -2158,21 +2156,6 @@ sources = ["BLOB_LIBPP_SPP_AMSDU"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
-
-[review.entity."INTERFACE_CONTROL%s.BITS_16_17_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20104800", "S31_MMIO_DECLARED_20104800"]
-accuracy = "exact"
-completeness = "partial"
-
-[review.entity."INTERFACE_CONTROL%s.BIT_28_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20104800"]
-accuracy = "exact"
-completeness = "partial"
-
-[review.entity."INTERFACE_CONTROL%s.BITS_30_31_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20104800"]
-accuracy = "exact"
-completeness = "partial"
 
 [review.entity."WORD_080C_OPAQUE"]
 sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
@@ -2183,13 +2166,15 @@ sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
 accuracy = "exact"
 
 [review.entity."POLICY_CONTROL"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_CRYPTO_PROFILE_MODES_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
 [review.entity."POLICY_CONTROL.BITS_6_21_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20104810"]
+sources = ["BLOB_MAC_CRYPTO_PROFILE_MODES_20261104"]
+accuracy = "exact"
+completeness = "partial"
 
 [review.entity."KEY_VALID_BITMAP"]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
@@ -2724,18 +2709,18 @@ sources = ["S31_MMIO_DECLARED_20104C60"]
 sources = ["S31_MMIO_DECLARED_20104C60"]
 
 [review.entity."WORD_0C68_OPAQUE"]
-sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
+sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX", "BLOB_MAC_RX_STARTUP_CONTEXT_20261104"]
 accuracy = "exact"
 
 [review.entity."WORD_0C68_OPAQUE.BITS_0_19_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20104C68"]
+sources = ["S31_MMIO_DECLARED_20104C68", "BLOB_MAC_RX_STARTUP_CONTEXT_20261104"]
 
 [review.entity."WORD_0C6C_OPAQUE"]
-sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
+sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX", "BLOB_MAC_RX_STARTUP_CONTEXT_20261104"]
 accuracy = "exact"
 
 [review.entity."WORD_0C6C_OPAQUE.BITS_0_19_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20104C6C"]
+sources = ["S31_MMIO_DECLARED_20104C6C", "BLOB_MAC_RX_STARTUP_CONTEXT_20261104"]
 
 [review.entity."RX_DESCRIPTOR_HIGH_WINDOW"]
 sources = ["BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX", "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR", "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"]
@@ -6282,24 +6267,20 @@ sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 provenance = "observed"
 
 [review.entity."ENTRY_PEER_CONTROL%s"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_KEY_CIPHER_FORMAT_20261104"]
 provenance = "observed"
 accuracy = "exact"
-completeness = "complete"
+completeness = "partial"
 
 [review.entity."ENTRY_PEER_CONTROL%s.PEER_HIGH"]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 provenance = "observed"
 
-[review.entity."ENTRY_PEER_CONTROL%s.BITS_16_17_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20105804"]
-
 [review.entity."ENTRY_PEER_CONTROL%s.ALGORITHM"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+sources = ["BLOB_MAC_KEY_CIPHER_FORMAT_20261104"]
 provenance = "observed"
-
-[review.entity."ENTRY_PEER_CONTROL%s.BIT_20_OPAQUE"]
-sources = ["S31_MMIO_DECLARED_20105804"]
+accuracy = "exact"
+completeness = "partial"
 
 [review.entity."ENTRY_PEER_CONTROL%s.DIRECTION"]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
@@ -6308,11 +6289,6 @@ provenance = "observed"
 [review.entity."ENTRY_PEER_CONTROL%s.INTERFACE"]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 provenance = "observed"
-
-[review.entity."ENTRY_PEER_CONTROL%s.BIT_26_OPAQUE"]
-sources = ["S31_MMIO_MANUAL_20105804"]
-accuracy = "exact"
-completeness = "partial"
 
 [review.entity."ENTRY_PEER_CONTROL%s.LOGICAL_INDEX_NOT_THREE"]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
@@ -6362,45 +6338,53 @@ completeness = "complete"
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 provenance = "observed"
 
-[review.entity."ENTRY_TAIL_WORD_0%s"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+[review.entity."ENTRY_KEY_WORD_4%s"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_EXTENDED_KEY_WORDS_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[review.entity."ENTRY_TAIL_WORD_0%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-
-[review.entity."ENTRY_TAIL_WORD_1%s"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+[review.entity."ENTRY_KEY_WORD_4%s.VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_EXTENDED_KEY_WORDS_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[review.entity."ENTRY_TAIL_WORD_1%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-
-[review.entity."ENTRY_TAIL_WORD_2%s"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+[review.entity."ENTRY_KEY_WORD_5%s"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_EXTENDED_KEY_WORDS_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[review.entity."ENTRY_TAIL_WORD_2%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
-provenance = "observed"
-
-[review.entity."ENTRY_TAIL_WORD_3%s"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+[review.entity."ENTRY_KEY_WORD_5%s.VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_EXTENDED_KEY_WORDS_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "partial"
 
-[review.entity."ENTRY_TAIL_WORD_3%s.VALUE"]
-sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+[review.entity."ENTRY_KEY_WORD_6%s"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_EXTENDED_KEY_WORDS_20261104"]
 provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ENTRY_KEY_WORD_6%s.VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_EXTENDED_KEY_WORDS_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ENTRY_KEY_WORD_7%s"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_EXTENDED_KEY_WORDS_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ENTRY_KEY_WORD_7%s.VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_EXTENDED_KEY_WORDS_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
 
 [review.entity."AVERAGE_SNR"]
 sources = ["BLOB_LIBPP_BFR_AVERAGE_SNR"]
@@ -6495,6 +6479,101 @@ name = "TXOP_LIST_MEMORY_OFFSET"
 value = 0x1554
 sources = ["BLOB_MAC_TXOP_LIST_20261103"]
 description = "Ascending start of the three continuation lists. Slot s and one-based position p select word 15*s+15-p. The top six words overlap HE_SCRATCH; this format grants no independent MMIO owner."
+
+[review.entity."ENTRY_PEER_CONTROL%s.WEP104"]
+sources = ["BLOB_MAC_KEY_CIPHER_FORMAT_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ENTRY_PEER_CONTROL%s.GCMP_256_BIT_KEY"]
+sources = ["BLOB_MAC_KEY_CIPHER_FORMAT_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."ENTRY_PEER_CONTROL%s.BIT_17_OPAQUE"]
+sources = ["BLOB_MAC_KEY_CIPHER_FORMAT_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."INTERFACE_CONTROL%s.BIT_16_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."INTERFACE_CONTROL%s.MGMT_RX_CRYPTO_ENABLED"]
+sources = ["BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."INTERFACE_CONTROL%s.WEP_MODE"]
+sources = ["BLOB_MAC_CRYPTO_PROFILE_MODES_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."INTERFACE_CONTROL%s.BIT_30_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."INTERFACE_CONTROL%s.SMS4_MODE"]
+sources = ["BLOB_MAC_CRYPTO_PROFILE_MODES_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_CRYPTO_PROFILE_MODES_20261104", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL.BITS_0_1_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL.BIT_8_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL.SPP_AMSDU"]
+sources = ["BLOB_LIBPP_SPP_AMSDU"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL.BITS_16_17_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL.WEP_MODE"]
+sources = ["BLOB_MAC_CRYPTO_PROFILE_MODES_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL.BIT_30_OPAQUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO", "BLOB_MAC_MGMT_RX_CRYPTO_INDICATOR_20261104"]
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."CONTEXT2_CRYPTO_CONTROL.SMS4_MODE"]
+sources = ["BLOB_MAC_CRYPTO_PROFILE_MODES_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[review.entity."MULTI_BSSID_HIGH.BSSID_INDEX"]
+sources = ["BLOB_MAC_MBSSID_INDEX_20261104"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
 
 [[registers]]
 name = "BSSID_LOW%s"
@@ -6623,13 +6702,14 @@ description = "Observed source use; the individual hardware meaning is unknown."
 [[registers]]
 name = "MULTI_BSSID_HIGH"
 offset = 0x28
-description = "Complete clear leaf clears bits 23:16."
+description = "Multi-BSSID profile index in bits 23:16. The complete clear leaf zeros the index; the setter receives the parsed nontransmitted profile index after sta_update_mbssid compares association/profile state. The top byte remains unidentified."
 
 [[registers.fields]]
-name = "BITS_16_23_OPAQUE"
+name = "BSSID_INDEX"
 bits = "23:16"
 class = "plain"
 write-range = { min = 0x0, max = 0xff }
+description = "Project-assigned nontransmitted BSSID profile index, passed as an eight-bit value by sta_update_mbssid to hal_he_set_multi_bssid."
 
 [[registers.fields]]
 name = "BITS_24_31_OPAQUE"
@@ -7286,7 +7366,7 @@ name = "OPEN_MISC_PACKET_CLASSES"
 bits = "15:8"
 class = "plain"
 description = "Eight independent class-enable bits used by the working open scan/STA receive path; every eight-bit mask is representable."
-write-range = { min = 0, max = 255 }
+write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "MISC_PACKET_DUMP_ENABLE"
@@ -7600,7 +7680,7 @@ description = "Observed source use; the individual hardware meaning is unknown."
 name = "RX_BLOCK_ACK_ENTRY%s_CONTROL"
 offset = 0x178
 dim = { count = 8, stride = 0x24 }
-description = "Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant."
+description = "Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant. Inspected ADDBA negotiation prepares state through ampdu_rx_start, then its request handler reaches add through ic_add_rx_ba; DELBA, failed response, replacement and peer cleanup reach removal, while software reorder also reaches reset. Add/reset/delete are distinct operations. Registration of BA save/restore callbacks is observed, but their final indirect invocation and full power-transition ordering remain unresolved."
 
 [[registers.fields]]
 name = "ENABLE"
@@ -7643,7 +7723,7 @@ description = "Marks an installed entry. Complete delete clears and reasserts it
 name = "RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY"
 offset = 0x17c
 dim = { count = 8, stride = 0x24 }
-description = "Peer MAC bytes four and five, interface number and receive reorder-window size in one reverse-addressed ordinary receive BlockAck bank. Complete vendor ampdu_rx_start limits the protocol agreement by the peer request and configured receive window; its ordinary hardware-activation branch independently passes the constant 64 to ic_add_rx_ba. Complete hal_agreement_add_rx_ba then stores that value in WINDOW. Element i is the vendor's entry 7−i."
+description = "Peer MAC bytes four and five, interface number and receive reorder-window size in one reverse-addressed ordinary receive BlockAck bank. The inspected vendor ampdu_rx_start branch limits the protocol agreement by the peer request and configured receive window; its ordinary hardware-activation branch independently passes the constant 64 to ic_add_rx_ba. Complete hal_agreement_add_rx_ba then stores that value in WINDOW. Element i is the vendor's entry 7−i."
 
 [[registers.fields]]
 name = "PEER_ADDRESS_TAIL"
@@ -9501,8 +9581,62 @@ class = "read-only"
 [[registers]]
 name = "INTERFACE_CONTROL%s"
 offset = 0x800
-dim = { count = 3, stride = 0x4 }
-description = "STA, AP and NAN interface controls selected by hal_crypto_enable. Ordinary CCMP writes 0x00030103 and additionally enables SPP A-MSDU when the association negotiated it. SPP is shared by every key on this interface."
+dim = { count = 2, stride = 0x4 }
+description = "STA (index 0) and AP (index 1) interface-wide crypto profiles, separate from key-table ownership. Ordinary CCMP writes 0x00030103 plus the negotiated SPP bit. The vendor management-RX getter interprets bit 17 only in these two words."
+
+[[registers.fields]]
+name = "BITS_0_1_OPAQUE"
+bits = "1:0"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+write-range = { min = 0x0, max = 0x3 }
+
+[[registers.fields]]
+name = "BIT_8_OPAQUE"
+bits = "8"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "SPP_AMSDU"
+bits = "9"
+class = "plain"
+description = "Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream."
+
+[[registers.fields]]
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Ordinary enable/disable images include this bit; its individual hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "MGMT_RX_CRYPTO_ENABLED"
+bits = "17"
+class = "plain"
+description = "Project-assigned name from hal_crypto_mgmt_rx_enabled and wdev_is_mgmt_hwdecr_enabled. In the inspected protected ESP-NOW management-action consumer, this indicator selects framing/key-metadata handling. That chain does not demonstrate a software-AES versus hardware-AES choice."
+
+[[registers.fields]]
+name = "WEP_MODE"
+bits = "28"
+class = "plain"
+description = "Project-assigned name. The vendor interface profile sets this bit only for the inspected WEP40/WEP104 key types (API 1/5); the more specific electrical function is not established."
+
+[[registers.fields]]
+name = "BIT_30_OPAQUE"
+bits = "30"
+class = "plain"
+description = "Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "SMS4_MODE"
+bits = "31"
+class = "plain"
+description = "Project-assigned name. The vendor interface profile sets this bit for the independently identified SMS4 key type (API 4), clearing it for the other inspected types."
+
+[[registers]]
+name = "CONTEXT2_CRYPTO_CONTROL"
+offset = 0x808
+description = "Project-assigned name for hardware crypto selector two. Unlike STA/AP, its bit-17 publication depends on an argument derived upstream from PMF state. The management-RX getter never reads this word; the individual meanings of bits 16/17 remain unknown."
 
 [[registers.fields]]
 name = "BITS_0_1_OPAQUE"
@@ -9531,17 +9665,22 @@ description = "Observed source use; the individual hardware meaning is unknown."
 write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
-name = "BIT_28_OPAQUE"
+name = "WEP_MODE"
 bits = "28"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown."
+description = "Project-assigned name. The vendor interface profile sets this bit only for the inspected WEP40/WEP104 key types (API 1/5); the more specific electrical function is not established."
 
 [[registers.fields]]
-name = "BITS_30_31_OPAQUE"
-bits = "31:30"
+name = "BIT_30_OPAQUE"
+bits = "30"
 class = "plain"
-description = "Complete ordinary enable clears both high bits; one algorithm branch sets bit 31."
-write-range = { min = 0x0, max = 0x3 }
+description = "Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown."
+
+[[registers.fields]]
+name = "SMS4_MODE"
+bits = "31"
+class = "plain"
+description = "Project-assigned name. The vendor interface profile sets this bit for the independently identified SMS4 key type (API 4), clearing it for the other inspected types."
 
 [[registers]]
 name = "WORD_080C_OPAQUE"
@@ -9556,13 +9695,13 @@ class = "plain"
 [[registers]]
 name = "POLICY_CONTROL"
 offset = 0x810
-description = "Shared policy word. The ordinary non-algorithm-four enable path preserves bits 31:22 and 5:0 while clearing bits 21:6."
+description = "Shared crypto policy word. The inspected SMS4 interface profile sets bits 21:6 together to all ones; other inspected cipher profiles clear them, preserving bits 31:22 and 5:0. Individual lane meanings remain unknown."
 
 [[registers.fields]]
 name = "BITS_6_21_OPAQUE"
 bits = "21:6"
 class = "plain"
-description = "Cleared by the reachable STA CCMP enable transaction."
+description = "All sixteen bits are set for the inspected SMS4 profile and cleared otherwise; their individual hardware functions are not established."
 write-range = { min = 0x0, max = 0xffff }
 
 [[registers]]
@@ -9755,7 +9894,7 @@ description = "Project-assigned name. RX-hang timing configuration. hal_he_set_b
 name = "HANG_TIME"
 bits = "11:0"
 class = "plain"
-write-range = { min = 0, max = 4095 }
+write-range = { min = 0x0, max = 0xfff }
 description = "Project-assigned name. Twelve-bit RX-hang timing value; the vendor uses 15 or 58. No physical time unit is established."
 
 [[registers.fields]]
@@ -10280,7 +10419,7 @@ class = "read-only"
 [[registers]]
 name = "WORD_0C68_OPAQUE"
 offset = 0xc68
-description = "Complete mac_rxbuf_init sets the low twenty bits before descriptor publication."
+description = "The inspected startup chain wifi_hw_start -> ic_set_interrupt_handler -> hal_init -> mac_rxbuf_init writes 0xfffff to the low twenty bits before RX descriptor publication. Its units and individual hardware function remain unknown; no buffer-count, length or threshold identity is established."
 
 [[registers.fields]]
 name = "BITS_0_19_OPAQUE"
@@ -10291,7 +10430,7 @@ write-range = { min = 0x0, max = 0xfffff }
 [[registers]]
 name = "WORD_0C6C_OPAQUE"
 offset = 0xc6c
-description = "Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window."
+description = "The inspected startup chain wifi_hw_start -> ic_set_interrupt_handler -> hal_init -> mac_rxbuf_init writes four to the low twenty bits before RX descriptor publication. Its units and individual hardware function remain unknown; no buffer-count, length or threshold identity is established."
 
 [[registers.fields]]
 name = "BITS_0_19_OPAQUE"
@@ -10403,7 +10542,7 @@ values = [{ name = "METHOD_1", value = 1 }]
 bits = "1:0"
 class = "plain"
 description = "Complete init replaces the field with one; complete get/set leaves prove its width; complete dbg_read_bsr_info names the field CMP_BSR_METHOD."
-write-range = { min = 0, max = 3 }
+write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "PREAC_DISABLE_LOW_AC_TX_WHEN_EMPTY"
@@ -14714,7 +14853,7 @@ write-range = { min = 0x0, max = 0xffffffff }
 name = "ENTRY_PEER_CONTROL%s"
 offset = 0x1804
 dim = { count = 25, stride = 0x28 }
-description = "Word one of an entry: the last two peer address bytes and the control halfword hal_crypto_set_key_entry composes."
+description = "Word one of a key entry: peer bytes 4..5 and control fields. The three-bit cipher selector and WEP104/GCMP-256 flags are decoded by independent vendor setter/getter paths. Bit 17 remains unidentified."
 
 [[registers.fields]]
 name = "PEER_HIGH"
@@ -14724,26 +14863,24 @@ description = "Peer MAC address bytes 4 and 5, or 0xffff for a group key."
 write-range = { min = 0x0, max = 0xffff }
 
 [[registers.fields]]
-name = "BITS_16_17_OPAQUE"
-bits = "17:16"
+name = "WEP104"
+bits = "16"
 class = "plain"
-description = "Bits the recovered CCMP transaction writes zero."
-write-range = { min = 0x0, max = 0x3 }
+description = "Project-assigned name. WEP104 key-format flag: API key type 5 uses hardware WEP code 1 with this bit set; the inspected WEP40 path supplies five bytes and WEP104 thirteen."
+
+[[registers.fields]]
+name = "BIT_17_OPAQUE"
+bits = "17"
+class = "plain"
+description = "The inspected CCMP publisher clears this bit; its individual hardware meaning remains unknown."
 
 [[registers.fields]]
 name = "ALGORITHM"
-values = [{ name = "CCMP", value = 3 }]
-bits = "19:18"
+values = [{ name = "WEP", value = 1 }, { name = "TKIP", value = 2 }, { name = "CCMP", value = 3 }, { name = "SMS4", value = 4 }, { name = "GCMP", value = 5 }]
+bits = "20:18"
 class = "plain"
-description = "Cipher selector; 3 is CCMP."
-write-range = { min = 0x0, max = 0x3 }
-
-[[registers.fields]]
-name = "BIT_20_OPAQUE"
-bits = "20"
-class = "plain"
-description = "Bit the recovered CCMP transaction writes zero."
-write-range = { min = 0x0, max = 0x1 }
+description = "Project-assigned cipher selector. Inspected hardware codes are WEP=1, TKIP=2, CCMP=3, SMS4=4 and GCMP=5. Zero is written when clearing an entry; other codes have no established meaning."
+write-range = { min = 0x0, max = 0x7 }
 
 [[registers.fields]]
 name = "DIRECTION"
@@ -14762,11 +14899,10 @@ description = "Interface the key belongs to: 0 station, 1 access point."
 write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
-name = "BIT_26_OPAQUE"
+name = "GCMP_256_BIT_KEY"
 bits = "26"
 class = "plain"
-description = "Bit the recovered CCMP transaction writes zero."
-write-range = { min = 0x0, max = 0x1 }
+description = "Project-assigned name. Set for API key type 9 (GCMP) when the supplied key length is exactly 32 bytes. This is not a general key-length flag for other ciphers."
 
 [[registers.fields]]
 name = "LOGICAL_INDEX_NOT_THREE"
@@ -14836,55 +14972,55 @@ description = "Four temporal key bytes."
 write-range = { min = 0x0, max = 0xffffffff }
 
 [[registers]]
-name = "ENTRY_TAIL_WORD_0%s"
+name = "ENTRY_KEY_WORD_4%s"
 offset = 0x1818
 dim = { count = 25, stride = 0x28 }
-description = "Word the CCMP transaction only clears; its other users are not recovered."
+description = "Project-assigned key-material word 4. The inspected 32-byte GCMP publication copies key bytes 16..19 here. The CCMP clear path zeros this word; other cipher-specific contents are not established."
 
 [[registers.fields]]
 name = "VALUE"
 bits = "31:0"
 class = "plain"
-description = "Cleared by hal_crypto_clr_key_entry."
+description = "Key bytes 16..19 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry."
 write-range = { min = 0x0, max = 0xffffffff }
 
 [[registers]]
-name = "ENTRY_TAIL_WORD_1%s"
+name = "ENTRY_KEY_WORD_5%s"
 offset = 0x181c
 dim = { count = 25, stride = 0x28 }
-description = "Word the CCMP transaction only clears; its other users are not recovered."
+description = "Project-assigned key-material word 5. The inspected 32-byte GCMP publication copies key bytes 20..23 here. The CCMP clear path zeros this word; other cipher-specific contents are not established."
 
 [[registers.fields]]
 name = "VALUE"
 bits = "31:0"
 class = "plain"
-description = "Cleared by hal_crypto_clr_key_entry."
+description = "Key bytes 20..23 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry."
 write-range = { min = 0x0, max = 0xffffffff }
 
 [[registers]]
-name = "ENTRY_TAIL_WORD_2%s"
+name = "ENTRY_KEY_WORD_6%s"
 offset = 0x1820
 dim = { count = 25, stride = 0x28 }
-description = "Word the CCMP transaction only clears; its other users are not recovered."
+description = "Project-assigned key-material word 6. The inspected 32-byte GCMP publication copies key bytes 24..27 here. The CCMP clear path zeros this word; other cipher-specific contents are not established."
 
 [[registers.fields]]
 name = "VALUE"
 bits = "31:0"
 class = "plain"
-description = "Cleared by hal_crypto_clr_key_entry."
+description = "Key bytes 24..27 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry."
 write-range = { min = 0x0, max = 0xffffffff }
 
 [[registers]]
-name = "ENTRY_TAIL_WORD_3%s"
+name = "ENTRY_KEY_WORD_7%s"
 offset = 0x1824
 dim = { count = 25, stride = 0x28 }
-description = "Word the CCMP transaction only clears; its other users are not recovered."
+description = "Project-assigned key-material word 7. The inspected 32-byte GCMP publication copies key bytes 28..31 here. The CCMP clear path zeros this word; other cipher-specific contents are not established."
 
 [[registers.fields]]
 name = "VALUE"
 bits = "31:0"
 class = "plain"
-description = "Cleared by hal_crypto_clr_key_entry."
+description = "Key bytes 28..31 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry."
 write-range = { min = 0x0, max = 0xffffffff }
 
 [[registers]]

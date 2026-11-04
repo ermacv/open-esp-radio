@@ -272291,7 +272291,7 @@ pub mod wifi_mac {
 
     /// The `MULTI_BSSID_HIGH` register.
     ///
-    /// Complete clear leaf clears bits 23:16.
+    /// Multi-BSSID profile index in bits 23:16. The complete clear leaf zeros the index; the setter receives the parsed nontransmitted profile index after sta_update_mbssid compares association/profile state. The top byte remains unidentified.
     pub mod multi_bssid_high {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffff0000;
@@ -272301,12 +272301,12 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x28;
 
-        /// Width of `BITS_16_23_OPAQUE` in bits.
-        pub const BITS_16_23_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_16_23_OPAQUE`.
-        pub const BITS_16_23_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_16_23_OPAQUE`.
-        pub const BITS_16_23_OPAQUE_MASK: u32 = 0xff0000;
+        /// Width of `BSSID_INDEX` in bits.
+        pub const BSSID_INDEX_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `BSSID_INDEX`.
+        pub const BSSID_INDEX_MAX: u32 = 0xff;
+        /// Positioned bits of `BSSID_INDEX`.
+        pub const BSSID_INDEX_MASK: u32 = 0xff0000;
 
         /// Width of `BITS_24_31_OPAQUE` in bits.
         pub const BITS_24_31_OPAQUE_WIDTH: u32 = 8;
@@ -272320,9 +272320,9 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_16_23_OPAQUE` field.
+            /// Project-assigned nontransmitted BSSID profile index, passed as an eight-bit value by sta_update_mbssid to hal_he_set_multi_bssid.
             #[inline]
-            pub const fn bits_16_23_opaque(self) -> u8 {
+            pub const fn bssid_index(self) -> u8 {
                 (self.0 >> 16) as u8
             }
 
@@ -272337,9 +272337,9 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_16_23_OPAQUE` field.
+            /// Project-assigned nontransmitted BSSID profile index, passed as an eight-bit value by sta_update_mbssid to hal_he_set_multi_bssid.
             #[inline]
-            pub const fn bits_16_23_opaque(&self) -> u8 {
+            pub const fn bssid_index(&self) -> u8 {
                 (self.0 >> 16) as u8
             }
 
@@ -272349,9 +272349,9 @@ pub mod wifi_mac {
                 (self.0 >> 24) as u8
             }
 
-            /// Set `BITS_16_23_OPAQUE`.
+            /// Set `BSSID_INDEX`.
             #[inline]
-            pub fn set_bits_16_23_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_bssid_index(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xff00ffff) | (u32::from(value) << 16);
                 self
             }
@@ -276695,7 +276695,7 @@ pub mod wifi_mac {
 
     /// The `RX_BLOCK_ACK_ENTRY%s_CONTROL` register.
     ///
-    /// Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant.
+    /// Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word. Element i is the vendor's entry 7−i. SOURCE: HW11_S31_BLOCK_ACK_20261027 covers quiet direct/staging readback only, not live agreement acceptance or hardware-owned opaque-bit evolution. Ordinary CURRENT_SEQUENCE stayed zero after SSN load 0x123, and the extra latched agreement was empty; quiet zeros do not establish a permanently-zero invariant. Inspected ADDBA negotiation prepares state through ampdu_rx_start, then its request handler reaches add through ic_add_rx_ba; DELBA, failed response, replacement and peer cleanup reach removal, while software reorder also reaches reset. Add/reset/delete are distinct operations. Registration of BA save/restore callbacks is observed, but their final indirect invocation and full power-transition ordering remain unresolved.
     pub mod rx_block_ack_entry_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -276885,7 +276885,7 @@ pub mod wifi_mac {
 
     /// The `RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY` register.
     ///
-    /// Peer MAC bytes four and five, interface number and receive reorder-window size in one reverse-addressed ordinary receive BlockAck bank. Complete vendor ampdu_rx_start limits the protocol agreement by the peer request and configured receive window; its ordinary hardware-activation branch independently passes the constant 64 to ic_add_rx_ba. Complete hal_agreement_add_rx_ba then stores that value in WINDOW. Element i is the vendor's entry 7−i.
+    /// Peer MAC bytes four and five, interface number and receive reorder-window size in one reverse-addressed ordinary receive BlockAck bank. The inspected vendor ampdu_rx_start branch limits the protocol agreement by the peer request and configured receive window; its ordinary hardware-activation branch independently passes the constant 64 to ic_add_rx_ba. Complete hal_agreement_add_rx_ba then stores that value in WINDOW. Element i is the vendor's entry 7−i.
     pub mod rx_block_ack_entry_peer_tail_and_policy {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -284784,7 +284784,7 @@ pub mod wifi_mac {
 
     /// The `INTERFACE_CONTROL%s` register.
     ///
-    /// STA, AP and NAN interface controls selected by hal_crypto_enable. Ordinary CCMP writes 0x00030103 and additionally enables SPP A-MSDU when the association negotiated it. SPP is shared by every key on this interface.
+    /// STA (index 0) and AP (index 1) interface-wide crypto profiles, separate from key-table ownership. Ordinary CCMP writes 0x00030103 plus the negotiated SPP bit. The vendor management-RX getter interprets bit 17 only in these two words.
     pub mod interface_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xd0030303;
@@ -284796,7 +284796,239 @@ pub mod wifi_mac {
         /// The byte distance between two elements.
         pub const STRIDE: usize = 0x4;
         /// The element count.
-        pub const COUNT: usize = 3;
+        pub const COUNT: usize = 2;
+
+        /// Width of `BITS_0_1_OPAQUE` in bits.
+        pub const BITS_0_1_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_0_1_OPAQUE`.
+        pub const BITS_0_1_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_0_1_OPAQUE`.
+        pub const BITS_0_1_OPAQUE_MASK: u32 = 0x3;
+
+        /// Width of `BIT_8_OPAQUE` in bits.
+        pub const BIT_8_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_8_OPAQUE`.
+        pub const BIT_8_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_8_OPAQUE`.
+        pub const BIT_8_OPAQUE_MASK: u32 = 0x100;
+
+        /// Width of `SPP_AMSDU` in bits.
+        pub const SPP_AMSDU_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SPP_AMSDU`.
+        pub const SPP_AMSDU_MAX: u32 = 0x1;
+        /// Positioned bits of `SPP_AMSDU`.
+        pub const SPP_AMSDU_MASK: u32 = 0x200;
+
+        /// Width of `BIT_16_OPAQUE` in bits.
+        pub const BIT_16_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MASK: u32 = 0x10000;
+
+        /// Width of `MGMT_RX_CRYPTO_ENABLED` in bits.
+        pub const MGMT_RX_CRYPTO_ENABLED_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `MGMT_RX_CRYPTO_ENABLED`.
+        pub const MGMT_RX_CRYPTO_ENABLED_MAX: u32 = 0x1;
+        /// Positioned bits of `MGMT_RX_CRYPTO_ENABLED`.
+        pub const MGMT_RX_CRYPTO_ENABLED_MASK: u32 = 0x20000;
+
+        /// Width of `WEP_MODE` in bits.
+        pub const WEP_MODE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WEP_MODE`.
+        pub const WEP_MODE_MAX: u32 = 0x1;
+        /// Positioned bits of `WEP_MODE`.
+        pub const WEP_MODE_MASK: u32 = 0x10000000;
+
+        /// Width of `BIT_30_OPAQUE` in bits.
+        pub const BIT_30_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MASK: u32 = 0x40000000;
+
+        /// Width of `SMS4_MODE` in bits.
+        pub const SMS4_MODE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SMS4_MODE`.
+        pub const SMS4_MODE_MAX: u32 = 0x1;
+        /// Positioned bits of `SMS4_MODE`.
+        pub const SMS4_MODE_MASK: u32 = 0x80000000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_1_opaque(self) -> oer_portable_mmio::Bits<2> {
+                oer_portable_mmio::Bits::truncate(self.0)
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_8_opaque(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream.
+            #[inline]
+            pub const fn spp_amsdu(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Ordinary enable/disable images include this bit; its individual hardware meaning remains unknown.
+            #[inline]
+            pub const fn bit_16_opaque(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name from hal_crypto_mgmt_rx_enabled and wdev_is_mgmt_hwdecr_enabled. In the inspected protected ESP-NOW management-action consumer, this indicator selects framing/key-metadata handling. That chain does not demonstrate a software-AES versus hardware-AES choice.
+            #[inline]
+            pub const fn mgmt_rx_crypto_enabled(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Project-assigned name. The vendor interface profile sets this bit only for the inspected WEP40/WEP104 key types (API 1/5); the more specific electrical function is not established.
+            #[inline]
+            pub const fn wep_mode(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown.
+            #[inline]
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. The vendor interface profile sets this bit for the independently identified SMS4 key type (API 4), clearing it for the other inspected types.
+            #[inline]
+            pub const fn sms4_mode(self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_0_1_opaque(&self) -> oer_portable_mmio::Bits<2> {
+                oer_portable_mmio::Bits::truncate(self.0)
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bit_8_opaque(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream.
+            #[inline]
+            pub const fn spp_amsdu(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Ordinary enable/disable images include this bit; its individual hardware meaning remains unknown.
+            #[inline]
+            pub const fn bit_16_opaque(&self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name from hal_crypto_mgmt_rx_enabled and wdev_is_mgmt_hwdecr_enabled. In the inspected protected ESP-NOW management-action consumer, this indicator selects framing/key-metadata handling. That chain does not demonstrate a software-AES versus hardware-AES choice.
+            #[inline]
+            pub const fn mgmt_rx_crypto_enabled(&self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Project-assigned name. The vendor interface profile sets this bit only for the inspected WEP40/WEP104 key types (API 1/5); the more specific electrical function is not established.
+            #[inline]
+            pub const fn wep_mode(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown.
+            #[inline]
+            pub const fn bit_30_opaque(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. The vendor interface profile sets this bit for the independently identified SMS4 key type (API 4), clearing it for the other inspected types.
+            #[inline]
+            pub const fn sms4_mode(&self) -> bool {
+                (self.0 & 0x80000000) != 0
+            }
+
+            /// Set `BITS_0_1_OPAQUE`.
+            #[inline]
+            pub fn set_bits_0_1_opaque(&mut self, value: oer_portable_mmio::Bits<2>) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffc) | value.get();
+                self
+            }
+
+            /// Set `BIT_8_OPAQUE`.
+            #[inline]
+            pub fn set_bit_8_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffeff) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `SPP_AMSDU`.
+            #[inline]
+            pub fn set_spp_amsdu(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+                self
+            }
+
+            /// Set `BIT_16_OPAQUE`.
+            #[inline]
+            pub fn set_bit_16_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `MGMT_RX_CRYPTO_ENABLED`.
+            #[inline]
+            pub fn set_mgmt_rx_crypto_enabled(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
+                self
+            }
+
+            /// Set `WEP_MODE`.
+            #[inline]
+            pub fn set_wep_mode(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `BIT_30_OPAQUE`.
+            #[inline]
+            pub fn set_bit_30_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `SMS4_MODE`.
+            #[inline]
+            pub fn set_sms4_mode(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+                self
+            }
+        }
+    }
+
+    /// The `CONTEXT2_CRYPTO_CONTROL` register.
+    ///
+    /// Project-assigned name for hardware crypto selector two. Unlike STA/AP, its bit-17 publication depends on an argument derived upstream from PMF state. The management-RX getter never reads this word; the individual meanings of bits 16/17 remain unknown.
+    pub mod context2_crypto_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xd0030303;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x808;
 
         /// Width of `BITS_0_1_OPAQUE` in bits.
         pub const BITS_0_1_OPAQUE_WIDTH: u32 = 2;
@@ -284826,19 +285058,26 @@ pub mod wifi_mac {
         /// Positioned bits of `BITS_16_17_OPAQUE`.
         pub const BITS_16_17_OPAQUE_MASK: u32 = 0x30000;
 
-        /// Width of `BIT_28_OPAQUE` in bits.
-        pub const BIT_28_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_28_OPAQUE`.
-        pub const BIT_28_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_28_OPAQUE`.
-        pub const BIT_28_OPAQUE_MASK: u32 = 0x10000000;
+        /// Width of `WEP_MODE` in bits.
+        pub const WEP_MODE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WEP_MODE`.
+        pub const WEP_MODE_MAX: u32 = 0x1;
+        /// Positioned bits of `WEP_MODE`.
+        pub const WEP_MODE_MASK: u32 = 0x10000000;
 
-        /// Width of `BITS_30_31_OPAQUE` in bits.
-        pub const BITS_30_31_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_30_31_OPAQUE`.
-        pub const BITS_30_31_OPAQUE_MAX: u32 = 0x3;
-        /// Positioned bits of `BITS_30_31_OPAQUE`.
-        pub const BITS_30_31_OPAQUE_MASK: u32 = 0xc0000000;
+        /// Width of `BIT_30_OPAQUE` in bits.
+        pub const BIT_30_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MASK: u32 = 0x40000000;
+
+        /// Width of `SMS4_MODE` in bits.
+        pub const SMS4_MODE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SMS4_MODE`.
+        pub const SMS4_MODE_MAX: u32 = 0x1;
+        /// Positioned bits of `SMS4_MODE`.
+        pub const SMS4_MODE_MASK: u32 = 0x80000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -284869,16 +285108,22 @@ pub mod wifi_mac {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. The vendor interface profile sets this bit only for the inspected WEP40/WEP104 key types (API 1/5); the more specific electrical function is not established.
             #[inline]
-            pub const fn bit_28_opaque(self) -> bool {
+            pub const fn wep_mode(self) -> bool {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Complete ordinary enable clears both high bits; one algorithm branch sets bit 31.
+            /// Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown.
             #[inline]
-            pub const fn bits_30_31_opaque(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 30)
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. The vendor interface profile sets this bit for the independently identified SMS4 key type (API 4), clearing it for the other inspected types.
+            #[inline]
+            pub const fn sms4_mode(self) -> bool {
+                (self.0 & 0x80000000) != 0
             }
         }
 
@@ -284910,16 +285155,22 @@ pub mod wifi_mac {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. The vendor interface profile sets this bit only for the inspected WEP40/WEP104 key types (API 1/5); the more specific electrical function is not established.
             #[inline]
-            pub const fn bit_28_opaque(&self) -> bool {
+            pub const fn wep_mode(&self) -> bool {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Complete ordinary enable clears both high bits; one algorithm branch sets bit 31.
+            /// Preserved or cleared by inspected profile operations; its individual hardware meaning remains unknown.
             #[inline]
-            pub const fn bits_30_31_opaque(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 30)
+            pub const fn bit_30_opaque(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. The vendor interface profile sets this bit for the independently identified SMS4 key type (API 4), clearing it for the other inspected types.
+            #[inline]
+            pub const fn sms4_mode(&self) -> bool {
+                (self.0 & 0x80000000) != 0
             }
 
             /// Set `BITS_0_1_OPAQUE`.
@@ -284953,20 +285204,24 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BIT_28_OPAQUE`.
+            /// Set `WEP_MODE`.
             #[inline]
-            pub fn set_bit_28_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_wep_mode(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
                 self
             }
 
-            /// Set `BITS_30_31_OPAQUE`.
+            /// Set `BIT_30_OPAQUE`.
             #[inline]
-            pub fn set_bits_30_31_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<2>,
-            ) -> &mut Self {
-                self.0 = (self.0 & 0x3fffffff) | (value.get() << 30);
+            pub fn set_bit_30_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `SMS4_MODE`.
+            #[inline]
+            pub fn set_sms4_mode(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
                 self
             }
         }
@@ -285024,7 +285279,7 @@ pub mod wifi_mac {
 
     /// The `POLICY_CONTROL` register.
     ///
-    /// Shared policy word. The ordinary non-algorithm-four enable path preserves bits 31:22 and 5:0 while clearing bits 21:6.
+    /// Shared crypto policy word. The inspected SMS4 interface profile sets bits 21:6 together to all ones; other inspected cipher profiles clear them, preserving bits 31:22 and 5:0. Individual lane meanings remain unknown.
     pub mod policy_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x003fffc0;
@@ -285046,7 +285301,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Cleared by the reachable STA CCMP enable transaction.
+            /// All sixteen bits are set for the inspected SMS4 profile and cleared otherwise; their individual hardware functions are not established.
             #[inline]
             pub const fn bits_6_21_opaque(self) -> u16 {
                 (self.0 >> 6) as u16
@@ -285057,7 +285312,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Cleared by the reachable STA CCMP enable transaction.
+            /// All sixteen bits are set for the inspected SMS4 profile and cleared otherwise; their individual hardware functions are not established.
             #[inline]
             pub const fn bits_6_21_opaque(&self) -> u16 {
                 (self.0 >> 6) as u16
@@ -287866,7 +288121,7 @@ pub mod wifi_mac {
 
     /// The `WORD_0C68_OPAQUE` register.
     ///
-    /// Complete mac_rxbuf_init sets the low twenty bits before descriptor publication.
+    /// The inspected startup chain wifi_hw_start -> ic_set_interrupt_handler -> hal_init -> mac_rxbuf_init writes 0xfffff to the low twenty bits before RX descriptor publication. Its units and individual hardware function remain unknown; no buffer-count, length or threshold identity is established.
     pub mod word_0c68_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000fffff;
@@ -287919,7 +288174,7 @@ pub mod wifi_mac {
 
     /// The `WORD_0C6C_OPAQUE` register.
     ///
-    /// Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window.
+    /// The inspected startup chain wifi_hw_start -> ic_set_interrupt_handler -> hal_init -> mac_rxbuf_init writes four to the low twenty bits before RX descriptor publication. Its units and individual hardware function remain unknown; no buffer-count, length or threshold identity is established.
     pub mod word_0c6c_opaque {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000fffff;
@@ -305146,7 +305401,7 @@ pub mod wifi_mac {
 
     /// The `ENTRY_PEER_CONTROL%s` register.
     ///
-    /// Word one of an entry: the last two peer address bytes and the control halfword hal_crypto_set_key_entry composes.
+    /// Word one of a key entry: peer bytes 4..5 and control fields. The three-bit cipher selector and WEP104/GCMP-256 flags are decoded by independent vendor setter/getter paths. Bit 17 remains unidentified.
     pub mod entry_peer_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xcfffffff;
@@ -305167,19 +305422,26 @@ pub mod wifi_mac {
         /// Positioned bits of `PEER_HIGH`.
         pub const PEER_HIGH_MASK: u32 = 0xffff;
 
-        /// Width of `BITS_16_17_OPAQUE` in bits.
-        pub const BITS_16_17_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_16_17_OPAQUE`.
-        pub const BITS_16_17_OPAQUE_MAX: u32 = 0x3;
-        /// Positioned bits of `BITS_16_17_OPAQUE`.
-        pub const BITS_16_17_OPAQUE_MASK: u32 = 0x30000;
+        /// Width of `WEP104` in bits.
+        pub const WEP104_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `WEP104`.
+        pub const WEP104_MAX: u32 = 0x1;
+        /// Positioned bits of `WEP104`.
+        pub const WEP104_MASK: u32 = 0x10000;
+
+        /// Width of `BIT_17_OPAQUE` in bits.
+        pub const BIT_17_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_17_OPAQUE`.
+        pub const BIT_17_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_17_OPAQUE`.
+        pub const BIT_17_OPAQUE_MASK: u32 = 0x20000;
 
         /// Width of `ALGORITHM` in bits.
-        pub const ALGORITHM_WIDTH: u32 = 2;
+        pub const ALGORITHM_WIDTH: u32 = 3;
         /// Greatest unsigned image of `ALGORITHM`.
-        pub const ALGORITHM_MAX: u32 = 0x3;
+        pub const ALGORITHM_MAX: u32 = 0x7;
         /// Positioned bits of `ALGORITHM`.
-        pub const ALGORITHM_MASK: u32 = 0xc0000;
+        pub const ALGORITHM_MASK: u32 = 0x1c0000;
 
         /// The declared values of the `ALGORITHM` field.
         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -305188,7 +305450,11 @@ pub mod wifi_mac {
             reason = "the variants are the model's value names"
         )]
         pub enum Algorithm {
+            Wep = 0x1,
+            Tkip = 0x2,
             Ccmp = 0x3,
+            Sms4 = 0x4,
+            Gcmp = 0x5,
         }
 
         impl Algorithm {
@@ -305208,18 +305474,15 @@ pub mod wifi_mac {
             #[inline]
             pub const fn from_bits(bits: u32) -> Option<Self> {
                 match bits {
+                    0x1 => Some(Self::Wep),
+                    0x2 => Some(Self::Tkip),
                     0x3 => Some(Self::Ccmp),
+                    0x4 => Some(Self::Sms4),
+                    0x5 => Some(Self::Gcmp),
                     _ => None,
                 }
             }
         }
-
-        /// Width of `BIT_20_OPAQUE` in bits.
-        pub const BIT_20_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_20_OPAQUE`.
-        pub const BIT_20_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_20_OPAQUE`.
-        pub const BIT_20_OPAQUE_MASK: u32 = 0x100000;
 
         /// Width of `DIRECTION` in bits.
         pub const DIRECTION_WIDTH: u32 = 3;
@@ -305309,12 +305572,12 @@ pub mod wifi_mac {
             }
         }
 
-        /// Width of `BIT_26_OPAQUE` in bits.
-        pub const BIT_26_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_26_OPAQUE`.
-        pub const BIT_26_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_26_OPAQUE`.
-        pub const BIT_26_OPAQUE_MASK: u32 = 0x4000000;
+        /// Width of `GCMP_256_BIT_KEY` in bits.
+        pub const GCMP_256_BIT_KEY_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `GCMP_256_BIT_KEY`.
+        pub const GCMP_256_BIT_KEY_MAX: u32 = 0x1;
+        /// Positioned bits of `GCMP_256_BIT_KEY`.
+        pub const GCMP_256_BIT_KEY_MASK: u32 = 0x4000000;
 
         /// Width of `LOGICAL_INDEX_NOT_THREE` in bits.
         pub const LOGICAL_INDEX_NOT_THREE_WIDTH: u32 = 1;
@@ -305376,28 +305639,28 @@ pub mod wifi_mac {
                 self.0 as u16
             }
 
-            /// Bits the recovered CCMP transaction writes zero.
+            /// Project-assigned name. WEP104 key-format flag: API key type 5 uses hardware WEP code 1 with this bit set; the inspected WEP40 path supplies five bytes and WEP104 thirteen.
             #[inline]
-            pub const fn bits_16_17_opaque(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
+            pub const fn wep104(self) -> bool {
+                (self.0 & 0x00010000) != 0
             }
 
-            /// Cipher selector; 3 is CCMP.
+            /// The inspected CCMP publisher clears this bit; its individual hardware meaning remains unknown.
             #[inline]
-            pub const fn algorithm(self) -> oer_portable_mmio::Bits<2> {
+            pub const fn bit_17_opaque(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Project-assigned cipher selector. Inspected hardware codes are WEP=1, TKIP=2, CCMP=3, SMS4=4 and GCMP=5. Zero is written when clearing an entry; other codes have no established meaning.
+            #[inline]
+            pub const fn algorithm(self) -> oer_portable_mmio::Bits<3> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 18)
             }
 
             /// The `ALGORITHM` field as its declared value, if it is one.
             #[inline]
             pub const fn algorithm_variant(self) -> Option<Algorithm> {
-                Algorithm::from_bits((self.0 >> 18) & 0x3)
-            }
-
-            /// Bit the recovered CCMP transaction writes zero.
-            #[inline]
-            pub const fn bit_20_opaque(self) -> bool {
-                (self.0 & 0x00100000) != 0
+                Algorithm::from_bits((self.0 >> 18) & 0x7)
             }
 
             /// Key use selector: 3 for a pairwise key, 6 for a group key.
@@ -305424,9 +305687,9 @@ pub mod wifi_mac {
                 Interface::from_field(self.0 >> 24)
             }
 
-            /// Bit the recovered CCMP transaction writes zero.
+            /// Project-assigned name. Set for API key type 9 (GCMP) when the supplied key length is exactly 32 bytes. This is not a general key-length flag for other ciphers.
             #[inline]
-            pub const fn bit_26_opaque(self) -> bool {
+            pub const fn gcmp_256_bit_key(self) -> bool {
                 (self.0 & 0x04000000) != 0
             }
 
@@ -305459,28 +305722,28 @@ pub mod wifi_mac {
                 self.0 as u16
             }
 
-            /// Bits the recovered CCMP transaction writes zero.
+            /// Project-assigned name. WEP104 key-format flag: API key type 5 uses hardware WEP code 1 with this bit set; the inspected WEP40 path supplies five bytes and WEP104 thirteen.
             #[inline]
-            pub const fn bits_16_17_opaque(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
+            pub const fn wep104(&self) -> bool {
+                (self.0 & 0x00010000) != 0
             }
 
-            /// Cipher selector; 3 is CCMP.
+            /// The inspected CCMP publisher clears this bit; its individual hardware meaning remains unknown.
             #[inline]
-            pub const fn algorithm(&self) -> oer_portable_mmio::Bits<2> {
+            pub const fn bit_17_opaque(&self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Project-assigned cipher selector. Inspected hardware codes are WEP=1, TKIP=2, CCMP=3, SMS4=4 and GCMP=5. Zero is written when clearing an entry; other codes have no established meaning.
+            #[inline]
+            pub const fn algorithm(&self) -> oer_portable_mmio::Bits<3> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 18)
             }
 
             /// The `ALGORITHM` field as its declared value, if it is one.
             #[inline]
             pub const fn algorithm_variant(&self) -> Option<Algorithm> {
-                Algorithm::from_bits((self.0 >> 18) & 0x3)
-            }
-
-            /// Bit the recovered CCMP transaction writes zero.
-            #[inline]
-            pub const fn bit_20_opaque(&self) -> bool {
-                (self.0 & 0x00100000) != 0
+                Algorithm::from_bits((self.0 >> 18) & 0x7)
             }
 
             /// Key use selector: 3 for a pairwise key, 6 for a group key.
@@ -305507,9 +305770,9 @@ pub mod wifi_mac {
                 Interface::from_field(self.0 >> 24)
             }
 
-            /// Bit the recovered CCMP transaction writes zero.
+            /// Project-assigned name. Set for API key type 9 (GCMP) when the supplied key length is exactly 32 bytes. This is not a general key-length flag for other ciphers.
             #[inline]
-            pub const fn bit_26_opaque(&self) -> bool {
+            pub const fn gcmp_256_bit_key(&self) -> bool {
                 (self.0 & 0x04000000) != 0
             }
 
@@ -305538,27 +305801,24 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BITS_16_17_OPAQUE`.
+            /// Set `WEP104`.
             #[inline]
-            pub fn set_bits_16_17_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<2>,
-            ) -> &mut Self {
-                self.0 = (self.0 & 0xfffcffff) | (value.get() << 16);
+            pub fn set_wep104(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `BIT_17_OPAQUE`.
+            #[inline]
+            pub fn set_bit_17_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
                 self
             }
 
             /// Set `ALGORITHM`.
             #[inline]
-            pub fn set_algorithm(&mut self, value: oer_portable_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & 0xfff3ffff) | (value.get() << 18);
-                self
-            }
-
-            /// Set `BIT_20_OPAQUE`.
-            #[inline]
-            pub fn set_bit_20_opaque(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffefffff) | (u32::from(value) << 20);
+            pub fn set_algorithm(&mut self, value: oer_portable_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xffe3ffff) | (value.get() << 18);
                 self
             }
 
@@ -305576,9 +305836,9 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BIT_26_OPAQUE`.
+            /// Set `GCMP_256_BIT_KEY`.
             #[inline]
-            pub fn set_bit_26_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_gcmp_256_bit_key(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
                 self
             }
@@ -305818,10 +306078,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `ENTRY_TAIL_WORD_0%s` register.
+    /// The `ENTRY_KEY_WORD_4%s` register.
     ///
-    /// Word the CCMP transaction only clears; its other users are not recovered.
-    pub mod entry_tail_word_0 {
+    /// Project-assigned key-material word 4. The inspected 32-byte GCMP publication copies key bytes 16..19 here. The CCMP clear path zeros this word; other cipher-specific contents are not established.
+    pub mod entry_key_word_4 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -305846,7 +306106,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 16..19 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
@@ -305857,7 +306117,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 16..19 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(&self) -> u32 {
                 self.0
@@ -305872,10 +306132,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `ENTRY_TAIL_WORD_1%s` register.
+    /// The `ENTRY_KEY_WORD_5%s` register.
     ///
-    /// Word the CCMP transaction only clears; its other users are not recovered.
-    pub mod entry_tail_word_1 {
+    /// Project-assigned key-material word 5. The inspected 32-byte GCMP publication copies key bytes 20..23 here. The CCMP clear path zeros this word; other cipher-specific contents are not established.
+    pub mod entry_key_word_5 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -305900,7 +306160,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 20..23 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
@@ -305911,7 +306171,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 20..23 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(&self) -> u32 {
                 self.0
@@ -305926,10 +306186,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `ENTRY_TAIL_WORD_2%s` register.
+    /// The `ENTRY_KEY_WORD_6%s` register.
     ///
-    /// Word the CCMP transaction only clears; its other users are not recovered.
-    pub mod entry_tail_word_2 {
+    /// Project-assigned key-material word 6. The inspected 32-byte GCMP publication copies key bytes 24..27 here. The CCMP clear path zeros this word; other cipher-specific contents are not established.
+    pub mod entry_key_word_6 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -305954,7 +306214,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 24..27 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
@@ -305965,7 +306225,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 24..27 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(&self) -> u32 {
                 self.0
@@ -305980,10 +306240,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `ENTRY_TAIL_WORD_3%s` register.
+    /// The `ENTRY_KEY_WORD_7%s` register.
     ///
-    /// Word the CCMP transaction only clears; its other users are not recovered.
-    pub mod entry_tail_word_3 {
+    /// Project-assigned key-material word 7. The inspected 32-byte GCMP publication copies key bytes 28..31 here. The CCMP clear path zeros this word; other cipher-specific contents are not established.
+    pub mod entry_key_word_7 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -306008,7 +306268,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 28..31 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
@@ -306019,7 +306279,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 28..31 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(&self) -> u32 {
                 self.0
@@ -307478,9 +307738,9 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_interface_control(
             &self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_mmio::Index<2>,
         ) -> interface_control::R {
-            interface_control::R(self.0.read_indexed::<0x800, 0x4, 3>(index))
+            interface_control::R(self.0.read_indexed::<0x800, 0x4, 2>(index))
         }
 
         /// Read `INTERFACE_CONTROL%s`, change fields and write it back; every other bit keeps
@@ -307488,12 +307748,30 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_interface_control(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_mmio::Index<2>,
             change: impl FnOnce(&mut interface_control::W),
         ) {
-            let mut value = interface_control::W(self.0.read_indexed::<0x800, 0x4, 3>(index));
+            let mut value = interface_control::W(self.0.read_indexed::<0x800, 0x4, 2>(index));
             change(&mut value);
-            self.0.write_indexed::<0x800, 0x4, 3>(index, value.0);
+            self.0.write_indexed::<0x800, 0x4, 2>(index, value.0);
+        }
+
+        /// Read `CONTEXT2_CRYPTO_CONTROL`.
+        #[inline]
+        pub fn read_context2_crypto_control(&self) -> context2_crypto_control::R {
+            context2_crypto_control::R(self.0.read::<0x808>())
+        }
+
+        /// Read `CONTEXT2_CRYPTO_CONTROL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_context2_crypto_control(
+            &mut self,
+            change: impl FnOnce(&mut context2_crypto_control::W),
+        ) {
+            let mut value = context2_crypto_control::W(self.0.read::<0x808>());
+            change(&mut value);
+            self.0.write::<0x808>(value.0);
         }
 
         /// Read `WORD_080C_OPAQUE`.
@@ -309087,90 +309365,90 @@ pub mod wifi_mac {
             self.0.write_indexed::<0x1814, 0x28, 25>(index, value.0);
         }
 
-        /// Read `ENTRY_TAIL_WORD_0%s`.
+        /// Read `ENTRY_KEY_WORD_4%s`.
         #[inline]
-        pub fn read_entry_tail_word_0(
+        pub fn read_entry_key_word_4(
             &self,
             index: oer_portable_mmio::Index<25>,
-        ) -> entry_tail_word_0::R {
-            entry_tail_word_0::R(self.0.read_indexed::<0x1818, 0x28, 25>(index))
+        ) -> entry_key_word_4::R {
+            entry_key_word_4::R(self.0.read_indexed::<0x1818, 0x28, 25>(index))
         }
 
-        /// Read `ENTRY_TAIL_WORD_0%s`, change fields and write it back; every other bit keeps
+        /// Read `ENTRY_KEY_WORD_4%s`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_entry_tail_word_0(
+        pub fn modify_entry_key_word_4(
             &mut self,
             index: oer_portable_mmio::Index<25>,
-            change: impl FnOnce(&mut entry_tail_word_0::W),
+            change: impl FnOnce(&mut entry_key_word_4::W),
         ) {
-            let mut value = entry_tail_word_0::W(self.0.read_indexed::<0x1818, 0x28, 25>(index));
+            let mut value = entry_key_word_4::W(self.0.read_indexed::<0x1818, 0x28, 25>(index));
             change(&mut value);
             self.0.write_indexed::<0x1818, 0x28, 25>(index, value.0);
         }
 
-        /// Read `ENTRY_TAIL_WORD_1%s`.
+        /// Read `ENTRY_KEY_WORD_5%s`.
         #[inline]
-        pub fn read_entry_tail_word_1(
+        pub fn read_entry_key_word_5(
             &self,
             index: oer_portable_mmio::Index<25>,
-        ) -> entry_tail_word_1::R {
-            entry_tail_word_1::R(self.0.read_indexed::<0x181c, 0x28, 25>(index))
+        ) -> entry_key_word_5::R {
+            entry_key_word_5::R(self.0.read_indexed::<0x181c, 0x28, 25>(index))
         }
 
-        /// Read `ENTRY_TAIL_WORD_1%s`, change fields and write it back; every other bit keeps
+        /// Read `ENTRY_KEY_WORD_5%s`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_entry_tail_word_1(
+        pub fn modify_entry_key_word_5(
             &mut self,
             index: oer_portable_mmio::Index<25>,
-            change: impl FnOnce(&mut entry_tail_word_1::W),
+            change: impl FnOnce(&mut entry_key_word_5::W),
         ) {
-            let mut value = entry_tail_word_1::W(self.0.read_indexed::<0x181c, 0x28, 25>(index));
+            let mut value = entry_key_word_5::W(self.0.read_indexed::<0x181c, 0x28, 25>(index));
             change(&mut value);
             self.0.write_indexed::<0x181c, 0x28, 25>(index, value.0);
         }
 
-        /// Read `ENTRY_TAIL_WORD_2%s`.
+        /// Read `ENTRY_KEY_WORD_6%s`.
         #[inline]
-        pub fn read_entry_tail_word_2(
+        pub fn read_entry_key_word_6(
             &self,
             index: oer_portable_mmio::Index<25>,
-        ) -> entry_tail_word_2::R {
-            entry_tail_word_2::R(self.0.read_indexed::<0x1820, 0x28, 25>(index))
+        ) -> entry_key_word_6::R {
+            entry_key_word_6::R(self.0.read_indexed::<0x1820, 0x28, 25>(index))
         }
 
-        /// Read `ENTRY_TAIL_WORD_2%s`, change fields and write it back; every other bit keeps
+        /// Read `ENTRY_KEY_WORD_6%s`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_entry_tail_word_2(
+        pub fn modify_entry_key_word_6(
             &mut self,
             index: oer_portable_mmio::Index<25>,
-            change: impl FnOnce(&mut entry_tail_word_2::W),
+            change: impl FnOnce(&mut entry_key_word_6::W),
         ) {
-            let mut value = entry_tail_word_2::W(self.0.read_indexed::<0x1820, 0x28, 25>(index));
+            let mut value = entry_key_word_6::W(self.0.read_indexed::<0x1820, 0x28, 25>(index));
             change(&mut value);
             self.0.write_indexed::<0x1820, 0x28, 25>(index, value.0);
         }
 
-        /// Read `ENTRY_TAIL_WORD_3%s`.
+        /// Read `ENTRY_KEY_WORD_7%s`.
         #[inline]
-        pub fn read_entry_tail_word_3(
+        pub fn read_entry_key_word_7(
             &self,
             index: oer_portable_mmio::Index<25>,
-        ) -> entry_tail_word_3::R {
-            entry_tail_word_3::R(self.0.read_indexed::<0x1824, 0x28, 25>(index))
+        ) -> entry_key_word_7::R {
+            entry_key_word_7::R(self.0.read_indexed::<0x1824, 0x28, 25>(index))
         }
 
-        /// Read `ENTRY_TAIL_WORD_3%s`, change fields and write it back; every other bit keeps
+        /// Read `ENTRY_KEY_WORD_7%s`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_entry_tail_word_3(
+        pub fn modify_entry_key_word_7(
             &mut self,
             index: oer_portable_mmio::Index<25>,
-            change: impl FnOnce(&mut entry_tail_word_3::W),
+            change: impl FnOnce(&mut entry_key_word_7::W),
         ) {
-            let mut value = entry_tail_word_3::W(self.0.read_indexed::<0x1824, 0x28, 25>(index));
+            let mut value = entry_key_word_7::W(self.0.read_indexed::<0x1824, 0x28, 25>(index));
             change(&mut value);
             self.0.write_indexed::<0x1824, 0x28, 25>(index, value.0);
         }

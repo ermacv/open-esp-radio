@@ -237,7 +237,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 w.set_bssid_byte_5(0);
             });
             init.modify_multi_bssid_high(|w| {
-                w.set_bits_16_23_opaque(0);
+                w.set_bssid_index(0);
             });
             for physical in (0..8).rev() {
                 init.modify_queue_control(element(physical), |w| {

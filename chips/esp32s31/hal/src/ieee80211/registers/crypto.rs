@@ -146,24 +146,40 @@ struct InterfaceControl {
     bits_0_1: u32,
     bit_8: bool,
     spp_amsdu: bool,
-    bits_16_17: u32,
+    upper_flags: bool,
 }
 
 /// Store one interface-control word: the zero-based
-/// `mac_crypto_interface_control` transaction, bits 28 and 31:30 zero.
+/// `mac_crypto_interface_control` / `mac_crypto_context2_control`
+/// transactions, WEP/SMS4 modes and bit 30 zero.
 fn store_interface_control<P: Placement>(
     control: &mut WifiMacCryptoControl<P>,
     index: Index<3>,
     value: InterfaceControl,
 ) {
-    control.modify_interface_control(index, |w| {
-        w.set_bits_0_1_opaque(bits(value.bits_0_1))
-            .set_bit_8_opaque(value.bit_8)
-            .set_spp_amsdu(value.spp_amsdu)
-            .set_bits_16_17_opaque(bits(value.bits_16_17))
-            .set_bit_28_opaque(false)
-            .set_bits_30_31_opaque(bits(0));
-    });
+    // The three-word selector is partitioned into STA/AP and context two.
+    // Only STA/AP have a vendor getter identifying management-RX bit 17.
+    match Index::new(index.get()) {
+        Ok(sta_ap) => control.modify_interface_control(sta_ap, |w| {
+            w.set_bits_0_1_opaque(bits(value.bits_0_1))
+                .set_bit_8_opaque(value.bit_8)
+                .set_spp_amsdu(value.spp_amsdu)
+                .set_bit_16_opaque(value.upper_flags)
+                .set_mgmt_rx_crypto_enabled(value.upper_flags)
+                .set_wep_mode(false)
+                .set_bit_30_opaque(false)
+                .set_sms4_mode(false);
+        }),
+        Err(_) => control.modify_context2_crypto_control(|w| {
+            w.set_bits_0_1_opaque(bits(value.bits_0_1))
+                .set_bit_8_opaque(value.bit_8)
+                .set_spp_amsdu(value.spp_amsdu)
+                .set_bits_16_17_opaque(bits(if value.upper_flags { 3 } else { 0 }))
+                .set_wep_mode(false)
+                .set_bit_30_opaque(false)
+                .set_sms4_mode(false);
+        }),
+    }
 }
 
 /// The fields of one key entry's peer-control store, the others zero.
@@ -186,16 +202,16 @@ fn store_peer_control<P: Placement>(
 ) {
     table.modify_entry_peer_control(index, |w| {
         w.set_peer_high(value.peer_high)
-            .set_bits_16_17_opaque(bits(0))
+            .set_wep104(false)
+            .set_bit_17_opaque(false)
             .set_algorithm(bits(value.algorithm))
-            .set_bit_20_opaque(false)
             .set_direction(bits(value.direction))
             .set_interface(
                 oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Interface::from_field(
                     value.interface.bits(),
                 ),
             )
-            .set_bit_26_opaque(false)
+            .set_gcmp_256_bit_key(false)
             .set_logical_index_not_three(value.logical_index_not_three)
             .set_logical_key_index(bits(u32::from(value.logical_key_index)));
     });
@@ -243,16 +259,16 @@ fn clear_key_entry_words<P: Placement>(
         },
     );
     store_key_words(table, index, [0; 4]);
-    table.modify_entry_tail_word_0(index, |w| {
+    table.modify_entry_key_word_4(index, |w| {
         w.set_value(0);
     });
-    table.modify_entry_tail_word_1(index, |w| {
+    table.modify_entry_key_word_5(index, |w| {
         w.set_value(0);
     });
-    table.modify_entry_tail_word_2(index, |w| {
+    table.modify_entry_key_word_6(index, |w| {
         w.set_value(0);
     });
-    table.modify_entry_tail_word_3(index, |w| {
+    table.modify_entry_key_word_7(index, |w| {
         w.set_value(0);
     });
 }
@@ -267,15 +283,20 @@ fn enable_ccmp<P: Placement>(control: &mut WifiMacCryptoControl<P>, index: Index
             bits_0_1: 3,
             bit_8: true,
             spp_amsdu: spp,
-            bits_16_17: 3,
+            upper_flags: true,
         },
     );
     control.modify_policy_control(|w| {
         w.set_bits_6_21_opaque(0);
     });
-    control.modify_interface_control(index, |w| {
-        w.set_bits_30_31_opaque(bits(0));
-    });
+    match Index::new(index.get()) {
+        Ok(sta_ap) => control.modify_interface_control(sta_ap, |w| {
+            w.set_bit_30_opaque(false).set_sms4_mode(false);
+        }),
+        Err(_) => control.modify_context2_crypto_control(|w| {
+            w.set_bit_30_opaque(false).set_sms4_mode(false);
+        }),
+    }
 }
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
@@ -291,7 +312,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// `libpp.a[hal_crypto.o]::hal_crypto_init`.
     pub fn initialize_mac_crypto_bypass(&mut self) {
         let control = &mut self.mac.wifi_mac_crypto_control;
-        for (position, bits_16_17) in [3, 3, 0].into_iter().enumerate() {
+        for (position, upper_flags) in [true, true, false].into_iter().enumerate() {
             store_interface_control(
                 control,
                 element::<3>(position),
@@ -299,7 +320,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     bits_0_1: 0,
                     bit_8: false,
                     spp_amsdu: false,
-                    bits_16_17,
+                    upper_flags,
                 },
             );
         }
@@ -424,7 +445,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         let control = &mut self.mac.wifi_mac_crypto_control;
         publish_key_entry_validity(control, validity);
-        let spp = control.read_interface_control(control_index).spp_amsdu();
+        let spp = match Index::new(control_index.get()) {
+            Ok(sta_ap) => control.read_interface_control(sta_ap).spp_amsdu(),
+            Err(_) => control.read_context2_crypto_control().spp_amsdu(),
+        };
         enable_ccmp(control, control_index, spp);
         oer_portable_riscv::fence();
 
