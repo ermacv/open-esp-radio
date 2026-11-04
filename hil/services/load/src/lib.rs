@@ -112,14 +112,16 @@ pub struct Profile {
 
 /// Load the image sends within the window to `peer`:`peer_port` from its
 /// bound port: datagrams of `payload` bytes (the header included) at
-/// `rate_bps` bits per second of UDP payload, or as fast as its socket
-/// takes them when `rate_bps` is 0.
+/// `rate_bps` bits per second of UDP payload on average, `burst` of them
+/// (at least 1) due together, or as fast as its socket takes them when
+/// `rate_bps` is 0, which ignores `burst`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Transmit {
     pub peer: [u8; 4],
     pub peer_port: u16,
     pub payload: u16,
     pub rate_bps: u32,
+    pub burst: u16,
 }
 
 /// The answer to [`Start`].

@@ -116,7 +116,8 @@ fn validate(start: &Start) -> Result<(), LoadError> {
         Some(transmit)
             if transmit.peer_port == 0
                 || usize::from(transmit.payload) < header::LENGTH
-                || transmit.payload > MAX_PAYLOAD =>
+                || transmit.payload > MAX_PAYLOAD
+                || transmit.burst == 0 =>
         {
             Err(LoadError::InvalidParameters)
         }
@@ -150,6 +151,7 @@ mod tests {
             peer_port: 5002,
             payload,
             rate_bps: 0,
+            burst: 1,
         }
     }
 

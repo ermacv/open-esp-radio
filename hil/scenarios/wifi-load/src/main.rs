@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 mod link;
+mod ping;
 mod profile;
 mod tracking;
 mod traffic;
@@ -50,7 +51,7 @@ const SCENARIO: Scenario = Scenario::new(
 .using_router()
 .using_air_exclusively();
 
-const CASES: [Case; 5] = [
+const CASES: [Case; 9] = [
     Case {
         name: "path",
         run: path,
@@ -66,6 +67,22 @@ const CASES: [Case; 5] = [
     Case {
         name: "rx-tx",
         run: rx_tx,
+    },
+    Case {
+        name: "ping",
+        run: ping_idle,
+    },
+    Case {
+        name: "combined",
+        run: combined,
+    },
+    Case {
+        name: "overload",
+        run: overload,
+    },
+    Case {
+        name: "sparse",
+        run: sparse,
     },
     // Last: the image serves no station after a leave.
     Case {
@@ -732,6 +749,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
                 peer_port: host_port,
                 payload: PAYLOAD as u16,
                 rate_bps: 100_000,
+                burst: 1,
             }),
             profile: None,
         },
@@ -852,6 +870,10 @@ enum Mode {
 }
 
 impl Mode {
+    fn directions(self) -> u64 {
+        if self == Self::RxTx { 2 } else { 1 }
+    }
+
     fn name(self) -> &'static str {
         match self {
             Self::Rx => "rx",
@@ -871,6 +893,138 @@ fn tx(cx: &mut Cx<'_>) -> Result<(), Failure> {
 
 fn rx_tx(cx: &mut Cx<'_>) -> Result<(), Failure> {
     levels(cx, Mode::RxTx)
+}
+
+/// Each way of the `combined` case: 130 Mbit/s in all, near the air's
+/// ceiling (the archive's network comparison).
+const COMBINED_MBPS: u64 = 65;
+/// Each way of the `overload` case: more than the air holds either way
+/// (the archive's network comparison).
+const OVERLOAD_MBPS: u64 = 130;
+/// The requests of the `ping` case: 12 s at [`ping::PERIOD`], the archive's.
+const PING_COUNT: u32 = 120;
+/// The longest median round trip of a ping over an unloaded link, the
+/// owner's limit: host, wire, router, one hop over the air and back.
+const PING_MEDIAN_LIMIT_US: u64 = 3000;
+
+/// One sparse traffic shape, the same each way.
+#[derive(Clone, Copy)]
+struct Sparse {
+    datagrams: u16,
+    every_ms: u32,
+    payload: usize,
+}
+
+impl Sparse {
+    fn name(self) -> String {
+        format!(
+            "sparse {} of {} bytes every {} ms",
+            self.datagrams, self.payload, self.every_ms
+        )
+    }
+
+    /// The bits per second of UDP payload the shape offers one way.
+    fn rate_bps(self) -> u64 {
+        u64::from(self.datagrams) * self.payload as u64 * 8 * 1000 / u64::from(self.every_ms)
+    }
+}
+
+/// Isolated frames from an idle link, the archive's sparse peer of two
+/// datagrams, lone frames about as far apart as the receive ring's longest
+/// wait, and bursts that end in silence; small frames take the ring's
+/// shorter wait.
+const SPARSE: [Sparse; 6] = [
+    Sparse {
+        datagrams: 1,
+        every_ms: 100,
+        payload: PAYLOAD,
+    },
+    Sparse {
+        datagrams: 2,
+        every_ms: 100,
+        payload: PAYLOAD,
+    },
+    Sparse {
+        datagrams: 1,
+        every_ms: 1,
+        payload: PAYLOAD,
+    },
+    Sparse {
+        datagrams: 8,
+        every_ms: 20,
+        payload: PAYLOAD,
+    },
+    Sparse {
+        datagrams: 32,
+        every_ms: 10,
+        payload: PAYLOAD,
+    },
+    Sparse {
+        datagrams: 8,
+        every_ms: 20,
+        payload: 200,
+    },
+];
+
+/// Over an idle link: the median round trip decides the case.
+fn ping_idle(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    let device = device_address(cx)?;
+    let echoes = ping::echo(device, PING_COUNT).map_err(Failure::Incomplete)?;
+    cx.measure("ping idle", rtt(&echoes));
+    ping_within_limit("idle", &echoes)
+}
+
+/// Whether the ping's median is within [`PING_MEDIAN_LIMIT_US`].
+fn ping_within_limit(name: &str, echoes: &traffic::Echoes) -> Result<(), Failure> {
+    let median = ping::median_us(echoes);
+    check(
+        median.is_some_and(|median| median <= PING_MEDIAN_LIMIT_US),
+        format!(
+            "ping {name}: median {median:?} us of {} replies, the limit {PING_MEDIAN_LIMIT_US} us",
+            echoes.rtt_us.len()
+        ),
+    )
+}
+
+fn combined(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    both_ways(cx, "combined", COMBINED_MBPS)
+}
+
+fn overload(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    both_ways(cx, "overload", OVERLOAD_MBPS)
+}
+
+/// One level of `each_mbps` each way, a ping beside it.
+fn both_ways(cx: &mut Cx<'_>, name: &str, each_mbps: u64) -> Result<(), Failure> {
+    let path = Path::of(cx)?;
+    let offer = Offer {
+        name: format!("{name} {each_mbps} + {each_mbps} Mbit/s"),
+        ping: true,
+        ..Offer::level(Mode::RxTx, each_mbps * 2, probes()?)?
+    };
+    level(cx, &path, &offer).map(|_| ())
+}
+
+/// Every shape of [`SPARSE`] both ways at once, a ping beside it and no
+/// RTT probes, which would be traffic of their own. A shape's median ping
+/// decides the case: a sparse link stays as quick as an idle one.
+fn sparse(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    let path = Path::of(cx)?;
+    let mut over = Ok(());
+    for shape in SPARSE {
+        let offer = Offer {
+            name: shape.name(),
+            mode: Mode::RxTx,
+            each_bps: shape.rate_bps(),
+            payload: shape.payload,
+            burst: shape.datagrams,
+            probing: false,
+            ping: true,
+        };
+        let echoes = level(cx, &path, &offer)?;
+        over = over.and(ping_within_limit(&offer.name, &echoes));
+    }
+    over
 }
 
 /// How long into an RX run the stop comes, and how long the leave may take:
@@ -913,6 +1067,7 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
                 run,
                 PAYLOAD,
                 offered_bps,
+                1,
                 STOP_AFTER + LEAVE_TIMEOUT,
             )
         });
@@ -941,35 +1096,78 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
 }
 
 fn levels(cx: &mut Cx<'_>, mode: Mode) -> Result<(), Failure> {
-    let device = device_address(cx)?;
-    let station = mac(status(cx)?.address);
-    let host = host_route(device)?.source;
+    let path = Path::of(cx)?;
+    let probing = probes()?;
     for total in levels_mbps()? {
-        level(cx, mode, device, &station, host, total)?;
+        level(cx, &path, &Offer::level(mode, total, probing)?)?;
     }
     Ok(())
 }
 
-/// One level: `total_mbps` offered, split over the mode's directions, for
-/// the window, with RTT probes from the start to the end of the drain. The
-/// access point's view of `station` is read before the run and after its
-/// drain.
-fn level(
-    cx: &mut Cx<'_>,
-    mode: Mode,
+/// Who a level runs between.
+struct Path {
     device: Ipv4Addr,
-    station: &str,
+    station: String,
     host: Ipv4Addr,
-    total_mbps: u64,
-) -> Result<(), Failure> {
-    let directions = if mode == Mode::RxTx { 2 } else { 1 };
-    let each_bps = total_mbps
-        .checked_mul(1_000_000)
-        .map(|bps| bps / directions)
-        .filter(|bps| u32::try_from(*bps).is_ok())
-        .ok_or_else(|| Failure::Incomplete(format!("{total_mbps} Mbit/s is out of range")))?;
+}
+
+impl Path {
+    fn of(cx: &mut Cx<'_>) -> Result<Self, Failure> {
+        let device = device_address(cx)?;
+        Ok(Self {
+            device,
+            station: mac(status(cx)?.address),
+            host: host_route(device)?.source,
+        })
+    }
+}
+
+/// What a level offers.
+struct Offer {
+    name: String,
+    mode: Mode,
+    /// Each direction's bits per second of UDP payload, on average.
+    each_bps: u64,
+    payload: usize,
+    /// The datagrams due together, each way.
+    burst: u16,
+    probing: bool,
+    /// Whether a `ping` runs through the window beside the load.
+    ping: bool,
+}
+
+impl Offer {
+    /// `total_mbps` of full datagrams, split over `mode`'s directions.
+    fn level(mode: Mode, total_mbps: u64, probing: bool) -> Result<Self, Failure> {
+        let each_bps = total_mbps
+            .checked_mul(1_000_000)
+            .map(|bps| bps / mode.directions())
+            .filter(|bps| u32::try_from(*bps).is_ok())
+            .ok_or_else(|| Failure::Incomplete(format!("{total_mbps} Mbit/s is out of range")))?;
+        Ok(Self {
+            name: format!("{} {total_mbps} Mbit/s", mode.name()),
+            mode,
+            each_bps,
+            payload: PAYLOAD,
+            burst: 1,
+            probing,
+            ping: false,
+        })
+    }
+}
+
+/// One level: `offer` over the window, with RTT probes from the start to
+/// the end of the drain when it asks and its ping within the window. The
+/// access point's view of the station is read before the run and after its
+/// drain. Returns the ping's echoes, empty without one.
+fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes, Failure> {
+    let Path {
+        device,
+        ref station,
+        host,
+    } = *path;
+    let (mode, each_bps, probing) = (offer.mode, offer.each_bps, offer.probing);
     let profile = profile::requested()?;
-    let probing = probes()?;
     let run = run_id();
     let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
         .map_err(|error| Failure::Incomplete(format!("the host socket: {error}")))?;
@@ -983,8 +1181,9 @@ fn level(
     let transmit = (mode != Mode::Rx).then(|| Transmit {
         peer: host.octets(),
         peer_port: host_port,
-        payload: PAYLOAD as u16,
+        payload: offer.payload as u16,
         rate_bps: u32::try_from(each_bps).unwrap_or(0),
+        burst: offer.burst,
     });
     let started = cx.call(
         Start {
@@ -1005,7 +1204,7 @@ fn level(
     let peer = SocketAddrV4::new(device, DEVICE_PORT);
     let stop = AtomicBool::new(false);
     let window = Duration::from_millis(u64::from(DURATION_MS));
-    let (sent, probes) = std::thread::scope(|scope| {
+    let (sent, probes, echoes) = std::thread::scope(|scope| {
         // The host's window starts with the image's, as near as the HIL
         // answer's latency allows; the image counts only its own window.
         // The probes go within the window only; their late replies are
@@ -1013,17 +1212,31 @@ fn level(
         std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)));
         let probes = probing
             .then(|| scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop)));
+        let requests = (window.as_millis() / ping::PERIOD.as_millis()) as u32;
+        let echoes = offer
+            .ping
+            .then(|| scope.spawn(move || ping::echo(device, requests)));
         let sent = if mode == Mode::Tx {
             std::thread::sleep(window);
             traffic::Sent::default()
         } else {
-            traffic::send(&endpoint, peer, run, PAYLOAD, each_bps, window)
+            traffic::send(
+                &endpoint,
+                peer,
+                run,
+                offer.payload,
+                each_bps,
+                offer.burst,
+                window,
+            )
         };
         stop.store(true, Ordering::Relaxed);
         let probes = probes.map_or(0, |probes| probes.join().unwrap_or(0));
         std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
-        (sent, probes)
+        let echoes = echoes.map(|echoes| echoes.join().unwrap_or_else(|_| Err("ping".to_owned())));
+        (sent, probes, echoes)
     });
+    let echoes = echoes.transpose().map_err(Failure::Incomplete)?;
     let after = link::read(cx, station);
     let span = since.elapsed();
     let ended = collect(cx, run)?;
@@ -1042,12 +1255,15 @@ fn level(
     };
     let mut received = endpoint.close();
     received.echoes.sent = probes;
-    let name = format!("{} {total_mbps} Mbit/s", mode.name());
-    let mut value = measurement(mode, total_mbps, &sent, &received, &ended);
+    let name = &offer.name;
+    let mut value = measurement(offer, &sent, &received, &ended);
     if let Some(object) = value.as_object_mut() {
-        let link = link_measurement(&name, &before, &after, span, &ended);
+        if let Some(echoes) = &echoes {
+            object.insert("ping".to_owned(), rtt(echoes));
+        }
+        let link = link_measurement(name, &before, &after, span, &ended);
         object.insert("link".to_owned(), link);
-        let tracking = tracking_measurement(&name, &ended);
+        let tracking = tracking_measurement(name, &ended);
         object.insert("tracking".to_owned(), tracking);
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
@@ -1069,8 +1285,8 @@ fn level(
             object.insert("profile_hart1".to_owned(), report(&hart1));
         }
     }
-    cx.measure(name, value);
-    Ok(())
+    cx.measure(name.clone(), value);
+    Ok(echoes.unwrap_or_default())
 }
 
 /// One level's measurement. Throughput is over the measuring window: the
@@ -1079,19 +1295,19 @@ fn level(
 /// received (the image sends only within it). CPU is the image's, at the
 /// window's two ends, the parts' polls and the counters within it.
 fn measurement(
-    mode: Mode,
-    total_mbps: u64,
+    offer: &Offer,
     sent: &traffic::Sent,
     received: &traffic::Received,
     ended: &Ended,
 ) -> serde_json::Value {
     let report = &ended.report;
-    let directions = if mode == Mode::RxTx { 2 } else { 1 };
-    let offered_each = round(total_mbps as f64 / directions as f64);
+    let mode = offer.mode;
+    let offered_each = round(offer.each_bps as f64 / 1e6);
     let window = window_us(report) as f64 / 1e6;
     let mut value = serde_json::json!({
-        "offered_total_mbps": total_mbps,
-        "payload_bytes": PAYLOAD,
+        "offered_total_mbps": round(offer.each_bps as f64 * mode.directions() as f64 / 1e6),
+        "payload_bytes": offer.payload,
+        "burst_datagrams": offer.burst,
         "window_s": round(window),
         "rtt": rtt(&received.echoes),
         "cpu": utilisation(&report.cpu_start, &report.cpu_end),
@@ -1167,6 +1383,47 @@ mod tests {
     }
 
     #[test]
+    fn a_sparse_shape_offers_its_datagrams_over_its_period() {
+        let shape = Sparse {
+            datagrams: 2,
+            every_ms: 100,
+            payload: 1000,
+        };
+        assert_eq!(shape.rate_bps(), 160_000);
+        assert_eq!(shape.name(), "sparse 2 of 1000 bytes every 100 ms");
+        assert!(SPARSE.iter().all(|shape| shape.rate_bps() > 0));
+        assert!(
+            SPARSE
+                .iter()
+                .all(|shape| u32::try_from(shape.rate_bps()).is_ok())
+        );
+    }
+
+    #[test]
+    fn a_level_splits_its_total_over_its_directions() {
+        assert_eq!(
+            Offer::level(Mode::RxTx, 130, true).unwrap().each_bps,
+            65_000_000
+        );
+        assert_eq!(
+            Offer::level(Mode::Rx, 130, true).unwrap().each_bps,
+            130_000_000
+        );
+        assert!(Offer::level(Mode::Rx, 5000, true).is_err());
+    }
+
+    #[test]
+    fn the_ping_limit_holds_a_median_and_needs_replies() {
+        let echoes = |rtt_us: &[u64]| traffic::Echoes {
+            sent: 3,
+            rtt_us: rtt_us.to_vec(),
+        };
+        assert!(ping_within_limit("x", &echoes(&[900, 2900, 9000])).is_ok());
+        assert!(ping_within_limit("x", &echoes(&[900, 3100, 9000])).is_err());
+        assert!(ping_within_limit("x", &echoes(&[])).is_err());
+    }
+
+    #[test]
     fn probes_are_on_or_off_and_nothing_else() {
         assert!(parse_probes("on").unwrap());
         assert!(!parse_probes(" off ").unwrap());
@@ -1201,7 +1458,8 @@ mod tests {
             link: Link::default(),
             tracking: Tracking::default(),
         };
-        let value = measurement(Mode::Rx, 65, &sent, &traffic::Received::default(), &ended);
+        let offer = Offer::level(Mode::Rx, 65, true).unwrap();
+        let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);
         assert_eq!(value["window_s"], 5.0);
         assert_eq!(value["rx"]["device_received_mbps"], 13.0);
         assert!(value.get("tx").is_none());

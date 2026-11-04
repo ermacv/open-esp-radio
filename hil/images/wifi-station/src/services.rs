@@ -59,6 +59,7 @@ mod tests {
                 peer_port: u16::MAX,
                 payload: u16::MAX,
                 rate_bps: u32::MAX,
+                burst: u16::MAX,
             }),
             profile: Some(oer_hil_services_load::Profile {
                 period_us: u32::MAX,

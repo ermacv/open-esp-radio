@@ -215,7 +215,7 @@ wireless radio/BSS. These are the complete settings it owns:
 | `firewall.oer_station_dhcp` | Accept IPv4 UDP 68→67 from station to OpenWrt |
 | `firewall.oer_station_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
 | `firewall.oer_station_out`, `firewall.oer_station_in` | Reject all forwarding out of and into station, placed first among configured rules |
-| `firewall.oer_station_host_out`, `firewall.oer_station_host_in` | Only when the run names a host (`forward_host`): accept IPv4 UDP and TCP from station to that host and back, placed before the rejections |
+| `firewall.oer_station_host_out`, `firewall.oer_station_host_in` | Only when the run names a host (`forward_host`): accept IPv4 UDP, TCP and ICMP from station to that host and back, placed before the rejections |
 | Selected radio | Stand channel at the run's width (HT20 or HT40), beacon interval 100 TU, enabled, HE disabled |
 | Selected BSS | Generated SSID, enabled, visible, WPA2-CCMP encryption, station network, client isolation enabled |
 
