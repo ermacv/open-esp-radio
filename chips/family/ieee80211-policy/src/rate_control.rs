@@ -1216,8 +1216,9 @@ pub const fn beamforming_report_rate_for_metric(
 /// station; an access point keeps one per associated station with it, a
 /// use of ours.
 ///
-/// A schedule's HT rate takes the link's width, and its short guard
-/// interval only where the peer supports one at that width; an HE rate
+/// A schedule's HT rate takes the link's width and, whatever guard interval
+/// the schedule names, the short one wherever the peer supports it at that
+/// width and the long one otherwise; an HE rate
 /// takes 0.8 us with one HE-LTF where the peer supports it, two otherwise,
 /// and LDPC where the peer receives it. A schedule
 /// without a portable rate (the vendor's Long Range modes) sends at the
@@ -1248,11 +1249,10 @@ impl RateDecode {
             self.ht_bandwidth,
             self.he_800ns_gi_ltf,
         ) {
-            // A schedule rate the peer's capabilities cannot carry as is
-            // goes at the vendor station's fallback, as one without a
-            // portable rate does.
-            Some(PhyRate::Ht(rate)) if rate.short_gi() && !self.ht_short_gi => {
-                HtRate::new(rate.mcs(), rate.bandwidth(), false)
+            // A rate with no such form goes at the vendor station's
+            // fallback, as one without a portable rate does.
+            Some(PhyRate::Ht(rate)) if rate.short_gi() != self.ht_short_gi => {
+                HtRate::new(rate.mcs(), rate.bandwidth(), self.ht_short_gi)
                     .map_or_else(|| self.fallback(), PhyRate::Ht)
             }
             Some(PhyRate::He(rate)) if self.he_ldpc => HeRate::new(
