@@ -75,6 +75,8 @@ oer_protocols_hil_protocol::messages! {
     topic TrackingCollected = "load/tracking-report";
     endpoint CollectMac = "load/mac" => MacCollected;
     topic MacCollected = "load/mac-report";
+    endpoint CollectPositions = "load/positions" => PositionsCollected;
+    topic PositionsCollected = "load/positions-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -822,21 +824,68 @@ pub struct Mac {
     head: [u32; 32],
     tail: [u32; MAC_COUNTS - 32],
     pub frequency_offset: i32,
-    /// Unacknowledged subframes of first transmissions by their position on
-    /// air, the first one at index 0: what a BlockAck told, beside what the
-    /// MAC itself counted.
+}
+
+/// The aggregates a BlockAck answered at their first transmission within
+/// run `run`'s window, by position on air.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectPositions {
+    pub run: u32,
+}
+
+/// The answer to [`CollectPositions`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the counts go by value"
+)]
+pub enum PositionsCollected {
+    Report(Positions),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// See [`CollectPositions`], the first position at index 0.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Positions {
+    /// Subframes that went at each position.
+    pub sent: [u32; 32],
+    /// Those left unacknowledged.
     pub holes: [u32; 32],
+    /// Aggregates whose last subframes went missing together, by the
+    /// length of that run, a run of one at index 0.
+    pub tail_runs: [u32; 32],
+    /// Aggregates with a hole whose last subframe was acknowledged.
+    pub interior: u32,
+}
+
+impl Positions {
+    /// The counts between readings `start` and `end`, wrapping at 2^32.
+    pub fn window(start: &Self, end: &Self) -> Self {
+        let between = |at: fn(&Self) -> &[u32; 32]| -> [u32; 32] {
+            core::array::from_fn(|position| {
+                let read = |reading: &Self| at(reading).get(position).copied().unwrap_or(0);
+                read(end).wrapping_sub(read(start))
+            })
+        };
+        Self {
+            sent: between(|reading| &reading.sent),
+            holes: between(|reading| &reading.holes),
+            tail_runs: between(|reading| &reading.tail_runs),
+            interior: end.interior.wrapping_sub(start.interior),
+        }
+    }
 }
 
 impl Mac {
-    /// The reading of `counts`, `frequency_offset` and `holes`.
-    pub fn new(counts: [u32; MAC_COUNTS], frequency_offset: i32, holes: [u32; 32]) -> Self {
+    /// The reading of `counts` and `frequency_offset`.
+    pub fn new(counts: [u32; MAC_COUNTS], frequency_offset: i32) -> Self {
         let at = |index: usize| counts.get(index).copied().unwrap_or(0);
         Self {
             head: core::array::from_fn(at),
             tail: core::array::from_fn(|index| at(index.saturating_add(32))),
             frequency_offset,
-            holes,
         }
     }
 
@@ -861,11 +910,7 @@ impl Mac {
                     .checked_shr(32u32.saturating_sub(u32::from(bits)))
                     .unwrap_or(u32::MAX)
         });
-        let holes = core::array::from_fn(|position| {
-            let at = |reading: &Self| reading.holes.get(position).copied().unwrap_or(0);
-            at(end).wrapping_sub(at(start))
-        });
-        Self::new(counts, end.frequency_offset, holes)
+        Self::new(counts, end.frequency_offset)
     }
 }
 
@@ -1085,6 +1130,7 @@ oer_protocols_hil_agent::service! {
         CollectLink(CollectLink) => link,
         CollectTracking(CollectTracking) => tracking,
         CollectMac(CollectMac) => mac,
+        CollectPositions(CollectPositions) => positions,
     }
 }
 

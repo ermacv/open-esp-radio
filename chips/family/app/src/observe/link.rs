@@ -78,9 +78,6 @@ pub struct TxLink {
     /// none, 1, 2, 3 to 4, 5 to 8, 9 and more with some acknowledged, and
     /// all (a lost aggregate or BlockAck).
     pub missing: [u32; MISSING_BINS],
-    /// Unacknowledged subframes of first transmissions by their position on
-    /// air, the first one at index 0.
-    pub holes: [u32; HOLE_POSITIONS],
 }
 
 /// Both directions.
@@ -122,8 +119,23 @@ pub struct Settled {
 /// The aggregates' size bins.
 pub const SIZE_BINS: usize = 6;
 
-/// The positions of an aggregate the hole counts tell apart.
+/// The positions of an aggregate the counts tell apart.
 pub const HOLE_POSITIONS: usize = 32;
+
+/// The aggregates a BlockAck answered at their first transmission, by
+/// position on air, the first one at index 0.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Positions {
+    /// Subframes that went at each position.
+    pub sent: [u32; HOLE_POSITIONS],
+    /// Those left unacknowledged.
+    pub holes: [u32; HOLE_POSITIONS],
+    /// Aggregates whose last subframes went missing together, by the
+    /// length of that run, a run of one at index 0.
+    pub tail_runs: [u32; HOLE_POSITIONS],
+    /// Aggregates with a hole whose last subframe was acknowledged.
+    pub interior: u32,
+}
 
 /// The bins of the members a settled aggregate's BlockAck left missing.
 pub const MISSING_BINS: usize = 7;
@@ -220,7 +232,10 @@ pub struct LinkCounter {
     /// retried, dropped and BlockAckReqs.
     ampdu: [AtomicU32; AMPDU_COUNTS],
     tx_missing: [AtomicU32; MISSING_BINS],
+    tx_sent: [AtomicU32; HOLE_POSITIONS],
     tx_holes: [AtomicU32; HOLE_POSITIONS],
+    tx_tail_runs: [AtomicU32; HOLE_POSITIONS],
+    tx_interior: AtomicU32,
 }
 
 const AMPDU_COUNTS: usize = 7 + SIZE_BINS;
@@ -237,16 +252,40 @@ impl LinkCounter {
             tx_transmissions: AtomicU32::new(0),
             ampdu: [const { AtomicU32::new(0) }; AMPDU_COUNTS],
             tx_missing: [const { AtomicU32::new(0) }; MISSING_BINS],
+            tx_sent: [const { AtomicU32::new(0) }; HOLE_POSITIONS],
             tx_holes: [const { AtomicU32::new(0) }; HOLE_POSITIONS],
+            tx_tail_runs: [const { AtomicU32::new(0) }; HOLE_POSITIONS],
+            tx_interior: AtomicU32::new(0),
         }
     }
 
-    /// Count each position set in `holes`.
-    pub fn holes(&self, holes: u32) {
-        for (position, count) in self.tx_holes.iter().enumerate() {
-            if holes >> position & 1 != 0 {
-                bump(count, 1);
-            }
+    /// Count one aggregate of `members` a BlockAck answered at its first
+    /// transmission, leaving the positions in `holes` unacknowledged.
+    pub fn answered(&self, members: u8, holes: u32) {
+        for position in 0..usize::from(members).min(HOLE_POSITIONS) {
+            bump_at(&self.tx_sent, position, 1);
+            bump_at(&self.tx_holes, position, holes >> position & 1);
+        }
+        if holes == 0 {
+            return;
+        }
+        let run = (0..u32::from(members))
+            .rev()
+            .take_while(|&position| holes.checked_shr(position).unwrap_or(0) & 1 != 0)
+            .count();
+        match run.checked_sub(1) {
+            Some(index) => bump_at(&self.tx_tail_runs, index, 1),
+            None => bump(&self.tx_interior, 1),
+        }
+    }
+
+    /// The answered aggregates now.
+    pub fn positions(&self) -> Positions {
+        Positions {
+            sent: read(&self.tx_sent),
+            holes: read(&self.tx_holes),
+            tail_runs: read(&self.tx_tail_runs),
+            interior: self.tx_interior.load(Ordering::Relaxed),
         }
     }
 
@@ -338,7 +377,6 @@ impl LinkCounter {
                 other_ends,
                 unsent,
                 missing: read(&self.tx_missing),
-                holes: read(&self.tx_holes),
             },
         }
     }

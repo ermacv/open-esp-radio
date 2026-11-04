@@ -145,11 +145,20 @@ fn a_transmission_counts_its_rate_end_and_attempts() {
 }
 
 #[test]
-fn each_hole_counts_at_its_position() {
+fn an_answered_aggregate_counts_its_positions_and_how_its_holes_end() {
     let counter = LinkCounter::new();
-    counter.holes(0b101);
-    counter.holes(1 << 31 | 1);
-    let holes = counter.link().tx.holes;
-    assert_eq!((holes[0], holes[1], holes[2], holes[31]), (2, 0, 1, 1));
-    assert_eq!(holes.iter().sum::<u32>(), 4);
+    // Positions 2 and 3 of four: a tail of two.
+    counter.answered(4, 0b1100);
+    // Position 1 of four, the last acknowledged.
+    counter.answered(4, 0b0010);
+    // A full aggregate counts at every position.
+    counter.answered(2, 0);
+    // Past the positions told apart, a whole answer still counts.
+    counter.answered(32, 1 << 31);
+    let positions = counter.positions();
+    assert_eq!(positions.sent[..5], [4, 4, 3, 3, 1]);
+    assert_eq!(positions.holes[..5], [0, 1, 1, 1, 0]);
+    assert_eq!(positions.holes[31], 1);
+    assert_eq!((positions.tail_runs[0], positions.tail_runs[1]), (1, 1));
+    assert_eq!(positions.interior, 1);
 }

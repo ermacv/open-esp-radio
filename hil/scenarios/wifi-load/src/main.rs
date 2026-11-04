@@ -27,9 +27,10 @@ use std::{
 
 use oer_hil_services_load::{
     CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectMac, CollectParts,
-    CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
-    LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, PartWindow, PartsCollected,
-    Report, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected, Transmit,
+    CollectPositions, CollectTracking, Collected, Counters, CountersCollected, DataBus,
+    InstructionBus, Link, LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected,
+    PartWindow, PartsCollected, Positions, PositionsCollected, Report, Start, Started, TUNE_KNOBS,
+    TUNE_UNSET, Tracking, TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 use oer_protocols_hil_agent::base::Service as _;
@@ -243,6 +244,7 @@ struct Ended {
     counters: Counters,
     link: Link,
     mac: Mac,
+    positions: Positions,
     tracking: Tracking,
 }
 
@@ -286,6 +288,10 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         MacCollected::Report(mac) => mac,
         other => return Err(Failure::Fail(format!("the image's MAC: {other:?}"))),
     };
+    let positions = match cx.call(CollectPositions { run }, CALL)? {
+        PositionsCollected::Report(positions) => positions,
+        other => return Err(Failure::Fail(format!("the image's positions: {other:?}"))),
+    };
     match cx.call(CollectTracking { run }, CALL)? {
         TrackingCollected::Report(tracking) => Ok(Ended {
             report,
@@ -293,6 +299,7 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             counters,
             link,
             mac,
+            positions,
             tracking,
         }),
         other => Err(Failure::Fail(format!("the image's tracking: {other:?}"))),
@@ -309,10 +316,17 @@ fn mac_counts(mac: &Mac) -> serde_json::Value {
         .filter(|(_, count)| *count != 0)
         .map(|(name, count)| (name, count.into()))
         .collect();
+    serde_json::json!({ "counts": moved, "frequency_offset": mac.frequency_offset })
+}
+
+/// The aggregates a BlockAck answered at their first transmission, by
+/// position on air.
+fn positions_counts(positions: &Positions) -> serde_json::Value {
     serde_json::json!({
-        "counts": moved,
-        "frequency_offset": mac.frequency_offset,
-        "holes_by_position": mac.holes,
+        "sent": positions.sent,
+        "holes": positions.holes,
+        "tail_runs": positions.tail_runs,
+        "interior": positions.interior,
     })
 }
 
@@ -1411,6 +1425,7 @@ fn measurement(
         "polls": polls(&ended.parts, window_us(report)),
         "counters": counters(&ended.counters, window_us(report)),
         "mac": mac_counts(&ended.mac),
+        "positions": positions_counts(&ended.positions),
     });
     let mut sides = serde_json::Map::new();
     if mode != Mode::Tx {
@@ -1582,6 +1597,7 @@ mod tests {
             counters: Counters::default(),
             link: Link::default(),
             mac: Mac::default(),
+            positions: Positions::default(),
             tracking: Tracking::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();

@@ -43,9 +43,8 @@ pub struct AggregateSettled {
     /// Whether the aggregate was refused before the port.
     pub refused: bool,
     /// The positions its BlockAck left unacknowledged, bit 0 the first
-    /// subframe on air: of a first transmission that got an answer, else
-    /// none.
-    pub holes: u32,
+    /// subframe on air: of a first transmission that got an answer.
+    pub holes: Option<u32>,
     /// The rate its last transmission went at; `None` when none reached
     /// the air.
     pub rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,

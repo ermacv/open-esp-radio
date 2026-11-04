@@ -32,8 +32,8 @@ use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
     Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError, Mac,
-    MacCollected, PartsCollected, Report, Request, SamplesCollected, Sent, Start, Started,
-    Tracking, TrackingCollected, Transmit,
+    MacCollected, PartsCollected, Positions, PositionsCollected, Report, Request, SamplesCollected,
+    Sent, Start, Started, Tracking, TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
@@ -76,6 +76,7 @@ pub(crate) enum Answer {
     Link(LinkCollected),
     Tracking(TrackingCollected),
     Mac(MacCollected),
+    Positions(PositionsCollected),
     Samples(SamplesCollected),
     Cpu(Load),
     /// The boot hart's relay answers it: a page of samples.
@@ -94,6 +95,7 @@ impl Answer {
             Self::Link(link) => answer(identity, &link),
             Self::Tracking(tracking) => answer(identity, &tracking),
             Self::Mac(mac) => answer(identity, &mac),
+            Self::Positions(positions) => answer(identity, &positions),
             Self::Samples(samples) => answer(identity, &samples),
             Self::Cpu(load) => answer(identity, &load),
             Self::Relayed => {}
@@ -173,6 +175,7 @@ async fn kept_answer(
         Kept::Counters => Answer::Counters(CountersCollected::Report(ended.counters)),
         Kept::Link => Answer::Link(LinkCollected::Report(ended.link)),
         Kept::Mac => Answer::Mac(MacCollected::Report(ended.mac)),
+        Kept::Positions => Answer::Positions(PositionsCollected::Report(ended.positions)),
         Kept::Tracking => Answer::Tracking(TrackingCollected::Report(ended.tracking)),
         Kept::Samples { from, hart } => match ended.sampled.get(usize::from(hart)) {
             // Hart 0's samples are in the boot hart's buffer: its relay
@@ -223,6 +226,7 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::Running(Kept::Counters) => Answer::Counters(CountersCollected::Running),
         Decided::Running(Kept::Link) => Answer::Link(LinkCollected::Running),
         Decided::Running(Kept::Mac) => Answer::Mac(MacCollected::Running),
+        Decided::Running(Kept::Positions) => Answer::Positions(PositionsCollected::Running),
         Decided::Running(Kept::Tracking) => Answer::Tracking(TrackingCollected::Running),
         Decided::Running(Kept::Samples { .. }) => Answer::Samples(SamplesCollected::Running),
         Decided::UnknownRun(Kept::Report) => Answer::Collected(Collected::Refused(unknown)),
@@ -232,6 +236,9 @@ fn decided_answer(decided: Decided) -> Answer {
         }
         Decided::UnknownRun(Kept::Link) => Answer::Link(LinkCollected::Refused(unknown)),
         Decided::UnknownRun(Kept::Mac) => Answer::Mac(MacCollected::Refused(unknown)),
+        Decided::UnknownRun(Kept::Positions) => {
+            Answer::Positions(PositionsCollected::Refused(unknown))
+        }
         Decided::UnknownRun(Kept::Tracking) => {
             Answer::Tracking(TrackingCollected::Refused(unknown))
         }
@@ -282,6 +289,7 @@ struct Ends {
     counters: Counters,
     link: Link,
     mac: Mac,
+    positions: Positions,
     tracking: Tracking,
     sampled: Sampled,
 }
@@ -298,6 +306,7 @@ struct Ended {
     counters: Counters,
     link: Link,
     mac: Mac,
+    positions: Positions,
     tracking: Tracking,
     sampled: Sampled,
 }
@@ -362,6 +371,7 @@ async fn run(
         counters: ends.counters,
         link: ends.link,
         mac: ends.mac,
+        positions: ends.positions,
         tracking: ends.tracking,
         sampled: ends.sampled,
     }
@@ -474,6 +484,7 @@ async fn measure(
         counters: report::counters(&counters_start, &counters_end),
         link: report::link_window(&counters_start, &counters_end),
         mac: report::mac_window(&counters_start, &counters_end),
+        positions: report::positions_window(&counters_start, &counters_end),
         tracking: report::tracking(&tracking_start, &tracking_end),
         sampled: [sampled, sampled1],
     }
