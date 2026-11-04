@@ -100,6 +100,7 @@ impl NetTransmit for NoTransmit {
     fn poll_room(&mut self, _: &mut Context<'_>) -> Poll<()> {
         Poll::Pending
     }
+    fn flush(&mut self) {}
     fn try_transmit(
         &mut self,
         frame: OwnedNetworkTxFrame,

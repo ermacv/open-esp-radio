@@ -190,6 +190,70 @@ fn an_end_is_told_only_while_it_waits_once_per_burst() {
 }
 
 #[test]
+fn a_held_burst_tells_a_consumer_of_one_only_when_it_ends() {
+    use core::pin::pin;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use core::task::{Context, Poll, Waker};
+
+    /// Counts its notifications.
+    #[derive(Default)]
+    struct Counted(AtomicUsize);
+    impl QueueNotify for Counted {
+        fn register(&self, _: &mut Context<'_>) {}
+        fn notify(&self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let told = |notify: &Counted| notify.0.load(Ordering::Relaxed);
+    let hold = |sender: &mut SlotSender<'_, u8, 4, &Counted, &Counted>, value| {
+        sender.try_send_held_with(|slot| {
+            *slot = value;
+            Ok::<_, ()>(())
+        })
+    };
+
+    let (consumer, producer) = (Counted::default(), Counted::default());
+    let mut queue = WakingSlotQueue::<u8, 4, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split(|| 0);
+    let mut cx = Context::from_waker(Waker::noop());
+    // Nothing waits: the end of a burst tells nothing.
+    sender.flush();
+    assert_eq!(told(&consumer), 0);
+    // Waiting for one: the burst fills, and only its end tells, once.
+    assert_eq!(pin!(receiver.ready()).poll(&mut cx), Poll::Pending);
+    assert_eq!(hold(&mut sender, 1), Ok(()));
+    assert_eq!(hold(&mut sender, 2), Ok(()));
+    assert_eq!(told(&consumer), 0, "a burst does not wake for its first");
+    sender.flush();
+    assert_eq!(told(&consumer), 1, "the end of the burst does");
+    sender.flush();
+    assert_eq!(told(&consumer), 1, "no longer waiting");
+    assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(1));
+    assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(2));
+    // Waiting for two: the second held fill tells at once.
+    assert_eq!(
+        pin!(receiver.ready_at_least(2)).poll(&mut cx),
+        Poll::Pending
+    );
+    assert_eq!(hold(&mut sender, 3), Ok(()));
+    assert_eq!(told(&consumer), 1, "below the count");
+    assert_eq!(hold(&mut sender, 4), Ok(()));
+    assert_eq!(told(&consumer), 2, "at the count, within the burst");
+    // Below the count, the end of a burst tells nothing either.
+    assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(3));
+    assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(4));
+    assert_eq!(
+        pin!(receiver.ready_at_least(2)).poll(&mut cx),
+        Poll::Pending
+    );
+    assert_eq!(hold(&mut sender, 5), Ok(()));
+    sender.flush();
+    assert_eq!(told(&consumer), 2);
+    // A consumer that registers after a held fill sees it itself.
+    assert_eq!(pin!(receiver.ready()).poll(&mut cx), Poll::Ready(()));
+}
+
+#[test]
 fn a_consumer_waiting_for_several_is_told_once_they_are_filled() {
     use core::pin::pin;
     use core::sync::atomic::{AtomicUsize, Ordering};

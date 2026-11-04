@@ -69,6 +69,31 @@ fn a_transmitted_packet_goes_straight_to_the_device_and_returns_to_its_origin() 
 }
 
 #[test]
+fn a_burst_wakes_the_stack_once_and_its_next_poll_ends_the_burst() {
+    let general = allocator::<2>();
+    let (mut device, _radio, sink) = endpoint(4);
+    let wakes = Arc::new(WakeCount::default());
+    let waker = Waker::from(wakes.clone());
+    device.register_waker(&waker);
+    device.transmit(frame(general, 0x53)).unwrap();
+    device.transmit(frame(general, 0x54)).unwrap();
+    assert_eq!(wakes.0.load(StdOrdering::Relaxed), 1, "one for the burst");
+    assert_eq!(sink.0.borrow().flushed, 0, "the sender still runs");
+    device.register_waker(&waker);
+    assert_eq!(sink.0.borrow().flushed, 1, "the stack's poll ends it");
+    device.register_waker(&waker);
+    assert_eq!(sink.0.borrow().flushed, 1, "nothing was sent since");
+}
+
+#[test]
+fn a_device_no_stack_polls_yet_ends_each_frame_itself() {
+    let general = allocator::<1>();
+    let (mut device, _radio, sink) = endpoint(1);
+    device.transmit(frame(general, 0x56)).unwrap();
+    assert_eq!(sink.0.borrow().flushed, 1);
+}
+
+#[test]
 fn a_full_device_hands_the_packet_back_unchanged() {
     let general = allocator::<1>();
     let (mut device, _radio, _sink) = endpoint(0);

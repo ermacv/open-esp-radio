@@ -733,6 +733,8 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
         payload: [1; 4],
     };
     assert!(transmit.try_transmit(frame).is_ok());
+    assert_eq!(station.counts(), (1, 0), "the burst has not ended");
+    transmit.flush();
     assert_eq!(station.counts(), (1, 1));
     // Waiting for room, it also waits for returned memory.
     assert!(transmit.poll_room(&mut cx).is_pending());
