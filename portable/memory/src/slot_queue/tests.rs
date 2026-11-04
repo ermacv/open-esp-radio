@@ -188,3 +188,58 @@ fn an_end_is_told_only_while_it_waits_once_per_burst() {
     assert_eq!(told(&producer), 1, "one notify for the reads");
     assert_eq!(pin!(sender.ready()).poll(&mut cx), Poll::Ready(()));
 }
+
+#[test]
+fn a_consumer_waiting_for_several_is_told_once_they_are_filled() {
+    use core::pin::pin;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use core::task::{Context, Poll, Waker};
+
+    /// Counts its notifications.
+    #[derive(Default)]
+    struct Counted(AtomicUsize);
+    impl QueueNotify for Counted {
+        fn register(&self, _: &mut Context<'_>) {}
+        fn notify(&self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let told = |notify: &Counted| notify.0.load(Ordering::Relaxed);
+    let fill = |sender: &mut SlotSender<'_, u8, 4, &Counted, &Counted>, value| {
+        sender.try_send_with(|slot| {
+            *slot = value;
+            Ok::<_, ()>(())
+        })
+    };
+
+    let (consumer, producer) = (Counted::default(), Counted::default());
+    let mut queue = WakingSlotQueue::<u8, 4, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split(|| 0);
+    let mut cx = Context::from_waker(Waker::noop());
+    // Waiting for three: the first two fills tell nothing, the third once.
+    assert_eq!(pin!(receiver.ready_at_least(3)).poll(&mut cx), Poll::Pending);
+    assert_eq!(fill(&mut sender, 1), Ok(()));
+    assert_eq!(fill(&mut sender, 2), Ok(()));
+    assert_eq!(told(&consumer), 0, "below the count nothing is told");
+    assert_eq!(fill(&mut sender, 3), Ok(()));
+    assert_eq!(told(&consumer), 1, "told at the count");
+    assert_eq!(fill(&mut sender, 4), Ok(()));
+    assert_eq!(told(&consumer), 1, "no longer waiting");
+    // Already holding the count: ready at once, and nothing more is told.
+    assert_eq!(pin!(receiver.ready_at_least(2)).poll(&mut cx), Poll::Ready(()));
+    for value in 1..5 {
+        assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(value));
+    }
+    // A count beyond the depth waits for a full queue; zero waits for one.
+    assert_eq!(pin!(receiver.ready_at_least(9)).poll(&mut cx), Poll::Pending);
+    for value in 5..9 {
+        assert_eq!(fill(&mut sender, value), Ok(()));
+    }
+    assert_eq!(told(&consumer), 2, "told when the queue is full");
+    for value in 5..9 {
+        assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(value));
+    }
+    assert_eq!(pin!(receiver.ready_at_least(0)).poll(&mut cx), Poll::Pending);
+    assert_eq!(fill(&mut sender, 9), Ok(()));
+    assert_eq!(told(&consumer), 3, "zero counts as one");
+}

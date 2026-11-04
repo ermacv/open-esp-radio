@@ -581,6 +581,28 @@ impl DataPlane {
         self.first.right.is_none() || self.second.right.is_none()
     }
 
+    /// While an arena is on the air, the frames the standby still takes
+    /// before its PPDU bound, of the arena's `capacity`: the bound of the
+    /// TID it holds, or the whole arena while it holds none. `None` while
+    /// no arena is on the air: the next frame goes out at once.
+    pub fn standby_room(&self, capacity: u8) -> Option<u8> {
+        if !self.on_air() {
+            return None;
+        }
+        let Some(id) = self.standby() else {
+            return Some(0);
+        };
+        let book = self.book(id);
+        let count = book.count();
+        if count == 0 {
+            return Some(capacity);
+        }
+        let bound = (*book.tid.select(&self.limits)).map_or(0, |limit| {
+            u8::try_from(limit.subframes()).unwrap_or(u8::MAX).min(capacity)
+        });
+        Some(bound.saturating_sub(count))
+    }
+
     /// The frames the arenas hold: published, retained or taken.
     pub fn frames(&self) -> u8 {
         self.first.count().saturating_add(self.second.count())

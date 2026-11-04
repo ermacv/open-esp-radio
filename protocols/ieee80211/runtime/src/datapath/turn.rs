@@ -263,12 +263,15 @@ where
         {
             ready = true;
         }
-        if self.accepts()
-            && core::pin::pin!(network.transmit.ready())
-                .poll(cx)
-                .is_ready()
-        {
-            ready = true;
+        if self.accepts() {
+            let want = self.intake_want(TX_DEPTH);
+            if want != 0
+                && core::pin::pin!(network.transmit.ready_at_least(want))
+                    .poll(cx)
+                    .is_ready()
+            {
+                ready = true;
+            }
         }
         if !self.data.freed.is_empty()
             && core::pin::pin!(network.returned.ready())
@@ -319,6 +322,16 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         let facts = core::mem::take(&mut self.facts);
+        // The standby takes what the network queued before a completion
+        // puts it on the air.
+        if facts.tx.is_some_and(|tx| tx.bits() != 0)
+            && self.data.plane.as_ref().is_some_and(DataPlane::on_air)
+        {
+            D::span(ActorSpan::Intake, false);
+            let taken = self.intake(lifecycle, network);
+            D::span(ActorSpan::Intake, true);
+            taken?;
+        }
         D::span(ActorSpan::Transmit, false);
         let transmitted = self.transmit(facts, lifecycle, network);
         D::span(ActorSpan::Transmit, true);
