@@ -3,29 +3,30 @@
 use core::marker::PhantomData;
 
 use super::{Brand, Line, Permit, PoolPath, Seat, Slot};
-use crate::{SlotIdentity, SlotOwner};
+use crate::SlotIdentity;
 
 /// Authority supplied only to a backend's body-view constructor.
 ///
 /// Keep this value private in backend view implementations. It neither mints
 /// nor copies capacity: conversions consume a token and preserve its identity,
 /// component path, kind and index. No reference or payload is converted. The
-/// concrete backend tag prevents a wrapper from forwarding its authority to
-/// another backend's constructor. A body receives only the resulting views,
+/// concrete backend tag `S` (a slot owner, or a backend type that registers
+/// no slot) prevents a wrapper from forwarding its authority to another
+/// backend's constructor. A body receives only the resulting views,
 /// whose invariant loan prevents escape even when Id is static.
-pub struct BodyLoan<'p, Id: SlotIdentity, S: SlotOwner<Id>> {
+pub struct BodyLoan<'p, Id: SlotIdentity, S> {
     brand: Brand<'p>,
     owner: PhantomData<fn(Id, S) -> (Id, S)>,
 }
 
-impl<Id: SlotIdentity, S: SlotOwner<Id>> Copy for BodyLoan<'_, Id, S> {}
-impl<Id: SlotIdentity, S: SlotOwner<Id>> Clone for BodyLoan<'_, Id, S> {
+impl<Id: SlotIdentity, S> Copy for BodyLoan<'_, Id, S> {}
+impl<Id: SlotIdentity, S> Clone for BodyLoan<'_, Id, S> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'p, Id: SlotIdentity, S: SlotOwner<Id>> BodyLoan<'p, Id, S> {
+impl<'p, Id: SlotIdentity, S> BodyLoan<'p, Id, S> {
     pub(crate) const fn new() -> Self {
         Self {
             brand: PhantomData,

@@ -6,8 +6,8 @@
 //! and never waits: the runtime owns the event queues, the interrupt
 //! entries, the publication deadlines, the software queue of each access
 //! category ahead of the core and the asynchronous PHY retune an `Enable`
-//! needs, and serves the phase contract
-//! (`oer_protocols_ieee80211_contracts_port::phase`) over this core.
+//! needs, and serves the data port
+//! (`oer_protocols_ieee80211_contracts_port::DataPort`) over this core.
 //!
 //! # Checked operations
 //!

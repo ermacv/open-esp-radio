@@ -1,7 +1,7 @@
 #![no_std]
-use oer_protocols_ieee80211_contracts_port::{LowerMacTerminal, PhaseTypes};
+use oer_protocols_ieee80211_contracts_port::{LowerMacTerminal, PortTypes};
 
-pub fn disabled_return<'id, P: PhaseTypes<'id>>(
+pub fn disabled_return<'id, P: PortTypes<'id>>(
     frame: P::RxBuffer,
     meta: P::RxMeta,
     terminal: LowerMacTerminal<'id, P>,

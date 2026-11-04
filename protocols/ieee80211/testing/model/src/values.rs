@@ -18,11 +18,6 @@ impl<T> OwnedQueue<T> {
         values.push_back(item);
         self.0.set(values);
     }
-    pub(super) fn push_front(&self, item: T) {
-        let mut values = self.0.take();
-        values.push_front(item);
-        self.0.set(values);
-    }
     pub(super) fn pop_front(&self) -> Option<T> {
         let mut values = self.0.take();
         let item = values.pop_front();
@@ -41,22 +36,10 @@ impl<T> OwnedQueue<T> {
     pub(super) fn take_batch(&self) -> VecDeque<T> {
         self.0.take()
     }
-    pub(super) fn clear(&self) {
-        self.0.take().clear();
-    }
 }
 pub(super) trait Snapshot {
     type Output;
     fn snapshot(&self) -> Self::Output;
-}
-impl Snapshot for Cell<DriverObservation> {
-    type Output = DriverObservation;
-    fn snapshot(&self) -> DriverObservation {
-        let value = self.take();
-        let result = value.clone();
-        self.set(value);
-        result
-    }
 }
 impl Snapshot for Cell<Option<(Vec<u8>, ModelRxMeta)>> {
     type Output = Option<(Vec<u8>, ModelRxMeta)>;
@@ -69,15 +52,6 @@ impl Snapshot for Cell<Option<(Vec<u8>, ModelRxMeta)>> {
 }
 impl Snapshot for Cell<Vec<AirFrame>> {
     type Output = Vec<AirFrame>;
-    fn snapshot(&self) -> Self::Output {
-        let value = self.take();
-        let result = value.clone();
-        self.set(value);
-        result
-    }
-}
-impl Snapshot for Cell<Vec<ModelCryptoOperation>> {
-    type Output = Vec<ModelCryptoOperation>;
     fn snapshot(&self) -> Self::Output {
         let value = self.take();
         let result = value.clone();
@@ -102,22 +76,6 @@ impl<T> Record<T> for Cell<Vec<T>> {
         self.set(values);
     }
 }
-pub(super) trait ModelSettingsCell {
-    fn mark_other(&self);
-    fn set_block_ack(&self, slot: u8, wanted: Option<ModelReceiveAgreement>);
-}
-impl ModelSettingsCell for Cell<Settings> {
-    fn mark_other(&self) {
-        let mut value = self.take();
-        value.other = true;
-        self.set(value);
-    }
-    fn set_block_ack(&self, slot: u8, wanted: Option<ModelReceiveAgreement>) {
-        let mut value = self.take();
-        value.block_acks.insert(slot, wanted);
-        self.set(value);
-    }
-}
 pub(super) trait AssociationsCell {
     fn apply(&self, role: VifRole, spp: oer_protocols_ieee80211_wire::security::Spp);
 }
@@ -131,11 +89,6 @@ impl AssociationsCell for Cell<InterfaceAssociations> {
 pub(super) trait EdcaCell {
     fn parameters(&self, role: VifRole) -> EdcaParameterSet;
     fn set_parameters(&self, role: VifRole, parameters: EdcaParameterSet);
-    fn contentions(&self) -> Vec<ModelContention>;
-    fn set_entropy(&self, entropy: u32);
-    fn reset(&self, ac: WmmAccessCategory);
-    fn failure(&self, ac: WmmAccessCategory);
-    fn draw(&self, role: VifRole, ac: WmmAccessCategory);
 }
 impl EdcaCell for Cell<ModelEdca> {
     fn parameters(&self, role: VifRole) -> EdcaParameterSet {
@@ -147,32 +100,6 @@ impl EdcaCell for Cell<ModelEdca> {
     fn set_parameters(&self, role: VifRole, parameters: EdcaParameterSet) {
         let mut value = self.take();
         *value.parameters_mut(role) = parameters;
-        self.set(value);
-    }
-    fn contentions(&self) -> Vec<ModelContention> {
-        let value = self.take();
-        let result = value.draws.clone();
-        self.set(value);
-        result
-    }
-    fn set_entropy(&self, entropy: u32) {
-        let mut value = self.take();
-        value.entropy = entropy;
-        self.set(value);
-    }
-    fn reset(&self, ac: WmmAccessCategory) {
-        let mut value = self.take();
-        value.reset(ac);
-        self.set(value);
-    }
-    fn failure(&self, ac: WmmAccessCategory) {
-        let mut value = self.take();
-        value.failure(ac);
-        self.set(value);
-    }
-    fn draw(&self, role: VifRole, ac: WmmAccessCategory) {
-        let mut value = self.take();
-        value.draw(role, ac);
         self.set(value);
     }
 }

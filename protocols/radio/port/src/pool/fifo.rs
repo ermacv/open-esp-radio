@@ -92,7 +92,7 @@ use core::{
 };
 
 use super::{BodyLoan, Line, Permit, PermitPool, PermitSupply, PoolPath, Root, Seat};
-use crate::{LocalId, SlotOwner};
+use crate::LocalId;
 
 /// A first-in, first-out pool of `PERMITS` permits of one install,
 /// counting for `K`, with a line of a place for each of its `SEATS` seats.
@@ -326,7 +326,7 @@ impl<K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: PoolP
     /// served permit with that loan. A backend that keeps the pool in owned
     /// state serves its body's takers through it and returns their permits
     /// through [`BodyLoan::reclaim_permit`] and [`PermitPool::release`].
-    pub fn take_loaned<'a, 'p, S: SlotOwner<Pool::Identity>>(
+    pub fn take_loaned<'a, 'p, S>(
         &'a self,
         seat: &'a mut Seat<'p, K, Waiters>,
         loan: BodyLoan<'p, Pool::Identity, S>,

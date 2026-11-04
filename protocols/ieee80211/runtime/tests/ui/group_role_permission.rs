@@ -1,17 +1,19 @@
 #![no_std]
-use oer_protocols_ieee80211_contracts_port::{AccessPoint, KeyTypes, LowerMacPhase, StationPhase, Station};
-use oer_protocols_ieee80211_testing_model::{ModelKeys, ModelPhase};
+use oer_protocols_ieee80211_contracts_port::{AccessPoint, KeyTypes, PortCommand, Station};
+use oer_protocols_ieee80211_testing_model::{ModelCaps, ModelKeys, ModelTypes};
 
-pub fn permission_belongs_to_interface<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id, oer_protocols_ieee80211_testing_model::ModelCaps, Composition>,
+pub fn permission_belongs_to_interface<'id>(
     station: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupPermission,
     ap: <ModelKeys<'id, Composition, AccessPoint> as KeyTypes<'id>>::GroupPermission,
     selected: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupKey,
-) {
+) -> PortCommand<'id, ModelTypes<Composition>, ModelCaps> {
     #[cfg(ui_reject)]
-    phase.station().select_group_key(ap, selected); // ui-error: E0308
+    return PortCommand::SelectGroup { permission: ap, installed: selected }; // ui-error: E0308
     #[cfg(not(ui_reject))]
-    phase.station().select_group_key(station, selected);
+    {
+        let _ = ap;
+        PortCommand::SelectGroup { permission: station, installed: selected }
+    }
 }
 
 pub enum UiSlot {}

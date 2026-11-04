@@ -445,13 +445,6 @@ fn bridge_tx(bridge: &BridgeTx) -> serde_json::Value {
         "starved_percent": share(bridge.starved),
         "queued_mean": mean(bridge.queued_sum),
         "station_mean": mean(bridge.station_sum),
-        "station_parts_mean": {
-            "incoming": mean(bridge.incoming_sum),
-            "owed": mean(bridge.owed_sum),
-            "members": mean(bridge.members_sum),
-            "freed": mean(bridge.freed_sum),
-            "returning": mean(bridge.returning_sum),
-        },
     })
 }
 
@@ -1257,14 +1250,11 @@ mod tests {
             starved: 20,
             queued_sum: 1_000,
             station_sum: 9_000,
-            freed_sum: 3_000,
-            ..BridgeTx::default()
         });
         assert_eq!(value["queue_full_percent"], 25.0);
         assert_eq!(value["starved_percent"], 10.0);
         assert_eq!(value["queued_mean"], 5.0);
         assert_eq!(value["station_mean"], 45.0);
-        assert_eq!(value["station_parts_mean"]["freed"], 15.0);
         let none = bridge_tx(&BridgeTx::default());
         assert!(none["queued_mean"].is_null());
     }

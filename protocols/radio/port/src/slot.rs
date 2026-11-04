@@ -328,7 +328,7 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>, R> core::fmt::Debug for SlotRegisterErr
 #[repr(C)]
 #[must_use = "consume the authority to place one slot"]
 pub struct SlotClaim<Id: SlotIdentity> {
-    identity: PhantomData<fn(Id) -> Id>,
+    pub(crate) identity: PhantomData<fn(Id) -> Id>,
 }
 
 impl<Id: SlotIdentity> SlotClaim<Id> {

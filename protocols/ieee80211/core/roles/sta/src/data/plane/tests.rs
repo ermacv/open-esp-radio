@@ -1,15 +1,13 @@
 use super::*;
-use core::{future::Future, marker::PhantomData, task::Poll};
+use core::marker::PhantomData;
 use oer_portable_time::Duration;
-use oer_protocols_ieee80211_contracts_port::{
-    AmpduPhase, AmpduRate, Channel, ChannelWidth, LowerMacPhase, PhaseRate, RxMeta,
-};
+use oer_protocols_ieee80211_contracts_port::{AmpduRate, PortArena, PortRate, RxMeta};
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, InstalledCcmpTxKey, SoftwareCcmpKey,
 };
 use oer_protocols_ieee80211_testing_model::{
-    MODEL_MAX_MPDU, ModelAirDenied, ModelArena, ModelArenaAnswer, ModelBackend,
-    ModelBlockAckEvidence, ModelCaps, ModelNetworkMemory, ModelResources,
+    MODEL_MAX_MPDU, ModelAirDenied, ModelArena, ModelArenaAnswer, ModelBlockAckEvidence, ModelCaps,
+    ModelNetworkMemory,
 };
 use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 use oer_protocols_ieee80211_wire::{
@@ -18,10 +16,7 @@ use oer_protocols_ieee80211_wire::{
     frame::{FrameControlFields, sequence_control},
     phy::{HtMcs, HtRate, LegacyRate, PpduBandwidth},
 };
-use oer_protocols_radio_port::{
-    Disabled, Ended, Owner, PortBody, SlotIdentity, run_port, with_local_slot,
-};
-use std::{boxed::Box, rc::Rc, vec::Vec};
+use std::{boxed::Box, vec::Vec};
 
 const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -34,89 +29,30 @@ fn ht() -> PhyRate {
     PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap())
 }
 
-/// The phase-checked rates a test publishes at.
+/// The port-checked rates a test publishes at.
 #[derive(Clone, Copy)]
 struct Rates<'p, 'id> {
-    single: PhaseRate<'p, 'id, ModelCaps>,
-    aggregate: AmpduRate<'p, 'id, ModelCaps>,
+    single: PortRate<'p, ModelCaps>,
+    aggregate: AmpduRate<'p, ModelCaps>,
+    install: PhantomData<fn(&'id ()) -> &'id ()>,
 }
 
-/// A test body over the model phase's rates.
+/// A test body over an arena's checked rates.
 trait Case {
     fn run<'p, 'id: 'p>(rates: Rates<'p, 'id>);
 }
 
-struct Body<C>(PhantomData<C>);
-
-impl<Id: SlotIdentity, C: Case> PortBody<Id, ModelBackend<Id>> for Body<C> {
-    type Output = ();
-    async fn run<'p, 'id>(
-        self,
-        owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
-        _: ModelResources<'id, ModelBackend<Id>>,
-    ) -> Ended<Id, ModelBackend<Id>, ()>
-    where
-        ModelBackend<Id>: 'id,
-        Id: 'id,
-        'id: 'p,
-    {
-        let Ok(mut enabled) = owner.enable().await else {
-            panic!("the model enables")
-        };
-        {
-            let mut phase = enabled.phase();
-            let single = phase.rate(PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
-            let ht = phase.rate(ht()).unwrap();
-            let aggregate = phase.station().ampdu_rate(ht).ok().unwrap();
-            C::run(Rates { single, aggregate });
-        }
-        let Ok(disabled) = enabled
-            .disable(None, &mut |_| panic!("no receive buffer is held"))
-            .await
-        else {
-            panic!("the model disables")
-        };
-        Ended::uninstall(disabled, (), ())
-    }
-}
-
-fn run<F: Future>(future: F) -> F::Output {
-    let mut future = core::pin::pin!(future);
-    let mut context = core::task::Context::from_waker(core::task::Waker::noop());
-    for _ in 0..1_000 {
-        if let Poll::Ready(value) = future.as_mut().poll(&mut context) {
-            return value;
-        }
-    }
-    panic!("the model installation did not complete");
-}
-
+/// Run `C` with the rates a standalone model arena checks on its channel.
 fn with_rates<C: Case>() {
-    run(with_local_slot(async |claim| {
-        let mut slot = claim.place();
-        let (backend, _) = ModelBackend::new(
-            Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
-            [
-                IndividualAddress::new(STATION).unwrap(),
-                IndividualAddress::new(ACCESS_POINT).unwrap(),
-            ],
-            Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
-        );
-        let end = oer_protocols_radio_port::LocalExecution
-            .scope(
-                oer_protocols_radio_port::conformance::registration::guarded(
-                    slot.register(backend).ok().unwrap(),
-                ),
-                async |frontend| run_port(frontend, Body::<C>(PhantomData)).await,
-            )
-            .await;
-        assert!(matches!(
-            end,
-            oer_protocols_radio_port::PortEnd::Uninstalled { .. }
-        ));
-        drop(end);
-        slot.end_model_world();
-    }));
+    let arena = ModelArena::<ModelCaps>::new();
+    let single = PortArena::rate(&arena, PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
+    let ht = PortArena::rate(&arena, ht()).unwrap();
+    let aggregate = PortArena::ampdu_rate(&arena, ht).ok().unwrap();
+    C::run(Rates {
+        single,
+        aggregate,
+        install: PhantomData,
+    });
 }
 
 macro_rules! cases {
@@ -186,7 +122,7 @@ fn retried(frame: &[u8]) -> bool {
 
 struct World<'p, 'id> {
     rates: Rates<'p, 'id>,
-    /// The station's QoS sequence spaces, which each intake borrows.
+    /// The link's QoS sequence spaces, which each intake draws from.
     sequences: [SequenceCounter; 8],
     /// The station's pairwise key and its packet numbers.
     key: Option<InstalledCcmpTxKey<TestKey>>,
@@ -232,14 +168,19 @@ impl<'p, 'id: 'p> World<'p, 'id> {
         self.intake(msdu(tag, tid))
     }
 
-    /// Offer `msdu` with the station's numbers.
+    /// Offer `msdu` with the link's numbers.
     fn intake(&mut self, msdu: OutboundMsdu<ModelNetworkMemory>) -> Intake<ModelNetworkMemory> {
         let now = self.now();
-        let numbers = LinkNumbers {
-            sequences: LinkMode::Qos(&mut self.sequences),
-            packet_numbers: self.key.as_ref().map(InstalledCcmpTxKey::packet_numbers),
-        };
-        self.plane.intake(&mut self.arena, msdu, numbers, now)
+        let mut numbers = TxNumbers::new(
+            SequenceCounter::new(SequenceNumber::ZERO),
+            Some(self.sequences),
+            self.key.take(),
+        );
+        let intake = self.plane.intake(&mut self.arena, msdu, &mut numbers, now);
+        let (_, sequences, key) = numbers.into_parts();
+        self.sequences = sequences.unwrap();
+        self.key = key;
+        intake
     }
 
     fn taken(&mut self, tag: u8, tid: WmmUserPriority) {
@@ -322,6 +263,37 @@ cases! {
     a_tid_without_agreement_goes_one_mpdu_at_a_time => single,
     a_lone_frame_under_an_agreement_goes_alone_and_owes_a_block_ack_request_when_dropped => lone_frame,
     an_ended_agreement_drains_its_arenas_as_single_mpdus_without_drops => agreement_end,
+    the_standby_room_counts_down_to_the_tids_bound_while_an_arena_is_on_the_air => standby_room,
+}
+
+fn standby_room<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    let capacity = TxArena::capacity(&world.arena);
+    // Nothing on the air: the next frame goes out at once.
+    assert_eq!(world.plane.standby_room(capacity), None);
+    for tag in 0..2 {
+        world.taken(tag, BE);
+    }
+    assert_eq!(world.plane.standby_room(capacity), None);
+    world.publish();
+    // On the air with an empty standby: the whole arena.
+    assert_eq!(world.plane.standby_room(capacity), Some(capacity));
+    // The standby holds a BE frame: BE's bound of 8 subframes counts down.
+    for tag in 2..5 {
+        world.taken(tag, BE);
+    }
+    assert_eq!(world.plane.standby_room(capacity), Some(5));
+    for tag in 5..10 {
+        world.taken(tag, BE);
+    }
+    assert_eq!(world.plane.standby_room(capacity), Some(0));
+    assert!(matches!(world.take(10, BE), Intake::Wait(_)));
+    // The arena's own capacity bounds a wider TID bound.
+    assert_eq!(world.plane.standby_room(4), Some(0));
+    world.block_ack(all(2));
+    world.settle();
+    assert_eq!(world.plane.standby_room(capacity), None);
 }
 
 fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
@@ -708,21 +680,21 @@ fn shared_spaces<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 
 fn numbering<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let mut world = World::new(rates, link(LinkProtection::Open));
-    let mut counter = SequenceCounter::new(SequenceNumber::from_low_bits(0));
-    let numbers = LinkNumbers {
-        sequences: LinkMode::NonQos(&mut counter),
-        packet_numbers: None,
-    };
+    let mut numbers = TxNumbers::<InstalledCcmpTxKey<TestKey>>::new(
+        SequenceCounter::new(SequenceNumber::from_low_bits(0)),
+        None,
+        None,
+    );
     let now = world.now();
     let Intake::Refused { reason, .. } =
         world
             .plane
-            .intake(&mut world.arena, msdu(0, BE), numbers, now)
+            .intake(&mut world.arena, msdu(0, BE), &mut numbers, now)
     else {
         panic!("a QoS template refuses the station's non-QoS space");
     };
     assert_eq!(reason, IntakeRefusal::Numbering);
-    assert_eq!(counter.peek().get(), 0);
+    assert_eq!(numbers.next(BE).get(), 0);
 }
 
 fn withdraw_unpublished<'p, 'id: 'p>(rates: Rates<'p, 'id>) {

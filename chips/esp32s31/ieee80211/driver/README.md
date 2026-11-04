@@ -1,7 +1,8 @@
 # oer-chips-esp32s31-ieee80211-driver
 
-The ESP32-S31 Wi-Fi driver: device composition, the lower-MAC port backend,
-DMA rings, keys and the path from the P3 interrupt to the driver task. System context: [architecture](../../../../docs/architecture.md).
+The ESP32-S31 Wi-Fi driver: device composition, the data port the station's
+datapath actor owns (`port::Esp32s31Port`), DMA rings, keys and the path
+from the P3 interrupt to the actor's task. System context: [architecture](../../../../docs/architecture.md).
 
 The driver's MAC building blocks cover initialization and receive policy,
 EDCA and channel state, DMA ownership, aggregate formatting, local/TSF time
@@ -30,7 +31,7 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   is reached only through its owner type, never alongside a quiescence proof.
 - **MAC ownership.** The driver coordinates MAC stop, RX draining and the
   radio client's channel retune through owned HAL transactions. P3 latches
-  power events; the driver task tracks station TBTT deadlines from the installed schedule.
+  power events; the port tracks station TBTT deadlines from the installed schedule.
   Caller-supplied coexistence intent selects the publication PTI. The `coex`
   module's time-slice status values have no runtime publisher.
 - **MAC preparation and start.** Cold preparation programs configuration
@@ -42,10 +43,11 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
 - **BSS-color collision** is an HE event, independent of TX queue collisions.
   The station keeps it masked until an HE consumer exists; only a queue's
   `collision_pending` qualifies a TX collision detach.
-- **Keys and timeouts.** After an unconfirmed stop the driver erases secrets
-  through the abandonment protocol in its own context, and the installation
-  stays quarantined until reset. Packet-number exhaustion is a typed refusal
-  before backend handoff. No retry after a hardware TX timeout.
+- **Keys and timeouts.** After an unconfirmed stop the port keeps every
+  owner and the installation stays quarantined until the image resets; a
+  retired installation's device masks the ring's interrupts and erases its
+  keys. Packet-number exhaustion is a typed refusal before submission. No
+  retry after a hardware TX timeout.
 - **RX storage.** The large-RX profile uses 96 ring buffers and one reserved
   buffer R, each with 4608 backing bytes. Accepted units contain the descriptor
   interval from the software cursor through its first terminal RX_DONE inside
@@ -66,8 +68,9 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   additional SRAM placement budget; other SRAM sections and allocated stacks
   retain their existing limits.
 - **GTK replacement.** The station keeps one physical group-key slot. A key
-  table write failure poisons the port even when an internal rollback restores
-  the old material; no success terminal or reusable old GTK is returned.
+  table write failure is the port's named fault even when an internal
+  rollback restores the old material; the port keeps the command, and no
+  success terminal or reusable old GTK is returned.
   The receive handle retains zeroizing rollback material until removal or
   reset. Recovery starts a new association.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
@@ -77,28 +80,24 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   Trigger-response or beamformee service. The chip MAC and HAL contain
   Trigger queue primitives; their presence does not advertise those
   services through the port.
-- **Host conformance.** The shared suites run against this backend over the
-  host device model (`lower_mac/tests/port/conformance`): single-MPDU
-  outcomes, publication barriers, interface commands, single-MPDU admission
-  age, every ownership scenario with one buffer class in the
-  `PublishedHead` mode, the GTK progress, expiry, rollback and receive-cut
-  cases, and every EDCA case. The port publishes an idle queue's head at
-  once, so the model withholds that head's result; the `Unpublished`
-  arrangement needs an earlier held BestEffort transmission outside the
-  suite's operations and is checked by its own test. The model holds a
-  queue's completions, injects a TX-timeout edge and a collision, rejects
-  key writes, decrypts air frames at capture against its key table and
-  drains captured hardware, DMA and interrupt frames through the RX cut.
-  A publication is identified by its program's PSDU length: every host DMA
-  allocation has the same model descriptor address. Every shared arena case
-  runs against the S31 arenas, the model answering each A-MPDU's BlockAck.
-  Not run: air denial (no device model), and InstallBeside and
-  SelectRetained (one station GTK slot).
-- **Publication observations.** `Esp32s31Backend`'s last parameter `O` is
-  the driver task's observation receiver (`port::Observations`, an
+- **Host tests.** The shared data-port cases
+  (`oer-protocols-ieee80211-testing-conformance::data_port`) run against
+  `Esp32s31Port` over the host device model, beside the port's own tests in
+  `lower_mac/tests/port/data_port` (transmit and barrier order, data
+  arenas, stop, reinstall and release, keys, receive cuts and receive
+  room). The model holds a queue's completions, injects a TX-timeout edge
+  and a collision, answers each A-MPDU's BlockAck, rejects key writes,
+  decrypts air frames at capture against its key table and drains
+  captured hardware, DMA and interrupt frames through the RX cut. A
+  publication is identified by its program's PSDU length: every host DMA
+  allocation has the same model descriptor address. Not run: air denial
+  (no device model) and the access point's role, which the station-only
+  data port does not issue.
+- **Publication observations.** `Esp32s31Port`'s last parameter `O` is
+  the port's observation receiver (`port::Observations`, an
   `oer_portable_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
-  stored once in the driver from preparation to retirement, returns with the
-  stopped port and is lent to each contention draw, where the driver selects
+  stored once in the driver from preparation to retirement, passes to the
+  next installation on a reinstall and is lent to each contention draw, where the driver selects
   the head's VIF record. `ContentionDraw` holds values only: role, access
   category, the complete record, the current window and the drawn backoff.
   The event is built only for an enabled receiver; images pass `()`. The
@@ -171,7 +170,7 @@ The host model tests masked STATUS, redelivery and clearing with a positive
 sample retained before masking. Its TBTT model remains a policy assumption;
 the timer stand observations do not qualify received-beacon causes.
 
-The driver task asks for a bank change by setting a request bit
+The port asks for a bank change by setting a request bit
 (`fetch_or`, Release) and ringing the doorbell; the handler preempts the
 task, so a request that no
 longer reads pending has been applied. The handler lowers the doorbell
@@ -190,52 +189,49 @@ publishes it (`WifiIrqRequests::mac_interrupt_enable`).
 
 A start activates the epoch; a pause or retune closes it after the mask,
 the drain and the walker stop; a freeze masks it and its resume activates
-it again. The station's receive pull requests `UnmaskRx` only after the RX frontier drained with no
+it again. The port's receive pull requests `UnmaskRx` only after the RX frontier drained with no
 released buffer left to rearm. Installing a line clears a stale request. A
 lease the upper layer returns posts the RX-capacity fact
-(`RxReturnNotifier`) in the receive signal, so the pull rearms the returned descriptors even
+(`RxReturnNotifier`) in the receive signal, so the next pull rearms the returned descriptors even
 when an exhausted walker raises no RX interrupt; the notice touches no ring
 state.
 
 ## Receive path
 
-The station takes received units in its own turn. When its event queue is
-empty, its next event is its receive pull: a staged unit, or the ring
-serviced once when the RX interrupt left work, one unit per event and at
-most 32 refused units per pull. A unit it returns goes straight back to the
-ring, and its lends come off its count at its next pull. The MAC's receive
-facts (a received unit, a returned staging credit) travel in their own
-signal, which only the station's pull polls, so they wake the station
-directly; the driver task takes the other MAC facts and serves the transmit
-and TBTT ones. The RX interrupt stays masked until the pull drained the
-ring. A pull services the ring only while it has work (a receive fact, the
-driver's wake, a unit the station or the network returned, or work the last
-pull left); otherwise it
-takes no more than the receive facts and leaves the driver's state alone.
-While a cut or a stop holds the ring, the driver task's batches take both
-signals' facts. A cut's units and every terminal reach the station
-through the event queue, ahead of what the ring holds. The driver task and
-the pull borrow the device and the driver's state only within one
-synchronous step of their own task on the station's executor.
+The datapath actor takes received units in its own turn through
+`DataPort::receive`: a staged unit, or the ring serviced once when the RX
+interrupt left work, one unit per call result and at most eight refused
+units per call. The call takes the turn's instant, never reads the clock
+and never wakes its caller: ring work left now is `RxPull::Later(now)`,
+work waiting for its continuation `RxPull::Later(at)`, which the port's
+deadline covers. A unit the actor recycles goes straight back to the ring,
+and its lends come off its count at the next pull. The MAC's receive facts
+(a received unit, a returned staging credit) travel in their own signal,
+which the port's facts poll (`DataPort::poll_facts`) beside the transmit
+and TBTT facts, all in the actor's task. The RX interrupt stays masked
+until a pull drained the ring. While a group mutation's receive cut or a
+stop holds the ring, the pull takes nothing; a cut's units reach the actor
+through its sink ahead of the mutation's terminal.
 
-Every unit the network returns wakes the station, whose next pull rearms
-the ring: a walker that ran out of armed descriptors raises no receive
-interrupt, so the return is the only edge left.
+Every unit the network returns is a receive fact at the actor's next facts,
+whose next pull rearms the ring: a walker that ran out of armed
+descriptors raises no receive interrupt, so the return is the only edge
+left.
 
-When the station holds `RX_HELD` units, its pull disarms only the RX
+When the actor holds `RX_HELD` units, a pull disarms only the RX
 continuation timer and keeps the pending RX work and buffer owners; it
-services the ring again once the station returned or lent a unit. An
-overdue RX retry wakes the driver task, whose deadline covers it, and the
-driver task wakes the station. TX deadlines and the port contract are
-unchanged.
+services the ring again once the actor returned or lent a unit.
 
-The station holds at most `RX_HELD` (16) received units besides those it
+The actor holds at most `RX_HELD` (16) received units besides those it
 lent the network: the units it took and the MPDUs its receive Block Ack
 agreements keep, a 16-MPDU reorder window. The units outside the ring come
 from one stage pool; the network may hold all of it but `RX_HELD` and the
 admission's critical reserve (`port::lent_rx`). The admission discards bulk
 input, which the hardware already acknowledged, once only the reserve is
 left, so this split keeps a full reorder window's hole-closing MPDU staged.
+A received buffer dropped without its recycle or lend leaves its allocation
+out of the ring, and the port answers every later call with
+`Fault::ReceiveLost`.
 
 One received frame and the owner of its DMA buffer at each step:
 
@@ -243,44 +239,59 @@ One received frame and the owner of its DMA buffer at each step:
    the RX fact in the image's static receive `IrqSignal` of the station's
    executor (`oer_chips_family_interrupt_table::signal`), which pends it and
    touches no waker; the buffer is the DMA engine's.
-2. **Station.** The executor's next round wakes the station, the signal's
-   one waiter; the station's receive pull runs the
+2. **Actor.** The executor's next round wakes the actor, the signal's
+   one waiter; the port's receive pull runs the
    product service (`rx/transaction`), which takes the completed unit
    and stages it: the original buffer becomes a `NetworkRxFrame` lease of
    the staging pool, with no copy. Chained, oversized, empty and too-long
    units are dropped and counted there and never leave the pull.
-3. **Station.** `QueueSink` (`rx/upper.rs`), the pull's publisher, marks the
+3. **Actor.** `QueueSink` (`rx/upper.rs`), the pull's publisher, marks the
    lease's first handoff (the monotonic time and the prefix's raw MAC
    stamp), counts it and sends it into an affine SPSC queue as deep as the
    pool; a send after a pool credit therefore never refuses. The queue owns
    the lease. The pull unmasks RX through the doorbell once drained.
-4. **Station.** `FrameReceiver::next` takes the lease and holds it as a
+4. **Actor.** `FrameReceiver::next` takes the lease and holds it as a
    `HeldRxFrame`; `normalize` decodes the prefix under `W1_INGRESS` (no
    strict RXEND or dump-length refusal; what they would refuse is counted)
    and counts refusals by reason. The application owns the lease.
-5. **Station.** The MPDU and `portable::rx_meta` on the configured channel go to
+5. **Actor.** The MPDU and `portable::rx_meta` on the configured channel go to
    `sta::receive::classify` and `observe_scan`.
-6. **Station.** Dropping the held frame releases the lease and posts the
+6. **Actor.** Dropping the held frame releases the lease and posts the
    RX-capacity fact (a raise of its own executor's receive signal,
    `FromOwnTask`);
-   the station's next pull rearms the buffer.
+   the port's next pull rearms the buffer.
 
-The driver task and the station share one executor, so neither preempts the
-other. Teardown waits,
-bounded, until no lease is staged before it stops the walker, and queued
-frames are staged: the station keeps receiving and dropping frames after it requests
-the stop, until the exit is published; otherwise the epoch ends quarantined
-with `DrainTimeout`.
+Only the actor's task calls the port, so nothing else borrows the device or
+the driver's state. Teardown waits, bounded, until no lease is staged
+before it stops the walker, and queued frames are staged: the actor keeps
+receiving and dropping frames after it requests the stop, until the exit
+is published; otherwise the epoch ends quarantined with `DrainTimeout`.
 
 ## Lower-MAC core
 
 The driver core `LowerMacCore` lives in [`src/lower_mac.rs`](src/lower_mac.rs).
-The adapter [`src/port.rs`](src/port.rs) implements its lifecycle, phase,
-station and access-point interfaces over that core. One task polls the
-port's driver, beside the station on the station's executor, and the
-station's own task takes received units; the P3 handlers own only their interrupt epoch and static typed signals.
-The task-side `RadioDevice` retains the cooperative registers, PHY actor
-transaction and RX ring. No ISR accesses its task-only `RefCell` state.
+The data port [`src/port/engines.rs`](src/port/engines.rs) (`Esp32s31Port`)
+implements the contract's `DataPort` over that core for the station: it
+owns the driver's state, the device and the settings by value, and the
+datapath actor's task alone calls it, each call with the turn's instant.
+It never reads the clock in a call and never wakes its caller; what must
+run again is in the returned value or in its cached deadline, which every
+call that changes a queue recomputes. A barrier command (a configuration
+while an arena is on the air, a removal before its drain, a group
+mutation's receive cut) comes back `Held` for the actor to retry; a stop
+forgets its barrier, the stopped port refuses it `NotEnabled`, and after a
+restart it runs again under a bound measured from then. A broken
+contract of the port's own state is a named `Fault` that keeps its
+observations; the port keeps every owner it holds and answers each later
+call with the same fault. Its command issuer (`Esp32s31Commands`) mints
+each installation's key identities for the station's lifecycle. One
+installation (`Esp32s31Port::install`) takes the first minted
+installation; after a confirmed stop, `reinstall` mints the next one in
+place on the same device, driver state and allocations, and `release`
+hands the device back. The P3 handlers own only their interrupt epoch and
+static typed signals. The task-side `RadioDevice` retains the cooperative
+registers, PHY actor transaction and RX ring. No ISR accesses its
+task-only `RefCell` state.
 
 Eight shared TX tickets feed four hardware queues; an MPDU takes one, and
 the station's two data arenas hold one each. Every MPDU is written into one
@@ -293,8 +304,8 @@ data arena retains its frames in one of the two descriptor chains
 Timeout aborts of MPDUs and of the arena on the air force CCA one at a
 time. Gate, configuration, key and disable barriers wait for published
 MPDUs and arenas and return the original operation owners through
-terminals. Uninstall returns stopped owners for a fresh installation;
-uncertainty keeps the DMA allocations quarantined. RX buffers require
+terminals. A reinstall after a confirmed stop reuses the stopped owners for
+the next installation; uncertainty keeps the DMA allocations quarantined. RX buffers require
 explicit recycling. GTK changes freeze ingress and drain preceding RX
 before returning their permission. An erased key cannot authorize a
 returned MPDU's retransmission.
@@ -324,27 +335,26 @@ frame it encrypted is published or retained. Its one deadline is the
 publication watchdog.
 
 The driver builds the arenas at preparation and takes their chains and
-tickets back at retirement, only while both are idle and empty and hold no
-key right; otherwise the stopped port refuses reinstallation, as it does
-for a busy descriptor. The station reaches them through
-`StationPhase::data_arena` (`port::StationArena`), which borrows the
-driver's state for one synchronous step: it fills, publishes, withdraws
-and settles them, and refuses a publication as busy while the gate is
+tickets back at retirement. The retire checks require both idle and empty
+and holding no key right; otherwise the stopped port refuses reinstallation
+and release as not retired and keeps its installation. A busy descriptor
+found at retirement refuses reinstallation with a resource fault. The actor reaches them through `DataPort::arena`
+(`port::Esp32s31Arena`), lent for its turn: it fills, publishes, withdraws
+and settles them, and a publication is refused as busy while the gate is
 closed or closing, a configuration or a barrier command is pending, or the
-port stops. A publication wakes the driver, which serves the arena on the
-air in its turn, on a transmit edge and at the arena's deadline; the
-arena's end goes to the station as `TxCompleted::Arena`, and the station's
-settlement returns its frames' memory. The arena on the air holds its
-access category's queue: an MPDU of that category waits for the arena's
-end. Disable serves a published arena to its end (its watchdog's timeout
-abort when the hardware gives no completion) and hands that end to the
-disable sink. A station pairwise key removal waits while an arena holds a
-key right.
+port stops. The port serves the arena on the air in its transmit service
+(`DataPort::service_tx`), on a transmit edge and at the arena's deadline,
+and returns the arena's end to the actor, whose settlement returns its
+frames' memory. The arena on the air holds its access category's queue:
+an MPDU of that category waits for the arena's end. A stop serves a
+published arena to its end (its watchdog's timeout abort when the
+hardware gives no completion) before it disables the core. A station
+pairwise key removal waits while an arena holds a key right.
 
-The port exposes ordinary MPDUs, the station's data arenas (with the
-A-MPDU rates of `AmpduPhase`) and RX BlockAck agreements. It does not expose the optional
-beacon-timing, monitor or air-reservation phases.
-Its publication watchdog is 250 ms; command and retirement bounds
+The port exposes ordinary MPDUs, the station's data arenas (with their
+A-MPDU rates) and RX BlockAck agreements. It does not expose beacon
+timing, monitor or air reservation.
+Its publication watchdog is 250 ms; its command, start and stop bounds
 are 400 ms, including the publication and the finite RX stop.
 The operation mapping and portable limits are in
 [the port's README](../../../../protocols/ieee80211/contracts/port/README.md#implementers).

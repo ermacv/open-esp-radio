@@ -8,7 +8,7 @@
 //! A ticket is affine and its index is its place in the backend's ticket
 //! pool, so one place per ticket of that pool holds every context in
 //! flight. A place beyond the storage, a taken place at submission or an
-//! empty one at completion is a backend contract violation; the service
+//! empty one at completion is a backend contract violation; the lifecycle
 //! retains the context it holds in the fault.
 
 /// Fixed storage of one context per transmit ticket of the backend's pool.
@@ -31,7 +31,7 @@ impl<T, const N: usize> TxContextStorage<T> for [Option<T>; N] {
 
 /// Keep `context` at the place of the ticket at `index`; the context back
 /// when that place is taken or beyond the storage.
-pub(super) fn keep<T>(
+pub(crate) fn keep<T>(
     storage: &mut impl TxContextStorage<T>,
     index: u8,
     context: T,
@@ -46,7 +46,7 @@ pub(super) fn keep<T>(
 }
 
 /// The context at the place of the ticket at `index`, leaving it empty.
-pub(super) fn take<T>(storage: &mut impl TxContextStorage<T>, index: u8) -> Option<T> {
+pub(crate) fn take<T>(storage: &mut impl TxContextStorage<T>, index: u8) -> Option<T> {
     storage.place(index)?.take()
 }
 

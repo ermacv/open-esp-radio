@@ -48,7 +48,7 @@ pub enum MpduProtection {
 ///
 /// ```compile_fail,E0308
 /// use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, MpduLayout, TxFrame};
-/// fn flag<K: Ieee80211Capabilities>(frame: &TxFrame<'_, '_, K>) {
+/// fn flag<K: Ieee80211Capabilities>(frame: &TxFrame<'_, K>) {
 ///     drop(MpduLayout::new(frame, 0, true));
 /// }
 /// ```
@@ -57,7 +57,7 @@ pub enum MpduProtection {
 /// use oer_protocols_ieee80211_contracts_port::{
 ///     Ieee80211Capabilities, LayoutError, MpduLayout, MpduProtection, TxFrame,
 /// };
-/// fn open<K: Ieee80211Capabilities>(frame: &TxFrame<'_, '_, K>) -> Result<(), LayoutError> {
+/// fn open<K: Ieee80211Capabilities>(frame: &TxFrame<'_, K>) -> Result<(), LayoutError> {
 ///     let layout = MpduLayout::new(frame, 0, MpduProtection::Open)?;
 ///     assert_eq!(layout.protection(), MpduProtection::Open);
 ///     Ok(())
@@ -90,7 +90,7 @@ pub struct MpduLayout {
 impl MpduLayout {
     /// Check the only dynamic layout constraints: CCMP space and body overlap.
     pub fn new<K: Ieee80211Capabilities>(
-        frame: &TxFrame<'_, '_, K>,
+        frame: &TxFrame<'_, K>,
         body_len: usize,
         protection: MpduProtection,
     ) -> Result<Self, LayoutError> {
@@ -207,7 +207,7 @@ impl<T> LaidOut<T> {
 pub struct FreshSource<B, F, O, Key> {
     /// Fresh memory.
     pub buffer: B,
-    /// Class, phase and capabilities proof.
+    /// Class, port and capabilities proof.
     pub frame: F,
     /// External body, if any.
     pub body: Option<O>,
@@ -260,15 +260,7 @@ impl<
     K: Ieee80211Capabilities,
     O: crate::TxBody,
     Key,
->
-    crate::TxSource<
-        B,
-        N,
-        crate::ClassFrame<'p, 'id, C, K>,
-        O,
-        Key,
-        crate::RetransmissionPlan<'p, 'id, K>,
-    >
+> crate::TxSource<B, N, crate::ClassFrame<'p, C, K>, O, Key, crate::RetransmissionPlan<'p, K>>
 {
     /// Prove the complete layout before entering a backend. A refusal does
     /// not change memory, allocate PN, take admission or create a terminal.
@@ -277,10 +269,10 @@ impl<
     ) -> SourceLayoutResult<
         B,
         N,
-        crate::ClassFrame<'p, 'id, C, K>,
+        crate::ClassFrame<'p, C, K>,
         O,
         Key,
-        crate::RetransmissionPlan<'p, 'id, K>,
+        crate::RetransmissionPlan<'p, K>,
     > {
         match self {
             Self::Retransmission { mpdu, plan } => {
@@ -340,7 +332,7 @@ impl MpduLayout {
     fn initialize<K: Ieee80211Capabilities>(
         self,
         bytes: &mut [u8],
-        frame: &TxFrame<'_, '_, K>,
+        frame: &TxFrame<'_, K>,
         body: Option<&[u8]>,
     ) -> Result<Self, LayoutError> {
         let (prefix, body_memory) = self.memory(bytes)?;

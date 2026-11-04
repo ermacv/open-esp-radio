@@ -1,11 +1,11 @@
 //! Receive buffers lent to a network owner.
 //!
 //! A lend moves one received unit out of the installation's receive count to
-//! the network: the network's count rises first, then the driver takes
-//! the unit off its own count. Retirement therefore never sees a unit in
+//! the network: the network's count rises first, then the port takes the
+//! unit off its own count. Retirement therefore never sees a unit in
 //! neither count. Dropping the network owner, in a task, returns the unit's
-//! memory to its pool, lowers the network's count and wakes the driver to
-//! rearm what the ring got back and the task waiting for the network.
+//! memory to its pool, lowers the network's count and tells the task
+//! waiting for returns, whose port rearms what the ring got back.
 
 use super::{ReceiveBuffer, ReceiveUnit};
 use atomic_waker::AtomicWaker;
@@ -14,29 +14,22 @@ use core::{
     task::{Context, Poll},
 };
 use oer_portable_memory::QueueNotify;
-use oer_portable_sync::PriorityWaker;
 use oer_protocols_ieee80211_contracts_port::{
     AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer,
 };
 use oer_protocols_radio_port::SlotIdentity;
 
-/// How a lent unit's return tells the task waiting for every return (the
-/// station's stop) and the driver when it asked for its units. Every call
-/// is direct: the composition names the type.
+/// How a lent unit's return tells the task waiting for returns (the
+/// datapath actor). Every call is direct: the composition names the type.
 pub trait LentNotifies: Sync + 'static {
     /// Make the polling task the one a return tells; it checks the count
     /// next.
     fn register_returned(&self, cx: &mut Context<'_>);
     /// Tell the waiting task that a unit returned.
     fn returned(&self);
-    /// Make the driver's task the one a return it asked for tells.
-    fn register_driver(&self, cx: &mut Context<'_>);
-    /// Tell the driver, whose own waker is `local`.
-    fn wake_driver(&self, local: &PriorityWaker);
 }
 
-/// The network on the driver's hart: the waiting task's waker, and the
-/// driver's own waker, which its poll registers.
+/// The network on the waiting task's hart: that task's waker.
 pub struct SameHart {
     network: AtomicWaker,
 }
@@ -66,35 +59,22 @@ impl LentNotifies for SameHart {
     fn returned(&self) {
         self.network.wake();
     }
-    fn register_driver(&self, _: &mut Context<'_>) {}
-    fn wake_driver(&self, local: &PriorityWaker) {
-        local.wake();
-    }
 }
 
-/// The network on another hart: a return raises the driver's and the
-/// waiting task's executor signals instead of a waker (no waker crosses
-/// harts).
+/// The network on another hart: a return raises the waiting task's
+/// executor signal instead of a waker (no waker crosses harts).
 #[derive(Clone, Copy)]
-pub struct NetworkPeers<D, R> {
-    /// The driver's task.
-    pub driver: D,
-    /// The task that waits for every unit's return (the station's stop).
+pub struct NetworkPeers<R> {
+    /// The task that waits for the units' returns.
     pub returned: R,
 }
 
-impl<D: QueueNotify + 'static, R: QueueNotify + 'static> LentNotifies for NetworkPeers<D, R> {
+impl<R: QueueNotify + 'static> LentNotifies for NetworkPeers<R> {
     fn register_returned(&self, cx: &mut Context<'_>) {
         self.returned.register(cx);
     }
     fn returned(&self) {
         self.returned.notify();
-    }
-    fn register_driver(&self, cx: &mut Context<'_>) {
-        self.driver.register(cx);
-    }
-    fn wake_driver(&self, _: &PriorityWaker) {
-        self.driver.notify();
     }
 }
 
@@ -102,13 +82,11 @@ impl<D: QueueNotify + 'static, R: QueueNotify + 'static> LentNotifies for Networ
 pub(super) struct NetworkCredit<P = SameHart> {
     /// Units lent and not yet dropped.
     held: AtomicUsize,
-    /// Lends not yet taken off the body's receive count.
+    /// Lends not yet taken off the port's receive count.
     transferred: AtomicUsize,
-    /// A lent unit was dropped since the driver last looked.
+    /// A lent unit was dropped since the port last looked.
     returned: AtomicBool,
-    /// The network holds many units: the next return wakes the driver.
-    wants_units: AtomicBool,
-    /// How a return tells the waiting task and the driver. The units'
+    /// How a return tells the waiting task. The units'
     /// owners drop in tasks of the network's executor, never in an
     /// interrupt handler.
     notifies: P,
@@ -121,7 +99,6 @@ impl<P: LentNotifies> NetworkCredit<P> {
             held: AtomicUsize::new(0),
             transferred: AtomicUsize::new(0),
             returned: AtomicBool::new(false),
-            wants_units: AtomicBool::new(false),
             notifies,
         }
     }
@@ -131,7 +108,7 @@ impl<P: LentNotifies> NetworkCredit<P> {
         self.held.load(Ordering::Acquire)
     }
 
-    /// Lends since the last call, for the body's receive count.
+    /// Lends since the last call, for the port's receive count.
     pub(super) fn take_transferred(&self) -> usize {
         self.transferred.swap(0, Ordering::AcqRel)
     }
@@ -143,8 +120,8 @@ impl<P: LentNotifies> NetworkCredit<P> {
 
     /// Whether the network returned a unit the ring has not rearmed yet;
     /// the next return tells the polling task ([`LentNotifies::returned`]
-    /// runs on every return). The body's receive pull asks: a return may
-    /// be the only edge left when the walker ran out of armed descriptors.
+    /// runs on every return). The port's facts ask: a return may be the
+    /// only edge left when the walker ran out of armed descriptors.
     pub(super) fn poll_returns(&self, cx: &mut Context<'_>) -> bool {
         self.notifies.register_returned(cx);
         self.returned.load(Ordering::Acquire)
@@ -172,53 +149,37 @@ impl<P: LentNotifies> NetworkCredit<P> {
         }
     }
 
-    /// Ask the next return to wake the driver, while the network holds many
-    /// units. Whether a return came first: the driver then polls again.
-    ///
-    /// `cx` is the driver's: a network on another hart wakes it through the
-    /// driver's executor signal ([`NetworkPeers::driver`]), which the driver
-    /// registers here, before it asks.
-    pub(super) fn want_units(&self, cx: &mut Context<'_>) -> bool {
-        self.notifies.register_driver(cx);
-        self.wants_units.store(true, Ordering::Release);
-        self.returned.load(Ordering::Acquire)
-    }
-
-    /// Start a new installation's count. The caller has seen the previous
-    /// installation return every unit.
+    /// Start a new installation's count. The lend credit outlives the
+    /// installation: units the network still holds stay counted against
+    /// its limit, and a return not yet rearmed stays reported, so each
+    /// unit rejoins the ring of whichever installation runs when the
+    /// network drops it. Only the previous installation's pending
+    /// transfers (its receive count restarts at zero) end here.
     pub(super) fn reset(&self) {
         self.transferred.store(0, Ordering::Release);
-        self.returned.store(false, Ordering::Release);
-        self.wants_units.store(false, Ordering::Release);
     }
 }
 
 /// One received unit the network owns ([`LentRxBuffer`]).
 pub struct LentReceive<R: 'static, P: LentNotifies = SameHart> {
-    /// The unit, its view the MPDU. It drops before `returned`, so its
+    /// The unit, its view the MPDU. It drops before `_returned`, so its
     /// memory is back in its pool before the count falls.
     unit: R,
-    returned: ReturnOnDrop<P>,
+    _returned: ReturnOnDrop<P>,
 }
 
-/// Lowers the network's count and wakes both waiters when its lent unit
-/// was dropped.
+/// Lowers the network's count and tells the waiting task when its lent
+/// unit was dropped.
 struct ReturnOnDrop<P: LentNotifies> {
     credit: &'static NetworkCredit<P>,
-    driver: &'static PriorityWaker,
 }
 
 impl<P: LentNotifies> Drop for ReturnOnDrop<P> {
     fn drop(&mut self) {
         self.credit.held.fetch_sub(1, Ordering::AcqRel);
-        // The driver takes the flag on its next poll, which an interrupt
-        // brings: a return wakes it only when it asked, holding few units.
+        // The port takes the flag at its next facts.
         self.credit.returned.store(true, Ordering::Release);
-        let wants = self.credit.wants_units.swap(false, Ordering::AcqRel);
         self.credit.notifies.returned();
-        if wants {
-            self.credit.notifies.wake_driver(self.driver);
-        }
     }
 }
 
@@ -261,15 +222,14 @@ impl<Id: SlotIdentity, R: ReceiveUnit + Send> ReceiveBuffer<'_, Id, R> {
                 reason,
             });
         }
-        // Credit first: the network counts the unit before the driver stops.
+        // Credit first: the network counts the unit before the port stops.
         credit.held.fetch_add(1, Ordering::AcqRel);
-        // The body lends in its own turn and takes the count at its next
-        // pull, before it reads its receive room.
+        // The caller lends in its own turn and the port takes the count at
+        // its next pull, before it reads its receive room.
         credit.transferred.fetch_add(1, Ordering::AcqRel);
-        let (unit, driver) = self.into_unit();
         Ok(LentReceive {
-            unit,
-            returned: ReturnOnDrop { credit, driver },
+            unit: self.into_unit(),
+            _returned: ReturnOnDrop { credit },
         })
     }
 }
@@ -317,43 +277,48 @@ mod tests {
     /// One unit's return, as the network's drop of its lent unit makes it.
     fn return_one<P: LentNotifies>(credit: &'static NetworkCredit<P>) {
         credit.held.fetch_add(1, Ordering::AcqRel);
-        drop(ReturnOnDrop {
-            credit,
-            driver: leaked(PriorityWaker::new()),
-        });
+        drop(ReturnOnDrop { credit });
     }
 
     #[test]
-    fn a_driver_asking_for_units_registers_its_signal_which_a_return_on_another_hart_raises() {
-        let driver = leaked(Counted::new());
+    fn a_return_on_another_hart_raises_the_waiting_tasks_signal_and_the_polling_task_registers() {
         let returned = leaked(Counted::new());
-        let credit = leaked(NetworkCredit::with(NetworkPeers { driver, returned }));
+        let credit = leaked(NetworkCredit::with(NetworkPeers { returned }));
         let mut cx = Context::from_waker(Waker::noop());
 
-        // A return the driver did not ask for raises only the waiting task.
+        // Polling registers the waiting task's signal before it reads.
+        assert!(!credit.poll_returns(&mut cx), "nothing returned yet");
+        assert_eq!(returned.counts(), (1, 0));
+        // Each return raises it and stays reported until the port takes it.
         return_one(credit);
-        assert_eq!((driver.counts(), returned.counts()), ((0, 0), (0, 1)));
+        return_one(credit);
+        assert_eq!(returned.counts(), (1, 2));
+        assert!(credit.poll_returns(&mut cx));
         assert!(credit.take_returned());
-
-        // Asking registers the driver's signal before the request is
-        // published, so the next return's raise reaches the driver's task.
-        assert!(!credit.want_units(&mut cx), "no return since");
-        assert_eq!(driver.counts(), (1, 0));
-        return_one(credit);
-        assert_eq!((driver.counts(), returned.counts()), ((1, 1), (0, 2)));
-        // The request is spent: a further return leaves the driver alone.
-        return_one(credit);
-        assert_eq!(driver.counts(), (1, 1));
+        assert!(!credit.take_returned(), "taken once");
     }
 
     #[test]
-    fn a_return_before_the_request_is_reported_to_the_asking_driver() {
-        let driver = leaked(Counted::new());
-        let returned = leaked(Counted::new());
-        let credit = leaked(NetworkCredit::with(NetworkPeers { driver, returned }));
-        let mut cx = Context::from_waker(Waker::noop());
-        return_one(credit);
-        assert!(credit.want_units(&mut cx), "the driver polls again itself");
-        assert_eq!(driver.counts(), (1, 0));
+    fn the_lend_credit_outlives_a_reinstall_and_late_returns_rejoin_the_new_ring() {
+        let credit = leaked(NetworkCredit::with(SameHart::new()));
+        // Two units lent by the old installation, one returned before the
+        // reinstall and not yet rearmed.
+        credit.held.fetch_add(2, Ordering::AcqRel);
+        credit.transferred.fetch_add(2, Ordering::AcqRel);
+        drop(ReturnOnDrop { credit });
+        credit.reset();
+        // The network still holds one: the new installation counts it
+        // against its limit, and owes the ring the earlier return.
+        assert_eq!(credit.held(), 1);
+        assert_eq!(
+            credit.take_transferred(),
+            0,
+            "the old receive count is gone"
+        );
+        assert!(credit.take_returned(), "the earlier return is rearmed now");
+        // The late return reaches the new installation's ring.
+        drop(ReturnOnDrop { credit });
+        assert_eq!(credit.held(), 0);
+        assert!(credit.take_returned());
     }
 }

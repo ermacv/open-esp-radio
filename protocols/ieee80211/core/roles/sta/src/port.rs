@@ -5,14 +5,11 @@
 use core::marker::PhantomData;
 use oer_protocols_ieee80211_contracts_port::association::{KEY_BANK_CAPACITY, KeyPool};
 use oer_protocols_ieee80211_contracts_port::{
-    InterfaceKeys, InterfacePhase, KeyTypes, NumberedKey, PhaseTypes, TxBufferClass, TxBufferPool,
+    KeyTypes, NumberedKey, PortTypes, TxBufferClass, TxBufferPool,
 };
-use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, ForeignCcmpTxKey, InstalledCcmpTxKey, PendingCcmpTxKey,
-    request_ccmp_pairwise_key,
 };
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_radio_port::Slot;
 
 use crate::machine::StaTokens;
@@ -70,29 +67,18 @@ impl<'id, K: KeyTypes<'id>> PendingStationPairwiseKey<'id, K> {
 }
 
 impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
-    /// Request the station's PTK for `peer` on the phase's station
-    /// interface, numbering its MPDUs by `step`. The key exists only once
-    /// the port's installation terminal returns it.
-    pub fn request<'p, P>(
-        phase: &mut P,
+    /// The pending key of the installation the port's command issuer
+    /// minted as `installation`
+    /// ([`PortCommands::install_pairwise`](oer_protocols_ieee80211_contracts_port::PortCommands::install_pairwise)),
+    /// numbering its MPDUs by `step`. The key exists only once the
+    /// installation's terminal returns it.
+    pub const fn issued(
         association: K::Association,
-        slot: <InterfaceKeys<'p, 'id, P> as KeyTypes<'id>>::PairwiseSlot,
-        peer: IndividualAddress,
-        key: Ccmp128Key,
+        installation: K::Identity,
         step: CcmpPacketNumberStep,
-    ) -> PendingStationPairwiseKey<'id, K>
-    where
-        'id: 'p,
-        P: InterfacePhase<'p, 'id>,
-        InterfaceKeys<'p, 'id, P>: KeyTypes<
-                'id,
-                Association = K::Association,
-                PairwiseKey = K::PairwiseKey,
-                Identity = K::Identity,
-            >,
-    {
+    ) -> PendingStationPairwiseKey<'id, K> {
         PendingStationPairwiseKey {
-            key: request_ccmp_pairwise_key(phase, &association, slot, peer, key, step),
+            key: PendingCcmpTxKey::issued(installation, step),
             association,
         }
     }
@@ -120,7 +106,7 @@ impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
 
 impl<'id, Ty, S, const GROUPS: usize> StaTokens for PortStaTokens<'id, Ty, S, GROUPS>
 where
-    Ty: PhaseTypes<'id, TxBody = core::convert::Infallible> + TxBufferPool<'id, S>,
+    Ty: PortTypes<'id, TxBody = core::convert::Infallible> + TxBufferPool<'id, S>,
     S: TxBufferClass,
 {
     const PAIRWISE_SLOTS: usize =
@@ -203,6 +189,14 @@ where
     }
     fn association(key: &Self::PairwiseKey) -> &Self::Association {
         &key.association
+    }
+    type LinkKey = InstalledCcmpTxKey<<Ty::StationKeys as KeyTypes<'id>>::PairwiseKey>;
+    fn lend(key: Self::PairwiseKey) -> (Self::Association, Self::LinkKey) {
+        let StationPairwiseKey { key, association } = key;
+        (association, key)
+    }
+    fn reunite(association: Self::Association, key: Self::LinkKey) -> Self::PairwiseKey {
+        StationPairwiseKey { key, association }
     }
 
     type GroupKey = <Ty::StationKeys as KeyTypes<'id>>::GroupKey;

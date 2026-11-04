@@ -338,15 +338,6 @@ pub struct BridgeTx {
     /// The network transmit buffers the station held, summed over the
     /// turns.
     pub station_sum: u32,
-    /// Of those, summed likewise by where the station's latest pass saw
-    /// them: in the queue to the station, owed by its data machine, members
-    /// of aggregates out at the port, freed and not yet given back, and in
-    /// the queue back to the network.
-    pub incoming_sum: u32,
-    pub owed_sum: u32,
-    pub members_sum: u32,
-    pub freed_sum: u32,
-    pub returning_sum: u32,
 }
 
 /// Counts within one run's measuring window.
@@ -432,8 +423,6 @@ pub struct DriverRx {
 /// by decision. MSDU counts count MSDUs, the others MPDUs or events.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct StationRx {
-    /// The port reported lost events.
-    pub port_events_lost: u32,
     /// Frames the station dropped, by reason.
     pub dropped_header: u32,
     pub dropped_frame_kind: u32,
@@ -521,7 +510,6 @@ impl StationRx {
     /// the agreement window is the end's.
     pub const fn window(start: &Self, end: &Self) -> Self {
         Self {
-            port_events_lost: end.port_events_lost.wrapping_sub(start.port_events_lost),
             dropped_header: end.dropped_header.wrapping_sub(start.dropped_header),
             dropped_frame_kind: end
                 .dropped_frame_kind

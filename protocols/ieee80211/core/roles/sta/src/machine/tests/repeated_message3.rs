@@ -196,12 +196,10 @@ fn invalid_mic_and_non_increasing_counters_never_replace_a_deferred_frame() {
                 .enumerate()
                 {
                     assert_eq!(
-                        world.station.receive(
+                        world.deliver(
                             at(51),
                             &protected_received(frame, 101 + index as u64),
-                            verified_meta(),
-                            |_| {},
-                            &mut world.losses,
+                            verified_meta()
                         ),
                         Err(StaRxError::Security(RsnConnectedProcessError::Supplicant(
                             reason
@@ -237,7 +235,7 @@ fn connected_deferral_has_no_station_timeout_and_waits_for_the_port_terminal() {
             world.take();
             assert!(world.station.poll_deadline().is_none());
             let late = Instant::from_micros(u64::MAX);
-            world.station.input(late, StaInput::Tick, &mut world.losses);
+            world.input(late, StaInput::Tick);
             world.run(late);
             assert!(world.station.is_connected());
             assert!(world.take().is_empty());
@@ -268,15 +266,11 @@ fn original_d4_deadline_with_a_deferred_m3_fails_once_even_if_the_old_m4_later_d
             assert_eq!(world.station.poll_deadline(), Some(deadline));
         }
         let before = world.frames.len();
-        world
-            .station
-            .input(deadline, StaInput::Tick, &mut world.losses);
+        world.input(deadline, StaInput::Tick);
         world.hold_transmissions = false;
         world.run(deadline);
         for _ in 0..2 {
-            world
-                .station
-                .input(deadline, StaInput::Tick, &mut world.losses);
+            world.input(deadline, StaInput::Tick);
             world.run(deadline);
         }
         assert!(!world.station.is_connected());
@@ -338,6 +332,8 @@ fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
                 State::Leave(ref leave) if leave.step == LeaveStep::Disabled
             ));
             assert_eq!(world.frames.len(), before);
+            // The service takes the link back before the station finishes.
+            world.return_link();
             let (bank, _places) = world.station.finish(StaDisconnectReason::Requested);
             assert_eq!(bank.frame_credits(), (2, 2));
             assert_eq!(bank.key_owners(), (1, 2, true));
@@ -369,11 +365,14 @@ fn authenticated_higher_m3_keeps_ptk_and_answers_with_matching_mac_protection() 
                     CcmpPacketNumber::new(900).unwrap(),
                     GroupKeyId::new(1).unwrap().key_id(),
                 );
-                let State::Connected(connected) = &mut world.station.state else {
-                    panic!()
-                };
-                let rsn = connected.rsn.as_mut().unwrap();
-                rsn.replay
+                // The connected station lent its replay check to its link.
+                assert!(world.station.is_connected());
+                world
+                    .link
+                    .as_mut()
+                    .unwrap()
+                    .replay_mut()
+                    .unwrap()
                     .check(CcmpRxProtection::Group, None, header)
                     .unwrap();
                 let before = world.frames.len();
@@ -410,13 +409,23 @@ fn authenticated_higher_m3_keeps_ptk_and_answers_with_matching_mac_protection() 
                 assert_eq!(rsn.supplicant.replay_counter(), 3);
                 if material == 0x99 {
                     assert!(
-                        rsn.replay
+                        world
+                            .link
+                            .as_mut()
+                            .unwrap()
+                            .replay_mut()
+                            .unwrap()
                             .check(CcmpRxProtection::Group, None, header)
                             .is_err()
                     );
                 } else {
                     assert!(
-                        rsn.replay
+                        world
+                            .link
+                            .as_mut()
+                            .unwrap()
+                            .replay_mut()
+                            .unwrap()
                             .check(CcmpRxProtection::Group, None, header)
                             .is_ok()
                     );
@@ -489,14 +498,13 @@ fn a_removal_terminal_preserves_an_encoded_group_response_waiting_for_credit() {
         ];
         world.receive_verified(at(51), &group_message1(&ptk, 4, 2));
         let before = world.frames.len();
-        world.station.input(
+        world.input(
             at(52),
             StaInput::GroupKeyRemoved {
                 pending,
                 slot,
                 permission,
             },
-            &mut world.losses,
         );
         for buffer in buffers {
             world.station.buffers.put(buffer, &mut ());
@@ -617,14 +625,7 @@ fn damaged_deferred_eapol_disconnects_on_both_rx_and_tx_terminal_paths() {
                 // RX can advance the queue when there is no outstanding response.
                 rsn.rekey = Rekey::None;
                 let error = world
-                    .station
-                    .receive(
-                        at(52),
-                        &retry_message3(&ptk, 1, 0x99),
-                        meta(),
-                        |_| {},
-                        &mut world.losses,
-                    )
+                    .deliver(at(52), &retry_message3(&ptk, 1, 0x99), meta())
                     .unwrap_err();
                 // The triggering peer rejection survives the deferred local fault.
                 assert_eq!(
@@ -681,14 +682,7 @@ fn retained_security_ies_are_terminal_without_counting_a_peer_drop() {
             .invalidate_security_ies_for_test();
         let before = security_drops(&world);
         world
-            .station
-            .receive(
-                at(50),
-                &retry_message3(&ptk, 3, 0x99),
-                meta(),
-                |_| {},
-                &mut world.losses,
-            )
+            .deliver(at(50), &retry_message3(&ptk, 3, 0x99), meta())
             .unwrap();
         // Its key data is unwrapped in the step that takes it, which leaves
         // without counting a peer drop.

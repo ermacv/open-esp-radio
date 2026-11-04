@@ -125,7 +125,7 @@ pub trait RateSelection<M: RxMetadata, A, BA = A> {
     fn packet_number_step(&self) -> crate::ccmp::CcmpPacketNumberStep;
 
     /// The retry plan of the next frame for `frame`, in the rates the
-    /// port's channel carries: `carried` turns a rate into the phase's, or
+    /// port's channel carries: `carried` turns a rate into the port's, or
     /// refuses it. The selection's own rule decides what a refused stage
     /// becomes; `None` when no stage is left, and the frame does not go.
     fn plan<R>(

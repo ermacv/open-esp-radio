@@ -123,9 +123,10 @@ impl<'id, Path: PoolPath> LinkEpochSource<'id, Path> {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl<'id, Path: PoolPath> LinkEpoch<'id, Path> {
-    pub(crate) const fn for_test(sequence: u64) -> Self {
+    /// The connection `sequence` of the install `'id`, for a host test.
+    pub const fn for_test(sequence: u64) -> Self {
         Self {
             sequence,
             brand: PhantomData,

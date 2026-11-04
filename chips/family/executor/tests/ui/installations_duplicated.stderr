@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `first`
+  --> tests/ui/installations_duplicated.rs:13:21
+   |
+ 8 |     let first = first::take_static::<()>().expect("one take");
+   |         ----- move occurs because `first` has type `Installations<StaticId<first::Declaration>, ()>`, which does not implement the `Copy` trait
+ 9 |     #[cfg(all())]
+10 |     let second = first;
+   |                  ----- value moved here
+...
+13 |     let mut first = first; // ui-error: E0382
+   |                     ^^^^^ value used here after move

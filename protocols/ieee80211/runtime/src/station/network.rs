@@ -1,19 +1,19 @@
-//! The MSDUs the service hands the network stack: lent in place or copied.
+//! The MSDUs the actor hands the network stack: lent in place or copied.
 //!
-//! An MPDU that delivered exactly one MSDU is lent: the backend moves its
-//! receive buffer to the network ([`LowerMacPhase::lend`]) and the frame
-//! names its payload in that buffer. The service copies an MSDU instead
-//! when its MPDU delivered several (an A-MSDU) or the backend kept the
-//! buffer; [`RxMsdusCopied`] counts both.
+//! An MPDU that delivered exactly one MSDU is lent: the port moves its
+//! receive buffer to the network ([`DataPort::lend`]) and the frame names
+//! its payload in that buffer. The actor copies an MSDU instead when its
+//! MPDU delivered several (an A-MSDU) or the port kept the buffer;
+//! [`RxMsdusCopied`] counts both.
 //!
-//! [`LowerMacPhase::lend`]: oer_protocols_ieee80211_contracts_port::LowerMacPhase::lend
+//! [`DataPort::lend`]: oer_protocols_ieee80211_contracts_port::DataPort::lend
 
 use oer_protocols_ieee80211_contracts_port::LentRxBuffer;
 use oer_protocols_network_port::{FrameStorage, LentFrame, ReceivedFrame};
 
 /// A lent receive buffer as network storage: the MPDU, then the rest of its
 /// allocation.
-pub struct NetworkRx<L>(pub(super) L);
+pub struct NetworkRx<L>(pub(crate) L);
 
 impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
     fn bytes(&self) -> &[u8] {
@@ -35,7 +35,7 @@ impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
     }
 }
 
-/// The service's copies the network queue's [`Received::Copied`] marks stand
+/// The actor's copies the network queue's [`Received::Copied`] marks stand
 /// for, in their order.
 pub const RX_COPIED_DEPTH: usize = 4;
 
@@ -44,11 +44,11 @@ pub const RX_COPIED_DEPTH: usize = 4;
 pub enum Received<L> {
     /// In the backend's receive buffer, lent to the network.
     Lent(LentFrame<NetworkRx<L>>),
-    /// The service's own copy, the oldest one in the copies' queue.
+    /// The actor's own copy, the oldest one in the copies' queue.
     Copied(CopiedMark),
 }
 
-/// What stands for one of the service's copies in the network queue; the
+/// What stands for one of the actor's copies in the network queue; the
 /// device reads the copy in place ([`NetDevice::read_copied`]).
 ///
 /// [`NetDevice::read_copied`]: oer_protocols_network_port::NetDevice::read_copied
@@ -56,7 +56,7 @@ pub enum Received<L> {
 pub struct CopiedMark(());
 
 impl CopiedMark {
-    pub(super) const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self(())
     }
 }
@@ -72,7 +72,7 @@ impl<L: LentRxBuffer> ReceivedFrame for Received<L> {
     }
 }
 
-/// The MSDUs of one received frame the service copied instead of lending,
+/// The MSDUs of one received frame the actor copied instead of lending,
 /// by reason. Each count saturates at `u16::MAX`; at least one is nonzero.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxMsdusCopied {
@@ -89,7 +89,7 @@ pub struct RxMsdusCopied {
 /// every buffer.
 pub trait NetworkStop {
     /// Whether a network takes the station's frames at all. A composition
-    /// without one makes the service refuse every MSDU at once, returning
+    /// without one makes the actor refuse every MSDU at once, returning
     /// its buffer, so nothing waits for a consumer that does not exist.
     fn takes_frames(&self) -> bool;
     /// Begin stopping: take no new frame and drop every frame it holds.
@@ -127,62 +127,4 @@ impl NetworkStop for NoNetwork {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StopPolicy {
     pub drain: oer_portable_time::Duration,
-}
-
-/// Why the network did not return the station's lent buffers before the
-/// port retires.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NetworkDrainCause {
-    /// The stop's deadline passed.
-    Deadline,
-    /// The stop participant was lost before it reported.
-    ParticipantLost,
-}
-
-/// A failed network drain: why, and the buffers the network still held.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NetworkDrainFailure {
-    pub cause: NetworkDrainCause,
-    pub held: usize,
-}
-
-/// Stop the network and wait, until `deadline`, for it to stop and return
-/// every lent buffer.
-pub(super) async fn drain<
-    'p,
-    'id: 'p,
-    P: oer_protocols_ieee80211_contracts_port::LowerMacPhase<'p, 'id>,
->(
-    phase: &mut P,
-    network: &impl NetworkStop,
-    timer: &impl oer_portable_time::Timer,
-    deadline: oer_portable_time::Instant,
-) -> Result<(), NetworkDrainFailure> {
-    use core::{future::Future, task::Poll};
-    network.request_stop();
-    let mut alarm = core::pin::pin!(timer.wait_until(deadline));
-    core::future::poll_fn(|cx| {
-        let stopped = match network.poll_stopped(cx) {
-            Poll::Ready(Ok(())) => true,
-            Poll::Ready(Err(NetworkStopLost)) => {
-                return Poll::Ready(Err(NetworkDrainFailure {
-                    cause: NetworkDrainCause::ParticipantLost,
-                    held: phase.lent(),
-                }));
-            }
-            Poll::Pending => false,
-        };
-        let returned = phase.poll_lent_returned(cx).is_ready();
-        if stopped && returned {
-            Poll::Ready(Ok(()))
-        } else if alarm.as_mut().poll(cx).is_ready() {
-            Poll::Ready(Err(NetworkDrainFailure {
-                cause: NetworkDrainCause::Deadline,
-                held: phase.lent(),
-            }))
-        } else {
-            Poll::Pending
-        }
-    })
-    .await
 }

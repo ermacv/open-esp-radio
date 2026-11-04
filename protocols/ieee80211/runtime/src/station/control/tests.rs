@@ -639,7 +639,6 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
     };
     control.stop_gracefully(oer_portable_time::Instant::from_micros(u64::MAX));
     assert!(matches!(runner.policy_command::<()>(now), Ok(None)));
-    assert!(!runner.policy_ready(now));
     assert_eq!(runner.policy_deadline(), None);
     drop(disconnect);
     events.emit(terminal(explicit));

@@ -1,7 +1,7 @@
 //! Installed group owners and reserved record places. A pending installation
 //! owns its vacant place, so its return cannot overflow a retirement pool.
 
-use super::{Ccmp128Key, CcmpRxReplayEpoch, GroupKeyId, Pool};
+use super::{Ccmp128Key, GroupKeyId, Pool};
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayState;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -176,18 +176,14 @@ impl<Key> GroupKeys<Key> {
         }
     }
 
-    pub(super) fn activate(&mut self, entry: &mut Installed<Key>, replay: &mut CcmpRxReplayEpoch) {
-        let Replay::Retained(next) = core::mem::replace(&mut entry.replay, Replay::Active) else {
-            // It was already RX-active under this ID; selecting it changes
-            // neither counters nor the per-ID replay frontier.
-            return;
-        };
-        if let Some(previous) = replay.exchange_group(entry.key_id, next)
-            && let Some(old) = self
-                .entries
-                .iter_mut()
-                .flatten()
-                .find(|old| old.key_id == entry.key_id && matches!(old.replay, Replay::Active))
+    /// The installation of `key_id` whose lane a new installation took
+    /// keeps the frontier it had, `previous`, for its next selection.
+    pub(super) fn retain(&mut self, key_id: GroupKeyId, previous: CcmpRxReplayState) {
+        if let Some(old) = self
+            .entries
+            .iter_mut()
+            .flatten()
+            .find(|old| old.key_id == key_id && matches!(old.replay, Replay::Active))
         {
             old.replay = Replay::Retained(previous);
         }

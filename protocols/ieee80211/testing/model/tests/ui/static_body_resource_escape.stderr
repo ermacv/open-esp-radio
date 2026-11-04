@@ -7,20 +7,25 @@ warning: unused import: `oer_protocols_ieee80211_contracts_port::TxBufferMemory`
   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
 
 warning: variable does not need to be mutable
-  --> tests/ui/static_body_resource_escape.rs:18:13
+  --> tests/ui/static_body_resource_escape.rs:16:9
    |
-18 |         let mut buffer = resources.small.pop().expect("one model body resource");
-   |             ----^^^^^^
-   |             |
-   |             help: remove this `mut`
+16 |     let mut buffer = resources.small.pop().expect("one model resource");
+   |         ----^^^^^^
+   |         |
+   |         help: remove this `mut`
    |
    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
 
 error: lifetime may not live long enough
-  --> tests/ui/static_body_resource_escape.rs:20:36
+  --> tests/ui/static_body_resource_escape.rs:18:12
    |
-16 |     async fn run<'a, 'p>(self, owner: Owner<'a, 'p, Id, Backend, Disabled>, mut resources: ModelResources<'p, Backend>) -> Ended<Id,...
-   |                      -- lifetime `'p` defined here
+15 | pub fn escape<'p>(mut resources: ModelResources<'p, Backend>) -> Box<dyn Any> {
+   |               -- lifetime `'p` defined here
 ...
-20 |         let output: Box<dyn Any> = Box::new(buffer); // ui-error: lifetime may not live long enough
-   |                                    ^^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`
+18 |     return Box::new(buffer); // ui-error: lifetime may not live long enough
+   |            ^^^^^^^^^^^^^^^^ coercion requires that `'p` must outlive `'static`
+   |
+help: to declare that the trait object captures data from argument `resources`, you can add an explicit `'p` lifetime bound
+   |
+15 | pub fn escape<'p>(mut resources: ModelResources<'p, Backend>) -> Box<dyn Any + 'p> {
+   |                                                                              ++++

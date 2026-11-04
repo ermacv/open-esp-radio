@@ -193,13 +193,10 @@ impl HardwareServices {
 /// The parametric limits of a backend: which values of the base port's
 /// operations it accepts. It does not change while the port exists.
 ///
-/// Constructors of checked values refuse inputs outside these limits.
-/// Optional operations are expressed by extension traits such as
-/// [`AmpduPhase`](crate::AmpduPhase),
-/// [`BeaconTimingPhase`](crate::BeaconTimingPhase),
-/// [`MonitorPhase`](crate::MonitorPhase) and
-/// [`AirReservationPhase`](crate::AirReservationPhase). Each extension's
-/// capabilities state its own limits.
+/// Constructors of checked values refuse inputs outside these limits. An
+/// optional feature states its own limits in its own capabilities, as a
+/// port's arenas state what they aggregate
+/// ([`PortArena::ampdu_capabilities`](crate::PortArena::ampdu_capabilities)).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct LowerMacCapabilities {
     /// Radio bands the backend can tune to.

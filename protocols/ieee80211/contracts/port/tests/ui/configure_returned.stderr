@@ -1,11 +1,11 @@
 error[E0382]: use of moved value: `permission`
-  --> tests/ui/configure_returned.rs:12:35
+  --> tests/ui/configure_returned.rs:13:69
    |
- 7 |         permission,
-   |         ---------- move occurs because `permission` has type `ConfigurePermission<'_, oer_protocols_ieee80211_contracts_port::Station, <<P as LowerMacPhase<'_, '_>>::Types as PhaseTypes<'_>>::StationCommandPath, <<P as LowerMacPhase<'_, '_>>::Types as PhaseTypes<'_>>::StationConfigureContext>`, which does not implement the `Copy` trait
+ 8 |     let LowerMacTerminal::Configured(Configured::Station(permission)) = terminal else {
+   |                                                          ---------- move occurs because `permission` has type `ConfigurePermission<'_, oer_protocols_ieee80211_contracts_port::Station, <<P as DataPort<'_>>::Types as PortTypes<'_>>::StationCommandPath, <<P as DataPort<'_>>::Types as PortTypes<'_>>::StationConfigureContext>`, which does not implement the `Copy` trait
 ...
-10 |         phase.station().configure(permission, StationReceive::Off);
-   |                                   ---------- value moved here
-11 |         #[cfg(all())]
-12 |         phase.station().configure(permission, StationReceive::Off); // ui-error: E0382
-   |                                   ^^^^^^^^^^ value used here after move
+11 |     let next = PortCommand::Configure { permission, receive: StationReceive::Off };
+   |                                         ---------- value moved here
+12 |     #[cfg(all())]
+13 |     let _again = PortCommand::<'id, P::Types, P::Caps>::Configure { permission, receive: StationReceive::Off }; // ui-error: E0382
+   |                                                                     ^^^^^^^^^^ value used here after move

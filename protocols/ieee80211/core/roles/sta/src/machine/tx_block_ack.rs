@@ -91,6 +91,9 @@ pub struct StaTxBlockAck {
     /// it: taken again after every change of its queue, so a turn with
     /// nothing due scans no agreement.
     pending: Option<Instant>,
+    /// An operational agreement may have started, moved or ended since the
+    /// link's holder last heard them all.
+    changed: bool,
 }
 
 impl StaTxBlockAck {
@@ -149,6 +152,7 @@ impl StaTxBlockAck {
             admitted: false,
             timing: None,
             pending: None,
+            changed: false,
         })
     }
 
@@ -162,7 +166,24 @@ impl StaTxBlockAck {
         self.request = [None; TX_BLOCK_ACK_MAX_TIDS];
         self.heads = [None; TX_BLOCK_ACK_MAX_TIDS];
         self.admitted = admitted;
+        self.changed = true;
         self.retime();
+    }
+
+    /// Whether an operational agreement may have changed since
+    /// [`Self::settled`].
+    pub(crate) const fn changed(&self) -> bool {
+        self.changed
+    }
+
+    /// The link's holder heard every operational agreement.
+    pub(crate) fn settled(&mut self) {
+        self.changed = false;
+    }
+
+    /// A new holder of the link has heard no agreement yet.
+    pub(crate) fn mark_changed(&mut self) {
+        self.changed = true;
     }
 
     /// Take the timing and the queued negotiations again after a change of
@@ -283,6 +304,7 @@ impl StaTxBlockAck {
     /// to give; nothing is taken then.
     pub(crate) fn poll(&mut self, now: Instant, can_send: bool) -> Option<TxBlockAckOwed> {
         if self.timing.is_some_and(|at| now >= at) {
+            self.changed = true;
             // At most one expiry per agreement.
             for _ in ALL_TIDS {
                 if self.originator.expire_next(now).is_none() {
@@ -360,6 +382,7 @@ impl StaTxBlockAck {
     /// and owes a DELBA, so the access point keeps no agreement of its own.
     pub(crate) fn on_action(&mut self, action: BlockAckAction, now: Instant) -> bool {
         let taken = self.take_action(action, now);
+        self.changed |= taken;
         self.retime();
         taken
     }

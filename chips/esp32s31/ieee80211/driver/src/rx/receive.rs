@@ -1,4 +1,4 @@
-//! Receive in the driver's task with doorbell unmask and a fixed
+//! Receive in the data port's task with doorbell unmask and a fixed
 //! teardown.
 //!
 //! [`receive`] owns one receive epoch from bring-up to park:

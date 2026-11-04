@@ -1,8 +1,8 @@
 # IEEE 802.11 lower-MAC port
 
 `oer-protocols-ieee80211-contracts-port` declares the radio port between portable Wi-Fi MAC
-logic and the backend that puts frames on the air, on the owner shape of
-[the architecture](../../../../docs/architecture.md#radio-port). It holds only
+logic and the backend that puts frames on the air, as
+[the architecture](../../../../docs/architecture.md#radio-port) describes it. It holds only
 the interaction with the peripheral and the representation of the data that
 crosses it: typestate wrappers, outcomes and facts. Wire codecs live in
 `oer-protocols-ieee80211-wire`, policy in the cores above the port, vendor records in
@@ -10,36 +10,37 @@ crosses it: typestate wrappers, outcomes and facts. Wire codecs live in
 dependency of the port reaches an ieee80211 core (`oer-tools-test-layers`). It is
 sans-IO: it declares the port and its values and never waits on it.
 
-## The phase
+## The data port
 
-The port's lifecycle is `oer-protocols-radio-port`'s: a backend implements
-`LowerMacBackend`, a `PortBackend` whose disabled-only settings are
-`LowerMacSetup` (the channel, as a `SupportedChannel`; a backend whose
-addresses change also implements `AddressSetup`). An enabled port lends one
-running phase (`LowerMacPhase`, module `phase`): one object under `&mut`,
-the body's handle over single-producer single-consumer queues to the
-backend's driver, which alone owns the hardware state.
-Its event stream (`LowerMacEvent`) carries every token an operation took
-back; its operations are synchronous and never wait:
+The station's datapath actor owns the radio as a `DataPort` (module
+`data_port`) by value for an installation's whole life and calls it in its
+turns: it waits on the port's signals (`poll_facts`) and one alarm at
+`deadline`, reads the clock once per turn and passes that `now` to every
+call. No port method wakes its caller, reads the clock or loops over a
+queue. The station's lifecycle never holds the port: it sends each key,
+receive-configuration, gate or setting operation as one `PortCommand`
+(module `command`), which the actor hands to `DataPort::command` in order.
+A command whose barrier is not reached comes back `Held` and runs again on a
+later call; one the port cannot run in its state comes back refused with
+every owner. Installation commands come only from the backend's issuer
+(`PortCommands`), which mints the identity the installed key will carry.
+Terminals, TBTTs and the units a group mutation's receive cut drained go to
+the turn's `PortSink`, in the order the port produced them; a data arena's
+end returns from `service_tx` itself. `PortTypes` (module `types`) names
+the types the port's owners and terminals carry:
 
 - **Tickets and buffers.** A transmission takes a ticket (a place in
-  flight and its terminal's place) and the buffers of its frames, each of a
+  flight and its terminal's place) and the buffer of its frame, of a
   class sized by the composition (`TxBufferClass`, `ClassFrame`); its
-  `TxCompleted` event gives all of them back with `PhaseTypes::Context`,
-  chosen by the composition with `type Context: 'id` in `PhaseTypes<'id>`.
-  The bound retains install-branded epochs and excludes a reference to a
-  machine local to the generic `PortBody::run`. Portable contexts need not
-  be `Send`; only a backend crossing execution contexts requires it.
-  `PhaseTypes` also owns the single body type and backend fault type for
-  the phase and both of its interfaces; interface submission and the event
-  stream report that same fault.
+  `TxCompleted` terminal gives both back with `PortTypes::Context`,
+  chosen by the composition with `type Context: 'id` in `PortTypes<'id>`.
+  `PortTypes` also owns the single body type and backend fault type.
   Before submission, `Attempt::admit` seals context, ticket and the
-  prepared MPDU into one closed `InFlight`. The backend receives
-  `InterfaceSubmission`, with execution metadata beside the sealed owner.
+  prepared MPDU into one closed `InFlight`; `DataPort::admit` accepts the
+  sealed `StationSubmission` and `DataPort::submit` queues it.
   Queues, publication, withdrawal and quarantine retain that whole owner.
-  `TxCompleted::Single` returns its `Completed`; `TxCompleted::Arena`
-  returns a data arena's end (`PhaseArenaCompleted`), whose frames stay in
-  the arena until the station settles it through `StationPhase::data_arena`. `TransmitPool` mints tickets and one `TerminalAccess` for the consumer.
+  `TxCompleted::Single` returns its `Completed`. `TransmitPool` mints
+  tickets and one `TerminalAccess` for the consumer.
   Only consuming `Completed::into_parts` with that installation- and
   pool-specific permission releases owners. Completion alone grants no
   unpacking authority, and raw `InFlight` admission is private.
@@ -48,14 +49,11 @@ back; its operations are synchronous and never wait:
   owner extraction. The model projections keep those fields private, and
   host/RV32 UI pairs reject swapping tickets, contexts or MPDUs and
   reconstructing a terminal through fields.
-  The common conformance suite checks actual returned
-  identities and destructor counts before teardown as well as after it.
-  Each hardware backend supplies its own fixture for that harness. Context moves unchanged;
-  no `Clone` bound, frame inspection or parallel lookup identifies the
-  original operation. Bodies remain owned until the same terminal, even
-  when the backend copies their octets into DMA memory. An empty pool is the caller's
-  own capacity; an occupied queue is the backend's, which keeps the attempt
-  until the queue frees.
+  Context moves unchanged; no `Clone` bound, frame inspection or parallel
+  lookup identifies the original operation. Bodies remain owned until the
+  same terminal, even when the backend copies their octets into DMA memory.
+  An empty pool is the caller's own capacity; an occupied queue is the
+  backend's, which keeps the attempt until the queue frees.
 - **Preparation and submission.** `TxBufferPool::prepare` checks a source
   where its buffer class is concrete and returns a closed `Prepared` value.
   `TxSource::check` first consumes the raw source into `CheckedTxSource`;
@@ -66,8 +64,8 @@ back; its operations are synchronous and never wait:
   which refuses short storage before writing. Storage
   shortage, CCMP shortage and body overlap are `LayoutError`; backend
   `PreparationError` contains retransmission identity/kind refusals.
-  It retains the phase, install, role and key borrow. `ClassSizedFrame`
-  carries a portable machine's size proof until the service adds phase-bound
+  It retains the port borrow, install, role and key borrow. `ClassSizedFrame`
+  carries a portable machine's size proof until the service adds port-bound
   rates, without rechecking the class. `TxProtection::{Open, Ccmp(NumberedKey { key, packet_number })}` in
   the fresh source is the sole source of the Protected bit. It derives
   `MpduProtection` for the layout; callers cannot change a header's protection
@@ -77,13 +75,14 @@ back; its operations are synchronous and never wait:
   before any header/body write or admission. The core reserves a PN before
   handoff; cancelled preparation may leave a gap, and a reserved PN is never
   allocated to another MPDU.
-  `PhaseRate` retains the capabilities, generative installation brand and
-  enabled phase loan through NoAck, legacy/A-MPDU rates, retry plans and
-  prepared frames. Two installations of the same backend cannot exchange
-  those proofs even when their loan lifetimes coincide. Disable and retune
-  require releasing the old loan and checking a new rate on the new channel.
-  These identities add no stored bytes. The UI cases beside lower-MAC and
-  runtime check both misuse and valid use on host and RV32.
+  `PortRate` retains the capabilities and the borrow of the port that
+  checked it (`DataPort::rate`, `PortArena::rate`) through NoAck
+  (`PortRate::no_ack`), legacy (`PortRate::legacy`) and A-MPDU
+  (`PortArena::ampdu_rate`) rates, retry plans and prepared frames. A start
+  retunes only under `&mut`, so a rate checked in one turn is not used after
+  the port moved on (`tests/ui/port_rate_turn.rs`), and a rate of other
+  capabilities does not fit (`tests/ui/rate_capabilities.rs`). These
+  proofs add no stored bytes.
   Preparation borrows `TxBody::bytes` once and keeps that view for both the
   length check and the complete tail copy. Re-reading an external body can
   select another slice; even a shorter second view must not leave stale
@@ -93,9 +92,10 @@ back; its operations are synchronous and never wait:
   the MAC wire encoder's `BLOCK_ACK_REQUEST_LEN`.
   A refused preparation returns the original typed source and its owners;
   the caller still holds context and ticket. `submit` takes the already sealed
-  operation and its attempt parameters and can refuse only poisoning.
+  operation and its attempt parameters; a refusal (the radio does not run
+  or stops) ends it at once, withdrawn, with its terminal in the sink.
   The queued operation owns backend data, never a borrow of a local machine.
-  A retransmission takes the returned `Sent` MPDU and a phase-bound
+  A retransmission takes the returned `Sent` MPDU and a port-bound
   `RetransmissionPlan`: header, payload, body and installed-key identity
   remain inside that MPDU. SN and PN stay; only Retry changes in its bytes.
   Rate, retry plan, RTS/CTS, power and the coexistence operation belong to the new attempt.
@@ -103,16 +103,15 @@ back; its operations are synchronous and never wait:
   `RetransmissionKey`, even if the slot and key material are reused.
   `renew` returns memory and body explicitly.
 - **Data arenas.** The station's data goes through two DMA arenas the
-  station phase lends for one synchronous step
-  (`StationPhase::data_arena`, a `TxArena` whose memory is
-  `PhaseTypes::DataMemory`, the network's own frame memory, and whose
-  evidence and fault are the phase types'). The caller writes each frame
-  once as an arena takes it and publishes one arena at a time as an A-MPDU
-  at an `AmpduRate` or as the single MPDU of its position 0 under a
-  `RetryPlan`, which the backend carries out as for any single MPDU; the backend
-  serves the hardware and returns the end as `TxCompleted::Arena`. A
-  backend publishes nothing while its gate is closed, a configuration is
-  pending or it stops: it refuses the publication as busy.
+  port lends for one turn (`DataPort::arena`, a `PortArena` whose memory is
+  `PortTypes::DataMemory`, the network's own frame memory, and whose
+  evidence and fault are the port's). The caller writes each frame once as
+  an arena takes it and publishes one arena at a time as an A-MPDU at an
+  `AmpduRate` or as the single MPDU of its position 0 under a `RetryPlan`,
+  which the backend carries out as for any single MPDU; the backend serves
+  the hardware and returns the end from `DataPort::service_tx`. A backend
+  publishes nothing while its gate is closed, a configuration is pending or
+  it stops: it refuses the publication as busy.
 - **Management plans.** `ManagementTxPlan` carries a legacy rate derived
   above the driver and a nonzero attempt budget; every attempt keeps the
   selected rate. `oer-protocols-ieee80211-core-upper-mac` `management` chooses the budget:
@@ -140,22 +139,23 @@ back; its operations are synchronous and never wait:
   single MPDU names its response: unsolicited, an ACK, or a BlockAckReq's
   BlockAck with its report. A delivered aggregate always carries its
   BlockAck report. The backend's evidence of the response is its own type:
-  `PhaseTypes::AckEvidence` for a single MPDU, which a policy needing the
-  ACK's SNR requires as `AckSnr`, and `PhaseTypes::BlockAckEvidence` for an
+  `PortTypes::AckEvidence` for a single MPDU, which a policy needing the
+  ACK's SNR requires as `AckSnr`, and `PortTypes::BlockAckEvidence` for an
   aggregate, split by `BlockAckSnr` into a measured sample or none, because
   hardware may accept a BlockAck without a measurement.
-  The outcome carries no RSSI. `AirDenied` carries `PhaseTypes::AirDenied`,
+  The outcome carries no RSSI. `AirDenied` carries `PortTypes::AirDenied`,
   `Infallible` for a backend that cannot tell a coexistence abort apart.
   A hardware timeout with no completion ends as `Indeterminate`;
   the backend does not republish that MPDU, stop the queue, or return its
   tail. `TxStatus` describes only Success, AckTimeout, CtsTimeout, Collision
   and TimedOut observations of a publication. Decoder/accounting faults
-  poison the backend and produce no `TxOutcome` or returned-resource event.
+  are the port's named fault and produce no `TxOutcome` or returned-resource
+  event.
   Internal collisions remain driver retries; budget exhaustion is
   `ContentionLimit`. Withdrawals name only GateClosed, KeyRemoved or
   Disabled. Rate selection ignores withdrawals, Indeterminate,
-  ContentionLimit and AirDenied (`SingleEnd::rate_sample`). A lifecycle barrier waits for one current publication,
-  bounded by `LowerMacBackend::PUBLICATION_BOUND`, not the remaining plan.
+  ContentionLimit and AirDenied (`SingleEnd::rate_sample`). A barrier waits for one current publication,
+  bounded by the backend's publication bound, not the remaining plan.
   ACK still ends as `Delivered`; a needed retry returns
   `Withdrawn(cause)` with Sent, retaining SN/PN. An unpublished attempt
   returns Fresh. Unknown timeout remains Indeterminate. Per-AC terminals
@@ -187,35 +187,33 @@ back; its operations are synchronous and never wait:
   `AssociationSlot`, and `KeyTypes::Pool` must be that pool (`KeyPool`'s
   `PAIRWISE_SLOTS` and `GROUP_SLOTS`). A receive Block Ack slot is a
   `BlockAckSlot<'id, K, N>` that only the pool `BlockAckSlots<K, N>` mints,
-  and `PhaseTypes::BlockAckPool` must be that pool (`RxBlockAckPool::LEN`).
+  and `PortTypes::BlockAckPool` must be that pool (`RxBlockAckPool::LEN`).
   A declared capacity other than the minted one does not compile, the
   capabilities carry no copy of these counts, and running out is a missing
   slot token, never a comparison. A pairwise slot has one installation or
   removal command and terminal outstanding, since removal needs the key only
   the installation terminal returns. The command bound is tickets + the
   pairwise slots + one GTK permission per interface + configure permissions
-  + TSF permissions + two gate commands. The terminal bound is tickets +
-  pairwise slots + GTK permissions + gate closing + configure permissions
-  + TSF permissions; the event queue additionally reserves RX buffers.
-  `PhaseTypes` exposes these bounds. `InterfaceCommandPool` derives both of
+  + two gate commands. The terminal bound is tickets + pairwise slots + GTK
+  permissions + gate closing + configure permissions; received units are
+  bounded separately.
+  `PortTypes` exposes these bounds. `InterfaceCommandPool` derives both of
   its contributions from the same constants used to mint its slots.
 - **Interface commands.** `Mint` gives each interface one affine
-  `ConfigurePermission` and one `TsfPermission`, branded by installation,
-  role and pool path. `configure(permission, receive)` enters the FIFO;
+  `ConfigurePermission`, branded by installation, role and pool path.
+  `PortCommand::Configure { permission, receive }` enters the command order;
   `Configured` returns the same permission with its opaque context.
   The station's connection epoch travels in that context, so the service
   does not match a role against a separate pending-request table. A second
   configure is impossible until the first terminal returns. Configuration
   withdraws held attempts of its interface and waits for its published
   attempts; another interface's publication does not block it.
-  `sample_tsf(permission)` likewise returns its permission in `TsfSampled`.
-  Sampling belongs to the interface whose clock `BeaconTimingPhase` reads.
-  Disable drains these command terminals with their owners.
-- **Settings.** EDCA, BSS color, a TBTT plan, monitor reception and Block Ack
-  desired state take effect before the next publication; the latest value
-  of each wins. They consume no FIFO command credit. Each VIF keeps its
+  A stop drains these command terminals with their owners.
+- **Settings.** EDCA (`PortCommand::SetEdca`), BSS color
+  (`PortCommand::SetBssColor`) and Block Ack desired state take effect
+  before the next publication; the latest value of each wins. Each VIF keeps its
   complete EDCA table: AIFSN, ECWmin, ECWmax, TXOP limit and MSDU lifetime.
-  `SupportedEdca` refuses unsupported records; `set_edca` applies them
+  `SupportedEdca` refuses unsupported records; the port applies them
   exactly. The head frame's VIF selects the parameters of its AC queue's
   single contention state. Before a BSS is known, the standard non-AP
   defaults apply (IEEE 802.11-2020 9.4.2.28, Table 9-155), with 500 TU
@@ -225,20 +223,22 @@ back; its operations are synchronous and never wait:
   Its private `GatePlace` starts inside `GateOpen`
   and retains one `GateIssuer` in the backend. Closing moves that place to
   the driver; only after the publication barrier does the issuer transform
-  it into `GateClosed` for the event. Opening consumes that evidence and
-  returns the same place as `GateOpen`. There are no independent open and
-  closed slots. The arbiter holds these exact branded states; the body can
-  neither construct closed evidence, copy the place, nor keep both states.
-- **Reception.** A received frame's buffer goes back through `recycle`; a
-  lagging body loses unsolicited frames as `EventsLost`, never a terminal.
+  it into `GateClosed` for its terminal. Opening (`DataPort::open_gate`)
+  consumes that evidence and returns the same place as `GateOpen`. There
+  are no independent open and closed slots. The arbiter holds these exact
+  branded states; the caller can neither construct closed evidence, copy
+  the place, nor keep both states.
+- **Reception.** `DataPort::receive` gives one received unit at a time,
+  while the caller holds fewer than its room; the unit goes back through
+  `recycle` or moves to the network through `lend`.
 
 `oer_protocols_ieee80211_contracts_security::Ccmp128Key` is the shared affine, zeroizing owner
 of installation material. RSN moves this owner into installation. Its
 bytes are private; hardware programming and software CCMP borrow them.
 It has no `Clone`, `Copy`, equality or owned byte extraction, and Debug is
-redacted. The model moves that same owner through its command FIFO into
-the key table, where removal or teardown zeroizes it independently of any
-surviving slot identity. Quarantine intentionally retains the key without
+redacted. The model moves that same owner through its installation command
+into the key table, where removal or reinstallation zeroizes it
+independently of any surviving slot identity. Quarantine intentionally retains the key without
 calling `Drop`, until chip reset.
 
 An `AssociationPool` mints one start permission and the complete PTK/GTK
@@ -251,8 +251,8 @@ whether domains occupy whole interfaces or individual associations.
 
 A pairwise installation consumes its slot and reserves a FIFO terminal;
 only `PairwiseKeyInstalled`, after the write took effect, returns the
-installed key, so no attempt names it earlier. A failed write poisons with
-the slot and association retained. Pairwise removal carries the
+installed key, so no attempt names it earlier. A failed write is the
+port's named fault, with the slot and association retained. Pairwise removal carries the
 association owner through its `KeyRemoved` terminal. The station first removes its group keys, then the PTK; spare
 unused slots remain owned throughout. Only the exact complete `VacantKeyBank`
 can enter `end_association(owner, bank)`, which synchronously returns a
@@ -264,8 +264,8 @@ their immutable mode and admitted transmissions proceed normally.
 
 Each interface receives one affine `KeyTypes::GroupPermission`, minted once
 with the installation and branded to that port and interface. Every GTK
-install, replacement, selection and removal consumes it and reserves a FIFO
-terminal. The synchronous call transfers resources; `GroupKeyInstalled`,
+install, replacement, selection and removal consumes it and reserves a
+terminal. The command transfers resources; `GroupKeyInstalled`,
 `GroupKeyReplaced` or `GroupKeySelected` alone proves success and returns the
 installed owner and permission. `KeyRemoved` returns the vacant slot and
 permission. There is no Busy result or timer retry for admission.
@@ -274,21 +274,21 @@ Exactly one installation per association/wire KeyID decrypts at a time;
 other IDs may stay active. Each successful GTK terminal is a real RX cut:
 all delivered old-installation frames precede it, including facts retained
 in hardware, DMA, ISR and software queues; selected-installation frames
-follow it. The cut is finite under continuous ingress. The backend supplies
-completion and deadline wakeups and declares `GROUP_COMMAND_BOUND` from
-admission through terminal or Poisoned. Normal disable completes accepted
-GTK operations within the same bound. The API exposes no cancellation;
-uncertain operations retain their owners and permission for teardown.
+follow it; the units the cut drained go to the sink before the terminal.
+The cut is finite under continuous ingress. A mutation held at its barrier
+past the backend's command bound is the port's named fault, which keeps its
+owners. A stop completes accepted GTK operations within the same bound. The
+API exposes no cancellation.
 
-`select_group_key` consumes a concrete retained installed owner. It neither
+`PortCommand::SelectGroup` consumes a concrete retained installed owner. It neither
 writes material nor creates an installation nor resets counters, including
 when already current. A higher layer retains each saved key's replay owner
 and exchanges it at the terminal. The port knows no replay state.
 `KeyTypes::GroupSlotIdentity` correlates pending actions with their terminal;
 `Identity` still names the actual material installation used for TX.
 
-The model covers retained same-ID selection and delayed ingress through the
-shared conformance harness. An evicted key is no longer installed and
+The model and the S31 port check retained same-ID selection and delayed
+ingress against the shared conformance verifier. An evicted key is no longer installed and
 cannot be selected from a RAM copy. Physical slot counts belong to backend
 pools; each hardware backend must prove its own RX boundary.
 
@@ -300,13 +300,13 @@ A frame's kind (`TxFrame`) fixes its response: an individual frame (an
 `AckHeader` with an `IndividualAddress` receiver, any data or management
 frame but Action No Ack), an individual frame without an ACK (a
 `NoAckHeader` at a `SupportedNoAck` rate), a group frame or a BlockAckReq
-(at `LegacyPhaseRate`s). The interfaces' types are their roles
-(`StationPhase`, `AccessPointPhase`), each with its own receive rules
+(at `LegacyPortRate`s). Each role has its own receive rules
 (`StationReceive`, `SupportedFilter` of the role).
 
-The module `owner`'s table maps every refusal of the old lower-MAC port to
-its type, and lists the world's outcomes that stay. Compile-fail tests in
-`owner` and `phase` pin each rule a type carries.
+The module `owner`'s table maps every refusal a caller's own state explains
+to its type, and lists the world's outcomes that stay. Compile-fail tests in
+`owner`, `types`, `command`, `data_port` and `tests/ui` pin each rule a type
+carries.
 
 ## Data on two arenas
 
@@ -316,7 +316,7 @@ arena. The caller fills an arena frame by frame (`intake`, which writes the
 MPDU once into the memory the caller hands over and names its `FrameIndex`)
 and publishes it as one A-MPDU of every frame or one single MPDU of the frame
 at position 0, the others staying unsent in the arena (`ArenaPublication`: format
-and phase-checked rate, access category, RTS/CTS protection, encryption
+and port-checked rate, access category, RTS/CTS protection, encryption
 under the installed pairwise key, power). The backend refuses a frame to
 send whose Protected bit the encryption contradicts and an A-MPDU past its
 hardware octet or subframe limit. Publication moves the right into
@@ -333,17 +333,17 @@ indices and completions (`tests/ui/arena_*.rs`).
 
 ## Optional features
 
-Extension traits of the phase: `AmpduPhase` (the rates the backend
-aggregates at, which a data arena's A-MPDU takes; every phase's station
-interface implements it, so a station service always aggregates), `BeaconTimingPhase` (an interface's
-TSF, its samples and its TBTT plan with the wake lead and the beacon window
-the `BeaconWindow` it asks the air for as `Operation::BeaconWindow`) and `MonitorPhase`. Their values (`AmpduCapabilities` with its per-rate `AmpduLengthTable`,
-`TbttEvent`, `TsfSample`, `VifTsf`, `MonitorCapabilities`) are in
-`extensions`. The backend that writes an interface's TSF keeps that TSF's
-relation to the radio clock and stamps each sample with its generation.
-The TSF clock domain (`tsf::TsfInstant`, `TsfDuration`, `time_units`) is the
-port's: a received beacon's Timestamp field (the wire's `TsfTimestamp`)
-becomes a `TsfInstant` through `tsf::timestamp_instant`.
+The rates a backend aggregates at are its arenas'
+(`PortArena::ampdu_capabilities` with its per-rate `AmpduLengthTable`,
+checked into an `AmpduRate` by `PortArena::ampdu_rate`), which a data
+arena's A-MPDU takes. A TBTT of the station's schedule comes in the sink
+(`PortSink::tbtt`, `TbttEvent`). The values of these features (`TsfSample`,
+`VifTsf`, `MonitorCapabilities`) are in `extensions`. The backend that
+writes an interface's TSF keeps that TSF's relation to the radio clock and
+stamps each sample with its generation. The TSF clock domain
+(`tsf::TsfInstant`, `TsfDuration`, `time_units`) is the port's: a received
+beacon's Timestamp field (the wire's `TsfTimestamp`) becomes a `TsfInstant`
+through `tsf::timestamp_instant`.
 
 Parametric limits of what a backend has are its capabilities
 (`LowerMacCapabilities`), and a value outside them has no checked type. Why
@@ -399,29 +399,19 @@ contention of each access category, are the family package
 
 ## Implementers
 
-The host model in `oer-protocols-ieee80211-testing-model` implements the phase with
-composition-selected context types. It returns queued operations on gate
-close and normal disable, including queues held by the model air. On
-an ordinary fault it returns admitted terminals before `EventEnd::Drained`;
-the service verifies every outstanding identity. `EventEnd::Quarantined`
-instead ends through fail-stop without another disable/drain. Undelivered
-owners stay in permanent quarantine even after its receipt is dropped.
-Hardware backends provide the same resource and terminal contract.
+The host model in `oer-protocols-ieee80211-testing-model` implements the data
+port (`ModelPort`) with composition-selected context types. A stop returns
+queued operations, including queues held by the model air, and a quarantine
+keeps every owner the port holds. Hardware backends provide the same
+resource and terminal contract.
 
 The S31 driver implements this contract in its
-[`port` module](../../../../chips/esp32s31/ieee80211/driver/src/port.rs).
-Its P2 owner drives `LowerMacCore`, cooperative registers and the RX ring;
-P3 posts only static typed signals. The image supplies the timer, entropy
-and opaque contexts. Ordinary MPDUs retain caller-supplied
-PNs and external bodies; a normal uninstall returns the stopped resources.
-
-`LowerMacEvent::Terminal(LowerMacTerminal)` carries TX, key, configuration,
-gate and requested clock completions in the normal FIFO. Disable returns
-only `LowerMacTerminal`; RX and TBTT are excluded by type. The backend
-recycles unread RX itself and reports the coalesced loss after re-enable.
-`station::Runner` therefore needs no retained-RX array or receive-capacity
-const parameter for disable.
-
+[`port` module](../../../../chips/esp32s31/ieee80211/driver/src/port.rs)
+(`Esp32s31Port`, statically dispatched). It drives `LowerMacCore`,
+cooperative registers and the RX ring; P3 posts only static typed signals.
+The image supplies the timer, entropy and opaque contexts. Ordinary MPDUs
+retain caller-supplied PNs and external bodies; a reinstallation starts from
+the stopped resources.
 
 Station group-key slots are fungible, affine resources. The backend stores
 and returns each raw slot with its installed key; it carries no station-cell

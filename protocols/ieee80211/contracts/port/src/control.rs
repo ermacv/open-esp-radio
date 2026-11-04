@@ -45,8 +45,8 @@ impl VifRoleSet {
 /// acknowledged by the hardware whatever the filter says about other
 /// frames. The rules of [`Self::BSS_MEMBER`] belong to a BSS: a station
 /// without a BSSID can request only [`Self::OTHER_BSS_MANAGEMENT`].
-/// Receiving every frame regardless of address is
-/// [`MonitorPhase`](crate::MonitorPhase), not a filter rule.
+/// Receiving every frame regardless of address is a monitor's, not a
+/// filter rule.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct ReceiveFilter(u8);
 

@@ -1,13 +1,13 @@
 //! Backend-private loans of complete capacity owners; no capacity is minted.
 
 use super::*;
-use oer_protocols_radio_port::{BodyLoan, SlotOwner};
+use oer_protocols_radio_port::BodyLoan;
 
 impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     AssociationStart<'static, R, P, G, Path>
 {
     /// Lend the same complete owner to a body.
-    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> AssociationStart<'p, R, P, G, Path> {
@@ -21,7 +21,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     AssociationStart<'p, R, P, G, Path>
 {
     /// Retain the complete owner in backend queue custody.
-    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> AssociationStart<'static, R, P, G, Path> {
@@ -35,7 +35,7 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     PairwiseKeySlot<'static, R, P, G, Path>
 {
     /// Lend the same complete owner to a body.
-    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> PairwiseKeySlot<'p, R, P, G, Path> {
@@ -49,7 +49,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     PairwiseKeySlot<'p, R, P, G, Path>
 {
     /// Retain the complete owner in backend queue custody.
-    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> PairwiseKeySlot<'static, R, P, G, Path> {
@@ -63,7 +63,7 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     GroupKeySlot<'static, R, P, G, Path>
 {
     /// Lend the same complete owner to a body.
-    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> GroupKeySlot<'p, R, P, G, Path> {
@@ -77,7 +77,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     GroupKeySlot<'p, R, P, G, Path>
 {
     /// Retain the complete owner in backend queue custody.
-    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> GroupKeySlot<'static, R, P, G, Path> {
@@ -91,7 +91,7 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     Association<'static, R, P, G, Path>
 {
     /// Lend the same complete owner to a body.
-    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> Association<'p, R, P, G, Path> {
@@ -106,7 +106,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     Association<'p, R, P, G, Path>
 {
     /// Retain the complete owner in backend queue custody.
-    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> Association<'static, R, P, G, Path> {
@@ -121,7 +121,7 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     VacantKeyBank<'static, R, P, G, Path>
 {
     /// Lend the same complete owner to a body.
-    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> VacantKeyBank<'p, R, P, G, Path> {
@@ -136,7 +136,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     VacantKeyBank<'p, R, P, G, Path>
 {
     /// Retain the complete owner in backend queue custody.
-    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> VacantKeyBank<'static, R, P, G, Path> {
@@ -151,7 +151,7 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     VacantAssociation<'static, R, P, G, Path>
 {
     /// Lend the same complete owner to a body.
-    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> VacantAssociation<'p, R, P, G, Path> {
@@ -166,7 +166,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     VacantAssociation<'p, R, P, G, Path>
 {
     /// Retain the complete owner in backend queue custody.
-    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> VacantAssociation<'static, R, P, G, Path> {
@@ -179,7 +179,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
 
 impl<K, const N: usize, Path: PoolPath> BlockAckSlot<'static, K, N, Path> {
     /// Move the same slot across its backend's body boundary.
-    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> BlockAckSlot<'p, K, N, Path> {
@@ -191,7 +191,7 @@ impl<K, const N: usize, Path: PoolPath> BlockAckSlot<'static, K, N, Path> {
 
 impl<'p, K, const N: usize, Path: PoolPath> BlockAckSlot<'p, K, N, Path> {
     /// Move the same slot across its backend's body boundary.
-    pub fn into_owned<S: SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> BlockAckSlot<'static, K, N, Path> {

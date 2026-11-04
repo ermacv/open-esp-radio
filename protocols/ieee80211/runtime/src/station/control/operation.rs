@@ -94,7 +94,7 @@ pub(super) struct Operations {
     disconnect: Kind,
     scan: Kind,
     next: Cell<u64>,
-    /// The runner's reconnect policy waits here for a permission.
+    /// The lifecycle's reconnect policy waits here for a permission.
     released: PriorityWaker,
 }
 

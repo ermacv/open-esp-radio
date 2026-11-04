@@ -165,3 +165,61 @@ fn a_decoded_qos_header_keeps_no_ack_policy() {
     assert_eq!(decoded, spec);
     assert_eq!(decoded.qos(), Some(qos(2)));
 }
+
+/// Capabilities that carry an individual frame without an ACK only at
+/// non-HT rates.
+#[derive(Debug)]
+struct NonHtNoAck;
+
+impl Ieee80211Capabilities for NonHtNoAck {
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
+    const CAPS: crate::LowerMacCapabilities = crate::LowerMacCapabilities {
+        bands: crate::BandSet::GHZ2_4,
+        widths: crate::WidthSet::MHZ20,
+        rates: crate::RateSupport {
+            dsss_cck: true,
+            ofdm: true,
+            ht_max_mcs: oer_protocols_ieee80211_wire::phy::HtMcs::new(7),
+            he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9),
+            he_max_bandwidth_mhz: 20,
+            he_dcm: false,
+            he_ldpc: false,
+            spatial_streams: 1,
+        },
+        services: crate::HardwareServices::FCS,
+        vifs: 2,
+        tx_queues: 4,
+        max_mpdu_length: 2304,
+        tx_power_ceiling_min_dbm: Some(0),
+        individual_no_ack: crate::PhyFormatSet::NON_HT,
+        station_receive_filters: crate::ReceiveFilter::BSS_MEMBER,
+        access_point_receive_filters: crate::ReceiveFilter::BSS_MEMBER,
+        rx_block_ack_max_tid: 7,
+        rx_block_ack_max_window: 64,
+        rx_amsdu_in_ampdu: true,
+        edca_max_aifsn: 15,
+        edca_max_cw_exponent: 10,
+        edca_max_txop_limit_units_32_us: u16::MAX,
+    };
+}
+
+#[test]
+fn a_port_rate_carries_no_ack_and_a_block_ack_request_only_where_the_rate_allows() {
+    let legacy = PhyRate::Legacy(oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm6M);
+    let ht = PhyRate::Ht(
+        oer_protocols_ieee80211_wire::phy::HtRate::new(
+            oer_protocols_ieee80211_wire::phy::HtMcs::new(7).unwrap(),
+            oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+            false,
+        )
+        .unwrap(),
+    );
+
+    let rate = PortRate::<NonHtNoAck>::checked(legacy);
+    assert_eq!(rate.no_ack().unwrap().rate().get(), legacy);
+    assert_eq!(rate.legacy().unwrap().rate().get(), legacy);
+
+    let rate = PortRate::<NonHtNoAck>::checked(ht);
+    assert_eq!(rate.no_ack().unwrap_err().get(), ht);
+    assert_eq!(rate.legacy().unwrap_err().get(), ht);
+}

@@ -41,16 +41,3 @@ pub mod tx_work;
 
 /// Rate selection, receive observations and scheduling policy.
 pub mod rate;
-
-/// Generation `jumps` of the port's radio-clock relation, for tests that
-/// name generations by number.
-#[cfg(test)]
-pub(crate) fn clock_generation(
-    jumps: u32,
-) -> oer_protocols_ieee80211_contracts_port::Ieee80211ClockGeneration {
-    let mut source = oer_protocols_ieee80211_contracts_port::GenerationSource::new(0);
-    for _ in 0..jumps {
-        source.jump();
-    }
-    source.current()
-}

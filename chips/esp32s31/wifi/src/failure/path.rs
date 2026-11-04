@@ -1,66 +1,9 @@
-//! The variant paths an abandoned station's record keeps: why the port
-//! ended the body loan, then the port's first fault. A subtree the path
-//! does not spell out marks the path cut (`DiagPath::truncated`).
+//! The variant paths a failed station's record keeps: the lifecycle's
+//! cause, then the port's named fault or the observations it kept. A
+//! subtree the path does not spell out marks the path cut
+//! (`DiagPath::truncated`).
 use super::*;
 use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
-
-impl DiagnosticPath for Abandoned {
-    fn push_path(&self, path: &mut DiagPath) {
-        self.cause.push_path(path);
-        if let Some(fault) = &self.fault {
-            fault.push_path(path);
-        }
-    }
-}
-
-impl DiagnosticPath for AbandonCause {
-    fn push_path(&self, path: &mut DiagPath) {
-        match self {
-            Self::QueuesUnprepared => path.name("QueuesUnprepared"),
-            Self::MissingResource(resource) => {
-                path.name("MissingResource");
-                path.name(*resource);
-            }
-            Self::BodyAlreadyIssued => path.name("BodyAlreadyIssued"),
-            Self::Lifecycle(cause) => {
-                path.name("Lifecycle");
-                cause.push_path(path);
-            }
-        }
-    }
-}
-
-impl DiagnosticPath for RetirementCause {
-    fn push_path(&self, path: &mut DiagPath) {
-        match self {
-            Self::Cancelled => path.name("Cancelled"),
-            Self::FailStopRequested => path.name("FailStopRequested"),
-            Self::Construction => path.name("Construction"),
-            Self::BodyAlreadyIssued => path.name("BodyAlreadyIssued"),
-            Self::Deadline => path.name("Deadline"),
-            Self::StopUnconfirmed => path.name("StopUnconfirmed"),
-            Self::NetworkDrain(drain) => {
-                path.name("NetworkDrain");
-                path.name(match drain.cause {
-                    NetworkDrainCause::Deadline => "Deadline",
-                    NetworkDrainCause::ParticipantLost => "ParticipantLost",
-                });
-                path.word(u32::try_from(drain.held).unwrap_or(u32::MAX));
-            }
-            Self::InvalidState(observed) => {
-                path.name("InvalidState");
-                path.name(match observed.storage {
-                    SlotStorage::Empty => "Empty",
-                    SlotStorage::Registered => "Registered",
-                    SlotStorage::Vacant => "Vacant",
-                    SlotStorage::Unavailable => "Unavailable",
-                });
-                path.word(u32::from(observed.phase));
-                path.word(u32::from(observed.invocation_present));
-            }
-        }
-    }
-}
 
 impl DiagnosticPath for BackendFault {
     fn push_path(&self, path: &mut DiagPath) {
@@ -86,7 +29,6 @@ impl DiagnosticPath for BackendFault {
                     path.truncated();
                 }
             }
-            Self::Deadline => path.name("Deadline"),
             Self::Capacity => path.name("Capacity"),
             Self::Clock => path.name("Clock"),
             Self::Retune(error) => {
@@ -114,18 +56,72 @@ impl DiagnosticPath for BackendFault {
                 }
             }
             Self::TuneNotRecorded => path.name("TuneNotRecorded"),
-            Self::Setting(fault) => {
-                path.name("Setting");
-                path.name(match fault {
-                    SettingFault::UnsupportedChannel => "UnsupportedChannel",
-                    SettingFault::ChannelUnset => "ChannelUnset",
-                    SettingFault::EdcaLifetime => "EdcaLifetime",
-                    SettingFault::BlockAckSequence => "BlockAckSequence",
+            Self::HardwareUnavailable => path.name("HardwareUnavailable"),
+            Self::CoreViewUnavailable(op) => {
+                path.name("CoreViewUnavailable");
+                path.name(match op {
+                    CoreOperation::Command => "Command",
+                    CoreOperation::Tbtt => "Tbtt",
+                    CoreOperation::Arena => "Arena",
+                    CoreOperation::Publish => "Publish",
                 });
             }
-            Self::HardwareUnavailable => path.name("HardwareUnavailable"),
+            Self::DuplicateCompletion { queue } => queue_fault(path, "DuplicateCompletion", *queue),
+            Self::RemovalOverflow => path.name("RemovalOverflow"),
+            Self::CompletionWithoutPending { queue } => {
+                queue_fault(path, "CompletionWithoutPending", *queue);
+            }
+            Self::DescriptorMissing { queue } => queue_fault(path, "DescriptorMissing", *queue),
+            Self::ReturnRefused { queue } => queue_fault(path, "ReturnRefused", *queue),
+            Self::BlockAckReportMissing { queue } => {
+                queue_fault(path, "BlockAckReportMissing", *queue);
+            }
+            Self::AirMissing { queue } => queue_fault(path, "AirMissing", *queue),
+            Self::AttemptCounter { queue } => queue_fault(path, "AttemptCounter", *queue),
+            Self::StageMissing { queue } => queue_fault(path, "StageMissing", *queue),
+            Self::QueueFull { queue } => queue_fault(path, "QueueFull", *queue),
+            Self::ReceiveOverflow => path.name("ReceiveOverflow"),
+            Self::ReceiveRange => path.name("ReceiveRange"),
+            Self::ReceiveLost => path.name("ReceiveLost"),
+            Self::ArenaCoreContract => path.name("ArenaCoreContract"),
+            Self::InstallationResources => path.name("InstallationResources"),
+            Self::EdcaUnsupported => path.name("EdcaUnsupported"),
+            Self::ChannelNotPermitted => path.name("ChannelNotPermitted"),
+            Self::ChannelUnsupported => path.name("ChannelUnsupported"),
+            Self::KeySlotMissing(op) => {
+                path.name("KeySlotMissing");
+                path.name(match op {
+                    KeyOperation::Install => "Install",
+                    KeyOperation::Remove => "Remove",
+                    KeyOperation::Replace => "Replace",
+                    KeyOperation::Select => "Select",
+                    KeyOperation::Transmit => "Transmit",
+                });
+            }
+            Self::ReceiveAccounting => path.name("ReceiveAccounting"),
+            Self::CommandExpired(kind) => {
+                path.name("CommandExpired");
+                path.name(match kind {
+                    PortCommandKind::InstallPairwise => "InstallPairwise",
+                    PortCommandKind::InstallGroup => "InstallGroup",
+                    PortCommandKind::ReplaceGroup => "ReplaceGroup",
+                    PortCommandKind::SelectGroup => "SelectGroup",
+                    PortCommandKind::RemovePairwise => "RemovePairwise",
+                    PortCommandKind::RemoveGroup => "RemoveGroup",
+                    PortCommandKind::Configure => "Configure",
+                    PortCommandKind::CloseGate => "CloseGate",
+                    PortCommandKind::SetEdca => "SetEdca",
+                    PortCommandKind::SetBssColor => "SetBssColor",
+                });
+            }
         }
     }
+}
+
+/// A fault of one hardware queue: its name, then the queue.
+fn queue_fault(path: &mut DiagPath, name: &'static str, queue: u8) {
+    path.name(name);
+    path.word(u32::from(queue));
 }
 
 impl DiagnosticPath for LowerMacFault {
@@ -318,5 +314,110 @@ impl DiagnosticPath for AggregateTxError {
                 });
             }
         }
+    }
+}
+
+impl DiagnosticPath for LifecycleFailure {
+    fn push_path(&self, path: &mut DiagPath) {
+        match self {
+            Self::StartRefused(refused) => {
+                use oer_protocols_ieee80211_contracts_port::StartRefused as Refused;
+                path.name("StartRefused");
+                match refused {
+                    Refused::Running => path.name("Running"),
+                    Refused::Retune(cause) => {
+                        path.name("Retune");
+                        cause.push_path(path);
+                    }
+                    Refused::Deadline => path.name("Deadline"),
+                    Refused::Device => path.name("Device"),
+                }
+            }
+            Self::StopUnconfirmed(observed) => {
+                path.name("StopUnconfirmed");
+                path.word(u32::from(observed.deadline));
+                path.word(u32::from(observed.arena_on_air));
+                path.word(u32::from(observed.frames_out));
+                if let Some(port) = &observed.port {
+                    stop_unconfirmed(port, path);
+                }
+            }
+            Self::RetuneUnconfirmed(unconfirmed) => {
+                path.name("RetuneUnconfirmed");
+                stop_unconfirmed(unconfirmed, path);
+            }
+            Self::Port(fault) => {
+                path.name("Port");
+                fault.push_path(path);
+            }
+            Self::Actor(violation) => {
+                path.name("Actor");
+                path.name(actor_violation(*violation));
+            }
+            Self::Contract(violation) => {
+                path.name("Contract");
+                path.name(lifecycle_violation(*violation));
+                if let oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation::Returned(_) =
+                    violation
+                {
+                    path.truncated();
+                }
+            }
+            Self::Reinstall(cause) => {
+                path.name("Reinstall");
+                path.name(match cause {
+                    ReinstallCause::NotRetired => "NotRetired",
+                    ReinstallCause::SameEpoch => "SameEpoch",
+                    ReinstallCause::ChannelUnset => "ChannelUnset",
+                    ReinstallCause::Receipt => "Receipt",
+                    ReinstallCause::Resources => "Resources",
+                    ReinstallCause::Epochs => "Epochs",
+                });
+            }
+            Self::Mailbox => path.name("Mailbox"),
+        }
+    }
+}
+
+/// A port's unconfirmed stop: its cause, then what it still held.
+fn stop_unconfirmed(
+    unconfirmed: &oer_protocols_ieee80211_contracts_port::StopUnconfirmed,
+    path: &mut DiagPath,
+) {
+    path.truncated();
+    let observations = unconfirmed.observations;
+    path.word(u32::from(observations.arena_on_air));
+    path.word(u32::from(observations.published));
+    path.word(u32::from(observations.queued));
+    path.word(u32::from(observations.configuring));
+}
+
+fn actor_violation(
+    violation: oer_protocols_ieee80211_runtime::datapath::ActorViolation,
+) -> &'static str {
+    use oer_protocols_ieee80211_runtime::datapath::ActorViolation as V;
+    match violation {
+        V::OutboxFull => "OutboxFull",
+        V::ArenaClaim => "ArenaClaim",
+        V::ArenaCompletion => "ArenaCompletion",
+        V::LinkMailbox => "LinkMailbox",
+        V::ParcelMissing => "ParcelMissing",
+        V::RetireRunning => "RetireRunning",
+        V::LinkReturn => "LinkReturn",
+        V::PairwiseCustody => "PairwiseCustody",
+        V::CutOverflow => "CutOverflow",
+        V::ReorderOverflow => "ReorderOverflow",
+    }
+}
+
+fn lifecycle_violation(
+    violation: oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation,
+) -> &'static str {
+    use oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation as V;
+    match violation {
+        V::Returned(_) => "Returned",
+        V::Missing => "Missing",
+        V::QueueFull => "QueueFull",
+        V::RetuneWithoutRequest => "RetuneWithoutRequest",
     }
 }

@@ -29,19 +29,6 @@ impl Event for Publication {
     }
 }
 
-/// A terminal successfully entered the real port event queue.
-pub struct TerminalPosted;
-impl Event for TerminalPosted {
-    const KIND: Kind = Kind::new(Domain::Ieee80211, 102);
-    const CHANNEL: Channel = Publication::CHANNEL;
-    fn encode(&self) -> [u32; 2] {
-        [0, 0]
-    }
-    fn decode(words: [u32; 2]) -> Option<Self> {
-        (words == [0, 0]).then_some(Self)
-    }
-}
-
 /// Internal rollback and the actual retained command owners before fail-stop.
 pub struct GroupRollback {
     pub owners: [u8; 2],

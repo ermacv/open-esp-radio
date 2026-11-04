@@ -57,7 +57,6 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
     // also catches another raw field added to a previously reviewed file.
     let expected = [
         ("chips/esp32s31/app/src/lib.rs", 6),
-        ("chips/esp32s31/ieee80211/driver/src/port.rs", 5),
         ("chips/esp32s31/ieee80211/driver/src/port/lent.rs", 4),
         ("chips/esp32s31/ieee80211/driver/src/rx/control.rs", 7),
         ("chips/esp32s31/ieee80211/driver/src/rx/upper.rs", 7),
@@ -82,10 +81,6 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
 #[test]
 fn upward_notification_fields_use_the_shared_primitive() {
     for (source, fields) in [
-        (
-            include_str!("../../../../chips/esp32s31/ieee80211/driver/src/port.rs"),
-            &["driver: PriorityWaker,"][..],
-        ),
         (
             include_str!("../../../../chips/esp32s31/ieee80211/driver/src/rx/control.rs"),
             &["runner: PriorityWaker,"][..],
