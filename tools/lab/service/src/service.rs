@@ -644,6 +644,11 @@ impl Service {
                             .arbiter
                             .journal()
                             .record_flash(owner, &mac, &image)
+                            .map_err(|error| error.to_string())?;
+                        // The flash went past the board's crate: no receipt
+                        // of an earlier write tells what the board runs.
+                        oer_tools_lab_board::image::Store::open()
+                            .and_then(|store| store.void(&mac))
                             .map_err(|error| error.to_string())
                     });
                 match recorded {
