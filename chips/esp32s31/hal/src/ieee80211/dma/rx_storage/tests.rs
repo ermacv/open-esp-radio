@@ -1113,9 +1113,6 @@ fn exhausted_list_uses_descriptor_lengths_despite_dirty_prefix_bytes() {
         .expect("terminal payload owner");
     assert_eq!(unit.descriptor_count(), COUNT - 1);
     assert_eq!(unit.total_length(), 16 + 16 + 4);
-    assert_eq!(unit.segment(0), Some(&[0x33; 16][..]));
-    assert_eq!(unit.segment(1).map(<[u8]>::len), Some(16));
-    assert_eq!(unit.segment(2).map(<[u8]>::len), Some(4));
     let append = unit
         .recycle(&mut mmio)
         .expect("exhausted list recycle")
@@ -2388,10 +2385,6 @@ fn descriptor_interval_is_independent_of_dirty_buffer_contents() {
             (0, 3, 40)
         );
         assert_eq!(unit.metadata().descriptor_address(), ring.base);
-        for step in 0..2 {
-            assert_eq!(unit.segment(step), Some(&contents[..]));
-        }
-        assert_eq!(unit.segment(2).unwrap().len(), 8);
         unit.retain_for_deferred_recycle();
         let unit = ring
             .storage
@@ -3168,7 +3161,7 @@ fn stopped_ring_grants_restore_returned_buffers_before_a_new_recycle_epoch() {
         .unwrap()
         .unwrap();
     assert_eq!(unit.head_index(), 1);
-    assert_eq!(unit.segment(0).unwrap().len(), 4);
+    assert_eq!(unit.total_length(), 4);
     assert!(unit.recycle(&mut ring.walker).unwrap().is_some());
     live.complete_pending_reload(&mut ring.walker, frozen_settle())
         .unwrap();

@@ -532,16 +532,9 @@ pub struct RxCompletedUnit {
     /// `None` when the total length does not fit the descriptor length field.
     staged_word0: Option<WifiRxDmaDescriptorControl>,
     total_length: usize,
-    segment_lengths: RxCompletedUnitLengths,
     /// The frame began in the reserved descriptor and continued into this
     /// unit: this unit is only its tail.
     continues_reserved_landing: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum RxCompletedUnitLengths {
-    Single(u16),
-    Chained([u16; 64]),
 }
 
 impl RxCompletedUnit {
@@ -577,16 +570,6 @@ impl RxCompletedUnit {
     /// descriptor. Its consumer drops it like a chained unit.
     pub const fn continues_reserved_landing(&self) -> bool {
         self.continues_reserved_landing
-    }
-
-    pub fn segment_length(&self, step: usize) -> Option<usize> {
-        if step >= self.descriptor_count {
-            return None;
-        }
-        match &self.segment_lengths {
-            RxCompletedUnitLengths::Single(length) => (step == 0).then_some(usize::from(*length)),
-            RxCompletedUnitLengths::Chained(lengths) => Some(usize::from(lengths[step])),
-        }
     }
 }
 
@@ -1715,7 +1698,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         if first_word0.rx_done() {
             let descriptor_address =
                 descriptor_address(self.descriptor_table.base(), first_index.get())?;
-            let segment_length = u16::try_from(first_length).map_err(|_| RxRingError::Size)?;
             self.observed_mask.insert(first_index.get());
             return Ok(Some(RxCompletedUnit {
                 head_index: first_index.get(),
@@ -1723,13 +1705,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 descriptor_address,
                 staged_word0: staged_word0(first_word0, first_length),
                 total_length: first_length as usize,
-                segment_lengths: RxCompletedUnitLengths::Single(segment_length),
                 continues_reserved_landing: false,
             }));
         }
 
-        let mut segment_lengths = [0_u16; 64];
-        segment_lengths[0] = u16::try_from(first_length).map_err(|_| RxRingError::Size)?;
         let mut total_length = first_length as usize;
         for step in 1..descriptor_limit.min(64) {
             let index = first_index.advance(step);
@@ -1744,7 +1723,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 }
             };
             let length = u32::from(word0.length());
-            segment_lengths[step] = u16::try_from(length).map_err(|_| RxRingError::Size)?;
             total_length = total_length
                 .checked_add(length as usize)
                 .ok_or(RxRingError::Overflow)?;
@@ -1768,7 +1746,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 descriptor_address,
                 staged_word0: staged,
                 total_length,
-                segment_lengths: RxCompletedUnitLengths::Chained(segment_lengths),
                 continues_reserved_landing: false,
             }));
         }

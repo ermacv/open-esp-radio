@@ -58,7 +58,7 @@ fn copy_received<
         Ok(frame) => (network.receive_copied.try_send(frame).is_err()
             || network
                 .receive
-                .try_send(Received::Copied(CopiedMark::new()))
+                .try_send_held(Received::Copied(CopiedMark::new()))
                 .is_err())
         .then_some(Refusal::QueueFull),
         // The link located the payload in this frame.
@@ -94,7 +94,7 @@ fn queue_lent<
     match LentFrame::new(NetworkRx(lent), destination, source, ether_type, payload) {
         Ok(frame) => network
             .receive
-            .try_send(Received::Lent(frame))
+            .try_send_held(Received::Lent(frame))
             .is_err()
             .then_some(Refusal::QueueFull),
         // The payload lies in the MPDU, which starts the lent storage.
