@@ -284883,7 +284883,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00010000) != 0
             }
 
-            /// Project-assigned name from hal_crypto_mgmt_rx_enabled and wdev_is_mgmt_hwdecr_enabled. In the inspected protected ESP-NOW management-action consumer, this indicator selects framing/key-metadata handling. That chain does not demonstrate a software-AES versus hardware-AES choice.
+            /// Project-assigned name from hal_crypto_mgmt_rx_enabled and wdev_is_mgmt_hwdecr_enabled. In the inspected protected ESP-NOW management-action consumer, this indicator selects framing/key-metadata handling. That chain does not demonstrate a software-AES versus hardware-AES choice. The separate ieee80211_ccmp_decrypt path invokes a configurable CCMP callback; this getter branch does not prove whether that callback is avoided.
             #[inline]
             pub const fn mgmt_rx_crypto_enabled(self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -284936,7 +284936,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00010000) != 0
             }
 
-            /// Project-assigned name from hal_crypto_mgmt_rx_enabled and wdev_is_mgmt_hwdecr_enabled. In the inspected protected ESP-NOW management-action consumer, this indicator selects framing/key-metadata handling. That chain does not demonstrate a software-AES versus hardware-AES choice.
+            /// Project-assigned name from hal_crypto_mgmt_rx_enabled and wdev_is_mgmt_hwdecr_enabled. In the inspected protected ESP-NOW management-action consumer, this indicator selects framing/key-metadata handling. That chain does not demonstrate a software-AES versus hardware-AES choice. The separate ieee80211_ccmp_decrypt path invokes a configurable CCMP callback; this getter branch does not prove whether that callback is avoided.
             #[inline]
             pub const fn mgmt_rx_crypto_enabled(&self) -> bool {
                 (self.0 & 0x00020000) != 0
@@ -306080,7 +306080,7 @@ pub mod wifi_mac {
 
     /// The `ENTRY_KEY_WORD_4%s` register.
     ///
-    /// Project-assigned key-material word 4. The inspected 32-byte GCMP publication copies key bytes 16..19 here. The CCMP clear path zeros this word; other cipher-specific contents are not established.
+    /// Project-assigned key-material word 4. Inspected 32-byte GCMP and TKIP publications copy key bytes 16..19 here; the TKIP tail contains Michael MIC-key material. A 16-byte CCMP or GCMP setter leaves this word unchanged. The separate entry-clear operation zeros it. Storage does not establish hardware MIC computation or arbitrary key-length support.
     pub mod entry_key_word_4 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -306106,7 +306106,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Key bytes 16..19 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 16..19 in the inspected 32-byte GCMP/TKIP copy. Not written by the 16-byte setter; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
@@ -306117,7 +306117,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Key bytes 16..19 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 16..19 in the inspected 32-byte GCMP/TKIP copy. Not written by the 16-byte setter; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(&self) -> u32 {
                 self.0
@@ -306134,7 +306134,7 @@ pub mod wifi_mac {
 
     /// The `ENTRY_KEY_WORD_5%s` register.
     ///
-    /// Project-assigned key-material word 5. The inspected 32-byte GCMP publication copies key bytes 20..23 here. The CCMP clear path zeros this word; other cipher-specific contents are not established.
+    /// Project-assigned key-material word 5. Inspected 32-byte GCMP and TKIP publications copy key bytes 20..23 here; the TKIP tail contains Michael MIC-key material. A 16-byte CCMP or GCMP setter leaves this word unchanged. The separate entry-clear operation zeros it. Storage does not establish hardware MIC computation or arbitrary key-length support.
     pub mod entry_key_word_5 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -306160,7 +306160,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Key bytes 20..23 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 20..23 in the inspected 32-byte GCMP/TKIP copy. Not written by the 16-byte setter; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
@@ -306171,7 +306171,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Key bytes 20..23 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 20..23 in the inspected 32-byte GCMP/TKIP copy. Not written by the 16-byte setter; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(&self) -> u32 {
                 self.0
@@ -306188,7 +306188,7 @@ pub mod wifi_mac {
 
     /// The `ENTRY_KEY_WORD_6%s` register.
     ///
-    /// Project-assigned key-material word 6. The inspected 32-byte GCMP publication copies key bytes 24..27 here. The CCMP clear path zeros this word; other cipher-specific contents are not established.
+    /// Project-assigned key-material word 6. Inspected 32-byte GCMP and TKIP publications copy key bytes 24..27 here; the TKIP tail contains Michael MIC-key material. A 16-byte CCMP or GCMP setter leaves this word unchanged. The separate entry-clear operation zeros it. Storage does not establish hardware MIC computation or arbitrary key-length support.
     pub mod entry_key_word_6 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -306214,7 +306214,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Key bytes 24..27 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 24..27 in the inspected 32-byte GCMP/TKIP copy. Not written by the 16-byte setter; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
@@ -306225,7 +306225,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Key bytes 24..27 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 24..27 in the inspected 32-byte GCMP/TKIP copy. Not written by the 16-byte setter; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(&self) -> u32 {
                 self.0
@@ -306242,7 +306242,7 @@ pub mod wifi_mac {
 
     /// The `ENTRY_KEY_WORD_7%s` register.
     ///
-    /// Project-assigned key-material word 7. The inspected 32-byte GCMP publication copies key bytes 28..31 here. The CCMP clear path zeros this word; other cipher-specific contents are not established.
+    /// Project-assigned key-material word 7. Inspected 32-byte GCMP and TKIP publications copy key bytes 28..31 here; the TKIP tail contains Michael MIC-key material. A 16-byte CCMP or GCMP setter leaves this word unchanged. The separate entry-clear operation zeros it. Storage does not establish hardware MIC computation or arbitrary key-length support.
     pub mod entry_key_word_7 {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -306268,7 +306268,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Key bytes 28..31 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 28..31 in the inspected 32-byte GCMP/TKIP copy. Not written by the 16-byte setter; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
@@ -306279,7 +306279,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Key bytes 28..31 in the inspected 32-byte GCMP copy; cleared by hal_crypto_clr_key_entry.
+            /// Key bytes 28..31 in the inspected 32-byte GCMP/TKIP copy. Not written by the 16-byte setter; cleared by hal_crypto_clr_key_entry.
             #[inline]
             pub const fn value(&self) -> u32 {
                 self.0

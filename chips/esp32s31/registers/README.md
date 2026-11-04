@@ -123,6 +123,36 @@ SND20 configuration also have function-derived names. Their evidence is in
 [`blobray-mac-rx-controls.toml`](evidence/blobray-mac-rx-controls.toml); timing
 units and the internal CCA-byte format remain unestablished.
 
+## MAC key material and receive-crypto boundaries
+
+`ENTRY_KEY_WORD_4..7` hold bytes 16..31 of the inspected GCMP-256 and
+32-byte TKIP publications. The TKIP tail contains Michael MIC-key material;
+its storage alone does not establish hardware MIC computation. The
+16-byte CCMP/GCMP setter leaves these words unchanged. The separate entry
+clear operation zeros all ten words, as the open CCMP path does before
+installation. The source and concrete execution boundaries are in
+[`blobray-mac-execution-boundaries.toml`](evidence/blobray-mac-execution-boundaries.toml).
+
+The STA/AP management-RX indicator selects framing/key-metadata handling
+in its inspected consumer. The separate `ieee80211_ccmp_decrypt` path
+invokes a configurable CCMP callback. This does not prove that the indicator
+controls callback execution, that its AES backend runs entirely on the CPU,
+or a quantified CPU saving. Selector-two bits 16/17 remain opaque.
+
+The ordinary BA restore leaf expects three software arrays indexed by
+hardware index. Its captured multicast caller passes three scalar pointers;
+the isolated active-index-one case reads unrelated stack data. The
+vendor-only characterization runs with:
+
+```console
+cargo vendor-check scenario --chip esp32s31 wifi-ba-contract --linker path/to/ld.lld --output target/mac-ba-contract
+```
+
+Success means the pinned conditional observations match, including one
+explicit unknown-data stop. It is not a production equivalence or an on-air
+fault claim. The scenario needs only the pinned libpp/libnet80211 and the
+selected linker; it requires no production or vendor firmware image.
+
 ## Shared TSF snapshot words
 
 `MODEM_PWR.TSF_LOAD_CONTROL` publishes separate station and SoftAP snapshot

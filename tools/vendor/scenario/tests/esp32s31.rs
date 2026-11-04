@@ -77,6 +77,17 @@ fn scenarios_accept_their_inputs_and_reject_index_and_mutant_options() {
         "runs",
     ];
     assert!(Cli::try_parse_from(args).is_ok());
+    assert!(
+        Cli::try_parse_from([
+            "scenario",
+            "wifi-ba-contract",
+            "--linker",
+            "ld.lld",
+            "--output",
+            "runs",
+        ])
+        .is_ok()
+    );
     for flag in ["--index", "--patch", "--bluetooth-patch"] {
         let error = Cli::try_parse_from([&args[..], &[flag, "value"]].concat())
             .err()
