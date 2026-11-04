@@ -17,21 +17,23 @@ fn delay_slot_keeps_the_vendor_modulo() {
 }
 
 #[test]
-fn prefix_clears_the_queue_defaults_then_sets_queues_zero_and_one() {
+fn prefix_admits_only_bar_and_ps_poll_on_queues_zero_and_one() {
     let mut memory = HostWords::filled(u32::MAX);
     memory.owners().registers.initialize_mac_txrx_prefix();
 
     let owners = memory.owners();
     let prefix = &owners.registers.mac.wifi_mac_txrx_prefix;
     for queue in 0..4 {
-        let default = prefix.read_rx_queue_default(element(queue));
+        let dump = prefix.read_rx_control_frame_dump(element(queue));
         let first_two = queue < 2;
-        assert_eq!(default.bits_16_23_opaque(), 0);
-        assert_eq!(default.bit_24_opaque(), first_two);
-        assert!(!default.bit_25_opaque());
-        assert_eq!(default.bit_26_opaque(), first_two);
-        assert_eq!(default.bits_27_31_opaque().get(), 0);
-        assert_eq!(default.bits_0_15_opaque(), u16::MAX);
+        assert_eq!(dump.bits_16_22_opaque().get(), 0);
+        assert!(!dump.control_wrapper_enable());
+        assert_eq!(dump.block_ack_request_enable(), first_two);
+        assert!(!dump.block_ack_enable());
+        assert_eq!(dump.ps_poll_enable(), first_two);
+        assert!(!dump.rts_enable() && !dump.cts_enable() && !dump.ack_enable());
+        assert!(!dump.cf_end_enable() && !dump.cf_end_ack_enable());
+        assert_eq!(dump.bits_0_15_opaque(), u16::MAX);
     }
     assert!(!prefix.read_mode_control().bit_3_opaque());
     assert_eq!(prefix.read_timing_control().bits_20_27_opaque(), 0x1b);
@@ -95,10 +97,7 @@ fn callbacks_publish_the_delays_and_response_rate_tables() {
     ] {
         assert_eq!((rate_1m, rate_2m, rate_2m_short), (0x00, 0x01, 0x05));
     }
-    assert_eq!(
-        callbacks.read_bb_rx_hang_control().bits_0_11_opaque().get(),
-        0x00f
-    );
+    assert_eq!(callbacks.read_bb_rx_hang_control().hang_time().get(), 0x00f);
 }
 
 #[test]

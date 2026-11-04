@@ -78,7 +78,11 @@ fn the_prefix_from_zero_sets_every_vendor_field() {
         );
     }
     assert_eq!(prefix.read_rx_field_control().timeout_seconds().get(), 0x3c);
-    assert!(prefix.read_parent_enable().bit_12_opaque());
+    assert!(
+        prefix
+            .read_interrupt_1_enable()
+            .bss_color_collision_enable()
+    );
     assert_eq!(
         owners
             .registers

@@ -105,6 +105,24 @@ EOF is already one during initialization; neither it nor OWNER establishes
 a completion or detach/release predicate for this special descriptor.
 The model supplies no beacon-memory access owner or running offload lifecycle.
 
+## MAC receive filters and diagnostics
+
+`RX_CONTROL_FRAME_DUMP` names the nine control-frame classes admitted by
+the hardware dump filters. Its low half and the other high-half bits stay
+opaque. `RX_ERROR_DUMP` describes only the two words decoded and configured
+by the vendor's error-dump routine; the adjacent `WORD_00F0_OPAQUE` remains
+an observation without that format. `NRX_ERROR` combines the existing count
+with its fixed-error-code selector and enable. Configuration fields retain
+the vendor's fresh-read RMW contract; code dictionaries and counter lifecycle
+remain unestablished.
+
+The pinned VHT bandwidth-signaling RTS leaf changes bit 18. Bit 22 stays
+opaque and is preserved by the HAL initializer. RX-hang timing, the
+BSS-color-collision producer gate and CCA
+SND20 configuration also have function-derived names. Their evidence is in
+[`blobray-mac-rx-controls.toml`](evidence/blobray-mac-rx-controls.toml); timing
+units and the internal CCA-byte format remain unestablished.
+
 ## Shared TSF snapshot words
 
 `MODEM_PWR.TSF_LOAD_CONTROL` publishes separate station and SoftAP snapshot

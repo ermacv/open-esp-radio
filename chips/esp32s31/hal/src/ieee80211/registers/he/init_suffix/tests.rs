@@ -115,6 +115,12 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
         (0, 0xff)
     );
     assert!(!suffix.read_dump_complete_hesigb().enable());
+    let control = suffix.read_ersu_and_vht_control();
+    assert!(!control.vht_bw_signaling_rts());
+    assert!(
+        control.bit_22_opaque(),
+        "the current vendor VHT disable preserves the unclassified lane"
+    );
 }
 
 #[test]

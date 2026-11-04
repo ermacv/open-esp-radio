@@ -209,6 +209,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         init.modify_dump_complete_hesigb(|w| {
             w.set_enable(false);
         });
+        // SOURCE: BLOB_MAC_VHT_BW_SIGNALING_20261103. The current pinned
+        // leaf changes the named enable and preserves the opaque bit 22.
         init.modify_ersu_and_vht_control(|w| {
             w.set_vht_bw_signaling_rts(false);
         });

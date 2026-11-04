@@ -274298,10 +274298,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `WORD_00A4_OPAQUE` register.
+    /// The `RX_ERROR_DUMP_CONTROL` register.
     ///
-    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established.
-    pub mod word_00a4_opaque {
+    /// Project-assigned name. dbg_dump_rx_errors selects station, SoftAP or both interfaces through bits 15:12. Other interface encodings and the remaining word bits are unestablished.
+    pub mod rx_error_dump_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x0000f000;
         /// The register's width in bits.
@@ -274310,22 +274310,65 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xa4;
 
-        /// Width of `BITS_12_15_OPAQUE` in bits.
-        pub const BITS_12_15_OPAQUE_WIDTH: u32 = 4;
-        /// Greatest unsigned image of `BITS_12_15_OPAQUE`.
-        pub const BITS_12_15_OPAQUE_MAX: u32 = 0xf;
-        /// Positioned bits of `BITS_12_15_OPAQUE`.
-        pub const BITS_12_15_OPAQUE_MASK: u32 = 0xf000;
+        /// Width of `INTERFACE_SELECTION` in bits.
+        pub const INTERFACE_SELECTION_WIDTH: u32 = 4;
+        /// Greatest unsigned image of `INTERFACE_SELECTION`.
+        pub const INTERFACE_SELECTION_MAX: u32 = 0xf;
+        /// Positioned bits of `INTERFACE_SELECTION`.
+        pub const INTERFACE_SELECTION_MASK: u32 = 0xf000;
+
+        /// The declared values of the `INTERFACE_SELECTION` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum InterfaceSelection {
+            Station = 0x1,
+            SoftAp = 0x2,
+            StationAndSoftAp = 0x3,
+        }
+
+        impl InterfaceSelection {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 12
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x1 => Some(Self::Station),
+                    0x2 => Some(Self::SoftAp),
+                    0x3 => Some(Self::StationAndSoftAp),
+                    _ => None,
+                }
+            }
+        }
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. The mode-dependent image published by dbg_dump_rx_errors; no zero/disable encoding or other interface selection is established.
             #[inline]
-            pub const fn bits_12_15_opaque(self) -> oer_portable_mmio::Bits<4> {
+            pub const fn interface_selection(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// The `INTERFACE_SELECTION` field as its declared value, if it is one.
+            #[inline]
+            pub const fn interface_selection_variant(self) -> Option<InterfaceSelection> {
+                InterfaceSelection::from_bits((self.0 >> 12) & 0xf)
             }
         }
 
@@ -274333,19 +274376,22 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. The mode-dependent image published by dbg_dump_rx_errors; no zero/disable encoding or other interface selection is established.
             #[inline]
-            pub const fn bits_12_15_opaque(&self) -> oer_portable_mmio::Bits<4> {
+            pub const fn interface_selection(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// Set `BITS_12_15_OPAQUE`.
+            /// The `INTERFACE_SELECTION` field as its declared value, if it is one.
             #[inline]
-            pub fn set_bits_12_15_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<4>,
-            ) -> &mut Self {
-                self.0 = (self.0 & 0xffff0fff) | (value.get() << 12);
+            pub const fn interface_selection_variant(&self) -> Option<InterfaceSelection> {
+                InterfaceSelection::from_bits((self.0 >> 12) & 0xf)
+            }
+
+            /// Set `INTERFACE_SELECTION`.
+            #[inline]
+            pub fn set_interface_selection(&mut self, value: InterfaceSelection) -> &mut Self {
+                self.0 = (self.0 & 0xffff0fff) | (value.bits() << 12);
                 self
             }
         }
@@ -275005,10 +275051,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `BASEBAND_ERROR_STATUS%s` register.
+    /// The `RX_ERROR_DUMP%s` register.
     ///
-    /// First three words sampled by the bounded four-entry hal_ifc_get_bb_err_bitmap loop. Bit 16 contributes the corresponding output bitmap bit.
-    pub mod baseband_error_status {
+    /// Project-assigned name. WDEVRX_DUMP_ERRCODE(ifx:0/1) is decoded and configured by dbg_dump_rx_errors. The code byte is observed; the enable and mask are ordinary fresh-read RMW configuration fields. Code and error-mask dictionaries, reset and runtime sequencing remain unestablished. The adjacent word at 0xf0 is not assigned this format.
+    pub mod rx_error_dump {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -275019,14 +275065,140 @@ pub mod wifi_mac {
         /// The byte distance between two elements.
         pub const STRIDE: usize = 0x4;
         /// The element count.
-        pub const COUNT: usize = 3;
+        pub const COUNT: usize = 2;
 
-        /// Width of `ERROR` in bits.
-        pub const ERROR_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `ERROR`.
-        pub const ERROR_MAX: u32 = 0x1;
-        /// Positioned bits of `ERROR`.
-        pub const ERROR_MASK: u32 = 0x10000;
+        /// Width of `BB_ERROR_CODE` in bits.
+        pub const BB_ERROR_CODE_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `BB_ERROR_CODE`.
+        pub const BB_ERROR_CODE_MAX: u32 = 0xff;
+        /// Positioned bits of `BB_ERROR_CODE`.
+        pub const BB_ERROR_CODE_MASK: u32 = 0xff;
+
+        /// Width of `BITS_8_15_OPAQUE` in bits.
+        pub const BITS_8_15_OPAQUE_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `BITS_8_15_OPAQUE`.
+        pub const BITS_8_15_OPAQUE_MAX: u32 = 0xff;
+        /// Positioned bits of `BITS_8_15_OPAQUE`.
+        pub const BITS_8_15_OPAQUE_MASK: u32 = 0xff00;
+
+        /// Width of `BB_ERROR_CODE_ENABLE` in bits.
+        pub const BB_ERROR_CODE_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BB_ERROR_CODE_ENABLE`.
+        pub const BB_ERROR_CODE_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `BB_ERROR_CODE_ENABLE`.
+        pub const BB_ERROR_CODE_ENABLE_MASK: u32 = 0x10000;
+
+        /// Width of `ERROR_BIT_MASK` in bits.
+        pub const ERROR_BIT_MASK_WIDTH: u32 = 10;
+        /// Greatest unsigned image of `ERROR_BIT_MASK`.
+        pub const ERROR_BIT_MASK_MAX: u32 = 0x3ff;
+        /// Positioned bits of `ERROR_BIT_MASK`.
+        pub const ERROR_BIT_MASK_MASK: u32 = 0x7fe0000;
+
+        /// Width of `BITS_27_31_OPAQUE` in bits.
+        pub const BITS_27_31_OPAQUE_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `BITS_27_31_OPAQUE`.
+        pub const BITS_27_31_OPAQUE_MAX: u32 = 0x1f;
+        /// Positioned bits of `BITS_27_31_OPAQUE`.
+        pub const BITS_27_31_OPAQUE_MASK: u32 = 0xf8000000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Project-assigned name. The observed BB_ERRCODE byte. Its update lifecycle and code meanings are unestablished; the vendor configuration RMWs replay it unchanged.
+            #[inline]
+            pub const fn bb_error_code(self) -> u8 {
+                self.0 as u8
+            }
+
+            /// Observed reads and unchanged replay in dbg_dump_rx_errors; individual meanings are unestablished.
+            #[inline]
+            pub const fn bits_8_15_opaque(self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Project-assigned name. BB_ERRCODE_ENA set by the vendor configuration RMW and sampled by hal_ifc_get_bb_err_bitmap; it is not established as a hardware error-status flag.
+            #[inline]
+            pub const fn bb_error_code_enable(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name. The ten-bit ERR_BIT_MASK programmed from the low ten argument bits; individual error classes remain unestablished.
+            #[inline]
+            pub const fn error_bit_mask(self) -> oer_portable_mmio::Bits<10> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// Observed reads and unchanged replay in dbg_dump_rx_errors; individual meanings are unestablished.
+            #[inline]
+            pub const fn bits_27_31_opaque(self) -> oer_portable_mmio::Bits<5> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 27)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// Project-assigned name. The observed BB_ERRCODE byte. Its update lifecycle and code meanings are unestablished; the vendor configuration RMWs replay it unchanged.
+            #[inline]
+            pub const fn bb_error_code(&self) -> u8 {
+                self.0 as u8
+            }
+
+            /// Observed reads and unchanged replay in dbg_dump_rx_errors; individual meanings are unestablished.
+            #[inline]
+            pub const fn bits_8_15_opaque(&self) -> u8 {
+                (self.0 >> 8) as u8
+            }
+
+            /// Project-assigned name. BB_ERRCODE_ENA set by the vendor configuration RMW and sampled by hal_ifc_get_bb_err_bitmap; it is not established as a hardware error-status flag.
+            #[inline]
+            pub const fn bb_error_code_enable(&self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name. The ten-bit ERR_BIT_MASK programmed from the low ten argument bits; individual error classes remain unestablished.
+            #[inline]
+            pub const fn error_bit_mask(&self) -> oer_portable_mmio::Bits<10> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 17)
+            }
+
+            /// Observed reads and unchanged replay in dbg_dump_rx_errors; individual meanings are unestablished.
+            #[inline]
+            pub const fn bits_27_31_opaque(&self) -> oer_portable_mmio::Bits<5> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 27)
+            }
+
+            /// Set `BB_ERROR_CODE_ENABLE`.
+            #[inline]
+            pub fn set_bb_error_code_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `ERROR_BIT_MASK`.
+            #[inline]
+            pub fn set_error_bit_mask(&mut self, value: oer_portable_mmio::Bits<10>) -> &mut Self {
+                self.0 = (self.0 & 0xf801ffff) | (value.get() << 17);
+                self
+            }
+        }
+    }
+
+    /// The `WORD_00F0_OPAQUE` register.
+    ///
+    /// Observed third word of hal_ifc_get_bb_err_bitmap. Bit 16 contributes its output bit two. Neither an error-status identity nor the adjacent RX_ERROR_DUMP format is established.
+    pub mod word_00f0_opaque {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xf0;
 
         /// Width of `BITS_0_15_OPAQUE` in bits.
         pub const BITS_0_15_OPAQUE_WIDTH: u32 = 16;
@@ -275034,6 +275206,13 @@ pub mod wifi_mac {
         pub const BITS_0_15_OPAQUE_MAX: u32 = 0xffff;
         /// Positioned bits of `BITS_0_15_OPAQUE`.
         pub const BITS_0_15_OPAQUE_MASK: u32 = 0xffff;
+
+        /// Width of `BIT_16_OPAQUE` in bits.
+        pub const BIT_16_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MASK: u32 = 0x10000;
 
         /// Width of `BITS_17_31_OPAQUE` in bits.
         pub const BITS_17_31_OPAQUE_WIDTH: u32 = 15;
@@ -275047,19 +275226,19 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `ERROR` field.
-            #[inline]
-            pub const fn error(self) -> bool {
-                (self.0 & 0x00010000) != 0
-            }
-
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The `BITS_0_15_OPAQUE` field.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
                 self.0 as u16
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The `BIT_16_OPAQUE` field.
+            #[inline]
+            pub const fn bit_16_opaque(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// The `BITS_17_31_OPAQUE` field.
             #[inline]
             pub const fn bits_17_31_opaque(self) -> oer_portable_mmio::Bits<15> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 17)
@@ -275069,7 +275248,7 @@ pub mod wifi_mac {
 
     /// The `MISC_PACKET_POLICY` register.
     ///
-    /// The open promiscuous RX frontier sets bits 15:8 together after the complete sniffer-enable leaf. The complete vendor misc-packet leaf independently proves this register and related packet-class fields. Complete hal_ifc_get_bb_err_bitmap reads bit 16 as the fourth baseband-error status bit.
+    /// Project-assigned name. The open promiscuous RX frontier sets packet-class bits 15:8 together. hal_sniffer_set_promis_misc_pkt sets or clears the misc-packet-dump enable at bit 16; hal_ifc_get_bb_err_bitmap also samples that configuration lane as its fourth bitmap bit.
     pub mod misc_packet_policy {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -275086,12 +275265,12 @@ pub mod wifi_mac {
         /// Positioned bits of `OPEN_MISC_PACKET_CLASSES`.
         pub const OPEN_MISC_PACKET_CLASSES_MASK: u32 = 0xff00;
 
-        /// Width of `BASEBAND_ERROR` in bits.
-        pub const BASEBAND_ERROR_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BASEBAND_ERROR`.
-        pub const BASEBAND_ERROR_MAX: u32 = 0x1;
-        /// Positioned bits of `BASEBAND_ERROR`.
-        pub const BASEBAND_ERROR_MASK: u32 = 0x10000;
+        /// Width of `MISC_PACKET_DUMP_ENABLE` in bits.
+        pub const MISC_PACKET_DUMP_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `MISC_PACKET_DUMP_ENABLE`.
+        pub const MISC_PACKET_DUMP_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `MISC_PACKET_DUMP_ENABLE`.
+        pub const MISC_PACKET_DUMP_ENABLE_MASK: u32 = 0x10000;
 
         /// Width of `BITS_0_7_OPAQUE` in bits.
         pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
@@ -275118,9 +275297,9 @@ pub mod wifi_mac {
                 (self.0 >> 8) as u8
             }
 
-            /// Fourth status bit sampled by the bounded hal_ifc_get_bb_err_bitmap loop.
+            /// Project-assigned name. Nonzero input to hal_sniffer_set_promis_misc_pkt sets this bit; zero clears it. The bitmap getter does not establish a hardware error-status meaning.
             #[inline]
-            pub const fn baseband_error(self) -> bool {
+            pub const fn misc_packet_dump_enable(self) -> bool {
                 (self.0 & 0x00010000) != 0
             }
 
@@ -275147,9 +275326,9 @@ pub mod wifi_mac {
                 (self.0 >> 8) as u8
             }
 
-            /// Fourth status bit sampled by the bounded hal_ifc_get_bb_err_bitmap loop.
+            /// Project-assigned name. Nonzero input to hal_sniffer_set_promis_misc_pkt sets this bit; zero clears it. The bitmap getter does not establish a hardware error-status meaning.
             #[inline]
-            pub const fn baseband_error(&self) -> bool {
+            pub const fn misc_packet_dump_enable(&self) -> bool {
                 (self.0 & 0x00010000) != 0
             }
 
@@ -275172,6 +275351,13 @@ pub mod wifi_mac {
                 self
             }
 
+            /// Set `MISC_PACKET_DUMP_ENABLE`.
+            #[inline]
+            pub fn set_misc_packet_dump_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+                self
+            }
+
             /// Set `BITS_0_7_OPAQUE`.
             #[inline]
             pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
@@ -275191,10 +275377,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `RX_QUEUE_DEFAULT%s` register.
+    /// The `RX_CONTROL_FRAME_DUMP%s` register.
     ///
-    /// Four queue words have their high half cleared independently; queue zero and one then receive separate bit-24 and bit-26 set edges.
-    pub mod rx_queue_default {
+    /// Project-assigned name. Four WDEV_RXCTLDUMP_ENA words. hal_set_dump_ctrl_frame_cfg and its getter use the high half; the public promiscuous control-filter mask reaches these frame-class bits unchanged. ic_csi_set_config independently controls ACK dumping in words zero and one. The low half and bits 22:16 remain opaque.
+    pub mod rx_control_frame_dump {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -275207,41 +275393,6 @@ pub mod wifi_mac {
         /// The element count.
         pub const COUNT: usize = 4;
 
-        /// Width of `BITS_16_23_OPAQUE` in bits.
-        pub const BITS_16_23_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_16_23_OPAQUE`.
-        pub const BITS_16_23_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_16_23_OPAQUE`.
-        pub const BITS_16_23_OPAQUE_MASK: u32 = 0xff0000;
-
-        /// Width of `BIT_24_OPAQUE` in bits.
-        pub const BIT_24_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_24_OPAQUE`.
-        pub const BIT_24_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_24_OPAQUE`.
-        pub const BIT_24_OPAQUE_MASK: u32 = 0x1000000;
-
-        /// Width of `BIT_25_OPAQUE` in bits.
-        pub const BIT_25_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_25_OPAQUE`.
-        pub const BIT_25_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_25_OPAQUE`.
-        pub const BIT_25_OPAQUE_MASK: u32 = 0x2000000;
-
-        /// Width of `BIT_26_OPAQUE` in bits.
-        pub const BIT_26_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_26_OPAQUE`.
-        pub const BIT_26_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_26_OPAQUE`.
-        pub const BIT_26_OPAQUE_MASK: u32 = 0x4000000;
-
-        /// Width of `BITS_27_31_OPAQUE` in bits.
-        pub const BITS_27_31_OPAQUE_WIDTH: u32 = 5;
-        /// Greatest unsigned image of `BITS_27_31_OPAQUE`.
-        pub const BITS_27_31_OPAQUE_MAX: u32 = 0x1f;
-        /// Positioned bits of `BITS_27_31_OPAQUE`.
-        pub const BITS_27_31_OPAQUE_MASK: u32 = 0xf8000000;
-
         /// Width of `BITS_0_15_OPAQUE` in bits.
         pub const BITS_0_15_OPAQUE_WIDTH: u32 = 16;
         /// Greatest unsigned image of `BITS_0_15_OPAQUE`.
@@ -275249,45 +275400,145 @@ pub mod wifi_mac {
         /// Positioned bits of `BITS_0_15_OPAQUE`.
         pub const BITS_0_15_OPAQUE_MASK: u32 = 0xffff;
 
+        /// Width of `BITS_16_22_OPAQUE` in bits.
+        pub const BITS_16_22_OPAQUE_WIDTH: u32 = 7;
+        /// Greatest unsigned image of `BITS_16_22_OPAQUE`.
+        pub const BITS_16_22_OPAQUE_MAX: u32 = 0x7f;
+        /// Positioned bits of `BITS_16_22_OPAQUE`.
+        pub const BITS_16_22_OPAQUE_MASK: u32 = 0x7f0000;
+
+        /// Width of `CONTROL_WRAPPER_ENABLE` in bits.
+        pub const CONTROL_WRAPPER_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CONTROL_WRAPPER_ENABLE`.
+        pub const CONTROL_WRAPPER_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `CONTROL_WRAPPER_ENABLE`.
+        pub const CONTROL_WRAPPER_ENABLE_MASK: u32 = 0x800000;
+
+        /// Width of `BLOCK_ACK_REQUEST_ENABLE` in bits.
+        pub const BLOCK_ACK_REQUEST_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BLOCK_ACK_REQUEST_ENABLE`.
+        pub const BLOCK_ACK_REQUEST_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `BLOCK_ACK_REQUEST_ENABLE`.
+        pub const BLOCK_ACK_REQUEST_ENABLE_MASK: u32 = 0x1000000;
+
+        /// Width of `BLOCK_ACK_ENABLE` in bits.
+        pub const BLOCK_ACK_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BLOCK_ACK_ENABLE`.
+        pub const BLOCK_ACK_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `BLOCK_ACK_ENABLE`.
+        pub const BLOCK_ACK_ENABLE_MASK: u32 = 0x2000000;
+
+        /// Width of `PS_POLL_ENABLE` in bits.
+        pub const PS_POLL_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `PS_POLL_ENABLE`.
+        pub const PS_POLL_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `PS_POLL_ENABLE`.
+        pub const PS_POLL_ENABLE_MASK: u32 = 0x4000000;
+
+        /// Width of `RTS_ENABLE` in bits.
+        pub const RTS_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `RTS_ENABLE`.
+        pub const RTS_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `RTS_ENABLE`.
+        pub const RTS_ENABLE_MASK: u32 = 0x8000000;
+
+        /// Width of `CTS_ENABLE` in bits.
+        pub const CTS_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CTS_ENABLE`.
+        pub const CTS_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `CTS_ENABLE`.
+        pub const CTS_ENABLE_MASK: u32 = 0x10000000;
+
+        /// Width of `ACK_ENABLE` in bits.
+        pub const ACK_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ACK_ENABLE`.
+        pub const ACK_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `ACK_ENABLE`.
+        pub const ACK_ENABLE_MASK: u32 = 0x20000000;
+
+        /// Width of `CF_END_ENABLE` in bits.
+        pub const CF_END_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CF_END_ENABLE`.
+        pub const CF_END_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `CF_END_ENABLE`.
+        pub const CF_END_ENABLE_MASK: u32 = 0x40000000;
+
+        /// Width of `CF_END_ACK_ENABLE` in bits.
+        pub const CF_END_ACK_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CF_END_ACK_ENABLE`.
+        pub const CF_END_ACK_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `CF_END_ACK_ENABLE`.
+        pub const CF_END_ACK_ENABLE_MASK: u32 = 0x80000000;
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_16_23_OPAQUE` field.
-            #[inline]
-            pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
-            }
-
-            /// The `BIT_24_OPAQUE` field.
-            #[inline]
-            pub const fn bit_24_opaque(self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `BIT_25_OPAQUE` field.
-            #[inline]
-            pub const fn bit_25_opaque(self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `BIT_26_OPAQUE` field.
-            #[inline]
-            pub const fn bit_26_opaque(self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// The `BITS_27_31_OPAQUE` field.
-            #[inline]
-            pub const fn bits_27_31_opaque(self) -> oer_portable_mmio::Bits<5> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 27)
-            }
-
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The `BITS_0_15_OPAQUE` field.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
                 self.0 as u16
+            }
+
+            /// The `BITS_16_22_OPAQUE` field.
+            #[inline]
+            pub const fn bits_16_22_opaque(self) -> oer_portable_mmio::Bits<7> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn control_wrapper_enable(self) -> bool {
+                (self.0 & 0x00800000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn block_ack_request_enable(self) -> bool {
+                (self.0 & 0x01000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn block_ack_enable(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn ps_poll_enable(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn rts_enable(self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn cts_enable(self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn ack_enable(self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn cf_end_enable(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn cf_end_ack_enable(self) -> bool {
+                (self.0 & 0x80000000) != 0
             }
         }
 
@@ -275295,84 +275546,149 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_16_23_OPAQUE` field.
-            #[inline]
-            pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
-            }
-
-            /// The `BIT_24_OPAQUE` field.
-            #[inline]
-            pub const fn bit_24_opaque(&self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `BIT_25_OPAQUE` field.
-            #[inline]
-            pub const fn bit_25_opaque(&self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `BIT_26_OPAQUE` field.
-            #[inline]
-            pub const fn bit_26_opaque(&self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// The `BITS_27_31_OPAQUE` field.
-            #[inline]
-            pub const fn bits_27_31_opaque(&self) -> oer_portable_mmio::Bits<5> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 27)
-            }
-
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The `BITS_0_15_OPAQUE` field.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
                 self.0 as u16
             }
 
-            /// Set `BITS_16_23_OPAQUE`.
+            /// The `BITS_16_22_OPAQUE` field.
             #[inline]
-            pub fn set_bits_16_23_opaque(&mut self, value: u8) -> &mut Self {
-                self.0 = (self.0 & 0xff00ffff) | (u32::from(value) << 16);
-                self
+            pub const fn bits_16_22_opaque(&self) -> oer_portable_mmio::Bits<7> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
-            /// Set `BIT_24_OPAQUE`.
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
             #[inline]
-            pub fn set_bit_24_opaque(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfeffffff) | (u32::from(value) << 24);
-                self
+            pub const fn control_wrapper_enable(&self) -> bool {
+                (self.0 & 0x00800000) != 0
             }
 
-            /// Set `BIT_25_OPAQUE`.
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
             #[inline]
-            pub fn set_bit_25_opaque(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
-                self
+            pub const fn block_ack_request_enable(&self) -> bool {
+                (self.0 & 0x01000000) != 0
             }
 
-            /// Set `BIT_26_OPAQUE`.
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
             #[inline]
-            pub fn set_bit_26_opaque(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
-                self
+            pub const fn block_ack_enable(&self) -> bool {
+                (self.0 & 0x02000000) != 0
             }
 
-            /// Set `BITS_27_31_OPAQUE`.
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
             #[inline]
-            pub fn set_bits_27_31_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<5>,
-            ) -> &mut Self {
-                self.0 = (self.0 & 0x07ffffff) | (value.get() << 27);
-                self
+            pub const fn ps_poll_enable(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn rts_enable(&self) -> bool {
+                (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn cts_enable(&self) -> bool {
+                (self.0 & 0x10000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn ack_enable(&self) -> bool {
+                (self.0 & 0x20000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn cf_end_enable(&self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Project-assigned name. Admit this control-frame class to the hardware dump path.
+            #[inline]
+            pub const fn cf_end_ack_enable(&self) -> bool {
+                (self.0 & 0x80000000) != 0
             }
 
             /// Set `BITS_0_15_OPAQUE`.
             #[inline]
             pub fn set_bits_0_15_opaque(&mut self, value: u16) -> &mut Self {
                 self.0 = (self.0 & 0xffff0000) | u32::from(value);
+                self
+            }
+
+            /// Set `BITS_16_22_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_22_opaque(
+                &mut self,
+                value: oer_portable_mmio::Bits<7>,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xff80ffff) | (value.get() << 16);
+                self
+            }
+
+            /// Set `CONTROL_WRAPPER_ENABLE`.
+            #[inline]
+            pub fn set_control_wrapper_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xff7fffff) | (u32::from(value) << 23);
+                self
+            }
+
+            /// Set `BLOCK_ACK_REQUEST_ENABLE`.
+            #[inline]
+            pub fn set_block_ack_request_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfeffffff) | (u32::from(value) << 24);
+                self
+            }
+
+            /// Set `BLOCK_ACK_ENABLE`.
+            #[inline]
+            pub fn set_block_ack_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `PS_POLL_ENABLE`.
+            #[inline]
+            pub fn set_ps_poll_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `RTS_ENABLE`.
+            #[inline]
+            pub fn set_rts_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xf7ffffff) | (u32::from(value) << 27);
+                self
+            }
+
+            /// Set `CTS_ENABLE`.
+            #[inline]
+            pub fn set_cts_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
+                self
+            }
+
+            /// Set `ACK_ENABLE`.
+            #[inline]
+            pub fn set_ack_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
+                self
+            }
+
+            /// Set `CF_END_ENABLE`.
+            #[inline]
+            pub fn set_cf_end_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
+                self
+            }
+
+            /// Set `CF_END_ACK_ENABLE`.
+            #[inline]
+            pub fn set_cf_end_ack_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
                 self
             }
         }
@@ -278040,6 +278356,8 @@ pub mod wifi_mac {
     }
 
     /// The `NRX_ERROR` register.
+    ///
+    /// Project-assigned name. NRX error counter with a fixed-error-code selector and enable. hal_bb_count_fixed_err_code programs the selector only for API argument zero equal to two; zero code disables that API mode. Counter reset, overflow and error-code meanings remain unestablished.
     pub mod nrx_error {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -278056,12 +278374,26 @@ pub mod wifi_mac {
         /// Positioned bits of `COUNT`.
         pub const COUNT_MASK: u32 = 0x3ff;
 
-        /// Width of `BITS_10_31_OPAQUE` in bits.
-        pub const BITS_10_31_OPAQUE_WIDTH: u32 = 22;
-        /// Greatest unsigned image of `BITS_10_31_OPAQUE`.
-        pub const BITS_10_31_OPAQUE_MAX: u32 = 0x3fffff;
-        /// Positioned bits of `BITS_10_31_OPAQUE`.
-        pub const BITS_10_31_OPAQUE_MASK: u32 = 0xfffffc00;
+        /// Width of `FIXED_ERROR_CODE` in bits.
+        pub const FIXED_ERROR_CODE_WIDTH: u32 = 7;
+        /// Greatest unsigned image of `FIXED_ERROR_CODE`.
+        pub const FIXED_ERROR_CODE_MAX: u32 = 0x7f;
+        /// Positioned bits of `FIXED_ERROR_CODE`.
+        pub const FIXED_ERROR_CODE_MASK: u32 = 0x1fc00;
+
+        /// Width of `FIXED_ERROR_CODE_ENABLE` in bits.
+        pub const FIXED_ERROR_CODE_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `FIXED_ERROR_CODE_ENABLE`.
+        pub const FIXED_ERROR_CODE_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `FIXED_ERROR_CODE_ENABLE`.
+        pub const FIXED_ERROR_CODE_ENABLE_MASK: u32 = 0x20000;
+
+        /// Width of `BITS_18_31_OPAQUE` in bits.
+        pub const BITS_18_31_OPAQUE_WIDTH: u32 = 14;
+        /// Greatest unsigned image of `BITS_18_31_OPAQUE`.
+        pub const BITS_18_31_OPAQUE_MAX: u32 = 0x3fff;
+        /// Positioned bits of `BITS_18_31_OPAQUE`.
+        pub const BITS_18_31_OPAQUE_MASK: u32 = 0xfffc0000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -278074,10 +278406,65 @@ pub mod wifi_mac {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. Seven-bit error code inserted by hal_bb_count_fixed_err_code while retaining the counter and other lanes.
             #[inline]
-            pub const fn bits_10_31_opaque(self) -> oer_portable_mmio::Bits<22> {
+            pub const fn fixed_error_code(self) -> oer_portable_mmio::Bits<7> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 10)
+            }
+
+            /// Project-assigned name. Enable the fixed-error-code counting mode. The vendor setter clears it for zero code and sets it otherwise.
+            #[inline]
+            pub const fn fixed_error_code_enable(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Observed reads and unchanged replay by the fixed-error-code setter; individual meanings are unestablished.
+            #[inline]
+            pub const fn bits_18_31_opaque(self) -> oer_portable_mmio::Bits<14> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 18)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `COUNT` field.
+            #[inline]
+            pub const fn count(&self) -> oer_portable_mmio::Bits<10> {
+                oer_portable_mmio::Bits::truncate(self.0)
+            }
+
+            /// Project-assigned name. Seven-bit error code inserted by hal_bb_count_fixed_err_code while retaining the counter and other lanes.
+            #[inline]
+            pub const fn fixed_error_code(&self) -> oer_portable_mmio::Bits<7> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 10)
+            }
+
+            /// Project-assigned name. Enable the fixed-error-code counting mode. The vendor setter clears it for zero code and sets it otherwise.
+            #[inline]
+            pub const fn fixed_error_code_enable(&self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Observed reads and unchanged replay by the fixed-error-code setter; individual meanings are unestablished.
+            #[inline]
+            pub const fn bits_18_31_opaque(&self) -> oer_portable_mmio::Bits<14> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 18)
+            }
+
+            /// Set `FIXED_ERROR_CODE`.
+            #[inline]
+            pub fn set_fixed_error_code(&mut self, value: oer_portable_mmio::Bits<7>) -> &mut Self {
+                self.0 = (self.0 & 0xfffe03ff) | (value.get() << 10);
+                self
+            }
+
+            /// Set `FIXED_ERROR_CODE_ENABLE`.
+            #[inline]
+            pub fn set_fixed_error_code_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
+                self
             }
         }
     }
@@ -285496,7 +285883,7 @@ pub mod wifi_mac {
 
     /// The `BB_RX_HANG_CONTROL` register.
     ///
-    /// Canonical multifunction word. hal_he_set_bbrxhung_time(0) replaces the low twelve bits with 0x00f; the direct mac_txrx_init suffix later sets bits 31 and 30 through two fresh-read RMWs.
+    /// Project-assigned name. RX-hang timing configuration. hal_he_set_bbrxhung_time selects 15 for the ordinary mode and 58 when low-rate mode is enabled. Units and the recovery mechanism remain unestablished; the direct mac_txrx_init suffix separately sets bits 31 and 30.
     pub mod bb_rx_hang_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xc0000fff;
@@ -285506,12 +285893,12 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xc1c;
 
-        /// Width of `BITS_0_11_OPAQUE` in bits.
-        pub const BITS_0_11_OPAQUE_WIDTH: u32 = 12;
-        /// Greatest unsigned image of `BITS_0_11_OPAQUE`.
-        pub const BITS_0_11_OPAQUE_MAX: u32 = 0xfff;
-        /// Positioned bits of `BITS_0_11_OPAQUE`.
-        pub const BITS_0_11_OPAQUE_MASK: u32 = 0xfff;
+        /// Width of `HANG_TIME` in bits.
+        pub const HANG_TIME_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `HANG_TIME`.
+        pub const HANG_TIME_MAX: u32 = 0xfff;
+        /// Positioned bits of `HANG_TIME`.
+        pub const HANG_TIME_MASK: u32 = 0xfff;
 
         /// Width of `BIT_30_OPAQUE` in bits.
         pub const BIT_30_OPAQUE_WIDTH: u32 = 1;
@@ -285532,9 +285919,9 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BITS_0_11_OPAQUE` field.
+            /// Project-assigned name. Twelve-bit RX-hang timing value; the vendor uses 15 or 58. No physical time unit is established.
             #[inline]
-            pub const fn bits_0_11_opaque(self) -> oer_portable_mmio::Bits<12> {
+            pub const fn hang_time(self) -> oer_portable_mmio::Bits<12> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
@@ -285555,9 +285942,9 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BITS_0_11_OPAQUE` field.
+            /// Project-assigned name. Twelve-bit RX-hang timing value; the vendor uses 15 or 58. No physical time unit is established.
             #[inline]
-            pub const fn bits_0_11_opaque(&self) -> oer_portable_mmio::Bits<12> {
+            pub const fn hang_time(&self) -> oer_portable_mmio::Bits<12> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
@@ -285573,12 +285960,9 @@ pub mod wifi_mac {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Set `BITS_0_11_OPAQUE`.
+            /// Set `HANG_TIME`.
             #[inline]
-            pub fn set_bits_0_11_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<12>,
-            ) -> &mut Self {
+            pub fn set_hang_time(&mut self, value: oer_portable_mmio::Bits<12>) -> &mut Self {
                 self.0 = (self.0 & 0xfffff000) | value.get();
                 self
             }
@@ -285731,10 +286115,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `PARENT_ENABLE` register.
+    /// The `INTERRUPT_1_ENABLE` register.
     ///
-    /// Parent sets bit 12 before trigger-based TX init. Complete print_isr_regs independently names this same physical word WDEV_INT1_ENABLE. This is one canonical register with two observed roles, not two peripheral owners.
-    pub mod parent_enable {
+    /// Project-assigned name. INT1_ENA_WDEV in print_isr_regs. The color-collision ISR enable/disable leaves identify bit 12 as the producer gate, separate from the main interrupt bank. Other word lanes remain unestablished.
+    pub mod interrupt_1_enable {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x00001000;
         /// The register's width in bits.
@@ -285743,21 +286127,21 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xc2c;
 
-        /// Width of `BIT_12_OPAQUE` in bits.
-        pub const BIT_12_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_12_OPAQUE`.
-        pub const BIT_12_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_12_OPAQUE`.
-        pub const BIT_12_OPAQUE_MASK: u32 = 0x1000;
+        /// Width of `BSS_COLOR_COLLISION_ENABLE` in bits.
+        pub const BSS_COLOR_COLLISION_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BSS_COLOR_COLLISION_ENABLE`.
+        pub const BSS_COLOR_COLLISION_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `BSS_COLOR_COLLISION_ENABLE`.
+        pub const BSS_COLOR_COLLISION_ENABLE_MASK: u32 = 0x1000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `BIT_12_OPAQUE` field.
+            /// Project-assigned name. BSS-color-collision interrupt producer gate; set/clear polarity follows the complete named vendor leaves.
             #[inline]
-            pub const fn bit_12_opaque(self) -> bool {
+            pub const fn bss_color_collision_enable(self) -> bool {
                 (self.0 & 0x00001000) != 0
             }
         }
@@ -285766,15 +286150,15 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `BIT_12_OPAQUE` field.
+            /// Project-assigned name. BSS-color-collision interrupt producer gate; set/clear polarity follows the complete named vendor leaves.
             #[inline]
-            pub const fn bit_12_opaque(&self) -> bool {
+            pub const fn bss_color_collision_enable(&self) -> bool {
                 (self.0 & 0x00001000) != 0
             }
 
-            /// Set `BIT_12_OPAQUE`.
+            /// Set `BSS_COLOR_COLLISION_ENABLE`.
             #[inline]
-            pub fn set_bit_12_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_bss_color_collision_enable(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xffffefff) | (u32::from(value) << 12);
                 self
             }
@@ -288016,7 +288400,7 @@ pub mod wifi_mac {
 
     /// The `ERSU_AND_VHT_CONTROL` register.
     ///
-    /// Complete dbg_read_bsr_info names bits 8:2 and the comparison method. Complete dbg_read_rx_misc names bits 9:11. Complete dbg_tb_ignore_cca_enable proves that bit 12 set means TB respects CCA and NAV, while clearing it enables the debug ignore mode. Complete hal_he_bsr_init initializes the BSR comparison method and control bits. The HE Operation ER-SU-Disable bit at complete-IE byte five bit zero controls bit 10 through complete libpp[hal_mac_ctl.o]::hal_he_set_ersu. VHT bandwidth-signaling RTS disable later clears bit 22.
+    /// Complete dbg_read_bsr_info names bits 8:2 and the comparison method. Complete dbg_read_rx_misc names bits 9:11. Complete dbg_tb_ignore_cca_enable proves that bit 12 set means TB respects CCA and NAV, while clearing it enables the debug ignore mode. Complete hal_he_bsr_init initializes the BSR comparison method and control bits. The HE Operation ER-SU-Disable bit at complete-IE byte five bit zero controls bit 10 through complete libpp[hal_mac_ctl.o]::hal_he_set_ersu. The pinned VHT bandwidth-signaling RTS leaf clears bit 18. Bit 22 remains opaque and is preserved by that leaf.
     pub mod ersu_and_vht_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
@@ -288155,7 +288539,7 @@ pub mod wifi_mac {
         /// Greatest unsigned image of `VHT_BW_SIGNALING_RTS`.
         pub const VHT_BW_SIGNALING_RTS_MAX: u32 = 0x1;
         /// Positioned bits of `VHT_BW_SIGNALING_RTS`.
-        pub const VHT_BW_SIGNALING_RTS_MASK: u32 = 0x400000;
+        pub const VHT_BW_SIGNALING_RTS_MASK: u32 = 0x40000;
 
         /// Width of `BITS_13_14_OPAQUE` in bits.
         pub const BITS_13_14_OPAQUE_WIDTH: u32 = 2;
@@ -288164,12 +288548,26 @@ pub mod wifi_mac {
         /// Positioned bits of `BITS_13_14_OPAQUE`.
         pub const BITS_13_14_OPAQUE_MASK: u32 = 0x6000;
 
-        /// Width of `BITS_16_21_OPAQUE` in bits.
-        pub const BITS_16_21_OPAQUE_WIDTH: u32 = 6;
-        /// Greatest unsigned image of `BITS_16_21_OPAQUE`.
-        pub const BITS_16_21_OPAQUE_MAX: u32 = 0x3f;
-        /// Positioned bits of `BITS_16_21_OPAQUE`.
-        pub const BITS_16_21_OPAQUE_MASK: u32 = 0x3f0000;
+        /// Width of `BITS_16_17_OPAQUE` in bits.
+        pub const BITS_16_17_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_16_17_OPAQUE`.
+        pub const BITS_16_17_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_16_17_OPAQUE`.
+        pub const BITS_16_17_OPAQUE_MASK: u32 = 0x30000;
+
+        /// Width of `BITS_19_21_OPAQUE` in bits.
+        pub const BITS_19_21_OPAQUE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `BITS_19_21_OPAQUE`.
+        pub const BITS_19_21_OPAQUE_MAX: u32 = 0x7;
+        /// Positioned bits of `BITS_19_21_OPAQUE`.
+        pub const BITS_19_21_OPAQUE_MASK: u32 = 0x380000;
+
+        /// Width of `BIT_22_OPAQUE` in bits.
+        pub const BIT_22_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_22_OPAQUE`.
+        pub const BIT_22_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_22_OPAQUE`.
+        pub const BIT_22_OPAQUE_MASK: u32 = 0x400000;
 
         /// Width of `BITS_23_31_OPAQUE` in bits.
         pub const BITS_23_31_OPAQUE_WIDTH: u32 = 9;
@@ -288269,10 +288667,10 @@ pub mod wifi_mac {
                 (self.0 & 0x00008000) != 0
             }
 
-            /// The `VHT_BW_SIGNALING_RTS` field.
+            /// Project-assigned name. Pinned hal_vht_enable_bwsignaling_rts sets bit 18 for nonzero input and clears it for zero.
             #[inline]
             pub const fn vht_bw_signaling_rts(self) -> bool {
-                (self.0 & 0x00400000) != 0
+                (self.0 & 0x00040000) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -288281,10 +288679,22 @@ pub mod wifi_mac {
                 oer_portable_mmio::Bits::truncate(self.0 >> 13)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The `BITS_16_17_OPAQUE` field.
             #[inline]
-            pub const fn bits_16_21_opaque(self) -> oer_portable_mmio::Bits<6> {
+            pub const fn bits_16_17_opaque(self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// The `BITS_19_21_OPAQUE` field.
+            #[inline]
+            pub const fn bits_19_21_opaque(self) -> oer_portable_mmio::Bits<3> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The pinned VHT bandwidth-signaling leaf preserves this lane; its hardware meaning is unestablished.
+            #[inline]
+            pub const fn bit_22_opaque(self) -> bool {
+                (self.0 & 0x00400000) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -288384,10 +288794,10 @@ pub mod wifi_mac {
                 (self.0 & 0x00008000) != 0
             }
 
-            /// The `VHT_BW_SIGNALING_RTS` field.
+            /// Project-assigned name. Pinned hal_vht_enable_bwsignaling_rts sets bit 18 for nonzero input and clears it for zero.
             #[inline]
             pub const fn vht_bw_signaling_rts(&self) -> bool {
-                (self.0 & 0x00400000) != 0
+                (self.0 & 0x00040000) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -288396,10 +288806,22 @@ pub mod wifi_mac {
                 oer_portable_mmio::Bits::truncate(self.0 >> 13)
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// The `BITS_16_17_OPAQUE` field.
             #[inline]
-            pub const fn bits_16_21_opaque(&self) -> oer_portable_mmio::Bits<6> {
+            pub const fn bits_16_17_opaque(&self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
+            }
+
+            /// The `BITS_19_21_OPAQUE` field.
+            #[inline]
+            pub const fn bits_19_21_opaque(&self) -> oer_portable_mmio::Bits<3> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The pinned VHT bandwidth-signaling leaf preserves this lane; its hardware meaning is unestablished.
+            #[inline]
+            pub const fn bit_22_opaque(&self) -> bool {
+                (self.0 & 0x00400000) != 0
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -288508,7 +288930,7 @@ pub mod wifi_mac {
             /// Set `VHT_BW_SIGNALING_RTS`.
             #[inline]
             pub fn set_vht_bw_signaling_rts(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffbfffff) | (u32::from(value) << 22);
+                self.0 = (self.0 & 0xfffbffff) | (u32::from(value) << 18);
                 self
             }
 
@@ -288522,13 +288944,30 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BITS_16_21_OPAQUE`.
+            /// Set `BITS_16_17_OPAQUE`.
             #[inline]
-            pub fn set_bits_16_21_opaque(
+            pub fn set_bits_16_17_opaque(
                 &mut self,
-                value: oer_portable_mmio::Bits<6>,
+                value: oer_portable_mmio::Bits<2>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xffc0ffff) | (value.get() << 16);
+                self.0 = (self.0 & 0xfffcffff) | (value.get() << 16);
+                self
+            }
+
+            /// Set `BITS_19_21_OPAQUE`.
+            #[inline]
+            pub fn set_bits_19_21_opaque(
+                &mut self,
+                value: oer_portable_mmio::Bits<3>,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffc7ffff) | (value.get() << 19);
+                self
+            }
+
+            /// Set `BIT_22_OPAQUE`.
+            #[inline]
+            pub fn set_bit_22_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffbfffff) | (u32::from(value) << 22);
                 self
             }
 
@@ -289479,10 +289918,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `WORD_0C94_OPAQUE` register.
+    /// The `CCA_SND20_CONTROL` register.
     ///
-    /// Aligned source-qualified 32-bit bus view in the existing owned aperture. No reset, safe transaction or read safety is established.
-    pub mod word_0c94_opaque {
+    /// Project-assigned name. CCA SND20 configuration word reached by hal_cca_set_snd20_cfg. The low byte takes 0x20 for input one, otherwise 0x17. Units, byte subfields and the electrical expansion of SND20 are unestablished. The observed images are configuration, not a hardware value dictionary.
+    pub mod cca_snd20_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x000000ff;
         /// The register's width in bits.
@@ -289491,21 +289930,21 @@ pub mod wifi_mac {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0xc94;
 
-        /// Width of `BITS_0_7_OPAQUE` in bits.
-        pub const BITS_0_7_OPAQUE_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MAX: u32 = 0xff;
-        /// Positioned bits of `BITS_0_7_OPAQUE`.
-        pub const BITS_0_7_OPAQUE_MASK: u32 = 0xff;
+        /// Width of `CONFIGURATION` in bits.
+        pub const CONFIGURATION_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `CONFIGURATION`.
+        pub const CONFIGURATION_MAX: u32 = 0xff;
+        /// Positioned bits of `CONFIGURATION`.
+        pub const CONFIGURATION_MASK: u32 = 0xff;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. CCA SND20 configuration byte; upper word bits are preserved by the vendor setter.
             #[inline]
-            pub const fn bits_0_7_opaque(self) -> u8 {
+            pub const fn configuration(self) -> u8 {
                 self.0 as u8
             }
         }
@@ -289514,15 +289953,15 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Project-assigned name. CCA SND20 configuration byte; upper word bits are preserved by the vendor setter.
             #[inline]
-            pub const fn bits_0_7_opaque(&self) -> u8 {
+            pub const fn configuration(&self) -> u8 {
                 self.0 as u8
             }
 
-            /// Set `BITS_0_7_OPAQUE`.
+            /// Set `CONFIGURATION`.
             #[inline]
-            pub fn set_bits_0_7_opaque(&mut self, value: u8) -> &mut Self {
+            pub fn set_configuration(&mut self, value: u8) -> &mut Self {
                 self.0 = (self.0 & 0xffffff00) | u32::from(value);
                 self
             }
@@ -307545,17 +307984,20 @@ pub mod wifi_mac {
             self.0.write::<0x480>(value.0);
         }
 
-        /// Read `PARENT_ENABLE`.
+        /// Read `INTERRUPT_1_ENABLE`.
         #[inline]
-        pub fn read_parent_enable(&self) -> parent_enable::R {
-            parent_enable::R(self.0.read::<0xc2c>())
+        pub fn read_interrupt_1_enable(&self) -> interrupt_1_enable::R {
+            interrupt_1_enable::R(self.0.read::<0xc2c>())
         }
 
-        /// Read `PARENT_ENABLE`, change fields and write it back; every other bit keeps
+        /// Read `INTERRUPT_1_ENABLE`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_parent_enable(&mut self, change: impl FnOnce(&mut parent_enable::W)) {
-            let mut value = parent_enable::W(self.0.read::<0xc2c>());
+        pub fn modify_interrupt_1_enable(
+            &mut self,
+            change: impl FnOnce(&mut interrupt_1_enable::W),
+        ) {
+            let mut value = interrupt_1_enable::W(self.0.read::<0xc2c>());
             change(&mut value);
             self.0.write::<0xc2c>(value.0);
         }
@@ -309155,13 +309597,29 @@ pub mod wifi_mac {
             self.0.write_indexed::<0xd8, 0x4, 4>(index, value.0);
         }
 
-        /// Read `BASEBAND_ERROR_STATUS%s`.
+        /// Read `RX_ERROR_DUMP%s`.
         #[inline]
-        pub fn read_baseband_error_status(
-            &self,
-            index: oer_portable_mmio::Index<3>,
-        ) -> baseband_error_status::R {
-            baseband_error_status::R(self.0.read_indexed::<0xe8, 0x4, 3>(index))
+        pub fn read_rx_error_dump(&self, index: oer_portable_mmio::Index<2>) -> rx_error_dump::R {
+            rx_error_dump::R(self.0.read_indexed::<0xe8, 0x4, 2>(index))
+        }
+
+        /// Read `RX_ERROR_DUMP%s`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_rx_error_dump(
+            &mut self,
+            index: oer_portable_mmio::Index<2>,
+            change: impl FnOnce(&mut rx_error_dump::W),
+        ) {
+            let mut value = rx_error_dump::W(self.0.read_indexed::<0xe8, 0x4, 2>(index));
+            change(&mut value);
+            self.0.write_indexed::<0xe8, 0x4, 2>(index, value.0);
+        }
+
+        /// Read `WORD_00F0_OPAQUE`.
+        #[inline]
+        pub fn read_word_00f0_opaque(&self) -> word_00f0_opaque::R {
+            word_00f0_opaque::R(self.0.read::<0xf0>())
         }
 
         /// Read `MISC_PACKET_POLICY`.
@@ -309439,6 +309897,15 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_nrx_error(&self) -> nrx_error::R {
             nrx_error::R(self.0.read::<0x318>())
+        }
+
+        /// Read `NRX_ERROR`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_nrx_error(&mut self, change: impl FnOnce(&mut nrx_error::W)) {
+            let mut value = nrx_error::W(self.0.read::<0x318>());
+            change(&mut value);
+            self.0.write::<0x318>(value.0);
         }
 
         /// Read `NRX_ERROR_ABORT`.
@@ -309921,24 +310388,24 @@ pub mod wifi_mac {
     }
 
     impl<P: oer_portable_mmio::Placement> WifiMacTxrxPrefix<P> {
-        /// Read `RX_QUEUE_DEFAULT%s`.
+        /// Read `RX_CONTROL_FRAME_DUMP%s`.
         #[inline]
-        pub fn read_rx_queue_default(
+        pub fn read_rx_control_frame_dump(
             &self,
             index: oer_portable_mmio::Index<4>,
-        ) -> rx_queue_default::R {
-            rx_queue_default::R(self.0.read_indexed::<0xfc, 0x4, 4>(index))
+        ) -> rx_control_frame_dump::R {
+            rx_control_frame_dump::R(self.0.read_indexed::<0xfc, 0x4, 4>(index))
         }
 
-        /// Read `RX_QUEUE_DEFAULT%s`, change fields and write it back; every other bit keeps
+        /// Read `RX_CONTROL_FRAME_DUMP%s`, change fields and write it back; every other bit keeps
         /// the value read, every write-trigger field is zero.
         #[inline]
-        pub fn modify_rx_queue_default(
+        pub fn modify_rx_control_frame_dump(
             &mut self,
             index: oer_portable_mmio::Index<4>,
-            change: impl FnOnce(&mut rx_queue_default::W),
+            change: impl FnOnce(&mut rx_control_frame_dump::W),
         ) {
-            let mut value = rx_queue_default::W(self.0.read_indexed::<0xfc, 0x4, 4>(index));
+            let mut value = rx_control_frame_dump::W(self.0.read_indexed::<0xfc, 0x4, 4>(index));
             change(&mut value);
             self.0.write_indexed::<0xfc, 0x4, 4>(index, value.0);
         }
