@@ -128,7 +128,8 @@ sends nothing more and ends at its time.
 Country `DE` (`oer-protocols-radio-regulatory`): the station scans every 2.4 GHz
 channel the domain permits at each connect (`wifi::Config::all_channels`),
 joins at 40 MHz where the access point offers a permitted secondary channel
-(`with_ht40`), otherwise at 20 MHz, with an owner transmit cap of 10 dBm.
+(`with_ht40`), otherwise at 20 MHz, at the transmit power the domain permits: the image's
+cap of 20 dBm stays above that ceiling.
 
 ## Faults
 

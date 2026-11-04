@@ -669,6 +669,20 @@ pub(crate) static RX_COUNTERS: oer_portable_memory::OnceValue<
 pub fn rx_counters() -> Option<WifiRxReport> {
     RX_COUNTERS.get().map(|counters| counters.report())
 }
+
+/// One reading of the MAC's statistics, and its frequency offset.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub type MacCounters = (
+    [u32; oer_chips_esp32s31_ieee80211_driver::rx::counters::mac::COUNTS],
+    i32,
+);
+
+/// The MAC's statistics at the port's last sample and its frequency offset.
+/// Only a trace build samples them.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub fn mac_counters() -> MacCounters {
+    oer_chips_esp32s31_ieee80211_driver::rx::counters::mac::MAC_COUNTS.read()
+}
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]
 pub use chip::{

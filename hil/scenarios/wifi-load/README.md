@@ -139,6 +139,12 @@ transmissions per MPDU. RX and TX stay the image's.
   they went at (MCS, 20 or 40 MHz, short or long guard interval) and its
   share.
 
+`mac` holds the MAC's own statistics that moved over the window, by the
+names of the service's `MAC_COUNT_NAMES`: the decoder's errors, the
+responses it counted and `frequency_offset` at the window's end. The
+image samples the bank every 50 ms from the port's turn, so a window's
+ends lag by up to that much.
+
 `cache` holds one entry per cache bus the image counts, cleared at the
 window's start: `ibus0` (hart 0's instruction fetches through L1-ICache0)
 and `ibus1` (hart 1's), `dbus0` and `dbus1`

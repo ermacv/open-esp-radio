@@ -584,6 +584,13 @@ where
         if self.cut || self.pausing {
             return Ok(false);
         }
+        #[cfg(oer_trace)]
+        if let Some(active) = self.active.as_mut() {
+            crate::rx::counters::mac::MAC_COUNTS.sample(
+                &active.registers.wifi_mac_hal(),
+                self.timer.now().as_micros() as u32,
+            );
+        }
         let session = self.session.as_mut().map_err(|e| *e)?;
         if let Poll::Ready(facts) = session.poll_received(cx) {
             let facts = facts.map_err(Fault::Receive)?;

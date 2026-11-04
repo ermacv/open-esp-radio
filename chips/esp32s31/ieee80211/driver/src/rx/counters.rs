@@ -1015,6 +1015,117 @@ impl WifiRxCounters {
     }
 }
 
+/// The MAC's own receive and transmit statistics, sampled by the port's
+/// turn in a trace build: the receive decoder's errors, the responses it
+/// counted and its frequency offset, seen by nothing else.
+#[cfg(oer_trace)]
+pub mod mac {
+    use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
+
+    use oer_chips_esp32s31_hal::{
+        ieee80211::mac::WifiMacHal,
+        types::{MacRxStatisticsSnapshot, MacTxStatisticsSnapshot},
+    };
+
+    /// The counts [`MacCounts::read`] gives, in the order of
+    /// [`counts_of`].
+    pub const COUNTS: usize = 42;
+
+    /// How often a turn reads them: the bank is forty-odd registers.
+    const PERIOD_US: u32 = 50_000;
+
+    /// One bank's last sample.
+    pub struct MacCounts {
+        sampled_at: AtomicU32,
+        counts: [AtomicU32; COUNTS],
+        frequency_offset: AtomicI32,
+    }
+
+    /// The last sample.
+    pub static MAC_COUNTS: MacCounts = MacCounts {
+        sampled_at: AtomicU32::new(0),
+        counts: [const { AtomicU32::new(0) }; COUNTS],
+        frequency_offset: AtomicI32::new(0),
+    };
+
+    impl MacCounts {
+        /// Sample `mac` when the period since the last sample passed at `now_us`.
+        pub fn sample(&self, mac: &WifiMacHal<'_>, now_us: u32) {
+            let last = self.sampled_at.load(Ordering::Relaxed);
+            if now_us.wrapping_sub(last) < PERIOD_US {
+                return;
+            }
+            self.sampled_at.store(now_us, Ordering::Relaxed);
+            let rx = mac.receive_statistics_snapshot();
+            let tx = mac.transmit_statistics_snapshot();
+            for (slot, count) in self.counts.iter().zip(counts_of(&rx, &tx)) {
+                slot.store(count, Ordering::Relaxed);
+            }
+            self.frequency_offset
+                .store(rx.primary.cfo_scaled_40, Ordering::Relaxed);
+        }
+
+        /// The last sample's counts and frequency offset.
+        pub fn read(&self) -> ([u32; COUNTS], i32) {
+            (
+                self.counts
+                    .each_ref()
+                    .map(|count| count.load(Ordering::Relaxed)),
+                self.frequency_offset.load(Ordering::Relaxed),
+            )
+        }
+    }
+
+    /// The bank's counts in one order; the load service names them.
+    fn counts_of(rx: &MacRxStatisticsSnapshot, tx: &MacTxStatisticsSnapshot) -> [u32; COUNTS] {
+        let (p, d, h) = (&rx.primary, &rx.decode_errors, &rx.hang);
+        [
+            p.mpdu_count.into(),
+            p.fcs_error.into(),
+            p.abort.into(),
+            p.abort_fcs_pass.into(),
+            p.power_drop_error.into(),
+            p.he_sig_b_error.into(),
+            p.same_bm_error.into(),
+            p.signal_field.into(),
+            p.end.into(),
+            p.data_success.into(),
+            p.other_unicast.into(),
+            p.buffer_full.into(),
+            p.fifo_overflow.into(),
+            p.tkip_error.into(),
+            p.bt_block_error.into(),
+            p.frequency_hop_error.into(),
+            p.last_unmatched_error.into(),
+            p.ack_interrupt.into(),
+            p.rts_interrupt.into(),
+            d.brx_agc.into(),
+            d.brx.into(),
+            d.nrx.into(),
+            d.nrx_abort.into(),
+            d.nrx_agc_exit.into(),
+            d.nrx_baseband_off.into(),
+            d.nrx_fdm_watchdog.into(),
+            d.nrx_restart.into(),
+            d.nrx_service.into(),
+            d.nrx_tx_over.into(),
+            d.nrx_unsupported.into(),
+            d.nrx_he_format.into(),
+            d.nrx_ht_sig.into(),
+            d.nrx_he_unsupported.into(),
+            d.nrx_he_sig_a_crc.into(),
+            h.rx.into(),
+            h.tx.into(),
+            h.rx_tx_hang.into(),
+            h.rx_tx_panic.into(),
+            tx.tx_rts,
+            tx.tx_cts,
+            tx.track,
+            tx.trcts,
+        ]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

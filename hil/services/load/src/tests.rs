@@ -165,6 +165,8 @@ fn the_largest_reports_fit_one_response() {
         postcard::from_bytes::<TrackingCollected>(encoded).unwrap(),
         tracking
     );
+    let mac = MacCollected::Report(Mac::new([u32::MAX; MAC_COUNTS], i32::MIN));
+    assert!(postcard::to_slice(&mac, &mut buffer).unwrap().len() <= 512);
     let link = LinkCollected::Report(full_link());
     let encoded = postcard::to_slice(&link, &mut buffer).unwrap();
     assert!(encoded.len() <= 512, "{}", encoded.len());
@@ -431,6 +433,27 @@ fn a_receive_window_takes_wrapping_differences_and_the_end_s_agreement_window() 
 }
 
 #[test]
+fn a_mac_count_wraps_at_its_own_width() {
+    let at = |name| {
+        MAC_COUNT_NAMES
+            .iter()
+            .position(|(known, _)| *known == name)
+            .unwrap()
+    };
+    let (mut start, mut end) = ([0; MAC_COUNTS], [0; MAC_COUNTS]);
+    start[at("fcs_error")] = 0xfffe;
+    end[at("fcs_error")] = 1;
+    start[at("nrx")] = 0x3ff;
+    end[at("nrx")] = 2;
+    start[at("tx_rts")] = u32::MAX;
+    let window = Mac::window(&Mac::new(start, 7), &Mac::new(end, -40));
+    assert_eq!(window.count(at("fcs_error")), 3);
+    assert_eq!(window.count(at("nrx")), 3);
+    assert_eq!(window.count(at("tx_rts")), 1);
+    assert_eq!(window.frequency_offset, -40);
+}
+
+#[test]
 fn a_transmit_window_takes_wrapping_differences() {
     let start = TxAmpdu {
         aggregates: u32::MAX,
@@ -456,9 +479,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_eight_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_nine_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 16);
+    assert_eq!(keys.len(), 18);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }

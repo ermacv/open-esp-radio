@@ -34,8 +34,8 @@ use static_cell::ConstStaticCell;
 /// The regulatory domain the station installs, every 2.4 GHz channel it
 /// permits scanned at each connect.
 const COUNTRY: [u8; 2] = *b"DE";
-/// The owner's transmit power cap, below the domain's ceiling.
-const TX_CAP_DBM: i8 = 10;
+/// The transmit power cap: above the domain's ceiling, which decides.
+const TX_CAP_DBM: i8 = 20;
 
 /// A request of the SDK station service, of the Wi-Fi station service, of
 /// the fault service or of the load service.
