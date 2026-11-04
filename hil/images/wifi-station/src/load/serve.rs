@@ -39,7 +39,7 @@ use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
 
 use super::action::{Action, Answer as Decided, Kept, Phase, action};
-use super::pace::{GRANULARITY_US, MAX_BATCH, Next, Schedule};
+use super::pace::{GRANULARITY_US, Next, Schedule, UNPACED_BATCH};
 use super::receive::{Datagram, Receiving, classify, echo};
 use super::relay::{self, Client};
 use super::report::{self, Snapshot, Windows};
@@ -540,7 +540,7 @@ async fn send(
                 // The socket had no room: the due datagram waits for it,
                 // as an application's send does.
                 Next::Blocked => {
-                    let datagram = blocking(socket, size, peer, run, sent.datagrams);
+                    let datagram = blocking(socket, size, peer, run, sent.datagrams, now);
                     match select(datagram, wait_until(end)).await {
                         Either::First(result) => {
                             let now = now_us();
@@ -566,24 +566,25 @@ async fn send(
     }
 }
 
-/// Datagram `sequence`, once the socket has room for it.
+/// Datagram `sequence`, sent at `now`, once the socket has room for it.
 async fn blocking(
     socket: &Socket,
     size: usize,
     peer: SocketAddr,
     run: u32,
     sequence: u64,
+    now: u64,
 ) -> Result<Option<()>, SendError> {
     socket
         .send_to_with(size, peer, |payload| {
-            (size, write(payload, run, sequence, now_us()))
+            (size, write(payload, run, sequence, now))
         })
         .await
 }
 
-/// Send as fast as the socket takes the datagrams until `end`, yielding to
-/// the executor after each batch; after a failed send, wait the pacing
-/// granularity.
+/// Send as fast as the socket takes the datagrams until `end`: one deadline
+/// around the whole loop, the clock read and a yield to the executor once
+/// per [`UNPACED_BATCH`]; after a failed send, wait the pacing granularity.
 async fn unpaced(
     socket: &Socket,
     run: u32,
@@ -592,27 +593,26 @@ async fn unpaced(
     end: u64,
     sent: &mut Sent,
 ) {
-    let mut batch = 0;
-    loop {
-        let now = now_us();
-        if now >= end {
-            return;
-        }
-        let datagram = blocking(socket, size, peer, run, sent.datagrams);
-        match select(datagram, wait_until(end)).await {
-            Either::First(Ok(Some(()))) => taken(sent, size, now),
-            Either::First(Ok(None) | Err(_)) => {
-                sent.failed = sent.failed.saturating_add(1);
-                wait_until(now.saturating_add(GRANULARITY_US).min(end)).await;
+    let sending = async {
+        let mut now = now_us();
+        let mut batch = 0;
+        loop {
+            match blocking(socket, size, peer, run, sent.datagrams, now).await {
+                Ok(Some(())) => taken(sent, size, now),
+                Ok(None) | Err(_) => {
+                    sent.failed = sent.failed.saturating_add(1);
+                    wait_until(now_us().saturating_add(GRANULARITY_US)).await;
+                }
             }
-            Either::Second(()) => return,
+            batch += 1;
+            if batch == UNPACED_BATCH {
+                batch = 0;
+                yield_now().await;
+                now = now_us();
+            }
         }
-        batch += 1;
-        if batch == MAX_BATCH {
-            batch = 0;
-            yield_now().await;
-        }
-    }
+    };
+    select(sending, wait_until(end)).await;
 }
 
 /// The header of sequence `sequence` sent at `now`, at the front of
