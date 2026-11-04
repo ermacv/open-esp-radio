@@ -701,12 +701,13 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             .map_err(|_| Failure::Incomplete("the generated passphrase is too long".into()))?,
         channel,
     };
-    let Joined::Linked {
-        bssid,
-        channel: linked,
-    } = cx.call(join, JOIN_TIMEOUT)?
-    else {
-        return Err(Failure::Fail("the station did not join".into()));
+    let (bssid, linked) = match cx.call(join, JOIN_TIMEOUT)? {
+        Joined::Linked { bssid, channel } => (bssid, channel),
+        other => {
+            return Err(Failure::Fail(format!(
+                "the station did not join: {other:?}"
+            )));
+        }
     };
     let started = Instant::now();
     let (address, ipv4) = loop {

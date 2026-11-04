@@ -84,13 +84,16 @@ SECTIONS
   __runtime_isr_load_end = LOADADDR(.isr.text) + SIZEOF(.isr.text);
 
   /* Modules classify optional performance-sensitive code with semantic
-     .hot.text.* input sections, which execute from internal SRAM; this linker
-     remains unaware of module names and Rust symbol mangling. */
+     .hot.text.* input sections, which execute from internal SRAM. Code that
+     can carry no section of its own, generic and in crates that forbid
+     unsafe code, the chip names in its hot-code.x; this
+     script stays unaware of module names and Rust symbol mangling. */
   .hot.text ALIGN(ADDR(.isr.text) + SIZEOF(.isr.text), 64) :
     AT(ALIGN(LOADADDR(.isr.text) + SIZEOF(.isr.text), 64))
   {
     __runtime_hot_text_start = ABSOLUTE(.);
     *(.hot.text .hot.text.*);
+    INCLUDE hot-code.x
     . = ALIGN(4);
     __runtime_hot_text_end = ABSOLUTE(.);
   } > INTERNAL_LOW

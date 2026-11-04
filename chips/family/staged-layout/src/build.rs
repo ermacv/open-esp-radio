@@ -183,6 +183,12 @@ pub fn runtime(
         .into());
     }
     out.files.push(window);
+    // The chip's code in SRAM the runtime's `sections.x` includes.
+    let hot_code = chip_linker_dir.join("hot-code.x");
+    if !hot_code.is_file() {
+        return Err(std::format!("the chip's {} is missing", hot_code.display()).into());
+    }
+    out.files.push(hot_code);
     // A section no rule places is an error, not an orphan the linker puts
     // somewhere: a mistyped `.dma.bss.*` name would otherwise leave a DMA
     // static outside the checked range.
