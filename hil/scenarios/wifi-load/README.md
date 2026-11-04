@@ -22,7 +22,7 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 Each load case offers 10, 30, 50 and 65 Mbit/s in total (1472-byte
 datagrams); `OER_WIFI_LOAD_MBPS=10,65,100` replaces the levels (and `OER_WIFI_LOAD_WIDTH=ht20` the 40 MHz channel the path case asks the router for), e.g. to
 overload. Each level is one run of the image's load service: a 5 s
-measuring window after 300 ms, then 500 ms of drain, after which the image
+(`OER_WIFI_LOAD_SECONDS` replaces it, 1 to 60) measuring window after 300 ms, then 500 ms of drain, after which the image
 ends the run by itself. Throughput and CPU are over the window (the image's
 clock); per level it records offered, sent and received throughput, lost
 (sent less received), loss below the highest sequence, reordered, duplicate
@@ -108,8 +108,10 @@ transmissions per MPDU. RX and TX stay the image's.
   `airtime_us`, `dropped` and the end's `signal_avg_dbm`; and the in-use
   channel's `survey`: `active_ms`, `busy_ms`, `receive_ms`,
   `bss_receive_ms`, `transmit_ms`, `busy_percent` and the end's
-  `noise_dbm`. A count the driver does not report, or one that went back,
-  is null; when the router gives no view, `router` is `{"unavailable":
+  `noise_dbm`; `radio`, the radio's own counters that moved, by the
+  driver's names (`dot11FCSErrorCount`, `dot11RTSSuccessCount`,
+  `dot11RTSFailureCount`, `ba_miss`): the whole radio's, not the station's.
+  A count the driver does not report, or one that went back, is null; when the router gives no view, `router` is `{"unavailable":
   why}`. A `last_bitrate` is one frame's, at the span's end.
 - `device` is the image's count over its window, from its trace build
   (zeros otherwise). `rx`: the data MPDUs addressed to the station that
@@ -128,6 +130,10 @@ transmissions per MPDU. RX and TX stay the image's.
   `other_ends` (protection timeout, contention limit, coexistence denial)
   and `unsent` (expired, withdrawn or of unknown outcome). The aggregates
   themselves count in the level's `tx.ampdu`: `ampdu` here is null.
+  `aggregates_missing` counts the aggregates that went by the members
+  their BlockAck left missing: `none`, `one`, `two`, `three_four`,
+  `five_eight`, `nine_up` with some acknowledged, and `all`, a lost
+  aggregate or BlockAck.
   Each level also prints one `link` line: the router's channel and width,
   its last rates each way, and each way the image's MPDUs with every rate
   they went at (MCS, 20 or 40 MHz, short or long guard interval) and its

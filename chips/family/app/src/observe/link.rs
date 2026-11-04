@@ -74,6 +74,10 @@ pub struct TxLink {
     pub ack_timeouts: u32,
     pub other_ends: u32,
     pub unsent: u32,
+    /// Aggregates that went, by the members their BlockAck left missing:
+    /// none, 1, 2, 3 to 4, 5 to 8, 9 and more with some acknowledged, and
+    /// all (a lost aggregate or BlockAck).
+    pub missing: [u32; MISSING_BINS],
 }
 
 /// Both directions.
@@ -115,6 +119,9 @@ pub struct Settled {
 /// The aggregates' size bins.
 pub const SIZE_BINS: usize = 6;
 
+/// The bins of the members a settled aggregate's BlockAck left missing.
+pub const MISSING_BINS: usize = 7;
+
 const RATE_BUCKETS: usize = 4 * 8 + 4;
 const HT_OTHER: usize = 32;
 const NON_HT: usize = 33;
@@ -148,6 +155,21 @@ const fn size_bin(members: u8) -> usize {
         3..=4 => 2,
         5..=8 => 3,
         9..=16 => 4,
+        _ => 5,
+    }
+}
+
+/// The bin of an aggregate of `members` with `acknowledged` of them answered.
+const fn missing_bin(members: u8, acknowledged: u8) -> usize {
+    if acknowledged == 0 {
+        return MISSING_BINS - 1;
+    }
+    match members.saturating_sub(acknowledged) {
+        0 => 0,
+        1 => 1,
+        2 => 2,
+        3..=4 => 3,
+        5..=8 => 4,
         _ => 5,
     }
 }
@@ -191,6 +213,7 @@ pub struct LinkCounter {
     /// Aggregates, refused, subframes, the size bins, acknowledged,
     /// retried, dropped and BlockAckReqs.
     ampdu: [AtomicU32; AMPDU_COUNTS],
+    tx_missing: [AtomicU32; MISSING_BINS],
 }
 
 const AMPDU_COUNTS: usize = 7 + SIZE_BINS;
@@ -206,6 +229,7 @@ impl LinkCounter {
             tx_ends: [const { AtomicU32::new(0) }; 4],
             tx_transmissions: AtomicU32::new(0),
             ampdu: [const { AtomicU32::new(0) }; AMPDU_COUNTS],
+            tx_missing: [const { AtomicU32::new(0) }; MISSING_BINS],
         }
     }
 
@@ -241,6 +265,11 @@ impl LinkCounter {
                 &self.tx_rates,
                 bucket(settled.rate),
                 u32::from(settled.members),
+            );
+            bump_at(
+                &self.tx_missing,
+                missing_bin(settled.members, settled.acknowledged),
+                1,
             );
         }
         bump_at(&self.ampdu, 0, 1);
@@ -291,6 +320,7 @@ impl LinkCounter {
                 ack_timeouts,
                 other_ends,
                 unsent,
+                missing: read(&self.tx_missing),
             },
         }
     }

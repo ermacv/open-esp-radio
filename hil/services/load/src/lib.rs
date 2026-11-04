@@ -712,6 +712,10 @@ pub struct TxLink {
     pub other_ends: u32,
     /// Expired, withdrawn, or without a known outcome.
     pub unsent: u32,
+    /// Aggregates that went, by the members their BlockAck left missing:
+    /// none, 1, 2, 3 to 4, 5 to 8, 9 and more with some acknowledged, and
+    /// all (a lost aggregate or BlockAck).
+    pub missing: [u32; 7],
 }
 
 impl Rates {
@@ -756,6 +760,10 @@ impl Link {
                 ack_timeouts: tx1.ack_timeouts.wrapping_sub(tx0.ack_timeouts),
                 other_ends: tx1.other_ends.wrapping_sub(tx0.other_ends),
                 unsent: tx1.unsent.wrapping_sub(tx0.unsent),
+                missing: core::array::from_fn(|bin| {
+                    let at = |counts: &[u32; 7]| counts.get(bin).copied().unwrap_or(0);
+                    at(&tx1.missing).wrapping_sub(at(&tx0.missing))
+                }),
             },
         }
     }

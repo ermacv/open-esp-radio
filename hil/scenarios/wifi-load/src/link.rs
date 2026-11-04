@@ -44,6 +44,20 @@ fn delta(start: &Value, end: &Value, path: &[&str]) -> Value {
     }
 }
 
+/// The radio's counters that moved between readings `start` and `end`.
+fn radio(start: &Value, end: &Value) -> Value {
+    let Some(counters) = at(end, &["radio"]).as_object() else {
+        return Value::Null;
+    };
+    counters
+        .keys()
+        .filter_map(|name| {
+            let moved = delta(start, end, &["radio", name]);
+            (moved.as_u64() != Some(0)).then(|| (name.clone(), moved))
+        })
+        .collect()
+}
+
 /// The access point's view between readings `start` and `end`, `span`
 /// apart: its counters' differences, the rates of the last frames each
 /// way, its channel width and the in-use channel's survey; why not, when a
@@ -87,6 +101,7 @@ pub fn router_window(start: &Reading, end: &Reading, span: Duration) -> Value {
                 .map(|(busy, active)| round(100.0 * busy as f64 / active as f64)),
             "noise_dbm": at(end_view, &["survey", "noise_dbm"]),
         },
+        "radio": radio(start_view, end_view),
     })
 }
 
@@ -197,6 +212,15 @@ pub fn device(link: &Link) -> Value {
             "transmissions_per_single": (sent != 0)
                 .then(|| round(f64::from(tx.transmissions) / sent as f64)),
             "delivered": tx.delivered,
+            "aggregates_missing": {
+                "none": tx.missing[0],
+                "one": tx.missing[1],
+                "two": tx.missing[2],
+                "three_four": tx.missing[3],
+                "five_eight": tx.missing[4],
+                "nine_up": tx.missing[5],
+                "all": tx.missing[6],
+            },
             "ack_timeouts": tx.ack_timeouts,
             "other_ends": tx.other_ends,
             "unsent": tx.unsent,

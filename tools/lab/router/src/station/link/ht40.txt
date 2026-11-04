@@ -42,3 +42,7 @@
 	channel transmit time:		21843 ms
 [aqm]
 tid0 drops: 4
+[radio]
+rx_fcs_errors: 12
+dot11FCSErrorCount: 34
+tx_stats: not a number

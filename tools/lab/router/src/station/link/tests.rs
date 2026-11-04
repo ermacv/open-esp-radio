@@ -47,6 +47,13 @@ fn an_ht40_link_reads_every_counter_both_rates_the_width_and_the_survey() {
         })
     );
     assert_eq!(link.tid0_aqm_drops, Some(4));
+    assert_eq!(
+        link.radio
+            .iter()
+            .map(|(name, count)| (name.as_str(), *count))
+            .collect::<Vec<_>>(),
+        [("dot11FCSErrorCount", 34), ("rx_fcs_errors", 12)]
+    );
     let json = serde_json::to_value(&link).unwrap();
     assert_eq!(serde_json::from_value::<StationLink>(json).unwrap(), link);
 }

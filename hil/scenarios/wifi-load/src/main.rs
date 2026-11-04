@@ -107,6 +107,8 @@ const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
 /// Each level's measuring window, the time before it opens and the drain
 /// after it (the image's run, `oer_hil_services_load::Start`).
 const DURATION_MS: u32 = 5000;
+/// Replaces each level's window, in seconds.
+const SECONDS_ENV: &str = "OER_WIFI_LOAD_SECONDS";
 const DELAY_MS: u32 = 300;
 const DRAIN_MS: u32 = 500;
 /// RTT probes during a level. `OER_WIFI_LOAD_PROBES=off` sends none (`on`
@@ -346,6 +348,22 @@ fn probes() -> Result<bool, Failure> {
         Err(_) => Ok(true),
         Ok(text) => parse_probes(&text),
     }
+}
+
+/// A level's window in milliseconds.
+fn window_ms() -> Result<u32, Failure> {
+    match std::env::var(SECONDS_ENV) {
+        Ok(text) => parse_seconds(&text).map_err(Failure::Incomplete),
+        Err(_) => Ok(DURATION_MS),
+    }
+}
+
+fn parse_seconds(text: &str) -> Result<u32, String> {
+    text.parse::<u32>()
+        .ok()
+        .filter(|seconds| (1..=60).contains(seconds))
+        .map(|seconds| seconds * 1000)
+        .ok_or_else(|| format!("{SECONDS_ENV}: `{text}` is not 1 to 60 seconds"))
 }
 
 fn parse_probes(text: &str) -> Result<bool, Failure> {
@@ -1267,7 +1285,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
             run,
             port: DEVICE_PORT,
             delay_ms: DELAY_MS,
-            duration_ms: DURATION_MS,
+            duration_ms: window_ms()?,
             drain_ms: DRAIN_MS,
             transmit,
             profile,
@@ -1281,7 +1299,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
     )?;
     let peer = SocketAddrV4::new(device, DEVICE_PORT);
     let stop = AtomicBool::new(false);
-    let window = Duration::from_millis(u64::from(DURATION_MS));
+    let window = Duration::from_millis(u64::from(window_ms()?));
     let (sent, probes, echoes) = std::thread::scope(|scope| {
         // The host's window starts with the image's, as near as the HIL
         // answer's latency allows; the image counts only its own window.
@@ -1518,6 +1536,15 @@ mod tests {
         assert!(parse_tunes("nothing=1").is_err());
         assert!(parse_tunes("return-quiet").is_err());
         assert!(parse_tunes("return-quiet=x").is_err());
+    }
+
+    #[test]
+    fn a_window_is_whole_seconds_within_a_minute() {
+        assert_eq!(parse_seconds("1"), Ok(1000));
+        assert_eq!(parse_seconds("60"), Ok(60_000));
+        assert!(parse_seconds("0").is_err());
+        assert!(parse_seconds("61").is_err());
+        assert!(parse_seconds("1.5").is_err());
     }
 
     #[test]
