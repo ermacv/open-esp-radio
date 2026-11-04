@@ -7,7 +7,7 @@ use oer_protocols_network_port::{
 };
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 
-impl EthernetFrame for OwnedNetworkTxFrame<'_> {
+impl EthernetFrame for OwnedNetworkTxFrame {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         let (header, payload) =
             EthernetHeader::parse(self.ethernet()).map_err(|_| FrameLengthError::TooShort)?;
@@ -17,29 +17,6 @@ impl EthernetFrame for OwnedNetworkTxFrame<'_> {
             ether_type: header.ether_type.value(),
             payload,
         })
-    }
-}
-
-/// A device whose transmissions take the stack's packet owner itself: the
-/// device reads the frame where the stack wrote it, without a copy.
-pub trait OwnedTxDevice<'r>: NetDevice<TxFrame = OwnedNetworkTxFrame<'r>> {}
-impl<'r, D: NetDevice<TxFrame = OwnedNetworkTxFrame<'r>>> OwnedTxDevice<'r> for D {}
-
-impl<'r> OwnedNetworkTxFrame<'r> {
-    /// Transfer this stack owner into a neutral device: on acceptance the
-    /// device holds the packet and its software credit; a refusal returns
-    /// both together, neither released early.
-    pub fn transmit_to(
-        self,
-        device: &mut impl OwnedTxDevice<'r>,
-    ) -> Result<(), TransmitRefused<Self>> {
-        if let Err(reason) = self.view() {
-            return Err(TransmitRefused {
-                frame: self,
-                reason: oer_protocols_network_port::TransmitError::InvalidLength(reason),
-            });
-        }
-        device.try_transmit(self)
     }
 }
 
@@ -163,9 +140,9 @@ pub struct TxWritten<S> {
 }
 
 /// A frame [`ParkedTx::write`] did not place.
-pub enum TxWriteRefused<'r> {
+pub enum TxWriteRefused {
     /// The frame stays the caller's.
-    Kept(TransmitRefused<OwnedNetworkTxFrame<'r>>),
+    Kept(TransmitRefused<OwnedNetworkTxFrame>),
     /// The frame was lost on the way: slots that refused a packet they own.
     Lost,
 }
@@ -177,24 +154,19 @@ pub enum TxWriteRefused<'r> {
 pub struct ParkedTx<S: TxStorage, const N: usize> {
     slots: &'static TxSlots<S, N>,
     spare: Option<S>,
-    /// A frame from elsewhere waited for the spare.
-    starved: bool,
 }
 
 impl<S: TxStorage, const N: usize> ParkedTx<S, N> {
     /// Over the image's `slots`; the device's memory comes in through
     /// [`Self::give`].
     pub const fn new(slots: &'static TxSlots<S, N>) -> Self {
-        Self {
-            slots,
-            spare: None,
-            starved: false,
-        }
+        Self { slots, spare: None }
     }
 
-    /// Whether a frame refused for want of the spare may go now.
+    /// Whether any frame may go now: the spare is here for one from
+    /// elsewhere.
     pub fn available(&self) -> bool {
-        !self.starved || self.spare.is_some()
+        self.spare.is_some()
     }
 
     /// Memory free for the network: the spare first, then parked for the
@@ -203,7 +175,6 @@ impl<S: TxStorage, const N: usize> ParkedTx<S, N> {
     pub fn give(&mut self, storage: S) {
         if self.spare.is_none() {
             self.spare = Some(storage);
-            self.starved = false;
             return;
         }
         if let Err(refused) = self.slots.park(TxInPlace(storage)) {
@@ -219,10 +190,7 @@ impl<S: TxStorage, const N: usize> ParkedTx<S, N> {
     /// A frame from elsewhere waits while the spare is out
     /// ([`TransmitError::QueueFull`]); one longer than the spare is refused
     /// ([`TransmitError::InvalidLength`]). Both keep the frame.
-    pub fn write<'r>(
-        &mut self,
-        frame: OwnedNetworkTxFrame<'r>,
-    ) -> Result<TxWritten<S>, TxWriteRefused<'r>> {
+    pub fn write(&mut self, frame: OwnedNetworkTxFrame) -> Result<TxWritten<S>, TxWriteRefused> {
         if self.slots.owns(frame.packet()) {
             return match self.slots.take(frame.into_packet()) {
                 Ok(taken) => Ok(TxWritten {
@@ -239,7 +207,6 @@ impl<S: TxStorage, const N: usize> ParkedTx<S, N> {
             };
         }
         let Some(mut spare) = self.spare.take() else {
-            self.starved = true;
             return Err(TxWriteRefused::Kept(TransmitRefused {
                 frame,
                 reason: TransmitError::QueueFull,
@@ -298,67 +265,32 @@ impl crate::OwnedLinkController<'_> {
 )]
 mod tests;
 
-/// Ethernet translation for an image whose existing bridge drains RX and
-/// moves up to its queue's capacity of TX frames per turn. RX, TX
-/// publication/capacity and link changes wake it.
-/// The adapter owns every packet and retains a refused TX across readiness
-/// waits. Observations are callbacks owned by the image, never counters here.
+/// Ethernet translation for an image whose existing bridge drains RX: RX
+/// and link changes wake it. The stack's sending path owns transmission.
+/// Observations are callbacks owned by the image, never counters here.
 pub struct EthernetBridge<
     'r,
     X: oer_portable_memory::ExecutionContext,
     const RX: usize,
-    const TX: usize,
-    D: OwnedTxDevice<'r>,
+    D: NetDevice,
     const LENT: usize,
 > {
-    radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
+    radio: crate::OwnedNetworkRunner<'r, X, RX>,
     device: D,
     lent: Option<&'static LentSlots<Lent<D>, LENT>>,
     link: oer_protocols_network_port::LinkSnapshot,
-    pending: Option<(u64, OwnedNetworkTxFrame<'r>)>,
-}
-
-/// What one bridge turn did with the stack's transmissions, for an image
-/// that observes them: the packets the stack's queue held for the device
-/// when the turn began, out of its `capacity`, whether a packet waited from
-/// an earlier turn, and what became of the turn's packet.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TxTurn {
-    pub queued: usize,
-    pub capacity: usize,
-    pub waited: bool,
-    pub outcome: TxOutcome,
-}
-
-/// What became of a bridge turn's packet.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TxOutcome {
-    /// None: the stack published no packet.
-    Idle,
-    /// The device took the packet.
-    Moved,
-    /// The packet waits for the device's room, for a later turn.
-    Held,
-    /// The device refused the packet for its length: it ended here.
-    Dropped,
 }
 
 /// The storage of a device's lent frames.
 pub type Lent<D> = <<D as NetDevice>::RxFrame as ReceivedFrame>::Storage;
 
-impl<
-    'r,
-    X: oer_portable_memory::ExecutionContext,
-    const RX: usize,
-    const TX: usize,
-    D: OwnedTxDevice<'r>,
-    const LENT: usize,
-> EthernetBridge<'r, X, RX, TX, D, LENT>
+impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice, const LENT: usize>
+    EthernetBridge<'r, X, RX, D, LENT>
 {
     /// `lent`, the image's `LENT` packet slots, adopts the frames the device
     /// lends; without it the bridge copies them.
     pub fn new(
-        radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
+        radio: crate::OwnedNetworkRunner<'r, X, RX>,
         device: D,
         lent: Option<&'static LentSlots<Lent<D>, LENT>>,
     ) -> Self {
@@ -367,26 +299,20 @@ impl<
             device,
             lent,
             link: oer_protocols_network_port::LinkSnapshot::DOWN,
-            pending: None,
         }
     }
     pub(crate) const fn link(&self) -> oer_protocols_network_port::LinkSnapshot {
         self.link
     }
 
-    pub(crate) fn stop(&mut self) -> Result<(), crate::AccessRefused> {
+    pub(crate) fn stop(&mut self) {
         self.radio.link_controller().set_link_up(false);
-        self.pending = None;
         // A received frame the device still queues may be lent: dropping it
         // returns it to the device before the device's own stop.
         while let Some(frame) = self.device.try_receive() {
             drop(frame);
         }
-        while let Some(packet) = self.radio.try_receive_tx()? {
-            drop(packet);
-        }
         self.reclaim_lent();
-        Ok(())
     }
 
     /// Return to the device every lent frame whose packet the stack
@@ -398,20 +324,16 @@ impl<
         }
     }
 
-    /// One turn: drain RX, then move TX frames until none is published or
-    /// the device holds one, at most the queue's capacity. Always arm link
-    /// and RX before observing them; a blocked TX remains owned here while
-    /// RX and link keep progressing. No timer or time driver is needed to
-    /// make an idle bridge run again.
+    /// One turn: follow the link and drain RX. Always arm link and RX before
+    /// observing them. No timer or time driver is needed to make an idle
+    /// bridge run again.
     pub fn poll(
         &mut self,
         cx: &mut core::task::Context<'_>,
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
         mut copied: impl FnMut(LentCopy),
-        mut transmitted: impl FnMut(TxTurn),
-    ) -> core::task::Poll<Result<core::convert::Infallible, crate::AccessRefused>> {
-        use core::task::Poll;
+    ) {
         // A lent frame's packet dropped later wakes this task to return it:
         // register before reclaiming, so no release is missed.
         if let Some(lent) = self.lent {
@@ -422,13 +344,6 @@ impl<
         self.radio
             .link_controller()
             .follow_device(&self.device, &mut self.link);
-        if self
-            .pending
-            .as_ref()
-            .is_some_and(|(epoch, _)| *epoch != self.link.epoch)
-        {
-            self.pending = None;
-        }
         // A frame stays with the device while the stack's queue is full:
         // the stack's next take wakes this bridge, and the device's owner
         // holds its frames back meanwhile. Register even when no frame is
@@ -460,75 +375,6 @@ impl<
             if let Err(reason) = published {
                 refused(reason);
             }
-        }
-        // Each pass that made progress tries again, which arms the next
-        // wait when nothing more is ready: a full queue moves and then arms
-        // in one turn. A turn that used its whole budget yields to other P1
-        // futures and runs again.
-        for _ in 0..=TX {
-            match self.poll_transmit_one(cx, &mut transmitted) {
-                Err(error) => return Poll::Ready(Err(error)),
-                Ok(false) => return Poll::Pending,
-                Ok(true) => {}
-            }
-        }
-        cx.waker().wake_by_ref();
-        Poll::Pending
-    }
-
-    fn poll_transmit_one(
-        &mut self,
-        cx: &mut core::task::Context<'_>,
-        transmitted: &mut impl FnMut(TxTurn),
-    ) -> Result<bool, crate::AccessRefused> {
-        use core::{future::Future, task::Poll};
-        let waited = self.pending.is_some();
-        let queued = self.radio.tx_queue_len()?;
-        let mut ended = |outcome, progress| {
-            transmitted(TxTurn {
-                queued,
-                capacity: TX,
-                waited,
-                outcome,
-            });
-            Ok(progress)
-        };
-        let (epoch, packet) = match self.pending.take() {
-            Some(pending) => pending,
-            None => {
-                {
-                    let mut publication = core::pin::pin!(self.radio.wait_tx_publication());
-                    match publication.as_mut().poll(cx) {
-                        Poll::Pending => return ended(TxOutcome::Idle, false),
-                        Poll::Ready(result) => result?,
-                    }
-                }
-                let Some(packet) = self.radio.try_receive_tx()? else {
-                    // The coalesced publication outlived its last packet.
-                    return ended(TxOutcome::Idle, true);
-                };
-                (self.link.epoch, packet)
-            }
-        };
-        if self.device.poll_transmit_ready(cx).is_pending() {
-            self.pending = Some((epoch, packet));
-            return ended(TxOutcome::Held, false);
-        }
-        match packet.transmit_to(&mut self.device) {
-            Ok(()) => ended(TxOutcome::Moved, true),
-            Err(refused) => match refused.reason {
-                oer_protocols_network_port::TransmitError::InvalidLength(_) => {
-                    ended(TxOutcome::Dropped, true)
-                }
-                oer_protocols_network_port::TransmitError::QueueFull
-                | oer_protocols_network_port::TransmitError::LinkDown => {
-                    self.pending = Some((epoch, refused.frame));
-                    // Readiness is only an observation. Rearm after a refusal;
-                    // if credit is already back, schedule another bounded turn.
-                    let again = self.device.poll_transmit_ready(cx).is_ready();
-                    ended(TxOutcome::Held, again)
-                }
-            },
         }
     }
 }

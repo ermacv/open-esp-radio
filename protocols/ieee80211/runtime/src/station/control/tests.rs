@@ -104,7 +104,8 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
     let supply = Supply::with(2);
-    let mut device = Device::new(sender, back, supply.clone(), receive, copied, &state);
+    let _device: Device<'_, ModelLentRx, 1> = Device::new(receive, copied, &state);
+    let mut device = DeviceTransmit::new(sender, back, supply.clone(), &state);
     let dropped = Rc::new(Cell::new(0));
     let first = Frame {
         owner: dropped.clone(),
@@ -158,7 +159,7 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
         .unwrap();
     assert_eq!(third.reason, TransmitError::QueueFull);
     let mut cx = Context::from_waker(core::task::Waker::noop());
-    assert!(device.poll_transmit_ready(&mut cx).is_pending());
+    assert!(device.poll_room(&mut cx).is_pending());
     // The station gives the memory back once its MSDU ended: the network
     // end takes it on its next poll, free for the next frame.
     assert!(
@@ -169,7 +170,7 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
             })
             .is_ok()
     );
-    assert!(device.poll_transmit_ready(&mut cx).is_ready());
+    assert!(device.poll_room(&mut cx).is_ready());
     assert_eq!(supply.free(), 1);
     assert!(device.try_transmit(third.frame).is_ok());
     drop(second);
@@ -227,8 +228,9 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let (received, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (copy, copied) = copies.split();
-    let mut device: Device<'_, _, Frame, _, 1, 1> =
-        Device::new(sender, back, Supply::with(1), receive, copied, &state);
+    let mut device: Device<'_, _, 1> = Device::new(receive, copied, &state);
+    let _transmit: DeviceTransmit<'_, Frame, _, 1> =
+        DeviceTransmit::new(sender, back, Supply::with(1), &state);
     let wake = Arc::new(WakeCount(AtomicUsize::new(0)));
     let waker = core::task::Waker::from(wake.clone());
     let mut cx = Context::from_waker(&waker);
@@ -330,7 +332,8 @@ fn a_network_frame_requests_the_priority_of_its_marking() {
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
-    let mut device = Device::new(sender, back, Supply::with(4), receive, copied, &state);
+    let _device: Device<'_, ModelLentRx, 1> = Device::new(receive, copied, &state);
+    let mut device = DeviceTransmit::new(sender, back, Supply::with(4), &state);
     let mut status = state.status.get();
     status.link = LinkSnapshot {
         state: LinkState::Up,
@@ -700,22 +703,22 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     let (mut returned, back) = back.split(|| None);
     let (_, receive) = rx.split();
     let (_, copied) = copies.split();
-    let mut device: Device<'_, ModelLentRx, Frame, Supply, 1, 1, Two> =
-        Device::new(sender, back, Supply::with(2), receive, copied, &state);
+    let mut device: Device<'_, ModelLentRx, 1, Two> = Device::new(receive, copied, &state);
+    let mut transmit: DeviceTransmit<'_, Frame, Supply, 1, Two> =
+        DeviceTransmit::new(sender, back, Supply::with(2), &state);
     let mut cx = Context::from_waker(core::task::Waker::noop());
 
-    // The network waits on its own side for the link, for returned
-    // packets and for frames.
+    // The network waits on its own side for the link and for frames.
     assert!(device.poll_link(&mut cx).is_pending());
     assert!(device.poll_receive_ready(&mut cx).is_pending());
-    assert_eq!(network.counts(), (3, 1));
+    assert_eq!(network.counts(), (2, 1));
     let mut status = state.status.get();
     status.link = LinkSnapshot {
         state: LinkState::Up,
         epoch: 3,
     };
     state.set_status(status);
-    assert_eq!(network.counts(), (3, 2), "a link change tells the network");
+    assert_eq!(network.counts(), (2, 2), "a link change tells the network");
 
     // A transmitted frame tells the waiting station; its read tells the
     // network waiting for room.
@@ -729,15 +732,15 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
         owner: Rc::new(Cell::new(0)),
         payload: [1; 4],
     };
-    assert!(device.try_transmit(frame).is_ok());
+    assert!(transmit.try_transmit(frame).is_ok());
     assert_eq!(station.counts(), (1, 1));
     // Waiting for room, it also waits for returned memory.
-    assert!(device.poll_transmit_ready(&mut cx).is_pending());
-    assert_eq!(network.counts(), (6, 2));
+    assert!(transmit.poll_room(&mut cx).is_pending());
+    assert_eq!(network.counts(), (4, 2));
     let Ok(Some(outgoing)) = transmitted.try_receive_with(Option::take) else {
         panic!("the transmitted owner");
     };
-    assert_eq!(network.counts(), (6, 3));
+    assert_eq!(network.counts(), (4, 3));
     // The memory the station returns tells the network waiting for it.
     assert!(
         returned
@@ -747,7 +750,7 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
             })
             .is_ok()
     );
-    assert_eq!(network.counts(), (6, 4));
+    assert_eq!(network.counts(), (4, 4));
 }
 
 #[test]
@@ -819,6 +822,32 @@ impl<P> TxSupply<P> for Losing {
 }
 
 #[test]
+fn asking_for_room_takes_returned_memory_back() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+    let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<Vec<u8>>, 1>::new();
+    let state = State::new();
+    let (sender, _) = commands.split();
+    let (_control, _runner) = Control::new(sender, &state).unwrap();
+    let (sender, _receiver) = tx.split(|| None);
+    let (mut returned, back) = back.split(|| None);
+    let supply = Supply::with(0);
+    let mut device: DeviceTransmit<'_, Frame, _, 1> =
+        DeviceTransmit::new(sender, back, supply.clone(), &state);
+    assert!(!device.has_room(), "no memory is no room");
+    assert!(
+        returned
+            .try_send_with(|slot| {
+                *slot = Some(std::vec![0; 1600]);
+                Ok::<_, core::convert::Infallible>(())
+            })
+            .is_ok()
+    );
+    assert!(device.has_room());
+    assert_eq!(supply.free(), 1);
+}
+
+#[test]
 fn a_frame_lost_with_its_memory_is_accepted_and_reaches_no_station() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
@@ -832,8 +861,9 @@ fn a_frame_lost_with_its_memory_is_accepted_and_reaches_no_station() {
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
-    let mut device: Device<'_, _, Frame, _, 1, 1> =
-        Device::new(sender, back, Losing, receive, copied, &state);
+    let _device: Device<'_, ModelLentRx, 1> = Device::new(receive, copied, &state);
+    let mut device: DeviceTransmit<'_, Frame, _, 1> =
+        DeviceTransmit::new(sender, back, Losing, &state);
     let mut status = state.status.get();
     status.link = LinkSnapshot {
         state: LinkState::Up,

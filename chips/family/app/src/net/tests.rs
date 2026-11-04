@@ -137,12 +137,12 @@ fn a_wait_ends_with_the_services_stop_or_failure() {
         LinkState::Down,
         0,
         Ipv4Status::Unconfigured,
-        Lifecycle::Failed(ServiceError::ContextAccessRefused),
+        Lifecycle::Failed(ServiceError::DhcpMediumMismatch),
     ));
     let mut after = pin!(wait_ipv4(&watchers, || current.get()));
     assert_eq!(
         poll(after.as_mut(), &waker),
-        Poll::Ready(Err(NetError::Failed(ServiceError::ContextAccessRefused)))
+        Poll::Ready(Err(NetError::Failed(ServiceError::DhcpMediumMismatch)))
     );
 }
 

@@ -1,14 +1,12 @@
 extern crate std;
 
 use super::*;
-use crate::ethernet::{TxOutcome, TxTurn};
+use crate::sink::Sink;
 use core::{cell::RefCell, pin::Pin, task::Waker};
 use oer_portable_memory::HostContext;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
-use oer_protocols_network_port::{
-    EthernetFrame, FrameLengthError, NetDevice, TransmitError, TransmitRefused,
-};
+use oer_protocols_network_port::{EthernetFrame, FrameLengthError};
 use std::{
     boxed::Box,
     collections::VecDeque,
@@ -20,7 +18,6 @@ use std::{
     task::Wake,
     vec::Vec,
 };
-use xarxa_driver::{PacketBuf, PacketBufAllocator};
 
 const CONFIG: Ipv4Configuration = Ipv4Configuration {
     address: [192, 0, 2, 2],
@@ -173,11 +170,7 @@ struct PortState {
     link: LinkSnapshot,
     link_waker: Option<Waker>,
     rx_waker: Option<Waker>,
-    tx_waker: Option<Waker>,
     rx: VecDeque<Frame>,
-    accepted: Vec<usize>,
-    ready: bool,
-    refuse_once: bool,
 }
 impl PortState {
     fn wake(waker: &Option<Waker>) {
@@ -190,12 +183,9 @@ impl PortState {
         Self::wake(&self.link_waker);
     }
 }
-struct Port<F>(Rc<RefCell<PortState>>, core::marker::PhantomData<F>);
-/// The port the IP service drives: it takes the stack's packet owners.
-type IpPort = Port<crate::OwnedNetworkTxFrame<'static>>;
-impl<F: EthernetFrame> NetDevice for Port<F> {
+struct IpPort(Rc<RefCell<PortState>>);
+impl NetDevice for IpPort {
     type RxFrame = Frame;
-    type TxFrame = F;
     fn link(&self) -> LinkSnapshot {
         self.0.borrow().link
     }
@@ -226,30 +216,6 @@ impl<F: EthernetFrame> NetDevice for Port<F> {
     ) -> Result<R, FrameLengthError> {
         copied.view().map(read)
     }
-    fn poll_transmit_ready(&mut self, cx: &mut core::task::Context<'_>) -> Poll<()> {
-        let mut state = self.0.borrow_mut();
-        state.tx_waker = Some(cx.waker().clone());
-        if state.ready && state.link.state == LinkState::Up {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
-    }
-    fn try_transmit(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
-        let mut state = self.0.borrow_mut();
-        if !state.ready || state.refuse_once {
-            state.refuse_once = false;
-            state.ready = false;
-            return Err(TransmitRefused {
-                frame,
-                reason: TransmitError::QueueFull,
-            });
-        }
-        state
-            .accepted
-            .push(frame.view().unwrap().payload.as_ptr() as usize);
-        Ok(())
-    }
 }
 fn port() -> (IpPort, Rc<RefCell<PortState>>) {
     let state = Rc::new(RefCell::new(PortState {
@@ -259,13 +225,9 @@ fn port() -> (IpPort, Rc<RefCell<PortState>>) {
         },
         link_waker: None,
         rx_waker: None,
-        tx_waker: None,
         rx: VecDeque::new(),
-        accepted: Vec::new(),
-        ready: true,
-        refuse_once: false,
     }));
-    (Port(state.clone(), core::marker::PhantomData), state)
+    (IpPort(state.clone()), state)
 }
 /// The lent packet slots of the services these tests start.
 const LENT: usize = 4;
@@ -274,8 +236,9 @@ fn start<X: ExecutionContext>(
     configuration: Configuration,
 ) -> (
     Control<'static>,
-    Service<X, 2, 1, IpPort, LENT>,
+    Service<X, 2, Sink, IpPort, LENT>,
     Rc<RefCell<PortState>>,
+    Sink,
 ) {
     start_lent(configuration, None)
 }
@@ -285,14 +248,17 @@ fn start_lent<X: ExecutionContext>(
     lent: Option<&'static crate::ethernet::LentSlots<Lent, LENT>>,
 ) -> (
     Control<'static>,
-    Service<X, 2, 1, IpPort, LENT>,
+    Service<X, 2, Sink, IpPort, LENT>,
     Rc<RefCell<PortState>>,
+    Sink,
 ) {
     let (port, state) = port();
-    let resources = Box::leak(Box::new(Resources::<X, 2, 1>::new()));
+    let sink = Sink::with_room(4);
+    let resources = Box::leak(Box::new(Resources::<X, 2, Sink>::new()));
     let (control, service) = resources
         .start(
             port,
+            sink.clone(),
             lent,
             general::<8>(),
             NetworkInterfaceId::new(0),
@@ -300,8 +266,8 @@ fn start_lent<X: ExecutionContext>(
             1,
             configuration,
         )
-        .unwrap_or_else(|refused| panic!("start refused: {:?}", refused.reason));
-    (control, service, state)
+        .unwrap_or_else(|reason| panic!("start refused: {reason:?}"));
+    (control, service, state, sink)
 }
 
 // The stack boundary supplies lease events and protocol deadlines. Production
@@ -368,7 +334,7 @@ impl Interface for StackEvents<'_> {
 fn lease_events_expiry_and_coalesced_reconnect_keep_the_stack_and_socket() {
     let clock = VirtualClock::new();
     let stack_events = StackEvents::new(&clock);
-    let (control, mut service, port) = start::<HostContext>(Configuration::Dhcpv4);
+    let (control, mut service, port, _) = start::<HostContext>(Configuration::Dhcpv4);
     let stack = service.stack();
     let iface = service.interface();
     let marker = Ipv4Addr::new(198, 51, 100, 8);
@@ -391,7 +357,6 @@ fn lease_events_expiry_and_coalesced_reconnect_keep_the_stack_and_socket() {
             Configuration::Dhcpv4,
             |cx| stack_events.poll(cx),
             |event| events.borrow_mut().push(event),
-            |_| {},
             |_| {},
             |_| {},
             |_| {},
@@ -465,28 +430,13 @@ fn lease_events_expiry_and_coalesced_reconnect_keep_the_stack_and_socket() {
     drop(socket);
 }
 
-fn allocator() -> PacketBufAllocator {
-    let storage = Box::leak(Box::new(PacketPoolStorage::<1>::new()));
-    Box::leak(Box::new(PacketPool::new(storage))).allocator()
-}
-fn packet(pool: PacketBufAllocator) -> PacketBuf {
-    let mut packet = pool.try_alloc().unwrap();
-    packet.set_len(15);
-    packet.copy_from_slice(&[2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 0x88, 0xb5, 9]);
-    packet
-}
-
 #[test]
-fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
+fn a_full_device_stops_no_reception_and_only_its_room_or_a_frame_wakes_the_service() {
     let clock = VirtualClock::new();
     let stack_events = StackEvents::new(&clock);
-    let (control, mut service, port) = start::<HostContext>(Configuration::Dhcpv4);
+    let (control, mut service, port, sink) = start::<HostContext>(Configuration::Dhcpv4);
     let iface = service.interface();
-    let pool = allocator();
-    let packet = packet(pool);
-    let original_payload = packet.get(14..).unwrap().as_ptr() as usize;
     let received = Cell::new(0u32);
-    let turns = RefCell::new(Vec::new());
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
     let mut cx = core::task::Context::from_waker(&waker);
@@ -500,61 +450,20 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
         |_| received.set(received.get().saturating_add(1)),
         |_| {},
         |_| {},
-        |turn| turns.borrow_mut().push(turn),
     ));
-    // The turns that had a packet, without the idle ones.
-    let busy = || {
-        turns
-            .borrow()
-            .iter()
-            .filter(|turn| turn.outcome != TxOutcome::Idle)
-            .copied()
-            .collect::<Vec<_>>()
-    };
     settle(&mut task, &scheduled, &mut cx);
-    port.borrow_mut().refuse_once = true;
-    iface.with_driver(|driver| driver.transmit(packet)).unwrap();
-    settle(&mut task, &scheduled, &mut cx);
-    assert!(pool.try_alloc().is_none());
-    assert!(
-        !iface.with_driver(|driver| driver.can_transmit()),
-        "retained packet keeps the single TX credit"
-    );
-    let held = TxTurn {
-        queued: 1,
-        capacity: 1,
-        waited: false,
-        outcome: TxOutcome::Held,
-    };
-    assert_eq!(busy(), [held], "the refused packet waits for the device");
+    sink.0.borrow_mut().room = 0;
+    assert!(!iface.with_driver(|driver| driver.can_transmit()));
     port.borrow_mut().rx.push_back(Frame::Plain);
     PortState::wake(&port.borrow().rx_waker);
     settle(&mut task, &scheduled, &mut cx);
     assert_eq!(received.get(), 1);
-    assert!(pool.try_alloc().is_none());
     assert_eq!(clock.next_deadline(), None);
     clock.advance(Duration::from_secs(600)).unwrap();
     assert!(
         !scheduled.0.load(Ordering::Relaxed),
         "virtual time alone cannot wake an idle/blocked service"
     );
-    port.borrow_mut().ready = true;
-    PortState::wake(&port.borrow().tx_waker);
-    settle(&mut task, &scheduled, &mut cx);
-    assert_eq!(port.borrow().accepted, [original_payload]);
-    let moved = TxTurn {
-        queued: 0,
-        waited: true,
-        outcome: TxOutcome::Moved,
-        ..held
-    };
-    assert_eq!(
-        busy().last(),
-        Some(&moved),
-        "the waiting packet goes once the device has room"
-    );
-    assert!(pool.try_alloc().is_some());
-    assert!(iface.with_driver(|driver| driver.can_transmit()));
     // A frame the device still queues at the stop may be lent: the stop
     // drops it, which returns it to the device.
     port.borrow_mut().rx.push_back(Frame::Plain);
@@ -564,71 +473,34 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
 }
 
 #[test]
-fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration() {
-    for retained in [false, true] {
-        let (control, mut service, port) = start::<HostContext>(Configuration::Static(CONFIG));
-        let iface = service.interface();
-        let pool = allocator();
-        // Prime the bridge without polling Embassy's time ABI.
-        let waker = Waker::noop();
-        let mut cx = core::task::Context::from_waker(waker);
-        assert!(
-            service
-                .bridge
-                .poll(&mut cx, |_| {}, |_| {}, |_| {}, |_| {})
-                .is_pending()
-        );
-        assert!(iface.has_ip_addr(Ipv4Addr::from(CONFIG.address)));
-        assert_eq!(service.stack().routes().len(), 1);
-        port.borrow_mut().ready = false;
-        iface
-            .with_driver(|driver| driver.transmit(packet(pool)))
-            .unwrap();
-        if retained {
-            assert!(
-                service
-                    .bridge
-                    .poll(&mut cx, |_| {}, |_| {}, |_| {}, |_| {})
-                    .is_pending()
-            );
-        }
-        assert!(pool.try_alloc().is_none());
-        control.stop();
-        control.stop();
-        {
-            let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
-            assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
-        }
-        assert!(pool.try_alloc().is_some());
-        assert!(!iface.is_link_up());
-        assert!(!iface.is_config_v4_up());
-        assert!(service.stack().routes().is_empty());
-        assert_eq!(control.status().lifecycle, Lifecycle::Stopped);
-        // A terminal service can be polled again without touching the stack ABI.
-        let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+fn public_stop_clears_static_configuration() {
+    let (control, mut service, _, _) = start::<HostContext>(Configuration::Static(CONFIG));
+    let iface = service.interface();
+    // Prime the bridge without polling Embassy's time ABI.
+    let waker = Waker::noop();
+    let mut cx = core::task::Context::from_waker(waker);
+    service.bridge.poll(&mut cx, |_| {}, |_| {}, |_| {});
+    assert!(iface.has_ip_addr(Ipv4Addr::from(CONFIG.address)));
+    assert_eq!(service.stack().routes().len(), 1);
+    control.stop();
+    control.stop();
+    {
+        let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
         assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
     }
-}
-
-#[test]
-fn context_refusal_is_a_typed_terminal_and_does_not_poll_the_stack() {
-    let (control, mut service, _) = start::<oer_portable_memory::Never>(Configuration::Dhcpv4);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
-    assert_eq!(
-        task.as_mut()
-            .poll(&mut core::task::Context::from_waker(Waker::noop())),
-        Poll::Ready(Err(Error::ContextAccessRefused))
-    );
-    assert_eq!(
-        control.status().lifecycle,
-        Lifecycle::Failed(Error::ContextAccessRefused)
-    );
+    assert!(!iface.is_link_up());
+    assert!(!iface.is_config_v4_up());
+    assert!(service.stack().routes().is_empty());
+    assert_eq!(control.status().lifecycle, Lifecycle::Stopped);
+    // A terminal service can be polled again without touching the stack ABI.
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+    assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
 }
 
 #[test]
 fn static_status_tracks_link_events_and_stop_clears_the_real_interface() {
     let clock = VirtualClock::<1>::new();
-    let (control, mut service, port) = start::<HostContext>(Configuration::Static(CONFIG));
+    let (control, mut service, port, _) = start::<HostContext>(Configuration::Static(CONFIG));
     let iface = service.interface();
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
@@ -638,7 +510,6 @@ fn static_status_tracks_link_events_and_stop_clears_the_real_interface() {
         &mut service.bridge,
         &iface,
         Configuration::Static(CONFIG),
-        |_| {},
         |_| {},
         |_| {},
         |_| {},
@@ -665,7 +536,7 @@ fn static_status_tracks_link_events_and_stop_clears_the_real_interface() {
 }
 
 #[test]
-fn invalid_static_configuration_returns_the_original_device() {
+fn invalid_static_configuration_is_refused_by_name() {
     for (config, expected) in [
         (
             Ipv4Configuration {
@@ -689,11 +560,12 @@ fn invalid_static_configuration_returns_the_original_device() {
             Error::GatewayNotUnicast,
         ),
     ] {
-        let (port, original) = port();
-        let resources = Box::leak(Box::new(Resources::<HostContext, 1, 1>::new()));
+        let (port, _) = port();
+        let resources = Box::leak(Box::new(Resources::<HostContext, 1, Sink>::new()));
         let refused = resources
             .start(
                 port,
+                Sink::with_room(1),
                 None::<&'static crate::ethernet::LentSlots<Lent, LENT>>,
                 general::<1>(),
                 NetworkInterfaceId::new(0),
@@ -703,8 +575,7 @@ fn invalid_static_configuration_returns_the_original_device() {
             )
             .err()
             .unwrap();
-        assert_eq!(refused.reason, expected);
-        assert!(Rc::ptr_eq(&refused.device.0, &original));
+        assert_eq!(refused, expected);
     }
 }
 
@@ -716,13 +587,14 @@ fn general<const N: usize>() -> xarxa_driver::PacketBufAllocator {
 
 #[test]
 fn a_general_allocator_another_stack_waits_on_is_refused_before_a_stack_is_built() {
-    let (port, original) = port();
+    let (port, _) = port();
     let general = general::<1>();
     let _held = general.try_claim_waiter().unwrap();
-    let resources = Box::leak(Box::new(Resources::<HostContext, 1, 1>::new()));
+    let resources = Box::leak(Box::new(Resources::<HostContext, 1, Sink>::new()));
     let refused = resources
         .start(
             port,
+            Sink::with_room(1),
             None::<&'static crate::ethernet::LentSlots<Lent, LENT>>,
             general,
             NetworkInterfaceId::new(0),
@@ -732,30 +604,23 @@ fn a_general_allocator_another_stack_waits_on_is_refused_before_a_stack_is_built
         )
         .err()
         .unwrap();
-    assert_eq!(refused.reason, Error::GeneralWaiterUnavailable);
-    assert!(Rc::ptr_eq(&refused.device.0, &original));
+    assert_eq!(refused, Error::GeneralWaiterUnavailable);
 }
 
 #[test]
 fn a_stop_returns_every_lent_buffer_including_the_replies_the_stack_retains() {
     let slots: &'static crate::ethernet::LentSlots<Lent, 4> =
         Box::leak(Box::new(crate::ethernet::LentSlots::new()));
-    let (control, mut service, port) =
+    let (control, mut service, port, sink) =
         start_lent::<HostContext>(Configuration::Static(CONFIG), Some(slots));
-    let iface = service.interface();
-    let pool = allocator();
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
     let mut cx = core::task::Context::from_waker(&waker);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
     settle(&mut task, &scheduled, &mut cx);
-    // The device takes no frame and the stack's one TX credit is out: its
-    // replies wait inside it, each in its request's packet.
-    port.borrow_mut().ready = false;
-    iface
-        .with_driver(|driver| driver.transmit(packet(pool)))
-        .unwrap();
-    settle(&mut task, &scheduled, &mut cx);
+    // The device has no room: the stack's replies wait inside it, each in
+    // its request's packet.
+    sink.0.borrow_mut().room = 0;
     let returned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     // The peer's ARP request teaches the stack its MAC; its buffer returns
     // once the stack has read it.
@@ -765,8 +630,8 @@ fn a_stop_returns_every_lent_buffer_including_the_replies_the_stack_retains() {
     PortState::wake(&port.borrow().rx_waker);
     settle(&mut task, &scheduled, &mut cx);
     assert_eq!(returned.load(Ordering::Relaxed), 1);
-    // The echo reply reuses its request's lent buffer and waits for TX
-    // credit inside the stack.
+    // The echo reply reuses its request's lent buffer and waits for the
+    // device's room inside the stack.
     port.borrow_mut()
         .rx
         .push_back(lent(0x0800, &echo_request(), &returned));
@@ -808,7 +673,7 @@ fn udp_datagram(port: u16, payload: &[u8]) -> Vec<u8> {
 fn a_stop_returns_the_lent_buffers_an_open_socket_queues() {
     let slots: &'static crate::ethernet::LentSlots<Lent, 4> =
         Box::leak(Box::new(crate::ethernet::LentSlots::new()));
-    let (control, mut service, port) =
+    let (control, mut service, port, _) =
         start_lent::<HostContext>(Configuration::Static(CONFIG), Some(slots));
     let mut socket = owned_embassy_net::udp::UdpSocket::new(service.stack()).unwrap();
     socket
@@ -817,7 +682,7 @@ fn a_stop_returns_the_lent_buffers_an_open_socket_queues() {
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
     let mut cx = core::task::Context::from_waker(&waker);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
     settle(&mut task, &scheduled, &mut cx);
     let returned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for payload in [[1, 2, 3], [4, 5, 6]] {

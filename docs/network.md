@@ -26,7 +26,7 @@ aliases and include optional and target-specific dependencies.
   storage, a seed and the `PacketBufAllocator`; the Wi-Fi device is lent with
   `add_iface_borrowed`, and IP configuration is set on the returned interface.
 - The forks add explicit RX/TX packet pools, packet-owner handoff to the
-  driver, credit-return wakes, bounded polling and construction in resource
+  driver, a full device's room wake, bounded polling and construction in resource
   storage. A UDP or raw send blocked on the device wakes when its interface
   has room, one blocked on an empty pool when the pool has a buffer again;
   the stack never busy-retries a pool.
@@ -40,10 +40,10 @@ aliases and include optional and target-specific dependencies.
 
 | Crate | Owns | Does not own |
 | --- | --- | --- |
-| `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
+| `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, the `NetDevice` and `NetTransmit` contracts | queues, allocator, executor, hardware |
 | `oer-protocols-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-portable-wire` | decisions about a packet, IEEE 802.11 formats |
 | `oer-protocols-bridges-ieee80211-ethernet` (`protocols/bridges/ieee80211-ethernet`) | the requested WMM user priority of an outgoing frame from its VLAN PCP or IP DSCP | the final priority, which the station decides from its link |
-| `oer-portable-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools, a device's transmit memory parked as the stack's general packets (`ParkedTx`); in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
+| `oer-portable-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, stack wake registration, RX copying into packet pools, a device's transmit memory parked as the stack's general packets (`ParkedTx`); in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
 | `oer-portable-embassy-net::ip` | final pool/stack storage, one `EthernetBridge` over `NetDevice`, DHCP/static IPv4, link epoch and typed configuration/stop/error status | radio installation, a second stack, a common TCP/UDP API |
 | `oer-chips-esp32s31-ieee80211-driver::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
 | `oer-protocols-ieee80211-core-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
@@ -54,9 +54,8 @@ aliases and include optional and target-specific dependencies.
 ```text
 network stack (P1)
     builds a PacketBuf in a station transmit buffer (its general allocator)
-    classifies Ethernet destination and transport headers once
-    publishes into destination/flow queues over one owner pool
-network end (P1)
+    hands it to the network end, in the call that sent it
+network end (P1, the same call)
     takes the buffer out of the packet: the frame stays where it was written
     copies a frame from elsewhere (a reply in a received buffer) into its spare
     publishes the buffer to the station
@@ -68,35 +67,9 @@ station (P2)
 - **The stack's general packets are the station's transmit buffers.** The
   network end parks every buffer the port does not hold in `TxSlots`
   (`oer-portable-embassy-net::ethernet`), whose allocator is the stack's
-  general allocator; a dropped packet parks its buffer again. A refused
-  submission returns the original `PacketBuf` with its credit.
-- **Epochs.** Queue entries carry the interface link epoch; AP-retained owners
-  also carry the association generation established at radio admission.
-  Ethernet destination metadata alone grants no association or security
-  authority.
-- **`TxQueues`** holds one owner pool and two levels of metadata: destination,
-  then transport flow. Each take rotates among a destination's nonempty flow
-  FIFOs; several flows give no extra destination turns and can fill the same
-  aggregate. `pending_for` and readiness count the whole destination.
-  Selection scans metadata, never packets. A free owner slot always admits a
-  new destination or flow (the stack's `can_transmit()` is destination-blind);
-  there is no per-peer or per-flow reservation. `next_head_after` gives the
-  next destination in address order, wrapping.
-- **Admission credit.** The queue depth bounds every admitted software owner,
-  in adapter queues and held by the radio together. Dequeue moves the credit
-  with the owner; packet destruction returns the pool slot before it releases
-  admission and wakes a blocked producer. SRAM materialization consumes the
-  software owner and its admission; physical credits stay taken until DMA
-  completion.
-- **`TransportFlow`** classifies Ethernet-II IPv4/IPv6 TCP and UDP by exact
-  directional addresses, protocol and ports (IPv4 options respected).
-  Fragmented IPv4 uses one coarse addresses/protocol FIFO, including the first
-  fragment; IPv6 extension chains are not traversed (addresses plus initial
-  next header); VLAN, other encapsulations and malformed headers use an opaque
-  FIFO. These are scheduling hints, never acceptance or security decisions.
-  Order holds within a FIFO, not across a fragmented and an unfragmented class.
-  Packet round-robin is not byte or airtime fairness.
-
+  general allocator; a dropped packet parks its buffer again. The station's
+  transmit queue is the one queue on the way: a full one refuses the original
+  `PacketBuf` to the stack, which keeps it and waits for the room wake.
 ## Airtime ledger (`oer-protocols-ieee80211-core-upper-mac::airtime`)
 
 - `AirtimeStorage` holds bounded per-peer deficit accounts apart from packet
@@ -169,7 +142,7 @@ completions cannot bypass the settle interval.
   radio's DMA storage, and the packet returns to its pool when dropped.
 - Cross-domain wakes are hints over durable state: consumers check, arm and
   recheck before sleeping. An exhausted work budget self-wakes; real resource
-  exhaustion waits for its credit-return edge. RX availability and general
+  exhaustion waits for its return edge. RX availability and general
   pool availability (transmit buffers parked again) are separate domains.
 
 ## Access point egress

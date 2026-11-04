@@ -1,4 +1,5 @@
 use super::*;
+use crate::sink::Sink;
 use oer_portable_memory::HostContext;
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
@@ -21,25 +22,6 @@ impl Wake for WakeCount {
     }
 }
 
-#[test]
-fn a_displaced_registration_wakes_only_a_different_task_and_releases_its_waker() {
-    let current_count = Arc::new(WakeCount::default());
-    let current = Waker::from(current_count.clone());
-
-    wake_replaced(None, &current);
-    wake_replaced(Some(current.clone()), &current);
-    assert_eq!(current_count.0.load(StdOrdering::Relaxed), 0);
-    assert_eq!(Arc::strong_count(&current_count), 2);
-
-    let previous_count = Arc::new(WakeCount::default());
-    let previous = Waker::from(previous_count.clone());
-    wake_replaced(Some(previous), &current);
-    assert_eq!(previous_count.0.load(StdOrdering::Relaxed), 1);
-    assert_eq!(current_count.0.load(StdOrdering::Relaxed), 0);
-    assert_eq!(Arc::strong_count(&previous_count), 1);
-    assert_eq!(Arc::strong_count(&current_count), 2);
-}
-
 fn allocator<const N: usize>() -> PacketBufAllocator {
     let storage = Box::leak(Box::new(PacketPoolStorage::<N>::new()));
     Box::leak(Box::new(PacketPool::new(storage))).allocator()
@@ -52,31 +34,94 @@ fn frame(allocator: PacketBufAllocator, marker: u8) -> PacketBuf {
     packet
 }
 
-#[test]
-fn tx_owner_returns_to_its_origin_after_radio_completion() {
-    let general = allocator::<1>();
-    let rx = allocator::<1>();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 1>::new()));
-    let (mut device, mut radio) = resources
-        .split(NetworkInterfaceId::new(3), [2, 0, 0, 0, 0, 3], rx)
+/// An endpoint with its link up over a device of `room` frames.
+fn endpoint(
+    room: usize,
+) -> (
+    OwnedNetworkDevice<'static, HostContext, 1, Sink>,
+    OwnedNetworkRunner<'static, HostContext, 1>,
+    Sink,
+) {
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1>::new()));
+    let sink = Sink::with_room(room);
+    let (device, mut radio) = resources
+        .split(
+            NetworkInterfaceId::new(0),
+            [2; 6],
+            allocator::<1>(),
+            sink.clone(),
+        )
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
+    (device, radio, sink)
+}
 
+#[test]
+fn a_transmitted_packet_goes_straight_to_the_device_and_returns_to_its_origin() {
+    let general = allocator::<1>();
+    let (mut device, _radio, sink) = endpoint(1);
     device.transmit(frame(general, 0x51)).unwrap();
     assert!(general.try_alloc().is_none());
-    let queued = radio.try_receive_tx().unwrap().unwrap();
-    assert_eq!(queued.interface(), NetworkInterfaceId::new(3));
-    assert_eq!(queued.ethernet(), &[0x51; ETHERNET_HEADER_LEN]);
-    drop(queued);
+    let taken = sink.0.borrow_mut().taken.pop_front().unwrap();
+    assert_eq!(taken.ethernet(), &[0x51; ETHERNET_HEADER_LEN]);
+    drop(taken);
     assert!(general.try_alloc().is_some());
+}
+
+#[test]
+fn a_full_device_hands_the_packet_back_unchanged() {
+    let general = allocator::<1>();
+    let (mut device, _radio, _sink) = endpoint(0);
+    let packet = device.transmit(frame(general, 0x52)).unwrap_err();
+    assert_eq!(&*packet, &[0x52; ETHERNET_HEADER_LEN]);
+}
+
+#[test]
+fn a_full_device_wakes_the_stack_once_it_has_room() {
+    let (mut device, _radio, sink) = endpoint(0);
+    let count = Arc::new(WakeCount::default());
+    device.register_waker(&Waker::from(count.clone()));
+    assert!(sink.0.borrow().waker.is_some());
+    sink.0.borrow_mut().waker = None;
+    // A later refusal arms again, without another stack poll.
+    assert!(!device.can_transmit());
+    sink.free(1);
+    assert_eq!(count.0.load(StdOrdering::Relaxed), 1);
+    assert!(device.can_transmit());
+}
+
+#[test]
+fn a_device_with_room_registers_nothing_at_each_frame() {
+    let (mut device, _radio, sink) = endpoint(1);
+    assert!(device.can_transmit());
+    assert!(sink.0.borrow().waker.is_none());
+}
+
+#[test]
+fn a_replaced_stack_task_is_the_one_a_full_device_wakes() {
+    let (mut device, _radio, sink) = endpoint(0);
+    let first = Arc::new(WakeCount::default());
+    let second = Arc::new(WakeCount::default());
+    device.register_waker(&Waker::from(first.clone()));
+    device.register_waker(&Waker::from(second.clone()));
+    sink.0.borrow_mut().waker = None;
+    assert!(!device.can_transmit());
+    sink.free(1);
+    assert_eq!(first.0.load(StdOrdering::Relaxed), 0);
+    assert_eq!(second.0.load(StdOrdering::Relaxed), 1);
 }
 
 #[test]
 fn rx_owner_survives_handoff_and_returns_to_rx_pool() {
     let rx = allocator::<1>();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 1>::new()));
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1>::new()));
     let (mut device, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2, 0, 0, 0, 0, 1], rx)
+        .split(
+            NetworkInterfaceId::new(0),
+            [2, 0, 0, 0, 0, 1],
+            rx,
+            Sink::with_room(1),
+        )
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
 
@@ -97,9 +142,9 @@ fn rx_owner_survives_handoff_and_returns_to_rx_pool() {
 #[test]
 fn copied_rx_is_independent_of_source_storage_until_the_packet_drops() {
     let rx = allocator::<1>();
-    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
+    let mut resources = OwnedEndpointResources::<HostContext, 1>::new();
     let (mut device, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], rx)
+        .split(NetworkInterfaceId::new(0), [2; 6], rx, Sink::with_room(1))
         .expect("endpoint split");
     radio.link_controller().set_link_up(true);
     let publisher = radio.rx_publisher();
@@ -123,9 +168,14 @@ fn copied_rx_is_independent_of_source_storage_until_the_packet_drops() {
 fn rx_readiness_waits_for_both_link_and_pool_capacity() {
     let rx = allocator::<1>();
     let held = rx.try_alloc().unwrap();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 1>::new()));
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1>::new()));
     let (_device, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2, 0, 0, 0, 0, 1], rx)
+        .split(
+            NetworkInterfaceId::new(0),
+            [2, 0, 0, 0, 0, 1],
+            rx,
+            Sink::with_room(1),
+        )
         .expect("endpoint split");
     let wake_count = Arc::new(WakeCount::default());
     let waker = Waker::from(wake_count.clone());
@@ -144,39 +194,31 @@ fn rx_readiness_waits_for_both_link_and_pool_capacity() {
 }
 
 #[test]
-fn link_epoch_prevents_stale_tx_retargeting() {
-    let general = allocator::<1>();
-    let rx = allocator::<1>();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 1>::new()));
-    let (mut device, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2, 0, 0, 0, 0, 1], rx)
-        .expect("endpoint split");
-    radio.link_controller().set_link_up(true);
-    device.transmit(frame(general, 0x33)).unwrap();
-
+fn no_transmission_is_admitted_over_a_down_link() {
+    let (mut device, mut radio, sink) = endpoint(1);
     radio.link_controller().set_link_up(false);
-    radio.link_controller().set_link_up(true);
-    assert!(radio.try_receive_tx().unwrap().is_none());
-    assert!(general.try_alloc().is_some());
+    assert!(!device.can_transmit());
+    assert!(sink.0.borrow().waker.is_none());
 }
 
 #[test]
 fn link_down_does_not_revoke_a_synchronous_tx_admission() {
     let general = allocator::<1>();
-    let rx = allocator::<1>();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 1>::new()));
-    let (mut device, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2, 0, 0, 0, 0, 1], rx)
-        .expect("endpoint split");
-    radio.link_controller().set_link_up(true);
-
+    let (mut device, mut radio, sink) = endpoint(1);
     assert!(device.can_transmit());
     radio.link_controller().set_link_up(false);
+    sink.0.borrow_mut().refusal = Some(TransmitError::LinkDown);
     assert!(device.transmit(frame(general, 0x44)).is_ok());
+    assert!(sink.0.borrow().taken.is_empty());
+    assert!(general.try_alloc().is_some());
+}
 
-    // It belongs to the down lifetime and cannot cross the next up edge.
-    radio.link_controller().set_link_up(true);
-    assert!(radio.try_receive_tx().unwrap().is_none());
+#[test]
+fn a_frame_the_device_refuses_for_its_length_ends_here() {
+    let general = allocator::<1>();
+    let (mut device, _radio, sink) = endpoint(1);
+    sink.0.borrow_mut().refusal = Some(TransmitError::InvalidLength(FrameLengthError::TooLong));
+    assert!(device.transmit(frame(general, 0x45)).is_ok());
     assert!(general.try_alloc().is_some());
 }
 
@@ -184,9 +226,14 @@ fn link_down_does_not_revoke_a_synchronous_tx_admission() {
 fn device_constructs_the_owned_embassy_stack() {
     let general = allocator::<8>();
     let rx = allocator::<1>();
-    let endpoint = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 1>::new()));
+    let endpoint = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1>::new()));
     let (device, _radio) = endpoint
-        .split(NetworkInterfaceId::new(0), [2, 0, 0, 0, 0, 1], rx)
+        .split(
+            NetworkInterfaceId::new(0),
+            [2, 0, 0, 0, 0, 1],
+            rx,
+            Sink::with_room(1),
+        )
         .expect("endpoint split");
     let storage = Box::leak(Box::new(owned_embassy_net::StackStorage::new()));
 
@@ -200,14 +247,14 @@ fn device_constructs_the_owned_embassy_stack() {
 #[test]
 fn a_second_split_returns_a_named_refusal() {
     let rx = allocator::<1>();
-    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
+    let mut resources = OwnedEndpointResources::<HostContext, 1>::new();
     {
         let _owners = resources
-            .split(NetworkInterfaceId::new(0), [2; 6], rx)
+            .split(NetworkInterfaceId::new(0), [2; 6], rx, Sink::with_room(1))
             .unwrap();
     }
     assert!(matches!(
-        resources.split(NetworkInterfaceId::new(0), [2; 6], rx),
+        resources.split(NetworkInterfaceId::new(0), [2; 6], rx, Sink::with_room(1)),
         Err(EndpointSplitError::AlreadySplit)
     ));
 }
@@ -216,14 +263,14 @@ fn a_second_split_returns_a_named_refusal() {
 fn a_claimed_rx_waiter_refuses_split_without_consuming_the_resources() {
     let rx = allocator::<1>();
     let held = rx.try_claim_waiter().unwrap();
-    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
+    let mut resources = OwnedEndpointResources::<HostContext, 1>::new();
     assert!(matches!(
-        resources.split(NetworkInterfaceId::new(0), [2; 6], rx),
+        resources.split(NetworkInterfaceId::new(0), [2; 6], rx, Sink::with_room(1)),
         Err(EndpointSplitError::RxWaiterUnavailable)
     ));
     drop(held);
     let (mut device, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], rx)
+        .split(NetworkInterfaceId::new(0), [2; 6], rx, Sink::with_room(1))
         .unwrap();
     radio.link_controller().set_link_up(true);
     radio.try_send_rx(&[0x66; 14]).unwrap();
@@ -234,9 +281,9 @@ fn a_claimed_rx_waiter_refuses_split_without_consuming_the_resources() {
 fn rx_copy_checks_lengths_and_preserves_all_bytes_at_pool_capacity() {
     let rx = allocator::<1>();
     let capacity = rx.try_alloc().unwrap().capacity();
-    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
+    let mut resources = OwnedEndpointResources::<HostContext, 1>::new();
     let (mut device, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], rx)
+        .split(NetworkInterfaceId::new(0), [2; 6], rx, Sink::with_room(1))
         .unwrap();
     radio.link_controller().set_link_up(true);
     let publisher = radio.rx_publisher();
@@ -265,150 +312,4 @@ fn rx_copy_checks_lengths_and_preserves_all_bytes_at_pool_capacity() {
     assert_eq!(&packet[6..12], &[2; 6]);
     assert_eq!(&packet[12..14], &[8, 6]);
     assert_eq!(&packet[14..], payload);
-}
-
-type ReentrantQueue = tx_queue::TxQueue<HostContext, 1>;
-
-use self::std::{cell::RefCell, rc::Rc};
-
-// Each test thread owns its own callback. The Send+Sync waker contains no
-// local payload; a foreign thread can never touch the queue. Taking the
-// callback before invoking it permits synchronous reentry without a borrow.
-std::thread_local! {
-    static ON_WAKE: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None);
-}
-struct CallbackScope;
-impl Drop for CallbackScope {
-    fn drop(&mut self) {
-        ON_WAKE.with(|slot| {
-            slot.borrow_mut().take();
-        });
-    }
-}
-struct CallbackWake(Arc<WakeCount>);
-impl Wake for CallbackWake {
-    fn wake(self: Arc<Self>) {
-        self.wake_by_ref();
-    }
-    fn wake_by_ref(self: &Arc<Self>) {
-        let callback = ON_WAKE.with(|slot| slot.borrow_mut().take());
-        if let Some(callback) = callback {
-            callback();
-        }
-        self.0.0.fetch_add(1, StdOrdering::Relaxed);
-    }
-}
-fn callback(action: impl FnOnce() + 'static) -> (Waker, Arc<WakeCount>, CallbackScope) {
-    ON_WAKE.with(|slot| {
-        assert!(slot.borrow_mut().replace(Box::new(action)).is_none());
-    });
-    let count = Arc::new(WakeCount::default());
-    (
-        Waker::from(Arc::new(CallbackWake(count.clone()))),
-        count,
-        CallbackScope,
-    )
-}
-
-fn drain(queue: &ReentrantQueue) {
-    assert_eq!(queue.len(), Ok(1));
-    assert!(queue.is_full());
-    assert_eq!(
-        queue.head_for([0x68; 6]).unwrap().unwrap().pending_frames,
-        1
-    );
-    let (queued, credit) = queue.pop(None).unwrap().unwrap();
-    assert_eq!(&*queued.packet, &[0x68; 14]);
-    drop(queued);
-    drop(credit);
-    assert!(!queue.is_full());
-}
-
-#[test]
-fn tx_publication_wakes_after_restoring_owners_and_metadata() {
-    let pool = allocator::<1>();
-    let queue = Rc::new(ReentrantQueue::new());
-    let called = queue.clone();
-    let (waker, count, _scope) = callback(move || drain(&called));
-    assert_eq!(
-        queue.poll_ready_any(&mut Context::from_waker(&waker)),
-        Poll::Pending
-    );
-    assert!(
-        queue
-            .push(QueuedPacket {
-                epoch: 0,
-                packet: frame(pool, 0x68)
-            })
-            .is_ok()
-    );
-    assert_eq!(count.0.load(StdOrdering::Relaxed), 1);
-    assert_eq!(queue.is_empty(), Ok(true));
-    assert!(pool.try_alloc().is_some());
-}
-
-#[test]
-fn returning_tx_credit_can_synchronously_refill_the_queue() {
-    let pool = allocator::<1>();
-    let queue = Rc::new(ReentrantQueue::new());
-    let called = queue.clone();
-    let (waker, count, _scope) = callback(move || {
-        assert!(!called.is_full());
-        // Even a one-slot pool must already be available in the credit wake.
-        assert!(
-            called
-                .push(QueuedPacket {
-                    epoch: 0,
-                    packet: frame(pool, 0x69)
-                })
-                .is_ok()
-        );
-    });
-    queue.register_sender(&waker);
-    assert!(
-        queue
-            .push(QueuedPacket {
-                epoch: 0,
-                packet: frame(pool, 0x68)
-            })
-            .is_ok()
-    );
-    let (packet, credit) = queue.pop(None).unwrap().unwrap();
-    drop(packet);
-    drop(credit);
-    assert_eq!(count.0.load(StdOrdering::Relaxed), 1);
-    let (packet, credit) = queue.pop(None).unwrap().unwrap();
-    assert_eq!(&*packet.packet, &[0x69; 14]);
-    drop(packet);
-    drop(credit);
-    assert!(!queue.is_full());
-    assert!(pool.try_alloc().is_some());
-}
-
-#[test]
-fn replacing_a_tx_waiter_restores_state_before_waking_the_previous_task() {
-    let pool = allocator::<1>();
-    let queue = Rc::new(ReentrantQueue::new());
-    assert!(
-        queue
-            .push(QueuedPacket {
-                epoch: 0,
-                packet: frame(pool, 0x68)
-            })
-            .is_ok()
-    );
-    let called = queue.clone();
-    let (previous, count, _scope) = callback(move || drain(&called));
-    let next = Waker::from(Arc::new(WakeCount::default()));
-    assert_eq!(
-        queue.poll_ready_for([0x70; 6], 1, &mut Context::from_waker(&previous)),
-        Poll::Pending
-    );
-    assert_eq!(
-        queue.poll_ready_for([0x70; 6], 1, &mut Context::from_waker(&next)),
-        Poll::Pending
-    );
-    assert_eq!(count.0.load(StdOrdering::Relaxed), 1);
-    assert_eq!(queue.is_empty(), Ok(true));
-    assert!(!queue.is_full());
 }

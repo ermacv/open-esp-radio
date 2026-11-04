@@ -172,9 +172,6 @@ pub struct Report {
     pub cpu_end: Load,
     pub received: Received,
     pub sent: Sent,
-    /// What the network bridge's turns did with the stack's transmissions
-    /// within the window: why a send was refused.
-    pub bridge_tx: BridgeTx,
 }
 
 /// The load datagrams of the run the image received on its port, counted
@@ -325,31 +322,6 @@ pub enum CountersCollected {
     /// The run's window or drain has not ended yet.
     Running,
     Refused(LoadError),
-}
-
-/// What the network bridge's turns did with the stack's transmissions
-/// within the window; each turn moves at most one packet to the station.
-/// The sums are taken at each turn's start.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct BridgeTx {
-    /// Turns, idle ones included.
-    pub turns: u32,
-    /// Turns that handed a packet to the station.
-    pub moved: u32,
-    /// Turns whose packet waits for the station's room.
-    pub held: u32,
-    /// Turns whose packet the station refused for its length.
-    pub dropped: u32,
-    /// Turns that began with the stack's transmit queue full.
-    pub queue_full: u32,
-    /// Turns that began with no network transmit buffer free for the
-    /// stack.
-    pub starved: u32,
-    /// The stack's queued packets, summed over the turns.
-    pub queued_sum: u32,
-    /// The network transmit buffers the station held, summed over the
-    /// turns.
-    pub station_sum: u32,
 }
 
 /// Counts within one run's measuring window.

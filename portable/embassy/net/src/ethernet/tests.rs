@@ -1,249 +1,13 @@
 extern crate std;
 use super::*;
+use crate::sink::Sink;
 use crate::{NetworkInterfaceId, OwnedEndpointResources};
-use core::task::{Context, Poll};
+use core::task::Context;
 use oer_portable_memory::HostContext;
-use oer_protocols_network_port::{LinkSnapshot, LinkState, TransmitError};
+use oer_protocols_network_port::TransmitError;
 use std::{boxed::Box, vec::Vec};
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
-struct Port<F>(LinkSnapshot, bool, core::marker::PhantomData<F>);
-struct Frame;
-impl oer_protocols_network_port::ReceivedFrame for Frame {
-    type Storage = core::convert::Infallible;
-    type Copied = Self;
-    fn into_lent(self) -> Result<oer_protocols_network_port::LentFrame<Self::Storage>, Self> {
-        Err(self)
-    }
-}
-impl EthernetFrame for Frame {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        Err(FrameLengthError::TooShort)
-    }
-}
-impl<F: EthernetFrame> NetDevice for Port<F> {
-    type RxFrame = Frame;
-    type TxFrame = F;
-    fn link(&self) -> LinkSnapshot {
-        self.0
-    }
-    fn poll_link(&mut self, _: &mut Context<'_>) -> Poll<LinkSnapshot> {
-        Poll::Pending
-    }
-    fn receive_queue_len(&self) -> usize {
-        0
-    }
-    fn poll_receive_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
-        Poll::Pending
-    }
-    fn try_receive(&mut self) -> Option<Frame> {
-        None
-    }
-    fn read_copied<R>(
-        &mut self,
-        copied: Frame,
-        read: impl FnOnce(EthernetFrameView<'_>) -> R,
-    ) -> Result<R, FrameLengthError> {
-        copied.view().map(read)
-    }
-    fn poll_transmit_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
-        Poll::Ready(())
-    }
-    fn try_transmit(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
-        if self.1 {
-            Ok(())
-        } else {
-            Err(TransmitRefused {
-                frame,
-                reason: TransmitError::QueueFull,
-            })
-        }
-    }
-}
-
-#[test]
-fn neutral_refusal_retains_the_packet_and_software_credit_and_epoch_change_reclaims_stale_tx() {
-    let storage = Box::leak(Box::new(PacketPoolStorage::<1>::new()));
-    let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
-    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
-    let (mut stack, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], pool)
-        .unwrap();
-    let mut port = Port(
-        LinkSnapshot {
-            state: LinkState::Up,
-            epoch: 1,
-        },
-        false,
-        core::marker::PhantomData,
-    );
-    let mut previous = LinkSnapshot::DOWN;
-    radio.link_controller().follow_device(&port, &mut previous);
-    let mut packet = pool.try_alloc().unwrap();
-    packet.set_len(18);
-    packet.fill(7);
-    let address = packet.as_ptr();
-    assert!(stack.transmit(packet).is_ok());
-    let frame = radio.try_receive_tx().unwrap().unwrap();
-    let returned = frame.transmit_to(&mut port).err().unwrap();
-    assert_eq!(returned.reason, TransmitError::QueueFull);
-    assert_eq!(returned.frame.ethernet().as_ptr(), address);
-    assert!(!stack.can_transmit());
-    assert!(!pool.has_available());
-    drop(returned);
-    assert!(stack.can_transmit());
-    assert!(pool.has_available());
-    let mut packet = pool.try_alloc().unwrap();
-    packet.set_len(18);
-    packet.fill(9);
-    assert!(stack.transmit(packet).is_ok());
-    port.0.epoch = 2;
-    radio.link_controller().follow_device(&port, &mut previous);
-    assert!(radio.try_receive_tx().unwrap().is_none());
-    assert!(pool.has_available());
-    assert!(stack.can_transmit());
-}
-
-#[test]
-fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasing_its_credit() {
-    use core::future::Future;
-    let storage = Box::leak(Box::new(PacketPoolStorage::<1>::new()));
-    let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
-    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
-    let (mut stack, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], pool)
-        .unwrap();
-    let port = Port(
-        LinkSnapshot {
-            state: LinkState::Up,
-            epoch: 1,
-        },
-        false,
-        core::marker::PhantomData,
-    );
-    radio.link_controller().set_link_up(true);
-    let mut packet = pool.try_alloc().unwrap();
-    packet.set_len(18);
-    packet.fill(7);
-    assert!(stack.transmit(packet).is_ok());
-    let mut bridge = EthernetBridge::new(radio, port, None::<&'static LentSlots<_, 1>>);
-    {
-        let mut future = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
-            cx,
-            |_| {},
-            |_| {},
-            |_| {},
-            |_| {}
-        )));
-        let mut cx = Context::from_waker(core::task::Waker::noop());
-        for _ in 0..3 {
-            assert!(future.as_mut().poll(&mut cx).is_pending());
-            assert!(!pool.has_available());
-            assert!(!stack.can_transmit());
-        }
-    }
-    drop(bridge);
-    assert!(pool.has_available());
-    assert!(stack.can_transmit());
-}
-
-#[test]
-fn successful_tx_hands_the_owner_to_the_device_whose_drop_returns_packet_and_credit() {
-    let storage = Box::leak(Box::new(PacketPoolStorage::<1>::new()));
-    let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
-    let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
-    let (mut stack, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], pool)
-        .unwrap();
-    let mut port = Port(
-        LinkSnapshot {
-            state: LinkState::Up,
-            epoch: 1,
-        },
-        true,
-        core::marker::PhantomData,
-    );
-    radio.link_controller().set_link_up(true);
-    let mut packet = pool.try_alloc().unwrap();
-    packet.set_len(18);
-    packet.fill(7);
-    assert!(stack.transmit(packet).is_ok());
-    let frame = radio.try_receive_tx().unwrap().unwrap();
-    assert_eq!(frame.view().unwrap().payload, &[7; 4]);
-    assert!(!pool.has_available());
-    assert!(!stack.can_transmit());
-    // The port accepts the owner and drops it: the packet and its credit
-    // return then, not before.
-    assert!(frame.transmit_to(&mut port).is_ok());
-    assert!(pool.has_available());
-    assert!(stack.can_transmit());
-}
-
-#[test]
-fn one_turn_moves_every_queued_packet_and_arms_without_waking_itself() {
-    // Below the budget: a full one's first release is its capacity edge,
-    // which wakes the waiting sender.
-    const FILLS: u8 = 2;
-    use core::future::Future;
-    use core::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    struct Wakes(AtomicUsize);
-    impl std::task::Wake for Wakes {
-        fn wake(self: Arc<Self>) {
-            self.0.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-    let storage = Box::leak(Box::new(PacketPoolStorage::<3>::new()));
-    let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
-    let mut resources = OwnedEndpointResources::<HostContext, 1, 3>::new();
-    let (mut stack, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], pool)
-        .unwrap();
-    let port = Port(
-        LinkSnapshot {
-            state: LinkState::Up,
-            epoch: 1,
-        },
-        true,
-        core::marker::PhantomData,
-    );
-    radio.link_controller().set_link_up(true);
-    for fill in 0..FILLS {
-        let mut packet = pool.try_alloc().unwrap();
-        packet.set_len(18);
-        packet.fill(fill);
-        assert!(stack.transmit(packet).is_ok());
-    }
-    let mut bridge = EthernetBridge::new(radio, port, None::<&'static LentSlots<_, 1>>);
-    let mut moved = 0;
-    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
-    let waker = core::task::Waker::from(Arc::clone(&wakes));
-    {
-        let mut future = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
-            cx,
-            |_| {},
-            |_| {},
-            |_| {},
-            |turn| moved += usize::from(turn.outcome == TxOutcome::Moved)
-        )));
-        assert!(
-            future
-                .as_mut()
-                .poll(&mut Context::from_waker(&waker))
-                .is_pending()
-        );
-    }
-    assert_eq!(moved, FILLS as usize, "one turn moves the whole queue");
-    assert_eq!(
-        wakes.0.load(Ordering::Relaxed),
-        0,
-        "and waits without a self-wake"
-    );
-    assert!(pool.has_available());
-    assert!(stack.can_transmit());
-}
-
-/// A lent DMA-like buffer: its bytes and a count of its drops.
 struct Lent {
     bytes: Box<[u8; 1664]>,
     /// Where the storage starts in `bytes`.
@@ -302,14 +66,14 @@ fn lent(
 }
 
 fn lent_endpoint() -> (
-    crate::OwnedNetworkDevice<'static, HostContext, 2, 1>,
-    crate::OwnedNetworkRunner<'static, HostContext, 2, 1>,
+    crate::OwnedNetworkDevice<'static, HostContext, 2, Sink>,
+    crate::OwnedNetworkRunner<'static, HostContext, 2>,
 ) {
     let storage = Box::leak(Box::new(PacketPoolStorage::<2>::new()));
     let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 2, 1>::new()));
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 2>::new()));
     let (stack, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], pool)
+        .split(NetworkInterfaceId::new(0), [2; 6], pool, Sink::with_room(1))
         .unwrap();
     radio.link_controller().set_link_up(true);
     (stack, radio)
@@ -442,18 +206,21 @@ fn memory() -> Memory {
 }
 
 /// An endpoint whose link is up, and its receive pool.
+/// An endpoint with its link up over a device that keeps two frames.
 fn tx_endpoint() -> (
-    crate::OwnedNetworkDevice<'static, HostContext, 1, 1>,
-    crate::OwnedNetworkRunner<'static, HostContext, 1, 1>,
+    crate::OwnedNetworkDevice<'static, HostContext, 1, Sink>,
+    crate::OwnedNetworkRunner<'static, HostContext, 1>,
+    Sink,
 ) {
     let storage = Box::leak(Box::new(PacketPoolStorage::<1>::new()));
     let receive = Box::leak(Box::new(PacketPool::new(storage))).allocator();
-    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1, 1>::new()));
+    let resources = Box::leak(Box::new(OwnedEndpointResources::<HostContext, 1>::new()));
+    let sink = Sink::with_room(2);
     let (stack, mut radio) = resources
-        .split(NetworkInterfaceId::new(0), [2; 6], receive)
+        .split(NetworkInterfaceId::new(0), [2; 6], receive, sink.clone())
         .unwrap();
     radio.link_controller().set_link_up(true);
-    (stack, radio)
+    (stack, radio, sink)
 }
 
 #[test]
@@ -465,7 +232,7 @@ fn a_packet_the_stack_wrote_in_the_devices_memory_goes_out_in_it_without_a_copy(
     parked.give(memory());
     assert!(general.try_alloc().is_none());
     parked.give(memory());
-    let (mut stack, radio) = tx_endpoint();
+    let (mut stack, _radio, sink) = tx_endpoint();
     let mut packet = general.try_alloc().unwrap();
     assert!(general.try_alloc().is_none());
     packet.reserve(4);
@@ -473,8 +240,7 @@ fn a_packet_the_stack_wrote_in_the_devices_memory_goes_out_in_it_without_a_copy(
     packet.fill(7);
     let written_at = packet.as_ptr() as usize;
     assert!(stack.transmit(packet).is_ok());
-    let frame = radio.try_receive_tx().unwrap().unwrap();
-    assert!(!stack.can_transmit());
+    let frame = sink.0.borrow_mut().taken.pop_front().unwrap();
     let Ok(mut written) = parked.write(frame) else {
         panic!("a packet of the slots is written");
     };
@@ -484,9 +250,8 @@ fn a_packet_the_stack_wrote_in_the_devices_memory_goes_out_in_it_without_a_copy(
         written.storage.bytes_mut()[4..].as_ptr() as usize,
         written_at
     );
-    // The credit is back; the memory is the device's until given back,
-    // and given back it parks for the stack again.
-    assert!(stack.can_transmit());
+    // The memory is the device's until given back, and given back it parks
+    // for the stack again.
     assert!(general.try_alloc().is_none());
     parked.give(written.storage);
     assert!(general.try_alloc().is_some());
@@ -498,16 +263,16 @@ fn a_packet_from_elsewhere_is_copied_into_the_spare_and_the_next_waits_for_memor
     let mut parked = ParkedTx::new(slots);
     let storage = Box::leak(Box::new(PacketPoolStorage::<2>::new()));
     let elsewhere = Box::leak(Box::new(PacketPool::new(storage))).allocator();
-    let (mut stack, radio) = tx_endpoint();
+    let (mut stack, _radio, sink) = tx_endpoint();
     let mut send = |fill: u8| {
         let mut packet = elsewhere.try_alloc().unwrap();
         packet.set_len(16);
         packet.fill(fill);
         assert!(stack.transmit(packet).is_ok());
-        radio.try_receive_tx().unwrap().unwrap()
+        sink.0.borrow_mut().taken.pop_front().unwrap()
     };
-    // No memory yet: the frame waits, kept, and the supply says so.
-    assert!(parked.available());
+    // No memory yet: the supply says so, and a frame waits, kept.
+    assert!(!parked.available());
     let first = match parked.write(send(1)) {
         Err(TxWriteRefused::Kept(refused)) => {
             assert_eq!(refused.reason, TransmitError::QueueFull);

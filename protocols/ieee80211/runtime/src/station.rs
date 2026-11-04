@@ -52,8 +52,8 @@ pub(crate) use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
     Control, ControlCommand, ControlCreateError, ControlCreateRefused, ControlError,
-    ControlRefused, Device, Events, Operation, OperationEnd, RunnerControl, State, Status,
-    StatusReader, TxRefused, TxSupply, UnreadOperation,
+    ControlRefused, Device, DeviceTransmit, Events, Operation, OperationEnd, RunnerControl, State,
+    Status, StatusReader, TxRefused, TxSupply, UnreadOperation,
 };
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 

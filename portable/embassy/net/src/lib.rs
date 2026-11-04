@@ -20,32 +20,27 @@
 //! compatibility implementation of the released Embassy driver API. RX frames
 //! are copied into packet-pool storage before publication to the network stack.
 //! [`ethernet`] consumes the neutral `oer_protocols_network_port::NetDevice` contract; a
-//! refused TX retains its original packet and software credit together.
+//! a frame the stack sends goes straight to the device's transmit half.
 //! [`ip`] builds one permanent stack over that device and publishes its typed
-//! status across associations. [`datapath`] holds the software/physical TX
-//! ownership contracts and the destination/flow queue arena between them.
+//! status across associations.
 
 pub use oer_protocols_network_port::{
-    EthernetFrameView, FrameLengthError, LinkState, NetworkInterfaceId, RxEnqueueError,
+    EthernetFrameView, FrameLengthError, LinkState, NetTransmit, NetworkInterfaceId,
+    RxEnqueueError, TransmitError,
 };
 
-pub mod datapath;
 pub mod ethernet;
 pub mod ip;
 mod owned;
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    reason = "a test fixture's counts"
+)]
+mod sink;
 
 pub use owned::{
-    AccessRefused, EndpointSplitError, OwnedEndpointResources, OwnedLinkController,
-    OwnedNetworkDevice, OwnedNetworkRunner, OwnedNetworkTxFrame, OwnedRxPublisher,
-    OwnedTxFrameSource,
+    EndpointSplitError, OwnedEndpointResources, OwnedLinkController, OwnedNetworkDevice,
+    OwnedNetworkRunner, OwnedNetworkTxFrame, OwnedRxPublisher,
 };
-
-impl datapath::SoftwareTxFrame for OwnedNetworkTxFrame<'_> {
-    fn interface(&self) -> NetworkInterfaceId {
-        OwnedNetworkTxFrame::interface(self)
-    }
-
-    fn ethernet(&self) -> &[u8] {
-        OwnedNetworkTxFrame::ethernet(self)
-    }
-}

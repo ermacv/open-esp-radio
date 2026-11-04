@@ -165,7 +165,10 @@ fn failure(error: wifi::InitializationError) -> ! {
 }
 
 /// The IP stack's packet owner a transmission hands the station.
-type TxPacket = oer_portable_embassy_net::OwnedNetworkTxFrame<'static>;
+type TxPacket = oer_portable_embassy_net::OwnedNetworkTxFrame;
+
+/// The station's transmit end, which the IP stack's sending path owns.
+type Transmit = wifi::NetworkTransmit<'static, Notifies, TxPacket, WifiTx>;
 
 /// The packet slots over the station's transmit buffers, but the spare the
 /// network keeps for copies: the IP stack's general allocator.
@@ -203,8 +206,7 @@ impl TxSupply<TxPacket> for WifiTx {
             Err(TxWriteRefused::Kept(refused)) => return Err(TxRefused::Kept(refused)),
             Err(TxWriteRefused::Lost) => return Err(TxRefused::Lost),
         };
-        let published = self
-            .publisher
+        self.publisher
             .publish(written.storage, written.start, written.len)
             .map_err(|refused| {
                 // A packet stays inside its buffer: a frame past it ends
@@ -213,14 +215,9 @@ impl TxSupply<TxPacket> for WifiTx {
                     self.parked.give(slot);
                 }
                 TxRefused::Lost
-            });
-        if published.is_ok() {
-            station_took_tx();
-        }
-        published
+            })
     }
     fn give(&mut self, memory: wifi::TxMemory) {
-        station_gave_tx();
         self.parked.give(self.publisher.slot(memory));
     }
 }
@@ -560,7 +557,8 @@ pub enum StopError {
 /// without it, it tells the station that no network takes its frames.
 pub struct Device {
     network: Option<(
-        wifi::Network<'static, Notifies, TxPacket, WifiTx>,
+        wifi::Network<'static, Notifies>,
+        Transmit,
         wifi::NetworkStopper<'static, Notifies>,
     )>,
     address: [u8; 6],
@@ -569,8 +567,8 @@ pub struct Device {
 
 impl Drop for Device {
     fn drop(&mut self) {
-        if let Some((network, stopper)) = self.network.take() {
-            stopper.no_network(network);
+        if let Some((network, transmit, stopper)) = self.network.take() {
+            stopper.no_network(network, transmit);
         }
     }
 }
@@ -651,7 +649,7 @@ impl Station {
         let [t0, t1, t2, t3, s0, s1, s2, s3, s4, s5, s6, s7] = words;
         let mut delay = [0; 4];
         rng.fill(&mut delay).map_err(|_| Error::Entropy)?;
-        let (control, network, stopper, runners) = wifi::station(
+        let (control, network, transmit, stopper, runners) = wifi::station(
             wifi::Resources {
                 events: ProductEvents,
                 storage: binding::storage(),
@@ -683,7 +681,7 @@ impl Station {
             aes,
         });
         boot.device = Some(Device {
-            network: Some((network, stopper)),
+            network: Some((network, transmit, stopper)),
             address,
             seed: u64::from_le_bytes([s0, s1, s2, s3, s4, s5, s6, s7]),
         });
@@ -795,31 +793,29 @@ fn control(error: wifi::ControlError) -> ConnectError {
     }
 }
 
-/// The default packet pools of the IP service: receive slots, each holding
-/// one 1514-byte Ethernet frame, and transmit credits. The stack's general
-/// packets are the station's transmit buffers ([`TX_SLOTS`]).
+/// The default packet pool of the IP service: receive slots, each holding
+/// one 1514-byte Ethernet frame. The stack's general packets are the
+/// station's transmit buffers ([`TX_SLOTS`]).
 pub const RX: usize = 8;
-pub const TX: usize = 8;
 
 #[cfg(not(feature = "group"))]
 type Context = ThreadContext<0>;
 /// The IP service's executor: hart 1's with the group there.
 #[cfg(feature = "group")]
 type Context = ThreadContext<1>;
-type IpResources<const RX: usize, const TX: usize> = Resources<Context, RX, TX>;
-type IpService<const RX: usize, const TX: usize> =
-    Service<Context, RX, TX, wifi::Network<'static, Notifies, TxPacket, WifiTx>, { wifi::LENT_RX }>;
+type IpResources<const RX: usize> = Resources<Context, RX, Transmit>;
+type IpService<const RX: usize> =
+    Service<Context, RX, Transmit, wifi::Network<'static, Notifies>, { wifi::LENT_RX }>;
 
-/// The IP service's packet pools: `RX` receive slots, each one 1514-byte
-/// frame, and `TX` transmit credits. A static of this type is the storage
-/// [`Net::start_with`] takes once; [`Net::start`] takes the library's own
-/// of [`RX`] and [`TX`].
-pub struct Pools<const RX: usize, const TX: usize> {
-    resources: StaticCell<IpResources<RX, TX>>,
+/// The IP service's packet pool: `RX` receive slots, each one 1514-byte
+/// frame. A static of this type is the storage [`Net::start_with`] takes
+/// once; [`Net::start`] takes the library's own of [`RX`].
+pub struct Pools<const RX: usize> {
+    resources: StaticCell<IpResources<RX>>,
     control: StaticCell<ip::Control<'static>>,
 }
 
-impl<const RX: usize, const TX: usize> Pools<RX, TX> {
+impl<const RX: usize> Pools<RX> {
     pub const fn new() -> Self {
         Self {
             resources: StaticCell::new(),
@@ -828,24 +824,24 @@ impl<const RX: usize, const TX: usize> Pools<RX, TX> {
     }
 }
 
-impl<const RX: usize, const TX: usize> Default for Pools<RX, TX> {
+impl<const RX: usize> Default for Pools<RX> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-static POOLS: Pools<RX, TX> = Pools::new();
+static POOLS: Pools<RX> = Pools::new();
 
 /// What the IP service runs: the service, the station's stop request, and
 /// the service's control to stop it with, at the image's pool sizes.
 #[doc(hidden)]
-pub struct IpStart<const RX: usize, const TX: usize> {
-    service: IpService<RX, TX>,
+pub struct IpStart<const RX: usize> {
+    service: IpService<RX>,
     stopper: wifi::NetworkStopper<'static, Notifies>,
     control: &'static ip::Control<'static>,
 }
 
-impl<const RX: usize, const TX: usize> super::NetTask for IpStart<RX, TX> {
+impl<const RX: usize> super::NetTask for IpStart<RX> {
     fn serve(self) -> impl core::future::Future<Output = ()> {
         serve_ip(self)
     }
@@ -855,13 +851,12 @@ impl<const RX: usize, const TX: usize> super::NetTask for IpStart<RX, TX> {
 /// receive buffers the network may hold.
 static LENT: LentSlots<wifi::ReceivedStorage<Notifies>, { wifi::LENT_RX }> = LentSlots::new();
 
-/// The IP stack's device, which sockets name, over pools of `RX` and `TX`.
-pub type IpDevice<const RX: usize = { self::RX }, const TX: usize = { self::TX }> =
-    oer_portable_embassy_net::OwnedNetworkDevice<'static, Context, RX, TX>;
+/// The IP stack's device, which sockets name, over a pool of `RX`.
+pub type IpDevice<const RX: usize = { self::RX }> =
+    oer_portable_embassy_net::OwnedNetworkDevice<'static, Context, RX, Transmit>;
 
 /// The IP stack sockets open on.
-pub type Stack<const RX: usize = { self::RX }, const TX: usize = { self::TX }> =
-    embassy_net::Stack<'static, IpDevice<RX, TX>>;
+pub type Stack<const RX: usize = { self::RX }> = embassy_net::Stack<'static, IpDevice<RX>>;
 
 static WATCHERS: Watchers<Context, 4> = Watchers::new();
 
@@ -912,11 +907,11 @@ fn publish(status: Status) {
 /// How the stack takes its IPv4 configuration.
 pub use oer_portable_embassy_net::ip::Configuration as NetConfig;
 
-/// The IP service over the station's device, with pools of `RX` receive
-/// slots and `TX` transmit credits; the defaults are the library's.
-pub struct Net<const RX: usize = { self::RX }, const TX: usize = { self::TX }> {
+/// The IP service over the station's device, with a pool of `RX` receive
+/// slots; the default is the library's.
+pub struct Net<const RX: usize = { self::RX }> {
     control: &'static ip::Control<'static>,
-    stack: Stack<RX, TX>,
+    stack: Stack<RX>,
 }
 
 impl Net {
@@ -931,31 +926,32 @@ impl Net {
         device: Device,
         configuration: Configuration,
         boot: GroupBoot,
-    ) -> Result<(Self, GroupBoot<IpStart<RX, TX>>), Error> {
+    ) -> Result<(Self, GroupBoot<IpStart<RX>>), Error> {
         Self::start_with(device, &POOLS, configuration, boot)
     }
 }
 
-impl<const RX: usize, const TX: usize> Net<RX, TX> {
+impl<const RX: usize> Net<RX> {
     /// As [`Net::start`], with the image's own `pools`.
     ///
     /// # Errors
     /// As [`Net::start`]; the pools were taken already.
     pub fn start_with(
         mut device: Device,
-        pools: &'static Pools<RX, TX>,
+        pools: &'static Pools<RX>,
         configuration: Configuration,
         boot: GroupBoot,
-    ) -> Result<(Self, GroupBoot<IpStart<RX, TX>>), Error> {
-        let (network, stopper) = device.network.take().ok_or(Error::AlreadyStarted)?;
+    ) -> Result<(Self, GroupBoot<IpStart<RX>>), Error> {
+        let (network, transmit, stopper) = device.network.take().ok_or(Error::AlreadyStarted)?;
         let resources = pools
             .resources
             .try_uninit()
-            .map(|place| place.write(const { IpResources::<RX, TX>::new() }))
+            .map(|place| place.write(const { IpResources::<RX>::new() }))
             .ok_or(Error::AlreadyStarted)?;
         let (control, service) = resources
             .start(
                 network,
+                transmit,
                 Some(&LENT),
                 TX_SLOTS.allocator(),
                 NetworkInterfaceId::new(0),
@@ -963,7 +959,7 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
                 device.seed,
                 configuration,
             )
-            .map_err(|refused| Error::Net(refused.reason))?;
+            .map_err(Error::Net)?;
         let control: &'static ip::Control<'static> =
             pools.control.try_init(control).ok_or(Error::Storage)?;
         let stack = service.stack();
@@ -978,7 +974,7 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
     }
 
     /// The stack sockets open on.
-    pub fn stack(&self) -> Stack<RX, TX> {
+    pub fn stack(&self) -> Stack<RX> {
         self.stack
     }
 
@@ -1006,9 +1002,7 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
 }
 
 #[cfg(feature = "observe")]
-use super::observed::{
-    bridge_copied, bridge_received, bridge_refused, bridge_turned, station_gave_tx, station_took_tx,
-};
+use super::observed::{bridge_copied, bridge_received, bridge_refused};
 /// The network bridge's frames: counted with `observe`.
 #[cfg(not(feature = "observe"))]
 fn bridge_received(_: oer_portable_embassy_net::EthernetFrameView<'_>) {}
@@ -1016,19 +1010,11 @@ fn bridge_received(_: oer_portable_embassy_net::EthernetFrameView<'_>) {}
 fn bridge_refused(_: oer_portable_embassy_net::RxEnqueueError) {}
 #[cfg(not(feature = "observe"))]
 fn bridge_copied(_: oer_portable_embassy_net::ethernet::LentCopy) {}
-#[cfg(not(feature = "observe"))]
-fn bridge_turned(_: oer_portable_embassy_net::ethernet::TxTurn) {}
-/// The network transmit buffers the station holds: counted with
-/// `observe`.
-#[cfg(not(feature = "observe"))]
-fn station_took_tx() {}
-#[cfg(not(feature = "observe"))]
-fn station_gave_tx() {}
 
 /// The IP service's task: every status change wakes the waits. Once the
 /// station asks its network to stop, the service stops and returns every
 /// receive buffer it holds, then the station hears that it stopped.
-async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
+async fn serve_ip<const RX: usize>(start: IpStart<RX>) {
     let IpStart {
         mut service,
         stopper,
@@ -1040,7 +1026,6 @@ async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
             bridge_received,
             bridge_refused,
             bridge_copied,
-            bridge_turned,
         ));
         match select(run.as_mut(), stopper.requested()).await {
             Either::First(result) => result,

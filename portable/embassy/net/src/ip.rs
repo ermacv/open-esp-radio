@@ -8,7 +8,9 @@
 use core::{cell::Cell, future::Future, task::Poll};
 use oer_portable_memory::ExecutionContext;
 use oer_portable_sync::PriorityWaker;
-use oer_protocols_network_port::{EthernetFrameView, LinkSnapshot, LinkState, NetworkInterfaceId};
+use oer_protocols_network_port::{
+    EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetTransmit, NetworkInterfaceId,
+};
 use owned_embassy_net::{
     Stack, StackStorage,
     iface::{Iface, dhcpv4::DhcpConfig},
@@ -16,7 +18,9 @@ use owned_embassy_net::{
 };
 use xarxa_driver::{PacketBufAllocator, PacketPool, PacketPoolStorage};
 
-use crate::{OwnedEndpointResources, OwnedNetworkDevice, ethernet::EthernetBridge};
+use crate::{
+    OwnedEndpointResources, OwnedNetworkDevice, OwnedNetworkTxFrame, ethernet::EthernetBridge,
+};
 
 /// IPv4 values independent of the selected socket stack.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,7 +58,6 @@ pub enum Error {
     GatewayNotUnicast,
     RouteTableFull,
     DhcpMediumMismatch,
-    ContextAccessRefused,
 }
 
 impl From<crate::EndpointSplitError> for Error {
@@ -170,40 +173,52 @@ impl Control<'_> {
 /// exclusive static borrow in `start` prevents a second start or pool waiter.
 ///
 /// Memory placement belongs to the image. There are RX receive packet/queue
-/// slots and TX software admission credits; the general packets come from
+/// slots and the device's transmit half `T`; the general packets come from
 /// the allocator `start` takes, such as the device's
 /// [`TxSlots`](crate::ethernet::TxSlots).
 ///
 /// ```compile_fail,E0499
-/// use oer_portable_embassy_net::{NetworkInterfaceId, ip::{Configuration, Resources}};
+/// use oer_portable_embassy_net::{NetworkInterfaceId, OwnedNetworkTxFrame, ip::{Configuration, Resources}};
 /// use oer_portable_memory::ExecutionContext;
-/// use oer_protocols_network_port::NetDevice;
-/// fn twice<X: ExecutionContext, D: oer_portable_embassy_net::ethernet::OwnedTxDevice<'static>>(
-///     resources: &'static mut Resources<X, 1, 1>, first: D, second: D,
+/// use oer_protocols_network_port::{NetDevice, NetTransmit};
+/// fn twice<X: ExecutionContext, D: NetDevice, T: NetTransmit<Frame = OwnedNetworkTxFrame> + 'static>(
+///     resources: &'static mut Resources<X, 1, T>, first: (D, T), second: (D, T),
 ///     general: xarxa_driver::PacketBufAllocator,
 /// ) {
-///     let _ = resources.start::<D, 1>(first, None, general, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
-///     let _ = resources.start::<D, 1>(second, None, general, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
+///     let _ = resources.start::<D, 1>(first.0, first.1, None, general, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
+///     let _ = resources.start::<D, 1>(second.0, second.1, None, general, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
 /// }
 /// ```
-pub struct Resources<X: ExecutionContext + 'static, const RX: usize, const TX: usize> {
+pub struct Resources<
+    X: ExecutionContext + 'static,
+    const RX: usize,
+    T: NetTransmit<Frame = OwnedNetworkTxFrame> + 'static,
+> {
     rx_storage: PacketPoolStorage<RX>,
     rx_pool: Option<PacketPool<RX>>,
-    endpoint: OwnedEndpointResources<X, RX, TX>,
-    device: Option<OwnedNetworkDevice<'static, X, RX, TX>>,
-    stack: StackStorage<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
+    endpoint: OwnedEndpointResources<X, RX>,
+    device: Option<OwnedNetworkDevice<'static, X, RX, T>>,
+    stack: StackStorage<'static, OwnedNetworkDevice<'static, X, RX, T>>,
     state: State,
 }
 
-impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize> Default
-    for Resources<X, RX, TX>
+impl<
+    X: ExecutionContext + 'static,
+    const RX: usize,
+    T: NetTransmit<Frame = OwnedNetworkTxFrame> + 'static,
+> Default for Resources<X, RX, T>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize> Resources<X, RX, TX> {
+impl<
+    X: ExecutionContext + 'static,
+    const RX: usize,
+    T: NetTransmit<Frame = OwnedNetworkTxFrame> + 'static,
+> Resources<X, RX, T>
+{
     pub const fn new() -> Self {
         Self {
             rx_storage: PacketPoolStorage::new(),
@@ -215,52 +230,52 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize> Resources<
         }
     }
 
-    /// Build once over `general`, the allocator of every packet the stack
-    /// makes, which no other stack waits on. Errors retain final storage;
-    /// the device is returned on construction refusal, without a second
+    /// Build once over `device`, `transmit`, its transmit half, and
+    /// `general`, the allocator of every packet the stack makes, which no
+    /// other stack waits on. Errors retain final storage, without a second
     /// stack or fallback configuration.
     #[allow(
         clippy::too_many_arguments,
         reason = "one start over the device and its pools"
     )]
-    pub fn start<D: crate::ethernet::OwnedTxDevice<'static>, const LENT: usize>(
+    pub fn start<D: NetDevice, const LENT: usize>(
         &'static mut self,
         device: D,
+        transmit: T,
         lent: Option<&'static crate::ethernet::LentSlots<crate::ethernet::Lent<D>, LENT>>,
         general: PacketBufAllocator,
         interface: NetworkInterfaceId,
         address: [u8; 6],
         seed: u64,
         configuration: Configuration,
-    ) -> Result<(Control<'static>, Service<X, RX, TX, D, LENT>), StartRefused<D>> {
-        match self.initialize(general, interface, address, seed, configuration) {
-            Ok(Initialized {
-                state,
+    ) -> Result<(Control<'static>, Service<X, RX, T, D, LENT>), Error> {
+        let Initialized {
+            state,
+            iface,
+            runner,
+            radio,
+        } = self.initialize(transmit, general, interface, address, seed, configuration)?;
+        Ok((
+            Control { state },
+            Service {
                 iface,
                 runner,
-                radio,
-            }) => Ok((
-                Control { state },
-                Service {
-                    iface,
-                    runner,
-                    bridge: EthernetBridge::new(radio, device, lent),
-                    configuration,
-                    state,
-                },
-            )),
-            Err(reason) => Err(StartRefused { device, reason }),
-        }
+                bridge: EthernetBridge::new(radio, device, lent),
+                configuration,
+                state,
+            },
+        ))
     }
 
     fn initialize(
         &'static mut self,
+        transmit: T,
         general: PacketBufAllocator,
         interface: NetworkInterfaceId,
         address: [u8; 6],
         seed: u64,
         configuration: Configuration,
-    ) -> Result<Initialized<X, RX, TX>, Error> {
+    ) -> Result<Initialized<X, RX, T>, Error> {
         if let Configuration::Static(config) = configuration
             && config.prefix_length > 32
         {
@@ -277,7 +292,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize> Resources<
             .allocator();
         let (device, radio) = self
             .endpoint
-            .split(interface, address, receive)
+            .split(interface, address, receive, transmit)
             .map_err(Error::from)?;
         // Checked above, on this executor: no other stack claims the
         // general waiter before Stack::new.
@@ -312,16 +327,15 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize> Resources<
     }
 }
 
-pub struct StartRefused<D> {
-    pub device: D,
-    pub reason: Error,
-}
-
-struct Initialized<X: ExecutionContext + 'static, const RX: usize, const TX: usize> {
+struct Initialized<
+    X: ExecutionContext + 'static,
+    const RX: usize,
+    T: NetTransmit<Frame = OwnedNetworkTxFrame> + 'static,
+> {
     state: &'static State,
-    iface: Iface<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
-    runner: owned_embassy_net::Runner<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
-    radio: crate::OwnedNetworkRunner<'static, X, RX, TX>,
+    iface: Iface<'static, OwnedNetworkDevice<'static, X, RX, T>>,
+    runner: owned_embassy_net::Runner<'static, OwnedNetworkDevice<'static, X, RX, T>>,
+    radio: crate::OwnedNetworkRunner<'static, X, RX>,
 }
 
 /// Permanent bridge and stack runner. Reconnect never reconstructs this value.
@@ -330,13 +344,13 @@ struct Initialized<X: ExecutionContext + 'static, const RX: usize, const TX: usi
 pub struct Service<
     X: ExecutionContext + 'static,
     const RX: usize,
-    const TX: usize,
-    D: crate::ethernet::OwnedTxDevice<'static>,
+    T: NetTransmit<Frame = OwnedNetworkTxFrame> + 'static,
+    D: NetDevice,
     const LENT: usize,
 > {
-    iface: Iface<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
-    runner: owned_embassy_net::Runner<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
-    bridge: EthernetBridge<'static, X, RX, TX, D, LENT>,
+    iface: Iface<'static, OwnedNetworkDevice<'static, X, RX, T>>,
+    runner: owned_embassy_net::Runner<'static, OwnedNetworkDevice<'static, X, RX, T>>,
+    bridge: EthernetBridge<'static, X, RX, D, LENT>,
     configuration: Configuration,
     state: &'static State,
 }
@@ -344,16 +358,16 @@ pub struct Service<
 impl<
     X: ExecutionContext + 'static,
     const RX: usize,
-    const TX: usize,
-    D: crate::ethernet::OwnedTxDevice<'static>,
+    T: NetTransmit<Frame = OwnedNetworkTxFrame> + 'static,
+    D: NetDevice,
     const LENT: usize,
-> Service<X, RX, TX, D, LENT>
+> Service<X, RX, T, D, LENT>
 {
-    pub fn stack(&self) -> Stack<'static, OwnedNetworkDevice<'static, X, RX, TX>> {
+    pub fn stack(&self) -> Stack<'static, OwnedNetworkDevice<'static, X, RX, T>> {
         self.iface.stack()
     }
 
-    pub fn interface(&self) -> Iface<'static, OwnedNetworkDevice<'static, X, RX, TX>> {
+    pub fn interface(&self) -> Iface<'static, OwnedNetworkDevice<'static, X, RX, T>> {
         self.iface
     }
 
@@ -366,7 +380,6 @@ impl<
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
         mut copied: impl FnMut(crate::ethernet::LentCopy),
-        mut transmitted: impl FnMut(crate::ethernet::TxTurn),
     ) -> Result<(), Error> {
         let mut running = core::pin::pin!(self.runner.run());
         drive(
@@ -381,7 +394,6 @@ impl<
             &mut received,
             &mut refused,
             &mut copied,
-            &mut transmitted,
         )
         .await
     }
@@ -399,8 +411,8 @@ trait Interface {
     /// its device.
     fn drop_received(&self) {}
 }
-impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
-    for Iface<'_, OwnedNetworkDevice<'_, X, RX, TX>>
+impl<X: ExecutionContext, const RX: usize, T: NetTransmit<Frame = OwnedNetworkTxFrame>> Interface
+    for Iface<'_, OwnedNetworkDevice<'_, X, RX, T>>
 {
     fn restart_dhcp(&self) {
         self.restart_dhcpv4();
@@ -429,16 +441,9 @@ impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn drive<
-    'r,
-    X: ExecutionContext,
-    const RX: usize,
-    const TX: usize,
-    D: crate::ethernet::OwnedTxDevice<'r>,
-    const LENT: usize,
->(
+async fn drive<'r, X: ExecutionContext, const RX: usize, D: NetDevice, const LENT: usize>(
     state: &State,
-    bridge: &mut EthernetBridge<'r, X, RX, TX, D, LENT>,
+    bridge: &mut EthernetBridge<'r, X, RX, D, LENT>,
     iface: &impl Interface,
     configuration: Configuration,
     mut poll_stack: impl FnMut(&mut core::task::Context<'_>),
@@ -446,7 +451,6 @@ async fn drive<
     mut received: impl FnMut(EthernetFrameView<'_>),
     mut refused: impl FnMut(crate::RxEnqueueError),
     mut copied: impl FnMut(crate::ethernet::LentCopy),
-    mut transmitted: impl FnMut(crate::ethernet::TxTurn),
 ) -> Result<(), Error> {
     core::future::poll_fn(|cx| {
         state.runner.register(cx.waker());
@@ -456,23 +460,9 @@ async fn drive<
             Lifecycle::Running => {}
         }
         if state.stop.get() {
-            return finish(state, bridge, iface, Ok(()), &mut events);
+            return finish(state, bridge, iface, &mut events);
         }
-        if let Poll::Ready(Err(_)) = bridge.poll(
-            cx,
-            &mut received,
-            &mut refused,
-            &mut copied,
-            &mut transmitted,
-        ) {
-            return finish(
-                state,
-                bridge,
-                iface,
-                Err(Error::ContextAccessRefused),
-                &mut events,
-            );
-        }
+        bridge.poll(cx, &mut received, &mut refused, &mut copied);
         let link = bridge.link();
         let previous = state.status.get();
         if link != previous.link {
@@ -517,26 +507,18 @@ async fn drive<
     .await
 }
 
-fn finish<
-    'r,
-    X: ExecutionContext,
-    const RX: usize,
-    const TX: usize,
-    D: crate::ethernet::OwnedTxDevice<'r>,
-    const LENT: usize,
->(
+fn finish<'r, X: ExecutionContext, const RX: usize, D: NetDevice, const LENT: usize>(
     state: &State,
-    bridge: &mut EthernetBridge<'r, X, RX, TX, D, LENT>,
+    bridge: &mut EthernetBridge<'r, X, RX, D, LENT>,
     iface: &impl Interface,
-    result: Result<(), Error>,
     events: &mut impl FnMut(StatusChanged),
 ) -> Poll<Result<(), Error>> {
-    let result = result.and(bridge.stop().map_err(|_| Error::ContextAccessRefused));
+    bridge.stop();
     iface.drop_received();
     // The packets the interface held may be lent frames: return them now,
     // the service polls its bridge no more.
     bridge.reclaim_lent();
-    let result = result.and(iface.clear());
+    let result = iface.clear();
     state.publish(
         Status {
             link: LinkSnapshot {

@@ -26,7 +26,7 @@ use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
 use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MAX_ETHERNET_PAYLOAD_LEN};
 use oer_protocols_ieee80211_core_roles_sta::machine::StaProfile;
 use oer_protocols_network_port::{
-    LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused,
+    LinkSnapshot, LinkState, NetDevice, NetTransmit, TransmitError, TransmitRefused,
 };
 
 /// Latest product state. Events and command owners still reach the callback once.
@@ -570,85 +570,39 @@ pub enum TxRefused<P> {
     Lost,
 }
 
-/// The Wi-Fi implementation of the neutral Ethernet contract. `L` is the
-/// port's lent receive buffer ([`DatapathPort::LentRx`](crate::datapath::DatapathPort::LentRx)),
-/// `P` the network stack's packet a transmission hands over and `S` the
-/// memory its frame goes into for the station.
-pub struct Device<
-    'c,
-    L,
-    P,
-    S: TxSupply<P>,
-    const TX: usize,
-    const RX: usize,
-    N: Notifies = SameHart,
-> {
-    /// The frames for the station, each in the network's memory, where the
-    /// station writes its MPDU header in place.
-    transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
-    /// The memory the station gave back, free for the next frames.
-    returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
-    supply: S,
+/// The Wi-Fi implementation of the neutral Ethernet contract's link and
+/// receive half. `L` is the port's lent receive buffer
+/// ([`DatapathPort::LentRx`](crate::datapath::DatapathPort::LentRx)).
+pub struct Device<'c, L, const RX: usize, N: Notifies = SameHart> {
     receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
     copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
     link: &'c super::NetworkLink<N::NetworkWaker>,
     observed: LinkSnapshot,
-    packet: core::marker::PhantomData<fn(P)>,
 }
-/// The network end over the station's channels and `state`'s link.
-impl<'c, L, P, S: TxSupply<P>, const TX: usize, const RX: usize, N: Notifies>
-    Device<'c, L, P, S, TX, RX, N>
-{
+impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
+    /// The network end over the station's receive channels and `state`'s
+    /// link.
     pub fn new(
-        transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
-        returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
-        supply: S,
         receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
         copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
         state: &'c State<N>,
     ) -> Self {
         Self {
-            transmit,
-            returned,
-            supply,
             receive,
             copied,
             link: state.network_link(),
             observed: LinkSnapshot::DOWN,
-            packet: core::marker::PhantomData,
-        }
-    }
-    /// Take back every memory the station returned, here on the network's
-    /// executor, and register for the next return.
-    fn reclaim(&mut self, cx: &mut Context<'_>) {
-        loop {
-            while let Ok(Some(memory)) = self.returned.try_receive_with(Option::take) {
-                self.supply.give(memory);
-            }
-            if core::pin::pin!(self.returned.ready()).poll(cx).is_pending() {
-                return;
-            }
         }
     }
 }
-impl<
-    L: oer_protocols_ieee80211_contracts_port::LentRxBuffer,
-    P: oer_protocols_network_port::EthernetFrame,
-    S: TxSupply<P>,
-    const TX: usize,
-    const RX: usize,
-    N: Notifies,
-> NetDevice for Device<'_, L, P, S, TX, RX, N>
+impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N: Notifies>
+    NetDevice for Device<'_, L, RX, N>
 {
     type RxFrame = Received<L>;
-    type TxFrame = P;
     fn link(&self) -> LinkSnapshot {
         self.link.snapshot()
     }
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
-        // The bridge polls the link on every turn: returned memory comes
-        // back here even while the stack has nothing to send.
-        self.reclaim(cx);
         self.link.register(cx);
         let link = self.link();
         if link == self.observed {
@@ -680,20 +634,68 @@ impl<
             .ok_or(oer_protocols_network_port::FrameLengthError::MissingCopy)?;
         oer_protocols_network_port::EthernetFrame::view(&copy).map(read)
     }
-    fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.link.register(cx);
-        if self.link().state == LinkState::Down {
-            return Poll::Pending;
+}
+
+/// The Wi-Fi implementation of the neutral Ethernet contract's transmit
+/// half. `P` is the network stack's packet a transmission hands over and
+/// `S` the memory its frame goes into for the station.
+pub struct DeviceTransmit<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies = SameHart> {
+    /// The frames for the station, each in the network's memory, where the
+    /// station writes its MPDU header in place.
+    transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
+    /// The memory the station gave back, free for the next frames.
+    returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
+    supply: S,
+    link: &'c super::NetworkLink<N::NetworkWaker>,
+    packet: core::marker::PhantomData<fn(P)>,
+}
+impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, S, TX, N> {
+    /// The network end over the station's transmit channels and `state`'s
+    /// link.
+    pub fn new(
+        transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
+        returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
+        supply: S,
+        state: &'c State<N>,
+    ) -> Self {
+        Self {
+            transmit,
+            returned,
+            supply,
+            link: state.network_link(),
+            packet: core::marker::PhantomData,
         }
-        // Free memory comes back with the station's returns.
-        self.reclaim(cx);
+    }
+    /// Take back every memory the station returned, here on the network's
+    /// executor.
+    fn take_returned(&mut self) {
+        while let Ok(Some(memory)) = self.returned.try_receive_with(Option::take) {
+            self.supply.give(memory);
+        }
+    }
+}
+impl<P: oer_protocols_network_port::EthernetFrame, S: TxSupply<P>, const TX: usize, N: Notifies>
+    NetTransmit for DeviceTransmit<'_, P, S, TX, N>
+{
+    type Frame = P;
+    fn has_room(&mut self) -> bool {
+        self.take_returned();
+        self.supply.available() && self.transmit.free_capacity() != 0
+    }
+    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        loop {
+            self.take_returned();
+            if core::pin::pin!(self.returned.ready()).poll(cx).is_pending() {
+                break;
+            }
+        }
         if !self.supply.available() {
             return Poll::Pending;
         }
         core::pin::pin!(self.transmit.ready()).poll(cx)
     }
     fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
-        let checked = if self.link().state == LinkState::Down {
+        let checked = if self.link.snapshot().state == LinkState::Down {
             Err(TransmitError::LinkDown)
         } else if self.transmit.free_capacity() == 0 {
             Err(TransmitError::QueueFull)
