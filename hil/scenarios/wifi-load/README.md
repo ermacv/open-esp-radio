@@ -16,7 +16,7 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 | `ping` | The host's own `ping`, 120 requests of 56 bytes 100 ms apart over the idle link, answered by the image's IP stack. Fails above a median of 3 ms |
 | `combined` | 65 Mbit/s each way at once, 130 in all, RTT probes and a `ping` beside them |
 | `overload` | 130 Mbit/s each way at once, more than the air holds either way, RTT probes and a `ping` beside them |
-| `sparse` | Each shape both ways at once with a `ping` beside it and no RTT probes: 1 and 2 datagrams every 100 ms, 1 every 1 ms, bursts of 8 every 20 ms and of 32 every 10 ms, and 8 of 200 bytes every 20 ms. Fails above a median ping of 3 ms |
+| `sparse` | Each shape both ways at once with a `ping` beside it and no RTT probes: 1 and 2 datagrams every 100 ms, 1 every 1 ms, bursts of 8 every 20 ms and of 32 every 50 ms, and 8 of 200 bytes every 20 ms. Fails above a median ping of 3 ms |
 | `stop` | Leaves 2 s into an RX run of 65 Mbit/s and records how long the leave took. Fails unless the station answers `Down`: the IP service stops and closes the load socket, every lent receive buffer returns by the stop's 2 s deadline, and the radio retires; the run itself ends at its time without the socket. Runs last, because the image serves no station after a leave |
 
 Each load case offers 10, 30, 50 and 65 Mbit/s in total (1472-byte
