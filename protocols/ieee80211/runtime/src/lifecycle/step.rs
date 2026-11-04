@@ -29,7 +29,7 @@ enum Follow<'id, D: DatapathPort<'id>, const GROUPS: usize> {
     /// The station's notice.
     Notice(StaNotice),
     /// The station failed.
-    Failed(StationFailure),
+    Failed(StationFailure<super::PortFault<'id, D>>),
 }
 
 impl<'id, D, C, X, T, const GROUPS: usize, O> Lifecycle<'id, D, C, X, T, GROUPS, O>
@@ -97,6 +97,7 @@ where
                     }
                 }
             }
+            let mut idle = false;
             while !self.inner.link.loan
                 && self.inner.end.is_none()
                 && self.inner.ending.is_none()
@@ -104,12 +105,26 @@ where
             {
                 let follow = {
                     let Some(action) = self.station.poll_action(now, &mut self.inner.events) else {
+                        idle = true;
                         break;
                     };
                     progress = true;
                     self.inner.action(actor, io, action)
                 };
                 self.follow(actor, io, follow);
+            }
+            // The link goes back once the station owes nothing more: its
+            // leave frames, numbered on the link, go under it first. The
+            // last poll checked the room.
+            if idle
+                && self.inner.link.asked
+                && self.inner.end.is_none()
+                && self.inner.ending.is_none()
+            {
+                self.inner.link.asked = false;
+                self.inner.link.returning = true;
+                self.inner.send(actor, ToActor::Disconnect);
+                progress = true;
             }
             if self.inner.end.is_none() && self.inner.ending.is_none() && self.inner.room(actor) {
                 progress |= self.reply(actor, io);
@@ -351,7 +366,8 @@ where
                     LinkAction::Agreement { tid, window } => {
                         self.send(actor, ToActor::Agreement { tid, window })
                     }
-                    LinkAction::Return => self.send(actor, ToActor::Disconnect),
+                    // The station's frames numbered on the link go first.
+                    LinkAction::Return => self.link.asked = true,
                     LinkAction::Sequence(tid) => self.send(actor, ToActor::Sequence(tid)),
                     LinkAction::ReturnKey => self.send(actor, ToActor::ReturnPairwise),
                 }

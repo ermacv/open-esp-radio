@@ -129,7 +129,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn poll_start_on(
         &mut self,
         wifi: oer_protocols_ieee80211_wire::channel::WifiChannel,
-    ) -> Poll<Result<(), StartRefused>> {
+    ) -> Poll<Result<(), StartRefused<Fault>>> {
         let waker = self.waker();
         let now = self.now();
         self.port
@@ -522,23 +522,33 @@ fn a_stop_ends_a_published_arena_through_its_timeout_abort_and_hands_its_end_to_
 }
 
 #[test]
-fn a_frame_left_in_an_arena_keeps_the_chains_from_a_new_installation() {
+fn a_frame_left_in_an_arena_refuses_the_reinstall_as_not_retired_until_withdrawn() {
     with_installations(|mut fixture, installations| {
         fixture.start();
         let [first, _second] = fixture.arenas();
         fixture.fill(&first, &[10], plain);
         fixture.stop();
         assert_eq!(fixture.observed.borrow().publications, 0);
-        let Err(refused) = reinstall(fixture, installations) else {
-            panic!("the arena keeps its chain");
-        };
+        // The retire checks see the frame: a handled refusal, no fault.
         assert_eq!(
-            refused,
-            (
-                ReinstallRefused::Resources,
-                Some(Fault::InstallationResources)
-            )
+            fixture.port.reinstall(installations, 18).err(),
+            Some(ReinstallRefused::NotRetired)
         );
+        assert_eq!(fixture.port.fault(), None);
+        assert!(
+            fixture.port.release().is_none(),
+            "the release runs the same checks"
+        );
+        assert!(!fixture.observed.borrow().detached);
+        // Once the caller takes its frame back, the chains go home.
+        let mut returned = Returned::default();
+        fixture
+            .port
+            .arena()
+            .withdraw(&first, returned.take())
+            .expect("a stopped port withdraws its unpublished arena");
+        assert_eq!(returned.tags(), [10]);
+        assert!(reinstall(fixture, installations).is_ok());
     });
 }
 
@@ -937,13 +947,13 @@ fn the_last_started_channel_survives_a_stop_and_reinstall() {
 }
 
 #[test]
-fn a_refused_retune_refuses_the_start_and_leaves_the_port_stopped_to_start_again() {
+fn a_refused_retune_refuses_the_start_with_its_cause_and_leaves_the_port_stopped_to_start_again() {
     // The radio actor refused the retune because a tracking tick had failed.
     let tick = Poison {
         origin: PoisonOrigin::TrackingTick,
         cause: PoisonCause::Tracking(PhyFault::EdgeTimedOut),
     };
-    for cause in [
+    let retunes = [
         WifiRetuneError::Radio(Failure::Poisoned(tick)),
         WifiRetuneError::Radio(Failure::Poisoned(Poison::request(
             oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
@@ -954,15 +964,18 @@ fn a_refused_retune_refuses_the_start_and_leaves_the_port_stopped_to_start_again
         WifiRetuneError::NotStopped(
             oer_chips_esp32s31_hal::owner::maintenance::Error::MacActive { state: 3 },
         ),
-    ] {
+    ]
+    .map(Fault::Retune);
+    // The regulatory domain's refusal of the channel is the front end's too.
+    for cause in retunes.into_iter().chain([Fault::ChannelNotPermitted]) {
         with_fixture(|fixture| {
             fixture.start();
             fixture.stop();
-            fixture.observed.borrow_mut().fail_start = Some(Fault::Retune(cause));
+            fixture.observed.borrow_mut().fail_start = Some(cause);
             assert_eq!(
                 fixture.poll_start_on(channel(1)),
-                Poll::Ready(Err(StartRefused::Retune)),
-                "{cause:?}"
+                Poll::Ready(Err(StartRefused::Retune(cause))),
+                "{cause:?}: the refusal keeps its cause"
             );
             assert_eq!(fixture.port.fault(), None, "a refused start is no fault");
             assert_eq!(fixture.observed.borrow().start_channels, [channel(6)]);

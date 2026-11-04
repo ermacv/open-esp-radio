@@ -13,6 +13,17 @@ pub(super) struct Collected {
     pub(super) fresh: bool,
 }
 
+/// Where a turn left the lifecycle's messages.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Messages {
+    /// Every queued message was taken.
+    Taken,
+    /// The next one waits for a held command or the changing radio.
+    Waiting,
+    /// The budget left messages queued; the next turn takes them.
+    Left,
+}
+
 /// The port's fault of the actor of `D`.
 type PortFault<'id, D> = <<D as DatapathPort<'id>>::Port as DataPort<'id>>::Fault;
 
@@ -130,11 +141,14 @@ where
         >,
     O: ActorEvents,
 {
-    /// Whether the lifecycle's messages are taken now: no command waits at
-    /// its barrier, and a message taken while the radio changes waits for
-    /// it no longer.
+    /// Whether the lifecycle's messages are taken now: a command waiting at
+    /// its barrier takes one more, which a stop withdraws it for, and a
+    /// message taken while the radio changes waits for it no longer.
     fn takes_messages(&self) -> bool {
-        self.held.is_none() && !(self.stash.is_some() && self.radio.changing())
+        if self.held.is_some() {
+            return self.stash.is_none();
+        }
+        !(self.stash.is_some() && self.radio.changing())
     }
 
     /// The earliest instant after the turn's at which the actor must run
@@ -309,19 +323,27 @@ where
         let transmitted = self.transmit(facts, lifecycle, network);
         D::span(ActorSpan::Transmit, true);
         transmitted?;
-        D::span(ActorSpan::Receive, false);
-        let received = self.rx(facts.rx, lifecycle, network);
-        D::span(ActorSpan::Receive, true);
-        received?;
+        // The lifecycle's messages go before the received units: a link
+        // handed over is in force for every unit this turn routes.
+        D::span(ActorSpan::Messages, false);
+        let served = self.messages(cx, lifecycle, network);
+        D::span(ActorSpan::Messages, true);
+        if served? == Messages::Left {
+            // The budget left messages queued, a link among them: the
+            // units wait for the turn that took them, which follows at once.
+            self.facts.rx |= facts.rx;
+            self.again = true;
+        } else {
+            D::span(ActorSpan::Receive, false);
+            let received = self.rx(facts.rx, lifecycle, network);
+            D::span(ActorSpan::Receive, true);
+            received?;
+        }
         D::span(ActorSpan::Intake, false);
         let taken = self.intake(lifecycle, network);
         D::span(ActorSpan::Intake, true);
         taken?;
         self.return_freed(network);
-        D::span(ActorSpan::Messages, false);
-        let served = self.messages(cx, lifecycle, network);
-        D::span(ActorSpan::Messages, true);
-        served?;
         self.drive_radio(cx)?;
         // A message may have released the link's data: the plane takes it
         // now, so the network's next MSDU wakes this actor.
@@ -445,7 +467,8 @@ where
     /// Take the lifecycle's messages in order: at most
     /// [`MESSAGE_BUDGET`], of which at most one command or radio change. A
     /// command held at its barrier runs first; while it waits, or while the
-    /// radio starts or moves, the next message waits.
+    /// radio starts or moves, the next message waits, but a stop behind a
+    /// held command withdraws it and runs.
     fn messages<
         const TO: usize,
         const FROM: usize,
@@ -459,25 +482,35 @@ where
         cx: &mut Context<'_>,
         lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
-    ) -> Result<(), Failed<'id, D>> {
+    ) -> Result<Messages, Failed<'id, D>> {
         let mut heavy = false;
         if let Some(HeldCommand { command }) = self.held.take() {
             heavy = true;
             self.command(command, lifecycle, network)?;
             if self.held.is_some() {
-                return Ok(());
+                let next = self
+                    .stash
+                    .take()
+                    .or_else(|| lifecycle.to_actor.try_receive());
+                match next {
+                    Some(stop @ ToActor::Stop { .. }) => {
+                        self.message(cx, stop, lifecycle, network)?;
+                    }
+                    next => self.stash = next,
+                }
+                return Ok(Messages::Waiting);
             }
         }
         for _ in 0..MESSAGE_BUDGET {
             if self.radio.changing() && self.stash.is_some() {
-                return Ok(());
+                return Ok(Messages::Waiting);
             }
             let Some(message) = self
                 .stash
                 .take()
                 .or_else(|| lifecycle.to_actor.try_receive())
             else {
-                return Ok(());
+                return Ok(Messages::Taken);
             };
             let weighs = !matches!(
                 message,
@@ -497,19 +530,26 @@ where
                     message,
                     ToActor::StationTx(_) | ToActor::Port(_) | ToActor::Parcel
                 );
-            if (weighs && heavy) || waits {
+            if waits {
                 self.stash = Some(message);
-                self.again |= !waits;
-                return Ok(());
+                return Ok(Messages::Waiting);
+            }
+            if weighs && heavy {
+                self.stash = Some(message);
+                self.again = true;
+                return Ok(Messages::Left);
             }
             heavy |= weighs;
             self.message(cx, message, lifecycle, network)?;
             if self.held.is_some() || self.end.is_some() {
-                return Ok(());
+                return Ok(Messages::Waiting);
             }
         }
-        self.again |= !lifecycle.to_actor.is_empty();
-        Ok(())
+        if lifecycle.to_actor.is_empty() {
+            return Ok(Messages::Taken);
+        }
+        self.again = true;
+        Ok(Messages::Left)
     }
 
     /// Take one message of the lifecycle.
@@ -662,7 +702,7 @@ where
                 self.facts.rx = true;
                 self.again = true;
             }
-            ToActor::Stop { deadline } => self.stop(deadline, network)?,
+            ToActor::Stop { deadline } => self.stop(deadline, lifecycle, network)?,
             ToActor::Retire | ToActor::Reinstall => {
                 if !matches!(self.radio, Radio::Halted | Radio::Stopped) {
                     // Only a stopped radio retires: the lifecycle stops it
@@ -720,25 +760,33 @@ where
         match progress {
             CommandProgress::Done => {}
             CommandProgress::Held(command) => self.held = Some(HeldCommand { command }),
-            CommandProgress::Refused(command, reason) => {
-                // A refused group change ends without a terminal.
-                let group = if self.stage.group_terminal.is_none() {
-                    self.group.take()
-                } else {
-                    None
-                };
-                let grouped = self.give_group(lifecycle, group)?;
-                self.give(
-                    lifecycle,
-                    Returned::Command {
-                        command,
-                        grouped,
-                        reason,
-                    },
-                )?;
-            }
+            CommandProgress::Refused(command, reason) => self.refuse(command, reason, lifecycle)?,
         }
         self.staged(lifecycle, network)
+    }
+
+    /// Give a command that did not run back with its owners and the group
+    /// token: a refused group change ends without a terminal.
+    fn refuse<const TO: usize, const FROM: usize, const RETURNS: usize>(
+        &mut self,
+        command: ActorCommand<'id, D>,
+        reason: CommandRefusal,
+        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+    ) -> Result<(), Failed<'id, D>> {
+        let group = if self.stage.group_terminal.is_none() {
+            self.group.take()
+        } else {
+            None
+        };
+        let grouped = self.give_group(lifecycle, group)?;
+        self.give(
+            lifecycle,
+            Returned::Command {
+                command,
+                grouped,
+                reason,
+            },
+        )
     }
 
     /// Give the link back: the arenas' unpublished frames and the waiting
@@ -778,11 +826,26 @@ where
     /// Begin the stop by `deadline`: the data's unpublished frames go back
     /// to the network, the receive agreements end and their units return,
     /// and the radio stops.
-    fn stop<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
+    fn stop<
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
         &mut self,
         deadline: Instant,
+        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
+        // The stop withdraws the command held at its barrier: it goes back
+        // with its owners, refused as the stopping radio refuses it, and
+        // the stopping port forgets its barrier.
+        if let Some(HeldCommand { command }) = self.held.take() {
+            self.refuse(command, CommandRefusal::NotEnabled, lifecycle)?;
+        }
         self.stop_data()?;
         self.receive
             .clear(&mut PortBlockAcks(&mut self.port), &mut self.events);

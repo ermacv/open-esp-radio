@@ -27,15 +27,18 @@
 //! 1. the transmit facts: completed station frames and port terminals go to
 //!    the lifecycle, a data arena's end settles and the sealed standby
 //!    publishes at once;
-//! 2. at most [`RX_BUDGET`] received units, reordered, admitted by the link
-//!    and handed on; the network at its lend limit stops the pull until it
-//!    returns a unit;
-//! 3. at most `TX_DEPTH` network MSDUs into the standby arena, which
-//!    publishes when nothing is on the air;
-//! 4. the network's freed memory back, while its queue has room;
-//! 5. the lifecycle's messages in order, at most [`MESSAGE_BUDGET`], of
+//! 2. the lifecycle's messages in order, at most [`MESSAGE_BUDGET`], of
 //!    which at most one port command or radio change; a command the port
-//!    holds at its barrier stops the messages until it ran;
+//!    holds at its barrier stops the messages until it ran, but a stop
+//!    behind it withdraws it;
+//! 3. at most [`RX_BUDGET`] received units, reordered, admitted by the link
+//!    and handed on; the network at its lend limit stops the pull until it
+//!    returns a unit. While the message budget left messages queued, the
+//!    units wait for the next turn: a link handed over before them is in
+//!    force when they are routed;
+//! 4. at most `TX_DEPTH` network MSDUs into the standby arena, which
+//!    publishes when nothing is on the air;
+//! 5. the network's freed memory back, while its queue has room;
 //! 6. the coalesced facts for the lifecycle.
 //!
 //! The actor wakes itself only when a budget ran out with work left, or
@@ -301,8 +304,8 @@ struct Owed<'id, D: DatapathPort<'id>> {
     /// Refused MSDUs by reason.
     refused: heapless::Deque<(MsduRefusal, u16), 4>,
     /// The answers to the lifecycle's radio and link messages.
-    started: Option<Result<(), StartRefused>>,
-    retuned: Option<Result<(), RetuneFailed>>,
+    started: Option<Result<(), StartRefused<<D::Port as DataPort<'id>>::Fault>>>,
+    retuned: Option<Result<(), RetuneFailed<<D::Port as DataPort<'id>>::Fault>>>,
     stopped: Option<StopOutcome>,
     link_returned: bool,
     sequence: Option<(WmmUserPriority, SequenceNumber)>,

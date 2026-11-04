@@ -57,6 +57,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .is_some_and(|arena| arena.on_air().is_some())
     }
 
+    /// Whether the arenas give their chains and tickets back at retirement:
+    /// both idle and empty, holding no key right, never faulted.
+    pub(in crate::port) fn arenas_returnable(&self) -> bool {
+        self.arena
+            .as_ref()
+            .is_some_and(DataArenas::<Id, B>::returnable)
+    }
+
     /// Whether the station's pending pairwise key removal waits for an
     /// arena's key right: a frame it encrypted is on the air, awaits
     /// settlement or is retained.

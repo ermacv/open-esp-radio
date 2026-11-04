@@ -26,10 +26,15 @@ their wake topology, events, command credits, admissions, transmit context
 places and the receive Block Ack storage. `monitor` holds the capture and
 injection handoffs of a monitor.
 
-Each actor turn reads the clock once and serves the transmit facts, at most
-32 received units, the network's MSDUs, the freed memory and the
-lifecycle's messages; the actor wakes itself only when a budget ran out
-with work left. Air input never ends it: only the port's named fault or the
+Each actor turn reads the clock once and serves the transmit facts, the
+lifecycle's messages, at most 32 received units, the network's MSDUs and
+the freed memory; the actor wakes itself only when a budget ran out with
+work left. While the message budget leaves messages queued, received units
+wait for the next turn, so a link handed over before them is in force when
+they are routed. A stop withdraws a command the port holds at its barrier:
+it comes back refused `NotEnabled`, and the stopping lifecycle drops its
+owners with the installation. The lifecycle asks the actor for the link
+back once the station's leave frames numbered on the link went before it. Air input never ends it: only the port's named fault or the
 actor's own broken contract does, with every owner kept. The lifecycle
 wakes on the actor's messages, the application's commands and stop, and
 one alarm at the station's, arbiter's and reconnect policy's deadline; at

@@ -297,6 +297,17 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
         })
     }
 
+    /// Whether [`Self::into_parts`] gives the chains and tickets back: both
+    /// arenas are idle and empty, hold no key right and never faulted.
+    pub fn returnable(&self) -> bool {
+        self.fault.is_none()
+            && self.chains.iter().all(|chain| {
+                matches!(chain.phase, Phase::Idle)
+                    && chain.owner.is_fully_free()
+                    && matches!(chain.admission, Some(TxAdmission::Open(_)))
+            })
+    }
+
     /// The chains and tickets back, when both arenas are idle and empty,
     /// hold no key right and never faulted.
     ///
@@ -305,13 +316,7 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
     /// The arenas, unchanged.
     #[allow(clippy::result_large_err, reason = "the arenas go back by value")]
     pub fn into_parts(self) -> Result<ArenaParts<'core, 'slot, L, Path, SLOTS>, Self> {
-        let returnable = self.fault.is_none()
-            && self.chains.iter().all(|chain| {
-                matches!(chain.phase, Phase::Idle)
-                    && chain.owner.is_fully_free()
-                    && matches!(chain.admission, Some(TxAdmission::Open(_)))
-            });
-        if !returnable {
+        if !self.returnable() {
             return Err(self);
         }
         let [first, second] = self.chains;

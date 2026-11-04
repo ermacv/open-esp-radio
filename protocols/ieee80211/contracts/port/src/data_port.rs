@@ -225,13 +225,14 @@ pub enum SubmitRefusal {
 }
 
 /// Why [`DataPort::poll_start`] did not start the radio. Nothing runs;
-/// the port stays stopped and can start again.
+/// the port stays stopped and can start again. `F` is the port's
+/// [`DataPort::Fault`], which names why the front end did not tune.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum StartRefused {
+pub enum StartRefused<F> {
     /// The radio runs already.
     Running,
-    /// The radio front end did not tune the channel.
-    Retune,
+    /// The radio front end did not tune the channel, for the port's cause.
+    Retune(F),
     /// The start did not end within the backend's command bound.
     Deadline,
     /// The device refused the start.
@@ -514,7 +515,7 @@ pub trait DataPort<'id> {
         cx: &mut Context<'_>,
         channel: SupportedChannel<Self::Caps>,
         now: Instant,
-    ) -> Poll<Result<(), StartRefused>>;
+    ) -> Poll<Result<(), StartRefused<Self::Fault>>>;
 
     /// Stop the radio: queued attempts end withdrawn, a published one is
     /// waited for, then the MAC, its DMA and interrupt work stop, within

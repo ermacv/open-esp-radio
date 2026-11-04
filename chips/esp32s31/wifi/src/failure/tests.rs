@@ -170,3 +170,34 @@ fn a_lifecycle_failure_names_its_cause_and_keeps_its_observations() {
     ));
     assert_eq!(actor.names(), ["Actor", "PairwiseCustody"]);
 }
+
+#[test]
+fn a_refused_start_keeps_the_retune_cause_in_its_path() {
+    use oer_chips_esp32s31_ieee80211_driver::port::{Fault, WifiRetuneError};
+    use oer_chips_esp32s31_radio_client::Failure;
+    use oer_portable_diagnostics::DiagPath;
+    use oer_protocols_ieee80211_contracts_port::StartRefused;
+    let refused = super::convert::start_refused(StartRefused::Retune(Fault::Retune(
+        WifiRetuneError::Radio(Failure::Refused),
+    )));
+    assert_eq!(
+        refused,
+        StartRefused::Retune(BackendFault::Retune(RetuneError::Radio(
+            super::convert::radio_failure(Failure::Refused)
+        )))
+    );
+    let path = DiagPath::of(&LifecycleFailure::StartRefused(refused));
+    assert_eq!(path.names(), ["StartRefused", "Retune", "Retune", "Radio"]);
+    assert!(path.overflowed(), "the radio failure's subtree is cut");
+    let permit = DiagPath::of(&LifecycleFailure::StartRefused(
+        super::convert::start_refused(StartRefused::Retune(Fault::ChannelNotPermitted)),
+    ));
+    assert_eq!(
+        permit.names(),
+        ["StartRefused", "Retune", "ChannelNotPermitted"]
+    );
+    let device = DiagPath::of(&LifecycleFailure::StartRefused(
+        super::convert::start_refused(StartRefused::Device),
+    ));
+    assert_eq!(device.names(), ["StartRefused", "Device"]);
+}

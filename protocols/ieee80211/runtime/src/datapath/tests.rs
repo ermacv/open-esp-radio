@@ -627,6 +627,28 @@ fn received_data_reaches_the_network_without_the_lifecycle() {
 }
 
 #[test]
+fn a_unit_landing_behind_the_queued_handover_is_routed_under_the_link() {
+    bench(|bench| {
+        bench.start();
+        // Commands the message budget takes one per turn queue ahead of the
+        // handover; the access point's data lands before the actor's turn.
+        for message in [ToActor::Disassociated, ToActor::Disassociated] {
+            assert!(bench.to_actor.try_send(message).is_ok());
+        }
+        assert!(bench.link.try_send(link(true, None)).is_ok());
+        assert!(bench.to_actor.try_send(ToActor::Connect).is_ok());
+        assert!(bench.to_actor.try_send(ToActor::Release).is_ok());
+        bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
+        bench.settle();
+        assert!(matches!(
+            bench.receive.try_receive(),
+            Some(Received::Lent(_))
+        ));
+        assert!(bench.next().is_none(), "nothing went to the lifecycle");
+    });
+}
+
+#[test]
 fn the_networks_lend_limit_holds_frames_until_it_returns_one() {
     bench(|bench| {
         bench.start();

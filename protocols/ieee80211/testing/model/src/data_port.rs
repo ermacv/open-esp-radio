@@ -1353,7 +1353,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         _: &mut Context<'_>,
         channel: SupportedChannel<C>,
         now: Instant,
-    ) -> Poll<Result<(), StartRefused>> {
+    ) -> Poll<Result<(), StartRefused<ModelPortFault>>> {
         if self.radio != Radio::Stopped {
             return Poll::Ready(Err(StartRefused::Running));
         }
@@ -1383,6 +1383,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 self.air
                     .disables
                     .set(self.air.disables.get().saturating_add(1));
+                // A stopping port refuses the held command back to its
+                // caller: its bound runs again from its next admission.
+                self.held_since = None;
                 now
             }
             Radio::Stopping { since } => since,

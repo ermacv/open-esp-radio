@@ -591,10 +591,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.now = Instant::from_micros(0);
         self.deadline = None;
         self.rx_later = None;
-        self.group_since = None;
-        self.holding = None;
-        self.cut_retry = false;
-        self.cut_due = false;
+        self.forget_held();
         self.reopen = false;
         self.stop_served = false;
         self.core_disabled = false;
@@ -641,6 +638,20 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             && self.shared.returned.none_out()
             && self.driver.queues.iter().all(|queue| queue.is_empty())
             && self.driver.running.iter().all(Option::is_none)
+            && self.driver.arenas_returnable()
+    }
+
+    /// Forget the command the caller held at its barrier: its admission
+    /// instant, its hold on single MPDUs, its receive cut and its removal
+    /// barrier. A stop refuses the held command back to the caller
+    /// unchanged; it runs again, from its own new admission, once the port
+    /// runs again.
+    fn forget_held(&mut self) {
+        self.group_since = None;
+        self.holding = None;
+        self.cut_retry = false;
+        self.cut_due = false;
+        self.driver.barrier = None;
     }
 
     /// Retire the driver's installation and detach the device: the
@@ -1749,7 +1760,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         cx: &mut Context<'_>,
         channel: SupportedChannel<Self::Caps>,
         now: Instant,
-    ) -> Poll<Result<(), StartRefused>> {
+    ) -> Poll<Result<(), StartRefused<Fault>>> {
         self.now = now;
         let since = match self.state {
             PortState::Running | PortState::Stopping { .. } => {
@@ -1772,7 +1783,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         let Some(wifi) = channel.channel().wifi_channel() else {
             self.state = PortState::Stopped;
-            return Poll::Ready(Err(StartRefused::Retune));
+            return Poll::Ready(Err(StartRefused::Retune(Fault::ChannelUnsupported)));
         };
         let started = match self.device.poll_start(cx, wifi) {
             Poll::Pending => {
@@ -1799,9 +1810,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 self.core_disabled = false;
                 Ok(())
             }
-            Err(Fault::Retune(_) | Fault::ChannelNotPermitted) => {
+            Err(cause @ (Fault::Retune(_) | Fault::ChannelNotPermitted)) => {
                 self.state = PortState::Stopped;
-                Err(StartRefused::Retune)
+                Err(StartRefused::Retune(cause))
             }
             Err(_) => {
                 self.state = PortState::Stopped;
@@ -1823,6 +1834,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             PortState::Starting { .. } | PortState::Running => {
                 self.state = PortState::Stopping { since: now };
                 self.stop_served = false;
+                // A stopping port refuses the held command back to its
+                // caller: nothing of it stays to run against the restart.
+                self.forget_held();
                 self.recompute_deadline();
                 now
             }

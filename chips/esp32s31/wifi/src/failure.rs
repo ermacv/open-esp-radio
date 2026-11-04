@@ -67,6 +67,9 @@ pub enum BackendFault {
     EdcaUnsupported,
     /// The regulatory domain did not permit the channel being started.
     ChannelNotPermitted,
+    /// The channel being started has no 2.4 GHz definition, the only band
+    /// the front end tunes.
+    ChannelUnsupported,
     /// A key a command named was not installed, or no key place was free.
     KeySlotMissing(KeyOperation),
     /// Received units were returned or lent beyond the count held.
@@ -514,8 +517,9 @@ pub enum ReleaseCause {
 /// again.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LifecycleFailure {
-    /// The radio did not start on its first channel.
-    StartRefused(oer_protocols_ieee80211_contracts_port::StartRefused),
+    /// The radio did not start on its first channel; a refused retune
+    /// keeps the port's cause.
+    StartRefused(oer_protocols_ieee80211_contracts_port::StartRefused<BackendFault>),
     /// A stop proved nothing by its deadline: what was still out.
     StopUnconfirmed(oer_protocols_ieee80211_runtime::datapath::StopObserved),
     /// A retune's stop proved nothing.

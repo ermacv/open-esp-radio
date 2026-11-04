@@ -129,6 +129,7 @@ where
                 Some(link) => {
                     self.station.link_returned(link);
                     self.inner.link.lent = false;
+                    self.inner.link.returning = false;
                     self.inner.link.epoch = None;
                 }
                 None => self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::Missing)),
@@ -167,7 +168,7 @@ where
         &mut self,
         actor: &ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
         io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
-        result: Result<(), RetuneFailed>,
+        result: Result<(), RetuneFailed<super::PortFault<'id, D>>>,
     ) {
         let Some(pending) = self.inner.retune.take() else {
             self.inner.end = Some(LifecycleEnd::Contract(
@@ -297,6 +298,19 @@ where
                     None
                 };
                 self.terminal(actor, terminal, group);
+            }
+            Returned::Command {
+                command,
+                grouped,
+                reason: CommandRefusal::NotEnabled,
+            } if matches!(self.inner.ending, Some((_, _, super::EndStage::Radio))) => {
+                // The end's stop withdrew a command held at its barrier:
+                // its owners and the change's token drop with this
+                // installation's retired banks.
+                if grouped && actor.groups.try_receive().is_none() {
+                    self.inner
+                        .reject(Rejected::Command(command), LifecycleViolation::Missing);
+                }
             }
             Returned::Command {
                 command,

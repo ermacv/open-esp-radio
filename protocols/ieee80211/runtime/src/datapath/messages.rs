@@ -213,9 +213,9 @@ pub enum FromActor<'id, D: DatapathPort<'id>> {
     /// The gate is open.
     GateOpened(GateOpen<'id, ActorGatePath<'id, D>>),
     /// The start's end.
-    Started(Result<(), StartRefused>),
+    Started(Result<(), StartRefused<<D::Port as DataPort<'id>>::Fault>>),
     /// The retune's end.
-    Retuned(Result<(), RetuneFailed>),
+    Retuned(Result<(), RetuneFailed<<D::Port as DataPort<'id>>::Fault>>),
     /// The stop's end.
     Stopped(StopOutcome),
     /// The actor ended on a broken contract; it keeps every owner it held.
@@ -255,11 +255,11 @@ pub enum Returned<'id, D: DatapathPort<'id>> {
 
 /// Why a retune ended without the radio running on the new channel.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RetuneFailed {
+pub enum RetuneFailed<F> {
     /// The radio did not confirm its stop.
     Stop(StopUnconfirmed),
     /// The radio did not start on the new channel; it is stopped.
-    Start(StartRefused),
+    Start(StartRefused<F>),
 }
 
 /// How a stop ended.

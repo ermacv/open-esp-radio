@@ -34,9 +34,25 @@ pub(crate) fn backend_fault(
         Source::InstallationResources => BackendFault::InstallationResources,
         Source::EdcaUnsupported => BackendFault::EdcaUnsupported,
         Source::ChannelNotPermitted => BackendFault::ChannelNotPermitted,
+        Source::ChannelUnsupported => BackendFault::ChannelUnsupported,
         Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
         Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
         Source::CommandExpired(kind) => BackendFault::CommandExpired(command_kind(kind)),
+    }
+}
+
+/// A refused start, with a refused retune's cause.
+pub(crate) fn start_refused(
+    value: oer_protocols_ieee80211_contracts_port::StartRefused<
+        oer_chips_esp32s31_ieee80211_driver::port::Fault,
+    >,
+) -> oer_protocols_ieee80211_contracts_port::StartRefused<BackendFault> {
+    use oer_protocols_ieee80211_contracts_port::StartRefused as Source;
+    match value {
+        Source::Running => Source::Running,
+        Source::Retune(cause) => Source::Retune(backend_fault(cause)),
+        Source::Deadline => Source::Deadline,
+        Source::Device => Source::Device,
     }
 }
 
@@ -718,7 +734,7 @@ pub(crate) fn lifecycle(
     use oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd as End;
     Some(match end {
         End::Stopped | End::Restart(_) => return None,
-        End::StartRefused(refused) => LifecycleFailure::StartRefused(refused),
+        End::StartRefused(refused) => LifecycleFailure::StartRefused(start_refused(refused)),
         End::StopUnconfirmed(observed) => LifecycleFailure::StopUnconfirmed(observed),
         End::RetuneUnconfirmed(unconfirmed) => LifecycleFailure::RetuneUnconfirmed(unconfirmed),
         End::Faulted(ActorFault::Port(fault)) => LifecycleFailure::Port(backend_fault(fault)),

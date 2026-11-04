@@ -763,6 +763,44 @@ fn a_held_command_past_its_bound_is_a_named_fault_that_keeps_its_owners() {
 }
 
 #[test]
+fn a_held_command_refused_by_a_stop_measures_its_bound_from_the_restart() {
+    with_harness(|harness| {
+        harness.start();
+        let install = group_install(harness);
+        harness.air.hold_group_commands(true);
+        let CommandProgress::Held(install) = harness.command(install) else {
+            panic!("held");
+        };
+        let waker = harness.waker();
+        let now = harness.clock.now();
+        assert!(matches!(
+            harness
+                .port
+                .poll_stop(&mut Context::from_waker(&waker), now),
+            Poll::Ready(Ok(()))
+        ));
+        let CommandProgress::Refused(install, CommandRefusal::NotEnabled) =
+            harness.command(install)
+        else {
+            panic!("a stopped port refuses the held command");
+        };
+        // The radio stays stopped longer than a held command's bound.
+        harness.advance(MODEL_HELD_COMMAND_BOUND);
+        harness.start();
+        assert_eq!(harness.port.deadline(), None, "no held command's bound");
+        let CommandProgress::Held(install) = harness.command(install) else {
+            panic!("the air still holds group commands");
+        };
+        harness.air.hold_group_commands(false);
+        assert!(matches!(harness.command(install), CommandProgress::Done));
+        assert!(matches!(
+            harness.sink.terminals.as_slice(),
+            [LowerMacTerminal::GroupKeyInstalled(_)]
+        ));
+    });
+}
+
+#[test]
 fn a_quarantined_air_is_named_with_what_the_port_held() {
     with_harness(|harness| {
         harness.start();

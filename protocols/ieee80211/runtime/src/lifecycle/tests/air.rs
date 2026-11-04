@@ -377,9 +377,6 @@ fn beside_an_access_point_msdus_survive_an_absence() {
 /// graceful stop, sends its Deauthentication on the association's control
 /// record.
 #[test]
-#[ignore = "new-path bug: on an open link the station's Deauthentication is numbered on the \
-            link it already gave back (ToActor::Disconnect before its StationTx), so the actor \
-            refuses it LinkChanged and it never goes on the air"]
 fn an_open_station_s_leave_sends_its_deauthentication() {
     for graceful in [false, true] {
         pair(

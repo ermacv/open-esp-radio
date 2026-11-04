@@ -368,6 +368,9 @@ pub enum Fault {
     EdcaUnsupported,
     /// The regulatory domain did not permit the channel being started.
     ChannelNotPermitted,
+    /// The channel being started has no 2.4 GHz definition, the only band
+    /// the front end tunes.
+    ChannelUnsupported,
     /// A key a command names is not installed, or no key place is free.
     KeySlotMissing(KeyOp),
     /// The caller returned more received units than it held, or the

@@ -216,9 +216,6 @@ fn a_fault_with_a_held_group_install_sends_no_message4() {
 }
 
 #[test]
-#[ignore = "new-path bug: ToActor::Stop waits behind the group command the port holds at its \
-            barrier, so the port's held-command bound faults the run (CommandStalled) instead \
-            of the stop draining the command and ending Stopped"]
 fn a_stop_with_a_held_group_install_sends_no_message4() {
     held_group_install_ends(false);
 }

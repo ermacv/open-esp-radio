@@ -488,9 +488,6 @@ fn without_a_network_a_received_msdu_returns_its_buffer_and_the_stop_ends_normal
 /// handed the actor the link, before the actor's turn took the handover:
 /// it reaches the network.
 #[test]
-#[ignore = "new-path ordering bug: the actor's turn routes received units before it takes the \
-            lifecycle's messages, so a data frame landing between the handover (ToActor::Connect) \
-            and that turn goes to the station without a link and is dropped NotConnected"]
 fn a_data_frame_landing_with_the_handover_reaches_the_network() {
     pair(
         open,

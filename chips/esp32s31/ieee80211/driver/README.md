@@ -278,7 +278,9 @@ It never reads the clock in a call and never wakes its caller; what must
 run again is in the returned value or in its cached deadline, which every
 call that changes a queue recomputes. A barrier command (a configuration
 while an arena is on the air, a removal before its drain, a group
-mutation's receive cut) comes back `Held` for the actor to retry. A broken
+mutation's receive cut) comes back `Held` for the actor to retry; a stop
+forgets its barrier, the stopped port refuses it `NotEnabled`, and after a
+restart it runs again under a bound measured from then. A broken
 contract of the port's own state is a named `Fault` that keeps its
 observations; the port keeps every owner it holds and answers each later
 call with the same fault. Its command issuer (`Esp32s31Commands`) mints
@@ -333,9 +335,10 @@ frame it encrypted is published or retained. Its one deadline is the
 publication watchdog.
 
 The driver builds the arenas at preparation and takes their chains and
-tickets back at retirement, only while both are idle and empty and hold no
-key right; otherwise the stopped port refuses reinstallation, as it does
-for a busy descriptor. The actor reaches them through `DataPort::arena`
+tickets back at retirement. The retire checks require both idle and empty
+and holding no key right; otherwise the stopped port refuses reinstallation
+and release as not retired and keeps its installation. A busy descriptor
+found at retirement refuses reinstallation with a resource fault. The actor reaches them through `DataPort::arena`
 (`port::Esp32s31Arena`), lent for its turn: it fills, publishes, withdraws
 and settles them, and a publication is refused as busy while the gate is
 closed or closing, a configuration or a barrier command is pending, or the

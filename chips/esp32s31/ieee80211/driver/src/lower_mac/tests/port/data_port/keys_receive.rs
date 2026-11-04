@@ -409,7 +409,6 @@ fn a_gtk_mutation_held_at_its_cut_comes_back_refused_by_a_stopped_port_and_runs_
 }
 
 #[test]
-#[ignore = "the port keeps a refused group command's barrier instant across its stop"]
 fn a_gtk_mutation_refused_by_a_stop_measures_its_bound_from_the_restart() {
     with_fixture(|fixture| {
         fixture.start();
@@ -441,6 +440,50 @@ fn a_gtk_mutation_refused_by_a_stop_measures_its_bound_from_the_restart() {
         );
         fixture.stop();
     });
+}
+
+#[test]
+fn a_gtk_mutation_refused_by_a_stop_leaves_no_hold_on_single_mpdus_after_the_restart() {
+    for mutation in [Mutation::Install, Mutation::Replace, Mutation::Remove] {
+        with_fixture(|fixture| {
+            fixture.start();
+            let (command, _) = fixture.group_command(mutation);
+            fixture.observed.borrow_mut().hold_cut = true;
+            let now = fixture.now();
+            let held = match fixture.port.command(command, now, &mut fixture.outbox) {
+                Ok(CommandProgress::Held(held)) => held,
+                _ => panic!("{mutation:?}: the cut holds the mutation"),
+            };
+            fixture.stop();
+            let now = fixture.now();
+            let refused = match fixture.port.command(held, now, &mut fixture.outbox) {
+                Ok(CommandProgress::Refused(refused, CommandRefusal::NotEnabled)) => refused,
+                _ => panic!("{mutation:?}: a stopped port refuses the held mutation"),
+            };
+            // The restarted port runs without the refused command: its
+            // single MPDUs publish at once, its deadline names no barrier.
+            fixture.observed.borrow_mut().hold_cut = false;
+            fixture.start();
+            assert_eq!(fixture.port.deadline(), None, "{mutation:?}");
+            let publications = fixture.observed.borrow().publications;
+            let attempt = fixture.station_mpdu().expect("attempt");
+            let now = fixture.now();
+            fixture
+                .port
+                .submit(attempt, now, &mut fixture.outbox)
+                .unwrap_or_else(|_| panic!("{mutation:?}: submitted"));
+            // The device reports its publications at the next turn's facts.
+            let _ = fixture.turn();
+            assert_eq!(
+                fixture.observed.borrow().publications,
+                publications + 1,
+                "{mutation:?}: the restarted port publishes the single MPDU"
+            );
+            assert_eq!(fixture.port.fault(), None, "{mutation:?}");
+            drop(refused);
+            fixture.stop();
+        });
+    }
 }
 
 #[test]

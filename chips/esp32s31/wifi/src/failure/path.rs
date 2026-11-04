@@ -87,6 +87,7 @@ impl DiagnosticPath for BackendFault {
             Self::InstallationResources => path.name("InstallationResources"),
             Self::EdcaUnsupported => path.name("EdcaUnsupported"),
             Self::ChannelNotPermitted => path.name("ChannelNotPermitted"),
+            Self::ChannelUnsupported => path.name("ChannelUnsupported"),
             Self::KeySlotMissing(op) => {
                 path.name("KeySlotMissing");
                 path.name(match op {
@@ -320,13 +321,17 @@ impl DiagnosticPath for LifecycleFailure {
     fn push_path(&self, path: &mut DiagPath) {
         match self {
             Self::StartRefused(refused) => {
+                use oer_protocols_ieee80211_contracts_port::StartRefused as Refused;
                 path.name("StartRefused");
-                path.name(match refused {
-                    oer_protocols_ieee80211_contracts_port::StartRefused::Running => "Running",
-                    oer_protocols_ieee80211_contracts_port::StartRefused::Retune => "Retune",
-                    oer_protocols_ieee80211_contracts_port::StartRefused::Deadline => "Deadline",
-                    oer_protocols_ieee80211_contracts_port::StartRefused::Device => "Device",
-                });
+                match refused {
+                    Refused::Running => path.name("Running"),
+                    Refused::Retune(cause) => {
+                        path.name("Retune");
+                        cause.push_path(path);
+                    }
+                    Refused::Deadline => path.name("Deadline"),
+                    Refused::Device => path.name("Device"),
+                }
             }
             Self::StopUnconfirmed(observed) => {
                 path.name("StopUnconfirmed");

@@ -232,9 +232,9 @@ pub struct LifecycleIo<
 /// Why the station failed: the lifecycle stopped the radio and ends for
 /// the next installation ([`LifecycleEnd::Restart`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StationFailure {
+pub enum StationFailure<F> {
     /// The arbiter's move was refused and it could not return.
-    RetuneRefused(StartRefused),
+    RetuneRefused(StartRefused<F>),
     /// A station request came while its kind's credit was out.
     CommandAdmission(Request),
     /// The reconnect policy's deadline overflowed.
@@ -277,9 +277,9 @@ pub enum LifecycleEnd<F> {
     /// The station failed; the radio stopped and the actor ended for the
     /// next installation. The composition reinstalls the port and builds
     /// the service again.
-    Restart(StationFailure),
+    Restart(StationFailure<F>),
     /// The radio did not start on its first channel; the actor retired.
-    StartRefused(StartRefused),
+    StartRefused(StartRefused<F>),
     /// A stop proved nothing by its deadline.
     StopUnconfirmed(StopObserved),
     /// A retune's stop proved nothing.
@@ -345,15 +345,19 @@ enum ArbiterCell<'id, D: DatapathPort<'id>> {
     Retired(RetiredArbiter<'id, D::Caps, NoReservation, ActorGatePath<'id, D>>),
 }
 
+/// The port's fault type of the lifecycle's datapath `D`.
+type PortFault<'id, D> =
+    <<D as DatapathPort<'id>>::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault;
+
 /// Why the lifecycle ends, while it takes its owners back.
 #[derive(Clone, Copy, Debug)]
-enum Ending {
+enum Ending<F> {
     /// The application stopped it.
     Stop,
     /// The station failed.
-    Restart(StationFailure),
+    Restart(StationFailure<F>),
     /// The first start was refused: the radio never ran.
-    StartRefused(StartRefused),
+    StartRefused(StartRefused<F>),
 }
 
 /// Where the end is: the link back, then the key, then the radio's stop.
@@ -374,6 +378,11 @@ enum EndStage {
 struct LinkCustody {
     /// The actor holds the station's link.
     lent: bool,
+    /// The station asked its link back: the actor hears it once the
+    /// station's frames numbered on the link went before it.
+    asked: bool,
+    /// The actor was asked for the link back and has not returned it.
+    returning: bool,
     /// The actor keeps the station's pairwise key.
     key: bool,
     /// The key the actor keeps was lent for frames before the link, and is
@@ -442,7 +451,7 @@ struct Inner<'id, D: DatapathPort<'id>, X, T, O> {
             oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpoch<'id, ActorEpochPath<'id, D>>,
         >,
     >,
-    ending: Option<(Ending, Instant, EndStage)>,
+    ending: Option<(Ending<PortFault<'id, D>>, Instant, EndStage)>,
     /// The first owner a broken contract left, and its cause.
     rejected: Option<Rejected<'id, D>>,
     end: Option<
@@ -1107,6 +1116,8 @@ where
             return;
         };
         let next = match stage {
+            // A link already asked back is waited for.
+            EndStage::Begin if self.inner.link.lent && self.inner.link.returning => None,
             EndStage::Begin if self.inner.link.lent => Some((EndStage::Link, ToActor::Disconnect)),
             EndStage::Begin | EndStage::Link if !self.inner.link.lent && self.inner.link.key => {
                 Some((EndStage::Key, ToActor::ReturnPairwise))
@@ -1124,6 +1135,10 @@ where
         if actor.to_actor.try_send(message).is_err() {
             self.inner.blocked = true;
             return;
+        }
+        if stage == EndStage::Link {
+            self.inner.link.asked = false;
+            self.inner.link.returning = true;
         }
         self.inner.ending = Some((why, deadline, stage));
     }
@@ -1202,7 +1217,7 @@ where
     /// policy's from now.
     fn begin_end<K, Out: ServiceOutputSink<K>, const COMMAND_DEPTH: usize, N: Notifies>(
         &mut self,
-        why: Ending,
+        why: Ending<PortFault<'id, D>>,
         io: &LifecycleIo<'_, K, Out, COMMAND_DEPTH, N>,
     ) {
         if self.ending.is_some() {
