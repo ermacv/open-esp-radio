@@ -113,3 +113,19 @@ fn a_write_replaces_a_receipt_of_another_schema() {
         Some(State::Writing { .. })
     ));
 }
+
+#[test]
+fn a_write_past_the_store_voids_what_the_board_is_said_to_carry() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Store::at(directory.path());
+    let access = device();
+    written(&store, &access, "image").started().unwrap();
+    assert!(matches!(
+        store.state(&access),
+        Ok(Some(State::Started { .. }))
+    ));
+    store.void(&access).unwrap();
+    assert!(matches!(store.state(&access), Ok(None)));
+    // A board without a receipt has nothing to void.
+    store.void(&access).unwrap();
+}

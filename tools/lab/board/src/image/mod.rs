@@ -191,6 +191,15 @@ impl Store {
         self.directory.join(format!("{}.image.json", id.compact()))
     }
 
+    /// Forget the receipt of `id`: something wrote its flash past this
+    /// crate, so what it runs is unknown and the next write replaces it.
+    pub fn void(&self, id: &DeviceId) -> Result<()> {
+        match std::fs::remove_file(self.path(id)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.into()),
+            _ => Ok(()),
+        }
+    }
+
     /// What board `id`'s flash holds; `None` when nothing was ever written
     /// through this store. Read strictly: a file that does not parse is an
     /// error.
