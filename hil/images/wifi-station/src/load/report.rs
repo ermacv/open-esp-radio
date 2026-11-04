@@ -339,7 +339,7 @@ mod chip {
                 ampdu: super::tx_ampdu(&counters.ampdu),
             },
             link: super::link(&counters.link),
-            mac: wire::Mac::new(counters.mac.0, counters.mac.1),
+            mac: wire::Mac::new(counters.mac.0, counters.mac.1, counters.link.tx.holes),
         }
     }
 

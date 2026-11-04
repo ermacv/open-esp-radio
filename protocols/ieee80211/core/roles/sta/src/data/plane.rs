@@ -1040,6 +1040,7 @@ impl DataPlane {
                     retried,
                     dropped: decision.dropped,
                     refused: false,
+                    holes: decision.holes,
                     rate,
                 })
             });
@@ -1127,6 +1128,10 @@ impl DataPlane {
                 decision.delivered = decision.delivered.saturating_add(1);
                 continue;
             }
+            if attempts == 1 && matches!(end, AttemptEnd::Answered { .. }) {
+                let bit = 1_u32.checked_shl(u32::from(position.get()));
+                decision.holes |= bit.unwrap_or(0);
+            }
             let admitted = usize::try_from(original)
                 .ok()
                 .and_then(|original| book.admitted.get(original))
@@ -1204,6 +1209,8 @@ struct Decision {
     retry: FrameMask,
     /// Their original positions.
     pending: u64,
+    /// The positions a first transmission's answer left unacknowledged.
+    holes: u32,
 }
 
 /// The original positions of a book's `pending` mask, in ascending order:

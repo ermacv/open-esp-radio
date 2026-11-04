@@ -572,6 +572,30 @@ impl Event for StationTxAmpdu {
     }
 }
 
+/// The positions one aggregate's BlockAck left unacknowledged, bit 0 the
+/// first subframe on air.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StationTxHoles(pub u32);
+
+impl Event for StationTxHoles {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 34);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [self.0, 0]
+    }
+
+    fn decode([holes, _]: [u32; 2]) -> Option<Self> {
+        Some(Self(holes))
+    }
+}
+
+impl core::fmt::Display for StationTxHoles {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "station.tx holes {:#x}", self.0)
+    }
+}
+
 impl core::fmt::Display for StationTxAmpdu {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if self.block_ack_request {
@@ -756,15 +780,20 @@ impl<O: oer_portable_trace::Observer>
         use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
         match event {
             StaEvent::RsnInputDropped(_) => self.report(StationRxKind::RsnInputDropped, 1),
-            StaEvent::AggregateSettled(settled) => self.report_tx(StationTxAmpdu {
-                members: settled.members,
-                acknowledged: settled.acknowledged,
-                retried: settled.retried,
-                dropped: settled.dropped,
-                refused: settled.refused,
-                block_ack_request: false,
-                rate: RateClass::of(settled.rate),
-            }),
+            StaEvent::AggregateSettled(settled) => {
+                if settled.holes != 0 {
+                    oer_portable_trace::observe!(self.0, StationTxHoles(settled.holes));
+                }
+                self.report_tx(StationTxAmpdu {
+                    members: settled.members,
+                    acknowledged: settled.acknowledged,
+                    retried: settled.retried,
+                    dropped: settled.dropped,
+                    refused: settled.refused,
+                    block_ack_request: false,
+                    rate: RateClass::of(settled.rate),
+                });
+            }
             StaEvent::BlockAckRequestSent => self.report_tx(StationTxAmpdu {
                 block_ack_request: true,
                 ..StationTxAmpdu::default()
@@ -818,6 +847,7 @@ mod tests {
             RxData::KIND,
             TxData::KIND,
             StationTxAmpdu::KIND,
+            StationTxHoles::KIND,
             TxRateSelected::KIND,
         ]
         .map(Kind::raw);

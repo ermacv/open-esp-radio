@@ -275,11 +275,42 @@ impl<'p, 'id: 'p> World<'p, 'id> {
             .unwrap()
     }
 
+    /// The holes of the aggregate that ended, as its settlement reports them.
+    fn settled_holes(&mut self) -> u32 {
+        let now = self.now();
+        let done = self.arena.service((), now).unwrap().unwrap();
+        let returned = &mut self.returned;
+        let mut holes = Holes(None);
+        self.plane
+            .completed(
+                &mut self.arena,
+                done,
+                now,
+                |memory| returned.push(memory),
+                &mut holes,
+            )
+            .ok()
+            .unwrap();
+        holes.0.unwrap()
+    }
+
     fn returned_sequences(&mut self) -> Vec<u16> {
         self.returned
             .drain(..)
             .map(|memory| sequence(memory.as_slice()))
             .collect()
+    }
+}
+
+/// The holes of the settlement it saw.
+struct Holes(Option<u32>);
+
+impl EventSink<StaEvent> for Holes {
+    const ENABLED: bool = true;
+    fn event(&mut self, event: StaEvent) {
+        if let StaEvent::AggregateSettled(settled) = event {
+            self.0 = Some(settled.holes);
+        }
     }
 }
 
@@ -294,6 +325,7 @@ fn mask(positions: &[u8]) -> FrameMask {
 cases! {
     a_full_block_ack_releases_every_frame_in_order_and_moves_the_window => full_block_ack,
     a_partial_block_ack_retries_the_missing_frames_in_the_same_arena => partial_block_ack,
+    only_an_answered_first_transmission_reports_its_holes => holes_of_first_transmissions,
     frames_past_the_attempt_limit_are_dropped_and_owe_a_block_ack_request => attempt_limit,
     aged_frames_are_dropped_and_owe_a_block_ack_request => lifetime,
     a_sequence_number_past_the_window_waits => past_window,
@@ -485,6 +517,21 @@ fn partial_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         (first.arena.other(), PpduKind::Single)
     );
     assert_eq!(sequence(&frames[0]), 4);
+}
+
+fn holes_of_first_transmissions<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..4 {
+        world.taken(tag, BE);
+    }
+    world.publish();
+    world.block_ack(mask(&[0, 2]));
+    assert_eq!(world.settled_holes(), 0b1010);
+    // The retransmission's own hole is no position of the first aggregate.
+    world.publish();
+    world.block_ack(mask(&[0]));
+    assert_eq!(world.settled_holes(), 0);
 }
 
 fn attempt_limit<'p, 'id: 'p>(rates: Rates<'p, 'id>) {

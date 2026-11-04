@@ -306,6 +306,9 @@ impl oer_portable_trace::Observer for Observer {
         if let Some(decision) = Self::decoded::<E, station::StationRx>(event) {
             receive_decision(decision);
         }
+        if let Some(station::StationTxHoles(holes)) = Self::decoded::<E, _>(event) {
+            LINK.holes(holes);
+        }
         if let Some(settled) = Self::decoded::<E, station::StationTxAmpdu>(event) {
             if settled.block_ack_request {
                 LINK.block_ack_request();
