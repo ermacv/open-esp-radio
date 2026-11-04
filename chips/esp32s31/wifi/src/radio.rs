@@ -222,6 +222,22 @@ impl<W: Binding> DatapathPort<'static> for ActorPort<W> {
     fn arena_ack(response: port::BlockAckAnswer) -> Option<port::Ack> {
         response.snr_db.map(|snr_db| port::Ack { snr_db })
     }
+    #[cfg_attr(
+        not(oer_trace),
+        allow(unused_variables, reason = "only a trace build observes the unit")
+    )]
+    fn received(frame: &[u8], meta: &<Family<W::Id, W> as PhaseTypes<'static>>::RxMeta) {
+        #[cfg(oer_trace)]
+        crate::station::observe_received::<W>(frame, meta.common());
+    }
+    #[cfg_attr(
+        not(oer_trace),
+        allow(unused_variables, reason = "only a trace build observes the terminal")
+    )]
+    fn terminal(terminal: &LowerMacTerminal<'static, Family<W::Id, W>>) {
+        #[cfg(oer_trace)]
+        crate::station::observe_terminal::<W, W::Id>(terminal);
+    }
 }
 impl<W: Binding> LifecyclePort<'static> for ActorPort<W> {
     fn tx_buffer(

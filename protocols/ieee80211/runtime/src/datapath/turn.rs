@@ -66,6 +66,7 @@ impl<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize> PortSin
     for Outbox<'_, '_, 'id, D, FROM, RETURNS>
 {
     fn terminal(&mut self, terminal: ActorTerminal<'id, D>) {
+        D::terminal(&terminal);
         if self.grouped && self.stage.group_terminal.is_none() && is_group(&terminal) {
             self.stage.group_terminal = Some(terminal);
             return;
@@ -397,6 +398,7 @@ where
             self.owed.tbtt = Some(event);
         }
         while let Some((frame, meta)) = self.stage.cut.pop_front() {
+            D::received(frame.bytes(), &meta);
             self.received(frame, meta, lifecycle, network)?;
         }
         if let Some(terminal) = self.stage.group_terminal.take() {

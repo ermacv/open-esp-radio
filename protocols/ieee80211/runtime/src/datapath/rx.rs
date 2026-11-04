@@ -171,6 +171,7 @@ where
                     RxPull::Unit { frame, meta } => {
                         pulled = pulled.saturating_add(1);
                         self.progressed = true;
+                        D::received(frame.bytes(), &meta);
                         if matches!(self.radio, Radio::Stopping { .. }) {
                             // A stopping radio's units go back unread.
                             self.port.recycle(frame);

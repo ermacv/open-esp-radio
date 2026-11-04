@@ -81,6 +81,15 @@ impl<'s> DatapathPort<'s> for TestPort<'s> {
             ModelBlockAckEvidence::Unmeasured => None,
         }
     }
+
+    fn received(frame: &[u8], _: &ModelRxMeta) {
+        OBSERVED.with(|observed| observed.borrow_mut().push(frame.to_vec()));
+    }
+}
+
+std::thread_local! {
+    /// The units the actor's observation saw on this test's thread.
+    static OBSERVED: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
 }
 
 type P<'s> = TestPort<'s>;
@@ -1322,6 +1331,22 @@ fn a_unit_that_lands_during_a_turn_takes_a_repost() {
             lent += 1;
         }
         assert_eq!(lent, 2, "the repost pulled the landed unit");
+    });
+}
+
+#[test]
+fn every_unit_the_port_gives_is_observed_once_before_the_reordering() {
+    bench(|bench| {
+        OBSERVED.with(|observed| observed.borrow_mut().clear());
+        bench.start();
+        bench.connect(link(true, None));
+        let frames = [data_from_ap(1, &[1; 4]), foreign_data(2), management(3)];
+        for frame in &frames {
+            bench.air.receive(frame, meta());
+        }
+        bench.settle();
+        let observed = OBSERVED.with(|observed| observed.take());
+        assert_eq!(observed, frames.to_vec());
     });
 }
 

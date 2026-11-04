@@ -57,7 +57,7 @@ pub(crate) const MANAGEMENT: u8 = crate::supply::PORT_BUFFERS;
 pub(crate) static TARGET: oer_portable_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
     oer_portable_memory::OnceValue::new();
 #[cfg(oer_trace)]
-fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
+pub(crate) fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
     terminal: &LowerMacTerminal<'id, Family<Id, W>>,
 ) {
     if let LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) = terminal
@@ -87,6 +87,38 @@ fn observe_received_data<W: Binding>(bytes: &[u8], meta: &RxMeta, local: [u8; 6]
                 containment: crate::observation::Containment::of(meta.ampdu),
             }
         );
+    }
+}
+/// Report a unit the port gave: a data MPDU addressed to the station
+/// ([`observe_received_data`]), and the target's successful open
+/// authentication and its beacons.
+#[cfg(oer_trace)]
+pub(crate) fn observe_received<W: Binding>(bytes: &[u8], meta: &RxMeta) {
+    if let Some((local, _)) = TARGET.get() {
+        observe_received_data::<W>(bytes, meta, local);
+    }
+    if let Some((local, Some(target))) = TARGET.get() {
+        if oer_protocols_ieee80211_wire::station::parse_open_authentication_response(
+            bytes, local, target,
+        )
+        .is_some_and(|r| r.status_code == 0)
+        {
+            let observer = W::DriverObserver::default();
+            oer_portable_trace::observe!(observer, crate::observation::StationAuthenticated);
+        }
+        if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
+            .is_some_and(|h| h.control().subtype() == 8)
+            && oer_protocols_ieee80211_wire::scan::parse_management(bytes)
+                .is_some_and(|r| r.bssid.get() == target)
+        {
+            let observer = W::DriverObserver::default();
+            oer_portable_trace::observe!(
+                observer,
+                crate::observation::StationBeacon {
+                    at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
+                }
+            );
+        }
     }
 }
 impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
@@ -154,42 +186,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         }
         #[cfg(oer_trace)]
         if let LowerMacEvent::Received { frame, meta } = &event {
-            let bytes = frame.bytes();
-            if let Some((local, _)) = TARGET.get() {
-                observe_received_data::<W>(bytes, meta.common(), local);
-            }
-            if let Some((local, Some(target))) = TARGET.get() {
-                if oer_protocols_ieee80211_wire::station::parse_open_authentication_response(
-                    bytes, local, target,
-                )
-                .is_some_and(|r| r.status_code == 0)
-                {
-                    #[cfg(oer_trace)]
-                    {
-                        let observer = W::DriverObserver::default();
-                        oer_portable_trace::observe!(
-                            observer,
-                            crate::observation::StationAuthenticated
-                        );
-                    }
-                }
-                if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
-                    .is_some_and(|h| h.control().subtype() == 8)
-                    && oer_protocols_ieee80211_wire::scan::parse_management(bytes)
-                        .is_some_and(|r| r.bssid.get() == target)
-                {
-                    #[cfg(oer_trace)]
-                    {
-                        let observer = W::DriverObserver::default();
-                        oer_portable_trace::observe!(
-                            observer,
-                            crate::observation::StationBeacon {
-                                at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
-                            }
-                        );
-                    }
-                }
-            }
+            observe_received::<W>(frame.bytes(), meta.common());
         }
         event
     }

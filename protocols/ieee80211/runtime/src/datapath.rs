@@ -172,6 +172,14 @@ pub trait DatapathPort<'id>: Sized + 'id {
     /// Observe the start (`end` false) or end of a stretch of the actor's
     /// work; by default nothing observes it.
     fn span(_span: ActorSpan, _end: bool) {}
+
+    /// Observe a unit the port gave (`frame` from its header), before the
+    /// reordering and the link take it; by default nothing observes it.
+    fn received(_frame: &[u8], _meta: &<Self::Types as PhaseTypes<'id>>::RxMeta) {}
+
+    /// Observe a terminal the port gave, before the lifecycle takes it; by
+    /// default nothing observes it.
+    fn terminal(_terminal: &LowerMacTerminal<'id, Self::Types>) {}
 }
 
 /// A stretch of the actor's work, which it reports at both ends
