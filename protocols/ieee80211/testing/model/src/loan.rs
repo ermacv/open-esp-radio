@@ -107,17 +107,6 @@ impl<B: ModelComposition> OwnedPayload<B::Identity, B> for ModelMpdu<'static, B>
         }
     }
 }
-impl<'p, B: ModelComposition, R: ModelRole> ModelPairwiseKey<'p, B, R> {
-    pub(super) fn into_owned(
-        self,
-        loan: &BodyLoan<'p, B::Identity, B>,
-    ) -> ModelPairwiseKey<'static, B, R> {
-        ModelPairwiseKey {
-            identity: self.identity,
-            slot: self.slot.into_owned(loan),
-        }
-    }
-}
 impl<B: ModelComposition, R: ModelRole> ModelPairwiseKey<'static, B, R> {
     pub(super) fn lend<'p>(
         self,

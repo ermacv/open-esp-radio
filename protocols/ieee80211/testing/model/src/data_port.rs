@@ -25,8 +25,8 @@ use core::task::Context;
 use oer_protocols_ieee80211_contracts_port::Ieee80211Instant;
 use oer_protocols_ieee80211_contracts_port::{
     AdmittedTxParts, CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts,
-    LendRefusal, LendRefused, LowerMacEvent, PairwiseIssue, PortArena, PortCommand, PortCommands,
-    PortCompleted, PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartRefused,
+    LendRefusal, LendRefused, PairwiseIssue, PortArena, PortCommand, PortCommands, PortCompleted,
+    PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartRefused,
     StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
@@ -91,10 +91,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             MODEL_KEY_SLOTS,
             <Station as ModelRole>::AssociationPath<Id>,
         >,
-        peer: IndividualAddress,
+        _peer: IndividualAddress,
         key: Ccmp128Key,
     ) -> PairwiseIssue<'id, Self::Types, C> {
-        let identity = RawKeyIdentity::new(slot.index(), 0, VifRole::Station, peer, &self.air);
+        let identity = RawKeyIdentity::new(slot.index(), 0, VifRole::Station, &self.air);
         let issued = KeyIdentity {
             owned: identity.clone(),
             loan: PhantomData,
@@ -177,13 +177,6 @@ pub enum ModelPortFault {
     Quarantined {
         /// The call that found it.
         call: ModelPortCall,
-        /// What the port held.
-        observation: ModelPortObservation,
-    },
-    /// A group mutation failed at an injected hardware stage.
-    GroupChange {
-        /// The injected stage.
-        stage: GroupFaultStage,
         /// What the port held.
         observation: ModelPortObservation,
     },
@@ -313,7 +306,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) -> ModelInstall<'id, Id, C, X> {
         let Minted { mint, installation } = minted;
         let loan: BodyLoan<'id, Id, Backend<Id, C, X>> = installation.loan();
-        let (mut held, resources) = lifecycle::installation_parts(&air, mint);
+        let (mut held, resources) = installation::installation_parts(&air, mint);
         // Units the network still holds count against this installation's
         // lend limit until it drops them.
         held.network = network;
@@ -468,12 +461,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
         if self.air.failed() {
             let observation = self.observation();
-            let fault = match self.air.group_failure.get() {
-                Some(stage) if call == ModelPortCall::Command => {
-                    ModelPortFault::GroupChange { stage, observation }
-                }
-                _ => ModelPortFault::Quarantined { call, observation },
-            };
+            let fault = ModelPortFault::Quarantined { call, observation };
             return Err(self.fail(fault));
         }
         Ok(())
@@ -483,10 +471,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     /// `sink`, in the order they were posted.
     fn drain(&mut self, sink: &mut impl PortSink<'id, ModelTypes<Backend<Id, C, X>>>) {
         while let Some(event) = self.held.take_event() {
-            match event.lend(&self.loan) {
-                LowerMacEvent::Terminal(terminal) => sink.terminal(terminal),
-                LowerMacEvent::Received { frame, meta } => sink.received(frame, meta),
-                LowerMacEvent::Tbtt(event) => sink.tbtt(event),
+            match event {
+                OwnedLowerMacEvent::Terminal(terminal) => sink.terminal(terminal.lend(&self.loan)),
+                OwnedLowerMacEvent::Received { frame, meta } => {
+                    sink.received(frame.lend(&self.loan), meta);
+                }
             }
         }
     }
@@ -566,10 +555,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             }));
         };
         match served {
-            Ok(Some((done, category))) => {
-                self.air.edca.reset(category);
-                Ok(Some(done))
-            }
+            Ok(Some((done, _))) => Ok(Some(done)),
             Ok(None) => Ok(None),
             Err(fault) => {
                 let on_air = self.held.arenas.try_borrow().ok().and_then(|a| a.on_air());
@@ -631,7 +617,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             due(since.saturating_add(MODEL_HELD_COMMAND_BOUND));
         }
         self.deadline = deadline;
-        self.air.observation.set(self.driver.observation());
     }
 
     /// Take a pending removal of `key` back out of the driver, to hold its
@@ -660,13 +645,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 self.air
                     .edca
                     .set_parameters(VifRole::Station, parameters.get());
-                self.count_setting();
                 CommandProgress::Done
             }
-            PortCommand::SetBssColor(_) => {
-                self.count_setting();
-                CommandProgress::Done
-            }
+            PortCommand::SetBssColor(_) => CommandProgress::Done,
             PortCommand::CloseGate(gate) => {
                 if !matches!(self.driver.gate, DriverGate::Open) {
                     return CommandProgress::Refused(
@@ -703,7 +684,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                         receive,
                     });
                 }
-                self.count_setting();
                 self.held.configuring_station.set(false);
                 self.held.post(OwnedLowerMacEvent::Terminal(
                     OwnedLowerMacTerminal::Configured(OwnedConfigured::Station(
@@ -860,12 +840,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         });
     }
 
-    fn count_setting(&self) {
-        self.air
-            .settings
-            .set(self.air.settings.get().saturating_add(1));
-    }
-
     fn stop_observations(&self) -> StopObservations {
         let observation = self.observation();
         StopObservations {
@@ -931,9 +905,9 @@ impl<'t, 'id: 't, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: Mod
 
     fn publish(
         &mut self,
-        publication: ArenaPublication<'t, 'id, C>,
+        publication: ArenaPublication<'t, C>,
         now: Instant,
-    ) -> Result<(), PublishError<'t, 'id, C, ModelPortFault>> {
+    ) -> Result<(), PublishError<'t, C, ModelPortFault>> {
         match self.inner.publish(publication, now) {
             Ok(()) => Ok(()),
             Err(PublishError::Refused {
@@ -1144,8 +1118,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if let Some(at) = air.receive_later(now) {
             return Ok(RxPull::Later(at));
         }
-        let unit = if let Some((frame, meta)) = air.rx.pop_front() {
-            Some((frame, meta, false))
+        let unit = if let Some(unit) = air.rx.pop_front() {
+            Some(unit)
         } else {
             let mut captured = air.group_rx.take_batch();
             let ready = captured
@@ -1156,15 +1130,15 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 air.group_rx.push_back(received);
             }
             match ready {
-                Some(received) => Some((received.frame, received.meta, false)),
+                Some(received) => Some((received.frame, received.meta)),
                 None => {
                     let stream = air.rx_stream.take();
                     air.rx_stream.set(stream.clone());
-                    stream.map(|(frame, meta)| (frame, meta, true))
+                    stream
                 }
             }
         };
-        let Some((bytes, meta, streamed)) = unit else {
+        let Some((bytes, meta)) = unit else {
             // A unit may land right after the ring was read, unannounced.
             air.land();
             return Ok(RxPull::Empty);
@@ -1178,7 +1152,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             bytes,
             recycled: false,
             air: Rc::downgrade(&air),
-            streamed,
         };
         Ok(RxPull::Unit {
             frame: owner.lend(&self.loan),
@@ -1435,13 +1408,12 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             }
         }
         self.air.receive_agreements.set(applied);
-        self.count_setting();
     }
 }
 
 /// What the model aggregates: up to [`MODEL_AMPDU_SUBFRAMES`] subframes at
 /// HT and HE rates.
-fn model_ampdu_capabilities() -> AmpduCapabilities {
+pub(crate) fn model_ampdu_capabilities() -> AmpduCapabilities {
     AmpduCapabilities {
         max_subframes: MODEL_AMPDU_SUBFRAMES as u16,
         formats: PhyFormatSet::HT.union(PhyFormatSet::HE),

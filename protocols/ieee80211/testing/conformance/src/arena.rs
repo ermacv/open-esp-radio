@@ -20,7 +20,7 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 pub type Memory<'p, 'id, F> = <<F as Fixture<'p, 'id>>::Port as TxArena<'p, 'id>>::Memory;
 /// The publication type of a fixture's backend.
 pub type Publication<'p, 'id, F> =
-    ArenaPublication<'p, 'id, <<F as Fixture<'p, 'id>>::Port as TxArena<'p, 'id>>::Caps>;
+    ArenaPublication<'p, <<F as Fixture<'p, 'id>>::Port as TxArena<'p, 'id>>::Caps>;
 
 /// One arena case, each on a fresh fixture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

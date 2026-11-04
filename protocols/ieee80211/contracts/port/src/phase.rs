@@ -1,70 +1,39 @@
-//! A running lower-MAC phase: one object under `&mut`
-//! ([`PortPhase`]), whose event stream and
-//! operations a body's one loop drives.
+//! The types a data port's owners and terminals carry ([`PhaseTypes`]),
+//! and the values that move through it: tokens, attempts, keys and
+//! terminals.
 //!
 //! # Tokens
 //!
 //! Every token carries the install's brand `'id`, is minted once by the
 //! install's resources and travels by value: an operation takes it, and
-//! the event that ends the operation gives it back. So a portable core
+//! the terminal that ends the operation gives it back. So a portable core
 //! holds the tokens of what it may do, and what it holds is what it may
 //! do: a transmission it has no ticket for, a key it has no slot for or a
 //! gate it has not closed does not compile.
 //!
 //! | Token | Taken by | Given back by |
 //! | --- | --- | --- |
-//! | a transmit ticket ([`PhaseTypes::TicketKind`]) | [`InterfacePhase::submit`] | [`LowerMacTerminal::TxCompleted`] |
-//! | a transmit buffer of a class ([`TxBufferClass`]), its memory ([`TxBufferMemory`]) | [`InterfacePhase::submit`], together with its [`ClassFrame`] | [`LowerMacTerminal::TxCompleted`], every buffer of the attempt |
-//! | a key slot of a role's kind | [`InterfacePhase::install_pairwise_key`], [`InterfacePhase::install_group_key`] (the installed key, returned by its installation terminal, holds it) | [`LowerMacTerminal::KeyRemoved`], after a removal |
-//! | one GTK mutation permission per interface ([`KeyTypes::GroupPermission`]) | install/replace/select/remove GTK | the corresponding FIFO success terminal; uncertainty keeps it for teardown |
-//! | one configure permission per interface ([`crate::ConfigurePermission`]) | `configure(permission, receive)` | [`LowerMacTerminal::Configured`], with the same permission and opaque context |
-//! | one TSF permission per interface ([`crate::TsfPermission`]) | `sample_tsf(permission)` | [`LowerMacTerminal::TsfSampled`], with the same permission |
-//! | a Block Ack slot | [`InterfacePhase::add_block_ack`] (the agreement holds it) | [`InterfacePhase::remove_block_ack`] |
-//! | the open gate ([`GateOpen`]) | [`LowerMacPhase::close_gate`] | [`LowerMacPhase::open_gate`], which takes the closed gate ([`GateClosed`]) that [`LowerMacTerminal::GateClosed`] gave |
-//! | a received frame's buffer | [`LowerMacEvent::Received`] | [`LowerMacPhase::recycle`] |
+//! | a transmit ticket ([`PhaseTypes::TicketKind`]) | [`DataPort::submit`](crate::DataPort::submit) | [`LowerMacTerminal::TxCompleted`] |
+//! | a transmit buffer of a class ([`TxBufferClass`]), its memory ([`TxBufferMemory`]) | [`DataPort::submit`](crate::DataPort::submit), together with its [`ClassFrame`] | [`LowerMacTerminal::TxCompleted`], every buffer of the attempt |
+//! | a key slot of a role's kind | [`PortCommands`](crate::PortCommands)' installations (the installed key, returned by its installation terminal, holds it) | [`LowerMacTerminal::KeyRemoved`], after a removal |
+//! | one GTK mutation permission per interface ([`KeyTypes::GroupPermission`]) | install/replace/select/remove GTK | the corresponding FIFO success terminal |
+//! | one configure permission per interface ([`crate::ConfigurePermission`]) | [`PortCommand::Configure`](crate::PortCommand::Configure) | [`LowerMacTerminal::Configured`], with the same permission and opaque context |
+//! | a Block Ack slot | [`DataPort::add_block_ack`](crate::DataPort::add_block_ack) (the agreement holds it) | [`DataPort::remove_block_ack`](crate::DataPort::remove_block_ack) |
+//! | the open gate ([`GateOpen`]) | [`PortCommand::CloseGate`](crate::PortCommand::CloseGate) | [`DataPort::open_gate`](crate::DataPort::open_gate), which takes the closed gate ([`GateClosed`]) that [`LowerMacTerminal::GateClosed`] gave |
+//! | a received frame's buffer | [`DataPort::receive`](crate::DataPort::receive) | [`DataPort::recycle`](crate::DataPort::recycle) |
 //!
 //! A ticket and a buffer are different tokens.
 //! A ticket is a place in flight and a place for its terminal; their
 //! number is bounded by the hardware. A buffer is memory of one class,
-//! sized by the composition, from a pool the body holds: the caller
-//! encodes its frame straight into it. A submission
-//! takes one ticket and the buffers of its frames (an A-MPDU: one ticket
-//! and a buffer per subframe), and its terminal gives all of them back. So
-//! a submission never waits: an empty pool is the caller's own capacity,
+//! sized by the composition, from a pool the caller holds: the caller
+//! encodes its frame straight into it. A submission takes one ticket and
+//! the buffer of its frame, and its terminal gives both back. So a
+//! submission never waits: an empty pool is the caller's own capacity,
 //! and what the hardware cannot take at once (an occupied queue) the
 //! backend keeps until it can. Queue permits are the backend's own and
 //! never reach a caller. How many tickets and buffers each role holds,
 //! with a reserve for its management frames, is the composition's
 //! choice: the tokens are values it hands out.
-//!
-//! Settings without a terminal (EDCA, BSS color, TBTT plan, monitor and
-//! Block Ack desired state) take effect before the next submission; the latest
-//! value of a kind wins. Receive configuration and TSF sampling each consume
-//! their interface's unique permission and occupy a FIFO command until their
-//! terminal returns that same permission; neither can replace a prior request.
-//!
-//! An operation that waits for the air or for the attempts in flight (a
-//! gate's closing, an interface's receive configuration, a key's removal)
-//! returns at once, and its end arrives as an event of the stream. No
-//! operation of the phase awaits.
-//!
-//! # Order
-//!
-//! The phase's operations reach the hardware in the order the caller made
-//! them, through one queue to the driver: an attempt that names a key is
-//! published after that key's install, and a key's removal ends after
-//! every attempt that names it. A backend's conformance tests check both.
-//!
-//! The queue is strictly first in, first out: no command replaces another.
-//! Its capacity is the tokens': one attempt per ticket,
-//! two commands per pairwise slot, one command per interface's unique GTK
-//! mutation permission, and two commands for the gate. Pairwise install and
-//! removal, or gate closing and opening, may wait together; a GTK permission
-//! returns only at its terminal. Thus the command capacity is
-//! `tickets + 2 × pairwise slots + GTK permissions + configure permissions + TSF permissions + 2`.
-//! There is one configure and one TSF permission per
-//! interface, minted by `InterfaceCommandPool`. Block Ack is per-slot desired state;
-//! repeated writes coalesce and never enter the command queue.
 //!
 //! # Protected frames
 //!
@@ -110,21 +79,23 @@
 //! Its compiling twin moves the token on, as an operation takes it:
 //!
 //! ```
-//! # use oer_protocols_ieee80211_contracts_port::{GateClosed, GateOpen, LowerMacPhase, PhaseTypes};
-//! fn close<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
-//!     phase.close_gate(gate);
+//! # use oer_protocols_ieee80211_contracts_port::{DataPort, GateClosed, GateOpen, PhaseTypes, PortCommand};
+//! fn close<'id, P: DataPort<'id>>(
+//!     gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>,
+//! ) -> PortCommand<'id, P::Types, P::Caps> {
+//!     PortCommand::CloseGate(gate)
 //! }
-//! fn open<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateClosed<'id, <P::Types as PhaseTypes<'id>>::GatePath>) -> GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath> {
-//!     phase.open_gate(gate)
+//! fn open<'id, P: DataPort<'id>>(port: &mut P, gate: GateClosed<'id, <P::Types as PhaseTypes<'id>>::GatePath>) -> GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath> {
+//!     port.open_gate(gate)
 //! }
 //! ```
 //!
-//! The open gate does not open a gate, nor the closed one close it:
+//! The open gate does not open a gate:
 //!
 //! ```compile_fail,E0308
-//! # use oer_protocols_ieee80211_contracts_port::{GateOpen, LowerMacPhase, PhaseTypes};
-//! fn reopen<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
-//!     let _ = phase.open_gate(gate);
+//! # use oer_protocols_ieee80211_contracts_port::{DataPort, GateOpen, PhaseTypes};
+//! fn reopen<'id, P: DataPort<'id>>(port: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
+//!     let _ = port.open_gate(gate);
 //! }
 //! ```
 //!
@@ -133,7 +104,7 @@
 //!
 //! ```compile_fail,E0451
 //! # use oer_protocols_ieee80211_contracts_port::{ClassFrame, TxFrame};
-//! fn forge<'p, 'id, C, K>(frame: TxFrame<'p, 'id, K>) -> ClassFrame<'p, 'id, C, K> {
+//! fn forge<'t, C, K>(frame: TxFrame<'t, K>) -> ClassFrame<'t, C, K> {
 //!     ClassFrame { frame, class: core::marker::PhantomData }
 //! }
 //! ```
@@ -142,73 +113,45 @@
 //!
 //! ```
 //! # use oer_protocols_ieee80211_contracts_port::{ClassFrame, Ieee80211Capabilities, TxBufferClass, TxFrame};
-//! fn fit<'p, 'id, C: TxBufferClass, K: Ieee80211Capabilities>(
-//!     frame: TxFrame<'p, 'id, K>,
-//! ) -> Result<ClassFrame<'p, 'id, C, K>, TxFrame<'p, 'id, K>> {
+//! fn fit<'t, C: TxBufferClass, K: Ieee80211Capabilities>(
+//!     frame: TxFrame<'t, K>,
+//! ) -> Result<ClassFrame<'t, C, K>, TxFrame<'t, K>> {
 //!     ClassFrame::new(frame)
 //! }
 //! ```
 //!
-//! An attempt moves its context, ticket and buffer once:
+//! An attempt seals its context, ticket and buffer once:
 //!
 //! ```compile_fail,E0382
 //! # use oer_protocols_ieee80211_contracts_port::*;
-//! fn twice<'p, 'id: 'p, I>(interface: &mut I, attempt: InterfaceAttempt<'_, 'p, 'id, I>)
-//! where I: InterfacePhase<'p, 'id> {
-//!     let _ = interface.submit(attempt.admit());
-//!     let _ = interface.submit(attempt.admit());
+//! # use oer_protocols_radio_port::PoolPath;
+//! fn twice<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath>(attempt: Attempt<'id, T, M, K, X, Path>)
+//! where M::Types: PhaseTypes<'id, TicketKind = T, TicketPath = Path, Context = X> {
+//!     let _ = attempt.admit();
+//!     let _ = attempt.admit();
 //! }
 //! ```
 //!
-//! Its compiling twin moves each operation once, with no `Clone` bound:
+//! Its compiling twin seals each attempt once, with no `Clone` bound:
 //!
 //! ```
 //! # use oer_protocols_ieee80211_contracts_port::*;
-//! fn one<'p, 'id: 'p, I>(interface: &mut I, attempt: InterfaceAttempt<'_, 'p, 'id, I>)
-//! where I: InterfacePhase<'p, 'id> {
-//!     let _ = interface.submit(attempt.admit());
+//! # use oer_protocols_radio_port::PoolPath;
+//! fn one<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath>(attempt: Attempt<'id, T, M, K, X, Path>)
+//! where M::Types: PhaseTypes<'id, TicketKind = T, TicketPath = Path, Context = X> {
+//!     let _ = attempt.admit();
 //! }
 //! ```
-//!
-//! A frame checked on one phase cannot be submitted on an unrelated one:
-//!
-//! ```compile_fail
-//! # use oer_protocols_ieee80211_contracts_port::*;
-//! fn another_phase<'p, 'q, 'id: 'p + 'q, I, J>(
-//!     interface: &mut J, attempt: InterfaceAttempt<'_, 'p, 'id, I>,
-//! ) where
-//!     I: InterfacePhase<'p, 'id>,
-//!     J: InterfacePhase<'q, 'id, Caps = I::Caps, Types = I::Types, Role = I::Role>,
-//! {
-//!     let _ = interface.submit(attempt.admit());
-//! }
-//! ```
-//!
-//! # Event stream end
-//!
-//! A command's [`Poisoned`] result closes admission; earlier terminals may
-//! still be waiting. `next_event` ends with [`oer_protocols_radio_port::EventEnd`]:
-//! `Drained` promises every admitted terminal was returned, while `Quarantined`
-//! retains undelivered owners in the common lifecycle's permanent quarantine.
-//! The body checks its outstanding identities before accepting `Drained`.
-//! On `Quarantined` it fail-stops immediately, without disable or another
-//! drain. Subsequent event calls, including through a new phase loan, return
-//! the same end and cause. Dropping a quarantine receipt releases no owners.
 
-use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
-use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
-use oer_protocols_radio_port::PortPhase;
-use oer_protocols_radio_port::{Poisoned, PoolPath, Root, Slot};
+use oer_protocols_radio_port::{PoolPath, Root, Slot};
 
 use crate::{
-    Channel, PhyRate, Protection, TbttEvent, TxOperation,
+    Protection, TxOperation,
     owner::{
-        AccessPoint, BssColor, Ieee80211Capabilities, InterfaceRole, PhaseRate, Station,
-        StationReceive, SupportedBlockAck, SupportedEdca, SupportedFilter, SupportedNoAck,
-        SupportedPower, TxFrame,
+        AccessPoint, Ieee80211Capabilities, InterfaceRole, PortRate, Station, SupportedPower,
+        TxFrame,
     },
 };
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
 
 enum GateKind {}
 
@@ -327,7 +270,7 @@ impl<'id, Path: PoolPath> GateIssuer<'id, Path> {
 
 impl<Path: PoolPath> GateOpen<'static, Path> {
     /// Move the same gate state across its backend's private body boundary.
-    pub fn lend<'p, S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> GateOpen<'p, Path> {
@@ -341,7 +284,7 @@ impl<Path: PoolPath> GateOpen<'static, Path> {
 
 impl<'p, Path: PoolPath> GateOpen<'p, Path> {
     /// Move the same gate state across its backend's private body boundary.
-    pub fn into_owned<S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> GateOpen<'static, Path> {
@@ -355,7 +298,7 @@ impl<'p, Path: PoolPath> GateOpen<'p, Path> {
 
 impl<Path: PoolPath> GateClosed<'static, Path> {
     /// Move the same gate state across its backend's private body boundary.
-    pub fn lend<'p, S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> GateClosed<'p, Path> {
@@ -369,7 +312,7 @@ impl<Path: PoolPath> GateClosed<'static, Path> {
 
 impl<'p, Path: PoolPath> GateClosed<'p, Path> {
     /// Move the same gate state across its backend's private body boundary.
-    pub fn into_owned<S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
+    pub fn into_owned<S>(
         self,
         loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> GateClosed<'static, Path> {
@@ -381,37 +324,11 @@ impl<'p, Path: PoolPath> GateClosed<'p, Path> {
     }
 }
 
-/// An event of a running lower-MAC phase, in the order the events
-/// occurred; every token an operation took comes back in one.
-pub enum LowerMacEvent<'id, P: PhaseTypes<'id>> {
-    /// One received MPDU and its metadata.
-    Received {
-        /// The frame, from its header to the end of its body, without the
-        /// FCS.
-        frame: P::RxBuffer,
-        /// What the hardware observed of it.
-        meta: P::RxMeta,
-    },
-    /// A TBTT of an interface's schedule.
-    Tbtt(TbttEvent),
-    /// A command completion, carrying every returned owner.
-    Terminal(LowerMacTerminal<'id, P>),
-}
-
-/// Completions which a disabled port can return without lending an RX phase.
-/// Unsolicited RX and TBTT are not representable here.
+/// A terminal: the end of one operation, carrying every owner it took.
+/// Received units and TBTTs are not terminals.
 pub enum LowerMacTerminal<'id, P: PhaseTypes<'id>> {
     /// The terminal preserves the submitted shape and all of its owners.
     TxCompleted(TxCompleted<'id, P>),
-    /// The paired TSF reading a
-    /// [`BeaconTimingPhase::sample_tsf`](crate::BeaconTimingPhase::sample_tsf)
-    /// asked for.
-    TsfSampled {
-        /// The paired hardware and radio clock reading.
-        sample: crate::TsfSample,
-        /// The request's original interface admission.
-        permission: crate::SampledTsfPermission<'id, P>,
-    },
     /// The transmit gate closed: no attempt is published.
     GateClosed(GateClosed<'id, P::GatePath>),
     /// An interface's receive configuration took effect.
@@ -448,14 +365,11 @@ pub enum LowerMacTerminal<'id, P: PhaseTypes<'id>> {
 /// operation owner: the higher layer consumes `Completed::into_parts` to
 /// recover context, ticket and the complete MPDU, and queues cannot
 /// exchange their components before that terminal boundary. A data arena's
-/// end carries its arena right, which only its settlement through the
-/// station's [`StationPhase::data_arena`] returns.
+/// end is not a terminal: [`DataPort::service_tx`](crate::DataPort::service_tx)
+/// returns it.
 pub enum TxCompleted<'id, P: PhaseTypes<'id>> {
     /// Exactly one submitted MPDU, including its original body owner.
     Single(SingleCompleted<'id, P>),
-    /// A published data arena ended; its frames stay in the arena until it
-    /// is settled.
-    Arena(PhaseArenaCompleted<'id, P>),
 }
 
 /// A backend's single terminal, with its original accepted owner.
@@ -464,11 +378,6 @@ pub type SingleCompleted<'id, P> = crate::Completed<
     Slot<'id, <P as PhaseTypes<'id>>::TicketKind, <P as PhaseTypes<'id>>::TicketPath>,
     <P as PhaseTypes<'id>>::TxMpdu,
     PhaseSingleOutcome<'id, P>,
->;
-/// A data arena's end in the phase types `P`.
-pub type PhaseArenaCompleted<'id, P> = crate::arena::ArenaCompleted<
-    <P as PhaseTypes<'id>>::BlockAckEvidence,
-    <P as PhaseTypes<'id>>::AirDenied,
 >;
 /// A receive Block Ack slot of the phase types `P`.
 pub type PhaseBlockAckSlot<'id, P> =
@@ -609,12 +518,6 @@ pub enum Removed<'id, P: PhaseTypes<'id>> {
 
 /// The keys of a role in the phase types `P`.
 pub trait RoleKeys<'id, P: PhaseTypes<'id>>: InterfaceRole + Sized {
-    /// Installation component of this role's FIFO command permissions.
-    type CommandPath: PoolPath;
-    /// Preserve the request's interface when returning its sampling permission.
-    fn sampled(
-        permission: crate::TsfPermission<'id, Self, Self::CommandPath>,
-    ) -> crate::SampledTsfPermission<'id, P>;
     /// The role's keys.
     type Keys: KeyTypes<'id, Identity = P::KeyIdentity>;
     /// Keys this role may use for TX. Station has only a pairwise key.
@@ -640,12 +543,6 @@ pub trait RoleKeys<'id, P: PhaseTypes<'id>>: InterfaceRole + Sized {
 }
 
 impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for Station {
-    type CommandPath = P::StationCommandPath;
-    fn sampled(
-        permission: crate::TsfPermission<'id, Self, Self::CommandPath>,
-    ) -> crate::SampledTsfPermission<'id, P> {
-        crate::SampledTsfPermission::Station(permission)
-    }
     type Keys = P::StationKeys;
     type TxKey<'k>
         = &'k <P::StationKeys as KeyTypes<'id>>::PairwiseKey
@@ -675,12 +572,6 @@ impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for Station {
 }
 
 impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for AccessPoint {
-    type CommandPath = P::AccessPointCommandPath;
-    fn sampled(
-        permission: crate::TsfPermission<'id, Self, Self::CommandPath>,
-    ) -> crate::SampledTsfPermission<'id, P> {
-        crate::SampledTsfPermission::AccessPoint(permission)
-    }
     type Keys = P::AccessPointKeys;
     type TxKey<'k>
         = AttemptKey<
@@ -716,13 +607,7 @@ impl<'id, P: PhaseTypes<'id>> RoleKeys<'id, P> for AccessPoint {
     }
 }
 
-/// The keys of the interface `I`.
-pub type InterfaceKeys<'p, 'id, I> = <<I as InterfacePhase<'p, 'id>>::Role as RoleKeys<
-    'id,
-    <I as InterfacePhase<'p, 'id>>::Types,
->>::Keys;
-
-/// The types of one backend's phase that its events carry.
+/// The types a backend's data port carries in its owners and terminals.
 pub trait PhaseTypes<'id>: Sized {
     /// Maximum queued commands, derived in const evaluation from the mint's pools.
     const COMMAND_CAPACITY: usize;
@@ -782,14 +667,14 @@ pub trait PhaseTypes<'id>: Sized {
         + crate::ExecutionPayload;
     /// Memory a network fills with one data frame in place, which a data
     /// arena's slot holds from its intake until it returns
-    /// ([`StationPhase::data_arena`]). It names no installation: it outlives
+    /// ([`DataPort::arena`](crate::DataPort::arena)). It names no installation: it outlives
     /// one and crosses execution contexts.
     type DataMemory: Send + 'static;
     /// The memory of one received MPDU, which goes back through
-    /// [`LowerMacPhase::recycle`].
+    /// [`DataPort::recycle`](crate::DataPort::recycle).
     type RxBuffer: crate::RxBuffer;
     /// A received buffer lent to a network owner
-    /// ([`LowerMacPhase::lend`]).
+    /// ([`DataPort::lend`](crate::DataPort::lend)).
     type LentRx: crate::LentRxBuffer;
     /// The metadata of one received MPDU: the portable fields and what the
     /// backend's type guarantees beyond them.
@@ -812,112 +697,6 @@ pub trait PhaseTypes<'id>: Sized {
     type BlockAck;
 }
 
-/// A running lower-MAC phase of the install `'id`, lent for `'p`.
-pub trait LowerMacPhase<'p, 'id: 'p>:
-    PortPhase<
-        Event = LowerMacEvent<'id, Self::Types>,
-        Fault = <Self::Types as PhaseTypes<'id>>::Fault,
-    > + Sized
-{
-    /// The backend's capabilities marker.
-    type Caps: Ieee80211Capabilities;
-    /// The types the phase's events carry.
-    type Types: PhaseTypes<'id>;
-    /// The station interface of the phase. Every station interface sends
-    /// A-MPDUs.
-    type Station<'v>: StationPhase<'p, 'id, Caps = Self::Caps, Types = Self::Types>
-        + crate::AmpduPhase<'p, 'id, Caps = Self::Caps, Types = Self::Types>
-    where
-        Self: 'v;
-    /// The access-point interface of the phase.
-    type AccessPoint<'v>: AccessPointPhase<'p, 'id, Caps = Self::Caps, Types = Self::Types>
-    where
-        Self: 'v;
-
-    /// The channel the phase runs on.
-    fn channel(&self) -> Channel;
-
-    /// The rate on the phase's channel, when the capabilities send it
-    /// there. Only this check mints a [`PhaseRate`].
-    fn rate(&self, rate: PhyRate) -> Option<PhaseRate<'p, 'id, Self::Caps>> {
-        if Self::Caps::CAPS.supports_rate(rate, self.channel()) {
-            Some(PhaseRate::checked(rate))
-        } else {
-            None
-        }
-    }
-
-    /// The rate, when the capabilities carry an individual frame without
-    /// an ACK at it.
-    ///
-    /// # Errors
-    ///
-    /// The rate, when they do not.
-    fn no_ack(
-        &self,
-        rate: PhaseRate<'p, 'id, Self::Caps>,
-    ) -> Result<SupportedNoAck<'p, 'id, Self::Caps>, PhaseRate<'p, 'id, Self::Caps>> {
-        if Self::Caps::CAPS.individual_no_ack.contains_rate(rate.get()) {
-            Ok(SupportedNoAck(rate))
-        } else {
-            Err(rate)
-        }
-    }
-
-    /// Return an owned receive buffer to the backend's receive pool. Keeping
-    /// it occupies that capacity; dropping it does not recycle it. The host
-    /// model poisons the installation when an unrecycled owner is dropped.
-    fn recycle(&mut self, buffer: <Self::Types as PhaseTypes<'id>>::RxBuffer);
-
-    /// Move a received buffer out of the receive capacity to a network
-    /// owner, without copying its bytes. The buffer then counts as held by
-    /// the network until its owner is dropped, and the installation's
-    /// retirement waits for every lent buffer. A refusal returns the
-    /// unchanged buffer, still owed to [`Self::recycle`].
-    fn lend(
-        &mut self,
-        buffer: <Self::Types as PhaseTypes<'id>>::RxBuffer,
-    ) -> Result<
-        <Self::Types as PhaseTypes<'id>>::LentRx,
-        crate::LendRefused<<Self::Types as PhaseTypes<'id>>::RxBuffer>,
-    >;
-
-    /// Ready once the network holds no buffer [`Self::lend`] moved to it;
-    /// otherwise registers `cx` for the drop of the last one.
-    fn poll_lent_returned(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()>;
-
-    /// The buffers [`Self::lend`] moved to the network that it still holds.
-    fn lent(&self) -> usize;
-
-    /// Whether the network is under its limit: [`Self::lend`] refuses no
-    /// buffer for capacity now.
-    fn lend_room(&self) -> bool;
-
-    /// Ready while [`Self::lend_room`] holds; otherwise registers `cx` for
-    /// the drop of the next lent buffer.
-    fn poll_lend_room(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()>;
-
-    /// Close publication in every queue. A current publication is waited for,
-    /// at most the backend's PUBLICATION_BOUND, before GateClosed is emitted.
-    /// ACK returns `Delivered`; unknown timeout returns Indeterminate.
-    /// When a retry would be needed, withdraw the attempt with its Sent MPDU
-    /// instead of starting that retry. Queued fresh MPDUs return Fresh.
-    /// Terminals retain each AC's order and precede the barrier confirmation.
-    fn close_gate(&mut self, gate: GateOpen<'id, <Self::Types as PhaseTypes<'id>>::GatePath>);
-
-    /// Open the closed gate, a register write that cannot fail.
-    fn open_gate(
-        &mut self,
-        gate: GateClosed<'id, <Self::Types as PhaseTypes<'id>>::GatePath>,
-    ) -> GateOpen<'id, <Self::Types as PhaseTypes<'id>>::GatePath>;
-
-    /// The station interface.
-    fn station(&mut self) -> Self::Station<'_>;
-
-    /// The access-point interface.
-    fn access_point(&mut self) -> Self::AccessPoint<'_>;
-}
-
 /// One attempt awaiting preparation: its ticket, its MPDU in a
 /// buffer, its context, body, protection, key, power and the operation it asks the air for.
 /// The frame's kind sets its response and
@@ -929,7 +708,7 @@ pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root<oer_protocols_radio_po
     /// The attempt's place in flight.
     pub ticket: Slot<'id, T, Path>,
     /// Fresh memory with its checked description and body, or the original
-    /// returned MPDU together with this attempt's phase-bound rates.
+    /// returned MPDU together with this attempt's port-bound rates.
     pub source: M,
     /// The access category the attempt contends as.
     pub access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
@@ -986,8 +765,6 @@ impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath> AdmittedAttempt<'id, T, M
         self,
         _: &oer_protocols_radio_port::BodyLoan<'id, Path::Identity, M::Backend>,
     ) -> AdmittedTxParts<M::OwnedContext, Slot<'static, T, Path>, M::OwnedPayload, M::Execution, K>
-    where
-        M::Backend: oer_protocols_radio_port::SlotOwner<Path::Identity>,
     {
         self.parts
     }
@@ -1064,23 +841,23 @@ impl<Key> TxProtection<Key> {
 pub type PoolSource<'k, 'p, 'id, T, C, K, R> = TxSource<
     <T as TxBufferPool<'id, C>>::Buffer,
     <T as TxBufferPool<'id, C>>::Sent,
-    ClassFrame<'p, 'id, C, K>,
+    ClassFrame<'p, C, K>,
     <T as PhaseTypes<'id>>::TxBody,
     <R as RoleKeys<'id, T>>::TxKey<'k>,
-    RetransmissionPlan<'p, 'id, K>,
+    RetransmissionPlan<'p, K>,
 >;
 
 /// Class-specific source whose portable layout has already been checked.
 pub type CheckedPoolSource<'k, 'p, 'id, T, C, K, R> = crate::CheckedTxSource<
     <T as TxBufferPool<'id, C>>::Buffer,
     <T as TxBufferPool<'id, C>>::Sent,
-    ClassFrame<'p, 'id, C, K>,
+    ClassFrame<'p, C, K>,
     <T as PhaseTypes<'id>>::TxBody,
     <R as RoleKeys<'id, T>>::TxKey<'k>,
-    RetransmissionPlan<'p, 'id, K>,
+    RetransmissionPlan<'p, K>,
 >;
 
-/// Preparation returns a phase-bound MPDU or its unchanged class-specific source.
+/// Preparation returns a port-bound MPDU or its unchanged class-specific source.
 pub type PoolPreparation<'k, 'p, 'id, T, C, K, R> = Result<
     <T as PhaseTypes<'id>>::Prepared<'k, 'p, R, K>,
     PreparationRefused<PoolSource<'k, 'p, 'id, T, C, K, R>>,
@@ -1095,10 +872,10 @@ pub type PoolMpdu<'id, T, C> =
 pub trait PreparedTx<'id>: Sized {
     /// The backend's resource family.
     type Types: PhaseTypes<'id>;
-    /// Concrete owner whose frontend alone can consume this sealed admission.
-    type Backend: oer_protocols_radio_port::SlotOwner<
-            <<Self::Types as PhaseTypes<'id>>::TicketPath as PoolPath>::Identity,
-        >;
+    /// The backend's tag: only the holder of its private loan
+    /// ([`BodyLoan`](oer_protocols_radio_port::BodyLoan) of this tag) can
+    /// consume this sealed admission.
+    type Backend;
     /// Opaque context selected independently of the body's loan.
     type OwnedContext;
     /// Complete owned payload stored by P2.
@@ -1136,37 +913,6 @@ pub trait PreparedTx<'id>: Sized {
     );
 }
 
-/// The attempt of the interface `I`, after its class pool prepared the MPDU.
-/// It remains bound to this phase, install, capabilities and role.
-pub type InterfaceAttempt<'k, 'p, 'id, I> = Attempt<
-    'id,
-    <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketKind,
-    <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::Prepared<
-        'k,
-        'p,
-        <I as InterfacePhase<'p, 'id>>::Role,
-        <I as InterfacePhase<'p, 'id>>::Caps,
-    >,
-    <I as InterfacePhase<'p, 'id>>::Caps,
-    <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::Context,
-    <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketPath,
->;
-
-/// The sealed operation accepted by an interface backend.
-pub type InterfaceSubmission<'k, 'p, 'id, I> = AdmittedAttempt<
-    'id,
-    <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketKind,
-    <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::Prepared<
-        'k,
-        'p,
-        <I as InterfacePhase<'p, 'id>>::Role,
-        <I as InterfacePhase<'p, 'id>>::Caps,
-    >,
-    <I as InterfacePhase<'p, 'id>>::Caps,
-    <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::Context,
-    <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketPath,
->;
-
 /// An installed TX key and the PN allocated by its core for one fresh MPDU.
 /// Retransmissions retain the encoded header rather than requesting another.
 pub struct NumberedKey<Key> {
@@ -1178,13 +924,13 @@ pub struct NumberedKey<Key> {
 
 /// The MPDU supplied to a submission. Fresh memory travels with its
 /// `ClassFrame` and body; a `Sent` MPDU already owns that description and
-/// body, and receives only the new attempt's phase-bound rate plan.
+/// body, and receives only the new attempt's port-bound rate plan.
 pub enum TxSource<B, N, F, O, Key, Plan> {
     /// A new MPDU, numbered at its first protected transmission.
     Fresh {
         /// Caller-owned memory, writable only before admission.
         buffer: B,
-        /// The checked, phase-bound frame description.
+        /// The checked, port-bound frame description.
         frame: F,
         /// External octets at the end of the MPDU, retained until its return.
         body: Option<O>,
@@ -1200,16 +946,16 @@ pub enum TxSource<B, N, F, O, Key, Plan> {
     },
 }
 
-/// The phase-bound rates of a new attempt of a `Sent` MPDU. The backend
+/// The port-bound rates of a new attempt of a `Sent` MPDU. The backend
 /// checks that its response kind matches the original MPDU's kind.
 #[derive(Debug)]
-pub enum RetransmissionPlan<'p, 'id, K> {
+pub enum RetransmissionPlan<'p, K> {
     /// An individually acknowledged MPDU.
-    Individual(RetryPlan<PhaseRate<'p, 'id, K>>),
+    Individual(RetryPlan<PortRate<'p, K>>),
     /// An individually addressed MPDU with no ACK.
-    IndividualNoAck(crate::SupportedNoAck<'p, 'id, K>),
+    IndividualNoAck(crate::SupportedNoAck<'p, K>),
     /// A group-addressed MPDU.
-    Group(PhaseRate<'p, 'id, K>),
+    Group(PortRate<'p, K>),
 }
 
 /// Preparation failed before admission; the original operation is returned
@@ -1230,275 +976,6 @@ pub enum PreparationError {
     RetransmissionKey,
     /// The new rate plan requires a different response kind.
     RetransmissionKind,
-}
-
-/// What one interface of a running phase does: its own frames, keys and
-/// Block Ack agreements.
-///
-/// The body and fault belong to the phase's resource family, with no
-/// independent interface-level declarations:
-///
-/// ```compile_fail,E0220
-/// use oer_protocols_ieee80211_contracts_port::InterfacePhase;
-/// fn body<'p, 'id: 'p, I: InterfacePhase<'p, 'id>>() -> Option<I::TxBody> { None }
-/// ```
-///
-/// ```compile_fail,E0220
-/// use oer_protocols_ieee80211_contracts_port::InterfacePhase;
-/// fn fault<'p, 'id: 'p, I: InterfacePhase<'p, 'id>>() -> Option<I::Fault> { None }
-/// ```
-///
-/// ```
-/// use oer_protocols_ieee80211_contracts_port::{InterfaceAttempt, InterfacePhase, PhaseTypes, Poisoned};
-/// fn body<'p, 'id: 'p, I: InterfacePhase<'p, 'id>>()
-///     -> Option<<I::Types as PhaseTypes<'id>>::TxBody> { None }
-/// fn submit<'k, 'p, 'id: 'k + 'p, I: InterfacePhase<'p, 'id>>(
-///     interface: &mut I, attempt: InterfaceAttempt<'k, 'p, 'id, I>,
-/// ) -> Result<(), Poisoned<<I::Types as PhaseTypes<'id>>::Fault>> {
-///     interface.submit(attempt.admit())
-/// }
-/// ```
-pub trait InterfacePhase<'p, 'id: 'p> {
-    /// The backend's capabilities marker.
-    type Caps: Ieee80211Capabilities;
-    /// The types the phase's events carry.
-    type Types: PhaseTypes<'id>;
-    /// The interface's role, which names its keys among the phase's types.
-    type Role: RoleKeys<'id, Self::Types>;
-    /// The interface's own address, which the install gave it.
-    fn address(&self) -> IndividualAddress;
-
-    /// Accept the already sealed `attempt`. Its closed preparation proof
-    /// retains phase, install and role; submission has no buffer-class
-    /// parameter. A retransmission retains SN, PN and payload. An optional body remains
-    /// owned by the attempt until its terminal, even if copied into DMA memory.
-    /// The backend publishes the attempt once its queue is free; its
-    /// context, ticket, buffers and bodies return together, exactly once.
-    ///
-    /// # Errors
-    ///
-    /// Only a poisoned backend refuses submission. Preparation already
-    /// established the layout and key; fail-stop retains the operation until
-    /// the installation ends, without inventing a terminal.
-    fn submit<'k>(
-        &mut self,
-        attempt: InterfaceSubmission<'k, 'p, 'id, Self>,
-    ) -> Result<(), Poisoned<<Self::Types as PhaseTypes<'id>>::Fault>>;
-
-    /// The EDCA parameters this interface's attempts contend with, from
-    /// their next publication on. Each interface keeps its own set; the
-    /// head frame's VIF selects the parameters of its AC queue's single
-    /// contention state. The returned set is applied exactly; unsupported
-    /// records are refused by SupportedEdca, never clamped. Before a BSS
-    /// is known, the interface uses the standard non-AP EDCA defaults.
-    fn set_edca(&mut self, parameters: SupportedEdca<Self::Caps>) -> SupportedEdca<Self::Caps>;
-
-    /// Enqueue a pairwise installation of `key` for frames with `peer`,
-    /// consuming its vacant `slot`. The call reserves a FIFO terminal. Only
-    /// [`LowerMacTerminal::PairwiseKeyInstalled`] returns the installed
-    /// owner, after the key is effective for TX and RX; before it, no
-    /// attempt can name the key.
-    ///
-    /// `LowerMacBackend::GROUP_COMMAND_BOUND` covers admission through
-    /// terminal or Poisoned, with a backend-owned wake. A failed write
-    /// poisons with the slot and its association retained for teardown;
-    /// disable completes the accepted installation within the same bound or
-    /// retains its resources, never fabricating an installed key.
-    ///
-    /// Returns the identity the installed key carries: the terminal's key
-    /// is this installation's when its `pairwise_identity` equals it.
-    fn install_pairwise_key(
-        &mut self,
-        association: &<InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::Association,
-        slot: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::PairwiseSlot,
-        peer: IndividualAddress,
-        key: Ccmp128Key,
-    ) -> <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::Identity;
-
-    /// Enqueue a group installation, consuming its vacant slot and the
-    /// interface's unique permission. The call reserves a FIFO terminal.
-    /// Only `GroupKeyInstalled` returns an installed owner and permission.
-    ///
-    /// Exactly one installation per interface/association and wire KeyID
-    /// participates in decryption; other IDs stay active. At the terminal,
-    /// older installations of this ID remain retained but become inactive.
-    /// All delivered old-installation RX, including delayed DMA/ISR facts,
-    /// precedes it; selected-installation RX follows it. Traffic cannot delay
-    /// completion indefinitely: `LowerMacBackend::GROUP_COMMAND_BOUND` covers
-    /// admission through terminal or Poisoned, with a backend-owned wake.
-    ///
-    /// Hardware uncertainty retains every resource for teardown and returns
-    /// no ordinary permission. Disable completes accepted commands within
-    /// the same bound. This contract exposes no cancellation command: teardown
-    /// retains any operation that cannot complete, never fabricating success.
-    fn install_group_key(
-        &mut self,
-        association: &<InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::Association,
-        permission: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::GroupPermission,
-        slot: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::GroupSlot,
-        key_id: GroupKeyId,
-        key: Ccmp128Key,
-    );
-
-    /// Remove `key`: queued attempts that use it return as
-    /// `Withdrawn(KeyRemoved)`, a published one is waited for, and
-    /// [`LowerMacTerminal::KeyRemoved`] gives its slot and association owner back.
-    /// The owner is retained through queued, published and quarantined uses;
-    /// receiving it alone cannot end the association without the full bank.
-    fn remove_pairwise_key(
-        &mut self,
-        association: <<Self::Role as RoleKeys<'id, Self::Types>>::Keys as KeyTypes<'id>>::Association,
-        key: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::PairwiseKey,
-    );
-
-    /// Remove `key`, as [`Self::remove_pairwise_key`].
-    fn remove_group_key(
-        &mut self,
-        permission: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::GroupPermission,
-        key: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::GroupKey,
-    );
-
-    /// Start acknowledging A-MPDUs of `agreement` in `slot`; the agreement
-    /// holds the slot. A caller holds one agreement per peer and TID: it
-    /// replaces one through [`Self::replace_block_ack`]. This writes the
-    /// slot's desired state; add, replace and remove never enqueue commands.
-    /// The latest value is applied before the driver's next command.
-    #[must_use = "an agreement holds its slot; dropping it loses the slot until the next install"]
-    fn add_block_ack(
-        &mut self,
-        slot: PhaseBlockAckSlot<'id, Self::Types>,
-        agreement: SupportedBlockAck<Self::Caps>,
-    ) -> <Self::Types as PhaseTypes<'id>>::BlockAck;
-
-    /// Replace `running` with `agreement` of the same peer and TID, in its
-    /// slot.
-    #[must_use = "an agreement holds its slot; dropping it loses the slot until the next install"]
-    fn replace_block_ack(
-        &mut self,
-        running: <Self::Types as PhaseTypes<'id>>::BlockAck,
-        agreement: SupportedBlockAck<Self::Caps>,
-    ) -> <Self::Types as PhaseTypes<'id>>::BlockAck;
-
-    /// Clear the desired state of `agreement`, giving its slot back. Reuse
-    /// before the driver runs replaces the pending removal with the new
-    /// agreement; no intermediate hardware installation is promised.
-    #[must_use = "an ended agreement's slot is capacity; dropping it loses it until the next install"]
-    fn remove_block_ack(
-        &mut self,
-        agreement: <Self::Types as PhaseTypes<'id>>::BlockAck,
-    ) -> PhaseBlockAckSlot<'id, Self::Types>;
-}
-
-/// The station's data arenas, as [`StationPhase::data_arena`] lends them:
-/// their memory, evidence and fault are the phase types'.
-pub trait StationDataArena<'p, 'id: 'p, K: Ieee80211Capabilities, P: PhaseTypes<'id>>:
-    crate::arena::TxArena<
-        'p,
-        'id,
-        Caps = K,
-        Memory = P::DataMemory,
-        Response = P::BlockAckEvidence,
-        Denial = P::AirDenied,
-        Fault = P::Fault,
-    >
-{
-}
-
-impl<'p, 'id: 'p, K: Ieee80211Capabilities, P: PhaseTypes<'id>, A> StationDataArena<'p, 'id, K, P>
-    for A
-where
-    A: crate::arena::TxArena<
-            'p,
-            'id,
-            Caps = K,
-            Memory = P::DataMemory,
-            Response = P::BlockAckEvidence,
-            Denial = P::AirDenied,
-            Fault = P::Fault,
-        >,
-{
-}
-
-/// The station interface of a running phase.
-pub trait StationPhase<'p, 'id: 'p>: InterfacePhase<'p, 'id, Role = Station> {
-    /// The station's two data arenas, lent for one synchronous step.
-    type DataArena<'a>: StationDataArena<'p, 'id, Self::Caps, Self::Types>
-    where
-        Self: 'a;
-
-    /// Lend the station's data arenas ([`crate::arena`]): the station fills
-    /// and publishes them, and settles each completion the phase's stream
-    /// returns ([`TxCompleted::Arena`]). The backend serves the published
-    /// arena's hardware itself; it publishes nothing while the gate is
-    /// closed, a configuration is pending or the phase stops, and refuses
-    /// a publication as busy meanwhile.
-    fn data_arena(&mut self) -> Self::DataArena<'_>;
-
-    /// Consume an installed GTK and enqueue its replacement in command order.
-    /// Its unique interface permission reserves one terminal place at this
-    /// call. No removal or competing mutation is possible while the operation
-    /// holds that permission and the installed owner. The same finite RX cut
-    /// and GROUP_COMMAND_BOUND as ordinary group installation apply.
-    ///
-    /// [`LowerMacTerminal::GroupKeyReplaced`] returns the new installed key with
-    /// the same slot. Its position in the event stream is the installation
-    /// boundary for RX. A hardware write failure poisons the backend; any
-    /// internal hardware rollback is not a successful port terminal.
-    fn replace_group_key(
-        &mut self,
-        permission: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::GroupPermission,
-        installed: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::GroupKey,
-        key_id: GroupKeyId,
-        key: Ccmp128Key,
-    );
-
-    /// Select this concrete retained installation. No material write, new
-    /// installation or counter reset occurs, including when already current.
-    /// The same RX boundary and completion bound as installation apply.
-    /// The owner and permission return exactly once in `GroupKeySelected`.
-    /// An evicted hardware entry is not an installed owner and cannot be
-    /// restored by this operation, regardless of the backend's slot count.
-    fn select_group_key(
-        &mut self,
-        permission: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::GroupPermission,
-        installed: <InterfaceKeys<'p, 'id, Self> as KeyTypes<'id>>::GroupKey,
-    );
-
-    /// Set what the station receives once none of its frames is in flight:
-    /// a frame the closed gate holds ends as aborted at once, a published
-    /// one is waited for, and [`LowerMacTerminal::Configured`] returns the same
-    /// permission and context. The install mints one permission per interface;
-    /// another request cannot exist before its terminal returns that owner.
-    fn configure(
-        &mut self,
-        permission: crate::ConfigurePermission<
-            'id,
-            Station,
-            <Self::Types as PhaseTypes<'id>>::StationCommandPath,
-            <Self::Types as PhaseTypes<'id>>::StationConfigureContext,
-        >,
-        receive: StationReceive<Self::Caps>,
-    );
-
-    /// The BSS color of the station's HE BSS.
-    fn set_bss_color(&mut self, color: BssColor);
-}
-
-/// The access-point interface of a running phase, whose BSSID is its
-/// address.
-pub trait AccessPointPhase<'p, 'id: 'p>: InterfacePhase<'p, 'id, Role = AccessPoint> {
-    /// Set the access point's receive rules, as
-    /// [`StationPhase::configure`].
-    fn configure(
-        &mut self,
-        permission: crate::ConfigurePermission<
-            'id,
-            AccessPoint,
-            <Self::Types as PhaseTypes<'id>>::AccessPointCommandPath,
-            <Self::Types as PhaseTypes<'id>>::AccessPointConfigureContext,
-        >,
-        receive: SupportedFilter<Self::Caps, AccessPoint>,
-    );
 }
 
 /// A class of transmit buffers: memory of one size, which the composition
@@ -1622,18 +1099,18 @@ pub trait TxBufferMemory {
 
 /// A frame that a buffer of the class `C` fits; only [`ClassFrame::new`]
 /// makes one.
-pub struct ClassFrame<'p, 'id, C, K> {
-    frame: TxFrame<'p, 'id, K>,
+pub struct ClassFrame<'p, C, K> {
+    frame: TxFrame<'p, K>,
     class: core::marker::PhantomData<C>,
 }
 
-impl<'p, 'id, C: TxBufferClass, K: Ieee80211Capabilities> ClassFrame<'p, 'id, C, K> {
+impl<'p, C: TxBufferClass, K: Ieee80211Capabilities> ClassFrame<'p, C, K> {
     /// `frame`, when a buffer of the class `C` fits it.
     ///
     /// # Errors
     ///
     /// The frame, when it is longer than the class holds.
-    pub fn new(frame: TxFrame<'p, 'id, K>) -> Result<Self, TxFrame<'p, 'id, K>> {
+    pub fn new(frame: TxFrame<'p, K>) -> Result<Self, TxFrame<'p, K>> {
         if frame.mpdu_len() <= C::CAPACITY {
             Ok(Self {
                 frame,
@@ -1645,13 +1122,13 @@ impl<'p, 'id, C: TxBufferClass, K: Ieee80211Capabilities> ClassFrame<'p, 'id, C,
     }
 
     /// The frame.
-    pub fn into_frame(self) -> TxFrame<'p, 'id, K> {
+    pub fn into_frame(self) -> TxFrame<'p, K> {
         self.frame
     }
 
     /// Borrow the checked description for preparation without consuming
     /// the original operation, so a refusal can return it intact.
-    pub const fn frame(&self) -> &TxFrame<'p, 'id, K> {
+    pub const fn frame(&self) -> &TxFrame<'p, K> {
         &self.frame
     }
 }
@@ -1687,11 +1164,11 @@ impl<C: TxBufferClass, H: crate::FrameHeader, K: Ieee80211Capabilities> ClassSiz
         &self.frame
     }
 }
-impl<'p, 'id, C, K> ClassFrame<'p, 'id, C, K> {
-    /// Add only the phase-bound retry plan to an individually acknowledged MPDU.
+impl<'p, C, K> ClassFrame<'p, C, K> {
+    /// Add only the port-bound retry plan to an individually acknowledged MPDU.
     pub fn individual(
         frame: ClassSizedFrame<C, crate::AckHeader, K>,
-        plan: RetryPlan<PhaseRate<'p, 'id, K>>,
+        plan: RetryPlan<PortRate<'p, K>>,
     ) -> Self {
         Self {
             frame: TxFrame::Individual {
@@ -1701,10 +1178,10 @@ impl<'p, 'id, C, K> ClassFrame<'p, 'id, C, K> {
             class: core::marker::PhantomData,
         }
     }
-    /// Add only the phase-bound rate to a group MPDU.
+    /// Add only the port-bound rate to a group MPDU.
     pub fn group(
         frame: ClassSizedFrame<C, crate::HeaderSpec<crate::GroupAddress>, K>,
-        rate: PhaseRate<'p, 'id, K>,
+        rate: PortRate<'p, K>,
     ) -> Self {
         Self {
             frame: TxFrame::Group {
@@ -1959,7 +1436,7 @@ pub struct ArbiterAuthority<'id, Path: PoolPath = Root<oer_protocols_radio_port:
 
 impl<Path: PoolPath> ArbiterAuthority<'static, Path> {
     /// Lend the one construction authority without copying or reissuing it.
-    pub fn lend<'p, S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         _: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> ArbiterAuthority<'p, Path> {

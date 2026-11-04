@@ -1,7 +1,6 @@
 //! One installation of the port: the pools it mints, the tokens its
 //! lifecycle and datapath actor take, and the port's backend identity.
 use super::*;
-use radio::{SlotRetire, SlotStopped, SlotWakes};
 
 pub(super) type PortCoreOwner<'id, Id, D, const B: usize> =
     crate::lower_mac::CoreOwner<Core<'id, Id, D, B>>;
@@ -92,64 +91,10 @@ impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     }
 }
 
-/// The port's backend identity: the tag of its loan conversions between
-/// the driver's `'static` owners and an installation's brand, and the
-/// owner its sealed admissions name. It has no value: no slot registers
-/// it, and none of its slot operations can run.
+/// The port's backend tag: the tag of its loan conversions between the
+/// driver's `'static` owners and an installation's brand, and the owner
+/// its sealed admissions name. It has no value.
 pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>(
     Infallible,
     PhantomData<fn(Id) -> (Id, D, O)>,
 );
-
-impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<Id>
-    for Esp32s31Backend<Id, D, B, O>
-{
-    type Pools = InstallationPools;
-    type Queues = ();
-    const VACANT_QUEUES: Self::Queues = ();
-    type Vacant = Infallible;
-    type Frontend<'s>
-        = Infallible
-    where
-        Self: 's,
-        Id: 's;
-    type Invocation<'s>
-        = Infallible
-    where
-        Self: 's,
-        Id: 's;
-    fn prepare_queues(&mut self, _: &mut (), _: radio::Mint<'static, Self::Pools, Id>) {
-        match self.0 {}
-    }
-    fn split<'s>(
-        _: &'s mut (),
-        _: SlotWakes<'s, Id>,
-    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_protocols_radio_port::SlotInitError>
-    where
-        Self: 's,
-        Id: 's,
-    {
-        Err(oer_protocols_radio_port::SlotInitError::MissingResource(
-            "the S31 port registers no slot",
-        ))
-    }
-    fn run<'s>(
-        &mut self,
-        _: &mut Self::Invocation<'s>,
-        _: SlotRetire<'_, Id, Self>,
-    ) -> impl Future<Output = SlotStopped<Id, Self>>
-    where
-        Self: 's,
-        Id: 's,
-    {
-        let never = self.0;
-        async move { match never {} }
-    }
-    fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>) -> Self::Vacant
-    where
-        Self: 's,
-        Id: 's,
-    {
-        match self.0 {}
-    }
-}

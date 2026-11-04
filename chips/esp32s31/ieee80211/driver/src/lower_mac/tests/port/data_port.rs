@@ -216,7 +216,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     ) -> Option<<Port<'id, Id> as DataPort<'id>>::Admitted> {
         let buffer = self.buffers.pop()?;
         let ticket = self.tickets.pop()?;
-        let rate = self.port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))?.phase();
+        let rate = self.port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))?;
         let header = HeaderSpec::new(
             FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
             0,

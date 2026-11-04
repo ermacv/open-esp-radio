@@ -485,14 +485,6 @@ where
                     );
                 }
             }
-            terminal @ LowerMacTerminal::TxCompleted(TxCompleted::Arena(_)) => {
-                self.inner.reject(
-                    Rejected::Terminal(terminal),
-                    LifecycleViolation::Returned(BackendContractViolation::UnexpectedTerminal(
-                        PendingTerminal::Arena,
-                    )),
-                );
-            }
             LowerMacTerminal::GateClosed(closed) => {
                 if let Some(ArbiterCell::Running(arbiter)) = self.inner.arbiter.as_mut() {
                     arbiter.gate_closed(closed);
@@ -574,12 +566,6 @@ where
                     LifecycleViolation::Returned(
                         BackendContractViolation::UnexpectedAccessPointTerminal,
                     ),
-                );
-            }
-            terminal @ LowerMacTerminal::TsfSampled { .. } => {
-                self.inner.reject(
-                    Rejected::Terminal(terminal),
-                    LifecycleViolation::Returned(BackendContractViolation::UnexpectedTsfSample),
                 );
             }
         }

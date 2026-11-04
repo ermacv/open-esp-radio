@@ -2,16 +2,13 @@
 //!
 //! A ticket's public index is `u8`, so four words cover its entire domain
 //! without an allocation or a fallible capacity increase. The control
-//! operations each consume a unique affine permission, and one data arena
-//! is on the air at a time. This is accounting
+//! operations each consume a unique affine permission. This is accounting
 //! of a backend's external promises, not another owner of those permissions.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PendingTerminal {
     Transmit(u8),
     Control(ControlTerminal),
-    /// The completion of the data arena on the air.
-    Arena,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,7 +36,6 @@ impl ControlTerminal {
 pub(crate) struct Admissions {
     transmit: [u64; 4],
     control: u8,
-    arena: bool,
 }
 
 impl Admissions {
@@ -61,7 +57,6 @@ impl Admissions {
                 *word |= mask;
             }
             PendingTerminal::Control(operation) => self.control |= operation.mask(),
-            PendingTerminal::Arena => self.arena = true,
         }
     }
 
@@ -79,7 +74,6 @@ impl Admissions {
                 self.control &= !mask;
                 present
             }
-            PendingTerminal::Arena => core::mem::replace(&mut self.arena, false),
         }
     }
 }

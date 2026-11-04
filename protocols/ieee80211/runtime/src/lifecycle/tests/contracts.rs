@@ -4,42 +4,15 @@
 //! stay in their queue; a stop that proved nothing ends it unconfirmed.
 
 use super::*;
-use oer_protocols_ieee80211_contracts_port::{
-    Configured, LowerMacTerminal, SampledTsfPermission, VifRole,
-};
+use oer_protocols_ieee80211_contracts_port::{Configured, LowerMacTerminal, Removed, RemovedKey};
 
 /// What the test, as the actor, sends the lifecycle first.
 #[derive(Clone, Copy)]
 enum First {
     /// The access point's configuration terminal.
-    AccessPoint,
-    /// A TSF sample of the station's interface.
-    Tsf,
-}
-
-/// A sample of the station's TSF for `permission`.
-fn tsf_sample<'s>(
-    permission: oer_protocols_ieee80211_contracts_port::TsfPermission<
-        's,
-        oer_protocols_ieee80211_contracts_port::Station,
-        <Types<'s> as PhaseTypes<'s>>::StationCommandPath,
-    >,
-) -> LowerMacTerminal<'s, Types<'s>> {
-    LowerMacTerminal::TsfSampled {
-        permission: SampledTsfPermission::Station(permission),
-        sample: oer_protocols_ieee80211_contracts_port::TsfSample {
-            tsf: oer_protocols_ieee80211_contracts_port::VifTsf::new(
-                VifRole::Station,
-                oer_protocols_ieee80211_contracts_port::tsf::TsfInstant::from_micros(0),
-            ),
-            local: oer_protocols_ieee80211_contracts_port::Ieee80211Stamp {
-                at: oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(0),
-                generation: oer_protocols_radio_port::GenerationSource::new(1).current(),
-            },
-            uncertainty: oer_protocols_ieee80211_contracts_port::Ieee80211Duration::from_micros(0),
-            generation: oer_protocols_radio_port::GenerationSource::new(1).current(),
-        },
-    }
+    Configured,
+    /// The removal terminal of an access point's group key.
+    KeyRemoved,
 }
 
 /// Run the lifecycle alone, the test playing the actor: it answers the
@@ -117,10 +90,14 @@ fn alone(first: First, check: impl for<'s> FnOnce(Completed<'s>, Vec<Returned<'s
             assert!(run.as_mut().poll(&mut cx).is_pending());
             let configure =
                 LowerMacTerminal::Configured(Configured::AccessPoint(spare.access_point.configure));
-            let tsf = tsf_sample(spare.station_tsf);
+            let (slot, permission) = spare.access_point_group;
+            let removed = LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Group {
+                slot,
+                permission,
+            }));
             let terminals = match first {
-                First::AccessPoint => [configure, tsf],
-                First::Tsf => [tsf, configure],
+                First::Configured => [configure, removed],
+                First::KeyRemoved => [removed, configure],
             };
             for terminal in terminals {
                 assert!(
@@ -158,7 +135,7 @@ fn alone(first: First, check: impl for<'s> FnOnce(Completed<'s>, Vec<Returned<'s
 /// announcement.
 #[test]
 fn an_unsolicited_access_point_terminal_ends_the_lifecycle_and_keeps_its_owner() {
-    alone(First::AccessPoint, |completed, left, announced| {
+    alone(First::Configured, |completed, left, announced| {
         assert_eq!(
             completed.end,
             LifecycleEnd::Contract(LifecycleViolation::Returned(
@@ -175,7 +152,7 @@ fn an_unsolicited_access_point_terminal_ends_the_lifecycle_and_keeps_its_owner()
         assert!(matches!(
             left.as_slice(),
             [Returned::Terminal {
-                terminal: LowerMacTerminal::TsfSampled { .. },
+                terminal: LowerMacTerminal::KeyRemoved(Removed::AccessPoint(_)),
                 ..
             }]
         ));
@@ -183,23 +160,23 @@ fn an_unsolicited_access_point_terminal_ends_the_lifecycle_and_keeps_its_owner()
     });
 }
 
-/// A TSF sample no request asked for ends the lifecycle on its contract,
-/// the sample's permission kept with the retired lifecycle.
+/// An access point's key removal no request asked for ends the lifecycle
+/// on its contract, the removed slot and permission kept with the retired
+/// lifecycle.
 #[test]
-fn an_unsolicited_tsf_sample_ends_the_lifecycle_and_keeps_its_permission() {
-    alone(First::Tsf, |completed, left, announced| {
+fn an_unsolicited_access_point_key_removal_ends_the_lifecycle_and_keeps_its_owners() {
+    alone(First::KeyRemoved, |completed, left, announced| {
         assert_eq!(
             completed.end,
             LifecycleEnd::Contract(LifecycleViolation::Returned(
-                BackendContractViolation::UnexpectedTsfSample
+                BackendContractViolation::UnexpectedAccessPointTerminal
             ))
         );
         assert!(matches!(
             completed.retired.rejected,
-            Some(Rejected::Terminal(LowerMacTerminal::TsfSampled {
-                permission: SampledTsfPermission::Station(_),
-                ..
-            }))
+            Some(Rejected::Terminal(LowerMacTerminal::KeyRemoved(
+                Removed::AccessPoint(RemovedKey::Group { .. })
+            )))
         ));
         assert!(matches!(
             left.as_slice(),

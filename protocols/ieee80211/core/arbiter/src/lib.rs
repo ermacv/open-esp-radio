@@ -87,10 +87,9 @@
 //!   ([`LeaveReason::PortFailed`]).
 //! - **The air reservation** is the arbiter's type parameter
 //!   ([`ReservationMode`]): an arbiter that reserves the access point's air
-//!   for an absence closes the gate with one last frame, a CTS-to-self the
-//!   driver sends with the Duration left, and only a phase that sends it
-//!   ([`AirReservationPhase`])
-//!   closes its gates ([`CloseGateWith`]).
+//!   for an absence asks to close the gate with one last frame, a
+//!   CTS-to-self the driver sends with the Duration left: its gate-closing
+//!   action carries the reservation's end ([`ReservationMode::Reserve`]).
 //! - **The upstream** (the access point the station is connected to) is
 //!   the [`coordinator`]'s: the station reports its switch announcements,
 //!   its loss and where it found it again ([`UpstreamFact`]); the arbiter
@@ -117,46 +116,6 @@
 //!
 //! # Compile-fail tests
 //!
-//! A phase without the air reservation closes no gate of a reserving
-//! arbiter:
-//!
-//! ```compile_fail,E0277
-//! # use oer_protocols_ieee80211_core_arbiter::{AirReservation, CloseGateWith};
-//! # use oer_protocols_ieee80211_contracts_port::{GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
-//! fn close<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
-//!     CloseGateWith::<'p, 'id, AirReservation>::close_gate_with(
-//!         phase,
-//!         gate,
-//!         None,
-//!         |_| -> Ieee80211Instant { unreachable!() },
-//!     );
-//! }
-//! ```
-//!
-//! Its compiling twins: such a phase closes the gates of an arbiter without
-//! the reservation, and a phase with it those of a reserving one.
-//!
-//! ```
-//! # use oer_protocols_ieee80211_core_arbiter::{AirReservation, CloseGateWith, NoReservation};
-//! # use oer_protocols_ieee80211_contracts_port::{AirReservationPhase, GateClosed, GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
-//! fn plain<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
-//!     CloseGateWith::<'p, 'id, NoReservation>::close_gate_with(
-//!         phase,
-//!         gate,
-//!         (),
-//!         |_| -> Ieee80211Instant { unreachable!() },
-//!     );
-//! }
-//! fn reserving<'p, 'id: 'p, P: AirReservationPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
-//!     CloseGateWith::<'p, 'id, AirReservation>::close_gate_with(
-//!         phase,
-//!         gate,
-//!         None,
-//!         |_| -> Ieee80211Instant { unreachable!() },
-//!     );
-//! }
-//! ```
-//!
 //! No caller makes a lease place, so no station holds two leases:
 //!
 //! ```compile_fail,E0451
@@ -177,8 +136,7 @@ use core::{fmt::Debug, marker::PhantomData};
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    AirReservationPhase, ArbiterAuthority, GateClosed, GateOpen, Ieee80211Capabilities,
-    Ieee80211Instant, LowerMacPhase, PhaseTypes, SupportedChannel,
+    ArbiterAuthority, GateClosed, GateOpen, Ieee80211Capabilities, SupportedChannel,
 };
 use oer_protocols_ieee80211_wire::channel_switch::ChannelSwitchMode;
 use oer_protocols_radio_port::{PoolPath, Root};
@@ -559,8 +517,7 @@ pub enum UpstreamFact<K> {
 }
 
 /// Whether an arbiter reserves the access point's air for an absence: its
-/// type parameter, so only a phase that sends the reservation closes its
-/// gates ([`CloseGateWith`]).
+/// type parameter, whose reservation each gate-closing action carries.
 pub trait ReservationMode {
     /// Maximum absence representable by this mode's air reservation, if any.
     const MAX_ABSENCE: Option<Duration>;
@@ -602,45 +559,6 @@ impl ReservationMode for AirReservation {
 
     fn none() -> Option<Instant> {
         None
-    }
-}
-
-/// A phase that closes the gates of an arbiter of the reservation mode
-/// `R`: every phase for [`NoReservation`], only one that sends the
-/// reservation for [`AirReservation`].
-pub trait CloseGateWith<'p, 'id: 'p, R: ReservationMode>: LowerMacPhase<'p, 'id> {
-    /// Close the gate as the arbiter's action asks; `radio` turns the
-    /// reservation's end into the port's radio time.
-    fn close_gate_with(
-        &mut self,
-        gate: GateOpen<'id, <Self::Types as PhaseTypes<'id>>::GatePath>,
-        reserve: R::Reserve,
-        radio: impl FnOnce(Instant) -> Ieee80211Instant,
-    );
-}
-
-impl<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>> CloseGateWith<'p, 'id, NoReservation> for P {
-    fn close_gate_with(
-        &mut self,
-        gate: GateOpen<'id, <Self::Types as PhaseTypes<'id>>::GatePath>,
-        (): (),
-        _: impl FnOnce(Instant) -> Ieee80211Instant,
-    ) {
-        self.close_gate(gate);
-    }
-}
-
-impl<'p, 'id: 'p, P: AirReservationPhase<'p, 'id>> CloseGateWith<'p, 'id, AirReservation> for P {
-    fn close_gate_with(
-        &mut self,
-        gate: GateOpen<'id, <Self::Types as PhaseTypes<'id>>::GatePath>,
-        reserve: Option<Instant>,
-        radio: impl FnOnce(Instant) -> Ieee80211Instant,
-    ) {
-        match reserve {
-            Some(until) => self.close_gate_reserving(gate, radio(until)),
-            None => self.close_gate(gate),
-        }
     }
 }
 

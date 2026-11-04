@@ -1,11 +1,11 @@
 error[E0382]: use of moved value: `permission`
-  --> tests/ui/configure_once.rs:16:21
+  --> tests/ui/configure_once.rs:15:70
    |
- 7 |     permission: ConfigurePermission<
-   |     ---------- move occurs because `permission` has type `ConfigurePermission<'_, oer_protocols_ieee80211_contracts_port::Station, <<P as InterfacePhase<'_, '_>>::Types as PhaseTypes<'_>>::StationCommandPath, <<P as InterfacePhase<'_, '_>>::Types as PhaseTypes<'_>>::StationConfigureContext>`, which does not implement the `Copy` trait
+ 6 |     permission: ConfigurePermission<
+   |     ---------- move occurs because `permission` has type `ConfigurePermission<'_, oer_protocols_ieee80211_contracts_port::Station, <<P as DataPort<'_>>::Types as PhaseTypes<'_>>::StationCommandPath, <<P as DataPort<'_>>::Types as PhaseTypes<'_>>::StationConfigureContext>`, which does not implement the `Copy` trait
 ...
-14 |     phase.configure(permission, StationReceive::Off);
-   |                     ---------- value moved here
-15 |     #[cfg(all())]
-16 |     phase.configure(permission, StationReceive::Off); // ui-error: E0382
-   |                     ^^^^^^^^^^ value used here after move
+13 |     let first = PortCommand::Configure { permission, receive: StationReceive::Off };
+   |                                          ---------- value moved here
+14 |     #[cfg(all())]
+15 |     let _second = PortCommand::<'id, P::Types, P::Caps>::Configure { permission, receive: StationReceive::Off }; // ui-error: E0382
+   |                                                                      ^^^^^^^^^^ value used here after move

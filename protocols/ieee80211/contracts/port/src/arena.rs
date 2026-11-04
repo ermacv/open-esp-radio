@@ -38,7 +38,7 @@
 
 use crate::{
     Air, AmpduRate, BlockAckReport, Ieee80211Capabilities, MpduProtection, MpduStartSpacing,
-    PhaseRate, PhyRate, Protection, RetryPlan, SupportedPower,
+    PhyRate, PortRate, Protection, RetryPlan, SupportedPower,
 };
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
@@ -258,32 +258,32 @@ impl Arena {
     }
 }
 
-/// How an arena goes on the air, at a rate the phase checked.
-pub enum ArenaFormat<'p, 'id, K> {
+/// How an arena goes on the air, at a rate the port checked.
+pub enum ArenaFormat<'p, K> {
     /// One MPDU that solicits an ACK: the frame at position 0, sent by the
     /// retry plan as the backend sends any single MPDU (`RetryPlan`): it
     /// keeps the frame's sequence number, sets the Retry bit of each
     /// retransmission and ends at the first ACK or when the plan runs out.
     /// The arena's other frames stay unsent in it, and its completion
     /// reports every frame it holds and the plan's transmissions.
-    Single(RetryPlan<PhaseRate<'p, 'id, K>>),
+    Single(RetryPlan<PortRate<'p, K>>),
     /// An A-MPDU that solicits a BlockAck.
     Aggregate {
         /// A rate the backend aggregates at.
-        rate: AmpduRate<'p, 'id, K>,
+        rate: AmpduRate<'p, K>,
         /// The recipient's minimum MPDU start spacing.
         spacing: MpduStartSpacing,
     },
 }
 
-impl<K> Clone for ArenaFormat<'_, '_, K> {
+impl<K> Clone for ArenaFormat<'_, K> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<K> Copy for ArenaFormat<'_, '_, K> {}
+impl<K> Copy for ArenaFormat<'_, K> {}
 
-impl<K> core::fmt::Debug for ArenaFormat<'_, '_, K> {
+impl<K> core::fmt::Debug for ArenaFormat<'_, K> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Single(plan) => f.debug_tuple("Single").field(&plan.first().rate).finish(),
@@ -296,7 +296,7 @@ impl<K> core::fmt::Debug for ArenaFormat<'_, '_, K> {
     }
 }
 
-impl<K> ArenaFormat<'_, '_, K> {
+impl<K> ArenaFormat<'_, K> {
     /// The rate the PPDU goes at first.
     pub const fn rate(&self) -> PhyRate {
         match self {
@@ -307,11 +307,11 @@ impl<K> ArenaFormat<'_, '_, K> {
 }
 
 /// One publication of an arena: its right, its format and how it goes.
-pub struct ArenaPublication<'p, 'id, K> {
+pub struct ArenaPublication<'p, K> {
     /// The arena's right, which the backend holds until the completion.
     pub arena: Arena,
     /// Single MPDU or A-MPDU, and its rate.
-    pub format: ArenaFormat<'p, 'id, K>,
+    pub format: ArenaFormat<'p, K>,
     /// The EDCA queue the PPDU contends on.
     pub access_category: WmmAccessCategory,
     /// The control exchange that protects the PPDU.
@@ -323,7 +323,7 @@ pub struct ArenaPublication<'p, 'id, K> {
     pub power: SupportedPower<K>,
 }
 
-impl<K: Ieee80211Capabilities> core::fmt::Debug for ArenaPublication<'_, '_, K> {
+impl<K: Ieee80211Capabilities> core::fmt::Debug for ArenaPublication<'_, K> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ArenaPublication")
             .field("arena", &self.arena)
@@ -369,11 +369,11 @@ pub enum PublishRefused {
 }
 
 /// A failed publication.
-pub enum PublishError<'p, 'id, K, F> {
+pub enum PublishError<'p, K, F> {
     /// The backend refused it before any hardware change.
     Refused {
         /// The unchanged publication, with its arena right.
-        publication: ArenaPublication<'p, 'id, K>,
+        publication: ArenaPublication<'p, K>,
         /// Why.
         reason: PublishRefused,
     },
@@ -381,9 +381,7 @@ pub enum PublishError<'p, 'id, K, F> {
     Fault(F),
 }
 
-impl<K: Ieee80211Capabilities, F: core::fmt::Debug> core::fmt::Debug
-    for PublishError<'_, '_, K, F>
-{
+impl<K: Ieee80211Capabilities, F: core::fmt::Debug> core::fmt::Debug for PublishError<'_, K, F> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Refused {
@@ -587,7 +585,7 @@ pub type RetainErrorOf<'p, 'id, A> = RetainError<
 /// side; the caller uses the provided ones, which hold the arena-right and
 /// completion typestate.
 pub trait TxArena<'p, 'id: 'p> {
-    /// The capabilities the phase checked the publication's rate and power
+    /// The capabilities the port checked the publication's rate and power
     /// against.
     type Caps: Ieee80211Capabilities;
     /// The memory a frame occupies: the caller's buffer, held by its arena
@@ -637,9 +635,9 @@ pub trait TxArena<'p, 'id: 'p> {
     /// A refusal returns the publication unchanged; a fault quarantines.
     fn publish(
         &mut self,
-        publication: ArenaPublication<'p, 'id, Self::Caps>,
+        publication: ArenaPublication<'p, Self::Caps>,
         now: Instant,
-    ) -> Result<(), PublishError<'p, 'id, Self::Caps, Self::Fault>>;
+    ) -> Result<(), PublishError<'p, Self::Caps, Self::Fault>>;
 
     /// Serve `events`: the end of the arena on the air, once it ended.
     ///

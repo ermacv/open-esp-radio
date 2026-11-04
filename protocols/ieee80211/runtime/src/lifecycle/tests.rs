@@ -25,7 +25,7 @@ use oer_portable_events::EventSink;
 use oer_portable_memory::{SlotReceiver, SlotSender, WakingSlotQueue, WakingSpscQueue};
 use oer_portable_time::Duration;
 use oer_portable_time_virtual::VirtualClock;
-use oer_protocols_ieee80211_contracts_port::{LowerMacBackend, ReturnedMpdu};
+use oer_protocols_ieee80211_contracts_port::ReturnedMpdu;
 use oer_protocols_ieee80211_core_arbiter::ArbiterPolicy;
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
@@ -808,19 +808,22 @@ fn lifecycle<'s, const G: usize>(
     (parts, storage)
 }
 
+/// The access point's group key keys of [`Spare`].
+type AccessPointKeys<'s> = <Types<'s> as PhaseTypes<'s>>::AccessPointKeys;
+
 /// The installation's owners the station does not take: the access
-/// point's command permissions and the station's TSF permission.
+/// point's command permissions, one of its group key slots and its group
+/// permission.
 struct Spare<'s> {
     access_point: oer_protocols_ieee80211_contracts_port::InterfacePermissions<
         's,
         oer_protocols_ieee80211_contracts_port::AccessPoint,
         <Types<'s> as PhaseTypes<'s>>::AccessPointCommandPath,
     >,
-    station_tsf: oer_protocols_ieee80211_contracts_port::TsfPermission<
-        's,
-        oer_protocols_ieee80211_contracts_port::Station,
-        <Types<'s> as PhaseTypes<'s>>::StationCommandPath,
-    >,
+    access_point_group: (
+        <AccessPointKeys<'s> as KeyTypes<'s>>::GroupSlot,
+        <AccessPointKeys<'s> as KeyTypes<'s>>::GroupPermission,
+    ),
 }
 
 /// [`lifecycle`], and the owners the station does not take.
@@ -838,6 +841,8 @@ fn lifecycle_spare<'s, const G: usize>(
         block_acks,
         station_commands,
         access_point_commands,
+        access_point_group: [access_point_group, _],
+        access_point_group_permission,
         terminal_access,
         tickets,
         small,
@@ -855,7 +860,7 @@ fn lifecycle_spare<'s, const G: usize>(
     let channel = config.0.channels[0];
     let (arbiter, place, absence) = LifecycleArbiter::<P<'s>>::new(
         ArbiterPolicy::DEFAULT
-            .checked(<Backend<'s> as LowerMacBackend<LocalId<'s>>>::PUBLICATION_BOUND)
+            .checked(oer_protocols_ieee80211_testing_model::MODEL_PUBLICATION_BOUND)
             .unwrap(),
         channel,
         arbiter_authority,
@@ -891,7 +896,7 @@ fn lifecycle_spare<'s, const G: usize>(
     let storage = RxBlockAckStorage::new(block_acks, Duration::from_millis(100));
     let spare = Spare {
         access_point: access_point_commands,
-        station_tsf: station_commands.tsf,
+        access_point_group: (access_point_group, access_point_group_permission),
     };
     (lifecycle, storage, spare)
 }

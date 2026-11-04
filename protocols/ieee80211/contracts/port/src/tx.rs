@@ -1,11 +1,11 @@
 //! The values of a transmission and of its completion.
 //!
-//! An attempt of the phase ([`Attempt`](crate::Attempt)) is one frame
+//! An attempt of the port ([`Attempt`](crate::Attempt)) is one frame
 //! exchange by its retry plan ([`RetryPlan`](crate::RetryPlan)), which the
 //! backend carries out below the port; its one [`TxOutcome`] reports how
 //! it ended, how many transmissions it made and at which rate the last
 //! went. The header the caller encodes lives in a transmit buffer of the
-//! phase; the body, such as a network frame's payload, travels by
+//! port; the body, such as a network frame's payload, travels by
 //! ownership as a [`TxBody`]. Whether the backend sends the body from its
 //! owner's memory or copies it into its own is the backend's choice, not
 //! the contract's.

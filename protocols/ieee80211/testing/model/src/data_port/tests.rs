@@ -37,21 +37,31 @@ impl alloc::task::Wake for Counter {
     }
 }
 
+/// What the port put in its sink, in its order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Put {
+    Terminal,
+    Received,
+}
+
 /// The terminals and frames the port put in its sink.
 struct Sink<'s> {
     terminals: Vec<LowerMacTerminal<'s, Types<'s>>>,
     received: Vec<(ModelRxBuffer<'s, LocalId<'s>>, ModelRxMeta)>,
     tbtt: usize,
+    order: Vec<Put>,
 }
 impl<'s> PortSink<'s, Types<'s>> for Sink<'s> {
     fn terminal(&mut self, terminal: LowerMacTerminal<'s, Types<'s>>) {
         self.terminals.push(terminal);
+        self.order.push(Put::Terminal);
     }
     fn tbtt(&mut self, _: oer_protocols_ieee80211_contracts_port::TbttEvent) {
         self.tbtt += 1;
     }
     fn received(&mut self, frame: ModelRxBuffer<'s, LocalId<'s>>, meta: ModelRxMeta) {
         self.received.push((frame, meta));
+        self.order.push(Put::Received);
     }
 }
 
@@ -139,6 +149,7 @@ impl<'s> Harness<'s> {
                 terminals: Vec::new(),
                 received: Vec::new(),
                 tbtt: 0,
+                order: Vec::new(),
             },
             tickets,
             small,
@@ -173,15 +184,31 @@ impl<'s> Harness<'s> {
     fn admitted_under(
         &mut self,
         ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
-        mut buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
+        buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: Option<&ModelPairwiseKey<'s, B<'s>, Station>>,
     ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
+        self.admitted_numbered(ticket, buffer, key.map(|key| (key, 1)))
+    }
+
+    /// The station's protected data frame under `key`, numbered `number`.
+    fn admitted_under_number(
+        &mut self,
+        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
+        key: &ModelPairwiseKey<'s, B<'s>, Station>,
+        number: u64,
+    ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
+        self.admitted_numbered(ticket, buffer, Some((key, number)))
+    }
+
+    fn admitted_numbered(
+        &mut self,
+        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        mut buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
+        key: Option<(&ModelPairwiseKey<'s, B<'s>, Station>, u64)>,
+    ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
         buffer.bytes_mut().unwrap().fill(0);
-        let rate = self
-            .port
-            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
-            .unwrap()
-            .phase::<'s>();
+        let rate = self.port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M)).unwrap();
         let header = HeaderSpec::new(
             FrameControl::new(if key.is_some() { 0x4108 } else { 0x0108 }).unwrap(),
             0,
@@ -210,11 +237,11 @@ impl<'s> Harness<'s> {
                 frame,
                 body: None,
                 protection: match key {
-                    Some(key) => {
+                    Some((key, number)) => {
                         TxProtection::Ccmp(oer_protocols_ieee80211_contracts_port::NumberedKey {
                             key,
                             packet_number:
-                                oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(1)
+                                oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(number)
                                     .unwrap(),
                         })
                     }
@@ -501,7 +528,6 @@ fn refusals_before_the_start_return_every_owner_unchanged() {
             harness.sink.terminals.is_empty(),
             "a refusal makes no terminal"
         );
-        assert_eq!(harness.air.commands(), 0);
     });
 }
 
@@ -722,6 +748,59 @@ fn a_group_installation_is_held_while_the_air_holds_group_commands_then_runs() {
             harness.sink.terminals.as_slice(),
             [LowerMacTerminal::GroupKeyInstalled(_)]
         ));
+    });
+}
+
+#[test]
+fn old_group_key_ingress_at_every_stage_reaches_the_sink_before_the_replacements_terminal() {
+    with_harness(|harness| {
+        harness.start();
+        let install = group_install(harness);
+        assert!(matches!(harness.command(install), CommandProgress::Done));
+        let Some(LowerMacTerminal::GroupKeyInstalled(
+            oer_protocols_ieee80211_contracts_port::InstalledGroup::Station { key, permission },
+        )) = harness.sink.terminals.pop()
+        else {
+            panic!("the installation's terminal");
+        };
+        // A group data frame from the access point, captured under the
+        // installed key at each stage of the receive path.
+        let frame = [
+            0x08, 0x02, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0,
+            2, 0, 0,
+        ];
+        for stage in [
+            GroupRxStage::Dma,
+            GroupRxStage::Interrupt,
+            GroupRxStage::Software,
+        ] {
+            assert!(harness.air.receive_group(
+                &frame,
+                ModelRxMeta::new(channel(), -40, -90),
+                VifRole::Station,
+                GroupKeyId::new(1).unwrap(),
+                &[3; 16],
+                stage,
+            ));
+        }
+        harness.sink.order.clear();
+        let replace = PortCommand::ReplaceGroup {
+            permission,
+            installed: key,
+            key_id: GroupKeyId::new(1).unwrap(),
+            key: Ccmp128Key::new(&[4; 16]),
+        };
+        assert!(matches!(harness.command(replace), CommandProgress::Done));
+        assert_eq!(
+            harness.sink.order,
+            [Put::Received, Put::Received, Put::Received, Put::Terminal],
+            "the old key's ingress precedes the replacement's terminal"
+        );
+        assert!(matches!(
+            harness.sink.terminals.as_slice(),
+            [LowerMacTerminal::GroupKeyReplaced { .. }]
+        ));
+        assert_eq!(harness.recycle_received(), 3);
     });
 }
 
@@ -962,5 +1041,156 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
             harness.sink.terminals.as_slice(),
             [LowerMacTerminal::KeyRemoved(_)]
         ));
+    });
+}
+
+#[test]
+fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbers_anew() {
+    with_harness(|harness| {
+        harness.start();
+        let (start, _, _, [slot, _]) = harness.group.take().unwrap();
+        let association = ModelKeys::<B<'_>, Station>::begin_association(
+            start,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let (install, _) = harness.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        );
+        assert!(matches!(harness.command(install), CommandProgress::Done));
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(
+            oer_protocols_ieee80211_contracts_port::InstalledPairwise::Station(key),
+        )) = harness.sink.terminals.pop()
+        else {
+            panic!("the installation's terminal");
+        };
+        // Both transmissions of the plan go unanswered.
+        harness.air.answer(AirAnswer::NoResponse);
+        harness.air.answer(AirAnswer::NoResponse);
+        let ticket = harness.tickets.pop().unwrap();
+        let buffer = harness.small.pop().unwrap();
+        let attempt = harness.admitted_under(ticket, buffer, Some(&key));
+        let now = harness.clock.now();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
+        harness.service();
+        let Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal))) =
+            harness.sink.terminals.pop()
+        else {
+            panic!("the unanswered MPDU's terminal");
+        };
+        let TerminalParts {
+            ticket, payload, ..
+        } = terminal.into_parts(&mut harness.terminal_access);
+        let (ModelAnyBuffer::SmallSent(sent), None) = payload.into_parts() else {
+            panic!("a published MPDU comes back sent");
+        };
+        let rate = harness
+            .port
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .unwrap();
+        let source = prepare_model::<Station, ModelCaps, B<'_>, ModelSmall>(
+            TxSource::Retransmission {
+                mpdu: sent,
+                plan: oer_protocols_ieee80211_contracts_port::RetransmissionPlan::Individual(
+                    RetryPlan::new(RetryStage {
+                        rate,
+                        transmissions: NonZeroU8::MIN,
+                        protection: Protection::None,
+                    }),
+                ),
+            }
+            .check()
+            .ok()
+            .unwrap(),
+        )
+        .ok()
+        .unwrap();
+        let attempt = harness.port.admit(
+            Attempt {
+                context: (),
+                ticket,
+                source,
+                access_category: CATEGORY,
+                protection: Protection::None,
+                power: SupportedPower::new(TxPower::Calibrated).unwrap(),
+                coex_operation: TxOperation::Data,
+            }
+            .admit(),
+        );
+        let now = harness.clock.now();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
+        harness.service();
+        let sent = harness.air.sent();
+        let [first, .., retried] = sent.as_slice() else {
+            panic!("the MPDU went out twice");
+        };
+        assert_eq!(first.packet_number, Some(1));
+        assert_eq!(
+            retried.packet_number, first.packet_number,
+            "a retransmission keeps the packet number"
+        );
+        let retry = |frame: &[u8]| {
+            oer_protocols_ieee80211_wire::frame::FrameControlFields::from_bytes(
+                *frame.first_chunk::<2>().unwrap(),
+            )
+            .retry()
+        };
+        assert!(retry(&retried.frame), "a retransmission sets Retry");
+        // Renewal returns fresh memory, which the next MPDU numbers anew.
+        assert_eq!(harness.take_completed(), 1);
+        let ticket = harness.tickets.pop().unwrap();
+        let buffer = harness.small.pop().unwrap();
+        let attempt = harness.admitted_under_number(ticket, buffer, &key, 2);
+        let now = harness.clock.now();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
+        harness.service();
+        let renewed = harness.air.sent().pop().unwrap();
+        assert_eq!(renewed.packet_number, Some(2));
+        assert!(!retry(&renewed.frame), "a renewed MPDU is a new one");
+    });
+}
+
+#[test]
+fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication() {
+    with_harness(|harness| {
+        harness.start();
+        // An individual data frame solicits an ACK, not a BlockAck.
+        harness.air.answer(AirAnswer::BlockAck(1));
+        let attempt = harness.mpdu().unwrap();
+        let now = harness.clock.now();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
+        let now = harness.clock.now();
+        let fault = harness
+            .port
+            .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .err()
+            .unwrap();
+        assert!(matches!(
+            fault,
+            ModelPortFault::Quarantined {
+                call: ModelPortCall::ServiceTx,
+                ..
+            }
+        ));
+        assert!(harness.air.sent().is_empty(), "nothing was published");
+        assert!(harness.sink.terminals.is_empty(), "the port keeps the MPDU");
     });
 }

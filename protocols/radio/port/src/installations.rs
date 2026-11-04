@@ -38,7 +38,7 @@
 
 use core::marker::PhantomData;
 
-use crate::{BodyLoan, Mint, PoolSet, SlotClaim, SlotIdentity, SlotOwner};
+use crate::{BodyLoan, Mint, PoolSet, SlotClaim, SlotIdentity};
 
 /// The invariant identity and layout an installation carries.
 type Brand<Id, P> = PhantomData<fn(Id, P) -> (Id, P)>;
@@ -162,7 +162,7 @@ impl<Id: SlotIdentity, P: PoolSet> Installation<Id, P> {
     /// lends them under: `'static` for a static identity, at most the scope
     /// of a local one. Its conversions keep each token's identity, path,
     /// kind and index; only the holder of the receipt makes one.
-    pub const fn loan<'p, S: SlotOwner<Id>>(&self) -> BodyLoan<'p, Id, S>
+    pub const fn loan<'p, S>(&self) -> BodyLoan<'p, Id, S>
     where
         Id: 'p,
     {

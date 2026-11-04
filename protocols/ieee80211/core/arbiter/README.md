@@ -125,8 +125,8 @@ Releasing a lease during Closing is also a pre-start cancellation; it
 reopens the gate without an outbound retune or `LeaseStarted` notice.
 A refused lease move consumes the arbiter. `RetuneRefused::Return` gives
 back the working arbiter and the home `PendingRetune`, already in `Retuning`.
-A refused return or shared move yields `RetuneRefused::Failed`. Without an
-enabled phase, consumers poll `ArbiterNotice` through `poll_notice`; that
+A refused return or shared move yields `RetuneRefused::Failed`. Without a
+running port, consumers poll `ArbiterNotice` through `poll_notice`; that
 exhaustive type contains only station/AP notices and cannot take a gate or
 retune token. `finish(self, ArbiterEnd)` consumes planning and coordinator
 authority. `PortFailed` returns `FailedArbiter`, which only drains its outbox

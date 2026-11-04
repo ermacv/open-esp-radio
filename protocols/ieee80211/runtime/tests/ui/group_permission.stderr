@@ -1,11 +1,11 @@
 error[E0382]: use of moved value: `permission`
-  --> tests/ui/group_permission.rs:13:38
+  --> tests/ui/group_permission.rs:12:89
    |
- 7 |     permission: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupPermission,
+ 6 |     permission: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupPermission,
    |     ---------- move occurs because `permission` has type `Slot<'_, ModelGroupPermission<oer_protocols_ieee80211_contracts_port::Station>, oer_protocols_radio_port::Child<Root<StaticId<UiSlot>>, 8>>`, which does not implement the `Copy` trait
 ...
-11 |     phase.station().select_group_key(permission, selected);
-   |                                      ---------- value moved here
-12 |     #[cfg(all())]
-13 |     phase.station().remove_group_key(permission, retained); // ui-error: E0382
-   |                                      ^^^^^^^^^^ value used here after move
+10 |     let select = PortCommand::SelectGroup { permission, installed: selected };
+   |                                             ---------- value moved here
+11 |     #[cfg(all())]
+12 |     let _remove = PortCommand::<'id, ModelTypes<Composition>, ModelCaps>::RemoveGroup { permission, key: retained }; // ui-error: E0382
+   |                                                                                         ^^^^^^^^^^ value used here after move

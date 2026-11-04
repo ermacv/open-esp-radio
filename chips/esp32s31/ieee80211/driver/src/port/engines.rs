@@ -2043,9 +2043,9 @@ impl<'t, 'id: 't, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
 
     fn publish(
         &mut self,
-        publication: ArenaPublication<'t, 'id, Esp32s31Caps<B>>,
+        publication: ArenaPublication<'t, Esp32s31Caps<B>>,
         now: Instant,
-    ) -> Result<(), PublishError<'t, 'id, Esp32s31Caps<B>, Fault>> {
+    ) -> Result<(), PublishError<'t, Esp32s31Caps<B>, Fault>> {
         if self.publication_blocked() {
             return Err(PublishError::Refused {
                 publication,

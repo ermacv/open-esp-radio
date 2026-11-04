@@ -61,11 +61,11 @@ pub enum RxCryptoStatus {
     DecryptedAndIntegrityVerified,
 }
 
-/// The backend's memory of one received MPDU, lent with its event: the MPDU
+/// The backend's memory of one received MPDU, lent with its pull: the MPDU
 /// from its header to the end of its body, without the FCS.
 ///
 /// The consumer owns it until it passes the buffer to
-/// [`LowerMacPhase::recycle`](crate::LowerMacPhase::recycle). Dropping it does
+/// [`DataPort::recycle`](crate::DataPort::recycle). Dropping it does
 /// not satisfy that protocol; the host model poisons its installation on an
 /// unrecycled drop. A DMA backend can lend the receive buffer itself without
 /// copying the frame. A retained buffer occupies receive capacity, so an
@@ -76,7 +76,7 @@ pub trait RxBuffer {
 }
 
 /// A received buffer moved out of the port's receive capacity to a network
-/// owner ([`LowerMacPhase::lend`](crate::LowerMacPhase::lend)).
+/// owner ([`DataPort::lend`](crate::DataPort::lend)).
 ///
 /// The storage starts at the MPDU's first byte, as [`RxBuffer::bytes`] lent
 /// it, and continues to the end of its allocation; every byte is
@@ -116,9 +116,9 @@ pub enum LendRefusal {
     Stopping,
 }
 
-/// A refused [`LowerMacPhase::lend`](crate::LowerMacPhase::lend): the
+/// A refused [`DataPort::lend`](crate::DataPort::lend): the
 /// unchanged buffer, still owed to
-/// [`LowerMacPhase::recycle`](crate::LowerMacPhase::recycle), and why.
+/// [`DataPort::recycle`](crate::DataPort::recycle), and why.
 #[derive(Debug)]
 pub struct LendRefused<B> {
     /// The buffer, unchanged.

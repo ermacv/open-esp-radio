@@ -61,10 +61,7 @@ fn memory() -> TxBacking<512> {
     crate::mac::tx::test_support::model_backing().expect("model memory")
 }
 
-fn publication<'p, 'id>(
-    arena: Arena,
-    format: ArenaFormat<'p, 'id, Caps>,
-) -> ArenaPublication<'p, 'id, Caps> {
+fn publication<'p, 'id>(arena: Arena, format: ArenaFormat<'p, Caps>) -> ArenaPublication<'p, Caps> {
     ArenaPublication {
         arena,
         format,
@@ -244,7 +241,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     ) -> Option<<Port<'id, Id> as DataPort<'id>>::Admitted> {
         let buffer = self.buffers.pop()?;
         let ticket = self.tickets.pop()?;
-        let rate = self.port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))?.phase();
+        let rate = self.port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))?;
         let header = HeaderSpec::new(
             FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
             0,

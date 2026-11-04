@@ -236,7 +236,7 @@ fn one(rate: PhyRate) -> RetryPlan<PhyRate> {
         protection: Protection::None,
     })
 }
-fn stages<K>(frame: &TxFrame<'_, '_, K>) -> RetryPlan<PhyRate> {
+fn stages<K>(frame: &TxFrame<'_, K>) -> RetryPlan<PhyRate> {
     match frame {
         TxFrame::Individual { plan, .. } => plan.map(|rate| rate.get()),
         TxFrame::IndividualNoAck { rate, .. } => one(rate.rate().get()),

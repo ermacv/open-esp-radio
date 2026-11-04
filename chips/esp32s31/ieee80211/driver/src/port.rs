@@ -31,7 +31,7 @@ use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::{address::IndividualAddress, ccmp::GroupKeyId};
 use oer_protocols_radio_port::{self as radio, Child, Root, Slot};
-use oer_protocols_radio_port::{BodyLoan, ClockError, LoanedContext, SlotIdentity, SlotOwner};
+use oer_protocols_radio_port::{BodyLoan, ClockError, LoanedContext, SlotIdentity};
 
 mod atomic_words;
 use atomic_words::KeyActivity;

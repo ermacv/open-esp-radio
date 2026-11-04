@@ -239,10 +239,11 @@ Module map:
 - `port`: the station's tokens on a lower-MAC port (`PortStaTokens`) and
   the installed pairwise key
   (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
-  CCMP packet-number allocator; a retransmission keeps its number. Its
-  request (`StationPairwiseKey::request`) enqueues the installation and
-  returns a `PendingStationPairwiseKey` holding the association; only the
-  key its installation terminal returns makes it installed;
+  CCMP packet-number allocator; a retransmission keeps its number. The
+  identity the port's command issuer mints with the installation command
+  makes a `PendingStationPairwiseKey` holding the association
+  (`StationPairwiseKey::issued`); only the key its installation terminal
+  returns makes it installed;
 - the transmit decisions of a station frame travel with its action:
   `StaRatePlan` selects its rate record and transmissions, `StaFrameClass`
   its coexistence class, and `StaTransmit` its access category (Voice), its
@@ -501,7 +502,7 @@ channel absence does not close it.
 
 Station and Data construct `ClassSizedFrame` while encoding into their class's
 buffer, then retain that proof through the operation. The service only adds
-the phase's rates; it cannot replace the checked header or length.
+the port's checked rates; it cannot replace the checked header or length.
 `TxRefusal::NoRate` belongs to service selection, while
 `TxRefusal::Preparation` carries a pool refusal. Neither is a radio terminal.
 

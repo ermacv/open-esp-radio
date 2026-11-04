@@ -87,7 +87,7 @@ where
                 pairwise,
                 ..
             } = &*self;
-            let rated = frame.rated(plan, rates, |rate| port.rate(rate).map(|rate| rate.phase()));
+            let rated = frame.rated(plan, rates, |rate| port.rate(rate));
             // The packet number follows the rate: a frame without one draws
             // none.
             let protection = match (rated.is_some(), protected) {

@@ -55,10 +55,7 @@
 //! }
 //! ```
 
-use core::{
-    marker::PhantomData,
-    task::{Context, Poll},
-};
+use core::task::{Context, Poll};
 
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
@@ -67,51 +64,10 @@ use oer_protocols_radio_port::ClockError;
 use crate::{
     AdmittedAttempt, AmpduCapabilities, AmpduRate, Channel, CommandTypes, GateClosed, GateOpen,
     Ieee80211Capabilities, Ieee80211Instant, LendRefused, LowerMacTerminal, PhaseBlockAckSlot,
-    PhaseRate, PhaseTypes, PhyRate, PortCommand, Station, SupportedBlockAck, SupportedChannel,
+    PhaseTypes, PhyRate, PortCommand, PortRate, Station, SupportedBlockAck, SupportedChannel,
     TbttEvent,
     arena::{ArenaCompleted, TxArena},
 };
-
-/// A rate checked against the port's channel, for one borrow `'t` of the
-/// port: only [`DataPort::rate`] makes one.
-pub struct PortRate<'t, K> {
-    rate: PhyRate,
-    turn: PhantomData<fn(&'t ()) -> &'t ()>,
-    capabilities: PhantomData<fn(K) -> K>,
-}
-
-impl<K> Copy for PortRate<'_, K> {}
-impl<K> Clone for PortRate<'_, K> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<K> core::fmt::Debug for PortRate<'_, K> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("PortRate").field(&self.rate).finish()
-    }
-}
-
-impl<'t, K> PortRate<'t, K> {
-    const fn checked(rate: PhyRate) -> Self {
-        Self {
-            rate,
-            turn: PhantomData,
-            capabilities: PhantomData,
-        }
-    }
-
-    /// The rate.
-    pub const fn get(&self) -> PhyRate {
-        self.rate
-    }
-
-    /// The same checked rate as the frame descriptions take it, for the
-    /// same borrow of the port.
-    pub const fn phase<'id>(self) -> PhaseRate<'t, 'id, K> {
-        PhaseRate::checked(self.rate)
-    }
-}
 
 /// The transmit events a port sampled: its interrupt word, or none for a
 /// service that a deadline asks for.
@@ -283,9 +239,9 @@ pub trait PortArena<'t, 'id: 't>: TxArena<'t, 'id> {
 
     /// The rate on the port's channel, when the capabilities send it
     /// there, for this turn.
-    fn rate(&self, rate: PhyRate) -> Option<PhaseRate<'t, 'id, Self::Caps>> {
+    fn rate(&self, rate: PhyRate) -> Option<PortRate<'t, Self::Caps>> {
         if Self::Caps::CAPS.supports_rate(rate, self.channel()) {
-            Some(PhaseRate::checked(rate))
+            Some(PortRate::checked(rate))
         } else {
             None
         }
@@ -298,8 +254,8 @@ pub trait PortArena<'t, 'id: 't>: TxArena<'t, 'id> {
     /// The rate, when it does not.
     fn ampdu_rate(
         &self,
-        rate: PhaseRate<'t, 'id, Self::Caps>,
-    ) -> Result<AmpduRate<'t, 'id, Self::Caps>, PhaseRate<'t, 'id, Self::Caps>> {
+        rate: PortRate<'t, Self::Caps>,
+    ) -> Result<AmpduRate<'t, Self::Caps>, PortRate<'t, Self::Caps>> {
         let capabilities = self.ampdu_capabilities();
         if capabilities.formats.contains_rate(rate.get())
             && capabilities.max_length.at(rate.get()).is_ok()
@@ -565,13 +521,5 @@ mod tests {
         ] {
             assert!(!facts.is_empty());
         }
-    }
-
-    #[test]
-    fn a_port_rate_keeps_its_rate_in_the_frame_descriptions() {
-        let raw = PhyRate::Legacy(oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm6M);
-        let rate = PortRate::<()>::checked(raw);
-        assert_eq!(rate.get(), raw);
-        assert_eq!(rate.phase::<'static>().get(), raw);
     }
 }

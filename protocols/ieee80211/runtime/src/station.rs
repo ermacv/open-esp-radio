@@ -114,7 +114,6 @@ pub enum ServiceOutput<K> {
 pub enum BackendContractViolation {
     UnexpectedTerminal(PendingTerminal),
     UnexpectedAccessPointTerminal,
-    UnexpectedTsfSample,
     GroupTerminalWithoutRequest,
     GroupSlotMismatch,
     GroupTerminalKindMismatch,

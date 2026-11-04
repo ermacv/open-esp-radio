@@ -4,10 +4,10 @@
 //! [`ModelArenas`] holds each arena's memories and MPDU lengths by
 //! position, apart from any capabilities. [`ModelArena`] is the port over
 //! it with scripted answers: the standalone host arena of the arena tests
-//! and the conformance runner, and the driver's view of the station's
-//! arenas. [`ModelDataArena`] is the station interface's view
-//! ([`StationPhase::data_arena`](oer_protocols_ieee80211_contracts_port::StationPhase::data_arena)),
-//! whose answers come from the air's FIFO and whose frames the air records.
+//! and the conformance runner, on [`MODEL_ARENA_CHANNEL`], and the driver's
+//! view of the station's arenas. [`ModelDataArena`] is the data port's
+//! view ([`ModelPort`](crate::ModelPort)'s arenas), whose answers come from
+//! the air's FIFO and whose frames the air records.
 //!
 //! Publication records what the hardware would read
 //! ([`ModelArenas::published`]). A publication whose sent frames carry a
@@ -22,7 +22,7 @@
 use super::{
     AirAnswer, AirFrame, MODEL_ACK_SNR_DB, ModelAir, ModelAirDenied, ModelBlockAckEvidence,
     ModelComposition, ModelFault, ModelHeld, ModelNetworkMemory, PreparedKey, RawKeyIdentity,
-    values::{EdcaCell, Record},
+    values::Record,
 };
 use alloc::{collections::VecDeque, vec::Vec};
 use core::{borrow::BorrowMut, cell::RefMut, marker::PhantomData, num::NonZeroU16};
@@ -32,8 +32,8 @@ use oer_protocols_ieee80211_contracts_port::arena::{
     IntakeRefused, PublishError, PublishRefused, Settlement, TxArena,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    Air, BlockAckReport, Ieee80211Capabilities, MpduProtection, MpduStartSpacing, PhyRate,
-    Protection, TxPower, VifRole,
+    Air, AmpduCapabilities, BlockAckReport, Channel, ChannelWidth, Ieee80211Capabilities,
+    MpduProtection, MpduStartSpacing, PhyRate, PortArena, Protection, TxPower, VifRole,
 };
 use oer_protocols_ieee80211_wire::ccmp::{CCMP_HEADER_LEN, CcmpPacketNumber};
 use oer_protocols_ieee80211_wire::frame::{
@@ -357,7 +357,7 @@ impl ModelArenas {
     /// Put `publication`, which [`Self::refusal`] accepted, on the air.
     fn start<K: Ieee80211Capabilities>(
         &mut self,
-        publication: ArenaPublication<'_, '_, K>,
+        publication: ArenaPublication<'_, K>,
         now: Instant,
     ) {
         let id = publication.arena.id();
@@ -606,6 +606,25 @@ impl<C, S: BorrowMut<ModelArenas>> core::ops::DerefMut for ModelArena<C, S> {
     }
 }
 
+/// The channel a standalone [`ModelArena`] publishes on, whose rates its
+/// [`PortArena`] checks.
+pub const MODEL_ARENA_CHANNEL: Channel = match Channel::ghz2_4(6, ChannelWidth::Mhz20) {
+    Ok(channel) => channel,
+    Err(_) => panic!("channel 6 is a 2.4 GHz channel"),
+};
+
+impl<'p, 'id: 'p, C: Ieee80211Capabilities, S: BorrowMut<ModelArenas>> PortArena<'p, 'id>
+    for ModelArena<C, S>
+{
+    fn channel(&self) -> Channel {
+        MODEL_ARENA_CHANNEL
+    }
+
+    fn ampdu_capabilities(&self) -> AmpduCapabilities {
+        crate::data_port::model_ampdu_capabilities()
+    }
+}
+
 impl<'p, 'id: 'p, C: Ieee80211Capabilities, S: BorrowMut<ModelArenas>> TxArena<'p, 'id>
     for ModelArena<C, S>
 {
@@ -643,9 +662,9 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, S: BorrowMut<ModelArenas>> TxArena<'
 
     fn publish(
         &mut self,
-        publication: ArenaPublication<'p, 'id, C>,
+        publication: ArenaPublication<'p, C>,
         now: Instant,
-    ) -> Result<(), PublishError<'p, 'id, C, ModelArenaFault>> {
+    ) -> Result<(), PublishError<'p, C, ModelArenaFault>> {
         let state = self.state.borrow_mut();
         if let Some(fault) = state.fault {
             return Err(PublishError::Fault(fault));
@@ -763,8 +782,8 @@ impl StationArenas {
     }
 }
 
-/// The station interface's view of its two data arenas, lent for one step
-/// ([`StationPhase::data_arena`](oer_protocols_ieee80211_contracts_port::StationPhase::data_arena)).
+/// The station's view of its two data arenas, lent for one turn
+/// ([`ModelPortArena`](crate::ModelPortArena)).
 ///
 /// An encrypted publication takes the installed station pairwise key and
 /// keeps it, with a use that a removal waits for, until its arena holds no
@@ -779,7 +798,7 @@ pub struct ModelDataArena<'a, 'p, 'id, C, B: ModelComposition> {
     held: &'a ModelHeld<'static, B>,
     state: Option<RefMut<'a, StationArenas>>,
     caps: PhantomData<fn() -> C>,
-    /// The phase and installation whose checked rates it publishes.
+    /// The port borrow and installation whose checked rates it publishes.
     brand: PhantomData<fn(&'p (), &'id ()) -> (&'p (), &'id ())>,
 }
 
@@ -882,9 +901,9 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
 
     fn publish(
         &mut self,
-        publication: ArenaPublication<'p, 'id, C>,
+        publication: ArenaPublication<'p, C>,
         now: Instant,
-    ) -> Result<(), PublishError<'p, 'id, C, ModelFault>> {
+    ) -> Result<(), PublishError<'p, C, ModelFault>> {
         let held = self.held;
         let state = self.state().map_err(PublishError::Fault)?;
         if state.arenas.fault().is_some() {
@@ -970,11 +989,8 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
         {
             *place = Some(PreparedKey::new(key));
         }
-        let access_category = publication.access_category;
         state.arenas.answer(answer);
         state.arenas.start(publication, now);
-        held.air.edca.draw(VifRole::Station, access_category);
-        held.air.wake_driver();
         Ok(())
     }
 
@@ -1018,3 +1034,6 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
             .and_then(|state| state.arenas.deadline())
     }
 }
+
+#[cfg(test)]
+mod tests;

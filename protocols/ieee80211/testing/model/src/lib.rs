@@ -32,56 +32,38 @@
     )
 )]
 
-//! An in-memory lower-MAC backend on the phase shape
-//! (`oer_protocols_ieee80211_contracts_port::phase`), for host tests of the shape and of
+//! An in-memory lower-MAC backend as a data port
+//! (`oer_protocols_ieee80211_contracts_port::DataPort`), for host tests of
 //! the code that drives it.
 //!
-//! [`ModelPort`] is the same model as a data port
-//! (`oer_protocols_ieee80211_contracts_port::DataPort`): one actor owns it by value
-//! and calls it synchronously with the instant of its turn, and
-//! [`ModelCommands`] issues its installation commands. Its installations
-//! come from `Installations` under the identity's brand.
-//!
-//! [`ModelBackend::new`] takes the install's channel, interface addresses
-//! and monotonic clock, and returns the P2 owner and the [`ModelAir`] it
-//! plays on. A caller places its generative local slot outside the frontend
-//! future, registers it with `LocalExecution::scope`, and calls `run_port`
-//! with that frontend. The air answers each transmission, delivers received frames
-//! and records what the hardware saw. Receive Block Ack agreements are
-//! per-slot desired state: updates coalesce before the driver applies them,
-//! without occupying the command queue. Configure and TSF sampling consume
-//! their affine permissions in the FIFO; their terminals return those same
-//! permissions, including through disable's drain.
-//!
-//! The backend has the phase's shape: the phase
-//! is the body's handle over queues to the model's driver
-//! (`SlotOwner::run`), which alone owns the model's hardware (its
-//! queues of prepared attempts, its key table, its receive rules). The
-//! handle writes commands, in one queue and in order, and setting cells;
-//! the driver takes the cells before its next command, carries the
-//! commands out, retries the head of each queue by its plan and posts the
-//! events. The queues are cells of the one host thread a test runs on: the
-//! stand-ins of a backend's lock-free single-producer single-consumer
-//! queues.
+//! [`ModelPort::install`] takes the installation's channel, interface
+//! addresses and monotonic clock, and returns the port one actor owns by
+//! value, the lifecycle's issuer of its installation commands
+//! ([`ModelCommands`]), the installation's tokens ([`ModelResources`]) and
+//! the [`ModelAir`] it plays on. Its installations come from
+//! `Installations` under the identity's brand; [`ModelBackend`] is the
+//! composition tag that names the identity, capabilities and contexts. The
+//! actor calls the port synchronously with the instant of its turn. The air
+//! answers each transmission, delivers received frames and records what the
+//! hardware saw; the port's own queues, key table and receive rules are
+//! cells of the one host thread a test runs on.
 //!
 //! `ModelAir::answer` queues one `AirAnswer` per publication: ACK, BA
 //! bitmap, missing response, collision or hardware timeout. A single MPDU's
 //! checked frame determines whether it expects no response, an ACK or a
-//! Block Ack (a BAR's). A mismatched response poisons before publication
-//! and quarantines the rejected operation until teardown.
+//! Block Ack (a BAR's). A mismatched response quarantines the installation
+//! before publication.
 //!
 //! The station's data goes out on its two data arenas
-//! ([`StationPhase::data_arena`], [`ModelDataArena`]) of up to
-//! [`MODEL_AMPDU_SUBFRAMES`] frames each, as single MPDUs or A-MPDUs
-//! ([`AmpduPhase`] names the rates). Each publication takes the next
-//! `AirAnswer` of the same FIFO: a BlockAck's bit n acknowledges arena
-//! position n, by the frames' sequence numbers, and no queued answer
-//! acknowledges every frame. The air records each sent frame without a
-//! ticket, sealed under the installed station pairwise key the arena holds
-//! until it empties; a removal waits for that use. The driver serves the
-//! published arena and returns its end as `TxCompleted::Arena`; a gate,
-//! configuration or drain barrier refuses publication and waits for the
-//! arena on the air, and a drain aborts it. [`ModelArena`] is the same
+//! ([`ModelDataArena`], lent as [`ModelPortArena`]) of up to
+//! [`MODEL_AMPDU_SUBFRAMES`] frames each, as single MPDUs or A-MPDUs. Each
+//! publication takes the next `AirAnswer` of the same FIFO: a BlockAck's
+//! bit n acknowledges arena position n, by the frames' sequence numbers,
+//! and no queued answer acknowledges every frame. The air records each sent
+//! frame without a ticket, sealed under the installed station pairwise key
+//! the arena holds until it empties; a removal waits for that use. A gate,
+//! configuration or stop barrier refuses publication and waits for the
+//! arena on the air, and a stop aborts it. [`ModelArena`] is the same
 //! `TxArena` as a standalone host arena with scripted answers ([`arena`]).
 //!
 //! Each concrete class pool uses the portable `MpduLayout` proof before
@@ -90,79 +72,54 @@
 //! Small and large classes share one pool implementation. Their private
 //! `ModelClass` dispatch only erases or recovers the appropriate owner
 //! variant, returning every other class unchanged on refusal.
-//! `TxProtection` alone determines Protected and the MAC/CCMP prefix. Sent returns own that layout, body and the
-//! identity of the original key installation. Retry supplies only a new
-//! attempt's rates, never an independently reconstructed MPDU or body.
-//! Key identity is an allocation identity in this host model; a reused slot
-//! cannot match an earlier installation. A refused attempt returns all its
-//! resources synchronously and allocates no PN or completion event.
-//! Prepared operations retain a use of their key installation through their
-//! terminal or cancellation. `KeyOwnedRemoved` waits for these owners; a returned
-//! Sent retains only identity and therefore permits removal and slot reuse.
-//! PTK and GTK material live in the model's installation table, separately from
-//! cloneable identities. Removal clears its material after the last prepared
-//! use ends. Uninstall and abandon deactivate the table, discard captured
-//! ingress and clear all secrets even if a test retains an identity. Normal
-//! disable/reenable preserves installed keys and their counters.
-//! The unique `ModelAssociation` owns the protocol's decision. Modeled hardware
-//! holds one CCMP record per interface; keys select it with their interface
-//! identity, without sharing ownership of the association. The driver applies
-//! its SPP mode before publishing material and records that order. A mode can
-//! change only after the complete returned bank permits a new association.
-//! `AirFrame::frame` contains actual CCMP ciphertext and MIC; `plaintext` is
-//! the DMA image before encryption. `ModelAir::receive_ccmp` authenticates
-//! encrypted input under the installed association before publishing verified
-//! RX metadata. Full-bank association end is a pure ownership transition.
-//! Pending GTK installation owns only a vacant slot, permission, KeyID and
-//! material. The driver creates its identity and installed owner after the
-//! hardware step, then publishes the success terminal at the RX boundary.
-//! The key-table mutation and finite ingress capture do not wake the body.
-//! Delivery wakes only after the old ingress is closed: reentrant capture
-//! under the new key stays queued behind the terminal, while the frozen old
-//! DMA/ISR/software facts are delivered before it.
-//! A prepared retry submitted after removal is withdrawn in its AC's order,
-//! without publication. Cancellation wakes the driver to finish the barrier.
-//! A publication refusal retains the complete operation; submission after
-//! poisoning likewise transfers its owners to teardown custody.
+//! `TxProtection` alone determines Protected and the MAC/CCMP prefix. Sent
+//! returns own that layout, body and the identity of the original key
+//! installation. Retry supplies only a new attempt's rates, never an
+//! independently reconstructed MPDU or body. Key identity is an allocation
+//! identity in this host model; a reused slot cannot match an earlier
+//! installation. A refused attempt returns all its resources synchronously
+//! and allocates no PN or completion event. Prepared operations retain a
+//! use of their key installation through their terminal or cancellation; a
+//! key removal waits for these owners, while a returned Sent retains only
+//! identity and therefore permits removal and slot reuse. PTK and GTK
+//! material live in the model's installation table, separately from
+//! cloneable identities. Removal clears its material after the last
+//! prepared use ends; a reinstallation ends the installed keys.
+//! The unique `ModelAssociation` owns the protocol's decision. Modeled
+//! hardware holds one CCMP record per interface; keys select it with their
+//! interface identity, without sharing ownership of the association. The
+//! port applies its SPP mode before publishing material. `AirFrame::frame`
+//! contains actual CCMP ciphertext and MIC under that mode; `plaintext` is
+//! the DMA image before encryption. A pending GTK installation owns only a
+//! vacant slot, permission, KeyID and material. The port creates its
+//! identity and installed owner after the hardware step, then puts the
+//! success terminal at the RX boundary: the frozen old DMA/ISR/software
+//! ingress (`ModelAir::receive_group`) goes to the sink before it.
 //!
 //! `ModelContext` selects owned contexts by slot Id before lending their
-//! public body views. A station context retains both its nominal `LinkEpoch`
-//! identity and its separate body loan through every queue and terminal. The model grants one epoch-source slot in its resources.
+//! public views. A station context retains both its nominal `LinkEpoch`
+//! identity and its separate loan through every queue and terminal. The
+//! model grants one epoch-source slot in its resources.
 //!
 //! Capacity is the tokens': every terminal returns a ticket, so no terminal
-//! is ever lost; received frames beyond [`MODEL_RX_EVENTS`] queued are
-//! dropped and the stream says [`EventsLost`] once.
-//! Queued events keep FIFO order; after that finite queue, a pending loss
-//! indication precedes the next synthetic continuous-RX frame.
-//! The host fixture's VecDeque cannot express the token/capacity equation in
-//! its type. A broken equation retains the offending owner, poisons the
-//! backend and ends the installation without delivering later events. A
-//! received owner dropped without recycle likewise poisons this fixture.
-
-//! Publication and completion are separate owners. Tests may hold a result
-//! while posting gate/key/disable barriers; only that publication can finish.
-//! The model's 1 ms publication bound uses the supplied image clock. Only
-//! that clock's owner advances time. Radio instants are projections through
-//! an affine, zero-drift relation with a sampled nonzero offset. Hardware
-//! backends declare their own PPDU plus response/timeout bound.
+//! is ever lost; at most [`MODEL_RX_EVENTS`] received frames are out at
+//! once. The host fixture's VecDeque cannot express the token/capacity
+//! equation in its type: a broken equation retains the offending owner and
+//! quarantines the installation. A received owner dropped without recycle
+//! likewise quarantines this fixture.
 //!
-//! Unit tests and library consumers use the same implementation,
-//! including continuous RX and immediate recycling of its bounded slots. Only the unit-test module is under `cfg(test)`.
-//! Runtime's `tests/model_feature.rs` exercises these paths through the public port
-//! from a separate test crate, so the model itself is compiled without that cfg.
-
-#[cfg(any(test, feature = "test-support"))]
-#[allow(clippy::disallowed_methods, clippy::disallowed_macros)]
-mod fixture;
-#[cfg(any(test, feature = "test-support"))]
-use fixture::plain_context;
+//! Publication and completion are separate owners. Tests may hold a result
+//! while sending gate, key or stop barriers; only that publication can
+//! finish. The model's publication bound uses the supplied image clock.
+//! Only that clock's owner advances time. Radio instants are projections
+//! through an affine, zero-drift relation with a sampled nonzero offset.
+//! Hardware backends declare their own PPDU plus response/timeout bound.
 
 pub mod arena;
 pub use arena::{
-    MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, ModelArena, ModelArenaAnswer, ModelArenaFault,
-    ModelArenaPublication, ModelArenas, ModelDataArena,
+    MODEL_ARENA_CHANNEL, MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, ModelArena, ModelArenaAnswer,
+    ModelArenaFault, ModelArenaPublication, ModelArenas, ModelDataArena,
 };
-mod contention;
 mod loan;
 mod owned;
 use owned::*;
@@ -170,8 +127,6 @@ use owned::*;
 extern crate alloc;
 #[cfg(test)]
 extern crate std;
-#[cfg(test)]
-use core::cell::RefCell;
 
 use alloc::{
     boxed::Box,
@@ -179,16 +134,14 @@ use alloc::{
     rc::{Rc, Weak},
     vec::Vec,
 };
-use contention::ModelWindow;
 use core::{
     cell::Cell,
-    future::{Future, poll_fn},
     marker::PhantomData,
     num::NonZeroU16,
     task::{Poll, Waker},
 };
 use oer_portable_time::{Clock, Duration, Instant};
-use oer_protocols_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet};
+use oer_protocols_ieee80211_contracts_port::EdcaParameterSet;
 use oer_protocols_ieee80211_contracts_port::{
     association,
     association::{
@@ -199,38 +152,30 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, GroupKeyId};
 use oer_protocols_ieee80211_wire::frame::set_retry_bit;
-use oer_protocols_radio_port::{
-    BodyLoan, LoanedContext, ModelSlotOwner, SlotBodyOwner, SlotIdentity, SlotOwner, SlotRetire,
-    SlotStopped, SlotWakes,
-};
+use oer_protocols_radio_port::{BodyLoan, LoanedContext, SlotIdentity};
 use oer_protocols_radio_port::{ClockRelation, GenerationSource, RelationSample};
 
 use oer_portable_time::RadioInstant;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, PhyRate};
-use oer_protocols_radio_port::{
-    Abandon, Call, ClockError, EnableResult, EventEnd, InstallParts, PortBackend, PortPhase,
-    Quarantine,
-};
-use oer_protocols_radio_port::{EventsLost, Mint, Poisoned, PortResult, Slot};
+use oer_protocols_radio_port::ClockError;
+use oer_protocols_radio_port::{Mint, Slot};
 
 use oer_protocols_ieee80211_contracts_port::{
-    AccessPoint, AccessPointPhase, BandSet, BodyPayload, BssColor, BufferMemoryUnavailable,
-    Channel, CheckedPoolSource, CheckedTxSource, ConfigurePermission, ConnectionEpochKind,
-    ExecutionPayload, FreshSource, GateClosed, GateIssuer, GateOpen, HardwareServices,
-    Ieee80211Capabilities, Ieee80211Radio, InFlight, IndeterminateCause, InterfaceCommandPool,
-    InterfacePermissions, InterfacePhase, KeyTypes, LinkMetric, LowerMacBackend,
-    LowerMacCapabilities, LowerMacPhase, LowerMacSetup, MpduKind, MpduLayout, PhaseTypes,
-    PhyFormatSet, PreparationError, PreparationRefused, PreparedTx, RateSupport, ReceiveFilter,
-    RemovedKey, RetransmissionPlan, RoleKeys, RxBuffer, RxEvidence, RxMeta, RxMetadata,
-    SignalMetadata, Station, StationPhase, StationReceive, SupportedBlockAck, SupportedChannel,
-    SupportedEdca, SupportedFilter, TxBody, TxBufferClass, TxBufferMemory, TxBufferPool, TxFrame,
-    TxMpdu, TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
+    AccessPoint, BandSet, BodyPayload, BufferMemoryUnavailable, Channel, CheckedPoolSource,
+    CheckedTxSource, ConfigurePermission, ConnectionEpochKind, ExecutionPayload, FreshSource,
+    GateClosed, GateIssuer, GateOpen, HardwareServices, Ieee80211Capabilities, Ieee80211Radio,
+    InFlight, IndeterminateCause, InterfaceCommandPool, InterfacePermissions, KeyTypes, LinkMetric,
+    LowerMacCapabilities, MpduKind, MpduLayout, PhaseTypes, PhyFormatSet, PreparationError,
+    PreparationRefused, PreparedTx, RateSupport, ReceiveFilter, RetransmissionPlan, RoleKeys,
+    RxBuffer, RxEvidence, RxMeta, RxMetadata, SignalMetadata, Station, SupportedBlockAck,
+    SupportedChannel, TxBody, TxBufferClass, TxBufferMemory, TxBufferPool, TxFrame, TxMpdu,
+    TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_contracts_port::{
     AckSnr, Air, BlockAckSnr, SingleEnd, SingleOutcome, SingleResponse, SnrSample,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduCapabilities, AmpduLengthTable, AmpduPhase, BlockAckReport, Tid,
+    AmpduCapabilities, AmpduLengthTable, BlockAckReport, Tid,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
@@ -631,7 +576,7 @@ impl<Id: SlotIdentity> core::fmt::Debug for KeyIdentity<'_, Id> {
     }
 }
 impl<'p, Id: SlotIdentity> KeyIdentity<'p, Id> {
-    fn into_owned<S: SlotOwner<Id>>(self, _: &BodyLoan<'p, Id, S>) -> RawKeyIdentity {
+    fn into_owned<S>(self, _: &BodyLoan<'p, Id, S>) -> RawKeyIdentity {
         self.owned
     }
 }
@@ -649,7 +594,6 @@ struct KeyInstall {
     active: Cell<bool>,
     group_role: Option<VifRole>,
     role: VifRole,
-    peer: Option<IndividualAddress>,
     rx_active: Cell<bool>,
     preparations: Rc<()>,
     air: Weak<ModelAir>,
@@ -669,20 +613,13 @@ impl PartialEq for RawKeyIdentity {
 impl Eq for RawKeyIdentity {}
 
 impl RawKeyIdentity {
-    fn new(
-        index: u8,
-        key_id: u8,
-        role: VifRole,
-        peer: IndividualAddress,
-        air: &Rc<ModelAir>,
-    ) -> Self {
+    fn new(index: u8, key_id: u8, role: VifRole, air: &Rc<ModelAir>) -> Self {
         Self(Rc::new(KeyInstall {
             index,
             key_id,
             active: Cell::new(true),
             group_role: None,
             role,
-            peer: Some(peer),
             rx_active: Cell::new(false),
             preparations: Rc::new(()),
             air: Rc::downgrade(air),
@@ -701,7 +638,6 @@ impl RawKeyIdentity {
             active: Cell::new(true),
             group_role: Some(role),
             role,
-            peer: None,
             rx_active: Cell::new(false),
             preparations: Rc::new(()),
             air: Rc::downgrade(air),
@@ -724,15 +660,6 @@ impl PreparedKey {
         Self {
             identity,
             _lease: lease,
-        }
-    }
-}
-impl Drop for PreparedKey {
-    fn drop(&mut self) {
-        // A pending removal may now finish, including cancellation of an
-        // externally held preparation, which enqueues no command of its own.
-        if let Some(air) = self.identity.0.air.upgrade() {
-            air.wake_driver();
         }
     }
 }
@@ -1042,8 +969,8 @@ impl ModelContext for () {
     type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
 }
 
-/// The concrete slot owner selecting this model's nominal identity and data.
-pub trait ModelComposition: SlotBodyOwner<Self::Identity> {
+/// The composition tag selecting this model's nominal identity and data.
+pub trait ModelComposition: Sized {
     /// Nominal slot identity, independent of every body loan.
     type Identity: SlotIdentity;
     /// Capabilities of this concrete backend.
@@ -1058,10 +985,6 @@ type ModelContextOf<B> = <<B as ModelComposition>::Contexts as ModelContext>::Ow
 >;
 type ModelStationContextOf<B> =
     <<B as ModelComposition>::Contexts as ModelContext>::OwnedStationConfigureContext<
-        <B as ModelComposition>::Identity,
-    >;
-type ModelAccessPointContextOf<B> =
-    <<B as ModelComposition>::Contexts as ModelContext>::OwnedAccessPointConfigureContext<
         <B as ModelComposition>::Identity,
     >;
 
@@ -1280,7 +1203,7 @@ impl SignalMetadata for ModelRxMeta {
 }
 
 /// A received allocation under the consumer's invariant body loan and Id.
-/// Dropping it requests poison; only `LowerMacPhase::recycle` returns capacity.
+/// Dropping it requests poison; only `DataPort::recycle` returns capacity.
 pub struct ModelRxBuffer<'p, Id: SlotIdentity> {
     owner: OwnedRxBuffer<Id>,
     loan: PhantomData<fn(&'p ()) -> &'p ()>,
@@ -1290,7 +1213,6 @@ struct OwnedRxBuffer<Id: SlotIdentity> {
     bytes: Vec<u8>,
     recycled: bool,
     air: Weak<ModelAir>,
-    streamed: bool,
     identity: PhantomData<fn(Id) -> Id>,
 }
 
@@ -1307,7 +1229,7 @@ impl<Id: SlotIdentity> core::fmt::Debug for ModelRxBuffer<'_, Id> {
     }
 }
 impl<Id: SlotIdentity> OwnedRxBuffer<Id> {
-    fn lend<'p, S: SlotOwner<Id>>(self, _: &BodyLoan<'p, Id, S>) -> ModelRxBuffer<'p, Id> {
+    fn lend<'p, S>(self, _: &BodyLoan<'p, Id, S>) -> ModelRxBuffer<'p, Id> {
         ModelRxBuffer {
             owner: self,
             loan: PhantomData,
@@ -1342,7 +1264,7 @@ impl ModelNetwork {
 }
 
 /// A model receive buffer lent to the network
-/// ([`LowerMacPhase::lend`](oer_protocols_ieee80211_contracts_port::LowerMacPhase::lend)).
+/// ([`DataPort::lend`](oer_protocols_ieee80211_contracts_port::DataPort::lend)).
 pub struct ModelLentRx {
     bytes: Vec<u8>,
     mpdu_len: usize,
@@ -1610,15 +1532,6 @@ impl ModelReceiveAgreement {
     }
 }
 
-/// Hardware uncertainty injected at a concrete mutation boundary.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GroupFaultStage {
-    Before,
-    After,
-    /// Reject the replacement write, then restore the exact old GTK and fail-stop.
-    ReplacementWrite,
-}
-
 /// A receive fact deliberately delayed in the modeled ingress pipeline.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GroupRxStage {
@@ -1631,45 +1544,28 @@ pub enum GroupRxStage {
 struct CapturedGroupRx {
     frame: Vec<u8>,
     meta: ModelRxMeta,
-    installation: RawKeyIdentity,
     stage: GroupRxStage,
 }
 
+/// Whether the model admits work: it runs, closed admission to return its
+/// owners ([`ModelAir::fail_after_terminals`]), or quarantined
+/// ([`ModelAir::poison`]).
 #[derive(Clone, Copy, Default)]
 enum ModelStream {
     #[default]
     Running,
     Draining,
-    Ended(EventEnd<ModelFault>),
+    Ended,
 }
 
-/// One actual AC-queue draw from the VIF of its head frame.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ModelContention {
-    pub role: VifRole,
-    pub access_category: WmmAccessCategory,
-    pub parameters: EdcaAcParameters,
-    pub window_slots: u16,
-    pub backoff_slots: u16,
-}
-
+/// The EDCA set each interface's attempts contend with.
 struct ModelEdca {
     parameters: [EdcaParameterSet; 2],
-    queues: [ModelWindow; 4],
-    heads: [Option<VifRole>; 4],
-    entropy: u32,
-    draws: Vec<ModelContention>,
 }
 impl Default for ModelEdca {
     fn default() -> Self {
         Self {
             parameters: [EdcaParameterSet::STANDARD_DEFAULT; 2],
-            queues: WmmAccessCategory::ALL.map(|ac| {
-                ModelWindow::from_wmm(EdcaParameterSet::STANDARD_DEFAULT.access_category(ac).wmm)
-            }),
-            heads: [None; 4],
-            entropy: 0,
-            draws: Vec::new(),
         }
     }
 }
@@ -1685,30 +1581,6 @@ impl ModelEdca {
             VifRole::Station => &mut self.parameters[0],
             VifRole::AccessPoint => &mut self.parameters[1],
         }
-    }
-    fn draw(&mut self, role: VifRole, access_category: WmmAccessCategory) {
-        let parameters = self.parameters(role).access_category(access_category);
-        let queue = access_category.select_mut(&mut self.queues);
-        queue.reconfigure(parameters.wmm.ecw_min.get(), parameters.wmm.ecw_max.get());
-        let head = access_category.select_mut(&mut self.heads);
-        if *head != Some(role) {
-            queue.reset();
-            *head = Some(role);
-        }
-        self.draws.push(ModelContention {
-            role,
-            access_category,
-            parameters,
-            window_slots: queue.cw(),
-            backoff_slots: queue.draw(self.entropy),
-        });
-    }
-    fn failure(&mut self, ac: WmmAccessCategory) {
-        ac.select_mut(&mut self.queues).record_failure();
-    }
-    fn reset(&mut self, ac: WmmAccessCategory) {
-        ac.select_mut(&mut self.queues).reset();
-        *ac.select_mut(&mut self.heads) = None;
     }
 }
 
@@ -1735,32 +1607,9 @@ impl ModelTime {
     }
 }
 
-/// Non-owning observation of one GTK removal retained by P2.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GroupRemovalObservation {
-    /// Interface retaining the removal.
-    pub role: VifRole,
-    /// Vacant slot retained inside its whole removal command.
-    pub slot: u8,
-    /// Index of the original mutation permission.
-    pub permission: u8,
-}
-
-/// Snapshot published by P2, containing counts and indices, never owners.
-#[derive(Clone, Debug, Default)]
-pub struct DriverObservation {
-    /// Publications awaiting their actual results.
-    pub publications: usize,
-    /// Identities retained in the installed-key table.
-    pub installed_keys: usize,
-    /// GTK removals waiting for earlier admitted uses.
-    pub group_removals: Vec<GroupRemovalObservation>,
-}
-
 /// The air and the world of a model: shared by the backend's driver and
 /// the test.
 pub struct ModelAir {
-    observation: Cell<DriverObservation>,
     sent: Cell<Vec<AirFrame>>,
     /// The answers of the next transmissions, in order; once none is
     /// queued, each is acknowledged.
@@ -1771,25 +1620,15 @@ pub struct ModelAir {
     rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<u8>,
-    group_failure: Cell<Option<GroupFaultStage>>,
-    group_rollback: Cell<Option<oer_protocols_ieee80211_testing_conformance::group_keys::Rollback>>,
     group_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
     key_installations: Cell<Vec<KeyInstallation>>,
     associations: Cell<InterfaceAssociations>,
-    crypto_operations: Cell<Vec<ModelCryptoOperation>>,
     group_rx: OwnedQueue<CapturedGroupRx>,
     group_writes: Cell<usize>,
     stream: Cell<ModelStream>,
     disables: Cell<u32>,
-    driver: Cell<Option<Waker>>,
-    /// The driver's passes.
-    passes: Cell<u32>,
-    /// The commands the driver took, of every kind.
-    commands: Cell<u32>,
-    /// The settings the driver applied.
-    settings: Cell<u32>,
     /// The EDCA set each interface's attempts contend with, by role.
     edca: Cell<ModelEdca>,
     /// The queues the air keeps busy: their attempts wait unpublished.
@@ -1799,10 +1638,6 @@ pub struct ModelAir {
     time: ModelTime,
     receive_agreements: Cell<BTreeMap<u8, ModelReceiveAgreement>>,
     expired_msdus: Cell<u32>,
-    /// The task waiting for a stop deadline, woken by `clock_advanced`.
-    deadline: Cell<Option<Waker>>,
-    /// P2 does not answer a requested retirement while this is set.
-    retirement_held: Cell<bool>,
     /// The instant a data port call was given: the model's time for the
     /// call, read instead of the image clock while it is set.
     turn: Cell<Option<Instant>>,
@@ -1819,14 +1654,8 @@ pub struct ModelAir {
     landing: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
 }
 impl ModelAir {
-    /// Inspect P2's last published snapshot without borrowing its driver.
-    pub fn driver_observation(&self) -> DriverObservation {
-        self.observation.snapshot()
-    }
-
     fn new(clock: Rc<dyn Clock>) -> Self {
         Self {
-            observation: Cell::default(),
             sent: Default::default(),
             answers: Default::default(),
             #[cfg(feature = "test-support")]
@@ -1834,28 +1663,19 @@ impl ModelAir {
             rx: Default::default(),
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
-            group_failure: Default::default(),
-            group_rollback: Default::default(),
             group_held: Default::default(),
             key_installations: Default::default(),
             associations: Default::default(),
-            crypto_operations: Default::default(),
             group_rx: Default::default(),
             group_writes: Default::default(),
             stream: Default::default(),
             disables: Default::default(),
-            driver: Default::default(),
-            passes: Default::default(),
-            commands: Default::default(),
-            settings: Default::default(),
             edca: Default::default(),
             held: Default::default(),
             held_results: Default::default(),
             time: ModelTime::new(clock),
             receive_agreements: Default::default(),
             expired_msdus: Default::default(),
-            deadline: Default::default(),
-            retirement_held: Default::default(),
             turn: Cell::new(None),
             actor: Cell::new(None),
             rx_later: Cell::new(None),
@@ -1868,42 +1688,17 @@ impl ModelAir {
         self.turn.get().unwrap_or_else(|| self.time.clock.now())
     }
 
-    /// Wake the driver and the data port's actor: the world changed.
+    /// Wake the data port's actor: the world changed.
     fn wake_world(&self) {
-        self.wake_driver();
         if let Some(waker) = self.actor.take() {
             waker.wake();
         }
     }
 
-    /// Wake the driver and a stop-deadline wait after the clock owner
-    /// advances virtual time. This notification never changes the clock.
+    /// Wake the data port's actor after the clock owner advances virtual
+    /// time. This notification never changes the clock.
     pub fn clock_advanced(&self) {
         self.wake_world();
-        if let Some(waker) = self.deadline.take() {
-            waker.wake();
-        }
-    }
-
-    /// Keep P2 from answering a requested retirement while `held`, as a
-    /// slow stop does: the answer comes on the first driver pass after it
-    /// is released.
-    pub fn hold_retirement(&self, held: bool) {
-        self.retirement_held.set(held);
-        self.wake_driver();
-    }
-
-    /// Ends once the image clock reaches `deadline`, never for `None`. The
-    /// model has no timer: the clock owner's `clock_advanced` wakes it.
-    fn until(self: &Rc<Self>, deadline: Option<Instant>) -> impl Future<Output = ()> + 'static {
-        let air = self.clone();
-        core::future::poll_fn(move |cx| match deadline {
-            Some(deadline) if air.monotonic_now() >= deadline => Poll::Ready(()),
-            _ => {
-                air.deadline.set(Some(cx.waker().clone()));
-                Poll::Pending
-            }
-        })
     }
 
     /// Project the image clock into the model radio domain.
@@ -1919,37 +1714,6 @@ impl ModelAir {
             .map(|p| p.at)
             .map_err(|_| ClockError::EpochExhausted)
     }
-
-    /// The sampled affine relation used by `radio_now()`.
-    pub fn clock_relation(
-        &self,
-    ) -> (
-        ClockRelation<Instant, RadioInstant<Ieee80211Radio>>,
-        RelationSample<Instant, RadioInstant<Ieee80211Radio>>,
-    ) {
-        (self.time.relation, self.time.sample.get())
-    }
-}
-
-/// Mode application precedes publication of each key's material.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ModelCryptoOperation {
-    Association {
-        role: VifRole,
-        spp: oer_protocols_ieee80211_wire::security::Spp,
-    },
-    Key {
-        role: VifRole,
-        slot: u8,
-    },
-}
-
-/// A wire MPDU could not pass modeled CCMP reception.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ModelCcmpError {
-    MalformedHeader,
-    MissingKey,
-    Authentication(oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpMpduError),
 }
 
 // ModelCaps declares Interface scope. These are hardware policy records,
@@ -1993,10 +1757,6 @@ impl InterfaceAssociations {
 
 impl ModelAir {
     fn install_material(&self, identity: &RawKeyIdentity, key: Ccmp128Key) {
-        self.crypto_operations.record(ModelCryptoOperation::Key {
-            role: identity.0.role,
-            slot: identity.0.index,
-        });
         self.key_installations.record(KeyInstallation {
             identity: Rc::downgrade(&identity.0),
             key,
@@ -2005,115 +1765,12 @@ impl ModelAir {
 
     fn apply_association(&self, role: VifRole, spp: oer_protocols_ieee80211_wire::security::Spp) {
         self.associations.apply(role, spp);
-        self.crypto_operations
-            .record(ModelCryptoOperation::Association { role, spp });
-    }
-
-    /// Programming observations, in the same order as the driver's FIFO.
-    pub fn crypto_operations(&self) -> Vec<ModelCryptoOperation> {
-        self.crypto_operations.snapshot()
-    }
-
-    /// Receive actual encrypted data. Only successful MIC verification can
-    /// publish decrypted metadata; a changed SPP A-MSDU bit never reaches RX.
-    pub fn receive_ccmp(
-        &self,
-        frame: &[u8],
-        meta: ModelRxMeta,
-        role: VifRole,
-    ) -> Result<(), ModelCcmpError> {
-        use oer_protocols_ieee80211_wire::{ccmp::CcmpHeader, frame::DecodedHeader};
-        let header = DecodedHeader::decode(frame).ok_or(ModelCcmpError::MalformedHeader)?;
-        let ccmp = header
-            .body()
-            .first_chunk::<8>()
-            .ok_or(ModelCcmpError::MalformedHeader)?;
-        let key_id = CcmpHeader::parse(*ccmp)
-            .map_err(|_| ModelCcmpError::MalformedHeader)?
-            .key_id()
-            .value();
-        let group =
-            oer_protocols_ieee80211_contracts_port::GroupAddress::new(header.receiver()).is_some();
-        let installations = self.key_installations.take();
-        let result = (|| {
-            let material = installations
-                .iter()
-                .find(|entry| {
-                    entry.identity.upgrade().is_some_and(|key| {
-                        key.role == role
-                            && key.key_id == key_id
-                            && key.active.get()
-                            && if group {
-                                key.group_role.is_some() && key.rx_active.get()
-                            } else {
-                                key.peer
-                                    .is_some_and(|peer| peer.get() == header.transmitter())
-                            }
-                    })
-                })
-                .ok_or(ModelCcmpError::MissingKey)?;
-            let identity = material
-                .identity
-                .upgrade()
-                .ok_or(ModelCcmpError::MissingKey)?;
-            let mut plaintext = frame.to_vec();
-            self.associations
-                .get()
-                .get(identity.role)
-                .open(
-                    &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
-                    &material.key,
-                    &mut plaintext,
-                )
-                .map_err(ModelCcmpError::Authentication)?;
-            Ok(plaintext)
-        })();
-        self.key_installations.set(installations);
-        let plaintext = result?;
-        let (plaintext, _mic) = plaintext
-            .split_last_chunk::<8>()
-            .ok_or(ModelCcmpError::MalformedHeader)?;
-        self.receive(
-            plaintext,
-            meta.with_crypto(RxEvidence::HardwareObserved(
-                oer_protocols_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
-            )),
-        );
-        Ok(())
     }
 
     fn remove_key_material(&self, identity: &RawKeyIdentity) {
         let mut installations = self.key_installations.take();
         installations.retain(|entry| !entry.identity.ptr_eq(&Rc::downgrade(&identity.0)));
         self.key_installations.set(installations);
-    }
-
-    fn end_installation(&self) {
-        let mut installations = self.key_installations.take();
-        for entry in installations.iter() {
-            if let Some(identity) = entry.identity.upgrade() {
-                identity.active.set(false);
-                identity.rx_active.set(false);
-            }
-        }
-        self.group_rx.clear();
-        // Ccmp128Key clears its bytes even if an external identity still exists.
-        installations.clear();
-        self.key_installations.set(installations);
-    }
-
-    /// Inject uncertainty before or after a GTK hardware mutation. No success
-    /// owner or ordinary permission leaves the poisoned installation.
-    pub fn fail_next_group_change(&self, stage: GroupFaultStage) {
-        self.group_failure.set(Some(stage));
-        self.wake_driver();
-    }
-
-    /// Actual internal rollback observed before poisoned teardown.
-    pub fn group_rollback(
-        &self,
-    ) -> Option<oer_protocols_ieee80211_testing_conformance::group_keys::Rollback> {
-        self.group_rollback.get()
     }
 
     /// Delay commands while RX continues. The supplied clock's owner calls
@@ -2157,13 +1814,12 @@ impl ModelAir {
                     && key.group_role == Some(role)
             });
         self.key_installations.set(installations);
-        let Some(installation) = installation else {
+        if installation.is_none() {
             return false;
-        };
+        }
         self.group_rx.push_back(CapturedGroupRx {
             frame: frame.into(),
             meta,
-            installation: RawKeyIdentity(installation),
             stage,
         });
         self.wake_world();
@@ -2201,8 +1857,8 @@ impl ModelAir {
         self.wake_world();
     }
 
-    /// Stop generating RX events. Already returned buffers still require
-    /// recycling through the phase.
+    /// Stop generating received frames. Units already out still require
+    /// recycling through the port.
     pub fn stop_continuous_receive(&self) {
         self.rx_stream.take();
     }
@@ -2304,12 +1960,7 @@ impl ModelAir {
 
     /// Poison the backend.
     pub fn poison(&self) {
-        if !matches!(self.stream.get(), ModelStream::Ended(_)) {
-            self.stream.set(ModelStream::Ended(EventEnd::Quarantined {
-                cause: ModelFault,
-            }));
-        }
-        self.wake_driver();
+        self.stream.set(ModelStream::Ended);
     }
 
     /// An ordinary fault closes admission and returns every admitted owner
@@ -2318,21 +1969,11 @@ impl ModelAir {
     pub fn fail_after_terminals(&self) {
         if matches!(self.stream.get(), ModelStream::Running) {
             self.stream.set(ModelStream::Draining);
-            self.wake_driver();
         }
     }
 
-    /// Inject a false drain claim for a consumer's contract regression.
-    pub fn falsely_claim_drained(&self) {
-        // Fault injection retains real queued owners, but lies about their
-        // return. The service must reject this claim and fail-stop.
-        self.stream
-            .set(ModelStream::Ended(EventEnd::Drained { cause: ModelFault }));
-        self.wake_driver();
-    }
-
     fn failed(&self) -> bool {
-        matches!(self.stream.get(), ModelStream::Ended(_))
+        matches!(self.stream.get(), ModelStream::Ended)
     }
 
     fn admission_closed(&self) -> bool {
@@ -2342,21 +1983,6 @@ impl ModelAir {
     /// Number of actual disable calls; fail-stop is a different transition.
     pub fn disable_calls(&self) -> u32 {
         self.disables.get()
-    }
-
-    /// The driver's passes so far.
-    pub fn passes(&self) -> u32 {
-        self.passes.get()
-    }
-
-    /// The commands the driver took so far.
-    pub fn commands(&self) -> u32 {
-        self.commands.get()
-    }
-
-    /// The settings the driver applied so far.
-    pub fn settings(&self) -> u32 {
-        self.settings.get()
     }
 
     /// MSDUs that ended with Expired, counted separately from air failures.
@@ -2374,25 +2000,9 @@ impl ModelAir {
         self.edca.parameters(role)
     }
 
-    /// Actual contention draws, one per PPDU publication attempt.
-    pub fn contentions(&self) -> Vec<ModelContention> {
-        self.edca.contentions()
-    }
-
-    /// Inject a deterministic entropy word for subsequent backoff draws.
-    pub fn set_backoff_entropy(&self, entropy: u32) {
-        self.edca.set_entropy(entropy);
-    }
-
     /// The frames the air holds for the driver yet.
     pub fn pending_rx(&self) -> usize {
         self.rx.len()
-    }
-
-    fn wake_driver(&self) {
-        if let Some(waker) = self.driver.take() {
-            waker.wake();
-        }
     }
 
     fn next_answer(&self, default: AirAnswer) -> AirAnswer {
@@ -2475,7 +2085,7 @@ enum ResponsePolicy {
 }
 
 impl ResponsePolicy {
-    fn of_frame<K>(frame: &TxFrame<'_, '_, K>) -> Self {
+    fn of_frame<K>(frame: &TxFrame<'_, K>) -> Self {
         match frame {
             TxFrame::Individual { .. } => Self::Ack,
             TxFrame::IndividualNoAck { .. } | TxFrame::Group { .. } => Self::NoResponseExpected,
@@ -2489,31 +2099,6 @@ impl ResponsePolicy {
 }
 #[derive(Debug)]
 struct AnswerShapeMismatch;
-
-/// A command the handle sends the driver, in the order it made it.
-/// The host model boxes its larger single-operation owner so small commands
-/// do not reserve that space; the box moves opaque context without cloning.
-enum Command<'id, B: ModelComposition> {
-    Configure(OwnedConfigured<'id, B>),
-    Submit(Box<Prepared<'id, B>>),
-    InstallKey {
-        spp: oer_protocols_ieee80211_wire::security::Spp,
-        key: RawKeyIdentity,
-        material: Ccmp128Key,
-        /// The installed owner its terminal returns.
-        installed: OwnedInstalledPairwise<'id, B>,
-    },
-    Group {
-        admitted_at: u64,
-        change: GroupChange<'id, B>,
-    },
-    RemoveKey {
-        key: RawKeyIdentity,
-        removed: OwnedRemoved<'id, B>,
-    },
-    CloseGate(GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>),
-    OpenGate,
-}
 
 type StationGroupPermission<'id, B> =
     Slot<'id, ModelGroupPermission<Station>, ModelPool<<B as ModelComposition>::Identity, 8>>;
@@ -2630,45 +2215,24 @@ impl<B: ModelComposition> Prepared<'_, B> {
     }
 }
 
-/// The settings the handle writes and the driver takes before its next
-/// command; the latest value of each kind wins.
-#[derive(Default)]
-struct Settings {
-    other: bool,
-    /// Minted slots bound the keys to MODEL_BLOCK_ACK_SLOTS. Repeated writes
-    /// replace a slot's pending value instead of occupying command capacity.
-    block_acks: BTreeMap<u8, Option<ModelReceiveAgreement>>,
-}
-
-/// The install's queues between the handle and the driver. RX capacity stays
-/// charged until recycle, including buffers handed to the body by disable.
-/// Disable preserves an unobserved EventsLost indication for the next enable;
-/// draining events does not acknowledge that separate loss indication.
+/// The installation's owned queues: the terminals and received units the
+/// port puts in its sink, and the owners it retains. RX capacity stays
+/// charged until recycle.
 pub struct ModelHeld<'id, B: ModelComposition> {
     air: Rc<ModelAir>,
-    commands: Bounded<Command<'id, B>>,
-    /// The received buffers the body gives back, at most one per buffer.
-    recycled: Bounded<OwnedRxBuffer<B::Identity>>,
-    settings: Cell<Settings>,
     events: Bounded<OwnedLowerMacEvent<'id, B>>,
     quarantined: Bounded<Work<'id, B>>,
-    failed_group: Bounded<GroupChange<'id, B>>,
-    failed_group_terminal: Bounded<OwnedLowerMacEvent<'id, B>>,
-    /// The receive buffers out with the body, queued or held.
+    /// The receive buffers out with the caller, queued or held.
     rx_out: Cell<usize>,
     /// The receive buffers lent to the network.
     network: alloc::sync::Arc<ModelNetwork>,
-    /// Received frames dropped since the stream last said so.
-    lost: Cell<bool>,
-    body: Cell<Option<Waker>>,
     /// The backend alone attests the hardware barrier with the one gate place.
     gate_issuer: GateIssuer<'id, ModelPool<<B as ModelComposition>::Identity, 0>>,
-    /// Disable asks the driver to return all queued operations before the
-    /// owner ends the phase. Unlike poison, this is an ordinary terminal.
+    /// A stop returns all queued operations before the radio stops. Unlike
+    /// poison, this is an ordinary terminal.
     draining: Cell<bool>,
-    returned: Cell<bool>,
-    /// The station's two data arenas, which the station's interface lends
-    /// for one step and the driver serves.
+    /// The station's two data arenas, which the port lends for one turn
+    /// and serves.
     arenas: core::cell::RefCell<arena::StationArenas>,
     /// Station data publications wait: the gate is closed or closing, or a
     /// station configuration is pending.
@@ -2677,38 +2241,18 @@ pub struct ModelHeld<'id, B: ModelComposition> {
 }
 
 impl<'id, B: ModelComposition> ModelHeld<'id, B> {
-    fn command(&self, command: Command<'id, B>) {
-        self.send(command);
-    }
-
-    fn send(&self, command: Command<'id, B>) {
-        self.returned.set(false);
-        if self.commands.push(command).is_err() {
-            self.poison();
-        }
-        self.air.wake_driver();
-    }
-
     fn post(&self, event: OwnedLowerMacEvent<'id, B>) {
         if self.events.push(event).is_err() {
             self.poison();
         }
-        self.wake_body();
     }
 
     fn take_event(&self) -> Option<OwnedLowerMacEvent<'id, B>> {
         self.events.pop()
     }
 
-    fn wake_body(&self) {
-        if let Some(waker) = self.body.take() {
-            waker.wake();
-        }
-    }
-
     fn poison(&self) {
         self.air.poison();
-        self.wake_body();
     }
 
     /// Charge one received buffer to the bounded RX capacity, when a place
@@ -2743,8 +2287,8 @@ impl<'id, B: ModelComposition> ModelHeld<'id, B> {
     }
 }
 
-mod lifecycle;
-pub use lifecycle::{ModelBackend, ModelFrontend, ModelPools, ModelSetup, ModelVacant};
+mod installation;
+pub use installation::{ModelBackend, ModelPools};
 mod data_port;
 pub use data_port::{
     MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAdmitted, ModelCommands, ModelGroupInstall,
@@ -2779,38 +2323,6 @@ struct Driver<'id, B: ModelComposition> {
 }
 
 impl<'id, B: ModelComposition> Driver<'id, B> {
-    fn observation(&self) -> DriverObservation {
-        DriverObservation {
-            publications: self
-                .queues
-                .iter()
-                .filter(|queue| queue.air.is_some())
-                .count(),
-            installed_keys: self.keys.len(),
-            group_removals: self
-                .removing
-                .iter()
-                .filter_map(|removal| match &removal.removed {
-                    OwnedRemoved::Station(OwnedRemovedKey::Group { slot, permission }) => {
-                        Some(GroupRemovalObservation {
-                            role: VifRole::Station,
-                            slot: slot.index(),
-                            permission: permission.index(),
-                        })
-                    }
-                    OwnedRemoved::AccessPoint(OwnedRemovedKey::Group { slot, permission }) => {
-                        Some(GroupRemovalObservation {
-                            role: VifRole::AccessPoint,
-                            slot: slot.index(),
-                            permission: permission.index(),
-                        })
-                    }
-                    _ => None,
-                })
-                .collect(),
-        }
-    }
-
     fn new() -> Self {
         Self {
             queues: core::array::from_fn(|_| TxQueue {
@@ -2820,185 +2332,6 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
             keys: Vec::new(),
             removing: Vec::new(),
             gate: DriverGate::Open,
-        }
-    }
-
-    /// Serve everything posted: the settings, the commands in order, the
-    /// queues, then the air.
-    fn serve(&mut self, held: &ModelHeld<'id, B>) {
-        loop {
-            if held.air.failed() {
-                return;
-            }
-            // The settings come before the next command.
-            let settings = held.settings.take();
-            for (slot, wanted) in settings.block_acks {
-                let mut applied = held.air.receive_agreements.take();
-                match wanted {
-                    Some(agreement) => {
-                        applied.insert(slot, agreement);
-                    }
-                    None => {
-                        applied.remove(&slot);
-                    }
-                }
-                held.air.receive_agreements.set(applied);
-            }
-            while let Some(mut buffer) = held.recycled.pop() {
-                buffer.recycled = true;
-                held.release_rx();
-            }
-            if settings.other {
-                held.air
-                    .settings
-                    .set(held.air.settings.get().saturating_add(1));
-            }
-            let command = held.commands.pop();
-            let Some(command) = command else {
-                self.publish(held);
-                break;
-            };
-            held.air
-                .commands
-                .set(held.air.commands.get().saturating_add(1));
-            match command {
-                Command::Configure(permission) => {
-                    let role = permission.role();
-                    // Preserve each AC's terminal order. Its published head
-                    // completes before queued owners are withdrawn; a retry of
-                    // the old interface configuration cannot pass this barrier.
-                    self.publish_before(held, |candidate| candidate == role);
-                    self.serve_arena(held);
-                    let arena_on_air = role == VifRole::Station && self.arena_on_air(held);
-                    if arena_on_air
-                        || self.queues.iter().any(|queue| {
-                            queue
-                                .air
-                                .as_ref()
-                                .is_some_and(|publication| publication.work.role() == role)
-                        })
-                    {
-                        held.commands
-                            .items
-                            .push_front(Command::Configure(permission));
-                        break;
-                    }
-                    held.air
-                        .settings
-                        .set(held.air.settings.get().saturating_add(1));
-                    if role == VifRole::Station {
-                        held.configuring_station.set(false);
-                    }
-                    held.post(OwnedLowerMacEvent::Terminal(
-                        OwnedLowerMacTerminal::Configured(permission),
-                    ));
-                }
-                Command::Submit(mut prepared) => {
-                    if prepared
-                        .operation
-                        .execute()
-                        .mpdu
-                        .project_admission(&held.air)
-                        .is_err()
-                    {
-                        let _fault = held.quarantined.push(prepared);
-                        held.poison();
-                        return;
-                    }
-                    let queue = prepared.queue;
-                    queue
-                        .select_mut(&mut self.queues)
-                        .waiting
-                        .push_back(prepared);
-                }
-                Command::InstallKey {
-                    spp,
-                    key,
-                    material,
-                    installed,
-                } => {
-                    held.air.apply_association(key.0.role, spp);
-                    held.air.install_material(&key, material);
-                    self.keys.push(key);
-                    held.post(OwnedLowerMacEvent::Terminal(
-                        OwnedLowerMacTerminal::PairwiseKeyInstalled(installed),
-                    ));
-                }
-                Command::Group {
-                    admitted_at,
-                    change,
-                } => {
-                    if admitted_at
-                        .checked_add(MODEL_GROUP_COMMAND_BOUND.as_micros())
-                        .is_none_or(|deadline| held.air.monotonic_now().as_micros() >= deadline)
-                        || held.air.group_failure.get() == Some(GroupFaultStage::Before)
-                    {
-                        let _capacity_fault = held.failed_group.push(change);
-                        held.poison();
-                        return;
-                    }
-                    if held.air.group_held.get() && !held.draining.get() {
-                        // We popped exactly this cell; restore it without creating
-                        // capacity or allowing a later command to pass it.
-                        held.commands.items.push_front(Command::Group {
-                            admitted_at,
-                            change,
-                        });
-                        break;
-                    }
-                    self.group_change(held, admitted_at, change);
-                    if held.air.failed() {
-                        return;
-                    }
-                }
-                Command::RemoveKey { key, removed } => {
-                    self.removing.push(Removal {
-                        key,
-                        removed,
-                        group_admitted_at: None,
-                    });
-                }
-                Command::CloseGate(gate) => self.gate = DriverGate::Closing(gate),
-                Command::OpenGate => self.gate = DriverGate::Open,
-            }
-            self.publish(held);
-        }
-        // A result released by the world makes progress without a command.
-        self.publish(held);
-        self.serve_arena(held);
-        let idle = self
-            .queues
-            .iter()
-            .all(|queue| queue.air.is_none() && queue.waiting.is_empty())
-            && !self.arena_on_air(held);
-        if idle {
-            self.gate = match core::mem::replace(&mut self.gate, DriverGate::Closed) {
-                DriverGate::Closing(gate) => {
-                    let closed = held.gate_issuer.close(gate);
-                    held.post(OwnedLowerMacEvent::Terminal(
-                        OwnedLowerMacTerminal::GateClosed(closed),
-                    ));
-                    DriverGate::Closed
-                }
-                state => state,
-            };
-        }
-        if held.air.failed() {
-            return;
-        }
-        self.finish_removals(held);
-        if held.air.failed() {
-            return;
-        }
-        if idle
-            && self.removing.is_empty()
-            && held.commands.is_empty()
-            && held.draining.replace(false)
-        {
-            held.wake_body();
-        }
-        if matches!(held.air.stream.get(), ModelStream::Running) {
-            self.receive(held);
         }
     }
 
@@ -3074,52 +2407,6 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                 key_id,
                 key,
             } => {
-                if held.air.group_failure.get() == Some(GroupFaultStage::ReplacementWrite) {
-                    let mut table = held.air.key_installations.take();
-                    let Some(index) = table.iter().position(|entry| {
-                        entry.identity.ptr_eq(&Rc::downgrade(&installed.identity.0))
-                    }) else {
-                        held.air.key_installations.set(table);
-                        let _capacity_fault = held.failed_group.push(GroupChange::Replace {
-                            permission,
-                            installed,
-                            key_id,
-                            key,
-                        });
-                        held.poison();
-                        return;
-                    };
-                    let previous = table.remove(index);
-                    installed.identity.0.active.set(false);
-                    installed.identity.0.rx_active.set(false);
-                    // Failed new publication leaves no new epoch. The old
-                    // material is written back before fail-stop, not returned
-                    // as an ordinary installed owner.
-                    table.push(previous);
-                    installed.identity.0.active.set(true);
-                    installed.identity.0.rx_active.set(true);
-                    held.air
-                        .group_writes
-                        .set(held.air.group_writes.get().saturating_add(1));
-                    held.air.group_rollback.set(Some(
-                        oer_protocols_ieee80211_testing_conformance::group_keys::Rollback {
-                            previous_key_id: installed.identity.0.key_id,
-                            attempted_key_id: key_id.get(),
-                            restored: table.iter().any(|entry| {
-                                entry.identity.ptr_eq(&Rc::downgrade(&installed.identity.0))
-                            }),
-                        },
-                    ));
-                    held.air.key_installations.set(table);
-                    let _capacity_fault = held.failed_group.push(GroupChange::Replace {
-                        permission,
-                        installed,
-                        key_id,
-                        key,
-                    });
-                    held.poison();
-                    return;
-                }
                 installed.identity.0.active.set(false);
                 installed.identity.0.rx_active.set(false);
                 held.air.remove_key_material(&installed.identity);
@@ -3176,51 +2463,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         let Some(terminal) = terminal else {
             return;
         };
-        if held.air.group_failure.get() == Some(GroupFaultStage::After) {
-            let _capacity_fault = held.failed_group_terminal.push(terminal);
-            held.poison();
-        } else {
-            held.post(terminal);
-        }
-    }
-
-    /// Serve the station's published data arena: its completion once its
-    /// answer is due, unless its access category's result is held; a drain
-    /// aborts it at once.
-    fn serve_arena(&mut self, held: &ModelHeld<'id, B>) {
-        let Ok(mut arenas) = held.arenas.try_borrow_mut() else {
-            held.poison();
-            return;
-        };
-        let results = held.air.held_results.get();
-        let served = arenas.serve::<B::Caps>(
-            held.air.monotonic_now(),
-            |category| *category.select(&results),
-            held.draining.get(),
-        );
-        drop(arenas);
-        match served {
-            Ok(Some((done, category))) => {
-                held.air.edca.reset(category);
-                held.post(OwnedLowerMacEvent::Terminal(
-                    OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::Arena(done)),
-                ));
-            }
-            Ok(None) => {}
-            Err(_) => held.poison(),
-        }
-    }
-
-    /// Whether a station data arena is on the air; a borrowed arena state,
-    /// which the driver never meets, counts as one and poisons.
-    fn arena_on_air(&self, held: &ModelHeld<'id, B>) -> bool {
-        match held.arenas.try_borrow() {
-            Ok(arenas) => arenas.on_air().is_some(),
-            Err(_) => {
-                held.poison();
-                true
-            }
-        }
+        held.post(terminal);
     }
 
     /// Keep each published head until its result; barriers stop the next
@@ -3295,9 +2538,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                     .checked_add(MODEL_GROUP_COMMAND_BOUND.as_micros())
                     .is_none_or(|deadline| held.air.monotonic_now().as_micros() >= deadline)
             });
-            let uncertain = removal.group_admitted_at.is_some()
-                && held.air.group_failure.get() == Some(GroupFaultStage::After);
-            if overdue || uncertain || held.air.failed() {
+            if overdue || held.air.failed() {
                 pending.push(removal);
                 held.poison();
             } else if Rc::strong_count(&removal.key.0.preparations) == 1 {
@@ -3313,6 +2554,8 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         self.removing = pending;
     }
 
+    /// Deliver a unit of a group mutation's receive cut, or drop it when
+    /// the receive capacity is full.
     fn deliver(&mut self, held: &ModelHeld<'id, B>, frame: Vec<u8>, meta: ModelRxMeta) {
         if held.charge_rx() {
             held.post(OwnedLowerMacEvent::Received {
@@ -3321,33 +2564,9 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                     bytes: frame,
                     recycled: false,
                     air: Rc::downgrade(&held.air),
-                    streamed: false,
                 },
                 meta,
             });
-        } else {
-            held.lost.set(true);
-            held.wake_body();
-        }
-    }
-
-    /// Capture only this finite batch; newly arriving traffic belongs to the
-    /// next pass. Delayed ingress is forced through before a GTK boundary.
-    fn receive(&mut self, held: &ModelHeld<'id, B>) {
-        let captured = held.air.rx.take_batch();
-        for (frame, meta) in captured {
-            self.deliver(held, frame, meta);
-        }
-        let captured = held.air.group_rx.take_batch();
-        for received in captured {
-            if received.stage == GroupRxStage::Ready {
-                // Integrity was established at capture under this owner.
-                // Retain it through delivery even if the slot is later reused.
-                let _installation = received.installation;
-                self.deliver(held, received.frame, received.meta);
-            } else {
-                held.air.group_rx.push_back(received);
-            }
         }
     }
 }
@@ -3429,11 +2648,9 @@ impl<'id, B: ModelComposition> Published<'id, B> {
             TxOutcome::Ended(SingleEnd::AckTimeout(_) | SingleEnd::ContentionLimit(_))
         ) && let Some(rate) = plan.remaining.pop_front()
         {
-            held.air.edca.failure(plan.prepared.queue);
             plan.rate = rate;
             return publish_single(held, keys, plan);
         }
-        held.air.edca.reset(plan.prepared.queue);
         terminal(held, *plan.prepared, outcome);
         None
     }
@@ -3533,7 +2750,6 @@ fn publish_single<'id, B: ModelComposition>(
         .msdu_lifetime;
     if plan.prepared.operation.payload().expired(now, lifetime) {
         held.air.expired(1);
-        held.air.edca.reset(plan.prepared.queue);
         terminal(held, *plan.prepared, TxOutcome::Expired { msdus: 1 });
         return None;
     }
@@ -3579,7 +2795,6 @@ fn publish_single<'id, B: ModelComposition>(
             return None;
         }
     };
-    held.air.edca.draw(plan.prepared.role, plan.prepared.queue);
     // A denied PPDU never reached the air the journal records.
     if !matches!(answer, SingleAnswer::AirDenied) {
         held.air.sent.record(frame);
@@ -3612,311 +2827,6 @@ fn terminal<'id, B: ModelComposition>(
     ));
 }
 
-/// The model's running phase: the body's handle over the queues.
-pub struct ModelPhase<'a, 'id, C, B: ModelComposition + 'id> {
-    frontend: &'a mut ModelFrontend<'id, B>,
-    caps: PhantomData<fn() -> C>,
-    held: &'a ModelHeld<'static, B>,
-}
-
-impl<'id, C, B: ModelComposition + 'id> ModelPhase<'_, 'id, C, B> {
-    /// Deliberately violate the backend contract while retaining actual minted
-    /// owners, for consumer contract regressions outside the conformance suite.
-    pub fn inject_terminal(
-        &mut self,
-        terminal: oer_protocols_ieee80211_contracts_port::LowerMacTerminal<'id, ModelTypes<B>>,
-    ) {
-        self.held
-            .post(OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::retain(
-                terminal,
-                &self.frontend.loan,
-            )));
-    }
-}
-
-/// Install a station PTK and take the key its installation terminal
-/// returns, recycling RX delivered before it.
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) async fn installed_station_pairwise<'p, 'id: 'p, C, B: ModelComposition + 'id>(
-    phase: &mut ModelPhase<'p, 'id, C, B>,
-    association: &ModelAssociation<'id, B, Station>,
-    slot: PairwiseKeySlot<
-        'id,
-        Station,
-        MODEL_KEY_SLOTS,
-        MODEL_KEY_SLOTS,
-        <Station as ModelRole>::AssociationPath<B::Identity>,
-    >,
-    peer: IndividualAddress,
-    key: Ccmp128Key,
-) -> Result<ModelPairwiseKey<'id, B, Station>, &'static str>
-where
-    C: Ieee80211Capabilities,
-{
-    phase
-        .station()
-        .install_pairwise_key(association, slot, peer, key);
-    loop {
-        match phase.next_event().await {
-            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Terminal(
-                oer_protocols_ieee80211_contracts_port::LowerMacTerminal::PairwiseKeyInstalled(
-                    oer_protocols_ieee80211_contracts_port::InstalledPairwise::Station(key),
-                ),
-            ))) => return Ok(key),
-            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Received {
-                frame,
-                ..
-            })) => phase.recycle(frame),
-            _ => return Err("the station PTK installation terminal"),
-        }
-    }
-}
-
-/// Install an access point PTK and take the key its installation terminal
-/// returns, recycling RX delivered before it.
-#[cfg(test)]
-pub(crate) async fn installed_access_point_pairwise<'p, 'id: 'p, C, B: ModelComposition + 'id>(
-    phase: &mut ModelPhase<'p, 'id, C, B>,
-    association: &ModelAssociation<'id, B, AccessPoint>,
-    slot: PairwiseKeySlot<
-        'id,
-        AccessPoint,
-        MODEL_KEY_SLOTS,
-        MODEL_KEY_SLOTS,
-        <AccessPoint as ModelRole>::AssociationPath<B::Identity>,
-    >,
-    peer: IndividualAddress,
-    key: Ccmp128Key,
-) -> Result<ModelPairwiseKey<'id, B, AccessPoint>, &'static str>
-where
-    C: Ieee80211Capabilities,
-{
-    phase
-        .access_point()
-        .install_pairwise_key(association, slot, peer, key);
-    loop {
-        match phase.next_event().await {
-            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Terminal(
-                oer_protocols_ieee80211_contracts_port::LowerMacTerminal::PairwiseKeyInstalled(
-                    oer_protocols_ieee80211_contracts_port::InstalledPairwise::AccessPoint(key),
-                ),
-            ))) => return Ok(key),
-            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Received {
-                frame,
-                ..
-            })) => phase.recycle(frame),
-            _ => return Err("the access point PTK installation terminal"),
-        }
-    }
-}
-
-impl<'id, C, B: ModelComposition + 'id> PortPhase for ModelPhase<'_, 'id, C, B> {
-    type Event = oer_protocols_ieee80211_contracts_port::LowerMacEvent<'id, ModelTypes<B>>;
-    type Fault = ModelFault;
-
-    fn next_event(
-        &mut self,
-    ) -> impl Future<Output = Result<Result<Self::Event, EventsLost>, EventEnd<ModelFault>>> + '_
-    {
-        let held = self.held;
-        let loan = self.frontend.loan;
-        // Cancel-safe: the event stays queued until a poll takes it.
-        poll_fn(move |cx| {
-            if let ModelStream::Ended(end) = held.air.stream.get() {
-                return Poll::Ready(Err(end));
-            }
-            if let Some(event) = held.take_event() {
-                return Poll::Ready(Ok(Ok(event.lend(&loan))));
-            }
-            if held.lost.replace(false) {
-                return Poll::Ready(Ok(Err(EventsLost)));
-            }
-            if matches!(held.air.stream.get(), ModelStream::Draining) {
-                if held.returned.get()
-                    && !held.draining.get()
-                    && held.commands.is_empty()
-                    && held.recycled.is_empty()
-                {
-                    let end = EventEnd::Drained { cause: ModelFault };
-                    held.air.stream.set(ModelStream::Ended(end));
-                    held.air.wake_driver();
-                    return Poll::Ready(Err(end));
-                }
-                held.body.set(Some(cx.waker().clone()));
-                held.air.wake_driver();
-                return Poll::Pending;
-            }
-            if held.rx_out.get() < MODEL_RX_EVENTS
-                && let Some((bytes, meta)) = held.air.rx_stream.snapshot()
-                && held.charge_rx()
-            {
-                return Poll::Ready(Ok(Ok(OwnedLowerMacEvent::Received {
-                    frame: OwnedRxBuffer {
-                        identity: PhantomData,
-                        bytes,
-                        recycled: false,
-                        air: Rc::downgrade(&held.air),
-                        streamed: true,
-                    },
-                    meta,
-                }
-                .lend(&loan))));
-            }
-            held.body.set(Some(cx.waker().clone()));
-            Poll::Pending
-        })
-    }
-}
-
-impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacPhase<'p, 'id>
-    for ModelPhase<'p, 'id, C, B>
-{
-    type Caps = C;
-    type Types = ModelTypes<B>;
-    type Station<'v>
-        = ModelInterface<'p, 'v, 'id, Station, C, B>
-    where
-        Self: 'v;
-    type AccessPoint<'v>
-        = ModelInterface<'p, 'v, 'id, AccessPoint, C, B>
-    where
-        Self: 'v;
-
-    fn channel(&self) -> Channel {
-        self.frontend.channel.get()
-    }
-
-    fn recycle(&mut self, buffer: ModelRxBuffer<'id, B::Identity>) {
-        let buffer = buffer.owner;
-        if buffer.streamed {
-            let mut buffer = buffer;
-            // The independent source observes this return immediately. Its
-            // next poll can reuse the same bounded RX capacity without a
-            // body/driver task switch, exactly the starvation case.
-            buffer.recycled = true;
-            self.held.release_rx();
-            return;
-        }
-        if self.held.recycled.push(buffer).is_err() {
-            self.held.poison();
-        }
-        self.held.air.wake_driver();
-    }
-
-    fn lend(
-        &mut self,
-        buffer: ModelRxBuffer<'id, B::Identity>,
-    ) -> Result<
-        ModelLentRx,
-        oer_protocols_ieee80211_contracts_port::LendRefused<ModelRxBuffer<'id, B::Identity>>,
-    > {
-        use oer_protocols_ieee80211_contracts_port::{LendRefusal, LendRefused};
-        let reason = if self.held.air.failed() {
-            Some(LendRefusal::Stopping)
-        } else if self.held.network.held() >= MODEL_RX_EVENTS {
-            Some(LendRefusal::Capacity)
-        } else {
-            None
-        };
-        if let Some(reason) = reason {
-            return Err(LendRefused { buffer, reason });
-        }
-        let mut owner = buffer.owner;
-        owner.recycled = true;
-        let mut bytes = core::mem::take(&mut owner.bytes);
-        let mpdu_len = bytes.len();
-        bytes.resize(mpdu_len.max(MODEL_RX_STORAGE), 0);
-        // Credit first: the network counts the buffer before the body's
-        // receive count lets it go.
-        self.held
-            .network
-            .held
-            .fetch_add(1, core::sync::atomic::Ordering::AcqRel);
-        drop(owner);
-        self.held.release_rx();
-        self.held.air.wake_driver();
-        Ok(ModelLentRx {
-            bytes,
-            mpdu_len,
-            network: self.held.network.clone(),
-        })
-    }
-
-    fn poll_lent_returned(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()> {
-        self.held.network.waker.register(cx.waker());
-        if self.held.network.held() == 0 {
-            core::task::Poll::Ready(())
-        } else {
-            core::task::Poll::Pending
-        }
-    }
-
-    fn lent(&self) -> usize {
-        self.held.network.held()
-    }
-
-    fn lend_room(&self) -> bool {
-        self.held.network.held() < MODEL_RX_EVENTS
-    }
-
-    fn poll_lend_room(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<()> {
-        // Every lent buffer's drop wakes the registered task.
-        self.held.network.waker.register(cx.waker());
-        if self.lend_room() {
-            core::task::Poll::Ready(())
-        } else {
-            core::task::Poll::Pending
-        }
-    }
-
-    fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>) {
-        self.held.gate_closed.set(true);
-        self.held
-            .command(Command::CloseGate(gate.into_owned(&self.frontend.loan)));
-    }
-
-    fn open_gate(
-        &mut self,
-        gate: GateClosed<'id, ModelPool<<B as ModelComposition>::Identity, 0>>,
-    ) -> GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>> {
-        let open = self
-            .held
-            .gate_issuer
-            .open(gate.into_owned(&self.frontend.loan));
-        self.held.gate_closed.set(false);
-        self.held.command(Command::OpenGate);
-        open.lend(&self.frontend.loan)
-    }
-
-    fn station(&mut self) -> ModelInterface<'p, '_, 'id, Station, C, B> {
-        let [station, _] = self.frontend.addresses;
-        ModelInterface {
-            held: self.held,
-            loan: self.frontend.loan,
-            address: station,
-            role: PhantomData,
-        }
-    }
-
-    fn access_point(&mut self) -> ModelInterface<'p, '_, 'id, AccessPoint, C, B> {
-        let [_, access_point] = self.frontend.addresses;
-        ModelInterface {
-            held: self.held,
-            loan: self.frontend.loan,
-            address: access_point,
-            role: PhantomData,
-        }
-    }
-}
-
-/// One interface of the model's phase.
-pub struct ModelInterface<'p, 'v, 'id, R, C, B: ModelComposition + 'id> {
-    held: &'v ModelHeld<'static, B>,
-    loan: BodyLoan<'id, B::Identity, B>,
-    address: IndividualAddress,
-    role: PhaseProof<'p, (R, C)>,
-}
-
 /// A key the model installed.
 pub struct ModelPairwiseKey<'id, B: ModelComposition, R: ModelRole> {
     identity: RawKeyIdentity,
@@ -3937,7 +2847,7 @@ pub struct ModelBlockAck<'id, B: ModelComposition> {
 
 /// A retry plan's stages, as the model's hardware takes them.
 fn stages<C: Ieee80211Capabilities>(
-    frame: &TxFrame<'_, '_, C>,
+    frame: &TxFrame<'_, C>,
 ) -> oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate> {
     match frame {
         TxFrame::Individual { plan, .. } => plan.map(|rate| rate.get()),
@@ -3958,7 +2868,7 @@ fn one_stage(rate: PhyRate) -> oer_protocols_ieee80211_contracts_port::RetryPlan
 
 fn retry_stages<K>(
     layout: &MpduLayout,
-    plan: &RetransmissionPlan<'_, '_, K>,
+    plan: &RetransmissionPlan<'_, K>,
 ) -> Result<oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>, PreparationError> {
     match (layout.kind(), plan) {
         (MpduKind::Individual, RetransmissionPlan::Individual(plan)) => {
@@ -3976,25 +2886,26 @@ type PhaseProof<'p, T> = PhantomData<fn(&'p ()) -> (&'p (), T)>;
 type ModelSource<'k, 'p, 'id, C, K, R, B> = TxSource<
     ModelBuffer<'id, B, C>,
     ModelSent<'id, B, C>,
-    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, 'id, C, K>,
+    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, C, K>,
     ModelBodyOf<B>,
     <R as RoleKeys<'id, ModelTypes<B>>>::TxKey<'k>,
-    RetransmissionPlan<'p, 'id, K>,
+    RetransmissionPlan<'p, K>,
 >;
 type ModelCheckedSource<'k, 'p, 'id, C, K, R, B> = CheckedTxSource<
     ModelBuffer<'id, B, C>,
     ModelSent<'id, B, C>,
-    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, 'id, C, K>,
+    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, C, K>,
     ModelBodyOf<B>,
     <R as RoleKeys<'id, ModelTypes<B>>>::TxKey<'k>,
-    RetransmissionPlan<'p, 'id, K>,
+    RetransmissionPlan<'p, K>,
 >;
 type ModelPreparation<'k, 'p, 'id, R, K, B, C> = Result<
     ModelPrepared<'k, 'p, 'id, R, K, B>,
     PreparationRefused<ModelSource<'k, 'p, 'id, C, K, R, B>>,
 >;
 
-/// Closed preparation proof retaining role, phase, install and the key borrow.
+/// Closed preparation proof retaining role, port borrow, install and the key
+/// borrow.
 /// Dropping or submitting it ends that borrow; a queued operation owns only
 /// the backend identity, never a reference to a portable machine.
 pub struct ModelPrepared<'k, 'p, 'id, R, K, B: ModelComposition> {
@@ -4242,296 +3153,12 @@ fn prepare_model<
     })
 }
 
-impl<'p, 'v, 'id: 'p, R, K: Ieee80211Capabilities, B: ModelComposition + 'id>
-    InterfacePhase<'p, 'id> for ModelInterface<'p, 'v, 'id, R, K, B>
-where
-    R: GroupInstallationRole + RoleKeys<'id, ModelTypes<B>, Keys = ModelKeys<'id, B, R>>,
-{
-    type Caps = K;
-    type Types = ModelTypes<B>;
-    type Role = R;
-
-    fn address(&self) -> IndividualAddress {
-        self.address
-    }
-
-    /// The model applies each interface's set exactly.
-    fn set_edca(&mut self, parameters: SupportedEdca<K>) -> SupportedEdca<K> {
-        self.held.air.edca.set_parameters(R::ROLE, parameters.get());
-        self.held.settings.mark_other();
-        self.held.air.wake_driver();
-        parameters
-    }
-
-    fn submit<'k>(
-        &mut self,
-        attempt: oer_protocols_ieee80211_contracts_port::InterfaceSubmission<'k, 'p, 'id, Self>,
-    ) -> Result<(), Poisoned<ModelFault>> {
-        let mut attempt = attempt.into_parts(&self.loan);
-        attempt
-            .operation
-            .execute()
-            .mpdu
-            .admit(self.held.air.monotonic_now());
-        let ModelTxExecution { plan, key } = attempt.execution;
-        self.held.command(Command::Submit(Box::new(Prepared {
-            operation: attempt.operation,
-            role: R::ROLE,
-            queue: attempt.access_category,
-            plan,
-            key,
-        })));
-        if self.held.air.admission_closed() {
-            Err(Poisoned { cause: ModelFault })
-        } else {
-            Ok(())
-        }
-    }
-
-    fn install_pairwise_key(
-        &mut self,
-        association: &ModelAssociation<'id, B, R>,
-        slot: PairwiseKeySlot<
-            'id,
-            R,
-            MODEL_KEY_SLOTS,
-            MODEL_KEY_SLOTS,
-            R::AssociationPath<B::Identity>,
-        >,
-        peer: IndividualAddress,
-        key: Ccmp128Key,
-    ) -> KeyIdentity<'id, B::Identity> {
-        let identity = RawKeyIdentity::new(slot.index(), 0, R::ROLE, peer, &self.held.air);
-        let installation = KeyIdentity {
-            owned: identity.clone(),
-            loan: PhantomData,
-        };
-        self.held.command(Command::InstallKey {
-            spp: association.owner.spp(),
-            material: key,
-            key: identity.clone(),
-            installed: R::pairwise_installed(ModelPairwiseKey {
-                identity,
-                slot: slot.into_owned(&self.loan),
-            }),
-        });
-        installation
-    }
-
-    fn install_group_key(
-        &mut self,
-        association: &ModelAssociation<'id, B, R>,
-        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
-        slot: GroupKeySlot<
-            'id,
-            R,
-            MODEL_KEY_SLOTS,
-            MODEL_KEY_SLOTS,
-            R::AssociationPath<B::Identity>,
-        >,
-        key_id: GroupKeyId,
-        key: Ccmp128Key,
-    ) {
-        self.held.command(Command::Group {
-            admitted_at: self.held.air.monotonic_now().as_micros(),
-            change: GroupChange::Install(R::installation(PendingGroupInstall {
-                spp: association.owner.spp(),
-                slot: slot.into_owned(&self.loan),
-                permission: self.loan.reclaim_slot(permission),
-                key_id,
-                key,
-            })),
-        });
-    }
-
-    fn remove_pairwise_key(
-        &mut self,
-        association: ModelAssociation<'id, B, R>,
-        key: ModelPairwiseKey<'id, B, R>,
-    ) {
-        key.identity.0.active.set(false);
-        self.held.command(Command::RemoveKey {
-            key: key.identity,
-            removed: OwnedRemoved::retain(
-                R::removed(RemovedKey::Pairwise {
-                    slot: key.slot,
-                    association,
-                }),
-                &self.loan,
-            ),
-        });
-    }
-
-    fn remove_group_key(
-        &mut self,
-        permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
-        key: ModelGroupKey<'id, B, R>,
-    ) {
-        self.held.command(Command::Group {
-            admitted_at: self.held.air.monotonic_now().as_micros(),
-            change: GroupChange::Remove {
-                key: key.identity,
-                removed: OwnedRemoved::retain(
-                    R::removed(RemovedKey::Group {
-                        slot: key.slot,
-                        permission,
-                    }),
-                    &self.loan,
-                ),
-            },
-        });
-    }
-
-    fn add_block_ack(
-        &mut self,
-        slot: ModelBlockAckSlot<'id, B>,
-        agreement: SupportedBlockAck<K>,
-    ) -> ModelBlockAck<'id, B> {
-        self.held.settings.set_block_ack(
-            slot.index(),
-            Some(ModelReceiveAgreement::checked(R::ROLE, agreement)),
-        );
-        self.held.air.wake_driver();
-        ModelBlockAck { slot }
-    }
-
-    fn replace_block_ack(
-        &mut self,
-        running: ModelBlockAck<'id, B>,
-        agreement: SupportedBlockAck<K>,
-    ) -> ModelBlockAck<'id, B> {
-        self.held.settings.set_block_ack(
-            running.slot.index(),
-            Some(ModelReceiveAgreement::checked(R::ROLE, agreement)),
-        );
-        self.held.air.wake_driver();
-        running
-    }
-
-    fn remove_block_ack(&mut self, agreement: ModelBlockAck<'id, B>) -> ModelBlockAckSlot<'id, B> {
-        self.held
-            .settings
-            .set_block_ack(agreement.slot.index(), None);
-        self.held.air.wake_driver();
-        agreement.slot
-    }
-}
-
 /// The subframes one model A-MPDU holds.
 pub const MODEL_AMPDU_SUBFRAMES: usize = 8;
 
 /// The longest model A-MPDU at every HT and HE rate: the 65 535 octets of
 /// the HT-SIG HT Length field.
 pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = AmpduLengthTable::uniform(65_535);
-
-impl<'p, 'v, 'id: 'p, R, K: Ieee80211Capabilities, B: ModelComposition + 'id> AmpduPhase<'p, 'id>
-    for ModelInterface<'p, 'v, 'id, R, K, B>
-where
-    R: GroupInstallationRole + RoleKeys<'id, ModelTypes<B>, Keys = ModelKeys<'id, B, R>>,
-{
-    fn ampdu_capabilities(&self) -> AmpduCapabilities {
-        AmpduCapabilities {
-            max_subframes: MODEL_AMPDU_SUBFRAMES as u16,
-            formats: PhyFormatSet::HT.union(PhyFormatSet::HE),
-            max_length: &MODEL_AMPDU_LENGTHS,
-        }
-    }
-}
-
-impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> StationPhase<'p, 'id>
-    for ModelInterface<'p, 'v, 'id, Station, C, B>
-{
-    type DataArena<'a>
-        = ModelDataArena<'a, 'p, 'id, C, B>
-    where
-        Self: 'a;
-
-    fn data_arena(&mut self) -> ModelDataArena<'_, 'p, 'id, C, B> {
-        ModelDataArena::new(self.held)
-    }
-
-    fn replace_group_key(
-        &mut self,
-        permission: StationGroupPermission<'id, B>,
-        installed: ModelGroupKey<'id, B, Station>,
-        key_id: GroupKeyId,
-        key: Ccmp128Key,
-    ) {
-        self.held.command(Command::Group {
-            admitted_at: self.held.air.monotonic_now().as_micros(),
-            change: GroupChange::Replace {
-                permission: self.loan.reclaim_slot(permission),
-                installed: installed.into_owned(&self.loan),
-                key_id,
-                key,
-            },
-        });
-    }
-
-    fn select_group_key(
-        &mut self,
-        permission: StationGroupPermission<'id, B>,
-        installed: ModelGroupKey<'id, B, Station>,
-    ) {
-        self.held.command(Command::Group {
-            admitted_at: self.held.air.monotonic_now().as_micros(),
-            change: GroupChange::Select {
-                permission: self.loan.reclaim_slot(permission),
-                installed: installed.into_owned(&self.loan),
-            },
-        });
-    }
-
-    fn configure(
-        &mut self,
-        permission: ConfigurePermission<
-            'id,
-            Station,
-            oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
-            <B::Contexts as ModelContext>::StationConfigureContext<'id, B::Identity>,
-        >,
-        _: StationReceive<C>,
-    ) {
-        self.held.configuring_station.set(true);
-        self.held
-            .command(Command::Configure(OwnedConfigured::Station(
-                permission.into_owned(&self.loan),
-            )));
-    }
-
-    fn set_bss_color(&mut self, _: BssColor) {
-        self.held.settings.mark_other();
-        self.held.air.wake_driver();
-    }
-}
-
-impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> AccessPointPhase<'p, 'id>
-    for ModelInterface<'p, 'v, 'id, AccessPoint, C, B>
-{
-    fn configure(
-        &mut self,
-        permission: ConfigurePermission<
-            'id,
-            AccessPoint,
-            oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
-            <B::Contexts as ModelContext>::AccessPointConfigureContext<'id, B::Identity>,
-        >,
-        _: SupportedFilter<C, AccessPoint>,
-    ) {
-        self.held
-            .command(Command::Configure(OwnedConfigured::AccessPoint(
-                permission.into_owned(&self.loan),
-            )));
-    }
-}
-
-#[cfg(test)]
-mod tests;
-
-/// Reusable reference fixtures for the physical conformance runner.
-#[cfg(feature = "test-support")]
-#[allow(clippy::disallowed_methods, clippy::disallowed_macros)]
-pub mod conformance;
 
 mod values;
 use values::*;

@@ -3,7 +3,7 @@
 use core::marker::PhantomData;
 use oer_protocols_radio_port::{
     BodyLoan, LoanedContext, PoolBuilder, PoolPath, PoolSet, PortContext, Root, Slot, SlotIdentity,
-    SlotOwner, Slots,
+    Slots,
 };
 
 /// Permission to lower one preparation before sealing its accepted operation.
@@ -34,7 +34,7 @@ pub struct AdmissionOwners<C, T, M, E> {
 /// Backend-private owned payload conversion at the terminal boundary.
 /// Concrete implementations retain all fields and reconstruct only their
 /// public body loan; the complete operation stays sealed during conversion.
-pub trait OwnedPayload<Id: SlotIdentity, S: SlotOwner<Id>> {
+pub trait OwnedPayload<Id: SlotIdentity, S> {
     /// The same payload under the consumer's invariant body loan.
     type Lent<'p>
     where
@@ -50,7 +50,7 @@ pub trait OwnedPayload<Id: SlotIdentity, S: SlotOwner<Id>> {
 }
 
 /// Backend-private retention of a complete public payload in its owned queue.
-pub trait BodyPayload<'p, Id: SlotIdentity, S: SlotOwner<Id>> {
+pub trait BodyPayload<'p, Id: SlotIdentity, S> {
     /// Complete queue representation selected before the body loan.
     type Owned;
     /// End only the public loan, preserving every owned field.
@@ -83,7 +83,7 @@ pub struct TerminalAccess<'id, Kind, Path: PoolPath = Root<oer_protocols_radio_p
 
 impl<Kind, Path: PoolPath> TerminalAccess<'static, Kind, Path> {
     /// Lend the unique consumer authority without copying it.
-    pub fn lend<'p, S: SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S>(
         self,
         _: &BodyLoan<'p, Path::Identity, S>,
     ) -> TerminalAccess<'p, Kind, Path> {
@@ -183,7 +183,7 @@ impl<C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'static, Kind, Path>, M, O
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> Completed<X, Slot<'p, Kind, Path>, M::Lent<'p>, O>
     where
-        S: SlotOwner<Path::Identity> + 'p,
+        S: 'p,
         Path::Identity: 'p,
         M: OwnedPayload<Path::Identity, S> + 'p,
         X: LoanedContext<'p, Path::Identity, Owned = C>,
@@ -211,7 +211,6 @@ impl<'id, C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'id, Kind, Path>, M, 
         loan: &BodyLoan<'id, Path::Identity, S>,
     ) -> Completed<C::Owned, Slot<'static, Kind, Path>, M::Owned, O>
     where
-        S: SlotOwner<Path::Identity>,
         C: LoanedContext<'id, Path::Identity>,
         M: BodyPayload<'id, Path::Identity, S>,
     {

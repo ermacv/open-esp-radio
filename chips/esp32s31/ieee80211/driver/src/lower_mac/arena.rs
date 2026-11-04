@@ -708,9 +708,9 @@ where
 
     fn publish(
         &mut self,
-        publication: ArenaPublication<'p, 'id, K>,
+        publication: ArenaPublication<'p, K>,
         now: Instant,
-    ) -> Result<(), PublishError<'p, 'id, K, ArenaFault>> {
+    ) -> Result<(), PublishError<'p, K, ArenaFault>> {
         if let Some(fault) = self.arenas.fault {
             return Err(PublishError::Fault(fault));
         }

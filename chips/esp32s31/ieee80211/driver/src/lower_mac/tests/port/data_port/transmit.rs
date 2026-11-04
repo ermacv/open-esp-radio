@@ -136,8 +136,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let rate = self
             .port
             .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
-            .expect("rate")
-            .phase();
+            .expect("rate");
         let header = HeaderSpec::new(
             FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
             0,
@@ -193,8 +192,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let rate = self
             .port
             .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
-            .expect("rate")
-            .phase();
+            .expect("rate");
         let source = TxSource::Retransmission {
             mpdu,
             plan: RetransmissionPlan::Individual(RetryPlan::new(RetryStage {
@@ -373,7 +371,6 @@ fn an_unanswered_block_ack_request_is_sent_again_without_a_retry_bit() {
             .port
             .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
             .expect("rate")
-            .phase()
             .legacy()
         else {
             panic!("a legacy rate");
@@ -456,8 +453,7 @@ fn caller_pn_and_external_body_survive_tx_and_a_removed_key_refuses_retransmissi
         let rate = fixture
             .port
             .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
-            .expect("rate")
-            .phase();
+            .expect("rate");
         let source = TxSource::Retransmission {
             mpdu,
             plan: RetransmissionPlan::Individual(RetryPlan::new(RetryStage {

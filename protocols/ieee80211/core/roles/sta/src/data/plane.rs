@@ -819,8 +819,8 @@ impl DataPlane {
     /// plan's kind.
     pub fn publication<'p, 'id, K: Ieee80211Capabilities>(
         &mut self,
-        rate: impl FnOnce(PpduPlan) -> Option<ArenaFormat<'p, 'id, K>>,
-    ) -> Option<ArenaPublication<'p, 'id, K>> {
+        rate: impl FnOnce(PpduPlan) -> Option<ArenaFormat<'p, K>>,
+    ) -> Option<ArenaPublication<'p, K>> {
         let link = self.link.as_ref()?;
         let id = self.publishable()?;
         let book = self.book(id);
@@ -867,7 +867,7 @@ impl DataPlane {
 
     /// The backend refused `publication`: its arena's right comes back, and
     /// the arena goes again at the next publication.
-    pub fn refused<K>(&mut self, publication: ArenaPublication<'_, '_, K>) {
+    pub fn refused<K>(&mut self, publication: ArenaPublication<'_, K>) {
         let book = self.book_mut(publication.arena.id());
         if book.right.is_none() {
             book.published = None;

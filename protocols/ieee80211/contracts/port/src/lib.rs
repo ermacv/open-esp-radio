@@ -37,15 +37,13 @@
 //!
 //! The port is the contract between portable Wi-Fi MAC logic and the
 //! backend that puts frames on the air, whether a chip, a family driver or
-//! a host model, on the owner shape of `oer-protocols-radio-port`: a
-//! [`LowerMacBackend`] runs under its owner and lends a [`LowerMacPhase`]
-//! with one event stream and role-specific interface phases. Disabled-only
-//! settings are a [`LowerMacSetup`]. One submitted operation owns its context,
-//! ticket and MPDU until its terminal. The backend executes the retry plan;
-//! a lifecycle barrier waits for the current publication alone. Portable
-//! code selects rates and describes frames, while the backend numbers and
-//! publishes them. The services it performs autonomously are its
-//! [`LowerMacCapabilities::services`].
+//! a host model. The station's datapath actor owns the radio as a
+//! [`DataPort`] and runs the lifecycle's [`PortCommand`]s in its turns.
+//! One submitted operation owns its context, ticket and MPDU until its
+//! terminal. The backend executes the retry plan; a barrier waits for the
+//! current publication alone. Portable code selects rates and describes
+//! frames, while the backend numbers and publishes them. The services it
+//! performs autonomously are its [`LowerMacCapabilities::services`].
 //!
 //! The values that cross the port (attempts, settings, key installs,
 //! A-MPDU and beacon timing values, outcomes and the backend's service
@@ -53,10 +51,6 @@
 //! [`contract`], [`monitor`]). Data frames go out on the two DMA arenas of
 //! [`TxArena`] ([`arena`]). Codecs, policy, vendor records and chip
 //! models live in the layers that own them.
-//!
-//! The station's datapath actor owns the radio as a [`DataPort`] and runs
-//! the lifecycle's [`PortCommand`]s in its turns; the phase traits above
-//! remain for the slot-loan path until it moves onto that port.
 //!
 //! The PHY and channel values the port carries ([`Channel`], [`PhyRate`])
 //! are the portable ones of `oer-protocols-ieee80211-wire`. This package only declares
@@ -80,9 +74,9 @@ mod command;
 pub use command::{CommandKind, CommandTypes, PairwiseIssue, PortCommand, PortCommands};
 mod data_port;
 pub use data_port::{
-    CommandProgress, CommandRefusal, DataPort, Facts, PortArena, PortCompleted, PortRate,
-    PortRxBuffer, PortRxPull, PortSink, RxPull, StartRefused, StationSubmission, StopCause,
-    StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
+    CommandProgress, CommandRefusal, DataPort, Facts, PortArena, PortCompleted, PortRxBuffer,
+    PortRxPull, PortSink, RxPull, StartRefused, StationSubmission, StopCause, StopObservations,
+    StopUnconfirmed, SubmitRefusal, TxFacts,
 };
 mod layout;
 pub use layout::{
@@ -153,31 +147,24 @@ pub use oer_protocols_radio_port::{
 };
 pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
-    AccessPoint, AckHeader, AddressSetup, BssColor, FrameHeader, GroupAddress, HeaderSpec,
-    Ieee80211Capabilities, InterfaceRole, LegacyPhaseRate, LowerMacBackend, LowerMacSetup,
-    MpduLength, NoAckHeader, PhaseRate, QosControl, ReceiverAddress, ResponseHeader, SizedFrame,
-    Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca, SupportedFilter,
+    AccessPoint, AckHeader, AmpduRate, BssColor, FrameHeader, GroupAddress, HeaderSpec,
+    Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
+    NoAckHeader, PortRate, QosControl, ReceiverAddress, ResponseHeader, SizedFrame, Station,
+    StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca, SupportedFilter,
     SupportedNoAck, SupportedPower, Tid, TxFrame,
-};
-pub use owner::{
-    AirReservationPhase, AmpduPhase, AmpduRate, BeaconTimingPhase, BeaconWindow, MonitorPhase,
-    MpduStartSpacing, TbttPlan,
 };
 mod interface_commands;
 pub use interface_commands::{
     ConfigurePermission, Configured, InterfaceCommandPool, InterfacePermissions,
-    SampledTsfPermission, TsfPermission,
 };
 pub use phase::{
-    AccessPointPhase, AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt,
-    AttemptKey, BufferMemoryUnavailable, CheckedPoolSource, ClassFrame, ClassSizedFrame,
-    GateClosed, GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise,
-    InterfaceAttempt, InterfaceKeys, InterfacePhase, InterfaceSubmission, KeyTypes, LowerMacEvent,
-    LowerMacPhase, LowerMacTerminal, PhaseArenaCompleted, PhaseBlockAckSlot, PhaseSingleOutcome,
-    PhaseTypes, PoolMpdu, PoolPreparation, PoolSource, PreparationError, PreparationRefused,
-    PreparedTx, RETRY_STAGES, Removed, RemovedKey, RetransmissionPlan, RetryPlan, RetryStage,
-    ReturnedMpdu, RoleKeys, SingleCompleted, StationDataArena, StationPhase, TxBufferClass,
-    TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
+    AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt, AttemptKey,
+    BufferMemoryUnavailable, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed,
+    GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
+    PhaseBlockAckSlot, PhaseSingleOutcome, PhaseTypes, PoolMpdu, PoolPreparation, PoolSource,
+    PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
+    RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
+    TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
 };
 pub use rx::{
     AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus,

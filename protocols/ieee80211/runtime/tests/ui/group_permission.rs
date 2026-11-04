@@ -1,18 +1,18 @@
 #![no_std]
-use oer_protocols_ieee80211_contracts_port::{InterfacePhase, KeyTypes, LowerMacPhase, StationPhase, Station};
-use oer_protocols_ieee80211_testing_model::{ModelKeys, ModelPhase};
+use oer_protocols_ieee80211_contracts_port::{KeyTypes, PortCommand, Station};
+use oer_protocols_ieee80211_testing_model::{ModelCaps, ModelKeys, ModelTypes};
 
-pub fn one_mutation<'p, 'id: 'p>(
-    phase: &mut ModelPhase<'p, 'id, oer_protocols_ieee80211_testing_model::ModelCaps, Composition>,
+pub fn one_mutation<'id>(
     permission: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupPermission,
     selected: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupKey,
     retained: <ModelKeys<'id, Composition, Station> as KeyTypes<'id>>::GroupKey,
-) {
-    phase.station().select_group_key(permission, selected);
+) -> PortCommand<'id, ModelTypes<Composition>, ModelCaps> {
+    let select = PortCommand::SelectGroup { permission, installed: selected };
     #[cfg(ui_reject)]
-    phase.station().remove_group_key(permission, retained); // ui-error: E0382
+    let _remove = PortCommand::<'id, ModelTypes<Composition>, ModelCaps>::RemoveGroup { permission, key: retained }; // ui-error: E0382
     #[cfg(not(ui_reject))]
     let _retained_until_terminal = retained;
+    select
 }
 
 pub enum UiSlot {}

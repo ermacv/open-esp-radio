@@ -762,7 +762,7 @@ pub enum StaFrame<K, C> {
 }
 
 /// The rates a station frame goes at, which the service turns into the
-/// port's retry plan on the phase's channel.
+/// port's retry plan on the port's channel.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaRatePlan {
     /// An individual management frame: the BSS's lowest basic rate,
@@ -792,7 +792,7 @@ impl StaFrameClass {
 
 impl StaRatePlan {
     /// The retry plan of an individual frame at this plan's rates, as
-    /// `rates` select them; `carried` turns a rate into the phase's. `None`
+    /// `rates` select them; `carried` turns a rate into the port's. `None`
     /// when no stage of the selection is carried.
     pub fn individual<R, M: RxMetadata, A, BA>(
         self,
@@ -822,19 +822,18 @@ impl StaRatePlan {
 impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBufferClass>
     StaFrame<K, C>
 {
-    /// The frame on the phase's channel at the rates of `plan`, as `rates`
-    /// select them; `carried` turns a rate into the phase's. `None` when no
+    /// The frame on the port's channel at the rates of `plan`, as `rates`
+    /// select them; `carried` turns a rate into the port's. `None` when no
     /// stage of the selection is carried: the frame does not go. A
     /// BlockAckReq keeps only the plan's non-HT stages.
-    pub fn rated<'p, 'id, M: RxMetadata, A, BA>(
+    pub fn rated<'p, M: RxMetadata, A, BA>(
         self,
         plan: StaRatePlan,
         rates: &impl RateSelection<M, A, BA>,
         carried: impl Fn(
             oer_protocols_ieee80211_contracts_port::PhyRate,
-        )
-            -> Option<oer_protocols_ieee80211_contracts_port::PhaseRate<'p, 'id, K>>,
-    ) -> Option<oer_protocols_ieee80211_contracts_port::ClassFrame<'p, 'id, C, K>> {
+        ) -> Option<oer_protocols_ieee80211_contracts_port::PortRate<'p, K>>,
+    ) -> Option<oer_protocols_ieee80211_contracts_port::ClassFrame<'p, C, K>> {
         match self {
             Self::Individual(frame) => plan.individual(rates, carried).map(|plan| {
                 oer_protocols_ieee80211_contracts_port::ClassFrame::individual(frame, plan)

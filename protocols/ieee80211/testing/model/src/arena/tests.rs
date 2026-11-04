@@ -1,16 +1,25 @@
-use super::*;
+use crate::{
+    MODEL_ARENA_TIMEOUT, ModelArena, ModelArenaAnswer, ModelArenaFault, ModelCaps, ModelLarge,
+    ModelNetworkMemory,
+};
+use alloc::{boxed::Box, vec::Vec};
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd, FrameMask, IntakeRefused,
     PublishError, PublishRefused, TxArena,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduRate, MpduProtection, MpduStartSpacing, PhaseRate,
+    AmpduRate, MpduProtection, MpduStartSpacing, PhyRate, PortArena, PortRate, Protection,
+    SupportedPower, TxBufferClass, TxPower,
 };
 use oer_protocols_ieee80211_testing_conformance::{
     Environment,
     arena::{self as suite, Answer, Fixture, Published, check},
 };
 use oer_protocols_ieee80211_wire::frame::{FrameControlFields, sequence_control};
+use oer_protocols_ieee80211_wire::phy::{HtMcs, LegacyRate};
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// A QoS data MPDU of 30 octets whose sequence number is its tag.
 fn write_tagged(tag: u8, region: &mut [u8]) -> Option<u16> {
@@ -30,19 +39,19 @@ fn memory() -> ModelNetworkMemory {
     Box::new([0; ModelLarge::CAPACITY])
 }
 
-struct ArenaFixture<'p, 'id> {
+struct ArenaFixture<'p> {
     port: ModelArena<ModelCaps>,
-    single: PhaseRate<'p, 'id, ModelCaps>,
-    aggregate: AmpduRate<'p, 'id, ModelCaps>,
+    single: PortRate<'p, ModelCaps>,
+    aggregate: AmpduRate<'p, ModelCaps>,
     micros: u64,
 }
 
-impl<'p, 'id: 'p> ArenaFixture<'p, 'id> {
+impl<'p> ArenaFixture<'p> {
     fn publication(
         &self,
         arena: Arena,
-        format: ArenaFormat<'p, 'id, ModelCaps>,
-    ) -> ArenaPublication<'p, 'id, ModelCaps> {
+        format: ArenaFormat<'p, ModelCaps>,
+    ) -> ArenaPublication<'p, ModelCaps> {
         ArenaPublication {
             arena,
             format,
@@ -54,7 +63,7 @@ impl<'p, 'id: 'p> ArenaFixture<'p, 'id> {
     }
 }
 
-impl<'p, 'id: 'p> Fixture<'p, 'id> for ArenaFixture<'p, 'id> {
+impl<'p, 'id: 'p> Fixture<'p, 'id> for ArenaFixture<'p> {
     type Port = ModelArena<ModelCaps>;
     fn port(&mut self) -> &mut ModelArena<ModelCaps> {
         &mut self.port
@@ -70,10 +79,10 @@ impl<'p, 'id: 'p> Fixture<'p, 'id> for ArenaFixture<'p, 'id> {
     fn tag(memory: &ModelNetworkMemory) -> Option<u8> {
         tag_of(memory.as_slice())
     }
-    fn single(&self, arena: Arena) -> ArenaPublication<'p, 'id, ModelCaps> {
+    fn single(&self, arena: Arena) -> ArenaPublication<'p, ModelCaps> {
         self.publication(arena, ArenaFormat::Single(once(self.single)))
     }
-    fn aggregate(&self, arena: Arena) -> ArenaPublication<'p, 'id, ModelCaps> {
+    fn aggregate(&self, arena: Arena) -> ArenaPublication<'p, ModelCaps> {
         self.publication(
             arena,
             ArenaFormat::Aggregate {
@@ -123,48 +132,36 @@ impl<'p, 'id: 'p> Fixture<'p, 'id> for ArenaFixture<'p, 'id> {
     }
 }
 
-/// A test body over the phase's rates for a single MPDU and for an A-MPDU.
+/// A test body over an arena's checked rates for a single MPDU and for an
+/// A-MPDU.
 trait WithRates {
-    fn run<'p, 'id: 'p>(
-        self,
-        single: PhaseRate<'p, 'id, ModelCaps>,
-        aggregate: AmpduRate<'p, 'id, ModelCaps>,
-    );
+    fn run<'p, 'id: 'p>(self, single: PortRate<'p, ModelCaps>, aggregate: AmpduRate<'p, ModelCaps>);
 }
 
-struct Rates<R>(R);
-
-impl<R: WithRates> Work for Rates<R> {
-    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
-        self,
-        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
-        _: ModelResources<'id, ModelBackend<Id>>,
-    ) {
-        let single = phase.rate(PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
-        let ht = phase
-            .rate(PhyRate::Ht(
-                oer_protocols_ieee80211_wire::phy::HtRate::new(
-                    HtMcs::new(7).unwrap(),
-                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-                    false,
-                )
-                .unwrap(),
-            ))
-            .unwrap();
-        let aggregate = phase.station().ampdu_rate(ht).ok().unwrap();
-        self.0.run(single, aggregate);
-    }
-}
-
+/// Run `run` with the rates a standalone arena checks on its channel.
 fn with_rates(run: impl WithRates) {
-    let (backend, _) = backend();
-    let _port_end = block_on(run_model(backend, Body(Rates(run))));
+    let arena = ModelArena::<ModelCaps>::new();
+    let single = PortArena::rate(&arena, PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
+    let ht = PortArena::rate(
+        &arena,
+        PhyRate::Ht(
+            oer_protocols_ieee80211_wire::phy::HtRate::new(
+                HtMcs::new(7).unwrap(),
+                oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                false,
+            )
+            .unwrap(),
+        ),
+    )
+    .unwrap();
+    let aggregate = PortArena::ampdu_rate(&arena, ht).ok().unwrap();
+    run.run(single, aggregate);
 }
 
 fn fixture<'p, 'id: 'p>(
-    single: PhaseRate<'p, 'id, ModelCaps>,
-    aggregate: AmpduRate<'p, 'id, ModelCaps>,
-) -> ArenaFixture<'p, 'id> {
+    single: PortRate<'p, ModelCaps>,
+    aggregate: AmpduRate<'p, ModelCaps>,
+) -> ArenaFixture<'p> {
     ArenaFixture {
         port: ModelArena::new(),
         single,
@@ -179,8 +176,8 @@ fn the_model_passes_every_arena_case() {
     impl WithRates for Case {
         fn run<'p, 'id: 'p>(
             self,
-            single: PhaseRate<'p, 'id, ModelCaps>,
-            aggregate: AmpduRate<'p, 'id, ModelCaps>,
+            single: PortRate<'p, ModelCaps>,
+            aggregate: AmpduRate<'p, ModelCaps>,
         ) {
             let report = check(|| fixture(single, aggregate), Environment::Model).unwrap();
             assert_eq!(usize::from(report.passed), suite::Case::ALL.len());
@@ -198,8 +195,8 @@ fn encryption_needs_the_pairwise_key() {
     impl WithRates for Case {
         fn run<'p, 'id: 'p>(
             self,
-            single: PhaseRate<'p, 'id, ModelCaps>,
-            aggregate: AmpduRate<'p, 'id, ModelCaps>,
+            single: PortRate<'p, ModelCaps>,
+            aggregate: AmpduRate<'p, ModelCaps>,
         ) {
             let mut fixture = fixture(single, aggregate);
             let [first, _] = fixture.port.arenas().unwrap();
@@ -253,8 +250,8 @@ fn an_unanswered_publication_is_aborted_at_its_deadline() {
     impl WithRates for Case {
         fn run<'p, 'id: 'p>(
             self,
-            single: PhaseRate<'p, 'id, ModelCaps>,
-            aggregate: AmpduRate<'p, 'id, ModelCaps>,
+            single: PortRate<'p, ModelCaps>,
+            aggregate: AmpduRate<'p, ModelCaps>,
         ) {
             let mut fixture = fixture(single, aggregate);
             let [first, _] = fixture.port.arenas().unwrap();
@@ -291,8 +288,8 @@ fn a_mismatched_answer_quarantines_the_model() {
     impl WithRates for Case {
         fn run<'p, 'id: 'p>(
             self,
-            single: PhaseRate<'p, 'id, ModelCaps>,
-            aggregate: AmpduRate<'p, 'id, ModelCaps>,
+            single: PortRate<'p, ModelCaps>,
+            aggregate: AmpduRate<'p, ModelCaps>,
         ) {
             let mut fixture = fixture(single, aggregate);
             let [first, second] = fixture.port.arenas().unwrap();
@@ -365,8 +362,8 @@ fn an_aggregate_past_the_length_limit_is_refused_and_a_single_carries_position_0
     impl WithRates for Case {
         fn run<'p, 'id: 'p>(
             self,
-            single: PhaseRate<'p, 'id, ModelCaps>,
-            aggregate: AmpduRate<'p, 'id, ModelCaps>,
+            single: PortRate<'p, ModelCaps>,
+            aggregate: AmpduRate<'p, ModelCaps>,
         ) {
             let mut fixture = fixture(single, aggregate);
             fixture.port.set_length_limit(Some(59));

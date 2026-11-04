@@ -5,14 +5,11 @@
 use core::marker::PhantomData;
 use oer_protocols_ieee80211_contracts_port::association::{KEY_BANK_CAPACITY, KeyPool};
 use oer_protocols_ieee80211_contracts_port::{
-    InterfaceKeys, InterfacePhase, KeyTypes, NumberedKey, PhaseTypes, TxBufferClass, TxBufferPool,
+    KeyTypes, NumberedKey, PhaseTypes, TxBufferClass, TxBufferPool,
 };
-use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, ForeignCcmpTxKey, InstalledCcmpTxKey, PendingCcmpTxKey,
-    request_ccmp_pairwise_key,
 };
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_radio_port::Slot;
 
 use crate::machine::StaTokens;
@@ -70,33 +67,6 @@ impl<'id, K: KeyTypes<'id>> PendingStationPairwiseKey<'id, K> {
 }
 
 impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
-    /// Request the station's PTK for `peer` on the phase's station
-    /// interface, numbering its MPDUs by `step`. The key exists only once
-    /// the port's installation terminal returns it.
-    pub fn request<'p, P>(
-        phase: &mut P,
-        association: K::Association,
-        slot: <InterfaceKeys<'p, 'id, P> as KeyTypes<'id>>::PairwiseSlot,
-        peer: IndividualAddress,
-        key: Ccmp128Key,
-        step: CcmpPacketNumberStep,
-    ) -> PendingStationPairwiseKey<'id, K>
-    where
-        'id: 'p,
-        P: InterfacePhase<'p, 'id>,
-        InterfaceKeys<'p, 'id, P>: KeyTypes<
-                'id,
-                Association = K::Association,
-                PairwiseKey = K::PairwiseKey,
-                Identity = K::Identity,
-            >,
-    {
-        PendingStationPairwiseKey {
-            key: request_ccmp_pairwise_key(phase, &association, slot, peer, key, step),
-            association,
-        }
-    }
-
     /// The pending key of the installation the port's command issuer
     /// minted as `installation`
     /// ([`PortCommands::install_pairwise`](oer_protocols_ieee80211_contracts_port::PortCommands::install_pairwise)),
