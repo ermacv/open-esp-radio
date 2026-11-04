@@ -129,7 +129,7 @@ fn settings(host: Option<Ipv4Addr>) -> Vec<Setting> {
             ("firewall.oer_station_host_in.src", "*"),
             ("firewall.oer_station_host_in.src_ip", host.as_str()),
             ("firewall.oer_station_host_in.dest", NAME),
-            ("firewall.oer_station_host_in.proto", "tcp udp"),
+            ("firewall.oer_station_host_in.proto", "tcp udp icmp"),
             ("firewall.oer_station_host_in.family", "ipv4"),
             ("firewall.oer_station_host_in.target", "ACCEPT"),
             ("firewall.oer_station_host_out", "rule"),
@@ -137,7 +137,7 @@ fn settings(host: Option<Ipv4Addr>) -> Vec<Setting> {
             ("firewall.oer_station_host_out.src", NAME),
             ("firewall.oer_station_host_out.dest", "*"),
             ("firewall.oer_station_host_out.dest_ip", host.as_str()),
-            ("firewall.oer_station_host_out.proto", "tcp udp"),
+            ("firewall.oer_station_host_out.proto", "tcp udp icmp"),
             ("firewall.oer_station_host_out.family", "ipv4"),
             ("firewall.oer_station_host_out.target", "ACCEPT"),
         ] {
@@ -165,7 +165,7 @@ const SECTIONS: &[&str] = &[
     "firewall.oer_station_host_out",
 ];
 
-/// The station network, forwarding UDP and TCP to and from `host` when given.
+/// The station network, forwarding UDP, TCP and ICMP to and from `host` when given.
 pub fn render(host: Option<Ipv4Addr>) -> Result<String> {
     let mut script = String::from("set -e\n");
     for section in SECTIONS {
@@ -439,8 +439,8 @@ mod tests {
         ] {
             assert!(script.contains(line), "{line}");
         }
-        assert!(script.contains("'firewall.oer_station_host_in.proto=tcp udp'"));
-        assert!(script.contains("'firewall.oer_station_host_out.proto=tcp udp'"));
+        assert!(script.contains("'firewall.oer_station_host_in.proto=tcp udp icmp'"));
+        assert!(script.contains("'firewall.oer_station_host_out.proto=tcp udp icmp'"));
         // Reordered to the front after the rejections were.
         assert!(
             script.find("reorder firewall.oer_station_in=0").unwrap()
@@ -451,7 +451,7 @@ mod tests {
         let verify = verify_script("phy0-ap0", Some(host)).unwrap();
         assert!(verify.contains("grep -qF oer-station-host-out"));
         assert!(verify.contains("uci get firewall.oer_station_host_in.src_ip"));
-        assert!(verify.contains("= 'tcp udp'"));
+        assert!(verify.contains("= 'tcp udp icmp'"));
     }
 
     struct Fake {

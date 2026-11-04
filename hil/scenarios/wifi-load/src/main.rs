@@ -1010,6 +1010,7 @@ fn both_ways(cx: &mut Cx<'_>, name: &str, each_mbps: u64) -> Result<(), Failure>
 /// decides the case: a sparse link stays as quick as an idle one.
 fn sparse(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let path = Path::of(cx)?;
+    let mut over = Ok(());
     for shape in SPARSE {
         let offer = Offer {
             name: shape.name(),
@@ -1021,9 +1022,9 @@ fn sparse(cx: &mut Cx<'_>) -> Result<(), Failure> {
             ping: true,
         };
         let echoes = level(cx, &path, &offer)?;
-        ping_within_limit(&offer.name, &echoes)?;
+        over = over.and(ping_within_limit(&offer.name, &echoes));
     }
-    Ok(())
+    over
 }
 
 /// How long into an RX run the stop comes, and how long the leave may take:
