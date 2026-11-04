@@ -73,7 +73,7 @@ pub struct MacInterruptMask(u32);
 impl MacInterruptMask {
     /// Keep every MAC interrupt source disabled.
     pub const NONE: Self = Self(0x00000000);
-    /// Station mask: the cold receive image with HE BSS-color collision disabled until its consumer exists.
+    /// Station primary mask with TX queue collision disabled; INT1 is separate.
     pub const STATION: Self = Self(0x19a878e0);
 
     /// Combine reviewed writable values.

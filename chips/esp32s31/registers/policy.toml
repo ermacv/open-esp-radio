@@ -1522,8 +1522,8 @@ sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
 [[flag-domains.values]]
 name = "STATION"
 value = 0x19a878e0
-description = "Station mask: the cold receive image with HE BSS-color collision disabled until its consumer exists."
-sources = ["POLICY_STATION_BSS_COLOR_MASK"]
+description = "Station primary mask: the cold receive image with TX queue collision bit 8 disabled. Does not control the separate INT1 BSS-color event."
+sources = ["POLICY_STATION_TX_COLLISION_MASK"]
 
 [[flag-domains]]
 name = "WifiRxCsiControlMask"
@@ -3425,7 +3425,7 @@ sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
 name = "enable_station_mac_interrupts"
 register = "WIFI_MAC.ENABLE"
 value = 0x19a878e0
-sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "POLICY_STATION_BSS_COLOR_MASK"]
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "POLICY_STATION_TX_COLLISION_MASK"]
 
 [[fixed-register-images]]
 name = "prepare_bluetooth_interrupt_output"

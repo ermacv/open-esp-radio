@@ -286657,12 +286657,12 @@ pub mod wifi_mac {
         /// Positioned bits of `TX_COMPLETE`.
         pub const TX_COMPLETE_MASK: u32 = 0x80;
 
-        /// Width of `BSS_COLOR_COLLISION` in bits.
-        pub const BSS_COLOR_COLLISION_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BSS_COLOR_COLLISION`.
-        pub const BSS_COLOR_COLLISION_MAX: u32 = 0x1;
-        /// Positioned bits of `BSS_COLOR_COLLISION`.
-        pub const BSS_COLOR_COLLISION_MASK: u32 = 0x100;
+        /// Width of `TX_QUEUE_COLLISION` in bits.
+        pub const TX_QUEUE_COLLISION_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TX_QUEUE_COLLISION`.
+        pub const TX_QUEUE_COLLISION_MAX: u32 = 0x1;
+        /// Positioned bits of `TX_QUEUE_COLLISION`.
+        pub const TX_QUEUE_COLLISION_MASK: u32 = 0x100;
 
         /// Width of `BITS_9_10_OPAQUE` in bits.
         pub const BITS_9_10_OPAQUE_WIDTH: u32 = 2;
@@ -286812,9 +286812,9 @@ pub mod wifi_mac {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Enable for the HE BSS-color collision event.
+            /// Enable for the primary TX queue collision event serviced through lmacProcessCollisions. The separate HE BSS-color event uses INTERRUPT_1_STATUS bit 12. SOURCE: BLOB_MAC_PRIMARY_TX_COLLISION_IRQ_20261104.
             #[inline]
-            pub const fn bss_color_collision(self) -> bool {
+            pub const fn tx_queue_collision(self) -> bool {
                 (self.0 & 0x00000100) != 0
             }
 
@@ -286949,9 +286949,9 @@ pub mod wifi_mac {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// Enable for the HE BSS-color collision event.
+            /// Enable for the primary TX queue collision event serviced through lmacProcessCollisions. The separate HE BSS-color event uses INTERRUPT_1_STATUS bit 12. SOURCE: BLOB_MAC_PRIMARY_TX_COLLISION_IRQ_20261104.
             #[inline]
-            pub const fn bss_color_collision(&self) -> bool {
+            pub const fn tx_queue_collision(&self) -> bool {
                 (self.0 & 0x00000100) != 0
             }
 
@@ -287085,9 +287085,9 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BSS_COLOR_COLLISION`.
+            /// Set `TX_QUEUE_COLLISION`.
             #[inline]
-            pub fn set_bss_color_collision(&mut self, value: bool) -> &mut Self {
+            pub fn set_tx_queue_collision(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xfffffeff) | (u32::from(value) << 8);
                 self
             }
@@ -287320,12 +287320,12 @@ pub mod wifi_mac {
         /// Positioned bits of `TX_COMPLETE`.
         pub const TX_COMPLETE_MASK: u32 = 0x80;
 
-        /// Width of `BSS_COLOR_COLLISION` in bits.
-        pub const BSS_COLOR_COLLISION_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BSS_COLOR_COLLISION`.
-        pub const BSS_COLOR_COLLISION_MAX: u32 = 0x1;
-        /// Positioned bits of `BSS_COLOR_COLLISION`.
-        pub const BSS_COLOR_COLLISION_MASK: u32 = 0x100;
+        /// Width of `TX_QUEUE_COLLISION` in bits.
+        pub const TX_QUEUE_COLLISION_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TX_QUEUE_COLLISION`.
+        pub const TX_QUEUE_COLLISION_MAX: u32 = 0x1;
+        /// Positioned bits of `TX_QUEUE_COLLISION`.
+        pub const TX_QUEUE_COLLISION_MASK: u32 = 0x100;
 
         /// Width of `BITS_9_10_OPAQUE` in bits.
         pub const BITS_9_10_OPAQUE_WIDTH: u32 = 2;
@@ -287475,9 +287475,9 @@ pub mod wifi_mac {
                 (self.0 & 0x00000080) != 0
             }
 
-            /// HE BSS-color collision event.
+            /// Primary TX queue collision event. wDev_ProcessFiq tests bit 8 and posts lmacProcessCollisions; task service samples the per-queue collision bitmap before disabling and retrying affected queues. This event alone does not identify a queue or establish DMA detachment. HE BSS-color uses the separate INTERRUPT_1_STATUS bit 12. SOURCE: BLOB_MAC_PRIMARY_TX_COLLISION_IRQ_20261104.
             #[inline]
-            pub const fn bss_color_collision(self) -> bool {
+            pub const fn tx_queue_collision(self) -> bool {
                 (self.0 & 0x00000100) != 0
             }
 
@@ -312269,14 +312269,14 @@ pub mod wifi_mac {
             }
         }
 
-        /// The `BSS_COLOR_COLLISION` field.
+        /// The `TX_QUEUE_COLLISION` field.
         #[inline]
-        pub const fn bss_color_collision(&self) -> bool {
+        pub const fn tx_queue_collision(&self) -> bool {
             (self.0 & 0x00000100) != 0
         }
 
-        /// The snapshot without `BSS_COLOR_COLLISION` unless `keep`: it is then not acknowledged.
-        pub const fn retain_bss_color_collision(self, keep: bool) -> Self {
+        /// The snapshot without `TX_QUEUE_COLLISION` unless `keep`: it is then not acknowledged.
+        pub const fn retain_tx_queue_collision(self, keep: bool) -> Self {
             if keep {
                 self
             } else {

@@ -22,14 +22,14 @@ use crate::ieee80211::registers::{Chip, MacInterruptMask, MacPlacement, WifiRadi
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MacInterruptEvents {
     pub(crate) tx_complete: bool,
-    pub(crate) bss_color_collision: bool,
+    pub(crate) tx_queue_collision: bool,
     pub(crate) rx_success: bool,
     pub(crate) tx_timeout: bool,
 }
 
 impl MacInterruptEvents {
     pub const TX_COMPLETE: Self = Self::from_causes(true, false, false, false);
-    pub const BSS_COLOR_COLLISION: Self = Self::from_causes(false, true, false, false);
+    pub const TX_QUEUE_COLLISION: Self = Self::from_causes(false, true, false, false);
     pub const RX_SUCCESS: Self = Self::from_causes(false, false, true, false);
     pub const TX_TIMEOUT: Self = Self::from_causes(false, false, false, true);
 
@@ -39,13 +39,13 @@ impl MacInterruptEvents {
 
     pub const fn from_causes(
         tx_complete: bool,
-        bss_color_collision: bool,
+        tx_queue_collision: bool,
         rx_success: bool,
         tx_timeout: bool,
     ) -> Self {
         Self {
             tx_complete,
-            bss_color_collision,
+            tx_queue_collision,
             rx_success,
             tx_timeout,
         }
@@ -54,7 +54,7 @@ impl MacInterruptEvents {
     pub const fn union(self, other: Self) -> Self {
         Self::from_causes(
             self.tx_complete || other.tx_complete,
-            self.bss_color_collision || other.bss_color_collision,
+            self.tx_queue_collision || other.tx_queue_collision,
             self.rx_success || other.rx_success,
             self.tx_timeout || other.tx_timeout,
         )
@@ -62,21 +62,21 @@ impl MacInterruptEvents {
 
     pub const fn contains(self, other: Self) -> bool {
         (!other.tx_complete || self.tx_complete)
-            && (!other.bss_color_collision || self.bss_color_collision)
+            && (!other.tx_queue_collision || self.tx_queue_collision)
             && (!other.rx_success || self.rx_success)
             && (!other.tx_timeout || self.tx_timeout)
     }
 
     pub const fn is_empty(self) -> bool {
-        !self.tx_complete && !self.bss_color_collision && !self.rx_success && !self.tx_timeout
+        !self.tx_complete && !self.tx_queue_collision && !self.rx_success && !self.tx_timeout
     }
 
     pub const fn tx_complete(self) -> bool {
         self.tx_complete
     }
 
-    pub const fn bss_color_collision(self) -> bool {
-        self.bss_color_collision
+    pub const fn tx_queue_collision(self) -> bool {
+        self.tx_queue_collision
     }
 
     pub const fn rx_success(self) -> bool {
@@ -213,7 +213,7 @@ impl MacInterruptSnapshot {
                 .retain_rx_associated_auxiliary_5(selected.auxiliary_5)
                 .retain_bit_6_opaque(false)
                 .retain_tx_complete(false)
-                .retain_bss_color_collision(false)
+                .retain_tx_queue_collision(false)
                 .retain_bits_9_10_opaque(false)
                 .retain_watchdog(false)
                 .retain_bit_12_opaque(false)
@@ -238,7 +238,7 @@ impl MacInterruptSnapshot {
         let sample = &self.0;
         let work_events = MacInterruptEvents::from_causes(
             sample.tx_complete(),
-            sample.bss_color_collision(),
+            sample.tx_queue_collision(),
             sample.rx_success(),
             sample.tx_timeout(),
         );
@@ -436,7 +436,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 pub enum MacInterruptEnableState {
     /// Every interrupt-enable field is clear.
     Disabled,
-    /// Station mask with the independent HE BSS-color event disabled.
+    /// Station primary mask with TX queue collision disabled.
     Station,
     /// A field combination outside the reviewed writable images.
     Unknown,
@@ -446,9 +446,10 @@ pub enum MacInterruptEnableState {
 /// read-modify-write that sets every field: the vendor's whole-word store.
 ///
 /// SOURCE: `BLOB_LIBPP_HAL_ENABLE_MAC` (`mask_mac_interrupts`, the zero
-/// image) and `BLOB_LIBPP_HAL_INIT_TAIL`, `POLICY_STATION_BSS_COLOR_MASK`
+/// image) and `BLOB_LIBPP_HAL_INIT_TAIL`, `POLICY_STATION_TX_COLLISION_MASK`
 /// (`enable_station_mac_interrupts`, the station image `0x19a8_78e0`: the
-/// cold receive image with the HE BSS-color event disabled).
+/// cold receive image with TX queue collision bit 8 disabled). The separate
+/// INT1 BSS-color source is outside this primary mask.
 /// [`MacInterruptMask`] holds only those two images.
 fn publish_mac_interrupt_mask<P: Placement>(
     interrupt: &mut WifiMacInterrupt<P>,
@@ -460,7 +461,7 @@ fn publish_mac_interrupt_mask<P: Placement>(
             .set_rx_associated_auxiliary_5(station)
             .set_bit_6_opaque(station)
             .set_tx_complete(station)
-            .set_bss_color_collision(false)
+            .set_tx_queue_collision(false)
             .set_bits_9_10_opaque(Bits::constant::<0>())
             .set_watchdog(station)
             .set_bit_12_opaque(station)
@@ -508,7 +509,7 @@ fn observe_mac_interrupt_enable<P: Placement>(
 ) -> MacInterruptEnableState {
     let enable = interrupt.read_enable();
     let fixed_clear = enable.bits_0_4_opaque().get() == 0
-        && !enable.bss_color_collision()
+        && !enable.tx_queue_collision()
         && enable.bits_9_10_opaque().get() == 0
         && !enable.sta_beacon_filter()
         && enable.bits_16_18_opaque().get() == 0

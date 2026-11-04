@@ -123,6 +123,21 @@ SND20 configuration also have function-derived names. Their evidence is in
 [`blobray-mac-rx-controls.toml`](evidence/blobray-mac-rx-controls.toml); timing
 units and the internal CCA-byte format remain unestablished.
 
+## MAC collision interrupt banks
+
+Primary `ENABLE/STATUS.TX_QUEUE_COLLISION` is bit 8. The vendor FIQ posts
+TX queue collision service, whose task inspects the per-queue collision
+bitmap before selecting queues for retry processing. This event alone
+does not identify a queue, prove DMA detachment or establish automatic
+hardware retries. HE BSS-color collision instead uses secondary INT1 bit
+12. The pinned local paths and their coverage limits are recorded in
+[`blobray-mac-tx-collision-irq.toml`](evidence/blobray-mac-tx-collision-irq.toml).
+
+The station primary mask remains `0x19a878e0`, with TX queue collision
+disabled. HE initialization separately enables INT1 BSS-color; the open
+IRQ path does not yet service INT1. The primary mask cannot suppress that
+secondary source. On-air consequences have not been measured.
+
 ## MAC key material and receive-crypto boundaries
 
 `ENTRY_KEY_WORD_4..7` hold bytes 16..31 of the inspected GCMP-256 and

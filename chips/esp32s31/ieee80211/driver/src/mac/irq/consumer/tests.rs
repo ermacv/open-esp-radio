@@ -1,7 +1,7 @@
 extern crate std;
 
 use super::*;
-use crate::mac::irq::{EVENT_BSS_COLOR_COLLISION, EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
+use crate::mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_QUEUE_COLLISION, EVENT_TX_TIMEOUT};
 use core::{future::Future, pin::pin, task::Waker};
 use std::{
     sync::{Arc, atomic::AtomicUsize},
@@ -32,7 +32,7 @@ fn finite_batch_preserves_rx_before_tx_under_continuous_publication() {
         IrqWork::RxSuccess,
         IrqWork::TxComplete,
         IrqWork::TxTimeout,
-        IrqWork::BssColorCollision,
+        IrqWork::TxQueueCollision,
     ] {
         publisher.publish(EVENT_RX_SUCCESS);
         assert_eq!(batch.next(), Some(expected));
@@ -123,7 +123,7 @@ fn publication_before_registration_and_after_pending_are_both_durable() {
     assert!(consumer.poll_batch(&mut cx).is_ready());
     assert!(consumer.poll_batch(&mut cx).is_pending());
     // Only the atomic raiser crosses threads; the owner performs delivery.
-    std::thread::spawn(move || raiser.raise(EVENT_TX_TIMEOUT | EVENT_BSS_COLOR_COLLISION))
+    std::thread::spawn(move || raiser.raise(EVENT_TX_TIMEOUT | EVENT_TX_QUEUE_COLLISION))
         .join()
         .expect("raising thread");
     assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
@@ -134,7 +134,7 @@ fn publication_before_registration_and_after_pending_are_both_durable() {
     };
     assert_eq!(
         batch.collect::<std::vec::Vec<_>>(),
-        [IrqWork::TxTimeout, IrqWork::BssColorCollision]
+        [IrqWork::TxTimeout, IrqWork::TxQueueCollision]
     );
 }
 
@@ -231,7 +231,7 @@ fn diagnostic_epochs_count_empty_to_pending_transitions_not_each_tx_fact() {
     for events in [
         EVENT_TX_COMPLETE,
         EVENT_TX_TIMEOUT,
-        EVENT_BSS_COLOR_COLLISION,
+        EVENT_TX_QUEUE_COLLISION,
         EVENT_RX_SUCCESS,
     ] {
         publisher
@@ -251,7 +251,7 @@ fn diagnostic_epochs_count_empty_to_pending_transitions_not_each_tx_fact() {
             IrqWork::RxSuccess,
             IrqWork::TxComplete,
             IrqWork::TxTimeout,
-            IrqWork::BssColorCollision,
+            IrqWork::TxQueueCollision,
         ]
     );
     publisher
@@ -333,7 +333,7 @@ fn masked_is_published_once_and_survives_only_one_batch() {
             IrqWork::RxSuccess,
             IrqWork::TxComplete,
             IrqWork::TxTimeout,
-            IrqWork::BssColorCollision,
+            IrqWork::TxQueueCollision,
         ]
     );
     assert!(consumer.take_batch().unwrap().is_empty());

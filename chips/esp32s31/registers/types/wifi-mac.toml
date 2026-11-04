@@ -2415,8 +2415,8 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[review.entity."ENABLE.BSS_COLOR_COLLISION"]
-sources = ["BLOB_LIBPP_HAL_MAC_COLOR_COLLISION_ISR", "BLOB_LIBPP_HAL_INIT_TAIL"]
+[review.entity."ENABLE.TX_QUEUE_COLLISION"]
+sources = ["BLOB_MAC_PRIMARY_TX_COLLISION_IRQ_20261104", "BLOB_LIBPP_HAL_INIT_TAIL"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -2518,8 +2518,8 @@ provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
 
-[review.entity."STATUS.BSS_COLOR_COLLISION"]
-sources = ["BLOB_LIBPP_WDEV_PROCESS_FIQ", "BLOB_LIBPP_HAL_MAC_COLOR_COLLISION_ISR"]
+[review.entity."STATUS.TX_QUEUE_COLLISION"]
+sources = ["BLOB_MAC_PRIMARY_TX_COLLISION_IRQ_20261104"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"
@@ -10020,10 +10020,10 @@ class = "plain"
 description = "Enable for the TX-complete event."
 
 [[registers.fields]]
-name = "BSS_COLOR_COLLISION"
+name = "TX_QUEUE_COLLISION"
 bits = "8"
 class = "plain"
-description = "Enable for the HE BSS-color collision event."
+description = "Enable for the primary TX queue collision event serviced through lmacProcessCollisions. The separate HE BSS-color event uses INTERRUPT_1_STATUS bit 12. SOURCE: BLOB_MAC_PRIMARY_TX_COLLISION_IRQ_20261104."
 
 [[registers.fields]]
 name = "BITS_9_10_OPAQUE"
@@ -10180,10 +10180,10 @@ class = "read-only"
 description = "At least one hardware TX queue completed."
 
 [[registers.fields]]
-name = "BSS_COLOR_COLLISION"
+name = "TX_QUEUE_COLLISION"
 bits = "8"
 class = "read-only"
-description = "HE BSS-color collision event."
+description = "Primary TX queue collision event. wDev_ProcessFiq tests bit 8 and posts lmacProcessCollisions; task service samples the per-queue collision bitmap before disabling and retrying affected queues. This event alone does not identify a queue or establish DMA detachment. HE BSS-color uses the separate INTERRUPT_1_STATUS bit 12. SOURCE: BLOB_MAC_PRIMARY_TX_COLLISION_IRQ_20261104."
 
 [[registers.fields]]
 name = "BITS_9_10_OPAQUE"

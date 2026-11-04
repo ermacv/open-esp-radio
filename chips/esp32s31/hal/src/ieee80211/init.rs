@@ -42,11 +42,12 @@ use self::interface_address::program_cold_receive_addresses;
 
 pub use crate::types::{MacInterruptMask, MacTxPowerPair, MacTxPowerTable};
 
-/// Station event mask, with HE BSS-color collision disabled.
+/// Station primary event mask, with TX queue collision disabled.
 ///
 /// The radio interrupt handler publishes it when it activates an epoch; the
-/// bit policy itself remains part of the MAC lifecycle. Queue collisions are sampled from TX_COMMON;
-/// the independent HE color event has no station consumer yet.
+/// bit policy itself remains part of the MAC lifecycle. Queue collisions are
+/// sampled from TX_COMMON. The separate INT1 HE color source is enabled by HE
+/// initialization and is not controlled by this mask.
 pub const MAC_STATION_INTERRUPT_MASK: MacInterruptMask = MacInterruptMask::STATION;
 
 /// The Wi-Fi MAC reset pulse, which runs through the shared radio owner.
