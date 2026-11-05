@@ -230,6 +230,17 @@ impl TxHardware for DetachingCompletionHardware {
         }
     }
 
+    fn start_bound_he_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+        &mut self,
+        publication: D,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
+    }
+
     fn take_tx_completion(
         &mut self,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
