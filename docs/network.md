@@ -137,8 +137,9 @@ station (P2)
 
 Ordinary and aggregate service transitions are synchronous. A timeout abort
 keeps the transaction with a settle deadline; storage is released only after
-hardware detach, or quarantined if detach fails; early wakes and late
-completions cannot bypass the settle interval.
+hardware detach or the completion of a PPDU the abort found on the air, or
+quarantined if detach fails; early wakes and late completions cannot bypass
+the settle interval.
 
 ## RX and wakes
 

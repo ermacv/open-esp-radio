@@ -84,6 +84,8 @@ struct Observed {
     /// The next publication ends in the hardware's TX-timeout edge instead
     /// of a completion.
     timeout_edge: bool,
+    /// An abort finds every queue's VALID clear: the hardware took the PPDU.
+    taken_by_air: bool,
     /// Publications are aggregates: each completes with this BlockAck's
     /// starting sequence, bitmap and whether it arrived, beside its status.
     block_ack: Option<(u16, u64, bool)>,
@@ -355,6 +357,7 @@ impl Device<512> for TestDevice {
                 "the driver must return to its executor"
             );
         }
+        self.hardware.taken_by_air = [observed.taken_by_air; 4];
         drop(observed);
         let publications = self.hardware.publications();
         self.observed.borrow_mut().backoffs = self

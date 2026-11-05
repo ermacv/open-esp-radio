@@ -205,7 +205,6 @@ impl DiagnosticPath for TxError {
             Self::QueueActive => path.name("QueueActive"),
             Self::Stale => path.name("Stale"),
             Self::DetachFailed => path.name("DetachFailed"),
-            Self::TimeoutNotPending => path.name("TimeoutNotPending"),
             Self::ResetRequired => path.name("ResetRequired"),
             Self::Completion(fault) => {
                 path.name("Completion");
@@ -299,7 +298,6 @@ impl DiagnosticPath for AggregateTxError {
                 path.truncated();
             }
             Self::DetachFailed => path.name("DetachFailed"),
-            Self::TimeoutNotPending => path.name("TimeoutNotPending"),
             Self::ResetRequired => path.name("ResetRequired"),
             Self::DmaStorage(error) => {
                 path.name("DmaStorage");

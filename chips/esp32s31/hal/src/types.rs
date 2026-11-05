@@ -27,10 +27,10 @@ pub use crate::ieee80211::registers::{
     MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxDmaSnapshot,
     MacRxHangStatistics, MacRxHangStatisticsDelta, MacRxPrimaryStatistics,
     MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot, MacSppMode, MacStaApReceivePlan,
-    MacStaPolicyMode, MacStaReceivePolicySnapshot, MacTxCompletionObservation, MacTxControlFrame,
-    MacTxDetachOutcome, MacTxDetachReason, MacTxPowerPair, MacTxPowerTable, MacTxProtection,
-    MacTxPtiCount, MacTxPtiProgram, MacTxQueueDetached, MacTxQueueIndex, MacTxStatisticsSnapshot,
-    RxBlockAckEntrySnapshot, StaTbttSchedule, TxBlockAckPayload,
+    MacStaPolicyMode, MacStaReceivePolicySnapshot, MacTxAbortCause, MacTxCompletionObservation,
+    MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason, MacTxPowerPair, MacTxPowerTable,
+    MacTxProtection, MacTxPtiCount, MacTxPtiProgram, MacTxQueueDetached, MacTxQueueIndex,
+    MacTxStatisticsSnapshot, RxBlockAckEntrySnapshot, StaTbttSchedule, TxBlockAckPayload,
 };
 
 pub use crate::phy::restore::{

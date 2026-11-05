@@ -873,14 +873,35 @@ fn contexts<Id: radio::SlotIdentity>(events: &[Event<'_, Id>]) -> Vec<usize> {
 }
 
 #[test]
-fn a_publication_past_its_bound_without_a_timeout_edge_faults_and_keeps_its_owners() {
-    // No completion and no TX-timeout edge: the port cannot prove its DMA
-    // stopped, so it keeps the operation's owners in its quarantine and
-    // answers every later call with a named fault; the hardware edge is
-    // what returns a timed-out publication.
+fn a_publication_past_its_bound_without_a_timeout_edge_ends_and_returns_its_owners() {
+    // The air held the queue past its own timeout: the bound cancels the
+    // frame, a handled end, and the port goes on.
     with_access(|fixture, access| {
         fixture.start();
         fixture.hold_air(true);
+        fixture.submit_mpdu(Spec::open(1));
+        fixture.turns(1);
+        assert_eq!(fixture.publications(), 1);
+        // The bound, then the abort's settle.
+        for _ in 0..2 {
+            let at = fixture.port.deadline().expect("the frame's deadline");
+            fixture.advance(at.saturating_duration_since(fixture.now()));
+            fixture.turns(1);
+        }
+        assert_eq!(fixture.port.fault(), None);
+        assert_eq!(fixture.events(access).len(), 1, "the owners come back");
+    });
+}
+
+#[test]
+fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keeps_its_owners() {
+    // No completion after the abort found the PPDU on the air: the port
+    // cannot prove its DMA stopped, so it keeps the operation's owners in
+    // its quarantine and answers every later call with a named fault.
+    with_access(|fixture, access| {
+        fixture.start();
+        fixture.hold_air(true);
+        fixture.observed.borrow_mut().taken_by_air = true;
         fixture.submit_mpdu(Spec::open(1));
         fixture.turns(1);
         assert_eq!(fixture.publications(), 1);
@@ -903,7 +924,7 @@ fn a_publication_past_its_bound_without_a_timeout_edge_faults_and_keeps_its_owne
                 break;
             }
         }
-        let fault = fault.expect("the publication's bound ends in a named fault");
+        let fault = fault.expect("the publication's last bound ends in a named fault");
         assert_eq!(
             fault,
             Fault::Core(crate::lower_mac::LowerMacFault::Tx(

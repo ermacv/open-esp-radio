@@ -25,7 +25,8 @@ use crate::mac::tx::{
 };
 use oer_chips_esp32s31_hal::types::{
     MacHeTbTidLimit, MacHeTid, MacHtAmpduCompletionObservation, MacHtTxProgram, MacLegacyTxProgram,
-    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
+    MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
+    MacTxQueueDetached,
 };
 use oer_portable_memory::{
     HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma,
@@ -80,6 +81,7 @@ impl TxHardware for CompletionHardware {
     fn begin_tx_timeout_abort(
         &mut self,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        _: MacTxAbortCause,
     ) -> bool {
         false
     }
@@ -215,6 +217,7 @@ impl TxHardware for DetachingCompletionHardware {
     fn begin_tx_timeout_abort(
         &mut self,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        _: MacTxAbortCause,
     ) -> bool {
         self.abort_requested = true;
         true
@@ -580,7 +583,11 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
             )
             .unwrap();
 
-        assert!(owner.begin_timeout_abort(&mut hardware, cookie).unwrap());
+        assert!(
+            owner
+                .begin_timeout_abort(&mut hardware, cookie, MacTxAbortCause::TimeoutEdge)
+                .unwrap()
+        );
         assert!(hardware.abort_requested);
         assert_eq!(owner.held_backing_count(), 1);
         assert_eq!(pool.claimed_slots(), 1);

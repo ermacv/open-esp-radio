@@ -237,12 +237,10 @@ fn no_completion_is_taken_while_none_is_pending() {
             .take_mac_block_ack_completion(MacTxQueueIndex::constant::<0>())
             .is_none()
     );
-    assert!(
-        !memory
-            .owners()
-            .registers
-            .begin_mac_tx_timeout_abort(MacTxQueueIndex::constant::<0>())
-    );
+    assert!(!memory.owners().registers.begin_mac_tx_timeout_abort(
+        MacTxQueueIndex::constant::<0>(),
+        MacTxAbortCause::TimeoutEdge
+    ));
     assert!(before.changes(&memory).is_empty());
 }
 
@@ -258,6 +256,63 @@ fn a_completed_queue_detaches_with_its_descriptor_head() {
     assert_eq!(outcome, MacTxDetachOutcome::Detached(true));
     // Only CONTROL lost ENABLE and VALID.
     assert_eq!(before.changes(&memory).len(), 1);
+}
+
+#[test]
+fn a_forced_abort_begins_without_a_timeout_edge() {
+    let before = HostWords::filled(0);
+    let mut memory = before.clone();
+    assert!(
+        memory
+            .owners()
+            .registers
+            .begin_mac_tx_timeout_abort(MacTxQueueIndex::constant::<0>(), MacTxAbortCause::Forced)
+    );
+    assert_eq!(before.changes(&memory).len(), 1);
+}
+
+#[test]
+fn an_abort_of_a_valid_queue_detaches_without_a_timeout_edge() {
+    let mut memory = HostWords::filled(0);
+    let queue = MacTxQueueIndex::constant::<0>();
+    memory
+        .owners()
+        .registers
+        .mac
+        .wifi_mac_tx_queue_control
+        .modify_control_n(queue::bank(queue), |writer| {
+            writer.set_valid(true).set_enable(true);
+        });
+    let outcome =
+        memory
+            .owners()
+            .registers
+            .with_detached_mac_tx(queue, MacTxDetachReason::Timeout, |_| ());
+    assert_eq!(outcome, MacTxDetachOutcome::Detached(()));
+}
+
+#[test]
+fn an_abort_that_finds_valid_clear_leaves_the_queue_to_its_completion() {
+    let mut memory = HostWords::filled(0);
+    let queue = MacTxQueueIndex::constant::<0>();
+    memory
+        .owners()
+        .registers
+        .mac
+        .wifi_mac_tx_queue_control
+        .modify_control_n(queue::bank(queue), |writer| {
+            writer.set_enable(true);
+        });
+    let outcome =
+        memory
+            .owners()
+            .registers
+            .with_detached_mac_tx(queue, MacTxDetachReason::Timeout, |_| ());
+    assert_eq!(outcome, MacTxDetachOutcome::OnAir);
+    assert!(queue::queue_enabled(
+        &memory.owners().registers.mac.wifi_mac_tx_queue_control,
+        queue
+    ));
 }
 
 #[test]

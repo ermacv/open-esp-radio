@@ -9,7 +9,7 @@
 //! use the independent valid-BlockAck observation; raw TX status alone cannot
 //! prove either receipt or absence of the solicited response.
 
-use core::pin::Pin;
+use core::{ops::ControlFlow, pin::Pin};
 use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
 use oer_portable_time::{Clock, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
@@ -18,15 +18,15 @@ use crate::mac::{
     edca::EdcaContentionParameters,
     tx::{
         CompletionObservation, HeSmpduTxConfig, HtTxConfig, LegacyTxConfig, LegacyTxQueue,
-        MacLegacyTxResponse, TxCompletion, TxControlFrame, TxCookie, TxDmaState, TxError,
-        TxHardware, TxPhyRate, TxSlot, TxSlotAccess, TxSlotFree,
+        MacLegacyTxResponse, TxAbortEnd, TxCompletion, TxControlFrame, TxCookie, TxDmaState,
+        TxError, TxHardware, TxPhyRate, TxSlot, TxSlotAccess, TxSlotFree,
         ampdu::HtBlockAckObservation,
         protection::{TxProtection, TxProtectionDecision, TxReceiver},
         runtime::WifiTxRuntimePolicy,
     },
 };
 pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxResources};
-use oer_chips_esp32s31_hal::types::MacInterface;
+use oer_chips_esp32s31_hal::types::{MacInterface, MacTxAbortCause};
 use oer_protocols_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
 use oer_protocols_ieee80211_contracts_port::{ManagementTxPlan, VifRole};
 use oer_protocols_ieee80211_wire::frame::FrameControl;
@@ -524,6 +524,9 @@ impl ActiveTx {
 enum OrdinaryTxPhase {
     Published,
     AbortSettling,
+    /// An abort found the PPDU on the air: only its completion ends it, and
+    /// the deadline is the last one.
+    PastAbort,
 }
 
 /// Unique ordinary-MPDU descriptor and retry owner shared by protocol phases.
@@ -981,8 +984,9 @@ where
     /// expired publication deadline) the timeout abort. An edge its queue does
     /// not show leaves the attempt pending; unlike [`OrdinaryTxActive::service`], several
     /// simultaneous causes are not a fault, since they may belong to different
-    /// queues. An expired deadline without the queue's timeout edge still
-    /// quarantines the descriptor.
+    /// queues. An expired deadline aborts without the queue's timeout edge;
+    /// one past an abort that left the PPDU on the air quarantines the
+    /// descriptor.
     ///
     /// The timeout abort forces the MAC-wide CCA until its detach releases
     /// it, so `may_begin_timeout_abort` must be `false` while another queue's
@@ -1038,9 +1042,10 @@ where
     ) -> Result<Step, OrdinaryTxError> {
         use crate::mac::irq::EVENT_TX_TIMEOUT;
 
-        if matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
-            return self.service_abort_settle(hardware, active);
-        }
+        let active = match self.service_abort_settle(hardware, active)? {
+            ControlFlow::Continue(active) => active,
+            ControlFlow::Break(step) => return Ok(step),
+        };
         let events = match wake {
             WifiTxWake::Interrupt { events } => events,
             WifiTxWake::Deadline => 0,
@@ -1065,17 +1070,21 @@ where
             return self.finish_aborted_attempt(hardware, active, false);
         }
         let expired = self.timer.now() >= active.deadline;
-        if (events & EVENT_TX_TIMEOUT != 0 || expired) && may_begin_timeout_abort {
-            if self
-                .slot
-                .as_mut()
-                .begin_timeout_abort(hardware, active.cookie)?
-            {
-                return self.start_abort_settle(active);
-            }
+        if matches!(active.phase, OrdinaryTxPhase::PastAbort) {
             if expired {
                 return self.reset_required(active, TxResetReason::ExecutorDeadline);
             }
+            return Ok(Step::Pending(active));
+        }
+        if (events & EVENT_TX_TIMEOUT != 0 || expired)
+            && may_begin_timeout_abort
+            && self.slot.as_mut().begin_timeout_abort(
+                hardware,
+                active.cookie,
+                abort_cause(expired),
+            )?
+        {
+            return self.start_abort_settle(active);
         }
         Ok(Step::Pending(active))
     }
@@ -1254,9 +1263,10 @@ where
         active: ActiveTx,
         wake: WifiTxWake,
     ) -> Result<Step, OrdinaryTxError> {
-        if matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
-            return self.service_abort_settle(hardware, active);
-        }
+        let active = match self.service_abort_settle(hardware, active)? {
+            ControlFlow::Continue(active) => active,
+            ControlFlow::Break(step) => return Ok(step),
+        };
         let interrupt_events = match wake {
             WifiTxWake::Interrupt { events } => events,
             WifiTxWake::Deadline => 0,
@@ -1297,18 +1307,19 @@ where
             return self.reset_required(active, TxResetReason::CompletionInterruptWithoutState);
         }
         let expired = self.timer.now() >= active.deadline;
+        if matches!(active.phase, OrdinaryTxPhase::PastAbort) {
+            if expired {
+                return self.reset_required(active, TxResetReason::ExecutorDeadline);
+            }
+            return Ok(Step::Pending(active));
+        }
         if tx_events == EVENT_TX_TIMEOUT || expired {
-            if !self
-                .slot
-                .as_mut()
-                .begin_timeout_abort(hardware, active.cookie)?
-            {
-                let reason = if expired {
-                    TxResetReason::ExecutorDeadline
-                } else {
-                    TxResetReason::TimeoutInterruptWithoutState
-                };
-                return self.reset_required(active, reason);
+            if !self.slot.as_mut().begin_timeout_abort(
+                hardware,
+                active.cookie,
+                abort_cause(expired),
+            )? {
+                return self.reset_required(active, TxResetReason::TimeoutInterruptWithoutState);
             }
             return self.start_abort_settle(active);
         }
@@ -1358,9 +1369,10 @@ where
         hardware: &mut H,
         active: ActiveTx,
     ) -> Result<Step, OrdinaryTxError> {
-        if matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
-            return self.service_abort_settle(hardware, active);
-        }
+        let active = match self.service_abort_settle(hardware, active)? {
+            ControlFlow::Continue(active) => active,
+            ControlFlow::Break(step) => return Ok(step),
+        };
         if let Some(event) = self.acknowledge_completion(hardware, &active)? {
             match event {
                 CompletionObservation::Observed((completion, block_ack)) => {
@@ -1373,15 +1385,19 @@ where
                 CompletionObservation::NoEffect => {}
             }
         }
+        let expired = self.timer.now() >= active.deadline;
+        if matches!(active.phase, OrdinaryTxPhase::PastAbort) {
+            if expired {
+                return self.reset_required(active, TxResetReason::ExecutorDeadline);
+            }
+            return Ok(Step::Pending(active));
+        }
         if self
             .slot
             .as_mut()
-            .begin_timeout_abort(hardware, active.cookie)?
+            .begin_timeout_abort(hardware, active.cookie, abort_cause(expired))?
         {
             return self.start_abort_settle(active);
-        }
-        if self.timer.now() >= active.deadline {
-            return self.reset_required(active, TxResetReason::ExecutorDeadline);
         }
         Ok(Step::Pending(active))
     }
@@ -1425,20 +1441,40 @@ where
         Ok(Step::Pending(active))
     }
 
+    /// Serve a settling abort; [`ControlFlow::Continue`] hands on an attempt
+    /// with no abort settling, whose completion may already have come.
     fn service_abort_settle<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        active: ActiveTx,
-    ) -> Result<Step, OrdinaryTxError> {
+        mut active: ActiveTx,
+    ) -> Result<ControlFlow<Step, ActiveTx>, OrdinaryTxError> {
+        if !matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
+            return Ok(ControlFlow::Continue(active));
+        }
         // Late completion and repeated IRQs cannot bypass the hardware settle
         // interval. Abort detach, not completion acknowledgement, owns release.
-        if self.timer.now() < active.deadline {
-            return Ok(Step::Pending(active));
+        let now = self.timer.now();
+        if now < active.deadline {
+            return Ok(ControlFlow::Break(Step::Pending(active)));
         }
-        self.slot
+        match self
+            .slot
             .as_mut()
-            .finish_timeout_abort(hardware, active.cookie)?;
-        self.finish_aborted_attempt(hardware, active, true)
+            .finish_timeout_abort(hardware, active.cookie)?
+        {
+            TxAbortEnd::Detached => self
+                .finish_aborted_attempt(hardware, active, true)
+                .map(ControlFlow::Break),
+            TxAbortEnd::OnAir => {
+                let Some(deadline) = now.checked_add(active.completion_timeout) else {
+                    self.slot.as_mut().require_reset(active.cookie)?;
+                    return Err(OrdinaryTxError::DeadlineOverflow);
+                };
+                active.phase = OrdinaryTxPhase::PastAbort;
+                active.deadline = deadline;
+                Ok(ControlFlow::Continue(active))
+            }
+        }
     }
 
     fn finish_completion<H: TxHardware>(
@@ -1638,6 +1674,7 @@ where
         active.protection = protection;
         active.cookie = cookie;
         active.deadline = deadline;
+        active.phase = OrdinaryTxPhase::Published;
         Ok(())
     }
 
@@ -1820,6 +1857,15 @@ enum Step {
 }
 
 /// Return to the executor once, then complete.
+/// What begins the abort of a publication past its deadline or not.
+const fn abort_cause(expired: bool) -> MacTxAbortCause {
+    if expired {
+        MacTxAbortCause::Forced
+    } else {
+        MacTxAbortCause::TimeoutEdge
+    }
+}
+
 fn yield_once() -> impl Future<Output = ()> {
     let mut yielded = false;
     core::future::poll_fn(move |context| {

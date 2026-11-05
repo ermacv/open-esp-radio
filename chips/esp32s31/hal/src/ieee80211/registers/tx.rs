@@ -829,15 +829,29 @@ impl MacHtAmpduCompletionObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacTxDetachReason {
     Collision,
+    /// A settled abort, whichever [`MacTxAbortCause`] began it.
     Timeout,
     Completed,
+}
+
+/// What begins the abort of a published queue.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MacTxAbortCause {
+    /// The queue's own timeout edge; without it the abort does not begin.
+    TimeoutEdge,
+    /// The caller gave up on the queue: the air can hold it past its
+    /// programmed timeout without that edge, so the abort needs none.
+    Forced,
 }
 
 /// Result of one finite queue-detach transaction.
 #[derive(Debug, Eq, PartialEq)]
 pub enum MacTxDetachOutcome<T> {
-    /// The requested collision/timeout edge was not pending.
+    /// The requested collision edge was not pending.
     NoEvent,
+    /// The abort found VALID already clear and no proof the queue let go:
+    /// it keeps its descriptors until its completion ends them.
+    OnAir,
     /// The edge existed, but queue disable/invalid readback did not converge.
     Failed,
     /// Queue ownership was returned and the callback consumed its proof.
@@ -1823,9 +1837,18 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         })
     }
 
-    pub fn begin_mac_tx_timeout_abort(&mut self, queue: MacTxQueueIndex) -> bool {
+    /// Force CCA for the abort of `queue`; `false` leaves every register
+    /// untouched when a [`MacTxAbortCause::TimeoutEdge`] has no edge.
+    ///
+    /// SOURCE: `libpp[lmac.o]::lmacStopTransmit` forces CCA to three before
+    /// its 16 us delay whatever the queue's state.
+    pub fn begin_mac_tx_timeout_abort(
+        &mut self,
+        queue: MacTxQueueIndex,
+        cause: MacTxAbortCause,
+    ) -> bool {
         let common = &mut self.mac.wifi_mac_tx_common;
-        if !queue::timeout_pending(common, queue) {
+        if cause == MacTxAbortCause::TimeoutEdge && !queue::timeout_pending(common, queue) {
             return false;
         }
         let _ = queue::set_cca_force(common, 3);
@@ -1859,16 +1882,28 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 queue::acknowledge_collision(common, queue);
             }
             MacTxDetachReason::Timeout => {
-                if !queue::timeout_pending(common, queue) {
-                    return MacTxDetachOutcome::NoEvent;
-                }
+                // SOURCE: complete `libpp[lmac.o]::lmacStopTransmit` samples
+                // VALID, clears it, releases CCA and disables only a queue
+                // that was still valid.
                 let was_valid = queue::queue_valid(queue_control, queue);
                 queue::invalidate_queue(queue_control, queue);
                 let _ = queue::set_cca_force(common, 0);
                 if was_valid {
                     queue::disable_queue(queue_control, queue);
                 }
-                queue::acknowledge_timeout(common, queue);
+                // Sampled after the disable: an edge rising until then would
+                // otherwise stay for the queue's next publication.
+                let timed_out = queue::timeout_pending(common, queue);
+                if timed_out {
+                    queue::acknowledge_timeout(common, queue);
+                }
+                // The hardware took the PPDU before CCA was forced. The
+                // vendor's branch proves no detach, so only the queue's own
+                // completion, or its own timeout, returns the descriptors.
+                if !was_valid && (!timed_out || queue::queue_enabled(queue_control, queue)) {
+                    oer_portable_riscv::fence();
+                    return MacTxDetachOutcome::OnAir;
+                }
             }
             MacTxDetachReason::Completed => {
                 // A completion edge was consumed separately before this

@@ -61,7 +61,15 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
     assert_eq!(submitted.publications, 1);
     assert_eq!(submitted.mpdus, 1);
     assert_eq!(submitted.psdu_bytes, u32::from(aggregate.bytes));
-    assert!(owner.begin_timeout_abort(&mut hardware, cookie).unwrap());
+    assert!(
+        owner
+            .begin_timeout_abort(
+                &mut hardware,
+                cookie,
+                oer_chips_esp32s31_hal::types::MacTxAbortCause::TimeoutEdge
+            )
+            .unwrap()
+    );
     owner
         .finish_timeout_abort(&mut hardware, cookie, drop)
         .unwrap();
