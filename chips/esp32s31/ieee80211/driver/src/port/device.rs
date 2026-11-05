@@ -145,6 +145,8 @@ pub struct RadioDevice<
     tx_pending: u32,
     tbtt_pending: bool,
     cut: bool,
+    /// The cut's last service found no staging place free.
+    cut_blocked: bool,
     pausing: bool,
     continuation: Option<Instant>,
     streak: u32,
@@ -256,6 +258,7 @@ impl<
             tx_pending: 0,
             tbtt_pending: false,
             cut: false,
+            cut_blocked: false,
             pausing: false,
             continuation: None,
             streak: 0,
@@ -517,6 +520,7 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<Self::Receive>, Fault>> {
         self.cut = true;
+        self.cut_blocked = false;
         if receive_room != 0 {
             if let Some(frame) = self.received.0.get_mut().pop_front() {
                 self.returns.received();
@@ -545,6 +549,7 @@ where
                 &mut active.registers,
                 &self.doorbell,
                 &self.timer,
+                &self.timer,
                 &self.received,
             )
             .map_err(Fault::Receive)?;
@@ -563,6 +568,7 @@ where
             progress,
             crate::datapath::DatapathRxProgress::StageCapacityBlocked
         ) {
+            self.cut_blocked = true;
             Poll::Pending
         } else {
             if self.streak < IMMEDIATE_CONTINUATIONS {
@@ -574,6 +580,9 @@ where
             }
             Poll::Pending
         }
+    }
+    fn cut_held_by_units(&self) -> bool {
+        self.cut_blocked
     }
     fn returns_quiet(&mut self, held: usize, returned: bool) -> bool {
         let rearm_due = returned || self.rx_pending;
@@ -635,6 +644,7 @@ where
                 &mut active.registers,
                 &self.doorbell,
                 &clock,
+                &self.timer,
                 &self.received,
             )
             .map_err(Fault::Receive)?;
@@ -691,7 +701,7 @@ where
 }
 
 /// The turn's one instant, as the data port's receive service reads the
-/// clock; waiting still uses the device's timer.
+/// clock; waiting and the reload settle still use the device's timer.
 struct TurnClock<'a, T> {
     now: Instant,
     timer: &'a T,

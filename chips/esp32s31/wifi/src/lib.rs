@@ -237,6 +237,12 @@ type LentRx<N> = <N as Notifies>::LentRx;
 /// bound for the network's packet slots of lent frames.
 #[cfg(target_arch = "riscv32")]
 pub const LENT_RX: usize = oer_chips_esp32s31_ieee80211_driver::port::lent_rx(chip::Q);
+
+/// How long a stop must at least allow: a frame a foreign transmitter keeps
+/// off the air may end this late.
+#[cfg(target_arch = "riscv32")]
+pub const STOP_FLOOR: oer_portable_time::Duration =
+    oer_chips_esp32s31_ieee80211_driver::port::COMMAND_BOUND;
 /// The host build has no receive buffer to lend.
 #[cfg(not(target_arch = "riscv32"))]
 pub enum Unlent {}

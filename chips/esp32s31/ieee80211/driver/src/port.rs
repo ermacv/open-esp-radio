@@ -275,6 +275,9 @@ pub trait Device<const B: usize>: Sized + 'static {
         receive_room: usize,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<Self::Receive>, Fault>>;
+    /// Whether the pending cut waits for staged units the network holds,
+    /// which only its returns free.
+    fn cut_held_by_units(&self) -> bool;
     fn finish_rx_cut(&mut self) -> Result<(), Fault>;
     /// The data port's receive facts: take them, registering `cx` alone
     /// on their signal, and report whether the ring holds work: a staged
