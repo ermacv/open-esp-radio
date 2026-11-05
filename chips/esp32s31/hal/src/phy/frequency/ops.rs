@@ -191,11 +191,30 @@ impl FrequencyMemoryAddress {
     /// The last address of the domain.
     pub const LAST: u16 = 0x7ff;
 
-    /// The address `value`, within the domain. The tables that compute
-    /// addresses at run time prove their last one against [`Self::LAST`] in
-    /// a const check, so nothing is lost here.
-    pub const fn within_domain(value: u16) -> Self {
-        Self(Bits::truncate(value as u32))
+    /// The address `value`, when the memory has it.
+    pub const fn new(value: u16) -> Option<Self> {
+        if value > Self::LAST {
+            return None;
+        }
+        Some(Self(Bits::truncate(value as u32)))
+    }
+
+    /// `base + index * STRIDE + OFFSET`, the form of every address the
+    /// tables compute. The argument types bound the sum and the const check
+    /// proves its largest value in the domain, so no run-time value can
+    /// leave it.
+    pub const fn scaled<const STRIDE: u16, const OFFSET: u16>(base: u8, index: u8) -> Self {
+        const {
+            let largest = u8::MAX as u32 * (1 + STRIDE as u32) + OFFSET as u32;
+            if largest > Self::LAST as u32 {
+                panic!("a scaled frequency-memory address can leave the memory");
+            }
+        }
+        Self(Bits::truncate(
+            (base as u32)
+                .wrapping_add((index as u32).wrapping_mul(STRIDE as u32))
+                .wrapping_add(OFFSET as u32),
+        ))
     }
 
     /// The address as a number.

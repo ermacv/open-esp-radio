@@ -36,12 +36,11 @@ pub const PHY_FREQUENCY_TABLE_FIRST_CODE: u16 = 0x960;
 // `phy_get_freq_mem_param(2)` packs three distinct values: the low byte is
 // the kind-2 I2C-memory base (0x12), the middle byte is the stride (7), and
 // the high byte is the RF-record base (0x20 = 0x12 + 2 * 7).
-const PHY_FREQUENCY_I2C_MEMORY_BASE: u16 = 0x12;
-const PHY_RF_FREQUENCY_MEMORY_BASE: u16 = 0x20;
+const PHY_FREQUENCY_I2C_MEMORY_BASE: u8 = 0x12;
+const PHY_RF_FREQUENCY_MEMORY_BASE: u8 = 0x20;
 const PHY_FREQUENCY_MEMORY_ENTRY_STRIDE: u16 = 7;
 const PHY_FREQUENCY_MEMORY_WORD_STRIDE: u16 = 3;
 const PHY_FREQUENCY_MEMORY_MODE: u8 = 7;
-const PHY_FREQUENCY_RECORD_WORDS: u8 = 3;
 
 // The memory takes a 24-bit payload: each word the tables build fits it with
 // every field at its largest.
@@ -71,19 +70,6 @@ const _: () = {
         || word.with_payload(command).is_none()
     {
         panic!("a table word exceeds the frequency-memory payload");
-    }
-};
-
-// The record addresses the transitions compute stay in the address domain.
-const _: () = {
-    let last = phy_get_freq_mem_addr(
-        PHY_RF_FREQUENCY_MEMORY_BASE as u32,
-        PHY_FREQUENCY_MEMORY_ENTRY_STRIDE as u32,
-        (PHY_FREQUENCY_TABLE_ENTRY_COUNT - 1) as u32,
-        (PHY_FREQUENCY_RECORD_WORDS - 1) as u32 * PHY_FREQUENCY_MEMORY_WORD_STRIDE as u32,
-    );
-    if last > FrequencyMemoryAddress::LAST {
-        panic!("a frequency record lies beyond the memory");
     }
 };
 
@@ -133,16 +119,23 @@ impl RecordWord {
     }
 }
 
-/// The address of `word` of `entry`'s record: the const check above bounds it.
-const fn record_address(entry: TableEntry, word: RecordWord) -> FrequencyMemoryAddress {
-    FrequencyMemoryAddress::within_domain(phy_get_freq_mem_addr(
-        PHY_RF_FREQUENCY_MEMORY_BASE as u32,
-        PHY_FREQUENCY_MEMORY_ENTRY_STRIDE as u32,
-        entry.index() as u32,
-        word.index() as u32 * PHY_FREQUENCY_MEMORY_WORD_STRIDE as u32,
-    ))
-}
 const CAP_INTERPOLATION_DIVISOR: i32 = 64;
+
+/// The address of `word` of `entry`'s record.
+const fn record_address(entry: TableEntry, word: RecordWord) -> FrequencyMemoryAddress {
+    const STRIDE: u16 = PHY_FREQUENCY_MEMORY_ENTRY_STRIDE;
+    const WORD: u16 = PHY_FREQUENCY_MEMORY_WORD_STRIDE;
+    const BASE: u8 = PHY_RF_FREQUENCY_MEMORY_BASE;
+    match word {
+        RecordWord::CapAndSdm => FrequencyMemoryAddress::scaled::<STRIDE, 0>(BASE, entry.index()),
+        RecordWord::SdmHigh => {
+            FrequencyMemoryAddress::scaled::<STRIDE, { WORD }>(BASE, entry.index())
+        }
+        RecordWord::XtalDuty => {
+            FrequencyMemoryAddress::scaled::<STRIDE, { 2 * WORD }>(BASE, entry.index())
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyFrequencyTableParameters {
@@ -298,6 +291,7 @@ pub struct PhyFrequencyTableTransition {
 /// Exact non-I/O arithmetic of complete rev0 ROM
 /// `phy_get_freq_mem_addr`: `base + index * stride + offset`, retained to the
 /// sixteen-bit frequency-memory address domain.
+#[cfg(test)]
 pub const fn phy_get_freq_mem_addr(base: u32, stride: u32, index: u32, offset: u32) -> u16 {
     base.wrapping_add(index.wrapping_mul(stride))
         .wrapping_add(offset) as u16
@@ -756,17 +750,6 @@ impl PhyFrequencyI2cDescriptor {
         self,
         copy_index: u8,
     ) -> (FrequencyMemoryAddress, PhyFrequencyMemoryWordWord, u8) {
-        let (address, word, mode) = self.memory_write_parts(copy_index);
-        (
-            FrequencyMemoryAddress::within_domain(address),
-            PhyFrequencyMemoryWordWord::from_bits(word),
-            mode,
-        )
-    }
-
-    /// The address, word and mode of one copy, the address bounded by the
-    /// const check below.
-    const fn memory_write_parts(self, copy_index: u8) -> (u16, u32, u8) {
         // `phy_freq_i2c_write_set` stores the register byte before the block
         // byte in frequency command memory: `[block, register, data]` as the
         // little-endian word `data << 16 | register << 8 | block`.
@@ -781,35 +764,29 @@ impl PhyFrequencyI2cDescriptor {
                 _ => third,
             })
             .bits();
-        match self.kind() {
-            0 => match copy_index {
-                0 => (
-                    self.index() as u16 * 3,
-                    data_word,
-                    PHY_FREQUENCY_MEMORY_MODE,
-                ),
-                1 => (
-                    (self.index() as u16 + 1) * 3,
-                    data_word,
-                    PHY_FREQUENCY_MEMORY_MODE,
-                ),
-                _ => (
-                    self.index() as u16 * 3 + 6,
-                    data_word,
-                    PHY_FREQUENCY_MEMORY_MODE,
-                ),
-            },
+        let index = self.index();
+        let (address, word, mode) = match self.kind() {
+            0 => (
+                match copy_index {
+                    0 => FrequencyMemoryAddress::scaled::<3, 0>(0, index),
+                    1 => FrequencyMemoryAddress::scaled::<3, 3>(0, index),
+                    _ => FrequencyMemoryAddress::scaled::<3, 6>(0, index),
+                },
+                data_word,
+                PHY_FREQUENCY_MEMORY_MODE,
+            ),
             1 => (
-                self.index() as u16 * 3 + 9,
+                FrequencyMemoryAddress::scaled::<3, 9>(0, index),
                 register_block.with_data(first).bits(),
                 PHY_FREQUENCY_MEMORY_MODE,
             ),
             _ => (
-                self.index() as u16 * 2 + PHY_FREQUENCY_I2C_MEMORY_BASE,
+                FrequencyMemoryAddress::scaled::<2, 0>(PHY_FREQUENCY_I2C_MEMORY_BASE, index),
                 register_block.bits(),
                 3,
             ),
-        }
+        };
+        (address, PhyFrequencyMemoryWordWord::from_bits(word), mode)
     }
 }
 
@@ -899,23 +876,6 @@ const fn frequency_i2c_descriptor(
         }
     }
 }
-
-// Every memory copy of every descriptor stays in the address domain.
-const _: () = {
-    let mut index = 0;
-    while index != 11 {
-        let descriptor = frequency_i2c_descriptor(index, 0, 0, 0, false);
-        let mut copy = 0;
-        while copy != descriptor.memory_write_count() {
-            let (address, _, _) = descriptor.memory_write_parts(copy);
-            if address > FrequencyMemoryAddress::LAST {
-                panic!("a frequency descriptor lies beyond the memory");
-            }
-            copy += 1;
-        }
-        index += 1;
-    }
-};
 
 const fn phy_frequency_i2c_number_addresses(
     rfpll_register_0b: u8,

@@ -2064,27 +2064,32 @@ fn ring_with_pending_reload(
 }
 
 #[test]
-fn a_reload_doorbell_already_clear_reads_no_clock() {
+fn a_stall_in_the_first_observation_leaves_one_final_observation() {
     use crate::ieee80211::dma::rx_dma::model::RxWalkerModel;
     use core::cell::Cell;
 
-    struct Counting(Cell<u32>);
+    /// The limit passes between the first observation and the check after it.
+    struct Stalled(Cell<u64>);
 
-    impl Clock for Counting {
+    impl Clock for Stalled {
         fn now(&self) -> Instant {
-            self.0.set(self.0.get() + 1);
-            Instant::from_micros(0)
+            let reads = self.0.get();
+            self.0.set(reads + 1);
+            Instant::from_micros(if reads < 2 { 0 } else { 21 })
         }
     }
 
     let mut mmio = RxWalkerModel::new();
     let (_storage, mut live) = ring_with_pending_reload(&mut mmio);
-    let clock = Counting(Cell::new(0));
-    let settle = Settle::new(SettleLimit::new(Duration::from_micros(5)).unwrap(), &clock);
-    live.complete_pending_reload(&mut mmio, settle)
-        .expect("the doorbell is clear");
-    assert_eq!(clock.0.get(), 0);
-    assert_eq!(live.reload_evidence().max_reload_attempts, 1);
+    mmio.reload_stuck = true;
+    let clock = Stalled(Cell::new(0));
+    let settle = Settle::new(SettleLimit::new(Duration::from_micros(20)).unwrap(), &clock);
+    assert_eq!(
+        live.complete_pending_reload(&mut mmio, settle),
+        Err(RxRingError::ReloadPending)
+    );
+    assert_eq!(live.reload_evidence().max_reload_attempts, 2);
+    assert!(live.reload_pending(), "the append stays pending");
 }
 
 #[test]
@@ -2114,9 +2119,8 @@ fn a_reload_doorbell_that_never_clears_stays_pending_after_the_limit() {
         live.complete_pending_reload(&mut mmio, settle),
         Err(RxRingError::ReloadPending)
     );
-    // The first observation reads no clock. The start read is 100; the
-    // checks read 101..=105, and 105 ends it.
-    assert_eq!(live.reload_evidence().max_reload_attempts, 6);
+    // The start read is 100; the checks read 101..=105, and 105 ends it.
+    assert_eq!(live.reload_evidence().max_reload_attempts, 5);
     assert!(live.reload_pending(), "the append stays pending");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
 

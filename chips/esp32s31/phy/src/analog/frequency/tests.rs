@@ -38,6 +38,33 @@ fn frequency_memory_address_matches_wrapping_rom_arithmetic() {
 }
 
 #[test]
+fn record_addresses_match_the_rom_arithmetic() {
+    let mut transition = PhyFrequencyTableTransition::new(REQUEST);
+    let mut words = 0;
+    while let PhyFrequencyTableAction::WriteMemory {
+        entry_index,
+        word_index,
+        address,
+        ..
+    } = transition.action()
+    {
+        assert_eq!(
+            address.get(),
+            super::phy_get_freq_mem_addr(0x20, 7, entry_index.into(), u32::from(word_index) * 3)
+        );
+        transition
+            .advance(PhyFrequencyTableCompletion {
+                entry_index,
+                word_index,
+                address,
+            })
+            .unwrap();
+        words += 1;
+    }
+    assert_eq!(words, 85 * 3);
+}
+
+#[test]
 fn cap_adjustment_preserves_the_rom_mask_and_reencodes_bit_eight() {
     assert_eq!(
         phy_frequency_cap_adjusted_word(0x00aa_bffe, PhyFrequencyCapCorrection::from_delta(2),),
@@ -179,7 +206,7 @@ fn cap_memory_transition_and_binding_reject_foreign_or_terminal_edges() {
     assert_eq!(
         transition.advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
             entry_index: 1,
-            address: FrequencyMemoryAddress::within_domain(0x27),
+            address: FrequencyMemoryAddress::new(0x27).unwrap(),
             value: 0x0000_ff80,
         }),
         Err(PhyFrequencyCapMemoryTransitionError::WrongCompletion)
@@ -264,7 +291,7 @@ fn transition_publishes_exactly_three_words_for_all_85_entries() {
         transition.advance(PhyFrequencyTableCompletion {
             entry_index: 0,
             word_index: 0,
-            address: FrequencyMemoryAddress::within_domain(0x20),
+            address: FrequencyMemoryAddress::new(0x20).unwrap(),
         }),
         Err(PhyFrequencyTableTransitionError::AlreadyComplete)
     );
@@ -277,7 +304,7 @@ fn transition_rejects_out_of_order_memory_completion() {
         transition.advance(PhyFrequencyTableCompletion {
             entry_index: 0,
             word_index: 1,
-            address: FrequencyMemoryAddress::within_domain(0x23),
+            address: FrequencyMemoryAddress::new(0x23).unwrap(),
         }),
         Err(PhyFrequencyTableTransitionError::WrongCompletion)
     );

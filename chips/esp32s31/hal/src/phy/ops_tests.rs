@@ -83,7 +83,7 @@ fn frequency_read_restore_preserves_other_owner_changes_and_never_pulses_writers
     fr::set_hardware_control(&mut frequency, false);
     fr::read_memory(
         &mut frequency,
-        fr::FrequencyMemoryAddress::within_domain(0x400),
+        fr::FrequencyMemoryAddress::new(0x400).expect("in the memory"),
     );
     frequency.fe.modify_frequency_control(|w| {
         w.set_channel_index(17);
@@ -651,7 +651,7 @@ golden!(
     |b| {
         fr::write_memory(
             &mut b,
-            fr::FrequencyMemoryAddress::within_domain(0x5a5),
+            fr::FrequencyMemoryAddress::new(0x5a5).expect("in the memory"),
             crate::layouts::PhyFrequencyMemoryWordWord::from_bits(0xab_cdef),
             0x12,
         );
@@ -1081,3 +1081,16 @@ golden!(
         ),
     ]
 );
+
+#[test]
+fn a_frequency_memory_address_past_the_memory_does_not_exist() {
+    assert_eq!(fr::FrequencyMemoryAddress::new(0x800), None);
+    assert_eq!(
+        fr::FrequencyMemoryAddress::new(0x7ff).map(fr::FrequencyMemoryAddress::get),
+        Some(0x7ff)
+    );
+    assert_eq!(
+        fr::FrequencyMemoryAddress::scaled::<7, 6>(u8::MAX, u8::MAX).get(),
+        255 + 255 * 7 + 6
+    );
+}
