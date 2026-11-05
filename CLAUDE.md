@@ -25,9 +25,18 @@ system these rules serve.
   host tools. The PAC's single `take()` claims the chip; the HAL's
   `Root::take` splits it through `into_bootstrap` or `into_runtime`.
   Only these owned partitions grant register access.
-- **Compile time first.** Every check that can run at compile time runs there.
+- **Compile time first.** Every check that can run at compile time runs there;
+  a runtime check stands only where that proof is impossible, and their number
+  tends to zero.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.
+- **Errors stay errors.** An error never becomes a status, a dummy value or a
+  success. A refusal for temporary unavailability exists only where it is
+  needed and proven, and it names what comes next: a release event, a
+  registered waker, a retry time, or a final refusal returning its owners. A
+  permanent fault is never reported as temporary. A removed panic leaves its
+  owners kept, the operation's outcome correct and progress assured; the panic
+  count is a secondary measure.
 - **Panics and unsafe.** A change introduces no new runtime panic sites or
   `unsafe` code. Sans-IO crates (the layer in `docs/architecture.md`)
   start with `#![forbid(unsafe_code)]` and contain no runtime panic paths:
