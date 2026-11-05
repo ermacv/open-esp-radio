@@ -1660,8 +1660,6 @@ fn a_ppdu_past_its_cancel_without_a_completion_requires_a_reset() {
 fn completion_faults_return_the_existing_backend_fault_without_a_tx_terminal() {
     use crate::mac::tx::CompletionFault;
     for (status, detail, fault) in [
-        (1, 0xc0, CompletionFault::SecurityKeyError),
-        (4, 0xc0, CompletionFault::SecurityKeyError),
         (3, 0, CompletionFault::InvalidStatus { status: 3 }),
         (9, 0, CompletionFault::InvalidStatus { status: 9 }),
     ] {

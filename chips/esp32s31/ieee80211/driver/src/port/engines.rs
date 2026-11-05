@@ -790,26 +790,21 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         {
             arena.forget_program();
         }
+        // A configuration lends no commands: what is dirty stays so for the
+        // service after it.
+        let Some(mut view) = driver.core.view().commands() else {
+            return Ok(());
+        };
         if self.settings.edca_dirty {
             let [station, _] = self.settings.edca;
             let table =
                 SupportedEdca::<Esp32s31Caps<B>>::new(station).ok_or(Fault::EdcaUnsupported)?;
-            let mut view = driver
-                .core
-                .view()
-                .commands()
-                .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
             let _installed = view
                 .set_checked_edca(VifRole::Station, table)
                 .map_err(|_| Fault::EdcaUnsupported)?;
             self.settings.edca_dirty = false;
         }
         if let Some(color) = self.settings.color {
-            let mut view = driver
-                .core
-                .view()
-                .commands()
-                .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
             view.set_checked_he_bss_color(color);
             self.settings.color = None;
         }
@@ -820,11 +815,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     continue;
                 }
                 if let Some(old) = old.take() {
-                    let mut view = driver
-                        .core
-                        .view()
-                        .commands()
-                        .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
                     view.end_checked_rx_block_ack(
                         self.device.hardware()?,
                         old.role,
@@ -833,11 +823,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     )?;
                 }
                 if let Some(agreement) = wanted {
-                    let mut view = driver
-                        .core
-                        .view()
-                        .commands()
-                        .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
                     view.start_checked_rx_block_ack(self.device.hardware()?, agreement)?;
                 }
                 *old = wanted;

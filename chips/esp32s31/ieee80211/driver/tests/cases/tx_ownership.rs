@@ -459,10 +459,12 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
         slot.as_mut().access(),
         oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
     ));
-    hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(1, 0xc0));
+    hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(9, 0));
     assert_eq!(
         slot.as_mut().acknowledge_completion(&mut hardware),
-        Err(TxError::Completion(CompletionFault::SecurityKeyError))
+        Err(TxError::Completion(CompletionFault::InvalidStatus {
+            status: 9
+        }))
     );
     assert_eq!(slot.state(), TxDmaState::ResetRequired);
     assert!(!matches!(

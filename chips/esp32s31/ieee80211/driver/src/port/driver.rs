@@ -486,6 +486,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     IndeterminateCause::HardwareTimeout,
                 )),
                 PublicationEnd::Completed {
+                    status: TxStatus::KeyRefused,
+                    ..
+                } => Some(TxOutcome::Indeterminate(IndeterminateCause::KeyRefused)),
+                PublicationEnd::Completed {
                     status: TxStatus::Success,
                     ack_snr_db,
                     block_ack,

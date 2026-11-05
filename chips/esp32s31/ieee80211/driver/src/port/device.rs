@@ -404,7 +404,24 @@ where
                 }
                 Err(failure) => {
                     let cause = failure.cause;
-                    self.failed_retune = Some(failure);
+                    match failure.resume() {
+                        Ok(wifi) => {
+                            // The radio changed nothing: the port stays on
+                            // its channel for the caller's next start.
+                            let WifiRuntimeParts {
+                                platform,
+                                registers,
+                                context,
+                            } = wifi.into_runtime_parts();
+                            self.active = Some(Active {
+                                registers,
+                                platform,
+                                context,
+                            });
+                            self.paused = true;
+                        }
+                        Err(failure) => self.failed_retune = Some(failure),
+                    }
                     return Poll::Ready(Err(Fault::Retune(cause)));
                 }
             }

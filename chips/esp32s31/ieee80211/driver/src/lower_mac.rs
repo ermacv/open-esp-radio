@@ -86,10 +86,10 @@
 //! `NoEffect`, or a `CompletionFault`. Only Observed constructs completed
 //! metadata and consumes the published attempt through `finish(status)`.
 //! NoEffect retains the same descriptor, deadline and attempt until its real
-//! result or hardware timeout. SecurityKeyError and InvalidStatus propagate
-//! through `LowerMacFault::Tx` to the existing poisoned-install path; they
-//! return no TX terminal or slot. TimedOut ends the attempt with an unknown
-//! result, and the backend never republishes it.
+//! result or hardware timeout. InvalidStatus propagates through
+//! `LowerMacFault::Tx`; it returns no TX terminal or slot. TimedOut and
+//! KeyRefused end the attempt with an unknown result, and the backend never
+//! republishes it.
 //!
 //! The S31 MAC has four ordinary EDCA queues (voice, video, best effort,
 //! background), each with its own descriptor, completion bank and latched

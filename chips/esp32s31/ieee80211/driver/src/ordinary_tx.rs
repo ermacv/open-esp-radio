@@ -1551,7 +1551,7 @@ where
                     TxStatus::Collision => {
                         active.retries.collisions = active.retries.collisions.saturating_add(1);
                     }
-                    TxStatus::Success | TxStatus::TimedOut => {}
+                    TxStatus::Success | TxStatus::TimedOut | TxStatus::KeyRefused => {}
                 }
                 if set_retry_bit {
                     mark_retry(self.free_buffer()?, active.frame_length)?;
@@ -1933,7 +1933,9 @@ impl FixedRateRetry {
     ) -> FixedRetryDecision {
         use oer_protocols_ieee80211_contracts_port::TxStatus;
         match status {
-            TxStatus::Success | TxStatus::TimedOut => return FixedRetryDecision::Complete,
+            TxStatus::Success | TxStatus::TimedOut | TxStatus::KeyRefused => {
+                return FixedRetryDecision::Complete;
+            }
             TxStatus::AckTimeout => {
                 self.counters.mpdu = self.counters.mpdu.saturating_add(1);
                 self.counters.short = self.counters.short.saturating_add(1);

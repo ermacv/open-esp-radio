@@ -505,7 +505,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                     (None, TxStatus::AckTimeout | TxStatus::Collision) => {
                         AmpduAttemptResult::NoResponse
                     }
-                    (None, TxStatus::TimedOut) => {
+                    (None, TxStatus::TimedOut | TxStatus::KeyRefused) => {
                         return self.finish_ampdu(exchange, &state, MacAmpduTxResult::Incomplete);
                     }
                 };
