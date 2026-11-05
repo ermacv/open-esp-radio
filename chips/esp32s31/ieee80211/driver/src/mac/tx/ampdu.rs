@@ -93,7 +93,6 @@ pub enum HtAmpduTxError {
     TriggerMsduLengthUnavailable,
     TriggerBased(MacHeTbProgramError),
     DetachFailed,
-    TimeoutNotPending,
     ResetRequired,
     /// The lower descriptor/backing owner rejected a lifecycle or range edge.
     DmaStorage(AmpduDmaStorageError),

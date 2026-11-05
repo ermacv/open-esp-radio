@@ -142,7 +142,6 @@ pub enum AggregateTxError {
     TriggerMsduLengthUnavailable,
     TriggerBased(TriggerProgramError),
     DetachFailed,
-    TimeoutNotPending,
     ResetRequired,
     DmaStorage(ChainStorageError),
 }
@@ -217,7 +216,6 @@ pub enum TxError {
     QueueActive,
     Stale,
     DetachFailed,
-    TimeoutNotPending,
     ResetRequired,
     Completion(CompletionFault),
 }

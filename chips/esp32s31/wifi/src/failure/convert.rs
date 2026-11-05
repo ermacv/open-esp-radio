@@ -134,7 +134,6 @@ pub(super) fn aggregate_tx_error(
         Source::TriggerMsduLengthUnavailable => AggregateTxError::TriggerMsduLengthUnavailable,
         Source::TriggerBased(v0) => AggregateTxError::TriggerBased(trigger_program_error(v0)),
         Source::DetachFailed => AggregateTxError::DetachFailed,
-        Source::TimeoutNotPending => AggregateTxError::TimeoutNotPending,
         Source::ResetRequired => AggregateTxError::ResetRequired,
         Source::DmaStorage(v0) => AggregateTxError::DmaStorage(chain_storage_error(v0)),
     }
@@ -253,7 +252,6 @@ pub(super) fn tx_error(value: oer_chips_esp32s31_ieee80211_driver::mac::tx::TxEr
         Source::QueueActive => TxError::QueueActive,
         Source::Stale => TxError::Stale,
         Source::DetachFailed => TxError::DetachFailed,
-        Source::TimeoutNotPending => TxError::TimeoutNotPending,
         Source::ResetRequired => TxError::ResetRequired,
         Source::Completion(v0) => TxError::Completion(completion_fault(v0)),
     }

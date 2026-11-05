@@ -2,7 +2,7 @@
 
 use core::pin::Pin;
 
-use oer_chips_esp32s31_hal::types::MacHeTriggerTxQueueSnapshot;
+use oer_chips_esp32s31_hal::types::{MacHeTriggerTxQueueSnapshot, MacTxAbortCause};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use super::{
@@ -193,16 +193,17 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         self: Pin<&mut Self>,
         hardware: &mut H,
         cookie: TxCookie,
+        cause: MacTxAbortCause,
     ) -> Result<bool, HtAmpduTxError> {
         let storage = self.project();
         if *storage.state != TxDmaState::HardwareOwned || *storage.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
-        Ok(hardware.begin_tx_timeout_abort(storage.queue.hardware_index()))
+        Ok(hardware.begin_tx_timeout_abort(storage.queue.hardware_index(), cause))
     }
 
-    /// Permanently quarantine an aggregate whose executor deadline expired
-    /// without a qualified hardware completion/timeout edge.
+    /// Permanently quarantine an aggregate an abort left on the air, whose
+    /// completion did not come.
     ///
     /// The referenced network leases must remain retained until the unique
     /// radio lifecycle owner resets the MAC; returning them would make

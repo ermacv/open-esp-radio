@@ -304,7 +304,12 @@ attached to its queue's ordinary descriptor for the publication, and each
 data arena retains its frames in one of the two descriptor chains
 (`AMPDU_CHAINS`). Each queue executes an MPDU's supplied retry plan.
 Timeout aborts of MPDUs and of the arena on the air force CCA one at a
-time. Gate, configuration, key and disable barriers wait for published
+time: the queue's timeout edge begins one, and so does its publication
+watchdog without that edge, since a busy channel can hold a queue past its
+programmed timeout. The vendor's stop sequence then decides by VALID: a
+valid queue is disabled and the attempt ends; a clear one took its PPDU, so
+the owners stay with it until its completion, and a second watchdog without
+one records the fault and resets. Gate, configuration, key and disable barriers wait for published
 MPDUs and arenas and return the original operation owners through
 terminals. A reinstall after a confirmed stop reuses the stopped owners for
 the next installation; uncertainty keeps the DMA allocations quarantined. RX buffers require
@@ -360,7 +365,7 @@ pairwise key removal waits while an arena holds a key right.
 The port exposes ordinary MPDUs, the station's data arenas (with their
 A-MPDU rates) and RX BlockAck agreements. It does not expose beacon
 timing, monitor or air reservation.
-Its publication watchdog is 250 ms; its command, start and stop bounds
-are 400 ms, including the publication and the finite RX stop.
+Its publication watchdog is 2 s; its command bound is 2.5 s, and a command
+held behind published frames counts from the last one that held it.
 The operation mapping and portable limits are in
 [the port's README](../../../../protocols/ieee80211/contracts/port/README.md#implementers).

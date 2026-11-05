@@ -360,7 +360,11 @@ fn tx_slot_preserves_the_semantic_timeout_abort_order() {
     mmio.set_tx_queue_attached(0, true);
 
     assert_eq!(
-        slot.as_mut().begin_timeout_abort(&mut mmio, cookie),
+        slot.as_mut().begin_timeout_abort(
+            &mut mmio,
+            cookie,
+            oer_chips_esp32s31_hal::types::MacTxAbortCause::TimeoutEdge
+        ),
         Ok(true)
     );
     slot.as_mut()

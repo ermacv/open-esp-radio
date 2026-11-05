@@ -201,6 +201,24 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             .unwrap_or_else(|_| panic!("published"));
     }
 
+    /// Hold a single-MPDU arena on the air through its cancel.
+    fn cancel_on_the_air(&mut self) -> Arena {
+        self.start();
+        let [first, second] = self.arenas();
+        self.fill(&first, &[10], plain);
+        self.hold_air(true);
+        self.observed.borrow_mut().taken_by_air = true;
+        self.publish_single(first, 3);
+        assert!(self.turn().is_none(), "the queue holds the frame");
+        let watchdog = self.port.arena().deadline().expect("the watchdog");
+        self.advance(watchdog.saturating_duration_since(self.now()));
+        assert!(self.turn().is_none(), "the abort settles first");
+        self.advance(crate::ordinary_tx::TX_ABORT_SETTLE);
+        assert!(self.turn().is_none(), "the PPDU stays with the queue");
+        assert_eq!(self.port.fault(), None);
+        second
+    }
+
     /// Publish `arena` as an A-MPDU at `rate`, under `encryption`.
     fn publish_aggregate(
         &mut self,
@@ -809,7 +827,7 @@ fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
 }
 
 #[test]
-fn a_completion_without_effect_keeps_the_arena_watchdog_whose_expiry_is_a_named_fault() {
+fn a_completion_without_effect_keeps_the_arena_watchdog_whose_expiry_cancels_the_arena() {
     with_fixture(|fixture| {
         fixture.start();
         let [first, _second] = fixture.arenas();
@@ -830,14 +848,85 @@ fn a_completion_without_effect_keeps_the_arena_watchdog_whose_expiry_is_a_named_
         );
         assert!(fixture.port.deadline().is_some_and(|at| at <= watchdog));
         fixture.advance(watchdog.saturating_duration_since(fixture.now()));
+        assert!(fixture.turn().is_none(), "the abort settles first");
+        fixture.advance(crate::ordinary_tx::TX_ABORT_SETTLE);
+        let done = fixture.turn().expect("the cancel ends the arena");
+        assert!(matches!(done.end(), AttemptEnd::Aborted));
+        assert_eq!(fixture.port.fault(), None);
+        let mut returned = Returned::default();
+        let _first = fixture
+            .port
+            .arena()
+            .release(done, returned.take())
+            .expect("released");
+        assert_eq!(returned.tags(), [50, 51]);
+    });
+}
+
+#[test]
+fn an_arena_the_cancel_finds_on_the_air_ends_by_its_completion() {
+    with_fixture(|fixture| {
+        let _second = fixture.cancel_on_the_air();
+        fixture.hold_air(false);
+        let done = fixture.arena_end();
+        assert!(matches!(done.end(), AttemptEnd::Acked { .. }));
+        let mut returned = Returned::default();
+        let _first = fixture
+            .port
+            .arena()
+            .release(done, returned.take())
+            .expect("released");
+        assert_eq!(returned.tags(), [10]);
+    });
+}
+
+#[test]
+fn an_arena_past_its_cancel_on_the_air_is_a_named_fault() {
+    with_fixture(|fixture| {
+        let _second = fixture.cancel_on_the_air();
+        let watchdog = fixture.port.arena().deadline().expect("the last watchdog");
+        fixture.advance(watchdog.saturating_duration_since(fixture.now()));
         let now = fixture.now();
         let Err(fault) = fixture
             .port
             .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox)
         else {
-            panic!("the expired watchdog without a timeout edge quarantines");
+            panic!("the last watchdog quarantines");
         };
+        assert_eq!(
+            fault,
+            Fault::Arena(crate::lower_mac::arena::ArenaFault::Watchdog)
+        );
         assert_eq!(fixture.port.fault(), Some(fault));
+    });
+}
+
+#[test]
+fn a_retransmission_after_a_cancel_on_the_air_has_a_cancel_of_its_own() {
+    with_fixture(|fixture| {
+        let _second = fixture.cancel_on_the_air();
+        // The PPDU ends unanswered: the plan sends it again, and this queue
+        // lets go when its watchdog cancels it.
+        fixture.observed.borrow_mut().statuses = std::vec![(5, 0)];
+        fixture.observed.borrow_mut().taken_by_air = false;
+        fixture.hold_air(false);
+        assert!(fixture.turn().is_none(), "the plan sends it again");
+        fixture.hold_air(true);
+        assert!(fixture.turn().is_none(), "the queue holds it again");
+        assert_eq!(fixture.observed.borrow().publications, 2);
+        let watchdog = fixture.port.arena().deadline().expect("a new watchdog");
+        fixture.advance(watchdog.saturating_duration_since(fixture.now()));
+        assert!(fixture.turn().is_none(), "the abort settles first");
+        fixture.advance(crate::ordinary_tx::TX_ABORT_SETTLE);
+        let done = fixture.turn().expect("the cancel ends the arena");
+        assert!(matches!(done.end(), AttemptEnd::Aborted));
+        let mut returned = Returned::default();
+        let _first = fixture
+            .port
+            .arena()
+            .release(done, returned.take())
+            .expect("released");
+        assert_eq!(returned.tags(), [10]);
     });
 }
 

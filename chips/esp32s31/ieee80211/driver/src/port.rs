@@ -155,11 +155,13 @@ const INTERFACE_TERMINALS: usize = InterfaceCommandPool::<Station>::TERMINAL_CAP
 pub const TERMINAL_CAPACITY: usize = TX_TICKETS + 16 + 2 + 1 + INTERFACE_TERMINALS;
 // For the same reason, one installation or removal command per PTK slot.
 const COMMANDS: usize = TX_TICKETS + 16 + 2 + 2 + INTERFACE_COMMANDS;
-/// How long a published frame may stay on its queue before the port calls
-/// the MAC broken. A frame waits for the air without any fault, as long as a
-/// foreign transmitter holds the channel; the queue's own timeout ends that
-/// wait (`TxLifetimeClass::fresh_queue_timeout`, a handled end), so this
-/// bound backs it and must outlast the longest one.
+/// How long a published frame may stay on its queue before the port cancels
+/// it. A frame waits for the air without any fault, as long as a foreign
+/// transmitter holds the channel; the queue's own timeout should end that
+/// wait (`TxLifetimeClass::fresh_queue_timeout`) but does not always under a
+/// busy channel, so this bound backs it and must outlast the longest one.
+/// The cancel is a handled end; a PPDU it finds on the air has this bound
+/// again to complete, and only then is the MAC called broken.
 pub const PUBLICATION_BOUND: Duration = Duration::from_millis(2000);
 /// What the radio's arbiter plans for a published frame to end before it
 /// moves the port: a plan, not a limit. A frame that takes longer delays the

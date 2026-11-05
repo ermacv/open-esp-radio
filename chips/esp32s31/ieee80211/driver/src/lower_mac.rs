@@ -105,7 +105,7 @@
 //! [`LowerMacCore::service`] call offers the same edge to every published
 //! queue, and each claims only its own queue's state; an edge no queue
 //! claims is ignored, and a lost one still ends in the publication
-//! deadline's quarantine. A timeout abort forces the MAC-wide CCA for its
+//! deadline's abort. A timeout abort forces the MAC-wide CCA for its
 //! 16 µs settle, so aborts run one at a time: a queue whose timeout arrives
 //! while another settles keeps its latched timeout and is aborted right
 //! after that settle ends.

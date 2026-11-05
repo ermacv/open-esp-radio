@@ -16,13 +16,14 @@ use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
 use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
 use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
 use oer_chips_esp32s31_hal::types::{
-    MacHeTxProgram, MacHtTxProgram, MacLegacyTxProgram, MacTxDetachOutcome, MacTxDetachReason,
+    MacHeTxProgram, MacHtTxProgram, MacLegacyTxProgram, MacTxAbortCause, MacTxDetachOutcome,
+    MacTxDetachReason,
 };
 use oer_protocols_ieee80211_wire::frame::set_retry_bit;
 
 use crate::mac::tx::{
     CompletionObservation, HeAmpduTxConfig, HeSmpduTxConfig, HtAmpduTxConfig, HtTxConfig,
-    LegacyTxConfig, LegacyTxQueue, TxCompletion, TxCookie, TxDmaState,
+    LegacyTxConfig, LegacyTxQueue, TxAbortEnd, TxCompletion, TxCookie, TxDmaState,
 };
 
 use super::{
@@ -410,8 +411,10 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
+        cause: MacTxAbortCause,
     ) -> Result<bool, HtAmpduTxError> {
-        self.metadata_mut().begin_timeout_abort(hardware, cookie)
+        self.metadata_mut()
+            .begin_timeout_abort(hardware, cookie, cause)
     }
 
     /// Detach a collision-owned aggregate, handing every lease to
@@ -442,7 +445,9 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         match outcome {
             MacTxDetachOutcome::NoEvent => return Ok(false),
             MacTxDetachOutcome::Detached(Ok(())) => {}
-            MacTxDetachOutcome::Failed | MacTxDetachOutcome::Detached(Err(_)) => {
+            MacTxDetachOutcome::OnAir
+            | MacTxDetachOutcome::Failed
+            | MacTxDetachOutcome::Detached(Err(_)) => {
                 self.quarantine();
                 return Err(HtAmpduTxError::DetachFailed);
             }
@@ -454,14 +459,15 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         Ok(true)
     }
 
-    /// Finish a settled timeout abort, handing every lease to `returned` in
-    /// commit order once the queue confirmed its detach.
+    /// Finish a settled abort, handing every lease to `returned` in commit
+    /// order once the queue confirmed its detach; [`TxAbortEnd::OnAir`] keeps
+    /// them for the completion.
     pub fn finish_timeout_abort<H: HtAmpduHardware>(
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
         returned: impl FnMut(B),
-    ) -> Result<(), HtAmpduTxError> {
+    ) -> Result<TxAbortEnd, HtAmpduTxError> {
         let queue = {
             let storage = self.as_ref().get_ref();
             if storage.state != TxDmaState::HardwareOwned || storage.active != cookie {
@@ -480,9 +486,11 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             )
         };
         match outcome {
-            MacTxDetachOutcome::NoEvent => return Err(HtAmpduTxError::TimeoutNotPending),
+            MacTxDetachOutcome::OnAir => return Ok(TxAbortEnd::OnAir),
             MacTxDetachOutcome::Detached(Ok(())) => {}
-            MacTxDetachOutcome::Failed | MacTxDetachOutcome::Detached(Err(_)) => {
+            MacTxDetachOutcome::NoEvent
+            | MacTxDetachOutcome::Failed
+            | MacTxDetachOutcome::Detached(Err(_)) => {
                 self.quarantine();
                 return Err(HtAmpduTxError::DetachFailed);
             }
@@ -491,7 +499,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             hardware.clear_he_trigger_based_queue(reservation);
         }
         self.metadata_mut().release();
-        Ok(())
+        Ok(TxAbortEnd::Detached)
     }
 
     pub fn detach_completed<H: HtAmpduHardware>(
@@ -522,6 +530,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 Ok(())
             }
             MacTxDetachOutcome::NoEvent
+            | MacTxDetachOutcome::OnAir
             | MacTxDetachOutcome::Failed
             | MacTxDetachOutcome::Detached(Err(_)) => {
                 self.quarantine();
@@ -911,20 +920,26 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         hardware: &mut H,
         cookie: TxCookie,
     ) -> Result<bool, HtAmpduTxError> {
-        self.detach_aborted(hardware, cookie, MacTxDetachReason::Collision)
+        Ok(matches!(
+            self.detach_aborted(hardware, cookie, MacTxDetachReason::Collision)?,
+            Some(TxAbortEnd::Detached)
+        ))
     }
 
-    /// Finish a settled timeout abort, keeping the batch's backings for a
-    /// retention or a release.
+    /// Finish a settled abort, keeping the batch's backings for a retention
+    /// or a release; [`TxAbortEnd::OnAir`] keeps the batch on the air for its
+    /// completion.
     pub fn finish_timeout_abort_retained<H: HtAmpduHardware>(
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
-    ) -> Result<(), HtAmpduTxError> {
-        if self.detach_aborted(hardware, cookie, MacTxDetachReason::Timeout)? {
-            Ok(())
-        } else {
-            Err(HtAmpduTxError::TimeoutNotPending)
+    ) -> Result<TxAbortEnd, HtAmpduTxError> {
+        match self.detach_aborted(hardware, cookie, MacTxDetachReason::Timeout)? {
+            Some(end) => Ok(end),
+            None => {
+                self.quarantine();
+                Err(HtAmpduTxError::DetachFailed)
+            }
         }
     }
 
@@ -933,7 +948,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         hardware: &mut H,
         cookie: TxCookie,
         reason: MacTxDetachReason,
-    ) -> Result<bool, HtAmpduTxError> {
+    ) -> Result<Option<TxAbortEnd>, HtAmpduTxError> {
         let (Some(storage), Some(dma)) = (self.storage.as_mut(), self.dma.as_mut()) else {
             return Err(HtAmpduTxError::ResetRequired);
         };
@@ -949,7 +964,8 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             dma.mark_aborted_detached(detached)
         });
         match outcome {
-            MacTxDetachOutcome::NoEvent => return Ok(false),
+            MacTxDetachOutcome::NoEvent => return Ok(None),
+            MacTxDetachOutcome::OnAir => return Ok(Some(TxAbortEnd::OnAir)),
             MacTxDetachOutcome::Detached(Ok(())) => {}
             MacTxDetachOutcome::Failed | MacTxDetachOutcome::Detached(Err(_)) => {
                 self.quarantine();
@@ -963,7 +979,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             self.quarantine();
             return Err(error);
         }
-        Ok(true)
+        Ok(Some(TxAbortEnd::Detached))
     }
 }
 

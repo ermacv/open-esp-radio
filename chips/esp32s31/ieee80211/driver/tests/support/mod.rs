@@ -528,9 +528,12 @@ impl TxHardware for MockMmio {
     fn begin_tx_timeout_abort(
         &mut self,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        cause: oer_chips_esp32s31_hal::types::MacTxAbortCause,
     ) -> bool {
         let queue = queue.get() as u8;
-        if !self.tx_timeout_pending[usize::from(queue)] {
+        if cause == oer_chips_esp32s31_hal::types::MacTxAbortCause::TimeoutEdge
+            && !self.tx_timeout_pending[usize::from(queue)]
+        {
             return false;
         }
         self.operations.push(Operation::ForceTxCca);
@@ -560,9 +563,6 @@ impl TxHardware for MockMmio {
                 self.tx_collision_pending[index] = false;
             }
             MacTxDetachReason::Timeout => {
-                if !self.tx_timeout_pending[index] {
-                    return MacTxDetachOutcome::NoEvent;
-                }
                 self.operations.push(Operation::DisableTxQueue(queue));
                 self.tx_queue_attached[index] = false;
                 self.operations.push(Operation::ReleaseTxCca);

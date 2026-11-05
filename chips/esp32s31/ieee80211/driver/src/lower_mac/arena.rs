@@ -37,15 +37,17 @@ use super::{
 };
 use crate::mac::irq::EVENT_TX_TIMEOUT;
 use crate::mac::tx::{
-    CompletionObservation, LegacyTxQueue, TxCompletion, TxCookie, TxDmaState, TxPhyRate,
+    CompletionObservation, LegacyTxQueue, TxAbortEnd, TxCompletion, TxCookie, TxDmaState,
+    TxPhyRate,
     ampdu::{AmpduIntakeRefused, HtAmpduHardware, HtAmpduTxCompletion, HtAmpduTxError},
 };
 use crate::ordinary_tx::{TX_ABORT_SETTLE, WifiTxEntropy, WifiTxPowerProfile};
 use crate::tx::WifiTxWake;
 use core::{convert::Infallible, marker::PhantomData, num::NonZeroU16};
 use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
+use oer_chips_esp32s31_hal::types::MacTxAbortCause;
 use oer_portable_events::EventSink;
-use oer_portable_time::Instant;
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::arena::{
     ARENA_FRAMES, Arena, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd, Completion, FrameMask,
     IntakeRefused, PublishError, PublishRefused, Settlement, TxArena,
@@ -110,6 +112,9 @@ struct OnAir<'core, Path: PoolPath> {
     /// The publication watchdog, or the end of the abort settle.
     deadline: Instant,
     settling: bool,
+    /// An abort found the PPDU on the air: only its completion ends it, and
+    /// `deadline` is the last one.
+    past_abort: bool,
 }
 
 /// A published single MPDU's retry plan, run as the core runs an MPDU's
@@ -609,6 +614,10 @@ fn lost_end(status: TxStatus, air: Air) -> AttemptEnd<BlockAckAnswer, Infallible
 
 /// Serve one hardware edge of the published `chain`, as the aggregate
 /// service does ([`super::ampdu::service`]), keeping every frame.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one edge of a published chain, as its caller holds them"
+)]
 fn serve<L: PlacedBacking, H: HtAmpduHardware, Path: PoolPath, const SLOTS: usize>(
     hardware: &mut H,
     owner: &mut Esp32s31AmpduOwner<'_, L, SLOTS>,
@@ -616,14 +625,22 @@ fn serve<L: PlacedBacking, H: HtAmpduHardware, Path: PoolPath, const SLOTS: usiz
     on_air: &mut OnAir<'_, Path>,
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
+    publication_timeout: Duration,
     now: Instant,
 ) -> Step {
     if on_air.settling {
         if now < on_air.deadline {
             return Ok(None);
         }
-        owner.finish_timeout_abort_retained(hardware, cookie)?;
-        return Ok(Some(AttemptEnd::Aborted));
+        match owner.finish_timeout_abort_retained(hardware, cookie)? {
+            TxAbortEnd::Detached => return Ok(Some(AttemptEnd::Aborted)),
+            // The completion may have come while the abort settled.
+            TxAbortEnd::OnAir => {
+                on_air.settling = false;
+                on_air.past_abort = true;
+                on_air.deadline = now.saturating_add(publication_timeout);
+            }
+        }
     }
     let air = Air {
         transmissions: NonZeroU16::MIN,
@@ -654,15 +671,22 @@ fn serve<L: PlacedBacking, H: HtAmpduHardware, Path: PoolPath, const SLOTS: usiz
         return Ok(Some(AttemptEnd::Collision(None)));
     }
     let expired = now >= on_air.deadline;
-    if (events & EVENT_TX_TIMEOUT != 0 || expired) && may_begin_timeout_abort {
-        if owner.begin_timeout_abort(hardware, cookie)? {
-            on_air.settling = true;
-            on_air.deadline = now.saturating_add(TX_ABORT_SETTLE);
-            return Ok(None);
-        }
+    if on_air.past_abort {
         if expired {
             owner.require_reset(cookie)?;
             return Err(ArenaFault::Watchdog);
+        }
+        return Ok(None);
+    }
+    if (events & EVENT_TX_TIMEOUT != 0 || expired) && may_begin_timeout_abort {
+        let cause = if expired {
+            MacTxAbortCause::Forced
+        } else {
+            MacTxAbortCause::TimeoutEdge
+        };
+        if owner.begin_timeout_abort(hardware, cookie, cause)? {
+            on_air.settling = true;
+            on_air.deadline = now.saturating_add(TX_ABORT_SETTLE);
         }
     }
     Ok(None)
@@ -952,6 +976,7 @@ where
             role,
             deadline: now.saturating_add(timeout),
             settling: false,
+            past_abort: false,
             single: spacing.is_none(),
             retry: plan.map(|plan| SingleRetry {
                 plan,
@@ -995,6 +1020,7 @@ where
             LegacyTxQueue::from_access_category(on_air.queue.category()).hardware_index(),
         );
         let may_begin = self.core.begin_arena_service(index);
+        let publication_timeout = self.core.publication_timeout();
         let step = serve(
             self.hardware,
             &mut chain.owner,
@@ -1002,6 +1028,7 @@ where
             on_air,
             wake,
             may_begin,
+            publication_timeout,
             now,
         );
         let settling = on_air.settling;
@@ -1217,6 +1244,7 @@ where
     on_air.rate = rate;
     on_air.deadline = now.saturating_add(core.publication_timeout());
     on_air.settling = false;
+    on_air.past_abort = false;
     Ok(())
 }
 

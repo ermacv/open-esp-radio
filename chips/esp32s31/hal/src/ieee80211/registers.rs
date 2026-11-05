@@ -567,8 +567,9 @@ pub use tx::{
     MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtChannelWidth,
     MacHtGuardInterval, MacHtMcs, MacHtProtectionSpacing, MacHtRate, MacHtTxFormat,
     MacHtTxParameters, MacHtTxProgram, MacLegacyRate, MacLegacyTxParameters, MacLegacyTxProgram,
-    MacLegacyTxResponse, MacOrdinaryTxQueueSnapshot, MacTxCompletionObservation, MacTxControlFrame,
-    MacTxDetachOutcome, MacTxDetachReason, MacTxProtection, MacTxPtiProgram, MacTxQueueDetached,
+    MacLegacyTxResponse, MacOrdinaryTxQueueSnapshot, MacTxAbortCause, MacTxCompletionObservation,
+    MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason, MacTxProtection, MacTxPtiProgram,
+    MacTxQueueDetached,
     power_init::{
         MAC_TX_POWER_RATE_COUNT, MacPartialRuPowerSelector, MacTxPowerIndex, MacTxPowerPair,
         MacTxPowerTable,

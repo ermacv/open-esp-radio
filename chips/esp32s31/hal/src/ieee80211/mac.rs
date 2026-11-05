@@ -23,7 +23,8 @@ use crate::types::{
     MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtTxProgram,
     MacKeyEntryIndex, MacLegacyTxProgram, MacMinimumMpduStartSpacing, MacOrdinaryTxQueueSnapshot,
     MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow,
-    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
+    MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
+    MacTxQueueDetached,
 };
 
 use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
@@ -597,8 +598,12 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac().ordinary_tx_queue_snapshot(queue)
     }
 
-    pub fn begin_tx_timeout_abort(&mut self, queue: MacTxQueueIndex) -> bool {
-        self.pac_mut().begin_mac_tx_timeout_abort(queue)
+    pub fn begin_tx_timeout_abort(
+        &mut self,
+        queue: MacTxQueueIndex,
+        cause: MacTxAbortCause,
+    ) -> bool {
+        self.pac_mut().begin_mac_tx_timeout_abort(queue, cause)
     }
 
     pub fn with_tx_queue_detached<R>(

@@ -15,8 +15,8 @@ use oer_chips_esp32s31_hal::types::{
     MacCcmpKeyIdentity, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtTxProgram,
     MacKeyInstallOutcome, MacLegacyTxProgram, MacLegacyTxResponse, MacStaApReceivePlan,
-    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxProtection,
-    MacTxQueueDetached,
+    MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
+    MacTxProtection, MacTxQueueDetached,
 };
 use oer_protocols_ieee80211_contracts_port::MacRxMetadata;
 use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
@@ -77,6 +77,8 @@ struct Hardware {
     completion: [Option<MacTxCompletionObservation>; 4],
     block_ack_completion: [Option<MacHtAmpduCompletionObservation>; 4],
     timeout_pending: [bool; 4],
+    /// A queue whose abort finds VALID clear: the hardware took the PPDU.
+    taken_by_air: [bool; 4],
     collision_pending: [bool; 4],
     /// The MAC-wide CCA a timeout abort forces until its detach.
     cca_forced: bool,
@@ -182,9 +184,10 @@ impl TxHardware for Hardware {
     fn begin_tx_timeout_abort(
         &mut self,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        cause: MacTxAbortCause,
     ) -> bool {
         let queue = queue.get() as u8;
-        if !self.timeout_pending[usize::from(queue)] {
+        if cause == MacTxAbortCause::TimeoutEdge && !self.timeout_pending[usize::from(queue)] {
             return false;
         }
         assert!(!self.cca_forced, "one timeout abort forces CCA at a time");
@@ -203,11 +206,12 @@ impl TxHardware for Hardware {
         let queue = usize::from(queue);
         let pending = match reason {
             MacTxDetachReason::Timeout => {
-                let pending = core::mem::take(&mut self.timeout_pending[queue]);
-                if pending {
-                    self.cca_forced = false;
+                self.timeout_pending[queue] = false;
+                self.cca_forced = false;
+                if self.taken_by_air[queue] {
+                    return MacTxDetachOutcome::OnAir;
                 }
-                pending
+                true
             }
             MacTxDetachReason::Collision => core::mem::take(&mut self.collision_pending[queue]),
             MacTxDetachReason::Completed => true,
@@ -1571,9 +1575,84 @@ fn review_no_effect_cannot_postpone_an_expired_publication_watchdog() {
         // An RTS diagnostic is not a qualified stop. It must not hide an already
         // expired watchdog or make that deadline wait depend on further input.
         hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(1, 2));
-        let result = core.service(&mut hardware, WifiTxWake::Deadline, &mut events);
-        assert!(result.is_err(), "expired watchdog was bypassed: {result:?}");
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        assert!(hardware.cca_forced, "expired watchdog was bypassed");
         assert!(events.completions.is_empty());
+    });
+}
+
+#[test]
+fn a_publication_past_its_watchdog_is_cancelled_without_a_timeout_edge() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        submit(&mut core, &mut hardware, values(&data_frame(BSSID), false)).unwrap();
+        let deadline = core.next_deadline().unwrap();
+        core.tx.timer.advance_to(deadline);
+        let mut events = Events::default();
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        assert!(hardware.cca_forced);
+        let settle = core.next_deadline().unwrap();
+        core.tx.timer.advance_to(settle);
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        assert!(!hardware.cca_forced);
+        assert_eq!(events.completions, [PublicationEnd::TimedOut]);
+        assert_eq!(events.slots.len(), 1);
+        assert_eq!(hardware.publications(), 1);
+    });
+}
+
+#[test]
+fn a_cancel_that_finds_the_ppdu_on_air_waits_for_its_completion() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        hardware.taken_by_air[BE] = true;
+        submit(&mut core, &mut hardware, values(&data_frame(BSSID), false)).unwrap();
+        core.tx.timer.advance_to(core.next_deadline().unwrap());
+        let mut events = Events::default();
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        core.tx.timer.advance_to(core.next_deadline().unwrap());
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        assert!(!hardware.cca_forced);
+        assert!(events.completions.is_empty(), "the queue holds the frame");
+        assert!(events.slots.is_empty());
+
+        hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
+        core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
+            .unwrap();
+        assert_eq!(events.completions.len(), 1);
+        assert_eq!(events.slots.len(), 1);
+    });
+}
+
+#[test]
+fn a_ppdu_past_its_cancel_without_a_completion_requires_a_reset() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        hardware.taken_by_air[BE] = true;
+        submit(&mut core, &mut hardware, values(&data_frame(BSSID), false)).unwrap();
+        let mut events = Events::default();
+        for _ in 0..2 {
+            core.tx.timer.advance_to(core.next_deadline().unwrap());
+            core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+                .unwrap();
+        }
+        core.tx.timer.advance_to(core.next_deadline().unwrap());
+        assert_eq!(
+            core.service(&mut hardware, WifiTxWake::Deadline, &mut events),
+            Err(LowerMacFault::Tx(OrdinaryTxError::RadioResetRequired(
+                crate::ordinary_tx::TxResetReason::ExecutorDeadline
+            )))
+        );
+        assert!(events.completions.is_empty());
+        assert!(events.slots.is_empty());
     });
 }
 
@@ -3327,12 +3406,18 @@ fn poisoned_attempts_retain_key_rights_and_never_report_key_removed() {
         }
         let mut events = Events::default();
         core.remove_checked_key(&mut hardware, key, &mut events);
-        let deadline = core.next_deadline().unwrap();
-        core.tx.timer.advance_to(deadline);
-        assert!(
-            core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+        hardware.taken_by_air = [true; 4];
+        for _ in 0..8 {
+            let deadline = core.next_deadline().unwrap();
+            core.tx.timer.advance_to(deadline);
+            if core
+                .service(&mut hardware, WifiTxWake::Deadline, &mut events)
                 .is_err()
-        );
+            {
+                break;
+            }
+        }
+        assert!(core.inner.fault().is_some());
         assert_eq!(core.keys.uses[index].get(), 2);
         assert!(matches!(
             core.queues[1].as_ref().unwrap().work,
@@ -3502,12 +3587,18 @@ fn an_unpublished_right_returned_after_poison_stays_in_custody() {
         let outside = core.admit_key(&key, ticket).ok().unwrap();
         let mut events = Events::default();
         core.remove_checked_key(&mut hardware, key, &mut events);
-        let deadline = core.next_deadline().unwrap();
-        core.tx.timer.advance_to(deadline);
-        assert!(
-            core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+        hardware.taken_by_air = [true; 4];
+        for _ in 0..8 {
+            let deadline = core.next_deadline().unwrap();
+            core.tx.timer.advance_to(deadline);
+            if core
+                .service(&mut hardware, WifiTxWake::Deadline, &mut events)
                 .is_err()
-        );
+            {
+                break;
+            }
+        }
+        assert!(core.inner.fault().is_some());
         let _custody = core
             .return_admission(&mut hardware, TxAdmission::Protected(outside), &mut events)
             .err()
