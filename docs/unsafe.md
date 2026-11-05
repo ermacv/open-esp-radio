@@ -722,10 +722,7 @@ Thus a callback cannot substitute another allocation for an unwritten field.
 Cached SPSC placement initializes its cursor words directly and composes with
 this nested form in the Wi-Fi RX arena; compact P1/P2 queues retain their layout.
 
-`InlinePlace` owns optional inline storage. Initialization checks the returned
-address before publishing its initialized flag; clearing removes that flag
-before running the destructor. Interrupted initialization leaves the place
-empty. `Placed::replace_into` swaps two distinct, exclusively owned initialized
+`Placed::replace_into` swaps two distinct, exclusively owned initialized
 values directly between their places, then drops the previous destination in
 the consumed loan's storage. If that destructor unwinds, the new destination
 remains initialized and exclusively owned.
