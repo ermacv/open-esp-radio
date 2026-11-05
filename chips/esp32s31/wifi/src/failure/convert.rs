@@ -283,7 +283,6 @@ pub(super) fn tx_error(value: oer_chips_esp32s31_ieee80211_driver::mac::tx::TxEr
         Source::QueueActive => TxError::QueueActive,
         Source::Stale => TxError::Stale,
         Source::DetachFailed => TxError::DetachFailed,
-        Source::ResetRequired => TxError::ResetRequired,
         Source::Completion(v0) => TxError::Completion(completion_fault(v0)),
     }
 }

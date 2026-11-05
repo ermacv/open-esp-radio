@@ -304,9 +304,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         if !(2..=TX_AMPDU_SLOT_CAPACITY).contains(&SLOTS) {
             return Err(HtAmpduTxError::InvalidStorageGeometry { slots: SLOTS });
         }
-        let generation = (*storage.generation_cursor)
-            .checked_add(1)
-            .ok_or(HtAmpduTxError::ResetRequired)?;
+        let generation = super::next_generation(*storage.generation_cursor);
         *storage.generation_cursor = generation;
         *storage.active = TxCookie(generation);
         *storage.count = 0;

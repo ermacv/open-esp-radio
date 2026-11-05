@@ -1223,6 +1223,47 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
     assert!(live.try_stop(&mut mmio).is_ok());
 }
 
+#[test]
+fn an_append_past_the_last_generation_wraps_and_keeps_the_ring_live() {
+    const COUNT: usize = 4;
+    const ADDRESS_LOW_MASK: u32 = crate::ieee80211::registers::WifiDescriptorAddressLow::MAX;
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
+    let placed = place(storage);
+    let storage = placed.storage();
+    let base = placed.descriptor_base();
+    let mut mmio = MockRxDma::default();
+    let prepared = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner");
+    let mut live = prepared
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .expect("live epoch");
+    live.set_cursor_generation(u32::MAX);
+    storage.descriptors()[0].write_word0(crate::ieee80211::dma::descriptor::rx_landed_word(
+        16, 4, true,
+    ));
+    mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
+    mmio.next_descriptor_low =
+        (base + crate::ieee80211::dma::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
+    let frozen_cursor = live.freeze_cursor(&mut mmio).unwrap();
+    let credit = storage
+        .take_completed_unit(&mut live, frozen_cursor)
+        .expect("completed descriptor")
+        .expect("descriptor owner")
+        .retain_discard()
+        .expect("unit is at the recycle frontier");
+    let append = credit
+        .append(&mut mmio)
+        .expect("the append past the last generation");
+    assert_eq!(append.descriptor_count, 1);
+    live.complete_pending_reload(&mut mmio, frozen_settle())
+        .expect("vendor reload suffix");
+    assert!(live.topology_snapshot().valid);
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
 /// Two completed single-descriptor frames, LAST on the first: the walker
 /// still writes the second, so only the first unit can be taken.
 fn two_completed_frames_last_on_the_first() -> (
