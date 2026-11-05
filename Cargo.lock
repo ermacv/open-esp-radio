@@ -2170,6 +2170,7 @@ name = "oer-hil-scenarios-wifi-station"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "oer-hil-services-fault",
  "oer-hil-services-wifi-station",
  "oer-protocols-hil-agent",
  "oer-tools-hil-harness",

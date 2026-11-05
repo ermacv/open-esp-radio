@@ -243,6 +243,13 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
     pub(crate) fn take_profile(&self) -> Option<StaProfile> {
         self.state.profile.take()
     }
+    /// Keep a retired station's network for the next installation's first
+    /// Connect, a policy reconnect's included. A profile an application
+    /// connect published meanwhile is newer and stays.
+    pub(crate) fn keep_profile(&self, retired: Option<StaProfile>) {
+        let published = self.state.profile.take();
+        self.state.profile.set(published.or(retired));
+    }
     pub(crate) async fn wait_for_stop(&self) {
         match &self.endpoint {
             Some(endpoint) => endpoint.wait_for_stop().await,

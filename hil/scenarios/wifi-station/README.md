@@ -12,6 +12,7 @@ with the board and the air (`Scenario::using_router`).
 | `join` | The router brings up its isolated station network with a generated SSID and passphrase (WPA2-Personal, CCMP) on the first channel the stand file's `[router]` allows; the device joins it, linked on that channel, and the router's station table shows it authenticated, associated and authorized |
 | `dhcp` | The device takes an IPv4 address by DHCP; the router's lease for its MAC holds that address, and the router (`10.231.0.1`) is its gateway |
 | `ping` | The router pings the device's address ten times; at least nine replies |
+| `restart` | A refused publication restarts the station: the same boot counts one restart, and its reconnect policy brings the device back with no command from the host; at least nine of ten pings answered |
 | `leave` | The device leaves: its link is down, and the router's station table no longer lists it |
 
 The cases run in order on one boot: each needs what the one before did.

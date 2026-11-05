@@ -1285,6 +1285,11 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStatio
         )
     }
 
+    /// The station's network, for its next installation to reconnect to.
+    pub fn take_profile(&mut self) -> Option<StaProfile> {
+        self.profile.take()
+    }
+
     /// End this installation's bank and keep only the station's
     /// configuration and callbacks, for a station on another installation's
     /// owners; every owner of this installation drops with the bank.

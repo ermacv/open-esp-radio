@@ -192,6 +192,18 @@ impl Worker {
                 Either::First(Either::Second(oer_hil_services_fault::Request::RaiseException(_))) => {
                     match answer_then_trap(identity, &oer_hil_services_fault::Raising).await? {}
                 }
+                Either::First(Either::Second(oer_hil_services_fault::Request::RefusePublication(
+                    _,
+                ))) => {
+                    oer::wifi::debug::refuse_next_publication();
+                    answer(identity, &oer_hil_services_fault::Refusing);
+                }
+                Either::First(Either::Second(oer_hil_services_fault::Request::GetRestarts(_))) => {
+                    answer(
+                        identity,
+                        &oer_hil_services_fault::Restarts(oer::wifi::debug::restarts()),
+                    );
+                }
                 // The load server in the group answers it.
                 Either::Second(request) => {
                     self.load.send((identity, request)).await;
