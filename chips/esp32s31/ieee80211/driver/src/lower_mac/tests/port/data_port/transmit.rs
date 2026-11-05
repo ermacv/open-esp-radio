@@ -236,6 +236,49 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     }
 
     /// Serve `turns` turns.
+    /// Submit a BlockAckReq of `transmissions` publications at most.
+    fn submit_block_ack_request(&mut self, transmissions: u8) {
+        let fixture = self;
+        let buffer = fixture.buffers.pop().expect("buffer");
+        let ticket = fixture.tickets.pop().expect("ticket");
+        let Ok(rate) = fixture
+            .port
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .expect("rate")
+            .legacy()
+        else {
+            panic!("a legacy rate");
+        };
+        let frame = ClassFrame::new(TxFrame::BlockAckRequest {
+            receiver: IndividualAddress::new(BSSID).expect("receiver"),
+            transmitter: STATION,
+            tid: Tid::new(0).expect("TID"),
+            starting_sequence:
+                oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_low_bits(0x10),
+            plan: RetryPlan::new(RetryStage {
+                rate,
+                transmissions: core::num::NonZeroU8::new(transmissions).expect("budget"),
+                protection: Protection::None,
+            }),
+        })
+        .ok()
+        .expect("class");
+        let source = TxSource::Fresh {
+            buffer,
+            frame,
+            body: None,
+            protection: TxProtection::Open,
+        }
+        .check()
+        .ok()
+        .expect("layout");
+        let source =
+            <Family<_> as TxBufferPool<'_, BufferClass<512>>>::prepare::<Station, Caps>(source)
+                .ok()
+                .expect("prepared");
+        submit!(fixture, ticket, source, WmmAccessCategory::BestEffort, 72);
+    }
+
     fn turns(&mut self, turns: usize) {
         for _ in 0..turns {
             if let Some(done) = self.turn() {
@@ -365,44 +408,7 @@ fn an_unanswered_block_ack_request_is_sent_again_without_a_retry_bit() {
         fixture.observed.borrow_mut().block_ack = Some((0x10, 0, false));
         fixture.start();
         fixture.configure_station();
-        let buffer = fixture.buffers.pop().expect("buffer");
-        let ticket = fixture.tickets.pop().expect("ticket");
-        let Ok(rate) = fixture
-            .port
-            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
-            .expect("rate")
-            .legacy()
-        else {
-            panic!("a legacy rate");
-        };
-        let frame = ClassFrame::new(TxFrame::BlockAckRequest {
-            receiver: IndividualAddress::new(BSSID).expect("receiver"),
-            transmitter: STATION,
-            tid: Tid::new(0).expect("TID"),
-            starting_sequence:
-                oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_low_bits(0x10),
-            plan: RetryPlan::new(RetryStage {
-                rate,
-                transmissions: core::num::NonZeroU8::new(2).expect("budget"),
-                protection: Protection::None,
-            }),
-        })
-        .ok()
-        .expect("class");
-        let source = TxSource::Fresh {
-            buffer,
-            frame,
-            body: None,
-            protection: TxProtection::Open,
-        }
-        .check()
-        .ok()
-        .expect("layout");
-        let source =
-            <Family<_> as TxBufferPool<'_, BufferClass<512>>>::prepare::<Station, Caps>(source)
-                .ok()
-                .expect("prepared");
-        submit!(fixture, ticket, source, WmmAccessCategory::BestEffort, 72);
+        fixture.submit_block_ack_request(2);
         let returned = single(fixture.until(access, 1));
         assert!(
             matches!(returned.outcome, TxOutcome::Ended(SingleEnd::AckTimeout(air)) if air.transmissions.get() == 2),
@@ -419,6 +425,37 @@ fn an_unanswered_block_ack_request_is_sent_again_without_a_retry_bit() {
             "the resent request carries no Retry bit"
         );
     });
+}
+
+#[test]
+fn a_block_ack_beside_a_failed_status_delivers_its_request_unmeasured() {
+    // The hardware reports the BlockAck's result beside the completion's
+    // status, and only a zero status carries an ACK sample: the answer is
+    // the access point's, so the request is delivered without a measurement.
+    for status in [2, 5] {
+        with_access(|fixture, access| {
+            {
+                let mut observed = fixture.observed.borrow_mut();
+                observed.block_ack = Some((0x10, 0b1, true));
+                observed.statuses = std::vec![(status, 0)];
+            }
+            fixture.start();
+            fixture.configure_station();
+            fixture.submit_block_ack_request(1);
+            let returned = single(fixture.until(access, 1));
+            let TxOutcome::Ended(SingleEnd::Delivered {
+                response: SingleResponse::BlockAck { ack, .. },
+                ..
+            }) = returned.outcome
+            else {
+                panic!(
+                    "the answered request ends delivered: {:?}",
+                    returned.outcome
+                );
+            };
+            assert_eq!(ack.snr_sample(), SnrSample::Unmeasured);
+        });
+    }
 }
 
 #[test]

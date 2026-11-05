@@ -492,10 +492,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 } => {
                     let response = match pending.operation.payload().layout.kind() {
                         MpduKind::Group | MpduKind::IndividualNoAck => SingleResponse::Unsolicited,
-                        MpduKind::Individual => SingleResponse::Ack(Ack::from_sample(ack_snr_db)?),
+                        MpduKind::Individual => SingleResponse::Ack(Ack::from_sample(ack_snr_db)),
                         MpduKind::BlockAckRequest => SingleResponse::BlockAck {
                             report: block_ack.ok_or(Fault::BlockAckReportMissing { queue: at })?,
-                            ack: Ack::from_sample(ack_snr_db)?,
+                            ack: Ack::from_sample(ack_snr_db),
                         },
                     };
                     Some(TxOutcome::Ended(SingleEnd::Delivered {
@@ -680,11 +680,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         index: usize,
         mut pending: Pending<'id, Id, D, B, O>,
     ) -> Result<(), Fault> {
+        let at = index as u8;
+        let refused = |step| Fault::Publish { queue: at, step };
         let stage = pending
             .plan
             .stages()
             .nth(pending.stage)
-            .ok_or(Fault::Capacity)?;
+            .ok_or(Fault::StageMissing { queue: at })?;
         let (rate, protection) = (
             stage.rate,
             if pending.publications == 0 {
@@ -695,46 +697,55 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         );
         let role = pending.role();
         let CoreView::Open(mut core) = self.core.view() else {
-            return Err(Fault::Capacity);
+            return Err(Fault::CoreViewUnavailable(CoreOp::Publish));
         };
-        let observations = self.observations.as_mut().ok_or(Fault::Capacity)?;
+        let observations = self
+            .observations
+            .as_mut()
+            .ok_or(refused(PublishStep::Observations))?;
         let backoff_slots = core.draw_backoff(role, pending.category, observations);
         let core_ticket = self
             .tickets
             .iter_mut()
             .find_map(Option::take)
-            .ok_or(Fault::Capacity)?;
+            .ok_or(refused(PublishStep::Ticket))?;
         let key_handle = admitted_key(&self.keys, pending.key())?;
         let admission = match key_handle {
             Some(Installed::Transmit(key)) => core
                 .admit_key(key, core_ticket)
                 .map(TxAdmission::Protected)
-                .map_err(|_| Fault::Capacity)?,
-            Some(Installed::Receive(_)) => return Err(Fault::Capacity),
+                .map_err(|_| refused(PublishStep::KeyAdmission))?,
+            Some(Installed::Receive(_)) => return Err(refused(PublishStep::ReceiveKey)),
             None => TxAdmission::Open(core_ticket),
         };
         let mpdu = pending.operation.execute().mpdu;
         // The hardware takes the memory through the queue's descriptor; the
         // buffer keeps its return right.
-        let lease = mpdu.buffer.dma.publish().ok_or(Fault::Capacity)?;
+        let lease = mpdu
+            .buffer
+            .dma
+            .publish()
+            .ok_or(refused(PublishStep::Buffer))?;
         let mut slot = self
             .descriptors
             .get_mut(index)
             .and_then(Option::take)
-            .ok_or(Fault::Capacity)?;
+            .ok_or(refused(PublishStep::Descriptor))?;
         if slot.as_mut().attach(lease).is_err() {
-            return Err(Fault::Capacity);
+            return Err(refused(PublishStep::Attach));
         }
         let TxSlotAccess::Free(mut memory) = slot.access() else {
-            return Err(Fault::Capacity);
+            return Err(refused(PublishStep::DescriptorBusy));
         };
         if !mpdu.published {
             // A new MSDU: the descriptor's exchange record starts over.
             memory.reset_work();
             if let (Some(Installed::Transmit(key)), Some(pn)) = (key_handle, mpdu.pn) {
-                let buffer = memory.buffer_mut().map_err(|_| Fault::Capacity)?;
+                let buffer = memory
+                    .buffer_mut()
+                    .map_err(|_| refused(PublishStep::HeaderBuffer))?;
                 core.write_ccmp_header(key, buffer, mpdu.layout.header_len(), pn)
-                    .map_err(|_| Fault::Capacity)?;
+                    .map_err(|_| refused(PublishStep::CcmpHeader))?;
             }
         }
         let values = MpduValues::checked(
@@ -758,20 +769,24 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 retry: mpdu.published && mpdu.layout.kind() != MpduKind::BlockAckRequest,
             },
         )
-        .map_err(|_| Fault::Capacity)?;
+        .map_err(|_| refused(PublishStep::Values))?;
         mpdu.published = true;
-        pending.publications = pending.publications.checked_add(1).ok_or(Fault::Capacity)?;
+        pending.publications = pending
+            .publications
+            .checked_add(1)
+            .ok_or(refused(PublishStep::Count))?;
         #[cfg(all(oer_trace, oer_debug_control))]
         let publication = super::trace::Publication {
             ticket: pending.operation.ticket().index(),
             buffer: pending.operation.execute().mpdu.buffer.index(),
         };
-        let queue = self.free[index].take().ok_or(Fault::Capacity)?;
+        let queue = self.free[index].take().ok_or(refused(PublishStep::Queue))?;
         // Durable backing owns the indivisible operation before publication.
         self.running[index] = Some(pending);
-        if let Err(refused) = core.submit_checked(device.hardware()?, queue, admission, values) {
-            core::mem::forget(refused);
-            return Err(Fault::Capacity);
+        if let Err(failed) = core.submit_checked(device.hardware()?, queue, admission, values) {
+            let fault = failed.fault;
+            core::mem::forget(failed);
+            return Err(Fault::Core(fault));
         }
         #[cfg(all(oer_trace, oer_debug_control))]
         oer_chips_family_staged_runtime::trace::emit(&publication);
@@ -818,7 +833,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .keys
             .iter_mut()
             .find(|k| k.is_none())
-            .ok_or(Fault::Capacity)?;
+            .ok_or(Fault::KeySlotMissing(KeyOp::Install))?;
         *place = Some((identity, installed));
         Ok(())
     }
@@ -831,8 +846,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .keys
             .iter_mut()
             .find(|entry| entry.as_ref().is_some_and(|(key, _)| *key == identity))
-            .ok_or(Fault::Capacity)?;
-        let (_, installed) = place.take().ok_or(Fault::Capacity)?;
+            .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
+        let (_, installed) = place.take().ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
         let mut sink = Sink::default();
         match installed {
             Installed::Transmit(key) => {
@@ -853,7 +868,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if let Some(fault) = sink.fault() {
             return Err(fault);
         }
-        sink.removed.pop().ok_or(Fault::Capacity)
+        sink.removed.pop().ok_or(Fault::RemovalMissing)
     }
     pub(super) fn removed_terminal(
         &self,
@@ -877,7 +892,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             (Removal::AccessPointGroup(permission), Slot::AccessPointGroup(slot)) => {
                 brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Group { slot, permission })
             }
-            _ => return Err(Fault::Capacity),
+            _ => return Err(Fault::RemovalMismatch),
         };
         Ok(removed)
     }
@@ -934,7 +949,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     activity: &env.shared().key_live[17 + usize::from(slot.index())],
                 };
                 let Some(key_id) = crate::mac::crypto::ApGroupKeyId::new(key_id.get()) else {
-                    return Err(Fault::Capacity);
+                    return Err(Fault::GroupKeyIdRange);
                 };
                 self.install(
                     device,
@@ -968,9 +983,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     .iter_mut()
                     .flatten()
                     .find(|(identity, _)| *identity == key.identity)
-                    .ok_or(Fault::Capacity)?;
+                    .ok_or(Fault::KeySlotMissing(KeyOp::Replace))?;
                 let Installed::Receive(installed) = &mut entry.1 else {
-                    return Err(Fault::Capacity);
+                    return Err(Fault::KeySlotMissing(KeyOp::Replace));
                 };
                 #[cfg(oer_debug_control)]
                 let mut hardware = key_replacement::RejectOnce {
@@ -1065,7 +1080,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     .flatten()
                     .any(|(identity, _)| *identity == key.identity)
                 {
-                    return Err(Fault::Capacity);
+                    return Err(Fault::KeySlotMissing(KeyOp::Select));
                 }
                 return Ok(brand::OwnedTerminal::GroupKeySelected { key, permission });
             }
@@ -1117,5 +1132,5 @@ fn admitted_key<'a, 'id, Id: SlotIdentity>(
         .flatten()
         .find(|(key, _)| *key == identity)
         .map(|(_, key)| Some(key))
-        .ok_or(Fault::Capacity)
+        .ok_or(Fault::KeySlotMissing(KeyOp::Transmit))
 }

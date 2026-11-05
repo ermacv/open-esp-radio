@@ -262,7 +262,7 @@ fn control_plan(
 /// # };
 /// # #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// # struct Snr(i8);
-/// # impl AckSnr for Snr { fn snr_db(&self) -> i8 { self.0 } }
+/// # impl AckSnr for Snr { fn snr_sample(&self) -> SnrSample { SnrSample::Measured(self.0) } }
 /// impl BlockAckSnr for Snr {
 ///     fn snr_sample(&self) -> SnrSample {
 ///         SnrSample::Measured(self.0)
@@ -316,8 +316,8 @@ fn control_plan(
 /// #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// struct Snr(i8);
 /// impl AckSnr for Snr {
-///     fn snr_db(&self) -> i8 {
-///         self.0
+///     fn snr_sample(&self) -> SnrSample {
+///         SnrSample::Measured(self.0)
 ///     }
 /// }
 /// impl BlockAckSnr for Snr {
@@ -365,7 +365,10 @@ impl<K: Ieee80211Capabilities, M: SignalMetadata, A: AckSnr, BA: BlockAckSnr>
             Some(RateSample::Acked { air, ack }) => (
                 air.transmissions,
                 MpduOutcome::Acknowledged,
-                Some(ack.snr_db()),
+                match ack.snr_sample() {
+                    SnrSample::Measured(sample) => Some(sample),
+                    SnrSample::Unmeasured => None,
+                },
             ),
             // A frame that solicited no response went out, which is all it
             // asked for; it carries no ACK SNR.

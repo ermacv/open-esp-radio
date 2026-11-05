@@ -161,14 +161,15 @@ pub struct Air {
     pub rate: crate::PhyRate,
 }
 
-/// The SNR a backend's ACK evidence always carries: a property of the
-/// backend, as [`SignalMetadata`](crate::SignalMetadata) is of its receive
-/// metadata. A policy that needs it requires this trait of
-/// [`PortTypes::AckEvidence`](crate::PortTypes::AckEvidence), and a
-/// backend without it does not build with that policy.
+/// The SNR sample of a backend's ACK evidence, which its hardware may not
+/// report for every accepted response: a property of the backend, as
+/// [`SignalMetadata`](crate::SignalMetadata) is of its receive metadata. A
+/// policy that needs it requires this trait of
+/// [`PortTypes::AckEvidence`](crate::PortTypes::AckEvidence), and a backend
+/// without it does not build with that policy.
 pub trait AckSnr {
-    /// The response's SNR, in dB.
-    fn snr_db(&self) -> i8;
+    /// The response's SNR sample.
+    fn snr_sample(&self) -> SnrSample;
 }
 
 /// The SNR sample of a backend's BlockAck evidence for an aggregate, which
@@ -181,12 +182,12 @@ pub trait BlockAckSnr {
     fn snr_sample(&self) -> SnrSample;
 }
 
-/// Whether a BlockAck carried an SNR measurement.
+/// Whether a response carried an SNR measurement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SnrSample {
-    /// The backend measured the BlockAck's SNR, in dB.
+    /// The backend measured the response's SNR, in dB.
     Measured(i8),
-    /// The backend has no measurement of this BlockAck.
+    /// The backend has no measurement of this response.
     Unmeasured,
 }
 

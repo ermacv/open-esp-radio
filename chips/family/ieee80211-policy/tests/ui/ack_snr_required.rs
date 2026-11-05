@@ -10,8 +10,8 @@ fn for_port<M: SignalMetadata, A>(_: impl RateSelection<M, A>) {}
 pub struct Snr(i8);
 
 impl AckSnr for Snr {
-    fn snr_db(&self) -> i8 {
-        self.0
+    fn snr_sample(&self) -> oer_protocols_ieee80211_contracts_port::SnrSample {
+        oer_protocols_ieee80211_contracts_port::SnrSample::Measured(self.0)
     }
 }
 

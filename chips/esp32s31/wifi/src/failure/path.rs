@@ -29,7 +29,6 @@ impl DiagnosticPath for BackendFault {
                     path.truncated();
                 }
             }
-            Self::Capacity => path.name("Capacity"),
             Self::Clock => path.name("Clock"),
             Self::Retune(error) => {
                 path.name("Retune");
@@ -64,10 +63,35 @@ impl DiagnosticPath for BackendFault {
                     CoreOperation::Tbtt => "Tbtt",
                     CoreOperation::Arena => "Arena",
                     CoreOperation::Publish => "Publish",
+                    CoreOperation::Enable => "Enable",
+                    CoreOperation::Configure => "Configure",
+                    CoreOperation::Open => "Open",
+                });
+            }
+            Self::Publish { queue, step } => {
+                queue_fault(path, "Publish", *queue);
+                path.name(match step {
+                    PublishStep::Observations => "Observations",
+                    PublishStep::Ticket => "Ticket",
+                    PublishStep::KeyAdmission => "KeyAdmission",
+                    PublishStep::ReceiveKey => "ReceiveKey",
+                    PublishStep::Buffer => "Buffer",
+                    PublishStep::Descriptor => "Descriptor",
+                    PublishStep::Attach => "Attach",
+                    PublishStep::DescriptorBusy => "DescriptorBusy",
+                    PublishStep::HeaderBuffer => "HeaderBuffer",
+                    PublishStep::CcmpHeader => "CcmpHeader",
+                    PublishStep::Values => "Values",
+                    PublishStep::Count => "Count",
+                    PublishStep::Queue => "Queue",
                 });
             }
             Self::DuplicateCompletion { queue } => queue_fault(path, "DuplicateCompletion", *queue),
             Self::RemovalOverflow => path.name("RemovalOverflow"),
+            Self::RemovalMissing => path.name("RemovalMissing"),
+            Self::RemovalMismatch => path.name("RemovalMismatch"),
+            Self::GroupKeyIdRange => path.name("GroupKeyIdRange"),
+            Self::ConfigurationRefused => path.name("ConfigurationRefused"),
             Self::CompletionWithoutPending { queue } => {
                 queue_fault(path, "CompletionWithoutPending", *queue);
             }

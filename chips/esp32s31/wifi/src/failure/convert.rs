@@ -7,7 +7,6 @@ pub(crate) fn backend_fault(
     match value {
         Source::Core(v0) => BackendFault::Core(lower_mac_fault(v0)),
         Source::Receive(v0) => BackendFault::Receive(receive_fault(v0)),
-        Source::Capacity => BackendFault::Capacity,
         Source::Clock => BackendFault::Clock,
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,
@@ -15,8 +14,16 @@ pub(crate) fn backend_fault(
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
         Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
         Source::CoreViewUnavailable(op) => BackendFault::CoreViewUnavailable(core_operation(op)),
+        Source::Publish { queue, step } => BackendFault::Publish {
+            queue,
+            step: publish_step(step),
+        },
         Source::DuplicateCompletion { queue } => BackendFault::DuplicateCompletion { queue },
         Source::RemovalOverflow => BackendFault::RemovalOverflow,
+        Source::RemovalMissing => BackendFault::RemovalMissing,
+        Source::RemovalMismatch => BackendFault::RemovalMismatch,
+        Source::GroupKeyIdRange => BackendFault::GroupKeyIdRange,
+        Source::ConfigurationRefused => BackendFault::ConfigurationRefused,
         Source::CompletionWithoutPending { queue } => {
             BackendFault::CompletionWithoutPending { queue }
         }
@@ -65,6 +72,30 @@ pub(super) fn core_operation(
         Source::Tbtt => CoreOperation::Tbtt,
         Source::Arena => CoreOperation::Arena,
         Source::Publish => CoreOperation::Publish,
+        Source::Enable => CoreOperation::Enable,
+        Source::Configure => CoreOperation::Configure,
+        Source::Open => CoreOperation::Open,
+    }
+}
+
+pub(super) fn publish_step(
+    value: oer_chips_esp32s31_ieee80211_driver::port::PublishStep,
+) -> PublishStep {
+    use oer_chips_esp32s31_ieee80211_driver::port::PublishStep as Source;
+    match value {
+        Source::Observations => PublishStep::Observations,
+        Source::Ticket => PublishStep::Ticket,
+        Source::KeyAdmission => PublishStep::KeyAdmission,
+        Source::ReceiveKey => PublishStep::ReceiveKey,
+        Source::Buffer => PublishStep::Buffer,
+        Source::Descriptor => PublishStep::Descriptor,
+        Source::Attach => PublishStep::Attach,
+        Source::DescriptorBusy => PublishStep::DescriptorBusy,
+        Source::HeaderBuffer => PublishStep::HeaderBuffer,
+        Source::CcmpHeader => PublishStep::CcmpHeader,
+        Source::Values => PublishStep::Values,
+        Source::Count => PublishStep::Count,
+        Source::Queue => PublishStep::Queue,
     }
 }
 

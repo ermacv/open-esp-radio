@@ -201,3 +201,17 @@ fn a_refused_start_keeps_the_retune_cause_in_its_path() {
     ));
     assert_eq!(device.names(), ["StartRefused", "Device"]);
 }
+#[test]
+fn a_publication_fault_keeps_its_queue_and_step_across_the_boundary() {
+    use oer_chips_esp32s31_ieee80211_driver::port::{Fault, PublishStep as Step};
+    assert_eq!(
+        super::convert::backend_fault(Fault::Publish {
+            queue: 2,
+            step: Step::Ticket,
+        }),
+        BackendFault::Publish {
+            queue: 2,
+            step: PublishStep::Ticket,
+        }
+    );
+}

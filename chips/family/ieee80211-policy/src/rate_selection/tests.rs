@@ -157,8 +157,8 @@ fn plan_walk(plan: &RetryPlan<PhyRate>) -> Vec<PhyRate> {
 struct Snr(i8);
 
 impl AckSnr for Snr {
-    fn snr_db(&self) -> i8 {
-        self.0
+    fn snr_sample(&self) -> SnrSample {
+        SnrSample::Measured(self.0)
     }
 }
 
