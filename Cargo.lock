@@ -688,7 +688,7 @@ dependencies = [
 [[package]]
 name = "embassy-sync"
 version = "0.8.0"
-source = "git+https://github.com/ermacv/embassy?rev=9b380dbaa3e95c1dc47ce0f2bf6c8f7305ad0087#9b380dbaa3e95c1dc47ce0f2bf6c8f7305ad0087"
+source = "git+https://github.com/ermacv/embassy?rev=cbeed6a32ba1c3135f1518f046c5a5c60e86945d#cbeed6a32ba1c3135f1518f046c5a5c60e86945d"
 dependencies = [
  "cfg-if",
  "critical-section",

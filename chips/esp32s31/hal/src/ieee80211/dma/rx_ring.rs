@@ -2503,8 +2503,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// a pending sample lets a later RX completion replace that cursor epoch.
     ///
     /// The doorbells are observed until they clear or `settle`'s limit has
-    /// passed on its clock, counted from the first observation that found
-    /// one pending. When a doorbell is still pending then, the reload stays
+    /// passed on its clock, counted from the call; the first observation
+    /// always runs. When a doorbell is still pending then, the reload stays
     /// pending in this owner and the call returns `ReloadPending`. Each wait
     /// records its observation count in [`RxReloadEvidence::max_reload_attempts`].
     /// A settle rings the doorbell at most once more per appended tail, so
@@ -2515,16 +2515,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         settle: Settle<'_, C>,
     ) -> Result<(), RxRingError> {
         while self.pending_tail().is_some() {
-            // A doorbell already clear has nothing to wait for and reads no
-            // clock, on the hot path of every reload.
-            let mut attempts = 1_u32;
-            let settled = match mmio.try_with_reload_settled(|_settled| ()) {
-                Some(()) => Ok(()),
-                None => oer_portable_time::settle::settle(settle, || {
-                    attempts = attempts.saturating_add(1);
-                    mmio.try_with_reload_settled(|_settled| ())
-                }),
-            };
+            let mut attempts = 0_u32;
+            let settled = oer_portable_time::settle::settle(settle, || {
+                attempts = attempts.saturating_add(1);
+                mmio.try_with_reload_settled(|_settled| ())
+            });
             record_maximum(&self.arena.max_reload_attempts, attempts);
             settled.map_err(|oer_portable_time::settle::Unsettled| RxRingError::ReloadPending)?;
             self.settle_reload(mmio)?;
