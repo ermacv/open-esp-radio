@@ -764,6 +764,9 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     ) -> Poll<Result<Option<Self::Receive>, Fault>> {
         <Inner<W> as port::Device<TX>>::poll_rx_cut(&mut self.0, room, cx)
     }
+    fn cut_held_by_units(&self) -> bool {
+        <Inner<W> as port::Device<TX>>::cut_held_by_units(&self.0)
+    }
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {
         <Inner<W> as port::Device<TX>>::finish_rx_cut(&mut self.0)
     }

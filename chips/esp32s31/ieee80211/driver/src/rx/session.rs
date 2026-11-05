@@ -329,6 +329,7 @@ where
         registers: &mut RadioAccess,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
+        live: &impl oer_portable_time::Clock,
         publisher: &P,
     ) -> Result<crate::datapath::DatapathRxProgress, WifiRxCause> {
         let (mut mac, dma) = registers.split_rx_dma();
@@ -350,7 +351,7 @@ where
             totals: &mut self.totals,
             full_since: &mut self.full_since,
         };
-        receiver.service_once(self.frontier.live_mut().map_err(WifiRxCause::Start)?)
+        receiver.service_once(self.frontier.live_mut().map_err(WifiRxCause::Start)?, live)
     }
 
     pub(crate) fn port_unmask(&self, doorbell: &impl RadioDoorbell) {

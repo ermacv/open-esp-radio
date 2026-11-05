@@ -444,6 +444,44 @@ fn a_gtk_mutation_held_at_its_cut_comes_back_refused_by_a_stopped_port_and_runs_
 }
 
 #[test]
+fn a_gtk_mutation_waits_for_units_the_network_holds_past_its_bound() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (command, owners) = fixture.group_command(Mutation::Replace);
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.hold_cut = true;
+            observed.cut_by_units = true;
+        }
+        let now = fixture.now();
+        let mut held = match fixture.port.command(command, now, &mut fixture.outbox) {
+            Ok(CommandProgress::Held(held)) => held,
+            _ => panic!("the cut holds the mutation"),
+        };
+        // The network keeps its units for longer than a command's bound.
+        for _ in 0..3 {
+            fixture.advance(Duration::from_micros(COMMAND_BOUND.as_micros() - 1000));
+            let now = fixture.now();
+            held = match fixture.port.command(held, now, &mut fixture.outbox) {
+                Ok(CommandProgress::Held(held)) => held,
+                _ => panic!("the units decide: {:?}", fixture.port.fault()),
+            };
+        }
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.hold_cut = false;
+            observed.cut_by_units = false;
+        }
+        assert!(matches!(fixture.run(held), Ok(CommandProgress::Done)));
+        assert_eq!(
+            fixture.group_terminals(),
+            [(Mutation::Replace, owners.0, owners.1)]
+        );
+        fixture.stop();
+    });
+}
+
+#[test]
 fn a_gtk_mutation_refused_by_a_stop_measures_its_bound_from_the_restart() {
     with_fixture(|fixture| {
         fixture.start();

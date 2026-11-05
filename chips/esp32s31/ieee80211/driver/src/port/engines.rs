@@ -1120,6 +1120,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 Ok(CommandProgress::Held(command))
             }
             Poll::Pending => {
+                // The caller holds all the units the cut could hand it: as
+                // with a publication, they decide how long this takes, and
+                // the command's bound counts from the last they held it.
+                if room == 0 || self.device.cut_held_by_units() {
+                    self.group_since = Some(now);
+                }
                 self.cut_retry = true;
                 self.cut_due = false;
                 self.holding = Some(command.kind());

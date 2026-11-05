@@ -441,7 +441,7 @@ where
             }
             let admitted_before = self.totals[1];
             let observations = ring.reload_evidence().observations;
-            let progress = self.service_once(ring);
+            let progress = self.service_once(ring, self.timer);
             if let Some(snapshot) = snapshot.take() {
                 self.record_exhaustion(ring, snapshot, observations);
             }
@@ -561,9 +561,12 @@ where
         self.counters.exhaustion(snapshot);
     }
 
+    /// Service the ring once at `self.timer`'s time. `live` is a clock that
+    /// moves, whatever the service's time is: the reload settle runs on it.
     pub(super) fn service_once(
         &mut self,
         ring: &mut RxRingLive<'static, COUNT>,
+        live: &impl oer_portable_time::Clock,
     ) -> Result<DatapathRxProgress, WifiRxCause> {
         self.counters.service_pass();
         let [descriptors, units, bytes] = &mut *self.totals;
@@ -580,7 +583,7 @@ where
             },
             self.rx_dma,
             self.hardware,
-            Settle::new(RELOAD_SETTLE_LIMIT, self.timer),
+            Settle::new(RELOAD_SETTLE_LIMIT, live),
             (),
         );
         self.counters.reload_evidence(ring.reload_evidence());

@@ -338,9 +338,14 @@ pub struct Config {
 pub const RECONNECT: embassy_time::Duration = embassy_time::Duration::from_secs(1);
 
 /// The default bound of a stop: how long the IP service may take to return
-/// the receive buffers it holds. The library's choice,
-/// not a measured need.
-pub const DRAIN: embassy_time::Duration = embassy_time::Duration::from_secs(2);
+/// the receive buffers it holds and a frame a foreign transmitter keeps off
+/// the air may take to end. The library's choice, not a measured need.
+pub const DRAIN: embassy_time::Duration = embassy_time::Duration::from_secs(3);
+const _: () = {
+    if DRAIN.as_micros() <= wifi::STOP_FLOOR.as_micros() {
+        panic!("a stop expires behind a frame that may still end");
+    }
+};
 
 /// Why a configuration was refused.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -351,7 +356,7 @@ pub enum ConfigError {
     Channel,
     /// The reconnect interval is zero.
     Reconnect,
-    /// The stop deadline is zero.
+    /// The stop deadline is one a held frame could outlast.
     Drain,
 }
 
@@ -437,7 +442,7 @@ impl Config {
     /// Give the IP service `drain` to return its receive buffers at a stop.
     ///
     /// # Errors
-    /// [`ConfigError::Drain`] for a zero deadline.
+    /// [`ConfigError::Drain`] for a deadline a held frame could outlast.
     pub fn with_drain(self, drain: embassy_time::Duration) -> Result<Self, ConfigError> {
         let policy = stop(drain)?;
         Ok(Self {
@@ -447,10 +452,11 @@ impl Config {
     }
 }
 
-/// The stop policy with `drain`; zero is refused, since no network could
-/// return a buffer by it.
+/// The stop policy with `drain`; one a published frame could outlast is
+/// refused, since the stop would end before the frame.
 fn stop(drain: embassy_time::Duration) -> Result<wifi::StopPolicy, ConfigError> {
-    let micros = crate::boot::drain_micros(drain.as_micros()).ok_or(ConfigError::Drain)?;
+    let micros = crate::boot::drain_micros(drain.as_micros(), wifi::STOP_FLOOR.as_micros())
+        .ok_or(ConfigError::Drain)?;
     Ok(wifi::StopPolicy {
         drain: oer_portable_time::Duration::from_micros(micros.get()),
     })

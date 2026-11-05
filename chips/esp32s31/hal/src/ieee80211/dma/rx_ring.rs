@@ -2485,8 +2485,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// a pending sample lets a later RX completion replace that cursor epoch.
     ///
     /// The doorbells are observed until they clear or `settle`'s limit has
-    /// passed on its clock, counted from the call; the first observation
-    /// always runs. When a doorbell is still pending then, the reload stays
+    /// passed on its clock, counted from the first observation that found
+    /// one pending. When a doorbell is still pending then, the reload stays
     /// pending in this owner and the call returns `ReloadPending`. Each wait
     /// records its observation count in [`RxReloadEvidence::max_reload_attempts`].
     /// A settle rings the doorbell at most once more per appended tail, so

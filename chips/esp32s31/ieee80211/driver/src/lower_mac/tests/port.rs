@@ -90,6 +90,8 @@ struct Observed {
     /// starting sequence, bitmap and whether it arrived, beside its status.
     block_ack: Option<(u16, u64, bool)>,
     hold_cut: bool,
+    /// A held cut waits for units the network holds.
+    cut_by_units: bool,
     hold_stop: bool,
     cut_calls: usize,
     resumed_cuts: usize,
@@ -422,6 +424,9 @@ impl Device<512> for TestDevice {
         } else {
             Poll::Pending
         }
+    }
+    fn cut_held_by_units(&self) -> bool {
+        self.observed.borrow().cut_by_units
     }
     fn poll_rx_cut(
         &mut self,

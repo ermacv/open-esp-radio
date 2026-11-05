@@ -60,10 +60,10 @@ pub fn lowest_channel<T, E>(
     Err(None)
 }
 
-/// A station's stop deadline of `micros`: none for zero, which no network
-/// could meet.
-pub fn drain_micros(micros: u64) -> Option<core::num::NonZeroU64> {
-    core::num::NonZeroU64::new(micros)
+/// A station's stop deadline of `micros`: none at or below `floor`, the time
+/// the port may need to end what it holds, which no stop could then meet.
+pub fn drain_micros(micros: u64, floor: u64) -> Option<core::num::NonZeroU64> {
+    core::num::NonZeroU64::new(micros).filter(|micros| micros.get() > floor)
 }
 
 #[cfg(test)]
@@ -71,11 +71,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_zero_stop_deadline_is_refused_and_any_other_kept() {
-        assert_eq!(drain_micros(0), None);
-        assert_eq!(drain_micros(1).map(core::num::NonZeroU64::get), Some(1));
+    fn a_stop_deadline_at_or_below_its_floor_is_refused_and_any_other_kept() {
+        assert_eq!(drain_micros(0, 0), None);
+        assert_eq!(drain_micros(10, 10), None);
+        assert_eq!(drain_micros(1, 0).map(core::num::NonZeroU64::get), Some(1));
         assert_eq!(
-            drain_micros(2_000_000).map(core::num::NonZeroU64::get),
+            drain_micros(2_000_000, 10).map(core::num::NonZeroU64::get),
             Some(2_000_000)
         );
     }
