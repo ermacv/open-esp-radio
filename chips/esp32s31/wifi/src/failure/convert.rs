@@ -7,7 +7,15 @@ pub(crate) fn backend_fault(
     match value {
         Source::Core(v0) => BackendFault::Core(lower_mac_fault(v0)),
         Source::Receive(v0) => BackendFault::Receive(receive_fault(v0)),
-        Source::Clock => BackendFault::Clock,
+        Source::Unpublished(cause) => BackendFault::Unpublished(match cause {
+            oer_chips_esp32s31_ieee80211_driver::port::Unpublished::CoreView => {
+                UnpublishedCause::CoreView
+            }
+            oer_chips_esp32s31_ieee80211_driver::port::Unpublished::Admission => {
+                UnpublishedCause::Admission
+            }
+            oer_chips_esp32s31_ieee80211_driver::port::Unpublished::Key => UnpublishedCause::Key,
+        }),
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,
         Source::Arena(v0) => BackendFault::Arena(arena_fault(v0)),
@@ -71,7 +79,6 @@ pub(super) fn core_operation(
         Source::Command => CoreOperation::Command,
         Source::Tbtt => CoreOperation::Tbtt,
         Source::Arena => CoreOperation::Arena,
-        Source::Publish => CoreOperation::Publish,
         Source::Enable => CoreOperation::Enable,
         Source::Configure => CoreOperation::Configure,
         Source::Open => CoreOperation::Open,
@@ -108,7 +115,6 @@ pub(super) fn key_operation(
         Source::Remove => KeyOperation::Remove,
         Source::Replace => KeyOperation::Replace,
         Source::Select => KeyOperation::Select,
-        Source::Transmit => KeyOperation::Transmit,
     }
 }
 

@@ -329,7 +329,9 @@ pub enum DevicePull<R> {
 pub enum Fault {
     Core(LowerMacFault),
     Receive(crate::rx::control::WifiRxCause),
-    Clock,
+    /// A publication refused before it took any owner; its MPDU is back at
+    /// the head of its queue.
+    Unpublished(Unpublished),
     /// The radio front end did not retune the stopped port for this start.
     Retune(WifiRetuneError),
     /// The device lost its registers to an earlier failure.
@@ -435,6 +437,17 @@ pub enum Fault {
     CommandExpired(oer_protocols_ieee80211_contracts_port::CommandKind),
 }
 
+/// Why a publication was refused before it took any owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Unpublished {
+    /// The core is not open.
+    CoreView,
+    /// The MPDU has no admission time.
+    Admission,
+    /// The MPDU's key is not installed.
+    Key,
+}
+
 /// The lower-MAC operation a missing core view stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CoreOp {
@@ -444,8 +457,6 @@ pub enum CoreOp {
     Tbtt,
     /// The data arenas' core.
     Arena,
-    /// A single MPDU's publication.
-    Publish,
     /// The lower MAC's enable.
     Enable,
     /// A VIF configuration.
@@ -496,8 +507,6 @@ pub enum KeyOp {
     Replace,
     /// A selection found no installed group key of its identity.
     Select,
-    /// An attempt named a key that is not installed for transmission.
-    Transmit,
 }
 
 /// Why the radio front end did not retune a stopped Wi-Fi client.
@@ -509,26 +518,11 @@ pub enum WifiRetuneError {
     Radio(oer_chips_esp32s31_radio_client::Failure),
 }
 impl Fault {
-    /// Whether every owner stayed in its place when the fault was reported,
-    /// so a stop can return them: the broken contract is the port's state,
-    /// not the hardware's or a descriptor's.
-    const fn leaves_owners_whole(self) -> bool {
-        matches!(
-            self,
-            Self::Clock
-                | Self::TuneNotRecorded
-                | Self::CoreViewUnavailable(_)
-                | Self::RemovalOverflow
-                | Self::RemovalMissing
-                | Self::RemovalMismatch
-                | Self::GroupKeyIdRange
-                | Self::ConfigurationRefused
-                | Self::EdcaUnsupported
-                | Self::ChannelNotPermitted
-                | Self::ChannelUnsupported
-                | Self::KeySlotMissing(_)
-                | Self::ReceiveAccounting
-        )
+    /// Whether a stop can return every owner of this fault. Each variant
+    /// here names sites that took nothing: a fault of any other kind stays
+    /// terminal until its site proves the same.
+    pub(crate) const fn leaves_owners_whole(self) -> bool {
+        matches!(self, Self::Unpublished(_))
     }
 }
 
