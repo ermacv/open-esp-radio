@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 
+use crate::layouts::PhyFrequencyMemoryWordWord;
 use crate::phy::registers::{FrequencyRegisters, PhyPlacement};
 use oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam;
 use oer_portable_mmio::{Bits, Index, Placement};
@@ -181,22 +182,64 @@ pub(crate) fn nrx_frequency_quotient(shift: u32, frequency: u32) -> Bits<24> {
     Bits::truncate(quotient)
 }
 
-/// The frequency-memory address domain: eleven bits.
-const fn frequency_memory_address(address: u16) -> Option<(Bits<10>, bool)> {
-    if address >= 0x800 {
-        return None;
+/// One address of frequency memory: eleven bits, of which the low ten and
+/// the top one go to separate fields.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FrequencyMemoryAddress(Bits<11>);
+
+impl FrequencyMemoryAddress {
+    /// The last address of the domain.
+    pub const LAST: u16 = 0x7ff;
+
+    /// The address `value`, within the domain. The tables that compute
+    /// addresses at run time prove their last one against [`Self::LAST`] in
+    /// a const check, so nothing is lost here.
+    pub const fn within_domain(value: u16) -> Self {
+        Self(Bits::truncate(value as u32))
     }
-    Some((Bits::truncate(address as u32), address & 0x400 != 0))
+
+    /// The address as a number.
+    pub const fn get(self) -> u16 {
+        self.0.get() as u16
+    }
+
+    const fn low(self) -> Bits<10> {
+        Bits::truncate(self.0.get())
+    }
+
+    const fn high(self) -> bool {
+        self.0.get() & 0x400 != 0
+    }
 }
 
+/// The recovered baseband modes the PHY selects.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BasebandMode {
+    Idle,
+    Calibration,
+}
+
+impl BasebandMode {
+    const fn bits(self) -> Bits<2> {
+        Bits::truncate(match self {
+            Self::Idle => 0,
+            Self::Calibration => 2,
+        })
+    }
+}
+
+/// The read mode of `phy_read_rf_freq_mem`.
+///
+/// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
+const RF_MEMORY_READ_MODE: Bits<2> = Bits::truncate(2);
+
 /// Select the recovered two-bit baseband mode.
-pub fn set_baseband_mode<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, mode: u8) {
-    // A value beyond its field changes no register.
-    let Ok(mode) = Bits::<2>::new(u32::from(mode)) else {
-        return;
-    };
+pub fn set_baseband_mode<P: PhyPlacement>(
+    frequency: &mut FrequencyRegisters<P>,
+    mode: BasebandMode,
+) {
     frequency.fe.modify_frequency_parameter_1_status(|w| {
-        w.set_bits_0_1_opaque(mode);
+        w.set_bits_0_1_opaque(mode.bits());
     });
 }
 
@@ -276,22 +319,16 @@ pub fn initialize_registers<P: PhyPlacement>(
 /// Apply complete rev0 ROM `phy_freq_i2c_mem_write`.
 pub fn write_memory<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
-    address: u16,
-    value: u32,
+    address: FrequencyMemoryAddress,
+    word: PhyFrequencyMemoryWordWord,
     mode: u8,
 ) {
-    // A value beyond its field changes no register.
-    let (Ok(data), Some((address_low, address_high))) =
-        (Bits::<24>::new(value), frequency_memory_address(address))
-    else {
-        return;
-    };
     frequency.fe.modify_frequency_control(|w| {
-        w.set_memory_address_low(address_low)
-            .set_memory_address_high(address_high);
+        w.set_memory_address_low(address.low())
+            .set_memory_address_high(address.high());
     });
     frequency.fe.write_frequency_memory_data(|w| {
-        w.set_data(data).set_mode(mode);
+        w.set_data(Bits::truncate(word.payload())).set_mode(mode);
     });
     // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
     frequency.fe.modify_frequency_control(|w| {
@@ -306,22 +343,14 @@ pub fn write_memory<P: PhyPlacement>(
 /// Apply complete rev0 ROM `phy_read_rf_freq_mem`.
 pub fn read_memory<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
-    address: u16,
-    mode: u8,
+    address: FrequencyMemoryAddress,
 ) -> u32 {
-    // A value beyond its field changes no register and reads zero.
-    let (Some((address_low, address_high)), Ok(mode)) = (
-        frequency_memory_address(address),
-        Bits::<2>::new(u32::from(mode)),
-    ) else {
-        return 0;
-    };
     frequency.fe.modify_frequency_control(|w| {
-        w.set_memory_address_low(address_low)
-            .set_memory_address_high(address_high);
+        w.set_memory_address_low(address.low())
+            .set_memory_address_high(address.high());
     });
     frequency.fe.modify_i2c_number_control(|w| {
-        w.set_memory_read_mode(mode);
+        w.set_memory_read_mode(RF_MEMORY_READ_MODE);
     });
     // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
     frequency.fe.modify_frequency_memory_read_control(|w| {

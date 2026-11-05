@@ -1,4 +1,5 @@
 use crate::analog::i2c::analog_i2c;
+use oer_chips_esp32s31_hal::phy::frequency::FrequencyMemoryAddress;
 
 use super::{
     PHY_FREQUENCY_TABLE_ENTRY_COUNT, PhyChannelFrequencyInitAction,
@@ -59,7 +60,6 @@ fn cap_memory_underflow_retains_signed_mode_and_requires_its_completion() {
     let PhyFrequencyCapMemoryAction::ReadMemory {
         entry_index,
         address,
-        mode,
     } = transition.action()
     else {
         panic!("must read before adjusting");
@@ -68,14 +68,13 @@ fn cap_memory_underflow_retains_signed_mode_and_requires_its_completion() {
         .advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
             entry_index,
             address,
-            mode,
             value: 0x00aa_bf00,
         })
         .unwrap();
     let PhyFrequencyCapMemoryAction::WriteMemory { value, mode, .. } = transition.action() else {
         panic!("must publish the adjusted entry");
     };
-    assert_eq!(value, 0x00ff_fffb);
+    assert_eq!(value.payload(), 0x00ff_fffb);
     assert_eq!(mode, 0xff);
     assert_eq!(
         transition.advance(PhyFrequencyCapMemoryCompletion::MemoryWritten {
@@ -113,16 +112,13 @@ fn cap_memory_transition_reads_and_writes_all_entries_before_restore() {
             PhyFrequencyCapMemoryAction::ReadMemory {
                 entry_index,
                 address,
-                mode,
             } => {
                 assert_eq!(entry_index, reads);
-                assert_eq!(address, 0x20 + u16::from(entry_index) * 7);
-                assert_eq!(mode, 2);
+                assert_eq!(address.get(), 0x20 + u16::from(entry_index) * 7);
                 transition
                     .advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
                         entry_index,
                         address,
-                        mode,
                         value: 0x00aa_bf20,
                     })
                     .unwrap();
@@ -135,8 +131,8 @@ fn cap_memory_transition_reads_and_writes_all_entries_before_restore() {
                 mode,
             } => {
                 assert_eq!(entry_index, writes);
-                assert_eq!(address, 0x20 + u16::from(entry_index) * 7);
-                assert_eq!(value, 0x0000_bf22);
+                assert_eq!(address.get(), 0x20 + u16::from(entry_index) * 7);
+                assert_eq!(value.payload(), 0x0000_bf22);
                 assert_eq!(mode, 3);
                 transition
                     .advance(PhyFrequencyCapMemoryCompletion::MemoryWritten {
@@ -183,8 +179,7 @@ fn cap_memory_transition_and_binding_reject_foreign_or_terminal_edges() {
     assert_eq!(
         transition.advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
             entry_index: 1,
-            address: 0x27,
-            mode: 2,
+            address: FrequencyMemoryAddress::within_domain(0x27),
             value: 0x0000_ff80,
         }),
         Err(PhyFrequencyCapMemoryTransitionError::WrongCompletion)
@@ -246,7 +241,7 @@ fn transition_publishes_exactly_three_words_for_all_85_entries() {
             } => {
                 assert_eq!(mode, 7);
                 assert_eq!(
-                    address,
+                    address.get(),
                     0x20 + u16::from(entry_index) * 7 + u16::from(word_index) * 3
                 );
                 transition
@@ -269,7 +264,7 @@ fn transition_publishes_exactly_three_words_for_all_85_entries() {
         transition.advance(PhyFrequencyTableCompletion {
             entry_index: 0,
             word_index: 0,
-            address: 0x20,
+            address: FrequencyMemoryAddress::within_domain(0x20),
         }),
         Err(PhyFrequencyTableTransitionError::AlreadyComplete)
     );
@@ -282,7 +277,7 @@ fn transition_rejects_out_of_order_memory_completion() {
         transition.advance(PhyFrequencyTableCompletion {
             entry_index: 0,
             word_index: 1,
-            address: 0x23,
+            address: FrequencyMemoryAddress::within_domain(0x23),
         }),
         Err(PhyFrequencyTableTransitionError::WrongCompletion)
     );
@@ -343,7 +338,13 @@ fn collect_i2c_memory_writes(
         mode,
     } = transition.action()
     {
-        writes.push((descriptor_index, copy_index, address, value, mode));
+        writes.push((
+            descriptor_index,
+            copy_index,
+            address.get(),
+            value.bits(),
+            mode,
+        ));
         transition
             .advance(PhyFrequencyI2cCompletion::MemoryWrite {
                 descriptor_index,
@@ -752,7 +753,7 @@ fn modeled_frequency_i2c_commands_match_old_bytes_and_field_updates() {
                     } else {
                         register_block | (u32::from(old_data[usize::from(copy)]) << 16)
                     };
-                    assert_eq!(word, old);
+                    assert_eq!(word.bits(), old);
                 }
             }
         }

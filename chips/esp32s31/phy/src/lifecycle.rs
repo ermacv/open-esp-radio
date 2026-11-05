@@ -5,6 +5,7 @@
 //! protocol hardware engine has crossed its stopped boundary.
 
 use crate::analog::i2c::{Address, analog_i2c};
+use oer_chips_esp32s31_hal::phy::frequency::BasebandMode;
 
 /// One complete child call or finite hardware edge in current-vendor
 /// `phy_wakeup_init`.
@@ -15,7 +16,7 @@ use crate::analog::i2c::{Address, analog_i2c};
 /// and completion contract.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRfWakeOperation {
-    SetBasebandMode { mode: u8 },
+    SetBasebandMode { mode: BasebandMode },
     ForceTxRxOff { enabled: bool },
     SetHardwareFrequencyControl { enabled: bool },
     ResetI2cMaster,
@@ -57,7 +58,9 @@ pub enum PhyRfWakeOperation {
 /// [`crate::RegisteredPhyRfClosed`] proves that the protocol-client set is
 /// empty.
 pub const PHY_RF_WAKE_OPERATIONS: [PhyRfWakeOperation; 36] = [
-    PhyRfWakeOperation::SetBasebandMode { mode: 2 },
+    PhyRfWakeOperation::SetBasebandMode {
+        mode: BasebandMode::Calibration,
+    },
     PhyRfWakeOperation::ForceTxRxOff { enabled: true },
     PhyRfWakeOperation::SetHardwareFrequencyControl { enabled: false },
     PhyRfWakeOperation::ResetI2cMaster,
@@ -92,7 +95,9 @@ pub const PHY_RF_WAKE_OPERATIONS: [PhyRfWakeOperation; 36] = [
     PhyRfWakeOperation::SetHardwareFrequencyControl { enabled: true },
     PhyRfWakeOperation::SetBbpllCalibration { enabled: false },
     PhyRfWakeOperation::ForceTxRxOff { enabled: false },
-    PhyRfWakeOperation::SetBasebandMode { mode: 0 },
+    PhyRfWakeOperation::SetBasebandMode {
+        mode: BasebandMode::Idle,
+    },
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -238,7 +243,9 @@ mod tests {
         assert_eq!(
             &trace[..3],
             &[
-                PhyRfWakeOperation::SetBasebandMode { mode: 2 },
+                PhyRfWakeOperation::SetBasebandMode {
+                    mode: BasebandMode::Calibration,
+                },
                 PhyRfWakeOperation::ForceTxRxOff { enabled: true },
                 PhyRfWakeOperation::SetHardwareFrequencyControl { enabled: false },
             ]
@@ -249,7 +256,9 @@ mod tests {
                 PhyRfWakeOperation::SetHardwareFrequencyControl { enabled: true },
                 PhyRfWakeOperation::SetBbpllCalibration { enabled: false },
                 PhyRfWakeOperation::ForceTxRxOff { enabled: false },
-                PhyRfWakeOperation::SetBasebandMode { mode: 0 },
+                PhyRfWakeOperation::SetBasebandMode {
+                    mode: BasebandMode::Idle,
+                },
             ]
         );
         assert_eq!(
@@ -258,7 +267,9 @@ mod tests {
         );
         assert_eq!(
             transition.advance(PhyRfWakeCompletion::executed(
-                PhyRfWakeOperation::SetBasebandMode { mode: 0 }
+                PhyRfWakeOperation::SetBasebandMode {
+                    mode: BasebandMode::Idle,
+                }
             )),
             Err(PhyRfWakeTransitionError::AlreadyComplete)
         );
@@ -275,7 +286,9 @@ mod tests {
         );
         assert_eq!(
             transition.action(),
-            PhyRfWakeAction::Execute(PhyRfWakeOperation::SetBasebandMode { mode: 2 })
+            PhyRfWakeAction::Execute(PhyRfWakeOperation::SetBasebandMode {
+                mode: BasebandMode::Calibration,
+            })
         );
     }
 

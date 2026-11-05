@@ -1411,7 +1411,11 @@ impl PhyCalibrationTrackingRegisterBinding {
             RegisterAction::SetHardwareFrequencyControl { enabled } => {
                 oer_chips_esp32s31_hal::phy::frequency::set_baseband_mode(
                     registers,
-                    if enabled { 0 } else { 2 },
+                    if enabled {
+                        oer_chips_esp32s31_hal::phy::frequency::BasebandMode::Idle
+                    } else {
+                        oer_chips_esp32s31_hal::phy::frequency::BasebandMode::Calibration
+                    },
                 );
                 PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled }
             }

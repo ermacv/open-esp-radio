@@ -135,7 +135,7 @@ pub(super) fn envelope<D: PhyShortDelay>(
                 Completion::GrantProtectSet { enabled }
             }
             Action::SelectSoftwareControl => {
-                frequency::set_baseband_mode(registers, 2);
+                frequency::set_baseband_mode(registers, frequency::BasebandMode::Calibration);
                 Completion::SoftwareControlSelected
             }
             Action::Settle => {
@@ -149,7 +149,7 @@ pub(super) fn envelope<D: PhyShortDelay>(
                 Completion::BoundaryObserved
             }
             Action::RestoreHardwareControl => {
-                frequency::set_baseband_mode(registers, 0);
+                frequency::set_baseband_mode(registers, frequency::BasebandMode::Idle);
                 Completion::HardwareControlRestored
             }
         };

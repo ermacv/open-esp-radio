@@ -26,7 +26,9 @@ use oer_chips_esp32s31_hal::{
         PhyFrequencyMemoryRecordSdmHigh, PhyFrequencyMemoryRecordXtalDuty,
         PhyFrequencyMemoryWordWord, PhyRfpllCapacitorCodeCode,
     },
-    phy::frequency::{PhyFrequencyI2cNumberAddresses, frequency_cap_correction_word},
+    phy::frequency::{
+        FrequencyMemoryAddress, PhyFrequencyI2cNumberAddresses, frequency_cap_correction_word,
+    },
 };
 
 pub const PHY_FREQUENCY_TABLE_ENTRY_COUNT: u8 = 85;
@@ -39,6 +41,107 @@ const PHY_RF_FREQUENCY_MEMORY_BASE: u16 = 0x20;
 const PHY_FREQUENCY_MEMORY_ENTRY_STRIDE: u16 = 7;
 const PHY_FREQUENCY_MEMORY_WORD_STRIDE: u16 = 3;
 const PHY_FREQUENCY_MEMORY_MODE: u8 = 7;
+const PHY_FREQUENCY_RECORD_WORDS: u8 = 3;
+
+// The memory takes a 24-bit payload: each word the tables build fits it with
+// every field at its largest.
+const _: () = {
+    let cap = PhyFrequencyMemoryRecordCapAndSdm::from_bits(0)
+        .with_cap_low(u8::MAX)
+        .with_cap_high_byte(u8::MAX)
+        .with_sdm_low_byte(u8::MAX)
+        .bits();
+    let sdm = PhyFrequencyMemoryRecordSdmHigh::from_bits(0)
+        .with_lower_middle(u8::MAX)
+        .with_upper_middle(u8::MAX)
+        .with_most_significant(u8::MAX)
+        .bits();
+    let duty = PhyFrequencyMemoryRecordXtalDuty::from_bits(0)
+        .with_value(u8::MAX)
+        .bits();
+    let command = PhyFrequencyI2cCommandCommand::from_bits(0)
+        .with_register(u8::MAX)
+        .with_block(u8::MAX)
+        .with_data(u8::MAX)
+        .bits();
+    let word = PhyFrequencyMemoryWordWord::from_bits(0);
+    if word.with_payload(cap).is_none()
+        || word.with_payload(sdm).is_none()
+        || word.with_payload(duty).is_none()
+        || word.with_payload(command).is_none()
+    {
+        panic!("a table word exceeds the frequency-memory payload");
+    }
+};
+
+// The record addresses the transitions compute stay in the address domain.
+const _: () = {
+    let last = phy_get_freq_mem_addr(
+        PHY_RF_FREQUENCY_MEMORY_BASE as u32,
+        PHY_FREQUENCY_MEMORY_ENTRY_STRIDE as u32,
+        (PHY_FREQUENCY_TABLE_ENTRY_COUNT - 1) as u32,
+        (PHY_FREQUENCY_RECORD_WORDS - 1) as u32 * PHY_FREQUENCY_MEMORY_WORD_STRIDE as u32,
+    );
+    if last > FrequencyMemoryAddress::LAST {
+        panic!("a frequency record lies beyond the memory");
+    }
+};
+
+/// One entry of the frequency table, below the table's count by construction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TableEntry(u8);
+
+impl TableEntry {
+    const FIRST: Self = Self(0);
+
+    const fn next(self) -> Option<Self> {
+        if self.0 < PHY_FREQUENCY_TABLE_ENTRY_COUNT - 1 {
+            Some(Self(self.0 + 1))
+        } else {
+            None
+        }
+    }
+
+    const fn index(self) -> u8 {
+        self.0
+    }
+}
+
+/// One word of a frequency-memory record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecordWord {
+    CapAndSdm,
+    SdmHigh,
+    XtalDuty,
+}
+
+impl RecordWord {
+    const fn index(self) -> u8 {
+        match self {
+            Self::CapAndSdm => 0,
+            Self::SdmHigh => 1,
+            Self::XtalDuty => 2,
+        }
+    }
+
+    const fn next(self) -> Option<Self> {
+        match self {
+            Self::CapAndSdm => Some(Self::SdmHigh),
+            Self::SdmHigh => Some(Self::XtalDuty),
+            Self::XtalDuty => None,
+        }
+    }
+}
+
+/// The address of `word` of `entry`'s record: the const check above bounds it.
+const fn record_address(entry: TableEntry, word: RecordWord) -> FrequencyMemoryAddress {
+    FrequencyMemoryAddress::within_domain(phy_get_freq_mem_addr(
+        PHY_RF_FREQUENCY_MEMORY_BASE as u32,
+        PHY_FREQUENCY_MEMORY_ENTRY_STRIDE as u32,
+        entry.index() as u32,
+        word.index() as u32 * PHY_FREQUENCY_MEMORY_WORD_STRIDE as u32,
+    ))
+}
 const CAP_INTERPOLATION_DIVISOR: i32 = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,6 +166,15 @@ impl PhyFrequencyMemoryRecord {
     pub const fn words(self) -> [u32; 3] {
         self.words
     }
+
+    const fn word(self, word: RecordWord) -> PhyFrequencyMemoryWordWord {
+        let [cap_and_sdm, sdm_high, xtal_duty] = self.words;
+        PhyFrequencyMemoryWordWord::from_bits(match word {
+            RecordWord::CapAndSdm => cap_and_sdm,
+            RecordWord::SdmHigh => sdm_high,
+            RecordWord::XtalDuty => xtal_duty,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -84,8 +196,8 @@ pub enum PhyFrequencyTableAction {
     WriteMemory {
         entry_index: u8,
         word_index: u8,
-        address: u16,
-        value: u32,
+        address: FrequencyMemoryAddress,
+        value: PhyFrequencyMemoryWordWord,
         mode: u8,
     },
     Complete(PhyFrequencyTableOutcome),
@@ -95,7 +207,7 @@ pub enum PhyFrequencyTableAction {
 pub struct PhyFrequencyTableCompletion {
     pub entry_index: u8,
     pub word_index: u8,
-    pub address: u16,
+    pub address: FrequencyMemoryAddress,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -179,8 +291,8 @@ pub const fn phy_frequency_memory_record(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyFrequencyTableTransition {
     request: PhyFrequencyTableRequest,
-    entry_index: u8,
-    word_index: u8,
+    /// The word to write next, `None` once the table is written.
+    next: Option<(TableEntry, RecordWord)>,
 }
 
 /// Exact non-I/O arithmetic of complete rev0 ROM
@@ -195,35 +307,26 @@ impl PhyFrequencyTableTransition {
     pub const fn new(request: PhyFrequencyTableRequest) -> Self {
         Self {
             request,
-            entry_index: 0,
-            word_index: 0,
+            next: Some((TableEntry::FIRST, RecordWord::CapAndSdm)),
         }
     }
 
-    const fn address(self) -> u16 {
-        phy_get_freq_mem_addr(
-            PHY_RF_FREQUENCY_MEMORY_BASE as u32,
-            PHY_FREQUENCY_MEMORY_ENTRY_STRIDE as u32,
-            self.entry_index as u32,
-            self.word_index as u32 * PHY_FREQUENCY_MEMORY_WORD_STRIDE as u32,
-        )
-    }
-
     pub const fn action(self) -> PhyFrequencyTableAction {
-        if self.entry_index == PHY_FREQUENCY_TABLE_ENTRY_COUNT {
-            PhyFrequencyTableAction::Complete(PhyFrequencyTableOutcome {
-                entries_written: self.entry_index,
+        match self.next {
+            None => PhyFrequencyTableAction::Complete(PhyFrequencyTableOutcome {
+                entries_written: PHY_FREQUENCY_TABLE_ENTRY_COUNT,
                 low_frequency_cap: self.request.low_frequency_cap,
                 high_frequency_cap: self.request.high_frequency_cap,
-            })
-        } else {
-            let record = phy_frequency_memory_record(self.request, self.entry_index);
-            PhyFrequencyTableAction::WriteMemory {
-                entry_index: self.entry_index,
-                word_index: self.word_index,
-                address: self.address(),
-                value: record.words[self.word_index as usize],
-                mode: PHY_FREQUENCY_MEMORY_MODE,
+            }),
+            Some((entry, word)) => {
+                let record = phy_frequency_memory_record(self.request, entry.index());
+                PhyFrequencyTableAction::WriteMemory {
+                    entry_index: entry.index(),
+                    word_index: word.index(),
+                    address: record_address(entry, word),
+                    value: record.word(word),
+                    mode: PHY_FREQUENCY_MEMORY_MODE,
+                }
             }
         }
     }
@@ -232,33 +335,25 @@ impl PhyFrequencyTableTransition {
         &mut self,
         completion: PhyFrequencyTableCompletion,
     ) -> Result<(), PhyFrequencyTableTransitionError> {
-        let PhyFrequencyTableAction::WriteMemory {
-            entry_index,
-            word_index,
-            address,
-            ..
-        } = self.action()
-        else {
+        let Some((entry, word)) = self.next else {
             return Err(PhyFrequencyTableTransitionError::AlreadyComplete);
         };
-        if completion.entry_index != entry_index
-            || completion.word_index != word_index
-            || completion.address != address
+        if completion.entry_index != entry.index()
+            || completion.word_index != word.index()
+            || completion.address != record_address(entry, word)
         {
             return Err(PhyFrequencyTableTransitionError::WrongCompletion);
         }
 
-        if self.word_index == 2 {
-            self.word_index = 0;
-            self.entry_index += 1;
-        } else {
-            self.word_index += 1;
-        }
+        self.next = match (word.next(), entry.next()) {
+            (Some(word), _) => Some((entry, word)),
+            (None, Some(entry)) => Some((entry, RecordWord::CapAndSdm)),
+            (None, None) => None,
+        };
         Ok(())
     }
 }
 
-const PHY_RF_FREQUENCY_MEMORY_READ_MODE: u8 = 2;
 const PHY_RF_FREQUENCY_MEMORY_WRITE_MODE: u8 = 3;
 
 /// Signed capacitor correction accepted by `phy_pll_cap_mem_update`.
@@ -297,13 +392,12 @@ pub struct PhyFrequencyCapMemoryOutcome {
 pub enum PhyFrequencyCapMemoryAction {
     ReadMemory {
         entry_index: u8,
-        address: u16,
-        mode: u8,
+        address: FrequencyMemoryAddress,
     },
     WriteMemory {
         entry_index: u8,
-        address: u16,
-        value: u32,
+        address: FrequencyMemoryAddress,
+        value: PhyFrequencyMemoryWordWord,
         mode: u8,
     },
     RestoreChannelIndex {
@@ -316,13 +410,12 @@ pub enum PhyFrequencyCapMemoryAction {
 pub enum PhyFrequencyCapMemoryCompletion {
     MemoryRead {
         entry_index: u8,
-        address: u16,
-        mode: u8,
+        address: FrequencyMemoryAddress,
         value: u32,
     },
     MemoryWritten {
         entry_index: u8,
-        address: u16,
+        address: FrequencyMemoryAddress,
         mode: u8,
     },
     ChannelIndexRestored {
@@ -338,8 +431,8 @@ pub enum PhyFrequencyCapMemoryTransitionError {
 
 #[derive(Debug, Eq, PartialEq)]
 enum PhyFrequencyCapMemoryStep {
-    Read { entry_index: u8 },
-    Write { entry_index: u8, value: u32 },
+    Read { entry: TableEntry },
+    Write { entry: TableEntry, value: u32 },
     RestoreChannelIndex,
     Complete,
 }
@@ -381,34 +474,24 @@ impl PhyFrequencyCapMemoryTransition {
     pub const fn new(request: PhyFrequencyCapMemoryRequest) -> Self {
         Self {
             request,
-            step: PhyFrequencyCapMemoryStep::Read { entry_index: 0 },
+            step: PhyFrequencyCapMemoryStep::Read {
+                entry: TableEntry::FIRST,
+            },
         }
-    }
-
-    const fn address(entry_index: u8) -> u16 {
-        phy_get_freq_mem_addr(
-            PHY_RF_FREQUENCY_MEMORY_BASE as u32,
-            PHY_FREQUENCY_MEMORY_ENTRY_STRIDE as u32,
-            entry_index as u32,
-            0,
-        )
     }
 
     #[inline(always)]
     pub const fn action(&self) -> PhyFrequencyCapMemoryAction {
         match self.step {
-            PhyFrequencyCapMemoryStep::Read { entry_index } => {
-                PhyFrequencyCapMemoryAction::ReadMemory {
-                    entry_index,
-                    address: Self::address(entry_index),
-                    mode: PHY_RF_FREQUENCY_MEMORY_READ_MODE,
-                }
-            }
-            PhyFrequencyCapMemoryStep::Write { entry_index, value } => {
+            PhyFrequencyCapMemoryStep::Read { entry } => PhyFrequencyCapMemoryAction::ReadMemory {
+                entry_index: entry.index(),
+                address: record_address(entry, RecordWord::CapAndSdm),
+            },
+            PhyFrequencyCapMemoryStep::Write { entry, value } => {
                 PhyFrequencyCapMemoryAction::WriteMemory {
-                    entry_index,
-                    address: Self::address(entry_index),
-                    value: PhyFrequencyMemoryWordWord::from_bits(value).payload(),
+                    entry_index: entry.index(),
+                    address: record_address(entry, RecordWord::CapAndSdm),
+                    value: PhyFrequencyMemoryWordWord::from_bits(value),
                     mode: cap_memory_write_mode(value),
                 }
             }
@@ -436,35 +519,34 @@ impl PhyFrequencyCapMemoryTransition {
     ) -> Result<(), PhyFrequencyCapMemoryTransitionError> {
         self.step = match (&self.step, completion) {
             (
-                PhyFrequencyCapMemoryStep::Read { entry_index },
+                PhyFrequencyCapMemoryStep::Read { entry },
                 PhyFrequencyCapMemoryCompletion::MemoryRead {
                     entry_index: completed_entry,
                     address,
-                    mode: PHY_RF_FREQUENCY_MEMORY_READ_MODE,
                     value,
                 },
-            ) if completed_entry == *entry_index && address == Self::address(*entry_index) => {
+            ) if completed_entry == entry.index()
+                && address == record_address(*entry, RecordWord::CapAndSdm) =>
+            {
                 PhyFrequencyCapMemoryStep::Write {
-                    entry_index: *entry_index,
+                    entry: *entry,
                     value: phy_frequency_cap_adjusted_word(value, self.request.correction),
                 }
             }
             (
-                PhyFrequencyCapMemoryStep::Write { entry_index, value },
+                PhyFrequencyCapMemoryStep::Write { entry, value },
                 PhyFrequencyCapMemoryCompletion::MemoryWritten {
                     entry_index: completed_entry,
                     address,
                     mode,
                 },
-            ) if completed_entry == *entry_index
-                && address == Self::address(*entry_index)
+            ) if completed_entry == entry.index()
+                && address == record_address(*entry, RecordWord::CapAndSdm)
                 && mode == cap_memory_write_mode(*value) =>
             {
-                let next = entry_index.wrapping_add(1);
-                if next == PHY_FREQUENCY_TABLE_ENTRY_COUNT {
-                    PhyFrequencyCapMemoryStep::RestoreChannelIndex
-                } else {
-                    PhyFrequencyCapMemoryStep::Read { entry_index: next }
+                match entry.next() {
+                    Some(entry) => PhyFrequencyCapMemoryStep::Read { entry },
+                    None => PhyFrequencyCapMemoryStep::RestoreChannelIndex,
                 }
             }
             (
@@ -519,14 +601,11 @@ impl PhyFrequencyCapMemoryExternalBinding {
             PhyFrequencyCapMemoryAction::ReadMemory {
                 entry_index,
                 address,
-                mode,
             } => {
-                let value =
-                    oer_chips_esp32s31_hal::phy::frequency::read_memory(registers, address, mode);
+                let value = oer_chips_esp32s31_hal::phy::frequency::read_memory(registers, address);
                 PhyFrequencyCapMemoryCompletion::MemoryRead {
                     entry_index,
                     address,
-                    mode,
                     value,
                 }
             }
@@ -614,8 +693,8 @@ pub enum PhyFrequencyI2cAction {
     WriteMemory {
         descriptor_index: u8,
         copy_index: u8,
-        address: u16,
-        value: u32,
+        address: FrequencyMemoryAddress,
+        value: PhyFrequencyMemoryWordWord,
         mode: u8,
     },
     ConfigureNumberAddresses(PhyFrequencyI2cNumberAddresses),
@@ -634,7 +713,7 @@ pub enum PhyFrequencyI2cCompletion {
     MemoryWrite {
         descriptor_index: u8,
         copy_index: u8,
-        address: u16,
+        address: FrequencyMemoryAddress,
     },
     NumberAddressesConfigured(PhyFrequencyI2cNumberAddresses),
 }
@@ -673,15 +752,34 @@ impl PhyFrequencyI2cDescriptor {
         if self.kind() == 0 { 3 } else { 1 }
     }
 
-    const fn memory_write(self, copy_index: u8) -> (u16, u32, u8) {
+    const fn memory_write(
+        self,
+        copy_index: u8,
+    ) -> (FrequencyMemoryAddress, PhyFrequencyMemoryWordWord, u8) {
+        let (address, word, mode) = self.memory_write_parts(copy_index);
+        (
+            FrequencyMemoryAddress::within_domain(address),
+            PhyFrequencyMemoryWordWord::from_bits(word),
+            mode,
+        )
+    }
+
+    /// The address, word and mode of one copy, the address bounded by the
+    /// const check below.
+    const fn memory_write_parts(self, copy_index: u8) -> (u16, u32, u8) {
         // `phy_freq_i2c_write_set` stores the register byte before the block
         // byte in frequency command memory: `[block, register, data]` as the
         // little-endian word `data << 16 | register << 8 | block`.
         let register_block = PhyFrequencyI2cCommandCommand::from_bits(0)
             .with_register(self.address.index())
             .with_block(self.address.block());
+        let [first, second, third] = self.data;
         let data_word = register_block
-            .with_data(self.data[copy_index as usize])
+            .with_data(match copy_index {
+                0 => first,
+                1 => second,
+                _ => third,
+            })
             .bits();
         match self.kind() {
             0 => match copy_index {
@@ -703,7 +801,7 @@ impl PhyFrequencyI2cDescriptor {
             },
             1 => (
                 self.index() as u16 * 3 + 9,
-                register_block.with_data(self.data[0]).bits(),
+                register_block.with_data(first).bits(),
                 PHY_FREQUENCY_MEMORY_MODE,
             ),
             _ => (
@@ -801,6 +899,23 @@ const fn frequency_i2c_descriptor(
         }
     }
 }
+
+// Every memory copy of every descriptor stays in the address domain.
+const _: () = {
+    let mut index = 0;
+    while index != 11 {
+        let descriptor = frequency_i2c_descriptor(index, 0, 0, 0, false);
+        let mut copy = 0;
+        while copy != descriptor.memory_write_count() {
+            let (address, _, _) = descriptor.memory_write_parts(copy);
+            if address > FrequencyMemoryAddress::LAST {
+                panic!("a frequency descriptor lies beyond the memory");
+            }
+            copy += 1;
+        }
+        index += 1;
+    }
+};
 
 const fn phy_frequency_i2c_number_addresses(
     rfpll_register_0b: u8,

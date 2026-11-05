@@ -81,7 +81,10 @@ fn frequency_read_restore_preserves_other_owner_changes_and_never_pulses_writers
     });
     let saved = fr::capture_read_configuration(&frequency).expect("quiet engine");
     fr::set_hardware_control(&mut frequency, false);
-    fr::read_memory(&mut frequency, 0x400, 2);
+    fr::read_memory(
+        &mut frequency,
+        fr::FrequencyMemoryAddress::within_domain(0x400),
+    );
     frequency.fe.modify_frequency_control(|w| {
         w.set_channel_index(17);
     });
@@ -619,11 +622,39 @@ golden!(
 );
 
 golden!(
+    frequency_baseband_mode_calibration,
+    FrequencyRegisters,
+    7994,
+    |b| {
+        fr::set_baseband_mode(&mut b, fr::BasebandMode::Calibration);
+    },
+    [
+        (0x00000000, &[(0x0028, 0x00000002)]),
+        (0xffffffff, &[(0x0028, 0xfffffffe)]),
+    ]
+);
+
+golden!(
+    frequency_baseband_mode_idle,
+    FrequencyRegisters,
+    7994,
+    |b| {
+        fr::set_baseband_mode(&mut b, fr::BasebandMode::Idle);
+    },
+    [(0x00000000, &[]), (0xffffffff, &[(0x0028, 0xfffffffc)]),]
+);
+
+golden!(
     frequency_write_memory,
     FrequencyRegisters,
     7994,
     |b| {
-        fr::write_memory(&mut b, 0x5a5, 0xab_cdef, 0x12);
+        fr::write_memory(
+            &mut b,
+            fr::FrequencyMemoryAddress::within_domain(0x5a5),
+            crate::layouts::PhyFrequencyMemoryWordWord::from_bits(0xab_cdef),
+            0x12,
+        );
     },
     [
         (0x00000000, &[(0x001c, 0x0005a500), (0x002c, 0x12abcdef)]),
@@ -1050,20 +1081,3 @@ golden!(
         ),
     ]
 );
-
-#[test]
-fn frequency_field_refusals_keep_memory() {
-    for case in 0..4 {
-        let mut memory = vec![0; 8192];
-        let before = memory.clone();
-        let mut frequency = FrequencyRegisters::host(&mut memory).expect("host block");
-        match case {
-            0 => fr::set_baseband_mode(&mut frequency, 4),
-            1 => fr::write_memory(&mut frequency, 0, 1 << 24, 0),
-            2 => fr::write_memory(&mut frequency, 0x800, 0, 0),
-            _ => assert_eq!(fr::read_memory(&mut frequency, 0, 4), 0),
-        }
-        drop(frequency);
-        assert_eq!(memory, before, "a rejected field changes no register");
-    }
-}
