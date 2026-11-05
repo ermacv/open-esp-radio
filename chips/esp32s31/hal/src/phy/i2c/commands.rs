@@ -506,6 +506,51 @@ impl BluetoothTxPowerControlRegister {
     }
 }
 
+/// Whether a host serves `address` on the normal profile.
+const fn routed(address: Address) -> bool {
+    super::route(super::Profile::LibphyNormal, address.block()).is_some()
+}
+
+/// Every command of `operation` reaches a routed byte.
+const fn operation_routed(operation: PhyI2cConfigurationOperation) -> bool {
+    let mut index = 0;
+    while index < operation.command_count() {
+        let address = match operation.command(index) {
+            Some(PhyI2cConfigurationCommand::Read(address))
+            | Some(PhyI2cConfigurationCommand::Write(address, _)) => address,
+            Some(PhyI2cConfigurationCommand::Modify(field, _)) => field.address(),
+            None => return false,
+        };
+        if !routed(address) {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+// A table's addresses depend on the command's index alone: its inputs reach
+// only the values, so one set of inputs proves every operation of its kind.
+const _: () = {
+    use PhyI2cConfigurationOperation::{
+        BiasRegisters, ConfigureAdcRate, EnableBbpllCalibration, FilterDcap,
+        InitializationStageOne, RcCalibrationSettings, Sar2Initialization,
+    };
+    if !(operation_routed(ConfigureAdcRate(PhyAdcRate::Low))
+        && operation_routed(ConfigureAdcRate(PhyAdcRate::High))
+        && operation_routed(BiasRegisters)
+        && operation_routed(EnableBbpllCalibration)
+        && operation_routed(FilterDcap(PhyFilterDcapInputs::new(0, 0, 0, 0, 0)))
+        && operation_routed(InitializationStageOne(
+            PhyI2cInitializationStageOneInputs::new(0, 0),
+        ))
+        && operation_routed(RcCalibrationSettings)
+        && operation_routed(Sar2Initialization))
+    {
+        panic!("a configuration command reaches an unrouted analog block");
+    }
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;

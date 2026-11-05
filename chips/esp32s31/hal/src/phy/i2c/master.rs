@@ -10,6 +10,7 @@ use oer_chips_esp32s31_pac::{
     i2c_ana_mst::I2cAnaMst,
     i2c_ana_mst_mem::PhyI2cCommandRam,
 };
+use oer_chips_family_analog::BusRefusal;
 use oer_chips_family_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
 use oer_portable_mmio::{Bits, Index, Placement};
 
@@ -309,7 +310,8 @@ pub fn configure_command_memory<P: Placement>(
 }
 
 /// Binding for the calibration machines that still consume the analog transition port.
-/// The admitted command tables and its existing table-defect assertion remain here.
+/// The command tables prove their routes at compile time; an address from
+/// elsewhere is refused as [`BusRefusal::Unrouted`].
 pub struct ConfigurationBus<'a, P: Placement>(AnalogBus<MasterPort<'a, P>>);
 impl<'a, P: Placement> ConfigurationBus<'a, P> {
     pub(crate) fn new(master: &'a mut I2cAnaMst<P>) -> Self {
@@ -318,27 +320,25 @@ impl<'a, P: Placement> ConfigurationBus<'a, P> {
 }
 impl<P: Placement> oer_chips_family_analog::AnalogRegisterBus for ConfigurationBus<'_, P> {
     type Address = Address;
-    fn try_start_read(&mut self, address: Address) -> Result<(), oer_chips_family_analog::Busy> {
-        self.0.try_start_read(address).map_err(port_busy)
+    fn try_start_read(&mut self, address: Address) -> Result<(), BusRefusal> {
+        self.0.try_start_read(address).map_err(refusal)
     }
-    fn try_finish_read(&self, address: Address) -> Result<u8, oer_chips_family_analog::Busy> {
-        self.0.try_finish_read(address).map_err(port_busy)
+    fn try_finish_read(&self, address: Address) -> Result<u8, BusRefusal> {
+        self.0.try_finish_read(address).map_err(refusal)
     }
-    fn try_start_write(
-        &mut self,
-        address: Address,
-        value: u8,
-    ) -> Result<(), oer_chips_family_analog::Busy> {
-        self.0.try_start_write(address, value).map_err(port_busy)
+    fn try_start_write(&mut self, address: Address, value: u8) -> Result<(), BusRefusal> {
+        self.0.try_start_write(address, value).map_err(refusal)
     }
-    fn try_finish_write(&self, address: Address) -> Result<(), oer_chips_family_analog::Busy> {
-        self.0.try_finish_write(address).map_err(port_busy)
+    fn try_finish_write(&self, address: Address) -> Result<(), BusRefusal> {
+        self.0.try_finish_write(address).map_err(refusal)
     }
 }
-/// The port's refusal of a busy host. Configuration operations use only
-/// routed addresses, so an unrouted one is a table defect.
-fn port_busy(_: PhyI2cAccessError) -> oer_chips_family_analog::Busy {
-    oer_chips_family_analog::Busy
+/// The port's refusal, in the bus's words.
+fn refusal(error: PhyI2cAccessError) -> BusRefusal {
+    match error {
+        PhyI2cAccessError::Busy => BusRefusal::Busy,
+        PhyI2cAccessError::UnroutedAddress => BusRefusal::Unrouted,
+    }
 }
 
 #[cfg(test)]

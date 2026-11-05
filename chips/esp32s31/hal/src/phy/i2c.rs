@@ -19,6 +19,7 @@ pub use commands::{
     PhyI2cConfigurationCommand, PhyI2cConfigurationOperation, PhyI2cInitializationStageOneInputs,
 };
 use master::{ConfigurationBus, MasterPort};
+use oer_chips_family_analog::BusRefusal;
 use oer_chips_family_phy::serial::AnalogBus;
 
 pub use crate::phy::restore::{
@@ -50,6 +51,8 @@ pub enum PhyI2cConfigurationObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyI2cConfigurationError {
     BusyAtStart,
+    /// No host serves the command's address; nothing was started.
+    UnroutedAddress,
     /// A command's value does not fit its field; nothing was started.
     InvalidCommand,
     WrongAction,
@@ -126,7 +129,10 @@ impl PhyI2cConfigurationTransaction {
             Action::Complete(Ok(())) => return Err(PhyI2cConfigurationError::AlreadyComplete),
             Action::Complete(Err(_)) => return Err(PhyI2cConfigurationError::InvalidCommand),
         };
-        started.map_err(|oer_chips_family_analog::Busy| PhyI2cConfigurationError::BusyAtStart)?;
+        started.map_err(|refusal| match refusal {
+            BusRefusal::Busy => PhyI2cConfigurationError::BusyAtStart,
+            BusRefusal::Unrouted => PhyI2cConfigurationError::UnroutedAddress,
+        })?;
         self.started = true;
         Ok(())
     }
@@ -145,14 +151,20 @@ impl PhyI2cConfigurationTransaction {
         let completion = match self.transition.action() {
             Action::Read { address } => match bus.try_finish_read(address) {
                 Ok(value) => Completion::Read { address, value },
-                Err(oer_chips_family_analog::Busy) => {
+                Err(BusRefusal::Busy) => {
                     return Ok(PhyI2cConfigurationObservation::StillPending);
+                }
+                Err(BusRefusal::Unrouted) => {
+                    return Err(PhyI2cConfigurationError::UnroutedAddress);
                 }
             },
             Action::Write { address, .. } => match bus.try_finish_write(address) {
                 Ok(()) => Completion::Written { address },
-                Err(oer_chips_family_analog::Busy) => {
+                Err(BusRefusal::Busy) => {
                     return Ok(PhyI2cConfigurationObservation::StillPending);
+                }
+                Err(BusRefusal::Unrouted) => {
+                    return Err(PhyI2cConfigurationError::UnroutedAddress);
                 }
             },
             Action::Complete(_) => return Err(PhyI2cConfigurationError::AlreadyComplete),

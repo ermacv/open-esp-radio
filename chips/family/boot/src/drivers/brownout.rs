@@ -5,7 +5,7 @@ use crate::{
     wait::{BootDeadline, BootWait, WaitFailure},
 };
 use oer_chips_family_analog::{
-    AnalogField, AnalogRegisterBus, FieldWrite, Step, TransitionError, ValueTooWide,
+    AnalogField, AnalogRegisterBus, DriverError, FieldWrite, Step, ValueTooWide,
 };
 use oer_portable_time::Clock;
 
@@ -49,7 +49,7 @@ pub trait Registers {
 pub enum BrownoutFailure {
     Threshold(WaitFailure),
     Readback,
-    Transition(TransitionError),
+    Transition(DriverError),
     /// A supplied profile threshold does not fit its chip field.
     ThresholdValue(ValueTooWide),
 }
