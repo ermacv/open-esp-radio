@@ -41,7 +41,7 @@ critical-section-hart = "boot"
 task-stack = "proven"
 # The SDK's observations (`observe`) report through the executors', the
 # station's and the RF actor's observers, which only `oer_trace` builds call.
-instrumentation = ["trace"]
+instrumentation = ["trace", "debug-control"]
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each a

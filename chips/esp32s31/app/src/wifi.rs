@@ -143,9 +143,30 @@ impl wifi::Callbacks for Callbacks {
     }
 }
 
+/// Knobs of a diagnostic image.
+#[cfg(oer_debug_control)]
+pub mod debug {
+    use core::sync::atomic::{AtomicU32, Ordering};
+
+    pub use super::wifi::refuse_next_publication;
+
+    static RESTARTS: AtomicU32 = AtomicU32::new(0);
+
+    pub(super) fn count_restart() {
+        RESTARTS.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// How often the station restarted in this boot.
+    pub fn restarts() -> u32 {
+        RESTARTS.load(Ordering::Relaxed)
+    }
+}
+
 /// The station restarted after `failure`, which stayed inside the radio: the
 /// console keeps its cause and the chip runs on.
 fn restarted(failure: &wifi::failure::LifecycleFailure) {
+    #[cfg(oer_debug_control)]
+    debug::count_restart();
     let path = oer_portable_diagnostics::DiagPath::of(failure);
     let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
     let length =

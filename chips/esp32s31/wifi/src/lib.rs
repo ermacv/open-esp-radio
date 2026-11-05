@@ -670,6 +670,8 @@ pub use supply::{
 mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod release;
+#[cfg(oer_debug_control)]
+pub use oer_chips_esp32s31_ieee80211_driver::port::debug::refuse_next_publication;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 #[cfg(target_arch = "riscv32")]
 #[doc(hidden)]

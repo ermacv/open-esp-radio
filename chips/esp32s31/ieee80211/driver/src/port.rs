@@ -437,6 +437,25 @@ pub enum Fault {
     CommandExpired(oer_protocols_ieee80211_contracts_port::CommandKind),
 }
 
+/// Knobs of a diagnostic image.
+#[cfg(oer_debug_control)]
+pub mod debug {
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    static REFUSE_PUBLICATION: AtomicBool = AtomicBool::new(false);
+
+    /// Refuse the next publication as a missing key, through the path a
+    /// real one takes.
+    pub fn refuse_next_publication() {
+        REFUSE_PUBLICATION.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether this publication is the one to refuse.
+    pub(super) fn publication_refused() -> bool {
+        REFUSE_PUBLICATION.swap(false, Ordering::Relaxed)
+    }
+}
+
 /// Why a publication was refused before it took any owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Unpublished {

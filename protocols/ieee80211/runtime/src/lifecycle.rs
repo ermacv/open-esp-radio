@@ -824,9 +824,11 @@ where
             &mut commands,
             io,
         );
-        // A restart keeps the application's connection for the next
-        // installation's service.
-        if !matches!(end, LifecycleEnd::Restart(_)) {
+        // A restart keeps the application's connection and its network for
+        // the next installation's service.
+        if matches!(end, LifecycleEnd::Restart(_)) {
+            io.control.keep_profile(retired.station.take_profile());
+        } else {
             io.control.complete();
         }
         completed
@@ -1178,9 +1180,11 @@ where
             &mut commands,
             io,
         );
-        // A restart keeps the application's connection for the next
-        // installation's service.
-        if !matches!(end, LifecycleEnd::Restart(_)) {
+        // A restart keeps the application's connection and its network for
+        // the next installation's service.
+        if matches!(end, LifecycleEnd::Restart(_)) {
+            io.control.keep_profile(station.take_profile());
+        } else {
             io.control.complete();
         }
         LifecycleCompleted {

@@ -715,6 +715,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             (CoreView::Open(_), Some(_), None) => Err(Unpublished::Key),
             _ => Err(Unpublished::CoreView),
         };
+        #[cfg(oer_debug_control)]
+        let checked = checked.and_then(|checked| {
+            if super::debug::publication_refused() {
+                Err(Unpublished::Key)
+            } else {
+                Ok(checked)
+            }
+        });
         let (mut core, admitted_at, key_handle) = match checked {
             Ok(checked) => checked,
             Err(refusal) => {

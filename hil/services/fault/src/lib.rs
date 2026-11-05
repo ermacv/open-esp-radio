@@ -18,7 +18,10 @@
 //! exception and resets, and the next boot's evidence holds the record
 //! (`base::BootEvidence::post_mortem`).
 //!
-//! Only test images mount it: a request ends the boot that takes it.
+//! The service also refuses one publication, to check the station's restart
+//! on hardware: the chip must run on, and [`GetRestarts`] counts it.
+//!
+//! Only test images mount it.
 
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
@@ -26,6 +29,10 @@ use serde::{Deserialize, Serialize};
 oer_protocols_hil_protocol::messages! {
     endpoint RaiseException = "fault/raise-exception" => Raising;
     topic Raising = "fault/raising";
+    endpoint RefusePublication = "fault/refuse-publication" => Refusing;
+    topic Refusing = "fault/refusing";
+    endpoint GetRestarts = "fault/restarts" => Restarts;
+    topic Restarts = "fault/restarts-report";
 }
 
 /// Raise an illegal-instruction exception on the image's application
@@ -38,10 +45,28 @@ pub struct RaiseException;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Raising;
 
+/// Refuse the station's next publication.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct RefusePublication;
+
+/// The answer to [`RefusePublication`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Refusing;
+
+/// Ask how often the station restarted in this boot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct GetRestarts;
+
+/// The answer to [`GetRestarts`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Restarts(pub u32);
+
 oer_protocols_hil_agent::service! {
     /// The fault service's requests.
     pub enum Request (sessions = false, handler = Handler) {
         RaiseException(RaiseException) => raise_exception,
+        RefusePublication(RefusePublication) => refuse_publication,
+        GetRestarts(GetRestarts) => get_restarts,
     }
 }
 
@@ -53,7 +78,9 @@ mod tests {
     #[test]
     fn the_service_names_its_endpoint_and_answer_by_distinct_keys() {
         let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-        assert_eq!(keys.len(), 2);
-        assert_ne!(keys[0], keys[1]);
+        assert_eq!(keys.len(), 6);
+        for (index, key) in keys.iter().enumerate() {
+            assert!(!keys[..index].contains(key));
+        }
     }
 }

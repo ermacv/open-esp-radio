@@ -1,6 +1,7 @@
 //! The HIL Wi-Fi station scenario: the image's product station joins the
 //! lab router's isolated WPA2-Personal network on a channel the stand file
-//! allows, takes its IPv4 address by DHCP, answers the router's pings and
+//! allows, takes its IPv4 address by DHCP, answers the router's pings,
+//! restarts after a refused publication with the chip still running, and
 //! leaves. Every claim the device makes is checked against what the router
 //! sees: its station table, its DHCP lease and its ping.
 #![forbid(unsafe_code)]
@@ -11,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use oer_hil_services_fault::{GetRestarts, RefusePublication, Restarts};
 use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{
@@ -20,11 +22,14 @@ use oer_tools_hil_harness::{
 const SCENARIO: Scenario = Scenario::new(
     "wifi-station",
     "hil-wifi-station",
-    &[oer_hil_services_wifi_station::Request::KEYS],
+    &[
+        oer_hil_services_wifi_station::Request::KEYS,
+        oer_hil_services_fault::Request::KEYS,
+    ],
 )
 .using_router();
 
-const CASES: [Case; 4] = [
+const CASES: [Case; 5] = [
     Case {
         name: "join",
         run: join,
@@ -36,6 +41,10 @@ const CASES: [Case; 4] = [
     Case {
         name: "ping",
         run: ping,
+    },
+    Case {
+        name: "restart",
+        run: restart,
     },
     Case {
         name: "leave",
@@ -57,6 +66,8 @@ const ROUTER_ADDRESS: [u8; 4] = [10, 231, 0, 1];
 /// Pings the router sends and the replies the case needs.
 const PINGS: u16 = 10;
 const REPLIES: u64 = 9;
+/// A stop and a new installation.
+const RESTART_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn main() -> ExitCode {
     oer_tools_hil_harness::main(&SCENARIO, &CASES)
@@ -211,6 +222,49 @@ fn ping(cx: &mut Cx<'_>) -> Result<(), Failure> {
         received >= REPLIES,
         format!("{received} of {PINGS} pings answered: {answer}"),
     )
+}
+
+/// A refused publication restarts the station, not the chip: the same boot
+/// counts one restart, and the station reconnects by itself and carries data.
+fn restart(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    let Restarts(before) = cx.call(GetRestarts, STATUS_TIMEOUT)?;
+    let ipv4 = status(cx)?
+        .ipv4
+        .ok_or_else(|| Failure::Fail("the device has no address".into()))?;
+    cx.call(RefusePublication, STATUS_TIMEOUT)?;
+    // Its answers are the publications the refusal stops.
+    cx.router(RouterOperation::Ping {
+        address: Ipv4Addr::from(ipv4.address),
+        count: PINGS,
+    })?;
+    let started = Instant::now();
+    loop {
+        let Restarts(now) = cx.call(GetRestarts, STATUS_TIMEOUT)?;
+        if now == before + 1 {
+            break;
+        }
+        if started.elapsed() >= RESTART_TIMEOUT {
+            return Err(Failure::Fail(format!(
+                "{now} restarts within {RESTART_TIMEOUT:?}, {before} before"
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    // The station's reconnect policy brings it back with no command here.
+    let started = Instant::now();
+    loop {
+        let status = status(cx)?;
+        if status.link.is_some() && status.ipv4.is_some() {
+            break;
+        }
+        if started.elapsed() >= JOIN_TIMEOUT + DHCP_TIMEOUT {
+            return Err(Failure::Fail(format!(
+                "not back on the network: {status:?}"
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    ping(cx)
 }
 
 /// The device leaves: its link is down and the router's station table no

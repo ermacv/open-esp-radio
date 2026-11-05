@@ -90,6 +90,26 @@ impl oer_protocols_network_port::EthernetFrame for Frame {
 }
 
 #[test]
+fn a_restart_keeps_the_network_unless_a_newer_connect_published_one() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+    let state = State::new();
+    let (sender, _) = commands.split();
+    let (_control, runner) = Control::new(sender, &state).unwrap();
+
+    runner.keep_profile(Some(profile(b"retired")));
+    let kept = runner.take_profile().expect("the network stays");
+    assert!(kept.ssid == profile(b"retired").ssid);
+
+    state.profile.set(Some(profile(b"newer")));
+    runner.keep_profile(Some(profile(b"retired")));
+    let kept = runner.take_profile().expect("the newer network stays");
+    assert!(kept.ssid == profile(b"newer").ssid);
+
+    runner.keep_profile(None);
+    assert!(runner.take_profile().is_none());
+}
+
+#[test]
 fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
