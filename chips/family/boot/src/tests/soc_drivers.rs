@@ -6,7 +6,7 @@ use crate::{
     wait::{BootBudget, BootDeadline, BootWait, WaitFailure},
 };
 use core::cell::{Cell, RefCell};
-use oer_chips_family_analog::{AnalogField, AnalogRegisterBus, Busy};
+use oer_chips_family_analog::{AnalogField, AnalogRegisterBus, BusRefusal};
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use std::{rc::Rc, vec, vec::Vec};
@@ -183,35 +183,35 @@ struct Bus {
 }
 impl AnalogRegisterBus for Bus {
     type Address = u8;
-    fn try_start_read(&mut self, address: u8) -> Result<(), Busy> {
+    fn try_start_read(&mut self, address: u8) -> Result<(), BusRefusal> {
         assert_eq!(address, 5);
         if self.refusal == Refusal::ReadStart {
-            return Err(Busy);
+            return Err(BusRefusal::Busy);
         }
         self.log.borrow_mut().push("read");
         Ok(())
     }
-    fn try_finish_read(&self, address: u8) -> Result<u8, Busy> {
+    fn try_finish_read(&self, address: u8) -> Result<u8, BusRefusal> {
         assert_eq!(address, 5);
         if self.refusal == Refusal::ReadFinish {
-            Err(Busy)
+            Err(BusRefusal::Busy)
         } else {
             Ok(self.byte)
         }
     }
-    fn try_start_write(&mut self, address: u8, value: u8) -> Result<(), Busy> {
+    fn try_start_write(&mut self, address: u8, value: u8) -> Result<(), BusRefusal> {
         assert_eq!(address, 5);
         if self.refusal == Refusal::WriteStart {
-            return Err(Busy);
+            return Err(BusRefusal::Busy);
         }
         self.log.borrow_mut().push("write");
         self.byte = value;
         Ok(())
     }
-    fn try_finish_write(&self, address: u8) -> Result<(), Busy> {
+    fn try_finish_write(&self, address: u8) -> Result<(), BusRefusal> {
         assert_eq!(address, 5);
         if self.refusal == Refusal::WriteFinish {
-            Err(Busy)
+            Err(BusRefusal::Busy)
         } else {
             Ok(())
         }

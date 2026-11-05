@@ -36,9 +36,15 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-/// The host of an address is still executing a command.
+/// Why the bus did not take or finish a command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Busy;
+pub enum BusRefusal {
+    /// The host of the address is still executing a command; the caller
+    /// observes it again within its bound.
+    Busy,
+    /// No host serves the address, now or later.
+    Unrouted,
+}
 
 /// Non-blocking access to one chip's analog byte registers.
 ///
@@ -54,28 +60,28 @@ pub trait AnalogRegisterBus {
     /// # Errors
     ///
     /// The address's host is busy; no command was started.
-    fn try_start_read(&mut self, address: Self::Address) -> Result<(), Busy>;
+    fn try_start_read(&mut self, address: Self::Address) -> Result<(), BusRefusal>;
 
     /// The byte of the completed read of `address`.
     ///
     /// # Errors
     ///
     /// The read is still executing.
-    fn try_finish_read(&self, address: Self::Address) -> Result<u8, Busy>;
+    fn try_finish_read(&self, address: Self::Address) -> Result<u8, BusRefusal>;
 
     /// Start a write of `value` to `address`.
     ///
     /// # Errors
     ///
     /// The address's host is busy; no command was started.
-    fn try_start_write(&mut self, address: Self::Address, value: u8) -> Result<(), Busy>;
+    fn try_start_write(&mut self, address: Self::Address, value: u8) -> Result<(), BusRefusal>;
 
     /// Observe the completion of the write of `address`.
     ///
     /// # Errors
     ///
     /// The write is still executing.
-    fn try_finish_write(&self, address: Self::Address) -> Result<(), Busy>;
+    fn try_finish_write(&self, address: Self::Address) -> Result<(), BusRefusal>;
 }
 
 /// Bits `msb..=lsb` of one analog byte register.
@@ -185,6 +191,15 @@ pub enum TransitionError {
     AlreadyComplete,
     /// The completed command has no representable successor index.
     IndexExhausted { index: usize },
+}
+
+/// Why a [`Driver`] ended its transaction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DriverError {
+    /// The transition refused its completion.
+    Transition(TransitionError),
+    /// No host serves the address of the pending action.
+    Unrouted,
 }
 
 /// A transaction as a sequence of whole-byte reads and writes.
@@ -486,7 +501,7 @@ where
 enum BusPhase {
     Idle,
     Started,
-    Failed(TransitionError),
+    Failed(DriverError),
 }
 
 /// Run a [`ByteTransition`] over an [`AnalogRegisterBus`], at most one bus
@@ -529,9 +544,10 @@ where
     ///
     /// # Errors
     ///
-    /// The transition refused its completion. The refusal is retained and
-    /// subsequent polls perform no further bus actions.
-    pub fn poll(&mut self) -> Result<Step<Transition::Output>, TransitionError> {
+    /// The transition refused its completion, or no host serves its address.
+    /// The refusal is retained and subsequent polls perform no further bus
+    /// actions.
+    pub fn poll(&mut self) -> Result<Step<Transition::Output>, DriverError> {
         if let BusPhase::Failed(error) = self.phase {
             return Err(error);
         }
@@ -541,25 +557,21 @@ where
             (BusPhase::Failed(error), _) => return Err(error),
             (_, Action::Complete(output)) => return Ok(Step::Ready(output)),
             (BusPhase::Idle, Action::Read { address }) => {
-                if bus.try_start_read(address).is_ok() {
-                    self.phase = BusPhase::Started;
-                }
-                return Ok(Step::Pending);
+                return self.started(|bus| bus.try_start_read(address));
             }
             (BusPhase::Idle, Action::Write { address, value }) => {
-                if bus.try_start_write(address, value).is_ok() {
-                    self.phase = BusPhase::Started;
-                }
-                return Ok(Step::Pending);
+                return self.started(|bus| bus.try_start_write(address, value));
             }
             (BusPhase::Started, Action::Read { address }) => match bus.try_finish_read(address) {
                 Ok(value) => Completion::Read { address, value },
-                Err(Busy) => return Ok(Step::Pending),
+                Err(BusRefusal::Busy) => return Ok(Step::Pending),
+                Err(BusRefusal::Unrouted) => return self.unrouted(),
             },
             (BusPhase::Started, Action::Write { address, .. }) => {
                 match bus.try_finish_write(address) {
                     Ok(()) => Completion::Written { address },
-                    Err(Busy) => return Ok(Step::Pending),
+                    Err(BusRefusal::Busy) => return Ok(Step::Pending),
+                    Err(BusRefusal::Unrouted) => return self.unrouted(),
                 }
             }
         };
@@ -567,6 +579,7 @@ where
         match self.transition.advance(completion) {
             Ok(()) => {}
             Err(error) => {
+                let error = DriverError::Transition(error);
                 self.phase = BusPhase::Failed(error);
                 return Err(error);
             }
@@ -575,6 +588,27 @@ where
             Action::Complete(output) => Ok(Step::Ready(output)),
             _ => Ok(Step::Pending),
         }
+    }
+
+    /// Start the pending command: it runs, or its host is still busy.
+    fn started(
+        &mut self,
+        start: impl FnOnce(&mut Bus) -> Result<(), BusRefusal>,
+    ) -> Result<Step<Transition::Output>, DriverError> {
+        match start(&mut *self.bus) {
+            Ok(()) => {
+                self.phase = BusPhase::Started;
+                Ok(Step::Pending)
+            }
+            Err(BusRefusal::Busy) => Ok(Step::Pending),
+            Err(BusRefusal::Unrouted) => self.unrouted(),
+        }
+    }
+
+    /// No host serves the address: no later poll changes that.
+    fn unrouted(&mut self) -> Result<Step<Transition::Output>, DriverError> {
+        self.phase = BusPhase::Failed(DriverError::Unrouted);
+        Err(DriverError::Unrouted)
     }
 }
 
@@ -600,7 +634,7 @@ impl<'bus, Bus: AnalogRegisterBus> FieldRead<'bus, Bus> {
     }
 
     /// Advance the read by at most one bus action.
-    pub fn poll(&mut self) -> Result<Step<u8>, TransitionError> {
+    pub fn poll(&mut self) -> Result<Step<u8>, DriverError> {
         self.0.poll()
     }
 }
@@ -640,7 +674,7 @@ impl<'bus, Bus: AnalogRegisterBus> FieldWrite<'bus, Bus> {
     }
 
     /// Advance the write by at most one bus action.
-    pub fn poll(&mut self) -> Result<Step<()>, TransitionError> {
+    pub fn poll(&mut self) -> Result<Step<()>, DriverError> {
         self.0.poll()
     }
 }
@@ -649,7 +683,7 @@ impl<'bus, Bus: AnalogRegisterBus> FieldWrite<'bus, Bus> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConfigurationError {
     InvalidCommand(InvalidCommand),
-    Transition(TransitionError),
+    Driver(DriverError),
 }
 
 /// Polled vendor configuration leaf over a bus.
@@ -681,10 +715,10 @@ where
     ///
     /// # Errors
     ///
-    /// A `Modify` command's value does not fit its field; no bus action was
-    /// performed for it.
+    /// A `Modify` command's value does not fit its field, with no bus action
+    /// performed for it, or the driver ended the transaction.
     pub fn poll(&mut self) -> Result<Step<()>, ConfigurationError> {
-        match self.0.poll().map_err(ConfigurationError::Transition)? {
+        match self.0.poll().map_err(ConfigurationError::Driver)? {
             Step::Pending => Ok(Step::Pending),
             Step::Ready(result) => result
                 .map(Step::Ready)

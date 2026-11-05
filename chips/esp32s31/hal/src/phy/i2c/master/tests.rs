@@ -6,7 +6,7 @@
 //! at 0x20. A command word holds the block, the register, the data byte, the
 //! read/write bit (24), the busy bit (25) and the start bit (26).
 
-use super::{MasterPort, MasterSample};
+use super::{ConfigurationBus, MasterPort, MasterSample};
 use crate::phy::i2c::BluetoothTxPowerControlRegister;
 use oer_chips_esp32s31_pac::analog_i2c;
 use oer_chips_esp32s31_pac::{
@@ -159,6 +159,21 @@ fn an_unrouted_block_publishes_nothing() {
         AnalogBus::new(MasterPort::new(&mut master)).try_start_read(blocks::CPLL.register(0)),
         Err(PhyI2cAccessError::UnroutedAddress)
     );
+    drop(master);
+    assert!(words.iter().all(|word| *word == 0));
+}
+
+#[test]
+fn the_configuration_bus_calls_an_unrouted_block_what_it_is() {
+    use oer_chips_family_analog::{AnalogRegisterBus, BusRefusal};
+    let mut words = memory();
+    let mut master = I2cAnaMst::host(&mut words).expect("memory holds the block");
+    let mut bus = ConfigurationBus::new(&mut master);
+    let address = blocks::CPLL.register(0);
+    assert_eq!(bus.try_start_read(address), Err(BusRefusal::Unrouted));
+    assert_eq!(bus.try_finish_read(address), Err(BusRefusal::Unrouted));
+    assert_eq!(bus.try_start_write(address, 1), Err(BusRefusal::Unrouted));
+    assert_eq!(bus.try_finish_write(address), Err(BusRefusal::Unrouted));
     drop(master);
     assert!(words.iter().all(|word| *word == 0));
 }

@@ -32,26 +32,26 @@ impl Model {
 impl AnalogRegisterBus for Model {
     type Address = u8;
 
-    fn try_start_read(&mut self, address: u8) -> Result<(), Busy> {
+    fn try_start_read(&mut self, address: u8) -> Result<(), BusRefusal> {
         if self.busy.get() != 0 {
-            return Err(Busy);
+            return Err(BusRefusal::Busy);
         }
         self.busy.set(self.latency);
         self.operations.push(Operation::StartRead(address));
         Ok(())
     }
 
-    fn try_finish_read(&self, address: u8) -> Result<u8, Busy> {
+    fn try_finish_read(&self, address: u8) -> Result<u8, BusRefusal> {
         if self.busy.get() != 0 {
-            Err(Busy)
+            Err(BusRefusal::Busy)
         } else {
             Ok(self.registers[usize::from(address)])
         }
     }
 
-    fn try_start_write(&mut self, address: u8, value: u8) -> Result<(), Busy> {
+    fn try_start_write(&mut self, address: u8, value: u8) -> Result<(), BusRefusal> {
         if self.busy.get() != 0 {
-            return Err(Busy);
+            return Err(BusRefusal::Busy);
         }
         self.busy.set(self.latency);
         self.registers[usize::from(address)] = value;
@@ -59,9 +59,9 @@ impl AnalogRegisterBus for Model {
         Ok(())
     }
 
-    fn try_finish_write(&self, _address: u8) -> Result<(), Busy> {
+    fn try_finish_write(&self, _address: u8) -> Result<(), BusRefusal> {
         if self.busy.get() != 0 {
-            Err(Busy)
+            Err(BusRefusal::Busy)
         } else {
             Ok(())
         }
@@ -374,9 +374,9 @@ fn a_refused_driver_completion_is_retained_without_repeating_bus_actions() {
         let mut bus = Model::new(0);
         let mut driver = Driver::new(&mut bus, Refusing(error));
         assert_eq!(driver.poll(), Ok(Step::Pending));
-        assert_eq!(driver.poll(), Err(error));
-        assert_eq!(driver.poll(), Err(error));
-        assert_eq!(driver.poll(), Err(error));
+        assert_eq!(driver.poll(), Err(DriverError::Transition(error)));
+        assert_eq!(driver.poll(), Err(DriverError::Transition(error)));
+        assert_eq!(driver.poll(), Err(DriverError::Transition(error)));
         assert_eq!(bus.operations, [Operation::StartRead(0)]);
     }
 }
@@ -426,11 +426,15 @@ fn configuration_index_exhaustion_returns_the_exact_index_without_wrapping() {
         assert_eq!(driver.poll(), Ok(Step::Pending));
         assert_eq!(
             driver.poll(),
-            Err(TransitionError::IndexExhausted { index: usize::MAX })
+            Err(DriverError::Transition(TransitionError::IndexExhausted {
+                index: usize::MAX
+            }))
         );
         assert_eq!(
             driver.poll(),
-            Err(TransitionError::IndexExhausted { index: usize::MAX })
+            Err(DriverError::Transition(TransitionError::IndexExhausted {
+                index: usize::MAX
+            }))
         );
         assert_eq!(bus.operations.len(), 1);
     }
@@ -457,4 +461,47 @@ fn parallel_index_exhaustion_is_latched_without_restarting_a_pair_or_restoring()
     assert_eq!(writes.poll(), Err(error));
     assert_eq!(writes.poll(), Err(error));
     assert!(bus.operations.is_empty());
+}
+
+/// A bus that serves no address, counting what it was asked.
+#[derive(Default)]
+struct NoRoute {
+    asked: Cell<u8>,
+}
+
+impl NoRoute {
+    fn refuse(&self) -> BusRefusal {
+        self.asked.set(self.asked.get() + 1);
+        BusRefusal::Unrouted
+    }
+}
+
+impl AnalogRegisterBus for NoRoute {
+    type Address = u8;
+
+    fn try_start_read(&mut self, _address: u8) -> Result<(), BusRefusal> {
+        Err(self.refuse())
+    }
+
+    fn try_finish_read(&self, _address: u8) -> Result<u8, BusRefusal> {
+        Err(self.refuse())
+    }
+
+    fn try_start_write(&mut self, _address: u8, _value: u8) -> Result<(), BusRefusal> {
+        Err(self.refuse())
+    }
+
+    fn try_finish_write(&self, _address: u8) -> Result<(), BusRefusal> {
+        Err(self.refuse())
+    }
+}
+
+#[test]
+fn an_unrouted_address_ends_the_transaction_and_stays_refused() {
+    let mut bus = NoRoute::default();
+    let mut read = FieldRead::new(&mut bus, AnalogField::new(0_u8, 7, 0).expect("field"));
+    assert_eq!(read.poll(), Err(DriverError::Unrouted));
+    assert_eq!(read.poll(), Err(DriverError::Unrouted));
+    drop(read);
+    assert_eq!(bus.asked.get(), 1, "no later poll reaches the bus");
 }
