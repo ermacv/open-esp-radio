@@ -212,6 +212,7 @@ impl DiagnosticPath for LowerMacFault {
                     RxBlockAckError::HardwareReadbackMismatch => {
                         path.name("HardwareReadbackMismatch")
                     }
+                    RxBlockAckError::Domain => path.name("Domain"),
                 }
             }
             Self::NoRxBlockAckBank => path.name("NoRxBlockAckBank"),

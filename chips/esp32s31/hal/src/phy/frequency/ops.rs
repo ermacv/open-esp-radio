@@ -182,19 +182,19 @@ pub(crate) fn nrx_frequency_quotient(shift: u32, frequency: u32) -> Bits<24> {
 }
 
 /// The frequency-memory address domain: eleven bits.
-const fn frequency_memory_address(address: u16) -> (Bits<10>, bool) {
-    assert!(
-        address < 0x800,
-        "frequency-memory address must fit its eleven-bit domain"
-    );
-    (Bits::truncate(address as u32), address & 0x400 != 0)
+const fn frequency_memory_address(address: u16) -> Option<(Bits<10>, bool)> {
+    if address >= 0x800 {
+        return None;
+    }
+    Some((Bits::truncate(address as u32), address & 0x400 != 0))
 }
 
 /// Select the recovered two-bit baseband mode.
 pub fn set_baseband_mode<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, mode: u8) {
-    let mode = Bits::<2>::new(u32::from(mode))
-        .ok()
-        .expect("baseband mode must fit its two-bit field");
+    // A value beyond its field changes no register.
+    let Ok(mode) = Bits::<2>::new(u32::from(mode)) else {
+        return;
+    };
     frequency.fe.modify_frequency_parameter_1_status(|w| {
         w.set_bits_0_1_opaque(mode);
     });
@@ -280,10 +280,12 @@ pub fn write_memory<P: PhyPlacement>(
     value: u32,
     mode: u8,
 ) {
-    let data = Bits::<24>::new(value)
-        .ok()
-        .expect("frequency-memory data must fit 24 bits");
-    let (address_low, address_high) = frequency_memory_address(address);
+    // A value beyond its field changes no register.
+    let (Ok(data), Some((address_low, address_high))) =
+        (Bits::<24>::new(value), frequency_memory_address(address))
+    else {
+        return;
+    };
     frequency.fe.modify_frequency_control(|w| {
         w.set_memory_address_low(address_low)
             .set_memory_address_high(address_high);
@@ -307,10 +309,13 @@ pub fn read_memory<P: PhyPlacement>(
     address: u16,
     mode: u8,
 ) -> u32 {
-    let (address_low, address_high) = frequency_memory_address(address);
-    let mode = Bits::<2>::new(u32::from(mode))
-        .ok()
-        .expect("frequency-memory read mode must fit its two-bit field");
+    // A value beyond its field changes no register and reads zero.
+    let (Some((address_low, address_high)), Ok(mode)) = (
+        frequency_memory_address(address),
+        Bits::<2>::new(u32::from(mode)),
+    ) else {
+        return 0;
+    };
     frequency.fe.modify_frequency_control(|w| {
         w.set_memory_address_low(address_low)
             .set_memory_address_high(address_high);

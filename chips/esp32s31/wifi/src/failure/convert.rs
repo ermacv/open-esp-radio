@@ -710,6 +710,7 @@ pub(super) fn rx_block_ack_error(
         Source::Tid(v) => RxBlockAckError::Tid(v),
         Source::Window(v) => RxBlockAckError::Window(v),
         Source::HardwareReadbackMismatch => RxBlockAckError::HardwareReadbackMismatch,
+        Source::Domain => RxBlockAckError::Domain,
     }
 }
 pub(super) fn rx_stage_transaction_error(

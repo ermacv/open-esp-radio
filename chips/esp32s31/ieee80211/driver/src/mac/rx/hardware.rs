@@ -44,6 +44,8 @@ pub enum S31RxBlockAckAgreementError {
     Tid(u8),
     Window(u16),
     HardwareReadbackMismatch,
+    /// A checked value fell outside its register's domain.
+    Domain,
 }
 
 /// Narrow hardware capability shared by station and access-point RX
@@ -247,21 +249,22 @@ pub fn program(
     let agreement = agreement.validate()?;
     mmio.program_rx_block_ack_entry(
         MacRxBlockAckEntryIndex::new(u32::from(agreement.hardware_index))
-            .expect("validated receive BlockAck hardware index"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
         agreement.interface,
         agreement.peer,
-        MacRxBlockAckTid::new(u32::from(agreement.tid)).expect("validated receive BlockAck TID"),
+        MacRxBlockAckTid::new(u32::from(agreement.tid))
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
         MacRxBlockAckStartingSequence::new(u32::from(agreement.starting_sequence.get()))
-            .expect("validated receive BlockAck starting sequence"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
         MacRxBlockAckWindow::new(u32::from(agreement.window))
-            .expect("validated receive BlockAck window"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
     );
     let snapshot = mmio
         .rx_block_ack_entry_snapshot(
             MacRxBlockAckEntryIndex::new(u32::from(agreement.hardware_index))
-                .expect("validated receive BlockAck hardware index"),
+                .ok_or(S31RxBlockAckAgreementError::Domain)?,
         )
-        .expect("validated receive BlockAck hardware index has one direct bank");
+        .ok_or(S31RxBlockAckAgreementError::Domain)?;
     if !snapshot.enabled
         || snapshot.tid != agreement.tid
         || !snapshot.write_enabled
@@ -289,7 +292,7 @@ pub fn clear(
     }
     mmio.delete_rx_block_ack_entry(
         MacRxBlockAckEntryIndex::new(u32::from(hardware_index))
-            .expect("validated receive BlockAck hardware index"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
     );
     Ok(())
 }
@@ -314,11 +317,11 @@ pub fn reset_window(
     }
     mmio.reset_rx_block_ack_window(
         MacRxBlockAckEntryIndex::new(u32::from(hardware_index))
-            .expect("validated receive BlockAck hardware index"),
-        MacRxBlockAckTid::new(u32::from(tid)).expect("validated receive BlockAck TID"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
+        MacRxBlockAckTid::new(u32::from(tid)).ok_or(S31RxBlockAckAgreementError::Domain)?,
         MacRxBlockAckStartingSequence::new(u32::from(starting_sequence.get()))
-            .expect("validated receive BlockAck starting sequence"),
-        MacRxBlockAckWindow::new(u32::from(window)).expect("validated receive BlockAck window"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
+        MacRxBlockAckWindow::new(u32::from(window)).ok_or(S31RxBlockAckAgreementError::Domain)?,
     );
     Ok(())
 }
@@ -333,14 +336,15 @@ pub fn program_extra_softap(
     let agreement = agreement.validate()?;
     let matches = mmio.program_extra_softap_rx_block_ack_entry(
         MacExtraSoftApRxBlockAckEntryIndex::new(u32::from(agreement.hardware_index))
-            .expect("validated extra-SoftAP receive BlockAck hardware index"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
         agreement.interface,
         agreement.peer,
-        MacRxBlockAckTid::new(u32::from(agreement.tid)).expect("validated receive BlockAck TID"),
+        MacRxBlockAckTid::new(u32::from(agreement.tid))
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
         MacRxBlockAckStartingSequence::new(u32::from(agreement.starting_sequence.get()))
-            .expect("validated receive BlockAck starting sequence"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
         MacRxBlockAckWindow::new(u32::from(agreement.window))
-            .expect("validated receive BlockAck window"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
     );
     if !matches {
         return Err(S31RxBlockAckAgreementError::HardwareReadbackMismatch);
@@ -358,7 +362,7 @@ pub fn clear_extra_softap(
     }
     mmio.delete_extra_softap_rx_block_ack_entry(
         MacExtraSoftApRxBlockAckEntryIndex::new(u32::from(hardware_index))
-            .expect("validated extra-SoftAP receive BlockAck hardware index"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
     );
     Ok(())
 }
@@ -378,11 +382,11 @@ pub fn reset_extra_softap_window(
     }
     mmio.reset_extra_softap_rx_block_ack_window(
         MacExtraSoftApRxBlockAckEntryIndex::new(u32::from(hardware_index))
-            .expect("validated extra-SoftAP receive BlockAck hardware index"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
         MacRxBlockAckStartingSequence::new(u32::from(starting_sequence.get()))
-            .expect("validated receive BlockAck starting sequence"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
         MacRxBlockAckWindow::new(u32::from(crate::mac::rx::ampdu::RX_BLOCK_ACK_MAX_WINDOW))
-            .expect("vendor receive BlockAck hardware window"),
+            .ok_or(S31RxBlockAckAgreementError::Domain)?,
     );
     Ok(())
 }

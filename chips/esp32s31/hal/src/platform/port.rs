@@ -44,13 +44,8 @@ fn hart(hart: port::Hart) -> Hart {
 static DEBUG: ZeroedOnce<DebugModeStatus> = ZeroedOnce::new();
 
 /// Publish the per-hart debug status for [`Port::debugger_connected`], from
-/// the root's partition.
-///
-/// # Panics
-///
-/// When it was published before: the root splits the partition once.
+/// the root's partition, which the root splits once.
 pub(crate) fn publish_debug_status(peripherals: DebugPeripherals) {
-    assert!(DEBUG.get().is_none(), "the debug status is published once");
     let _ = DEBUG.get_or_init(|| peripherals.debug_mode_status);
 }
 

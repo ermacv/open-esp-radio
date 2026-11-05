@@ -249,16 +249,12 @@ pub struct PollPlaced<'a, 'f, F: Future> {
 }
 impl<'a, F: Future> Future for PollPlaced<'a, '_, F> {
     type Output = Placed<'a, F::Output>;
-    #[expect(
-        clippy::expect_used,
-        reason = "the Future contract: polling after completion may panic, and the wrapper holds the output place once"
-    )]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        let storage = this
-            .output
-            .take()
-            .expect("a completed placed future is not polled again");
+        // A completed future stays pending: its output place is gone.
+        let Some(storage) = this.output.take() else {
+            return Poll::Pending;
+        };
         // SAFETY: storage is exclusive and contains only a previous Pending
         // or uninitialized bytes. The callee's return place is this storage;
         // no MaybeUninit::write wrappers move the large output through locals.

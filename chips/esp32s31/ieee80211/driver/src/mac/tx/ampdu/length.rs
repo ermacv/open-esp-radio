@@ -217,10 +217,10 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         }
         let previous = if self.count != 0 {
             let previous = usize::from(self.count - 1);
-            Some((
-                u32::from(self.psdu_lengths[previous]),
-                u32::from(self.empty_delimiters[previous]),
-            ))
+            self.psdu_lengths
+                .get(previous)
+                .zip(self.empty_delimiters.get(previous))
+                .map(|(length, delimiters)| (u32::from(*length), u32::from(*delimiters)))
         } else {
             None
         };

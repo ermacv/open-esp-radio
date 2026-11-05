@@ -37,6 +37,8 @@ pub enum PhyGrantProtectError {
     AlreadyProtected,
     /// No request is programmed.
     NotProtected,
+    /// The client or the priority is outside its register domain.
+    Domain,
 }
 
 /// The vendor PHY grant-protect event.
@@ -92,7 +94,7 @@ impl<'owner> PhyGrantProtect<'owner> {
             ),
             CoexTimerPtiValue::new(u32::from(self.pti.value())),
         ) else {
-            unreachable!("the client and four-bit priority are in their domains");
+            return Err(PhyGrantProtectError::Domain);
         };
         let timer = CoexTimerRegister::Timer5;
         self.timers.configure(timer, client, pti);

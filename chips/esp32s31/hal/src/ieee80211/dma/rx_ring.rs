@@ -2445,11 +2445,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let accepted_distance = self.recycle_start.distance_to(self.accepted_tail);
         let later_completed_frontier = last_distance > tail_distance
             && last_distance <= accepted_distance
-            && (tail_distance + 1..=last_distance).all(|distance| {
-                self.descriptors[self.recycle_start.advance(distance).get()]
-                    .word0()
-                    .rx_done()
-            });
+            && (tail_distance + 1..=last_distance)
+                .all(|distance| self.rx_done(self.recycle_start.advance(distance)));
         // A zero link describes the software topology, not the walker's
         // current ownership. RX_DONE/LAST may become visible before hardware
         // has consumed that terminal link. Only NEXT=0 proves the finite list
