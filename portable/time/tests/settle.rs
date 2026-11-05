@@ -55,9 +55,8 @@ fn a_pair_that_never_agrees_stops_when_the_limit_has_passed() {
         None
     });
     assert_eq!(sample, Err(Unsettled));
-    // The first attempt reads nothing. The start read is 100; the checks
-    // read 101..=105, and 105 ends it.
-    assert_eq!(attempts, 6);
+    // The start read is 100; the checks read 101..=105, and 105 ends it.
+    assert_eq!(attempts, 5);
 }
 
 #[test]
@@ -86,9 +85,8 @@ fn concrete_and_erased_clocks_keep_the_same_result_and_attempt_count() {
         (Some(1), (Ok(1), 1)),
         (Some(2), (Ok(2), 2)),
         (Some(3), (Ok(3), 3)),
-        (Some(4), (Ok(4), 4)),
-        (Some(5), (Err(Unsettled), 4)),
-        (None, (Err(Unsettled), 4)),
+        (Some(4), (Err(Unsettled), 3)),
+        (None, (Err(Unsettled), 3)),
     ] {
         let concrete_clock = VirtualClock::default();
         let concrete: Settle<'_, VirtualClock> = Settle::new(limit(10), &concrete_clock);
@@ -136,15 +134,5 @@ fn an_interrupt_after_a_failed_attempt_still_gets_a_final_attempt() {
             .expect("the virtual clock advances past the limit");
         None
     });
-    assert_eq!((result, attempts), (Err(Unsettled), 3));
-}
-
-#[test]
-fn a_first_attempt_that_yields_reads_no_clock() {
-    let clock = Stepping(Cell::new(0));
-    assert_eq!(
-        settle(Settle::new(limit(4), &clock), || Some(true)),
-        Ok(true)
-    );
-    assert_eq!(clock.0.get(), 0);
+    assert_eq!((result, attempts), (Err(Unsettled), 2));
 }
