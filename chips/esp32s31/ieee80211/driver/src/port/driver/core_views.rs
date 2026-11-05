@@ -200,7 +200,7 @@ pub(in crate::port) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>
                 LifecycleStart::Retune(_) => Err(Fault::TuneNotRecorded),
             }
         }
-        _ => Err(Fault::Capacity),
+        _ => Err(Fault::CoreViewUnavailable(CoreOp::Enable)),
     }
 }
 
@@ -213,16 +213,16 @@ pub(in crate::port) fn configure<'id, Id: SlotIdentity, D: Device<B>, const B: u
         CoreView::Open(view) => view
             .configure(config)
             .map(|_| ())
-            .map_err(|_| Fault::Capacity),
+            .map_err(|_| Fault::ConfigurationRefused),
         CoreView::Closing(view) => view
             .configure(config)
             .map(|_| ())
-            .map_err(|_| Fault::Capacity),
+            .map_err(|_| Fault::ConfigurationRefused),
         CoreView::Closed(view) => view
             .configure(config)
             .map(|_| ())
-            .map_err(|_| Fault::Capacity),
-        _ => Err(Fault::Capacity),
+            .map_err(|_| Fault::ConfigurationRefused),
+        _ => Err(Fault::CoreViewUnavailable(CoreOp::Configure)),
     }
 }
 
@@ -315,7 +315,7 @@ pub(in crate::port) fn open<'id, Id: SlotIdentity, D: Device<B>, const B: usize>
             .open_gate(hardware, sink)
             .map(|_| ())
             .map_err(|failed| Fault::Core(failed.fault())),
-        _ => Err(Fault::Capacity),
+        _ => Err(Fault::CoreViewUnavailable(CoreOp::Open)),
     }
 }
 

@@ -4,7 +4,6 @@
 pub enum BackendFault {
     Core(LowerMacFault),
     Receive(ReceiveFault),
-    Capacity,
     Clock,
     Retune(RetuneError),
     Abandoned,
@@ -14,12 +13,25 @@ pub enum BackendFault {
     HardwareUnavailable,
     /// The lower-MAC core was not in the view a step needed.
     CoreViewUnavailable(CoreOperation),
+    /// A step of a single MPDU's publication failed.
+    Publish {
+        queue: u8,
+        step: PublishStep,
+    },
     /// A hardware queue completed twice in one service.
     DuplicateCompletion {
         queue: u8,
     },
     /// The core removed more keys than were installed.
     RemovalOverflow,
+    /// The core reported no removal of a key it was told to remove.
+    RemovalMissing,
+    /// A removal's terminal named another slot than the key held.
+    RemovalMismatch,
+    /// A group command named a key index the access point's group has not.
+    GroupKeyIdRange,
+    /// The core refused a VIF configuration.
+    ConfigurationRefused,
     /// A queue completed with no MPDU published on it.
     CompletionWithoutPending {
         queue: u8,
@@ -84,6 +96,26 @@ pub enum CoreOperation {
     Tbtt,
     Arena,
     Publish,
+    Enable,
+    Configure,
+    Open,
+}
+/// The step of a single MPDU's publication that failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PublishStep {
+    Observations,
+    Ticket,
+    KeyAdmission,
+    ReceiveKey,
+    Buffer,
+    Descriptor,
+    Attach,
+    DescriptorBusy,
+    HeaderBuffer,
+    CcmpHeader,
+    Values,
+    Count,
+    Queue,
 }
 /// The key operation that found no key.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

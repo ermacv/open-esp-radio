@@ -217,7 +217,9 @@ impl<W: Binding> DatapathPort<'static> for ActorPort<W> {
     type LentRx = crate::LentRx<W::Notifies>;
     const RX_HELD: u8 = ACTOR_RX_HELD;
     fn arena_ack(response: port::BlockAckAnswer) -> Option<port::Ack> {
-        response.snr_db.map(|snr_db| port::Ack { snr_db })
+        response.snr_db.map(|snr_db| port::Ack {
+            snr: SnrSample::Measured(snr_db),
+        })
     }
     #[cfg_attr(
         not(oer_trace),

@@ -1471,8 +1471,8 @@ pub struct ModelAck {
 }
 
 impl AckSnr for ModelAck {
-    fn snr_db(&self) -> i8 {
-        self.snr_db
+    fn snr_sample(&self) -> SnrSample {
+        SnrSample::Measured(self.snr_db)
     }
 }
 

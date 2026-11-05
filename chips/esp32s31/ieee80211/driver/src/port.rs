@@ -326,7 +326,6 @@ pub enum DevicePull<R> {
 pub enum Fault {
     Core(LowerMacFault),
     Receive(crate::rx::control::WifiRxCause),
-    Capacity,
     Clock,
     /// The radio front end did not retune the stopped port for this start.
     Retune(WifiRetuneError),
@@ -342,6 +341,13 @@ pub enum Fault {
     HardwareUnavailable,
     /// The lower-MAC core is not in the view this step needs.
     CoreViewUnavailable(CoreOp),
+    /// A step of a single MPDU's publication failed.
+    Publish {
+        /// The hardware queue.
+        queue: u8,
+        /// The step.
+        step: PublishStep,
+    },
     /// A hardware queue completed twice in one service.
     DuplicateCompletion {
         /// The hardware queue.
@@ -349,6 +355,14 @@ pub enum Fault {
     },
     /// The core removed more keys than were installed.
     RemovalOverflow,
+    /// The core reported no removal of a key it was told to remove.
+    RemovalMissing,
+    /// A removal's terminal names another slot than the key held.
+    RemovalMismatch,
+    /// A group command named a key index the access point's group has not.
+    GroupKeyIdRange,
+    /// The core refused a VIF configuration.
+    ConfigurationRefused,
     /// A queue completed with no MPDU published on it.
     CompletionWithoutPending {
         /// The hardware queue.
@@ -429,6 +443,43 @@ pub enum CoreOp {
     Arena,
     /// A single MPDU's publication.
     Publish,
+    /// The lower MAC's enable.
+    Enable,
+    /// A VIF configuration.
+    Configure,
+    /// The opening of the gate.
+    Open,
+}
+
+/// The step of a single MPDU's publication that failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PublishStep {
+    /// The port's observations were not in their place.
+    Observations,
+    /// No ticket of the core was free.
+    Ticket,
+    /// The core refused the attempt's key.
+    KeyAdmission,
+    /// The attempt names a receive key.
+    ReceiveKey,
+    /// The buffer's memory had already left the CPU.
+    Buffer,
+    /// The queue's descriptor was not in its place.
+    Descriptor,
+    /// The descriptor refused the buffer's memory.
+    Attach,
+    /// The descriptor was not free.
+    DescriptorBusy,
+    /// The descriptor's buffer was not the CPU's to write.
+    HeaderBuffer,
+    /// The CCMP header did not fit its buffer.
+    CcmpHeader,
+    /// The MPDU's values were refused.
+    Values,
+    /// The attempt's publication count overflowed.
+    Count,
+    /// The queue's token was not in its place.
+    Queue,
 }
 
 /// The key operation that found no key.
@@ -642,22 +693,28 @@ impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
     }
 }
 
+/// The evidence of a response. A successful completion carries its sample;
+/// a BlockAck the hardware reports beside a failed status has none.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ack {
-    pub snr_db: i8,
+    pub snr: SnrSample,
 }
 
 impl Ack {
-    fn from_sample(sample: Option<i8>) -> Result<Self, Fault> {
-        sample.map(|snr_db| Self { snr_db }).ok_or(Fault::Capacity)
+    /// The evidence of a completion's sample.
+    const fn from_sample(sample: Option<i8>) -> Self {
+        Self {
+            snr: match sample {
+                Some(snr_db) => SnrSample::Measured(snr_db),
+                None => SnrSample::Unmeasured,
+            },
+        }
     }
 }
 
-// Successful ordinary completions always supply the signed vendor sample;
-// group/no-ACK transmissions carry SingleResponse::Unsolicited instead.
 impl AckSnr for Ack {
-    fn snr_db(&self) -> i8 {
-        self.snr_db
+    fn snr_sample(&self) -> SnrSample {
+        self.snr
     }
 }
 
@@ -665,11 +722,11 @@ impl AckSnr for Ack {
 mod ack_tests {
     use super::*;
     #[test]
-    fn rate_control_receives_the_real_ack_sample_and_missing_evidence_is_refused() {
+    fn rate_control_receives_the_real_ack_sample_and_a_missing_one_is_unmeasured() {
         for sample in [i8::MIN, -7, 0, i8::MAX] {
-            let ack = Ack::from_sample(Some(sample)).expect("measured ACK");
-            assert_eq!(ack.snr_db(), sample);
+            let ack = Ack::from_sample(Some(sample));
+            assert_eq!(ack.snr_sample(), SnrSample::Measured(sample));
         }
-        assert_eq!(Ack::from_sample(None), Err(Fault::Capacity));
+        assert_eq!(Ack::from_sample(None).snr_sample(), SnrSample::Unmeasured);
     }
 }
