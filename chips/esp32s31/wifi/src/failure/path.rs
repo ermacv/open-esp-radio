@@ -240,7 +240,6 @@ impl DiagnosticPath for TxError {
 impl DiagnosticPath for CompletionFault {
     fn push_path(&self, path: &mut DiagPath) {
         match self {
-            Self::SecurityKeyError => path.name("SecurityKeyError"),
             Self::InvalidStatus { status } => {
                 path.name("InvalidStatus");
                 path.word(u32::from(*status));

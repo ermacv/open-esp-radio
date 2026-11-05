@@ -109,6 +109,9 @@ pub enum TxStatus {
     /// Hardware timed out without a completion; the publication outcome
     /// is unknown. This ends the attempt as Indeterminate, never a retry.
     TimedOut,
+    /// Hardware refused the attempt's key; whether anything went out is
+    /// unknown. This ends the attempt as Indeterminate, never a retry.
+    KeyRefused,
 }
 
 /// The BlockAck the recipient answered an A-MPDU or BlockAckReq with.
@@ -149,6 +152,8 @@ pub enum WithdrawCause {
 pub enum IndeterminateCause {
     /// Hardware timed out and no completion arrived before detachment.
     HardwareTimeout,
+    /// Hardware refused the attempt's key.
+    KeyRefused,
 }
 
 /// The MPDU transmissions an attempt made, the first included, and the rate

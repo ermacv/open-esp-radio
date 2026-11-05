@@ -252,7 +252,6 @@ pub enum TxError {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompletionFault {
-    SecurityKeyError,
     InvalidStatus { status: u8 },
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

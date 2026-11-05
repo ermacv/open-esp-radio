@@ -197,7 +197,7 @@ impl MpduRetryState {
                 };
                 self.finish_or_retry(status, reached, false)
             }
-            TxStatus::TimedOut => Self::end(RetryOutcome::Terminal(status)),
+            TxStatus::TimedOut | TxStatus::KeyRefused => Self::end(RetryOutcome::Terminal(status)),
         }
     }
 

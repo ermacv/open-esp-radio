@@ -608,7 +608,7 @@ fn lost_end(status: TxStatus, air: Air) -> AttemptEnd<BlockAckAnswer, Infallible
         // The protection exchange drew no CTS: no frame went out.
         TxStatus::CtsTimeout => AttemptEnd::ProtectionFailure(None),
         TxStatus::Collision => AttemptEnd::Collision(None),
-        TxStatus::TimedOut => AttemptEnd::Aborted,
+        TxStatus::TimedOut | TxStatus::KeyRefused => AttemptEnd::Aborted,
     }
 }
 

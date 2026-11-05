@@ -459,6 +459,54 @@ fn a_block_ack_beside_a_failed_status_delivers_its_request_unmeasured() {
 }
 
 #[test]
+fn a_key_the_hardware_refuses_ends_its_attempt_without_a_retry() {
+    for (status, detail) in [(1, 0xc0), (4, 0xc0)] {
+        with_access(|fixture, access| {
+            fixture.observed.borrow_mut().statuses = std::vec![(status, detail)];
+            fixture.start();
+            fixture.submit_mpdu(Spec::open(1));
+            let returned = single(fixture.until(access, 1));
+            assert_eq!(
+                returned.outcome,
+                TxOutcome::Indeterminate(IndeterminateCause::KeyRefused)
+            );
+            assert_eq!(fixture.publications(), 1, "the refused attempt ends");
+        });
+    }
+}
+
+#[test]
+fn settings_during_a_configuration_wait_for_its_end() {
+    with_access(|fixture, access| {
+        fixture.start();
+        fixture.hold_air(true);
+        fixture.submit_mpdu(Spec::open(1));
+        fixture.turns(1);
+        let now = fixture.now();
+        let command = PortCommand::Configure {
+            permission: fixture.configure.take().expect("permission"),
+            receive: StationReceive::Off,
+        };
+        assert!(matches!(
+            fixture.port.command(command, now, &mut fixture.outbox),
+            Ok(CommandProgress::Done)
+        ));
+        let edca = SupportedEdca::new(EdcaParameterSet::STANDARD_DEFAULT).expect("EDCA");
+        assert!(matches!(
+            fixture
+                .port
+                .command(PortCommand::SetEdca(edca), now, &mut fixture.outbox),
+            Ok(CommandProgress::Done)
+        ));
+        fixture.turns(2);
+        assert_eq!(fixture.port.fault(), None);
+        fixture.hold_air(false);
+        fixture.until(access, 2);
+        assert_eq!(fixture.port.fault(), None);
+    });
+}
+
+#[test]
 fn caller_pn_and_external_body_survive_tx_and_a_removed_key_refuses_retransmission() {
     with_access(|fixture, access| {
         fixture.start();

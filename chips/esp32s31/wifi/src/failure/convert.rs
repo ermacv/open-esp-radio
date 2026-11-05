@@ -292,7 +292,6 @@ pub(super) fn completion_fault(
 ) -> CompletionFault {
     use oer_chips_esp32s31_ieee80211_driver::mac::tx::CompletionFault as Source;
     match value {
-        Source::SecurityKeyError => CompletionFault::SecurityKeyError,
         Source::InvalidStatus { status } => CompletionFault::InvalidStatus { status },
     }
 }

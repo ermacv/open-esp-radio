@@ -100,6 +100,17 @@ pub struct WifiRetuneFailure<W> {
 }
 
 impl<W> WifiRetuneFailure<W> {
+    /// The stopped client back, on the channel it had, when the radio changed
+    /// nothing: only a poisoned domain cannot resume an RF role.
+    pub fn resume(self) -> Result<WifiStopped<W>, Self> {
+        match self.cause {
+            WifiRetuneError::Radio(oer_chips_esp32s31_radio_client::Failure::Poisoned(_)) => {
+                Err(self)
+            }
+            WifiRetuneError::Radio(_) | WifiRetuneError::NotStopped(_) => Ok(self.stopped),
+        }
+    }
+
     pub async fn release(
         self,
         cell: MembershipCell<Wifi>,

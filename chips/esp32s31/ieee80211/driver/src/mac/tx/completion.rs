@@ -17,7 +17,6 @@ pub enum CompletionObservation<T = TxStatus> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompletionFault {
     /// The backend published with an installation the cipher cannot use.
-    SecurityKeyError,
     /// A status outside all recovered completion-dispatch branches.
     InvalidStatus { status: u8 },
 }
@@ -83,7 +82,7 @@ const fn rts_error(detail: u8) -> Result<CompletionObservation, CompletionFault>
         // SOURCE(esp32s31): libpp[lmac.o]::lmacProcessTxRtsError +0xe6 calls
         // libpp[lmac.o]::lmacEndFrameExchangeSequence(inst, 1, 0), the same
         // arguments as libpp[lmac.o]::lmacProcessTxseckiderr +0x26. This is a key fault.
-        0xc0 => Err(CompletionFault::SecurityKeyError),
+        0xc0 => Ok(Observed(TxStatus::KeyRefused)),
         // SOURCE(esp32s31): libpp[lmac.o]::lmacProcessTxRtsError +0x72..+0xaa only logs
         // every remaining detail. It does not end the publication.
         _ => Ok(NoEffect),
@@ -101,7 +100,7 @@ const fn tx_error(detail: u8) -> Result<CompletionObservation, CompletionFault> 
         1 | 3..=5 => Ok(Observed(TxStatus::Collision)),
         // SOURCE(esp32s31): libpp[lmac.o]::lmacProcessTxError +0x98 calls
         // libpp[lmac.o]::lmacProcessTxseckiderr; that function's +0x26 ends FES(inst, 1, 0).
-        0xc0 => Err(CompletionFault::SecurityKeyError),
+        0xc0 => Ok(Observed(TxStatus::KeyRefused)),
         // SOURCE(esp32s31): libpp[lmac.o]::lmacProcessTxError +0xca dispatches the other
         // details to libpp[lmac.o]::lmacProcessAckTimeout; the dispatcher supplies a2 = 0.
         _ => Ok(Observed(TxStatus::AckTimeout)),
