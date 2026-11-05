@@ -1,12 +1,17 @@
 use super::*;
 use oer_portable_time_virtual::VirtualClock;
-use std::{cell::RefCell, vec::Vec};
+use std::{
+    cell::{Cell, RefCell},
+    vec::Vec,
+};
 
 struct Hardware<'a> {
     clock: &'a VirtualClock,
     ready_at: Option<Instant>,
     events: RefCell<Vec<(&'static str, Instant)>>,
     io_delay: u64,
+    /// A handler runs right after the first ready read, for this long.
+    handler_after_ready: Cell<u64>,
 }
 impl Hardware<'_> {
     fn record(&self, name: &'static str) {
@@ -28,7 +33,11 @@ impl Io for Hardware<'_> {
     }
     fn ready(&mut self) -> bool {
         self.record("ready");
-        self.ready_at.is_some_and(|at| self.clock.now() >= at)
+        let ready = self.ready_at.is_some_and(|at| self.clock.now() >= at);
+        self.clock
+            .advance(Duration::from_micros(self.handler_after_ready.take()))
+            .unwrap();
+        ready
     }
     fn clear_tone(&mut self) {
         self.record("clear");
@@ -44,6 +53,7 @@ fn hardware(clock: &VirtualClock, ready_at: Option<u64>) -> Hardware<'_> {
         ready_at: ready_at.map(Instant::from_micros),
         events: RefCell::new(Vec::new()),
         io_delay: 0,
+        handler_after_ready: Cell::new(0),
     }
 }
 #[test]
@@ -223,4 +233,25 @@ fn ready_exactly_at_the_limit_succeeds() {
             }
         }
     }
+}
+#[test]
+fn a_handler_after_a_ready_read_does_not_expire_a_finished_conversion() {
+    let clock = VirtualClock::starting_at(Instant::EPOCH);
+    let mut io = hardware(&clock, Some(10));
+    io.handler_after_ready.set(100);
+    let mut engine = Engine::new(false);
+    let result = loop {
+        match engine.advance(&clock, &mut io) {
+            Event::Wait { at, .. } => {
+                clock
+                    .advance(at.saturating_duration_since(clock.now()))
+                    .unwrap();
+            }
+            Event::Complete(result) => break result,
+        }
+    };
+    assert!(
+        matches!(result, Ok(Sample { value: 73, .. })),
+        "the next read finds the conversion finished: {result:?}"
+    );
 }
