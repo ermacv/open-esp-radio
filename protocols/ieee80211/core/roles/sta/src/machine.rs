@@ -1945,19 +1945,14 @@ impl<T: StaTokens, K> State<T, K> {
         };
         self.establish(new);
         if let Self::Connected(connected) = self {
-            connected.rsn.initialize(|place| {
-                oer_portable_memory::init_in_place!(
-                    place,
-                    ConnectedRsn {
-                        management: management,
-                        supplicant: supplicant,
-                        replay: Some(replay),
-                        message4: DuplicateMessage4::Send(response),
-                        rekey: Rekey::None,
-                        deferred: DeferredEapol::Empty,
-                        fault: None,
-                    }
-                )
+            connected.rsn = Some(ConnectedRsn {
+                management,
+                supplicant,
+                replay: Some(replay),
+                message4: DuplicateMessage4::Send(response),
+                rekey: Rekey::None,
+                deferred: DeferredEapol::Empty,
+                fault: None,
             });
         }
     }
@@ -1995,56 +1990,40 @@ impl<T: StaTokens, K> State<T, K> {
     #[inline(never)]
     fn leave(&mut self, reason: StaDisconnectReason, step: LeaveStep) {
         let deferred = self.take_deferred();
-        *self = Self::Leave(oer_portable_memory::InlinePlace::empty());
-        if let Self::Leave(place) = self {
-            place.initialize(|place| {
-                oer_portable_memory::init_in_place!(
-                    place,
-                    Leave {
-                        reason: reason,
-                        step: step,
-                        deferred: deferred,
-                    }
-                )
-            });
-        }
+        *self = Self::Leave(Leave {
+            reason,
+            step,
+            deferred,
+        });
     }
 
     #[inline(never)]
     fn establish(&mut self, new: NewConnection<T, K>) {
-        *self = Self::Connected(oer_portable_memory::InlinePlace::empty());
-        if let Self::Connected(place) = self {
-            place.initialize(|place| {
-                oer_portable_memory::init_in_place!(
-                    place,
-                    Connected {
-                        bssid: new.bssid,
-                        channel: new.channel,
-                        association_id: new.association_id,
-                        qos: new.qos,
-                        peer: new.peer,
-                        qos_sequences: new.qos_sequences,
-                        sequence: TidSequence::Unasked,
-                        confirmation: new.confirmation,
-                        report: new
-                            .confirmation
-                            .is_none()
-                            .then_some(UpstreamFact::Connected(new.channel)),
-                        edca: false,
-                        exchange: false,
-                        power: PowerSaveView::Awake,
-                        wake: false,
-                        sending: false,
-                        waking: false,
-                        background: None,
-                        connected_notice: new.confirmation.is_none(),
-                        block_ack: None,
-                        tx_block_ack: false,
-                        rsn: oer_portable_memory::InlinePlace::empty(),
-                    }
-                )
-            });
-        }
+        *self = Self::Connected(Connected {
+            bssid: new.bssid,
+            channel: new.channel,
+            association_id: new.association_id,
+            qos: new.qos,
+            peer: new.peer,
+            qos_sequences: new.qos_sequences,
+            sequence: TidSequence::Unasked,
+            confirmation: new.confirmation,
+            report: new
+                .confirmation
+                .is_none()
+                .then_some(UpstreamFact::Connected(new.channel)),
+            edca: false,
+            exchange: false,
+            power: PowerSaveView::Awake,
+            wake: false,
+            sending: false,
+            waking: false,
+            background: None,
+            connected_notice: new.confirmation.is_none(),
+            block_ack: None,
+            tx_block_ack: false,
+            rsn: None,
+        });
     }
 }
 
@@ -2076,9 +2055,9 @@ enum State<T: StaTokens, K> {
     /// Running the WPA2 four-way handshake.
     Handshake(Handshake<T, K>),
     /// Connected.
-    Connected(oer_portable_memory::InlinePlace<Connected<T, K>>),
+    Connected(Connected<T, K>),
     /// Leaving the network.
-    Leave(oer_portable_memory::InlinePlace<Leave>),
+    Leave(Leave),
     /// Telling the application why it is not connected, then idle.
     Report(StaDisconnectReason),
 }
@@ -2311,7 +2290,7 @@ struct Connected<T: StaTokens, K> {
     /// The transmit Block Ack originator started this association.
     tx_block_ack: bool,
     /// The supplicant of a protected link and its group key's handshake.
-    rsn: oer_portable_memory::InlinePlace<ConnectedRsn>,
+    rsn: Option<ConnectedRsn>,
 }
 
 /// What the connected station's transmission in flight is for.
@@ -3332,10 +3311,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     /// Whether the station is connected.
     pub const fn is_connected(&self) -> bool {
         match &self.state {
-            State::Connected(place) => match place.as_ref() {
-                Some(connected) => connected.confirmation.is_none(),
-                None => false,
-            },
+            State::Connected(connected) => connected.confirmation.is_none(),
             _ => false,
         }
     }
@@ -3351,10 +3327,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     pub const fn peer(&self) -> Option<&Peer<T::RxMeta>> {
         match &self.state {
             State::Handshake(handshake) => Some(&handshake.peer),
-            State::Connected(place) => match place.as_ref() {
-                Some(connected) => Some(&connected.peer),
-                None => None,
-            },
+            State::Connected(connected) => Some(&connected.peer),
             _ => None,
         }
     }
@@ -3378,7 +3351,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             .as_ref()
             .is_some_and(|profile| profile.security.policy() != StaSecurityPolicy::Open);
         let connected = match &mut self.state {
-            State::Connected(connected) => connected.as_mut(),
+            State::Connected(connected) => Some(connected),
             _ => None,
         };
         match (self.link, connected) {
@@ -3464,9 +3437,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         let LinkReturn { station, tids, rx } = link;
         self.sequence = station;
         let replay = rx.into_replay();
-        if let State::Connected(connected) = &mut self.state
-            && let Some(connected) = connected.as_mut()
-        {
+        if let State::Connected(connected) = &mut self.state {
             if let Some(tids) = tids {
                 connected.qos_sequences = tids;
             }
@@ -3504,9 +3475,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         let State::Connected(connected) = &mut self.state else {
             return;
         };
-        let Some(connected) = connected.as_mut() else {
-            return;
-        };
         if connected.sequence == TidSequence::Asked(tid) {
             *tid.select_mut(&mut connected.qos_sequences) = SequenceCounter::new(next);
             connected.sequence = TidSequence::Fresh(tid);
@@ -3529,12 +3497,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     ) -> Result<StaEapol, StaRxError> {
         let result = (|| {
             let State::Connected(connected) = &mut self.state else {
-                return Err(
-                    oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::NotConnected
-                        .into(),
-                );
-            };
-            let Some(connected) = connected.as_mut() else {
                 return Err(
                     oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::NotConnected
                         .into(),
@@ -3998,9 +3960,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         let State::Connected(connected) = &mut self.state else {
             return StaTraffic::Recorded;
         };
-        let Some(connected) = connected.as_mut() else {
-            return StaTraffic::Recorded;
-        };
         if connected.qos {
             *tid.select_mut(&mut connected.qos_sequences) = SequenceCounter::new(next);
         }
@@ -4022,9 +3981,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         head: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
     ) {
         let State::Connected(connected) = &mut self.state else {
-            return;
-        };
-        let Some(connected) = connected.as_mut() else {
             return;
         };
         if let Some(tx) = tx_agreements(&mut self.config.tx_block_ack, connected) {
@@ -4441,7 +4397,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             State::Connected(connected) if connected.confirmation.is_none() => connected,
             _ => return,
         };
-        let connected = &mut **connected;
         let Some(background) = &mut connected.background else {
             return;
         };
