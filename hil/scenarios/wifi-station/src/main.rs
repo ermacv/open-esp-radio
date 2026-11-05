@@ -66,6 +66,8 @@ const ROUTER_ADDRESS: [u8; 4] = [10, 231, 0, 1];
 /// Pings the router sends and the replies the case needs.
 const PINGS: u16 = 10;
 const REPLIES: u64 = 9;
+/// The console line of the injected refusal: a publication refused for its key.
+const INJECTED_CAUSE: &str = "wifi-restarted Port/Unpublished/Key";
 /// A stop and a new installation.
 const RESTART_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -227,7 +229,7 @@ fn ping(cx: &mut Cx<'_>) -> Result<(), Failure> {
 /// A refused publication restarts the station, not the chip: the same boot
 /// counts one restart, and the station reconnects by itself and carries data.
 fn restart(cx: &mut Cx<'_>) -> Result<(), Failure> {
-    let Restarts(before) = cx.call(GetRestarts, STATUS_TIMEOUT)?;
+    let (before, _) = restarts(cx)?;
     let ipv4 = status(cx)?
         .ipv4
         .ok_or_else(|| Failure::Fail("the device has no address".into()))?;
@@ -238,10 +240,10 @@ fn restart(cx: &mut Cx<'_>) -> Result<(), Failure> {
         count: PINGS,
     })?;
     let started = Instant::now();
-    loop {
-        let Restarts(now) = cx.call(GetRestarts, STATUS_TIMEOUT)?;
+    let cause = loop {
+        let (now, cause) = restarts(cx)?;
         if now == before + 1 {
-            break;
+            break cause;
         }
         if started.elapsed() >= RESTART_TIMEOUT {
             return Err(Failure::Fail(format!(
@@ -249,7 +251,12 @@ fn restart(cx: &mut Cx<'_>) -> Result<(), Failure> {
             )));
         }
         std::thread::sleep(Duration::from_millis(200));
-    }
+    };
+    cx.measure("restart cause", serde_json::json!(cause));
+    check(
+        cause == INJECTED_CAUSE,
+        format!("the restart's cause is `{cause}`, not the refused publication"),
+    )?;
     // The station's reconnect policy brings it back with no command here.
     let started = Instant::now();
     loop {
@@ -265,6 +272,17 @@ fn restart(cx: &mut Cx<'_>) -> Result<(), Failure> {
         std::thread::sleep(Duration::from_millis(500));
     }
     ping(cx)
+}
+
+/// The restart count and the last cause, asking again while the image
+/// records one.
+fn restarts(cx: &mut Cx<'_>) -> Result<(u32, String), Failure> {
+    for _ in 0..10 {
+        if let Restarts::Counted { count, cause } = cx.call(GetRestarts, STATUS_TIMEOUT)? {
+            return Ok((count, cause.to_string()));
+        }
+    }
+    Err(Failure::Fail("the image kept recording a restart".into()))
 }
 
 /// The device leaves: its link is down and the router's station table no

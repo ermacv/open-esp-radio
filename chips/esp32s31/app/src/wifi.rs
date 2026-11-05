@@ -146,31 +146,60 @@ impl wifi::Callbacks for Callbacks {
 /// The one-shot fault of a diagnostic image.
 #[cfg(oer_fault_injection)]
 pub mod debug {
-    use core::sync::atomic::{AtomicU32, Ordering};
+    use core::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 
     pub use super::wifi::refuse_next_publication;
 
-    static RESTARTS: AtomicU32 = AtomicU32::new(0);
+    /// The longest cause text kept.
+    pub const CAUSE_BYTES: usize = 64;
 
-    pub(super) fn count_restart() {
+    /// Even while no write is under way; each write moves it by two.
+    static SEQUENCE: AtomicU32 = AtomicU32::new(0);
+    static RESTARTS: AtomicU32 = AtomicU32::new(0);
+    static LENGTH: AtomicU32 = AtomicU32::new(0);
+    static CAUSE: [AtomicU8; CAUSE_BYTES] = [const { AtomicU8::new(0) }; CAUSE_BYTES];
+
+    /// Count a restart and keep its cause text. The station task is the one
+    /// writer.
+    pub(super) fn record(cause: &[u8]) {
+        SEQUENCE.fetch_add(1, Ordering::AcqRel);
+        let mut length = 0_u32;
+        for (place, byte) in CAUSE.iter().zip(cause) {
+            place.store(*byte, Ordering::Relaxed);
+            length = length.saturating_add(1);
+        }
+        LENGTH.store(length, Ordering::Relaxed);
         RESTARTS.fetch_add(1, Ordering::Relaxed);
+        SEQUENCE.fetch_add(1, Ordering::AcqRel);
     }
 
-    /// How often the station restarted in this boot.
-    pub fn restarts() -> u32 {
-        RESTARTS.load(Ordering::Relaxed)
+    /// How often the station restarted in this boot, and the last cause's
+    /// text with its length; `None` while a restart is being recorded.
+    pub fn restarts() -> Option<(u32, [u8; CAUSE_BYTES], usize)> {
+        let before = SEQUENCE.load(Ordering::Acquire);
+        if before % 2 != 0 {
+            return None;
+        }
+        let mut cause = [0; CAUSE_BYTES];
+        for (byte, place) in cause.iter_mut().zip(&CAUSE) {
+            *byte = place.load(Ordering::Relaxed);
+        }
+        let length = usize::try_from(LENGTH.load(Ordering::Relaxed)).unwrap_or(CAUSE_BYTES);
+        let count = RESTARTS.load(Ordering::Relaxed);
+        (SEQUENCE.load(Ordering::Acquire) == before).then_some((count, cause, length))
     }
 }
 
 /// The station restarted after `failure`, which stayed inside the radio: the
 /// console keeps its cause and the chip runs on.
 fn restarted(failure: &wifi::failure::LifecycleFailure) {
-    #[cfg(oer_fault_injection)]
-    debug::count_restart();
     let path = oer_portable_diagnostics::DiagPath::of(failure);
     let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
     let length =
         oer_chips_esp32s31_compose::diagnostic_text::write(b"wifi-restarted", &path, &mut text);
+    #[cfg(oer_fault_injection)]
+    debug::record(text.get(..length).unwrap_or(&[]));
+    // Once the application opened the console, this line goes nowhere.
     if let Some(line) = text.get(..length) {
         let _written = super::whole(line).and_then(|()| super::whole(b"\n"));
     }

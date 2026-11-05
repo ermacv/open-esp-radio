@@ -199,10 +199,18 @@ impl Worker {
                     answer(identity, &oer_hil_services_fault::Refusing);
                 }
                 Either::First(Either::Second(oer_hil_services_fault::Request::GetRestarts(_))) => {
-                    answer(
-                        identity,
-                        &oer_hil_services_fault::Restarts(oer::wifi::debug::restarts()),
-                    );
+                    let answer_body = match oer::wifi::debug::restarts() {
+                        Some((count, cause, length)) => oer_hil_services_fault::Restarts::Counted {
+                            count,
+                            cause: cause
+                                .get(..length)
+                                .and_then(|text| core::str::from_utf8(text).ok())
+                                .and_then(|text| heapless::String::try_from(text).ok())
+                                .unwrap_or_default(),
+                        },
+                        None => oer_hil_services_fault::Restarts::Recording,
+                    };
+                    answer(identity, &answer_body);
                 }
                 // The load server in the group answers it.
                 Either::Second(request) => {
