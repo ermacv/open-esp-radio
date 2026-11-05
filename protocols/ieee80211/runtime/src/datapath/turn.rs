@@ -1167,13 +1167,24 @@ where
         }
     }
 
-    /// End the run on `fault`: the lifecycle hears it when its queue has
-    /// room; every owner stays where it is.
+    /// Serve `fault`: the first one the port can stop past asks the
+    /// lifecycle for a restart. Any other ends the run; the lifecycle hears
+    /// it when its queue has room, and every owner stays where it is.
     pub(super) fn fault<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         fault: Failed<'id, D>,
     ) {
+        if !self.recovering
+            && self.port.recover_for_stop()
+            && lifecycle
+                .from_actor
+                .try_send(FromActor::Recovering(fault))
+                .is_ok()
+        {
+            self.recovering = true;
+            return;
+        }
         let _told = lifecycle.from_actor.try_send(FromActor::Faulted(fault));
         self.end = Some(ActorEnd::Faulted(fault));
     }

@@ -64,6 +64,8 @@ pub trait Binding: Sized + 'static {
     type TxSupply: crate::NetworkTxSupply;
     /// The minting authority of the port's installations, once.
     fn take_installations() -> Option<radio::Installations<Self>>;
+    /// The image records why the station restarted; the chip runs on.
+    fn restarted(failure: &crate::failure::LifecycleFailure);
     /// Image-owned terminal policy, called with a handled construction error.
     fn fail(error: InitializationError) -> !;
 }

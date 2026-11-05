@@ -611,6 +611,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.check().err()
     }
 
+    /// Report `fault` as the port would.
+    #[cfg(test)]
+    pub(crate) fn fault_for_test(&mut self, fault: Fault) {
+        self.record(fault);
+    }
+
     /// The slot and permission of a rejected group replacement the driver
     /// keeps with its quarantine, and its previous and attempted KeyIDs
     /// with whether the rollback restored the previous entry.
@@ -1896,6 +1902,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             Poll::Pending if expired => unconfirmed(self, StopCause::Deadline),
             Poll::Pending => Poll::Pending,
         }
+    }
+
+    fn recover_for_stop(&mut self) -> bool {
+        let recoverable = self.retained.is_none()
+            && !self.shared.lost()
+            && self.fault.is_some_and(|fault| fault.leaves_owners_whole());
+        if recoverable {
+            self.fault = None;
+        }
+        recoverable
     }
 
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError> {

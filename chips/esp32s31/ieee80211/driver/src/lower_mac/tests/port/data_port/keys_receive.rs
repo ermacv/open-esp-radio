@@ -482,6 +482,32 @@ fn a_gtk_mutation_waits_for_units_the_network_holds_past_its_bound() {
 }
 
 #[test]
+fn a_fault_that_leaves_every_owner_in_place_lets_the_port_stop_and_reinstall() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.port.fault_for_test(Fault::ConfigurationRefused);
+        assert!(fixture.port.recover_for_stop());
+        assert_eq!(fixture.port.fault(), None);
+        fixture.stop();
+        assert_eq!(fixture.port.fault(), None);
+    });
+}
+
+#[test]
+fn a_fault_on_a_descriptor_keeps_the_port_quarantined() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let fault = Fault::Publish {
+            queue: 1,
+            step: PublishStep::Attach,
+        };
+        fixture.port.fault_for_test(fault);
+        assert!(!fixture.port.recover_for_stop());
+        assert_eq!(fixture.port.fault(), Some(fault));
+    });
+}
+
+#[test]
 fn a_gtk_mutation_refused_by_a_stop_measures_its_bound_from_the_restart() {
     with_fixture(|fixture| {
         fixture.start();

@@ -525,6 +525,13 @@ pub trait DataPort<'id> {
         now: Instant,
     ) -> Poll<Result<(), StopUnconfirmed>>;
 
+    /// Take back the fault the port last reported, so that a stop can run
+    /// and return the owners it holds: whether it can. A port that holds an
+    /// owner no stop can return keeps its fault.
+    fn recover_for_stop(&mut self) -> bool {
+        false
+    }
+
     /// A reading of the port's radio clock.
     ///
     /// # Errors

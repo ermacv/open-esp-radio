@@ -411,6 +411,8 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     retained: Retained<'id, D>,
     /// How the run ended, once it did.
     end: Option<ActorEnd<<D::Port as DataPort<'id>>::Fault>>,
+    /// A fault asked for a restart: the next one ends the run.
+    recovering: bool,
 }
 
 /// Owners a broken contract leaves with the actor.
@@ -487,6 +489,7 @@ where
                 group: None,
             },
             end: None,
+            recovering: false,
         }
     }
 
@@ -549,6 +552,7 @@ where
                     group: None,
                 },
                 end: None,
+                recovering: false,
             })
         })
     }
@@ -625,6 +629,7 @@ where
         self.data.plane = None;
         self.radio = Radio::Stopped;
         self.end = None;
+        self.recovering = false;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract
