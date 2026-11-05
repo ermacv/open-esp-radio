@@ -128,6 +128,11 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         ))
     }
 
+    /// The metadata's state, until the owner's teardown took it.
+    pub fn state(&self) -> Option<TxDmaState> {
+        self.as_ref().map(|storage| storage.get_ref().state())
+    }
+
     /// The metadata, until the owner's teardown took it.
     pub fn as_ref(&self) -> Option<Pin<&HtAmpduTxStorage<SLOTS>>> {
         self.storage.as_ref().map(Pin::as_ref)
@@ -162,7 +167,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
     /// prove that a partially prepared or quarantined descriptor arena can be
     /// republished into a later radio epoch.
     pub fn is_fully_free(&self) -> bool {
-        self.state() == TxDmaState::Free
+        self.state() == Some(TxDmaState::Free)
             && self
                 .dma
                 .as_ref()
@@ -179,11 +184,12 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
 
     /// Confirm that every lease has already crossed a safe release edge.
     pub fn release_free_backings(&mut self) -> Result<(), HtAmpduTxError> {
-        if self.state() != TxDmaState::Free
+        let state = self.state().ok_or(HtAmpduTxError::ResetRequired)?;
+        if state != TxDmaState::Free
             || self.dma_mut()?.state() != AmpduDmaState::Free
             || self.held_backing_count() != 0
         {
-            return Err(HtAmpduTxError::NotFree(self.state()));
+            return Err(HtAmpduTxError::NotFree(state));
         }
         Ok(())
     }
@@ -204,7 +210,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         ),
         Self,
     > {
-        if self.state() != TxDmaState::Free || self.held_backing_count() != 0 {
+        if self.state() != Some(TxDmaState::Free) || self.held_backing_count() != 0 {
             return Err(self);
         }
         let Some(metadata) = self.storage.take() else {
@@ -987,24 +993,25 @@ const fn prepare_refusal(refused: MacTxPrepareRefused) -> HtAmpduTxError {
     }
 }
 
+/// Tests read the metadata of a live owner directly.
+#[cfg(test)]
 impl<B, const SLOTS: usize> Deref for RetainedDmaAmpduTx<'_, B, SLOTS> {
     type Target = HtAmpduTxStorage<SLOTS>;
 
-    /// The owner's metadata; a torn-down owner reads as empty storage.
     fn deref(&self) -> &Self::Target {
-        match &self.storage {
-            Some(storage) => storage.as_ref().get_ref(),
-            None => const { &HtAmpduTxStorage::new() },
-        }
+        self.as_ref()
+            .expect("a live owner holds its metadata")
+            .get_ref()
     }
 }
 
 impl<B, const SLOTS: usize> Drop for RetainedDmaAmpduTx<'_, B, SLOTS> {
     fn drop(&mut self) {
-        let metadata_state = self.state();
+        // `try_into_resources` took both: nothing is left to settle.
         let (Some(storage), Some(dma)) = (self.storage.as_mut(), self.dma.as_mut()) else {
             return;
         };
+        let metadata_state = storage.as_ref().get_ref().state();
         let cookie = storage.as_ref().get_ref().active;
         let detached = storage.as_ref().get_ref().detached;
         let released = match (metadata_state, dma.state()) {

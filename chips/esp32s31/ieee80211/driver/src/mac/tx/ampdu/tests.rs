@@ -789,9 +789,9 @@ fn owned_dma_pool_builds_two_mpdu_length_without_publishing_hardware() {
         }
     );
     assert_eq!(owner.frame_count(), 2);
-    assert_eq!(owner.state(), TxDmaState::Reserved);
+    assert_eq!(owner.state(), Some(TxDmaState::Reserved));
     owner.cancel(cookie, drop).unwrap();
-    assert_eq!(owner.state(), TxDmaState::Free);
+    assert_eq!(owner.state(), Some(TxDmaState::Free));
 }
 
 #[test]
@@ -1129,7 +1129,7 @@ fn completed_pool_retains_mpdu_until_explicit_release() {
             .unwrap()
             .is_some()
     );
-    assert_eq!(owner.state(), TxDmaState::Completed);
+    assert_eq!(owner.state(), Some(TxDmaState::Completed));
     assert_eq!(pool.claimed_slots(), 1);
     // A retention needs the detach as well.
     assert_eq!(
@@ -1144,7 +1144,7 @@ fn completed_pool_retains_mpdu_until_explicit_release() {
     assert_eq!(pool.claimed_slots(), 1, "the detached frame stays retained");
 
     owner.release_completed(cookie, drop).unwrap();
-    assert_eq!(owner.state(), TxDmaState::Free);
+    assert_eq!(owner.state(), Some(TxDmaState::Free));
     assert_eq!(pool.claimed_slots(), 0);
 }
 
@@ -1176,7 +1176,7 @@ fn detached_pool_compacts_only_missing_frames_for_ampdu_retry() {
     assert_eq!(prepared(&mut owner, cookie).unwrap().subframes, 2);
     assert_eq!(owner.frame_count(), 2);
     assert_eq!(pool.claimed_slots(), 2, "the acknowledged frames returned");
-    assert_eq!(owner.state(), TxDmaState::Reserved);
+    assert_eq!(owner.state(), Some(TxDmaState::Reserved));
     assert_eq!(owner.buffer_addresses[0], committed[1]);
     assert_eq!(owner.buffer_addresses[1], committed[3]);
     owner.cancel(cookie, drop).unwrap();
@@ -1217,11 +1217,11 @@ fn protection_failure_republishes_every_frame_without_the_retry_bit() {
         owner.retain_frames(cookie, 0b1011, 0, drop),
         Err(HtAmpduTxError::FrameIndexOutOfRange { index: 3, count: 3 })
     );
-    assert_eq!(owner.state(), TxDmaState::Completed);
+    assert_eq!(owner.state(), Some(TxDmaState::Completed));
     // No frame went on the air: every frame stays, none gains its Retry bit.
     owner.retain_frames(cookie, 0b111, 0, drop).unwrap();
     assert_eq!(prepared(&mut owner, cookie).unwrap(), original);
-    assert_eq!(owner.state(), TxDmaState::Reserved);
+    assert_eq!(owner.state(), Some(TxDmaState::Reserved));
     assert_eq!(owner.buffer_addresses[..3], committed[..3]);
     owner.cancel(cookie, drop).unwrap();
     for slot in 0..3 {
