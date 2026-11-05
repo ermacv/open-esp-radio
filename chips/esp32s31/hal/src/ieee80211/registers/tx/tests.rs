@@ -25,7 +25,9 @@ unsafe impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>> for ModelDma {
     }
 }
 
-impl CommitTxDma<DmaRef<WifiTxDmaDescriptor>> for ModelDma {
+impl crate::ieee80211::dma::tx_storage::CommitOwner for ModelDma {}
+
+impl CommitTxDma for ModelDma {
     type Started<'a> = ModelDma;
 
     fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>)) {

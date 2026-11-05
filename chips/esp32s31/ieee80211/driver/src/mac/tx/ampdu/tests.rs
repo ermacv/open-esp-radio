@@ -21,6 +21,7 @@ fn host_pool<
     PlacedTxPool::pin(Placed::host(storage)).unwrap_or_else(|_| panic!("placed pool geometry"))
 }
 mod length_budget;
+use crate::mac::tx::CommitTxDma;
 use crate::mac::tx::{
     HeAmpduTxConfig, HeRate, HtAmpduDensity, HtAmpduTxConfig, HtRate, TxHardware,
 };
@@ -29,7 +30,7 @@ use oer_chips_esp32s31_hal::types::{
     MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
     MacTxQueueDetached,
 };
-use oer_portable_memory::{CommitTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
+use oer_portable_memory::{PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
     completion: Option<MacHtAmpduCompletionObservation>,
@@ -38,6 +39,15 @@ struct CompletionHardware {
 }
 
 impl TxHardware for CompletionHardware {
+    fn prepare_bound_he_tx(
+        &mut self,
+        _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacHeTxProgram,
+    ) -> Result<(), MacTxPrepareRefused> {
+        Ok(())
+    }
+
     fn prepare_bound_legacy_tx(
         &mut self,
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
@@ -47,7 +57,7 @@ impl TxHardware for CompletionHardware {
         Err(MacTxPrepareRefused::QueueActive)
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_legacy_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -67,7 +77,7 @@ impl TxHardware for CompletionHardware {
         Ok(())
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_ht_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -176,7 +186,7 @@ impl TxHardware for DetachingCompletionHardware {
         Err(MacTxPrepareRefused::QueueActive)
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_legacy_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -203,7 +213,7 @@ impl TxHardware for DetachingCompletionHardware {
         }
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_ht_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -230,7 +240,7 @@ impl TxHardware for DetachingCompletionHardware {
         }
     }
 
-    fn start_bound_he_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_he_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -1018,6 +1028,72 @@ fn he_trigger_preparation_fails_closed_without_original_msdu_length() {
         owner.prepared_he_trigger(LegacyTxQueue::BestEffort, config),
         Err(HtAmpduTxError::TriggerMsduLengthUnavailable)
     );
+    owner.cancel(cookie, drop).unwrap();
+}
+
+#[test]
+fn a_refused_he_start_takes_its_trigger_queue_down() {
+    let mut storage = core::pin::pin!(HtAmpduTxStorage::<2>::new());
+    let pool = frame_pool::<256, 1>();
+    let mut retention = RetainedAmpduDmaStorage::new();
+    let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
+    let cookie = owner.begin().unwrap();
+    let rate = HeRate::new(
+        crate::mac::tx::HeMcs::Mcs0,
+        crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf800Ns,
+    );
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 0, 64, |bytes| bytes.fill(0x5a)),
+        64,
+        8,
+    )
+    .unwrap();
+    owner.set_msdu_length_for_test(0, 64);
+    let aggregate = prepared_he(&mut owner, cookie, rate, HtAmpduDensity::NoRestriction).unwrap();
+    let trigger = crate::mac::tx::HeTriggerBasedTxConfig::new(
+        MacHeTbTidLimit::Three,
+        MacHeTid::new(0).unwrap(),
+    )
+    .unwrap();
+    let config = HeAmpduTxConfig::new(
+        rate,
+        0,
+        aggregate.bytes,
+        aggregate.subframes,
+        HtAmpduDensity::NoRestriction,
+    )
+    .unwrap()
+    .with_trigger_based(trigger);
+    let mut hardware = CompletionHardware {
+        completion: None,
+        cleared: None,
+        trigger_snapshot: Some(MacHeTriggerTxQueueSnapshot {
+            logical_queue: 2,
+            tid: 0,
+            trigger_based_enabled: true,
+            mu_edca_timer_select: 2,
+            mu_edca_timer_enabled: true,
+            first_link: 0,
+            first_mpdu_length: 112,
+            first_next_link: 1,
+            tail_link: 1,
+            programmed_msdu_bytes: 64,
+            queued_msdu_bytes: 64,
+            queue_valid: true,
+        }),
+    };
+
+    // This model prepares an HE queue and has no start for it.
+    assert_eq!(
+        owner.submit_he(&mut hardware, cookie, LegacyTxQueue::BestEffort, config),
+        Err(HtAmpduTxError::Prepare(
+            oer_chips_esp32s31_hal::types::MacTxPrepareFault::Unsupported
+        ))
+    );
+    assert!(hardware.cleared.is_some(), "the trigger queue came down");
+    assert_eq!(owner.state(), Some(TxDmaState::Reserved));
     owner.cancel(cookie, drop).unwrap();
 }
 

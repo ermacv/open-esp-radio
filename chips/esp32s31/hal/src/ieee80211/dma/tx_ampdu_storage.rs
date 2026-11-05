@@ -13,9 +13,10 @@ use core::{
     pin::Pin,
 };
 
+use super::tx_storage::{CommitOwner, CommitTxDma};
 use crate::memory::dma_static::{Placed, PlacedBacking};
 use crate::types::MacTxQueueDetached;
-use oer_portable_memory::{CommitTxDma, HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use crate::layouts::{DmaRef, DmaWindowAddress, WifiTxDmaDescriptor, WifiTxDmaDescriptorControl};
@@ -1246,8 +1247,14 @@ impl<B, const SLOTS: usize, const BUFFER_SIZE: usize>
     }
 }
 
-impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
-    CommitTxDma<DmaRef<WifiTxDmaDescriptor>>
+impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize> CommitOwner
+    for RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
+{
+}
+
+// The token holds the one arena `AmpduDmaStart` borrows from, so the authority
+// names the chain `descriptor_head` reads.
+impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize> CommitTxDma
     for RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
 {
     type Started<'a> = AmpduDmaStart<'a>;

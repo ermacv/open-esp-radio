@@ -14,7 +14,7 @@ use crate::memory::dma_static::{Placed, PlacedBacking};
 use core::{marker::PhantomPinned, mem::ManuallyDrop, pin::Pin};
 
 use crate::types::MacTxQueueDetached;
-use oer_portable_memory::{CommitTxDma, HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use crate::ieee80211::dma::space::DmaSpace;
@@ -407,6 +407,31 @@ impl<'owner, L: PlacedBacking> TxDmaFree<'owner, L> {
 }
 
 /// Prepare-phase borrow which cannot itself manufacture the final start edge.
+mod sealed {
+    /// Held by the owners of this crate alone.
+    pub trait Owner {}
+}
+pub(crate) use sealed::Owner as CommitOwner;
+
+/// A prepared chain that hands itself to the hardware.
+///
+/// [`commit`](Self::commit) takes the owner's token by value and records
+/// hardware ownership before `start` runs, so whoever starts a queue from
+/// this trait holds the chain until the moment it lets go, and refusing
+/// leaves it with its owner.
+///
+/// The register owner checks [`descriptor_head`](PreparedTxDma::descriptor_head)
+/// and then starts the queue, so memory safety rests on [`Started`](Self::Started)
+/// being the authority of that same chain. No type can state that, so the
+/// trait is sealed: only this crate's audited owners implement it.
+pub trait CommitTxDma: PreparedTxDma<DmaRef<WifiTxDmaDescriptor>> + sealed::Owner {
+    /// The start authority of the committed chain.
+    type Started<'a>: HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>;
+
+    /// Record hardware ownership, then run `start`.
+    fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>));
+}
+
 pub struct TxDmaPublication<'owner, L> {
     owner: &'owner mut PinnedTxDmaStorage<L>,
 }
@@ -445,7 +470,11 @@ unsafe impl<L> PreparedTxDma<DmaRef<WifiTxDmaDescriptor>> for TxDmaPublication<'
     }
 }
 
-impl<L> CommitTxDma<DmaRef<WifiTxDmaDescriptor>> for TxDmaPublication<'_, L> {
+impl<L> sealed::Owner for TxDmaPublication<'_, L> {}
+
+// The token holds the one owner `TxDmaStart` borrows from, so the authority
+// names the chain `descriptor_head` reads.
+impl<L> CommitTxDma for TxDmaPublication<'_, L> {
     type Started<'a> = TxDmaStart<'a>;
 
     fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>)) {

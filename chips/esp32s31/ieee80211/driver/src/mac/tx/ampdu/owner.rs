@@ -128,6 +128,14 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         ))
     }
 
+    /// Record frame `index`'s MSDU length, which only intake sets.
+    #[cfg(test)]
+    pub(super) fn set_msdu_length_for_test(&mut self, index: usize, length: u16) {
+        if let Some(storage) = self.storage.as_mut() {
+            storage.as_mut().project().msdu_lengths[index] = length;
+        }
+    }
+
     /// The metadata's state, until the owner's teardown took it.
     pub fn state(&self) -> Option<TxDmaState> {
         self.as_ref().map(|storage| storage.get_ref().state())
@@ -366,17 +374,23 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                     .map_err(HtAmpduTxError::TriggerBased)?,
             );
         }
-        hardware
-            .start_bound_he_tx(publication, queue_index, || {
-                let metadata = storage.as_mut().project();
-                *metadata.trigger_reservation = prepared.trigger.map(|trigger| trigger.reservation);
-                *metadata.trigger_publication_snapshot = trigger_snapshot;
-                *metadata.queue = queue;
-                *metadata.aggregate_length = prepared.aggregate.bytes;
-                *metadata.detached = false;
-                *metadata.state = TxDmaState::HardwareOwned;
-            })
-            .map_err(prepare_refusal)?;
+        let started = hardware.start_bound_he_tx(publication, queue_index, || {
+            let metadata = storage.as_mut().project();
+            *metadata.trigger_reservation = prepared.trigger.map(|trigger| trigger.reservation);
+            *metadata.trigger_publication_snapshot = trigger_snapshot;
+            *metadata.queue = queue;
+            *metadata.aggregate_length = prepared.aggregate.bytes;
+            *metadata.detached = false;
+            *metadata.state = TxDmaState::HardwareOwned;
+        });
+        if let Err(refused) = started {
+            // Nothing records the trigger queue programmed above: it comes
+            // down here, or a later cancel would leave it on.
+            if let Some(trigger) = prepared.trigger {
+                hardware.clear_he_trigger_based_queue(trigger.reservation);
+            }
+            return Err(prepare_refusal(refused));
+        }
         storage.as_mut().project().work.record_publication(
             prepared.aggregate.bytes,
             prepared.aggregate.subframes,

@@ -27,7 +27,8 @@ use crate::types::{
     MacTxPrepareRefused, MacTxQueueDetached,
 };
 
-use oer_portable_memory::{CommitTxDma, PreparedTxDma};
+use crate::ieee80211::dma::tx_storage::CommitTxDma;
+use oer_portable_memory::PreparedTxDma;
 
 use crate::{
     ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters},
@@ -562,7 +563,7 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// See [`WifiMacRegisters::start_bound_mac_tx`].
-    pub fn start_bound_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    pub fn start_bound_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
