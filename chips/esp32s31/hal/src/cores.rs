@@ -427,6 +427,7 @@ pub fn software_reset(fatal: Fatal<'_>) -> AwaitWatchdog {
             reset_with(&CORE_CONTROL, hart)
         }
         Err(Fault::InvalidHart { raw }) => {
+            // HW_PANIC_SOURCE: invalid-hart
             // An invalid identity grants no keyed hart authority. Seal free owners
             // permanently; a lent/held owner is never taken over.
             let _clock = UART0_CLOCK.seal(|clock| clock.restore_uart0_clock());

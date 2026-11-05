@@ -52,15 +52,23 @@ system these rules serve.
   `forbid(unsafe_code)`. Other callers retain the no-growth rule.
   Context-local mutable payloads use `oer-portable-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
-  A hardware state is impossible only with a `SOURCE:` proof naming the
-  model, revision, preconditions, event order and limits; a cited value alone
-  proves no lifecycle invariant. Otherwise return a handled typed error.
+  Runtime code has zero panics; compile-time panics stay allowed. A reset or a
+  runtime panic exists only at the hardware level, behind a proof marked
+  `HW_PANIC_SOURCE: <name>` at the site and named in `[proofs]` of
+  `tools/test/layers/terminal-sites.toml`, so one search finds them all. The
+  proof is either a statement that the state is impossible, naming the model,
+  revision, preconditions, event order and limits (a cited value alone proves
+  no lifecycle invariant), or an observed hardware failure where continuing
+  would hand another owner memory or a peripheral the hardware may still use.
+  Otherwise return a handled typed error, and handle it at its own level: an
+  error never travels up the stack to end in a panic or reset. A software
+  contract violation not yet removed by types restarts the station and
+  records its cause, never the chip.
   An impossible state returns a named fault retaining its source observations;
   its owners stay quarantined, then the image calls safe `fatal::reset_recording`
   to retain the reason for the next boot to print. A watchdog is not this mechanism.
-  Only the image or HAL owner makes a terminal decision: it may record/reset
-  after a reachable handled error when safe continuation is not established,
-  without `panic!` or an impossibility claim. Keep unconfirmed owners quarantined.
+  Only the image or HAL owner carries out that terminal decision, without
+  `panic!`. Keep unconfirmed owners quarantined.
   Product policy is record+reset even with a debugger; stopping requires an
   explicit debug/probe mode with checked watchdog policy. Retained LP RAM
   diagnostics are best effort, read alongside raw reset causes, with no

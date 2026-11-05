@@ -4,7 +4,7 @@
 version = 1
 
 [proofs]
-invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_CORES_NUM and pinned rev0 ROM boot role; only InvalidHart is hardware-impossible, conditional on a conforming ESP32-S31 rev0, correct mhartid read and intact code/data. Its model admits IDs 0 and 1; this proves no DMA/event-order invariant."
+invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_CORES_NUM and pinned rev0 ROM boot role; only InvalidHart is hardware-impossible, conditional on a conforming ESP32-S31 rev0, correct mhartid read and intact code/data. Its model admits IDs 0 and 1; this proves no DMA/event-order invariant."
 
 [sites]
 
