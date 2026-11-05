@@ -673,7 +673,7 @@ checksum = "dc2d050bdc5c21e0862a89256ed8029ae6c290a93aecefc73084b3002cdebb01"
 [[package]]
 name = "embassy-net"
 version = "0.9.1"
-source = "git+https://github.com/ermacv/embassy.git?rev=64edfd25cd194dd627d0ad07e558570d723ac9c1#64edfd25cd194dd627d0ad07e558570d723ac9c1"
+source = "git+https://github.com/ermacv/embassy.git?rev=a743267fa9735e4d4b9cd1ea6baf30dbf1694a86#a743267fa9735e4d4b9cd1ea6baf30dbf1694a86"
 dependencies = [
  "document-features",
  "embassy-futures",
@@ -688,8 +688,7 @@ dependencies = [
 [[package]]
 name = "embassy-sync"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bbd85cf5a5ae56bdf26f618364af642d1d0a4e245cdd75cd9aabda382f65a81"
+source = "git+https://github.com/ermacv/embassy?rev=89ee7ece044846af1bdae83887ec619f64db9320#89ee7ece044846af1bdae83887ec619f64db9320"
 dependencies = [
  "cfg-if",
  "critical-section",
