@@ -449,7 +449,7 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
         if chain.len >= Self::CAPACITY {
             return Err((memory, IntakeRefused::Full));
         }
-        if chain.owner.state() == TxDmaState::Free {
+        if chain.owner.state() == Some(TxDmaState::Free) {
             match chain.owner.begin() {
                 Ok(cookie) => chain.cookie = cookie,
                 Err(error) => {
@@ -1144,7 +1144,7 @@ where
         else {
             return Err(self.arenas.quarantine(ArenaFault::State));
         };
-        if chain.owner.state() == TxDmaState::Reserved
+        if chain.owner.state() == Some(TxDmaState::Reserved)
             && let Err(error) = chain.owner.cancel(chain.cookie, returned)
         {
             return Err(self.arenas.quarantine(ArenaFault::Chain(error)));
