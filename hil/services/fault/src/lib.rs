@@ -57,9 +57,20 @@ pub struct Refusing;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct GetRestarts;
 
-/// The answer to [`GetRestarts`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct Restarts(pub u32);
+/// The longest restart cause the answer carries.
+pub const MAX_CAUSE: usize = 64;
+
+/// The answer to [`GetRestarts`]: how often the station restarted in this
+/// boot and the last restart's cause, as its console line would read.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Restarts {
+    Counted {
+        count: u32,
+        cause: heapless::String<MAX_CAUSE>,
+    },
+    /// A restart was being recorded: ask again.
+    Recording,
+}
 
 oer_protocols_hil_agent::service! {
     /// The fault service's requests.
@@ -74,6 +85,13 @@ oer_protocols_hil_agent::service! {
 mod tests {
     extern crate std;
     use super::*;
+
+    #[test]
+    fn a_restart_cause_fits_the_console_line_kept() {
+        let cause = heapless::String::<MAX_CAUSE>::try_from("wifi-restarted Port/Unpublished/Key")
+            .expect("the injected cause fits");
+        assert!(cause.len() < MAX_CAUSE);
+    }
 
     #[test]
     fn the_service_names_its_endpoint_and_answer_by_distinct_keys() {
