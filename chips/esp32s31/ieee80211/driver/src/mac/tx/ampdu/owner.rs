@@ -17,7 +17,7 @@ use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut}
 use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
 use oer_chips_esp32s31_hal::types::{
     MacHeTxProgram, MacHtTxProgram, MacLegacyTxProgram, MacTxAbortCause, MacTxDetachOutcome,
-    MacTxDetachReason,
+    MacTxDetachReason, MacTxPrepareRefused,
 };
 use oer_protocols_ieee80211_wire::frame::set_retry_bit;
 
@@ -295,9 +295,9 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 format: super::HtAmpduTxFormat::HtAmpdu,
             },
         )?;
-        if !hardware.prepare_bound_ht_tx(&publication, queue_index, program) {
-            return Err(HtAmpduTxError::QueueActive);
-        }
+        hardware
+            .prepare_bound_ht_tx(&publication, queue_index, program)
+            .map_err(prepare_refusal)?;
         let metadata = storage.as_mut().project();
         *metadata.queue = queue;
         *metadata.aggregate_length = prepared.aggregate.bytes;
@@ -340,9 +340,9 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 format: HtAmpduTxFormat::HeAmpdu,
             },
         )?;
-        if !hardware.prepare_bound_he_tx(&publication, queue_index, program) {
-            return Err(HtAmpduTxError::QueueActive);
-        }
+        hardware
+            .prepare_bound_he_tx(&publication, queue_index, program)
+            .map_err(prepare_refusal)?;
         let mut trigger_snapshot = None;
         if let Some(trigger) = prepared.trigger {
             trigger_snapshot = Some(
@@ -881,9 +881,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 hardware.prepare_bound_he_tx(&publication, index, program)
             }
         };
-        if !prepared {
-            return Err(HtAmpduTxError::QueueActive);
-        }
+        prepared.map_err(prepare_refusal)?;
         storage.as_mut().record_single_publication(cookie, queue)?;
         publication.commit(|start| match config {
             SingleTxConfig::Legacy(_) => hardware.start_bound_legacy_tx(start, index),
@@ -978,6 +976,14 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             return Err(error);
         }
         Ok(Some(TxAbortEnd::Detached))
+    }
+}
+
+/// A busy queue is retried; any other refusal stays what it is.
+const fn prepare_refusal(refused: MacTxPrepareRefused) -> HtAmpduTxError {
+    match refused {
+        MacTxPrepareRefused::QueueActive => HtAmpduTxError::QueueActive,
+        MacTxPrepareRefused::Fault(fault) => HtAmpduTxError::Prepare(fault),
     }
 }
 

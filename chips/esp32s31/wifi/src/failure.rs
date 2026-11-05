@@ -171,6 +171,7 @@ pub enum AggregateTxError {
     Length(AggregateLengthError),
     AggregateConfigurationMismatch,
     QueueActive,
+    Prepare(TxPrepareFault),
     TriggerMsduLengthUnavailable,
     TriggerBased(TriggerProgramError),
     DetachFailed,
@@ -242,10 +243,19 @@ pub enum OrdinaryTxError {
     BlockAckRequestRate,
     InvalidRetryHeader,
 }
+/// Why the hardware refused a chain, for a reason a retry does not change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxPrepareFault {
+    ForeignProgram,
+    ChainNotNamed { named: u32 },
+    Unsupported,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxError {
     Invalid,
     QueueActive,
+    Prepare(TxPrepareFault),
     Stale,
     DetachFailed,
     Completion(CompletionFault),

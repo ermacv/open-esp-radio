@@ -70,11 +70,17 @@ fn a_legacy_preparation_publishes_six_words_of_the_reversed_bank() {
     let dma = dma();
     let before = HostWords::filled(0);
     let mut memory = before.clone();
-    assert!(memory.owners().registers.prepare_bound_legacy_mac_tx(
-        &dma,
-        MacTxQueueIndex::constant::<0>(),
-        legacy_program(&dma)
-    ));
+    assert!(
+        memory
+            .owners()
+            .registers
+            .prepare_bound_legacy_mac_tx(
+                &dma,
+                MacTxQueueIndex::constant::<0>(),
+                legacy_program(&dma),
+            )
+            .is_ok()
+    );
 
     // CONTROL and CONFIG of the queue control, PLCP1, PTI, LENGTH_CONTROL
     // and POWER of the queue vector; nothing else.
@@ -167,11 +173,14 @@ fn a_busy_queue_is_not_prepared() {
     let dma = dma();
     let before = HostWords::filled(u32::MAX);
     let mut memory = before.clone();
-    assert!(!memory.owners().registers.prepare_bound_legacy_mac_tx(
-        &dma,
-        MacTxQueueIndex::constant::<1>(),
-        legacy_program(&dma)
-    ));
+    assert_eq!(
+        memory.owners().registers.prepare_bound_legacy_mac_tx(
+            &dma,
+            MacTxQueueIndex::constant::<1>(),
+            legacy_program(&dma),
+        ),
+        Err(MacTxPrepareRefused::QueueActive)
+    );
     assert!(before.changes(&memory).is_empty());
 }
 
@@ -369,10 +378,45 @@ fn a_foreign_dma_chain_is_refused_before_writes() {
     let foreign = ModelDma(model_reference(HEAD + 4));
     let before = HostWords::filled(0);
     let mut memory = before.clone();
-    assert!(!memory.owners().registers.prepare_bound_legacy_mac_tx(
-        &foreign,
-        MacTxQueueIndex::constant::<0>(),
-        legacy_program(&dma),
-    ));
+    assert_eq!(
+        memory.owners().registers.prepare_bound_legacy_mac_tx(
+            &foreign,
+            MacTxQueueIndex::constant::<0>(),
+            legacy_program(&dma),
+        ),
+        Err(MacTxPrepareRefused::Fault(
+            MacTxPrepareFault::ForeignProgram
+        ))
+    );
     assert!(before.changes(&memory).is_empty());
+}
+
+#[test]
+fn a_queue_that_names_another_chain_is_refused_before_the_owner_lets_go() {
+    let dma = dma();
+    let foreign = ModelDma(model_reference(HEAD + 4));
+    let mut memory = HostWords::filled(0);
+    let queue = MacTxQueueIndex::constant::<0>();
+    assert!(
+        memory
+            .owners()
+            .registers
+            .prepare_bound_legacy_mac_tx(&dma, queue, legacy_program(&dma))
+            .is_ok()
+    );
+    assert_eq!(
+        memory.owners().registers.prepared_chain(&foreign, queue),
+        Err(MacTxPrepareRefused::Fault(
+            MacTxPrepareFault::ChainNotNamed {
+                named: HEAD & 0xf_ffff
+            }
+        ))
+    );
+    let control = memory
+        .owners()
+        .registers
+        .mac
+        .wifi_mac_tx_queue_control
+        .read_control_n(queue::bank(queue));
+    assert!(!control.enable() && !control.valid());
 }

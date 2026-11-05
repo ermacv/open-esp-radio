@@ -1,4 +1,5 @@
 use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_chips_esp32s31_hal::types::MacTxPrepareRefused;
 
 use core::{cell::RefCell, pin::Pin};
 use std::{boxed::Box, vec::Vec};
@@ -115,11 +116,11 @@ impl TxHardware for Hardware {
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         let queue = queue.get() as u8;
         self.legacy.push((queue, program));
         self.published.borrow_mut().push(program);
-        true
+        Ok(())
     }
 
     fn start_bound_legacy_tx(
@@ -134,10 +135,10 @@ impl TxHardware for Hardware {
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         let queue = queue.get() as u8;
         self.ht.push((queue, program));
-        true
+        Ok(())
     }
 
     fn start_bound_ht_tx(
@@ -152,10 +153,10 @@ impl TxHardware for Hardware {
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHeTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         let queue = queue.get() as u8;
         self.he.push((queue, program));
-        true
+        Ok(())
     }
 
     fn start_bound_he_tx(

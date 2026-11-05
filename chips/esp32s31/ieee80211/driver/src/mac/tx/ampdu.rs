@@ -13,6 +13,7 @@ use oer_chips_esp32s31_hal::types::MacTxQueueIndex;
 use core::{marker::PhantomPinned, pin::Pin};
 
 use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError;
+use oer_chips_esp32s31_hal::types::MacTxPrepareFault;
 use oer_chips_esp32s31_hal::types::{
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTriggerTxQueueSnapshot,
 };
@@ -90,6 +91,8 @@ pub enum HtAmpduTxError {
     Length(HtAmpduLengthError),
     AggregateConfigurationMismatch,
     QueueActive,
+    /// The hardware refused the chain for a reason a retry does not change.
+    Prepare(MacTxPrepareFault),
     TriggerMsduLengthUnavailable,
     TriggerBased(MacHeTbProgramError),
     DetachFailed,

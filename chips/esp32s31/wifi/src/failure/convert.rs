@@ -162,6 +162,7 @@ pub(super) fn aggregate_tx_error(
         Source::Length(v0) => AggregateTxError::Length(aggregate_length_error(v0)),
         Source::AggregateConfigurationMismatch => AggregateTxError::AggregateConfigurationMismatch,
         Source::QueueActive => AggregateTxError::QueueActive,
+        Source::Prepare(v0) => AggregateTxError::Prepare(tx_prepare_fault(v0)),
         Source::TriggerMsduLengthUnavailable => AggregateTxError::TriggerMsduLengthUnavailable,
         Source::TriggerBased(v0) => AggregateTxError::TriggerBased(trigger_program_error(v0)),
         Source::DetachFailed => AggregateTxError::DetachFailed,
@@ -276,11 +277,21 @@ pub(super) fn ordinary_tx_error(
     }
 }
 
+fn tx_prepare_fault(value: oer_chips_esp32s31_hal::types::MacTxPrepareFault) -> TxPrepareFault {
+    use oer_chips_esp32s31_hal::types::MacTxPrepareFault as Source;
+    match value {
+        Source::ForeignProgram => TxPrepareFault::ForeignProgram,
+        Source::ChainNotNamed { named } => TxPrepareFault::ChainNotNamed { named },
+        Source::Unsupported => TxPrepareFault::Unsupported,
+    }
+}
+
 pub(super) fn tx_error(value: oer_chips_esp32s31_ieee80211_driver::mac::tx::TxError) -> TxError {
     use oer_chips_esp32s31_ieee80211_driver::mac::tx::TxError as Source;
     match value {
         Source::Invalid => TxError::Invalid,
         Source::QueueActive => TxError::QueueActive,
+        Source::Prepare(v0) => TxError::Prepare(tx_prepare_fault(v0)),
         Source::Stale => TxError::Stale,
         Source::DetachFailed => TxError::DetachFailed,
         Source::Completion(v0) => TxError::Completion(completion_fault(v0)),
