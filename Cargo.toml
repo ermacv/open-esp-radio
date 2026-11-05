@@ -410,9 +410,10 @@ incremental = true
 codegen-units = 16
 
 # One copy of the Embassy utilities in the network fork and the workspace;
-# `embassy-sync` is its 0.8.0 release with panic-free locks.
+# `embassy-sync` is its 0.8.0 release whose mutex and channel run no foreign
+# code inside their state.
 [patch.crates-io]
-embassy-sync = { git = "https://github.com/ermacv/embassy", rev = "89ee7ece044846af1bdae83887ec619f64db9320" }
+embassy-sync = { git = "https://github.com/ermacv/embassy", rev = "9b380dbaa3e95c1dc47ce0f2bf6c8f7305ad0087" }
 
 [patch."https://github.com/ermacv/embassy.git"]
 embassy-futures = { version = "0.1.2", registry = "crates-io" }
