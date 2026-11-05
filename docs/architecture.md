@@ -1318,7 +1318,9 @@ only image collectors retain measurement counters and window state. Executor
 idle boundaries use the monotonic platform clock with interrupts masked through
 the second reading; whole-hart load is one minus the idle fraction. Executor
 work intervals include preemption and overlap. `debug-control` separately names
-knobs that force paths under `oer_debug_control`; it is not an observer. Only
+knobs that force paths under `oer_debug_control`, and `fault-injection` a
+one-shot fault on a real path under `oer_fault_injection`, which changes nothing
+else, so an image that measures can carry it; neither is an observer. Only
 `cargo fw` sets these cfgs for an image declaring the corresponding class. Comparison probe images (`cargo fw probe`) are built
 over the production crates' public API alone. The separately admitted
 `hil/probes/esp32s31-facts` image takes the PAC once for short hardware

@@ -437,8 +437,8 @@ pub enum Fault {
     CommandExpired(oer_protocols_ieee80211_contracts_port::CommandKind),
 }
 
-/// Knobs of a diagnostic image.
-#[cfg(oer_debug_control)]
+/// The one-shot fault of a diagnostic image.
+#[cfg(oer_fault_injection)]
 pub mod debug {
     use core::sync::atomic::{AtomicBool, Ordering};
 

@@ -5,6 +5,7 @@
 //! | --- | --- | --- |
 //! | `trace` | events and execution cost, collected by the image | `oer_trace` |
 //! | `debug-control` | knobs that force execution paths | `oer_debug_control` |
+//! | `fault-injection` | a one-shot fault on a real path, nothing else | `oer_fault_injection` |
 //!
 //! An application package declares them as
 //! `[package.metadata.open-radio] instrumentation = ["trace"]`. Only the
@@ -25,16 +26,18 @@ use crate::Result;
 pub enum Class {
     Trace,
     DebugControl,
+    FaultInjection,
 }
 
 impl Class {
-    const ALL: [Self; 2] = [Self::Trace, Self::DebugControl];
+    const ALL: [Self; 3] = [Self::Trace, Self::DebugControl, Self::FaultInjection];
 
     /// The class's name in a manifest.
     pub const fn name(self) -> &'static str {
         match self {
             Self::Trace => "trace",
             Self::DebugControl => "debug-control",
+            Self::FaultInjection => "fault-injection",
         }
     }
 
@@ -43,6 +46,7 @@ impl Class {
         match self {
             Self::Trace => "oer_trace",
             Self::DebugControl => "oer_debug_control",
+            Self::FaultInjection => "oer_fault_injection",
         }
     }
 
@@ -150,6 +154,19 @@ mod tests {
         assert_eq!(
             control.rustflags().collect::<Vec<_>>(),
             ["--cfg oer_debug_control"]
+        );
+    }
+
+    #[test]
+    fn fault_injection_adds_its_own_cfg_and_no_debug_control() {
+        let declared = Instrumentation::of_metadata(
+            &metadata(serde_json::json!(["trace", "fault-injection"])),
+            "image",
+        )
+        .unwrap();
+        assert_eq!(
+            declared.rustflags().collect::<Vec<_>>(),
+            ["--cfg oer_trace", "--cfg oer_fault_injection"]
         );
     }
 
