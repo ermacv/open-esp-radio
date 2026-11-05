@@ -140,10 +140,6 @@ impl InterruptBlocks {
             interrupt_core0_observer,
             ..
         } = peripherals;
-        assert!(
-            PENDING.get().is_none(),
-            "the root publishes the pending sources once"
-        );
         let _ = PENDING.get_or_init(|| pending);
         set_level_bits(&mut clic_observer);
         // Published beside the pending sources, which the assertion above

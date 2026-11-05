@@ -1148,11 +1148,17 @@ fn validate_ccmp_data(
     if frame.length < MLME_HEADER_SIZE {
         return Err(RxError::Bounds);
     }
-    let frame_control = FrameControlFields::from_bytes([mpdu[0], mpdu[1]]);
+    let (Some(&control), Some(&sequence)) = (
+        mpdu.first_chunk::<2>(),
+        mpdu.get(22..).and_then(<[u8]>::first_chunk::<2>),
+    ) else {
+        return Err(RxError::Bounds);
+    };
+    let frame_control = FrameControlFields::from_bytes(control);
     if frame_control.version() != 0 || frame_control.kind() != FrameType::Data {
         return Err(RxError::Ignored);
     }
-    let fragmented = frame_control.more_fragments() || SequenceControl::from_bytes([mpdu[22], mpdu[23]]).fragment() != 0;
+    let fragmented = frame_control.more_fragments() || SequenceControl::from_bytes(sequence).fragment() != 0;
     let fragmentation_matches = matches!(
         (fragment_admission, fragmented),
         (CcmpFragmentAdmission::Unfragmented, false) | (CcmpFragmentAdmission::Fragmented, true)

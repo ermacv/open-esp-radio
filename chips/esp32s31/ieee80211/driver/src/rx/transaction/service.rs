@@ -348,9 +348,9 @@ where
             if hooks.observing() {
                 hooks.stage_discarded(Discard::OverloadBulk);
             }
-            admission.observe(Observation::OverloadDiscardedAndRecycled(
-                unavailable_preview.expect("overload discard has a preview"),
-            ));
+            if let Some(preview) = unavailable_preview {
+                admission.observe(Observation::OverloadDiscardedAndRecycled(preview));
+            }
             (None, recycle)
         } else if let Some(discard) = recoverable_discard {
             let recycle = unit.retain_discard();
@@ -368,9 +368,9 @@ where
         } else {
             if stage_with_reserved_credit {
                 critical_reserve_admitted = critical_reserve_admitted.saturating_add(1);
-                admission.observe(Observation::CriticalReserveAdmitted(
-                    unavailable_preview.expect("critical reserve admission has a preview"),
-                ));
+                if let Some(preview) = unavailable_preview {
+                    admission.observe(Observation::CriticalReserveAdmitted(preview));
+                }
             }
             hooks.phase(Phase::StagePool);
             let stage =

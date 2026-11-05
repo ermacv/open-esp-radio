@@ -442,7 +442,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             };
             self.free[index] = Some(completion.queue);
             let ticket_index = completion.ticket.index();
-            self.tickets[ticket_index] = Some(completion.ticket);
+            *self
+                .tickets
+                .get_mut(ticket_index)
+                .ok_or(Fault::CompletionWithoutPending { queue: at })? = Some(completion.ticket);
             let mut slot = completion.slot;
             // The buffer leaves the queue's descriptor and rejoins the right
             // its publication kept.
@@ -950,7 +953,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     slot: slot.index(),
                     serial: env.serial(),
                     key_id,
-                    activity: &env.shared().key_live[17 + usize::from(slot.index())],
+                    activity: env
+                        .shared()
+                        .key_live
+                        .get(17 + usize::from(slot.index()))
+                        .ok_or(Fault::GroupKeyIdRange)?,
                 };
                 let Some(key_id) = crate::mac::crypto::ApGroupKeyId::new(key_id.get()) else {
                     return Err(Fault::GroupKeyIdRange);

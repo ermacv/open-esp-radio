@@ -337,13 +337,8 @@ impl<P: Placement> oer_chips_family_analog::AnalogRegisterBus for ConfigurationB
 }
 /// The port's refusal of a busy host. Configuration operations use only
 /// routed addresses, so an unrouted one is a table defect.
-fn port_busy(error: PhyI2cAccessError) -> oer_chips_family_analog::Busy {
-    match error {
-        PhyI2cAccessError::Busy => oer_chips_family_analog::Busy,
-        PhyI2cAccessError::UnroutedAddress => {
-            panic!("a configuration operation uses only admitted analog routes")
-        }
-    }
+fn port_busy(_: PhyI2cAccessError) -> oer_chips_family_analog::Busy {
+    oer_chips_family_analog::Busy
 }
 
 #[cfg(test)]

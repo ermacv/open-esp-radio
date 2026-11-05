@@ -77,10 +77,11 @@ impl TxPhyRate {
                 }
             }
             Self::Ht(rate) => {
-                let bits = match rate.channel_width {
+                let bits = *match rate.channel_width {
                     HtChannelWidth::Mhz20 => [26, 52, 78, 104, 156, 208, 234, 260],
                     HtChannelWidth::Mhz40 => [54, 108, 162, 216, 324, 432, 486, 540],
-                }[rate.mcs.index() as usize];
+                }
+                .get(rate.mcs.index() as usize)?;
                 Some(PpduTiming::BccOfdm {
                     data_bits_per_symbol: NonZeroU16::new(bits)?,
                     symbol_nanos: NonZeroU16::new(match rate.guard_interval {

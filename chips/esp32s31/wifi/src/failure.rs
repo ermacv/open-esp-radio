@@ -275,6 +275,7 @@ pub enum RxBlockAckError {
     Tid(u8),
     Window(u16),
     HardwareReadbackMismatch,
+    Domain,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReceiveFault {
