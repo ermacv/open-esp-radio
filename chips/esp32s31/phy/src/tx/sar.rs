@@ -128,6 +128,8 @@ impl Engine {
             State::Observe {
                 started, deadline, ..
             } => {
+                // `now` precedes this read: a handler running after it must
+                // not expire a conversion the read had not yet seen finish.
                 let ready = io.ready();
                 self.observations = self.observations.saturating_add(1);
                 let readiness = Readiness {
@@ -141,7 +143,7 @@ impl Engine {
                     }
                     let value = io.sample();
                     self.complete(Ok(Sample { value, readiness }))
-                } else if clock.now() >= deadline {
+                } else if now >= deadline {
                     self.complete(Err(Error::NotReady(readiness)))
                 } else {
                     let at = clock.now().saturating_add(SAMPLE_INTERVAL).min(deadline);
