@@ -369,6 +369,41 @@ fn the_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
 }
 
 #[test]
+fn a_gtk_mutation_behind_a_published_frame_outlasts_its_bound_while_the_frame_holds_it() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (mut command, _) = fixture.group_command(Mutation::Select);
+        // The air keeps the frame on its queue, and a configuration holds
+        // every station frame ahead of the mutation.
+        fixture.hold_air(true);
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let now = fixture.now();
+        fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .ok()
+            .expect("published");
+        let configure = DataPortHarness::configure(fixture).expect("permission");
+        let now = fixture.now();
+        assert!(
+            fixture
+                .port
+                .command(configure, now, &mut fixture.outbox)
+                .is_ok()
+        );
+        for _ in 0..6 {
+            let now = fixture.now();
+            match fixture.port.command(command, now, &mut fixture.outbox) {
+                Ok(CommandProgress::Held(held)) => command = held,
+                other => panic!("the frame holds the mutation: {:?}", other.is_ok()),
+            }
+            fixture.advance(COMMAND_BOUND.saturating_sub(Duration::from_millis(1)));
+        }
+        assert_eq!(fixture.port.fault(), None);
+    });
+}
+
+#[test]
 fn a_gtk_mutation_held_at_its_cut_comes_back_refused_by_a_stopped_port_and_runs_after_restart() {
     for mutation in Mutation::ALL {
         with_fixture(|fixture| {
@@ -500,7 +535,7 @@ fn every_stalled_gtk_mutation_expires_on_its_own_deadline_into_its_named_fault()
             let admitted = fixture.now();
             let bound = admitted.saturating_add(COMMAND_BOUND);
             let mut command = command;
-            for _ in 0..10_000 {
+            for _ in 0..100_000 {
                 let now = fixture.now();
                 match fixture.port.command(command, now, &mut fixture.outbox) {
                     Ok(CommandProgress::Held(held)) => command = held,
