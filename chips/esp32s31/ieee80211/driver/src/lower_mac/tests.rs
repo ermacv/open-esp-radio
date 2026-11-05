@@ -8,8 +8,7 @@ use crate::mac::{
     irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT},
     rx::RxPhyInfo,
     tx::{
-        HardwareOwnedTxDma, PreparedTxDma, TxDmaState, TxError, TxHardware,
-        runtime::WifiTxRuntimePolicy,
+        CommitTxDma, PreparedTxDma, TxDmaState, TxError, TxHardware, runtime::WifiTxRuntimePolicy,
     },
 };
 use oer_chips_esp32s31_hal::types::{
@@ -123,11 +122,15 @@ impl TxHardware for Hardware {
         Ok(())
     }
 
-    fn start_bound_legacy_tx(
+    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
         &mut self,
-        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-    ) {
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
     }
 
     fn prepare_bound_ht_tx(
@@ -141,11 +144,15 @@ impl TxHardware for Hardware {
         Ok(())
     }
 
-    fn start_bound_ht_tx(
+    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
         &mut self,
-        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-    ) {
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
     }
 
     fn prepare_bound_he_tx(
@@ -159,11 +166,15 @@ impl TxHardware for Hardware {
         Ok(())
     }
 
-    fn start_bound_he_tx(
+    fn start_bound_he_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
         &mut self,
-        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-    ) {
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
     }
 
     fn take_tx_completion(

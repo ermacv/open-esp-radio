@@ -159,6 +159,20 @@ pub unsafe trait HardwareOwnedTxDma<Address> {
     fn descriptor_head(&self) -> Address;
 }
 
+/// A prepared chain that hands itself to the hardware.
+///
+/// [`commit`](Self::commit) takes the owner's token by value and records
+/// hardware ownership before `start` runs, so whoever starts a queue from
+/// this trait holds the chain until the moment it lets go, and refusing
+/// leaves it with its owner.
+pub trait CommitTxDma<Address>: PreparedTxDma<Address> {
+    /// The start authority of the committed chain.
+    type Started<'a>: HardwareOwnedTxDma<Address>;
+
+    /// Record hardware ownership, then run `start`.
+    fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>));
+}
+
 #[cfg(test)]
 mod dma_range_tests;
 

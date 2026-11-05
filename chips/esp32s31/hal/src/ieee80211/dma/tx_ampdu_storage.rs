@@ -15,7 +15,7 @@ use core::{
 
 use crate::memory::dma_static::{Placed, PlacedBacking};
 use crate::types::MacTxQueueDetached;
-use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
+use oer_portable_memory::{CommitTxDma, HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use crate::layouts::{DmaRef, DmaWindowAddress, WifiTxDmaDescriptor, WifiTxDmaDescriptorControl};
@@ -1243,6 +1243,17 @@ impl<B, const SLOTS: usize, const BUFFER_SIZE: usize>
         start(&AmpduDmaStart {
             binding: &dma.binding,
         });
+    }
+}
+
+impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
+    CommitTxDma<DmaRef<WifiTxDmaDescriptor>>
+    for RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
+{
+    type Started<'a> = AmpduDmaStart<'a>;
+
+    fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>)) {
+        RetainedAmpduDmaPublication::commit(self, start);
     }
 }
 
