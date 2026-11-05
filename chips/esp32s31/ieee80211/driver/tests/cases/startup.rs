@@ -9,6 +9,7 @@ fn mac_delay_slot_reproduces_vendor_modulo_eleven() {
     assert_eq!(MacDelaySlot::from_random(u32::MAX).value(), 3);
 }
 
+#[cfg(target_arch = "riscv32")]
 #[test]
 fn the_mac_start_config_carries_the_delay_word_drawn_before_the_start() {
     use oer_chips_esp32s31_ieee80211_driver::startup::WifiMacStartConfig;

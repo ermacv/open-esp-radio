@@ -8,8 +8,9 @@ use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use core::marker::PhantomData;
 
+use crate::ieee80211::dma::tx_storage::CommitTxDma;
 use oer_chips_esp32s31_pac::wifi_mac::{length_control::TxopListSelect, plcp1::Rate as PlcpRate};
-use oer_portable_memory::{CommitTxDma, PreparedTxDma};
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use crate::ieee80211::registers::{
     MacInterface, MacPlacement, MacPti, MacTxPtiCount, MacTxQueueIndex, WifiDescriptorAddressLow,
@@ -1083,7 +1084,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// refuses, and nothing is started. `handed_over` runs after that check
     /// and before the hardware can complete the queue, for the owner to
     /// publish its software state.
-    pub fn start_bound_mac_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    pub fn start_bound_mac_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -1091,7 +1092,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) -> Result<(), MacTxPrepareRefused> {
         self.prepared_chain(&publication, queue)?;
         handed_over();
-        publication.commit(|_started| self.start_prepared_mac_tx(queue));
+        publication.commit(|started| self.start_prepared_mac_tx(started, queue));
         Ok(())
     }
 
@@ -1663,7 +1664,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         );
     }
 
-    pub(crate) fn start_prepared_mac_tx(&mut self, queue: MacTxQueueIndex) {
+    pub(crate) fn start_prepared_mac_tx(
+        &mut self,
+        _hardware_owned: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: MacTxQueueIndex,
+    ) {
         oer_portable_riscv::fence();
         // SOURCE: publication prefix of `libpp[hal_mac_tx.o]::hal_mac_txq_enable` offsets 0x00..0x1e, before libpp[lmac.o]::GetAccess. It reads the
         // already prepared CONTROL word and ORs only ENABLE|VALID before

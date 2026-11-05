@@ -122,7 +122,7 @@ impl TxHardware for Hardware {
         Ok(())
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_legacy_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -144,7 +144,7 @@ impl TxHardware for Hardware {
         Ok(())
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_ht_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -166,7 +166,7 @@ impl TxHardware for Hardware {
         Ok(())
     }
 
-    fn start_bound_he_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_he_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,

@@ -17,8 +17,9 @@ extern crate alloc;
 #[cfg(any(test, feature = "test-support"))]
 use alloc::boxed::Box;
 
+pub use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::CommitTxDma;
 pub use oer_chips_esp32s31_hal::types::MacLegacyTxResponse;
-pub use oer_portable_memory::{CommitTxDma, PreparedTxDma};
+pub use oer_portable_memory::PreparedTxDma;
 
 use oer_chips_esp32s31_hal::types::{
     MacHeFecCoding, MacHeGuardIntervalAndLtf, MacHeMcs, MacHeRate, MacHeTbTidLimit, MacHeTid,
@@ -195,7 +196,7 @@ pub trait TxHardware {
         program: MacLegacyTxProgram,
     ) -> Result<(), MacTxPrepareRefused>;
 
-    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_legacy_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -211,7 +212,7 @@ pub trait TxHardware {
         Err(MacTxPrepareRefused::Fault(MacTxPrepareFault::Unsupported))
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_ht_tx<D: CommitTxDma>(
         &mut self,
         _publication: D,
         _queue: MacTxQueueIndex,
@@ -229,7 +230,7 @@ pub trait TxHardware {
         Err(MacTxPrepareRefused::Fault(MacTxPrepareFault::Unsupported))
     }
 
-    fn start_bound_he_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_he_tx<D: CommitTxDma>(
         &mut self,
         _publication: D,
         _queue: MacTxQueueIndex,
@@ -281,7 +282,7 @@ impl TxHardware for WifiMacHal<'_> {
         WifiMacHal::prepare_bound_legacy_tx(self, dma, queue, program)
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_legacy_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -299,7 +300,7 @@ impl TxHardware for WifiMacHal<'_> {
         WifiMacHal::prepare_bound_ht_tx(self, dma, queue, program)
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_ht_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -317,7 +318,7 @@ impl TxHardware for WifiMacHal<'_> {
         WifiMacHal::prepare_bound_he_tx(self, dma, queue, program)
     }
 
-    fn start_bound_he_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_he_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -375,7 +376,7 @@ impl TxHardware for RadioAccess {
         TxHardware::prepare_bound_legacy_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_legacy_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -393,7 +394,7 @@ impl TxHardware for RadioAccess {
         TxHardware::prepare_bound_ht_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_ht_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -411,7 +412,7 @@ impl TxHardware for RadioAccess {
         TxHardware::prepare_bound_he_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
-    fn start_bound_he_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+    fn start_bound_he_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
