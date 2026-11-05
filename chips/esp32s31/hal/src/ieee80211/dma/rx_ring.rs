@@ -2124,10 +2124,6 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         {
             return Ok(None);
         }
-        let Some(next_cursor_generation) = self.ring.cursor_generation.checked_add(1) else {
-            self.ring.require_reset();
-            return Err(RxRingError::Corrupt);
-        };
         for step in 0..group_size {
             let index = self.ring.recycle_start.advance(step);
             if let Err(error) = prepare_buffer(RecycleGrant::new(index.get())) {
@@ -2178,7 +2174,9 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         mmio.request_reload(&self.ring.binding);
         mmio.fence();
 
-        self.ring.cursor_generation = next_cursor_generation;
+        // A frozen cursor lives for one service and is only compared for
+        // equality, so the count wraps.
+        self.ring.cursor_generation = self.ring.cursor_generation.wrapping_add(1);
         self.ring.pending_tail_plus_one = tail_index.get() + 1;
         self.ring.reload_rerung = false;
         self.ring
@@ -2197,6 +2195,12 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
 impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     pub const fn observed_mask(&self) -> RxObservedMask {
         self.observed_mask
+    }
+
+    /// Place the ring's descriptor generation.
+    #[cfg(test)]
+    pub(crate) const fn set_cursor_generation(&mut self, generation: u32) {
+        self.cursor_generation = generation;
     }
 
     pub(crate) fn observed_prefix_len(&self) -> usize {

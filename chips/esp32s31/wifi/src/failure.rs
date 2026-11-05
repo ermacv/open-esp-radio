@@ -248,7 +248,6 @@ pub enum TxError {
     QueueActive,
     Stale,
     DetachFailed,
-    ResetRequired,
     Completion(CompletionFault),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

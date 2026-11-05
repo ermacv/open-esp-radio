@@ -111,3 +111,10 @@ fn only_a_decoding_fault_quarantines_the_owner_exactly_once() {
         }
     }
 }
+
+#[test]
+fn generations_wrap_past_the_idle_cookie() {
+    assert_eq!(next_generation(0), 1);
+    assert_eq!(next_generation(u32::MAX - 1), u32::MAX);
+    assert_eq!(next_generation(u32::MAX), 1);
+}

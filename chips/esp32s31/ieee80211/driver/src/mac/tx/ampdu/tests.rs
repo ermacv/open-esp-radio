@@ -1550,3 +1550,11 @@ fn no_effect_keeps_the_aggregate_and_its_trigger_reservation_published() {
     assert_eq!(hardware.cleared, Some(reservation));
     assert_eq!(cookie, storage.active);
 }
+
+#[test]
+fn an_aggregate_past_the_last_generation_begins_on_a_live_cookie() {
+    let mut storage = HtAmpduTxStorage::<2>::new();
+    storage.generation_cursor = u32::MAX;
+    let mut storage = core::pin::pin!(storage);
+    assert_eq!(storage.as_mut().begin(), Ok(TxCookie(1)));
+}

@@ -229,7 +229,6 @@ impl DiagnosticPath for TxError {
             Self::QueueActive => path.name("QueueActive"),
             Self::Stale => path.name("Stale"),
             Self::DetachFailed => path.name("DetachFailed"),
-            Self::ResetRequired => path.name("ResetRequired"),
             Self::Completion(fault) => {
                 path.name("Completion");
                 fault.push_path(path);

@@ -450,6 +450,16 @@ impl TxHardware for RadioAccess {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TxCookie(pub u32);
 
+/// The generation after `cursor`, past the idle cookie zero. An owner issues
+/// the next one only when its publication has ended and compares cookies
+/// for equality alone, so the count wraps.
+pub(crate) const fn next_generation(cursor: u32) -> u32 {
+    match cursor.wrapping_add(1) {
+        0 => 1,
+        next => next,
+    }
+}
+
 /// Completed-publication metadata, constructed only after Observed(status).
 /// Its retained status proof is independent of optional diagnostic fields.
 /// NoEffect and CompletionFault cannot construct this value.
@@ -658,7 +668,6 @@ pub enum TxError {
     QueueActive,
     Stale,
     DetachFailed,
-    ResetRequired,
     /// A completion contradicted the publication contract; retain DMA for reset.
     Completion(CompletionFault),
 }
@@ -3088,10 +3097,7 @@ impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
 
     pub fn reserve(self, buffer_capacity: u32, transfer_length: u32) -> Result<TxCookie, TxError> {
         let slot = self.slot.get_mut();
-        let generation = slot
-            .generation_cursor
-            .checked_add(1)
-            .ok_or(TxError::ResetRequired)?;
+        let generation = next_generation(slot.generation_cursor);
         match slot.dma.access() {
             TxDmaAccess::Free(free) => free
                 .reserve(buffer_capacity, transfer_length)
