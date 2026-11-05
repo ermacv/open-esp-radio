@@ -501,33 +501,7 @@ impl TxHardware for MockMmio {
         Ok(())
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        handed_over();
-        publication.commit(|_started| {});
-        self.record_fence();
-        self.record_fence();
-        Ok(())
-    }
-
-    fn start_bound_ht_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        handed_over();
-        publication.commit(|_started| {});
-        self.record_fence();
-        self.record_fence();
-        Ok(())
-    }
-
-    fn start_bound_he_tx<D: CommitTxDma>(
+    fn start_bound_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,

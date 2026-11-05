@@ -36,6 +36,7 @@ struct CompletionHardware {
     completion: Option<MacHtAmpduCompletionObservation>,
     cleared: Option<MacHeTbLinkReservation>,
     trigger_snapshot: Option<MacHeTriggerTxQueueSnapshot>,
+    refuse_start: bool,
 }
 
 impl TxHardware for CompletionHardware {
@@ -57,12 +58,17 @@ impl TxHardware for CompletionHardware {
         Err(MacTxPrepareRefused::QueueActive)
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma>(
+    fn start_bound_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         handed_over: impl FnOnce(),
     ) -> Result<(), MacTxPrepareRefused> {
+        if self.refuse_start {
+            return Err(MacTxPrepareRefused::Fault(
+                oer_chips_esp32s31_hal::types::MacTxPrepareFault::Unsupported,
+            ));
+        }
         handed_over();
         publication.commit(|_started| {});
         Ok(())
@@ -74,17 +80,6 @@ impl TxHardware for CompletionHardware {
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacHtTxProgram,
     ) -> Result<(), MacTxPrepareRefused> {
-        Ok(())
-    }
-
-    fn start_bound_ht_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        handed_over();
-        publication.commit(|_started| {});
         Ok(())
     }
 
@@ -186,7 +181,7 @@ impl TxHardware for DetachingCompletionHardware {
         Err(MacTxPrepareRefused::QueueActive)
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma>(
+    fn start_bound_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -213,17 +208,6 @@ impl TxHardware for DetachingCompletionHardware {
         }
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        handed_over();
-        publication.commit(|_started| {});
-        Ok(())
-    }
-
     fn prepare_bound_he_tx(
         &mut self,
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
@@ -238,17 +222,6 @@ impl TxHardware for DetachingCompletionHardware {
         } else {
             Ok(())
         }
-    }
-
-    fn start_bound_he_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        handed_over();
-        publication.commit(|_started| {});
-        Ok(())
     }
 
     fn take_tx_completion(
@@ -574,6 +547,7 @@ fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
                     completion: None,
                     cleared: None,
                     trigger_snapshot: None,
+                    refuse_start: false,
                 },
                 cookie,
                 LegacyTxQueue::BestEffort,
@@ -1083,9 +1057,9 @@ fn a_refused_he_start_takes_its_trigger_queue_down() {
             queued_msdu_bytes: 64,
             queue_valid: true,
         }),
+        refuse_start: true,
     };
 
-    // This model prepares an HE queue and has no start for it.
     assert_eq!(
         owner.submit_he(&mut hardware, cookie, LegacyTxQueue::BestEffort, config),
         Err(HtAmpduTxError::Prepare(
@@ -1134,6 +1108,7 @@ fn completion_exposes_publication_snapshot_then_clears_tb_enable() {
         )),
         cleared: None,
         trigger_snapshot: Some(snapshot),
+        refuse_start: false,
     };
 
     assert_eq!(
@@ -1634,6 +1609,7 @@ fn no_effect_keeps_the_aggregate_and_its_trigger_reservation_published() {
         )),
         cleared: None,
         trigger_snapshot: None,
+        refuse_start: false,
     };
     assert_eq!(
         storage.as_mut().acknowledge_completion(&mut hardware),
