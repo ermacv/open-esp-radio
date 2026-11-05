@@ -126,8 +126,11 @@ Each value has `owner` (the owning package's repository path)
 and nonempty `classes` (the spellings in the architecture's
 [fatal/reset contract](../../../docs/architecture.md#fatal-decisions-and-reset)).
 A shared dispatch mechanism can accept several classes. An entry containing
-`hardware-impossible` references a bounded `SOURCE:` statement in `[proofs]`;
-the checker validates the reference, not the hardware proposition. The
+`hardware-impossible` references a bounded `HW_PANIC_SOURCE:` statement in
+`[proofs]`; the checker validates the reference, not the hardware
+proposition. Every proof is cited in source as `HW_PANIC_SOURCE: <name>` and
+every citation names a proof, in both directions, so a search for the marker
+lists each hardware-level reset or panic. The
 InvalidHart proof is conditional on the stated rev0 model, correct CSR
 observation and intact code/data. It proves no radio event ordering.
 

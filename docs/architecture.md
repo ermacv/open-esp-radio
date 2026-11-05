@@ -727,6 +727,15 @@ prove either impossibility or a counterexample. Software invariants first
 use ownership, typestate or checked ranges. A diagnostic name, a zero status
 read or an existing `Fault` variant is no proof.
 
+Runtime code has zero panics. A reset or a runtime panic exists only at the
+hardware level, behind a proof: that impossibility, or an observed hardware
+failure where continuing would hand another owner memory or a peripheral the
+hardware may still use. Each proof is named in `[proofs]` of the
+[terminal-site registry](../tools/test/layers/README.md#terminal-site-registry)
+and cited at its site as `HW_PANIC_SOURCE: <name>`, so one search finds them
+all. An error is handled at its own level and never travels up the stack to
+end in a panic or reset.
+
 An interrupt is asynchronous; a CPU exception is synchronous to an
 instruction; a trap covers both. Masking interrupts does not mask exceptions.
 A physical reset may bypass trap entry entirely.

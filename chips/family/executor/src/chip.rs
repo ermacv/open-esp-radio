@@ -36,6 +36,7 @@ pub(crate) fn current_hart<B: Binding>() -> Hart {
     match Hart::new(oer_portable_riscv::hart_id() as u32) {
         Ok(hart) => hart,
         Err(_fault) => {
+            // HW_PANIC_SOURCE: invalid-hart
             // The existing fatal path retains InvalidHart's full raw ID;
             // no executor or register owner is released on this path.
             #[cfg(target_arch = "riscv32")]

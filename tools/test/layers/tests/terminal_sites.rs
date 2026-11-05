@@ -15,6 +15,9 @@ use std::{
 use proc_macro2::{Span, TokenStream, TokenTree};
 use syn::{Attribute, ReturnType, Type, spanned::Spanned, visit::Visit};
 
+/// The marker of a hardware-level proof, in `[proofs]` and at its site.
+const PROOF_MARKER: &str = "HW_PANIC_SOURCE:";
+
 const CLASSES: &[&str] = &[
     "hardware-impossible",
     "unexpected-hardware",
@@ -786,11 +789,11 @@ fn registry(text: &str) -> Result<Sites, String> {
                         .get("proofs")
                         .and_then(|proofs| proofs.get(proof))
                         .and_then(toml::Value::as_str)
-                        .is_none_or(|text| !text.starts_with("SOURCE:"))
+                        .is_none_or(|text| !text.starts_with(PROOF_MARKER))
                 })
         {
             return Err(format!(
-                "{id}: hardware impossibility needs a bounded SOURCE proof"
+                "{id}: hardware impossibility needs a bounded {PROOF_MARKER} proof"
             ));
         }
         sites.insert(id.clone());
@@ -862,6 +865,70 @@ fn terminal_registry_matches_source() {
         differences(&actual, &recorded),
         Vec::<String>::new(),
         "terminal-site registry drift"
+    );
+}
+
+/// The proof names a source cites after the marker.
+fn cited_proofs(source: &str) -> BTreeSet<String> {
+    source
+        .match_indices(PROOF_MARKER)
+        .map(|(at, marker)| {
+            source[at + marker.len()..]
+                .trim_start()
+                .chars()
+                .take_while(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '-')
+                .collect()
+        })
+        .collect()
+}
+
+/// A proof no source cites, and a citation of no proof.
+fn proof_differences(cited: &BTreeSet<String>, proofs: &BTreeSet<String>) -> Vec<String> {
+    proofs
+        .difference(cited)
+        .map(|name| format!("uncited proof: {name}"))
+        .chain(
+            cited
+                .difference(proofs)
+                .map(|name| format!("unknown proof: {name}")),
+        )
+        .collect()
+}
+
+#[test]
+fn every_hardware_proof_is_cited_at_its_site_and_every_citation_has_a_proof() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let mut files = Vec::new();
+    for directory in ["chips", "hil", "oer", "portable", "protocols"] {
+        sources(&root.join(directory), &mut files);
+    }
+    let cited = files
+        .iter()
+        .flat_map(|file| cited_proofs(&std::fs::read_to_string(file).expect("readable source")))
+        .collect();
+    let document: toml::Value =
+        toml::from_str(include_str!("../terminal-sites.toml")).expect("valid terminal registry");
+    let proofs = document
+        .get("proofs")
+        .and_then(toml::Value::as_table)
+        .expect("proofs table")
+        .keys()
+        .cloned()
+        .collect();
+    assert_eq!(
+        proof_differences(&cited, &proofs),
+        Vec::<String>::new(),
+        "hardware proof drift"
+    );
+}
+
+#[test]
+fn a_proof_without_a_site_and_a_site_without_a_proof_are_both_rejected() {
+    let cited = cited_proofs("// HW_PANIC_SOURCE: stray-proof\n// HW_PANIC_SOURCE:  held-2\n");
+    let proofs = BTreeSet::from(["held-2".to_owned(), "lonely".to_owned()]);
+    assert_eq!(
+        proof_differences(&cited, &proofs),
+        ["uncited proof: lonely", "unknown proof: stray-proof"]
     );
 }
 
