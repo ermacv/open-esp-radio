@@ -2515,11 +2515,16 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         settle: Settle<'_, C>,
     ) -> Result<(), RxRingError> {
         while self.pending_tail().is_some() {
-            let mut attempts = 0_u32;
-            let settled = oer_portable_time::settle::settle(settle, || {
-                attempts = attempts.saturating_add(1);
-                mmio.try_with_reload_settled(|_settled| ())
-            });
+            // A doorbell already clear has nothing to wait for and reads no
+            // clock, on the hot path of every reload.
+            let mut attempts = 1_u32;
+            let settled = match mmio.try_with_reload_settled(|_settled| ()) {
+                Some(()) => Ok(()),
+                None => oer_portable_time::settle::settle(settle, || {
+                    attempts = attempts.saturating_add(1);
+                    mmio.try_with_reload_settled(|_settled| ())
+                }),
+            };
             record_maximum(&self.arena.max_reload_attempts, attempts);
             settled.map_err(|oer_portable_time::settle::Unsettled| RxRingError::ReloadPending)?;
             self.settle_reload(mmio)?;

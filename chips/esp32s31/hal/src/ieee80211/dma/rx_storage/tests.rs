@@ -2064,6 +2064,30 @@ fn ring_with_pending_reload(
 }
 
 #[test]
+fn a_reload_doorbell_already_clear_reads_no_clock() {
+    use crate::ieee80211::dma::rx_dma::model::RxWalkerModel;
+    use core::cell::Cell;
+
+    struct Counting(Cell<u32>);
+
+    impl Clock for Counting {
+        fn now(&self) -> Instant {
+            self.0.set(self.0.get() + 1);
+            Instant::from_micros(0)
+        }
+    }
+
+    let mut mmio = RxWalkerModel::new();
+    let (_storage, mut live) = ring_with_pending_reload(&mut mmio);
+    let clock = Counting(Cell::new(0));
+    let settle = Settle::new(SettleLimit::new(Duration::from_micros(5)).unwrap(), &clock);
+    live.complete_pending_reload(&mut mmio, settle)
+        .expect("the doorbell is clear");
+    assert_eq!(clock.0.get(), 0);
+    assert_eq!(live.reload_evidence().max_reload_attempts, 1);
+}
+
+#[test]
 fn a_reload_doorbell_that_never_clears_stays_pending_after_the_limit() {
     use crate::ieee80211::dma::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
     use core::cell::Cell;
