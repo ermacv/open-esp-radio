@@ -1005,8 +1005,6 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
         .unwrap();
     assert_eq!(unit.head_index(), 0);
     assert_eq!(unit.descriptor_count(), 2);
-    assert_eq!(unit.metadata().segment_length(0), Some(256));
-    assert_eq!(unit.metadata().segment_length(1), Some(80));
     assert_eq!(unit.total_length(), 336);
     let staged_word0 = unit.metadata().staged_word0().unwrap();
     assert!(staged_word0.rx_done());

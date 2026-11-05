@@ -372,6 +372,7 @@ where
             D::span(ActorSpan::Receive, true);
             received?;
         }
+        network.receive.flush();
         D::span(ActorSpan::Intake, false);
         let taken = self.intake(lifecycle, network);
         D::span(ActorSpan::Intake, true);

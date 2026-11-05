@@ -652,6 +652,37 @@ fn received_data_reaches_the_network_without_the_lifecycle() {
 }
 
 #[test]
+fn a_turn_s_received_data_wakes_a_waiting_network() {
+    struct Woken(AtomicUsize);
+    impl std::task::Wake for Woken {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        let woken = Arc::new(Woken(AtomicUsize::new(0)));
+        let waker = Waker::from(woken.clone());
+        let mut cx = Context::from_waker(&waker);
+        assert!(
+            core::pin::pin!(bench.receive.ready())
+                .poll(&mut cx)
+                .is_pending()
+        );
+        for sequence in 1..4 {
+            bench.air.receive(&data_from_ap(sequence, &[9; 4]), meta());
+        }
+        bench.settle();
+        assert_eq!(woken.0.load(Ordering::Relaxed), 1);
+        assert!(matches!(
+            bench.receive.try_receive(),
+            Some(Received::Lent(_))
+        ));
+    });
+}
+
+#[test]
 fn a_unit_landing_behind_the_queued_handover_is_routed_under_the_link() {
     bench(|bench| {
         bench.start();

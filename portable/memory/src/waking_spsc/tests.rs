@@ -265,6 +265,53 @@ fn a_queue_across_harts_registers_and_tells_each_end_through_its_own_notify() {
     );
 }
 
+#[test]
+fn a_held_burst_tells_the_consumer_once_and_only_a_waiting_producer_hears_of_room() {
+    let (consumer, producer) = (Counted::default(), Counted::default());
+    let mut queue = WakingSpscQueue::<u8, 3, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split();
+    let mut cx = Context::from_waker(Waker::noop());
+
+    sender.flush();
+    assert_eq!(consumer.counts().1, 0, "nothing was held");
+    sender.try_send_held(1).expect("room");
+    sender.try_send_held(2).expect("room");
+    assert_eq!(consumer.counts().1, 0, "the burst goes on");
+    sender.flush();
+    assert_eq!(consumer.counts().1, 1, "its end tells once");
+    sender.flush();
+    assert_eq!(consumer.counts().1, 1, "nothing was held since");
+
+    assert_eq!(receiver.try_receive(), Some(1));
+    assert_eq!(producer.counts().1, 0, "the producer does not wait");
+
+    sender.try_send(3).expect("room");
+    sender.try_send(4).expect("room");
+    assert!(pin!(sender.ready()).poll(&mut cx).is_pending());
+    assert_eq!(receiver.try_receive(), Some(2));
+    assert_eq!(producer.counts().1, 1, "a waiting producer hears");
+    assert_eq!(receiver.try_receive(), Some(3));
+    assert_eq!(producer.counts().1, 1, "once");
+}
+
+#[test]
+fn a_producer_that_found_a_cell_and_waits_for_more_hears_of_the_next_one() {
+    let (consumer, producer) = (Counted::default(), Counted::default());
+    let mut queue = WakingSpscQueue::<u8, 3, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, receiver) = queue.split();
+    let mut cx = Context::from_waker(Waker::noop());
+
+    sender.try_send(1).expect("room");
+    sender.try_send(2).expect("room");
+    // One cell is free, the producer needs two: its poll is ready, and it
+    // sleeps on its registration.
+    assert!(pin!(sender.ready()).poll(&mut cx).is_ready());
+    assert_eq!(receiver.try_receive(), Some(1));
+    assert_eq!(producer.counts().1, 1, "the next cell tells it");
+    assert_eq!(receiver.try_receive(), Some(2));
+    assert_eq!(producer.counts().1, 1, "no longer registered as waiting");
+}
+
 /// Poll a future once with a no-op waker.
 trait NowOrNever: Future + Sized {
     fn now_or_never(self) -> Option<Self::Output> {

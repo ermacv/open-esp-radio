@@ -145,6 +145,9 @@ completions cannot bypass the settle interval.
 - RX is copied into the endpoint's RX pool (`OwnedRxPublisher`) before
   publication. The network retains packet-pool storage independently of the
   radio's DMA storage, and the packet returns to its pool when dropped.
+- A turn's received frames wake the network once, at the end of the turn's
+  receive stage; a frame the network takes tells the station only while it
+  waits for room in that queue.
 - Cross-domain wakes are hints over durable state: consumers check, arm and
   recheck before sleeping. An exhausted work budget self-wakes; real resource
   exhaustion waits for its return edge. RX availability and general

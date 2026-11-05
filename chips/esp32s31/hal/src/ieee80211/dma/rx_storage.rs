@@ -86,9 +86,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
 
 /// Read and recycle authority for one complete, possibly chained RX unit.
 ///
-/// All segment views are bounded by lengths captured before this token was
-/// created. The token retains the unique live-ring borrow until the complete
-/// copy is finished and [`recycle`](Self::recycle) consumes it.
+/// The token retains the unique live-ring borrow until the complete copy is
+/// finished and [`recycle`](Self::recycle) consumes it.
 pub struct RxDmaCompletedUnit<
     'storage,
     'owner,
@@ -214,25 +213,6 @@ impl<
 
     pub const fn metadata(&self) -> &RxCompletedUnit {
         &self.unit
-    }
-
-    #[allow(unsafe_code, reason = "completed unit token retains every segment")]
-    pub fn segment(&self, step: usize) -> Option<&[u8]> {
-        let length = self.unit.segment_length(step)?;
-        let index = self
-            .unit
-            .head_index()
-            .checked_add(step)?
-            .checked_rem(COUNT)?;
-        // SAFETY: `RxCompletedUnit` proves that the terminal descriptor made
-        // every preceding segment CPU-owned. This token retains the mutable
-        // ring borrow, preventing recycle while the returned slice lives.
-        let binding = unsafe { BoundBuffers::completed(self.storage, index, self) };
-        with_bound_buffers(binding, |ring, buffers| {
-            buffers.completed_bytes(ring.read_grant())
-        })
-        .ok()?
-        .get(..length)
     }
 
     pub fn recycle<M: RxDma>(

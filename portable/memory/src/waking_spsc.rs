@@ -1,14 +1,18 @@
 //! Wake policy around the audited affine SPSC queue: one producer and one
 //! consumer endpoint, each with its own notify, by default an ordinary
-//! atomic waker.
+//! atomic waker. A freed cell tells the producer only while it waits; a
+//! producer that knows where its burst ends notifies the consumer once for
+//! it ([`WakingSpscSender::try_send_held`], [`WakingSpscSender::flush`]).
 
 use crate::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender,
     AffineSpscTrySendError,
 };
 use atomic_waker::AtomicWaker;
+use core::cell::Cell;
 use core::future::{Future, poll_fn};
 use core::pin::Pin;
+use core::sync::atomic::{AtomicBool, Ordering, fence};
 use core::task::{Context, Poll};
 
 /// How one end of a queue waits for its peer and how the peer tells it.
@@ -61,6 +65,8 @@ pub struct WakingSpscQueue<T, const DEPTH: usize, C = AtomicWaker, P = AtomicWak
     queue: AffineSpscQueue<T, DEPTH>,
     consumer: C,
     producer: P,
+    /// The producer found no free cell after its registration.
+    producer_waits: AtomicBool,
 }
 
 type Endpoints<'a, T, const DEPTH: usize, C, P> = (
@@ -83,6 +89,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscQueue<T, D
             queue: const { AffineSpscQueue::new() },
             consumer,
             producer,
+            producer_waits: AtomicBool::new(false),
         }
     }
 
@@ -91,16 +98,20 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscQueue<T, D
     pub fn split(&mut self) -> Endpoints<'_, T, DEPTH, C, P> {
         let (sender, receiver) = self.queue.split();
         let (consumer, producer) = (&self.consumer, &self.producer);
+        let producer_waits = &self.producer_waits;
         (
             WakingSpscSender {
                 sender,
                 consumer,
                 producer,
+                producer_waits,
+                held: Cell::new(false),
             },
             WakingSpscReceiver {
                 receiver,
                 consumer,
                 producer,
+                producer_waits,
             },
         )
     }
@@ -116,6 +127,9 @@ pub struct WakingSpscSender<'a, T, const DEPTH: usize, C = AtomicWaker, P = Atom
     sender: AffineSpscSender<'a, T, DEPTH>,
     consumer: &'a C,
     producer: &'a P,
+    producer_waits: &'a AtomicBool,
+    /// A value waits for [`Self::flush`] to notify the consumer.
+    held: Cell<bool>,
 }
 
 impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscSender<'_, T, DEPTH, C, P> {
@@ -130,6 +144,22 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscSender<'_,
         self.sender.try_send(value)?;
         self.consumer.notify();
         Ok(())
+    }
+
+    /// [`Self::try_send`] within a burst: the consumer is notified once, by
+    /// the burst's [`Self::flush`], so ends on different harts exchange one
+    /// signal per burst, not one per value.
+    pub fn try_send_held(&self, value: T) -> Result<(), AffineSpscTrySendError<T>> {
+        self.sender.try_send(value)?;
+        self.held.set(true);
+        Ok(())
+    }
+
+    /// End a burst: notify the consumer if a held value waits for it.
+    pub fn flush(&self) {
+        if self.held.take() {
+            self.consumer.notify();
+        }
     }
 
     /// Reserve one vacant cell now, without waiting or registering a wake;
@@ -172,6 +202,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscSender<'_,
             sender: Some(&mut self.sender),
             consumer: self.consumer,
             producer: self.producer,
+            producer_waits: self.producer_waits,
         }
         .await
     }
@@ -208,6 +239,7 @@ struct SendReady<'sender, 'queue, T, const DEPTH: usize, C, P> {
     sender: Option<&'sender mut AffineSpscSender<'queue, T, DEPTH>>,
     consumer: &'sender C,
     producer: &'sender P,
+    producer_waits: &'sender AtomicBool,
 }
 
 impl<'sender, T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> Future
@@ -220,9 +252,13 @@ impl<'sender, T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> Future
         let Some(sender) = this.sender.take() else {
             return Poll::Pending;
         };
-        // Reclamation before registration is seen by the Acquire load in
-        // try_reserve; reclamation after it wakes this sole registration.
+        // Reclamation before the flag is seen by the Acquire load in
+        // try_reserve; reclamation after it sees the flag and wakes this
+        // sole registration. A ready poll keeps the flag: its caller may
+        // wait for more than this cell, and the next reclamation clears it.
         this.producer.register(cx);
+        this.producer_waits.store(true, Ordering::SeqCst);
+        fence(Ordering::SeqCst);
         match sender.try_reserve() {
             Ok(permit) => Poll::Ready(WakingSpscSendPermit {
                 permit,
@@ -240,6 +276,7 @@ pub struct WakingSpscReceiver<'a, T, const DEPTH: usize, C = AtomicWaker, P = At
     receiver: AffineSpscReceiver<'a, T, DEPTH>,
     consumer: &'a C,
     producer: &'a P,
+    producer_waits: &'a AtomicBool,
 }
 
 impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'_, T, DEPTH, C, P> {
@@ -255,7 +292,12 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'
     #[must_use]
     pub fn try_receive(&self) -> Option<T> {
         let value = self.receiver.try_receive().ok()?;
-        self.producer.notify();
+        // Only a producer waiting for a cell hears of it: across harts a
+        // notify is an interrupt.
+        fence(Ordering::SeqCst);
+        if self.producer_waits.swap(false, Ordering::SeqCst) {
+            self.producer.notify();
+        }
         Some(value)
     }
 
