@@ -143,8 +143,8 @@ impl wifi::Callbacks for Callbacks {
     }
 }
 
-/// Knobs of a diagnostic image.
-#[cfg(oer_debug_control)]
+/// The one-shot fault of a diagnostic image.
+#[cfg(oer_fault_injection)]
 pub mod debug {
     use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -165,7 +165,7 @@ pub mod debug {
 /// The station restarted after `failure`, which stayed inside the radio: the
 /// console keeps its cause and the chip runs on.
 fn restarted(failure: &wifi::failure::LifecycleFailure) {
-    #[cfg(oer_debug_control)]
+    #[cfg(oer_fault_injection)]
     debug::count_restart();
     let path = oer_portable_diagnostics::DiagPath::of(failure);
     let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];

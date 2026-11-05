@@ -715,7 +715,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             (CoreView::Open(_), Some(_), None) => Err(Unpublished::Key),
             _ => Err(Unpublished::CoreView),
         };
-        #[cfg(oer_debug_control)]
+        #[cfg(oer_fault_injection)]
         let checked = checked.and_then(|checked| {
             if super::debug::publication_refused() {
                 Err(Unpublished::Key)
@@ -726,7 +726,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let (mut core, admitted_at, key_handle) = match checked {
             Ok(checked) => checked,
             Err(refusal) => {
-                return match self.queues[index].push_front(pending) {
+                let Some(queue) = self.queues.get_mut(index) else {
+                    core::mem::forget(pending);
+                    return Err(Fault::QueueFull { queue: at });
+                };
+                return match queue.push_front(pending) {
                     Ok(()) => Err(Fault::Unpublished(refusal)),
                     // The retry stays in custody with the quarantine.
                     Err(pending) => {

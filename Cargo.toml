@@ -356,7 +356,8 @@ unsafe_op_in_unsafe_fn = "deny"
 # alone, in their own target directory; no production crate of the S31
 # reads it. `oer_trace` (what happened: values and
 # events and execution cost collected by the image) and
-# `oer_debug_control` (knobs that force execution paths) are set by
+# `oer_debug_control` (knobs that force execution paths) and
+# `oer_fault_injection` (a one-shot fault on a real path, nothing else) are set by
 # `cargo fw` for an image that declares the class in its manifest
 # (`[package.metadata.open-radio] instrumentation`), also in a target
 # directory of their own.
@@ -364,6 +365,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     "cfg(oer_probe)",
     "cfg(oer_trace)",
     "cfg(oer_debug_control)",
+    "cfg(oer_fault_injection)",
 ] }
 
 [workspace.lints.clippy]
