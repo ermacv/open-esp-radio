@@ -2090,8 +2090,9 @@ fn a_reload_doorbell_that_never_clears_stays_pending_after_the_limit() {
         live.complete_pending_reload(&mut mmio, settle),
         Err(RxRingError::ReloadPending)
     );
-    // The start read is 100; the checks read 101..=105, and 105 ends it.
-    assert_eq!(live.reload_evidence().max_reload_attempts, 5);
+    // The first observation reads no clock. The start read is 100; the
+    // checks read 101..=105, and 105 ends it.
+    assert_eq!(live.reload_evidence().max_reload_attempts, 6);
     assert!(live.reload_pending(), "the append stays pending");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
 

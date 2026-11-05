@@ -76,14 +76,12 @@ pub struct MacTxPtiProgram {
     pub count: MacTxPtiCount,
 }
 
-fn assert_tx_descriptor_head(
+/// Whether a program's descriptor address names the authority's chain.
+fn tx_descriptor_head_matches(
     authority_head: DmaRef<WifiTxDmaDescriptor>,
     descriptor_address_low: u32,
-) {
-    assert!(
-        descriptor_address_low == authority_head.bits() & DESCRIPTOR_ADDRESS_LOW_MASK,
-        "TX control register does not reference the retained DMA chain"
-    );
+) -> bool {
+    descriptor_address_low == authority_head.bits() & DESCRIPTOR_ADDRESS_LOW_MASK
 }
 
 /// Reviewed ESP32-S31 selector for one non-HT transmit rate.
@@ -972,10 +970,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
-        assert!(
-            dma.descriptor_head() == program.descriptor_head,
-            "the program is bound to this DMA chain"
-        );
+        if !(dma.descriptor_head() == program.descriptor_head) {
+            return false;
+        }
         if !self.prepare_legacy_mac_tx(queue, program) {
             return false;
         }
@@ -994,10 +991,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
-        assert!(
-            dma.descriptor_head() == program.descriptor_head,
-            "the program is bound to this DMA chain"
-        );
+        if !(dma.descriptor_head() == program.descriptor_head) {
+            return false;
+        }
         if !self.prepare_ht_mac_tx(queue, program) {
             return false;
         }
@@ -1016,10 +1012,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
-        assert!(
-            dma.descriptor_head() == program.descriptor_head,
-            "the program is bound to this DMA chain"
-        );
+        if !(dma.descriptor_head() == program.descriptor_head) {
+            return false;
+        }
         if !self.prepare_he_mac_tx(queue, program) {
             return false;
         }
@@ -1041,11 +1036,14 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .mac
             .wifi_mac_tx_queue_control
             .read_control_n(queue::bank(queue));
-        assert_tx_descriptor_head(
+        // A chain the queue does not name stays unpublished: the publication
+        // watchdog ends the attempt.
+        if tx_descriptor_head_matches(
             dma.descriptor_head(),
             control.descriptor_address_low().get(),
-        );
-        self.start_prepared_mac_tx(queue);
+        ) {
+            self.start_prepared_mac_tx(queue);
+        }
     }
 
     /// The idle check and `hal_mac_tx_config_timeout` of one ordinary queue,
@@ -1076,40 +1074,41 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         program: MacLegacyTxProgram,
     ) -> bool {
         let parameters = program.parameters;
-        assert!(
-            u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
-            "the program bounds the timeout"
-        );
-        assert!(
-            u32::from(parameters.scheduler_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.packet_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.priority_count)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
-            "the program bounds the count"
-        );
-        assert!(
-            u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
-            "the program bounds AIFSN"
-        );
-        assert!(
-            u32::from(parameters.contention_window)
-                <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
-            "the program bounds the window"
-        );
+        if !(u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.scheduler_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.packet_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.priority_count)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX) {
+            return false;
+        }
+        if !(u32::from(parameters.contention_window)
+            <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX)
+        {
+            return false;
+        }
 
         if !self.begin_mac_tx(queue, parameters.timeout) {
             return false;
         }
 
-        self.program_legacy_mac_tx_ppdu(queue, program);
+        if !self.program_legacy_mac_tx_ppdu(queue, program) {
+            return false;
+        }
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
@@ -1278,23 +1277,23 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) {
+    ) -> bool {
         let parameters = program.parameters;
-        assert!(
-            u32::from(parameters.scheduler_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.packet_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.priority_count)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
-            "the program bounds the count"
-        );
+        if !(u32::from(parameters.scheduler_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.packet_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.priority_count)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
+        {
+            return false;
+        }
         self.publish_prepared_control(
             queue,
             program.descriptor_head,
@@ -1331,6 +1330,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.packet_priority,
             parameters.priority_count,
         );
+        true
     }
 
     /// Program one non-aggregate HT queue up to its final ENABLE|VALID edge.
@@ -1344,19 +1344,18 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         program: MacHtTxProgram,
     ) -> bool {
         let parameters = program.parameters;
-        assert!(
-            u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
-            "the program bounds the timeout"
-        );
-        assert!(
-            u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
-            "the program bounds AIFSN"
-        );
-        assert!(
-            u32::from(parameters.contention_window)
-                <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
-            "the program bounds the window"
-        );
+        if !(u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX) {
+            return false;
+        }
+        if !(u32::from(parameters.contention_window)
+            <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX)
+        {
+            return false;
+        }
 
         // SOURCE: complete hal_mac_tx_config_timeout, followed by the
         // libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu non-HE HT branch.
@@ -1364,7 +1363,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             return false;
         }
 
-        self.program_ht_mac_tx_ppdu(queue, program);
+        if !self.program_ht_mac_tx_ppdu(queue, program) {
+            return false;
+        }
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
@@ -1387,32 +1388,31 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) {
+    ) -> bool {
         let parameters = program.parameters;
-        assert!(
-            u32::from(parameters.descriptor_count)
-                <= oer_chips_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_MAX,
-            "the program bounds the count"
-        );
-        assert!(
-            parameters.protection_spacing.register_value() <= 0x03ff,
-            "every spacing fits its field"
-        );
-        assert!(
-            u32::from(parameters.scheduler_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.packet_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.priority_count)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
-            "the program bounds the count"
-        );
+        if !(u32::from(parameters.descriptor_count)
+            <= oer_chips_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_MAX)
+        {
+            return false;
+        }
+        if !(parameters.protection_spacing.register_value() <= 0x03ff) {
+            return false;
+        }
+        if !(u32::from(parameters.scheduler_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.packet_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.priority_count)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
+        {
+            return false;
+        }
 
         let bank = queue::bank(queue);
         let cbw40 = matches!(parameters.rate.channel_width, MacHtChannelWidth::Mhz40);
@@ -1519,6 +1519,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.packet_priority,
             parameters.priority_count,
         );
+        true
     }
 
     /// Program one HE SU A-MPDU up to its final ENABLE|VALID edge.
@@ -1527,47 +1528,46 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// words and deliberately does not write the non-HE DATA_LENGTH word.
     fn prepare_he_mac_tx(&mut self, queue: MacTxQueueIndex, program: MacHeTxProgram) -> bool {
         let parameters = program.parameters;
-        assert!(
-            parameters.descriptor_count <= 32,
-            "the program bounds the count"
-        );
-        assert!(
-            parameters.protection_spacing <= 0x03ff,
-            "the program bounds the spacing"
-        );
-        assert!(
-            u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
-            "the program bounds the timeout"
-        );
-        assert!(
-            u32::from(parameters.scheduler_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.packet_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.priority_count)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
-            "the program bounds the count"
-        );
-        assert!(
-            u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
-            "the program bounds AIFSN"
-        );
-        assert!(
-            u32::from(parameters.contention_window)
-                <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
-            "the program bounds the window"
-        );
+        if !(parameters.descriptor_count <= 32) {
+            return false;
+        }
+        if !(parameters.protection_spacing <= 0x03ff) {
+            return false;
+        }
+        if !(u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.scheduler_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.packet_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.priority_count)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX) {
+            return false;
+        }
+        if !(u32::from(parameters.contention_window)
+            <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX)
+        {
+            return false;
+        }
 
         if !self.begin_mac_tx(queue, parameters.timeout) {
             return false;
         }
-        self.program_he_mac_tx_ppdu(queue, program);
+        if !self.program_he_mac_tx_ppdu(queue, program) {
+            return false;
+        }
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
@@ -1589,31 +1589,29 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
-    ) {
+    ) -> bool {
         let parameters = program.parameters;
-        assert!(
-            parameters.descriptor_count <= 32,
-            "the program bounds the count"
-        );
-        assert!(
-            parameters.protection_spacing <= 0x03ff,
-            "the program bounds the spacing"
-        );
-        assert!(
-            u32::from(parameters.scheduler_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.packet_priority)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
-            "the program bounds the priority"
-        );
-        assert!(
-            u32::from(parameters.priority_count)
-                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
-            "the program bounds the count"
-        );
+        if !(parameters.descriptor_count <= 32) {
+            return false;
+        }
+        if !(parameters.protection_spacing <= 0x03ff) {
+            return false;
+        }
+        if !(u32::from(parameters.scheduler_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.packet_priority)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
+        {
+            return false;
+        }
+        if !(u32::from(parameters.priority_count)
+            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
+        {
+            return false;
+        }
         let bank = queue::bank(queue);
         self.publish_prepared_control(
             queue,
@@ -1730,6 +1728,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.packet_priority,
             parameters.priority_count,
         );
+        true
     }
 
     pub(crate) fn start_prepared_mac_tx(&mut self, queue: MacTxQueueIndex) {

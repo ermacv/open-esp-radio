@@ -449,7 +449,9 @@ impl RxObservedMask {
     }
 
     fn insert(&mut self, index: usize) {
-        self.words[index / 32] |= 1_u32 << (index % 32);
+        if let Some(word) = self.words.get_mut(index / 32) {
+            *word |= 1_u32 << (index % 32);
+        }
     }
 
     fn insert_group<const COUNT: usize>(&mut self, start: RingIndex<COUNT>, count: usize) {
@@ -461,7 +463,9 @@ impl RxObservedMask {
     fn remove_group<const COUNT: usize>(&mut self, start: RingIndex<COUNT>, count: usize) {
         for step in 0..count {
             let index = start.advance(step);
-            self.words[index.get() / 32] &= !(1_u32 << (index.get() % 32));
+            if let Some(word) = self.words.get_mut(index.get() / 32) {
+                *word &= !(1_u32 << (index.get() % 32));
+            }
         }
     }
 
@@ -1121,6 +1125,13 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
 }
 
 impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
+    /// Whether the descriptor at `index` holds a completed unit.
+    fn rx_done(&self, index: RingIndex<COUNT>) -> bool {
+        self.descriptors
+            .get(index.get())
+            .is_some_and(|descriptor| descriptor.word0().rx_done())
+    }
+
     pub const fn descriptor_base(&self) -> u32 {
         self.descriptor_table.base()
     }
@@ -1421,9 +1432,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let mut completed = 0;
         while observed + completed < COUNT {
             let index = start_index.advance(completed);
-            if self.observed_mask.contains(index.get())
-                || !self.descriptors[index.get()].word0().rx_done()
-            {
+            if self.observed_mask.contains(index.get()) || !self.rx_done(index) {
                 break;
             }
             completed += 1;
@@ -1442,9 +1451,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let mut completed = 0;
         while completed < COUNT {
             let index = self.recycle_start.advance(completed);
-            if self.observed_mask.contains(index.get())
-                || !self.descriptors[index.get()].word0().rx_done()
-            {
+            if self.observed_mask.contains(index.get()) || !self.rx_done(index) {
                 break;
             }
             completed += 1;
@@ -1571,13 +1578,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return RxCompletedUnitFrontier::default();
         }
         let first_index = self.recycle_start.advance(observed);
-        if self.descriptors[first_index.get()].word0().rx_done() {
+        if self.rx_done(first_index) {
             let mut completed = 0;
             while completed < descriptor_limit {
                 let index = first_index.advance(completed);
-                if self.observed_mask.contains(index.get())
-                    || !self.descriptors[index.get()].word0().rx_done()
-                {
+                if self.observed_mask.contains(index.get()) || !self.rx_done(index) {
                     break;
                 }
                 completed += 1;
@@ -1595,7 +1600,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             if self.observed_mask.contains(index.get()) {
                 break;
             }
-            if self.descriptors[index.get()].word0().rx_done() {
+            if self.rx_done(index) {
                 return RxCompletedUnitFrontier {
                     unit_count: 1,
                     descriptor_count: step + 1,
@@ -1618,7 +1623,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return RxCompletedUnitFrontier::default();
         }
         let first_index = self.recycle_start.advance(observed);
-        if self.descriptors[first_index.get()].word0().rx_done() {
+        if self.rx_done(first_index) {
             // The caller only needs one ownership proof. Avoid walking the
             // rest of a terminal-only burst merely to truncate its unit count
             // back to one: the next finite cursor check will prove the next
@@ -1636,7 +1641,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             if self.observed_mask.contains(index.get()) {
                 break;
             }
-            if self.descriptors[index.get()].word0().rx_done() {
+            if self.rx_done(index) {
                 return RxCompletedUnitFrontier {
                     unit_count: 1,
                     descriptor_count: step + 1,
@@ -1772,7 +1777,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         if self.ring.observed_mask.contains(index) {
             return None;
         }
-        let descriptor = &self.ring.descriptors[index];
+        let descriptor = self.ring.descriptors.get(index)?;
         let word0 = descriptor.word0();
         if !word0.rx_done() {
             return None;
@@ -1910,7 +1915,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         let mut completed = 0;
         while completed < MAX_BATCH {
             let index = self.ring.recycle_start.advance(completed);
-            if !self.ring.observed_mask.contains(index.get()) || !self.ring.descriptors[index.get()].word0().rx_done() {
+            if !self.ring.observed_mask.contains(index.get()) || !self.ring.rx_done(index) {
                 break;
             }
             completed += 1;
@@ -2105,7 +2110,12 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         let head_index = self.ring.recycle_start;
         let head_address = descriptor_address(self.ring.descriptor_table.base(), head_index.get())?;
         let tail_index = head_index.advance(group_size - 1);
-        if self.ring.descriptors[self.ring.accepted_tail.get()].next_address() != 0 {
+        if self
+            .ring
+            .descriptors
+            .get(self.ring.accepted_tail.get())
+            .is_none_or(|tail| tail.next_address() != 0)
+        {
             // The accepted tail is the only legal append point. Validate it
             // before the first irreversible buffer/descriptor mutation so a
             // corrupt list cannot become a partially rearmed live arena.
@@ -2138,7 +2148,11 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         }
         for step in 0..group_size {
             let index = self.ring.recycle_start.advance(step);
-            let descriptor = &self.ring.descriptors[index.get()];
+            let descriptor = self
+                .ring
+                .descriptors
+                .get(index.get())
+                .ok_or(RxRingError::Corrupt)?;
             let next = if step + 1 < group_size {
                 Some(
                     self.ring
@@ -2160,7 +2174,11 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
             );
         }
 
-        let accepted_tail = &self.ring.descriptors[self.ring.accepted_tail.get()];
+        let accepted_tail = self
+            .ring
+            .descriptors
+            .get(self.ring.accepted_tail.get())
+            .ok_or(RxRingError::Corrupt)?;
         // This type is the sole publication authority. All descriptors in the
         // appended group were observed complete, rearmed and remain
         // unreachable until this old-tail link and the following doorbell.
@@ -2417,8 +2435,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             self.completion_release_probe_pending = false;
             return false;
         };
-        let tail_next_low =
-            self.descriptors[tail_index.get()].next_address() & RX_DESCRIPTOR_ADDRESS_LOW_MASK;
+        let tail_next_low = self
+            .descriptors
+            .get(tail_index.get())
+            .map_or(0, RxDescriptor::next_address)
+            & RX_DESCRIPTOR_ADDRESS_LOW_MASK;
         let tail_distance = descriptor_count - 1;
         let last_distance = self.recycle_start.distance_to(last_index);
         let accepted_distance = self.recycle_start.distance_to(self.accepted_tail);
@@ -2691,14 +2712,16 @@ fn ring_topology_snapshot<const COUNT: usize>(
         visited.insert(index.get());
         snapshot.visited_descriptors += 1;
 
-        let descriptor = &descriptors[index.get()];
+        let Some(descriptor) = descriptors.get(index.get()) else {
+            return snapshot;
+        };
         let word0 = descriptor.word0();
         let buffer_address = descriptor.buffer_address();
         let next_address = descriptor.next_address();
         if step == 0 {
             snapshot.head_next_address = next_address;
         }
-        if buffer_address != buffer_addresses[index.get()] {
+        if buffer_addresses.get(index.get()) != Some(&buffer_address) {
             return snapshot;
         }
         if require_armed {
@@ -2769,7 +2792,12 @@ fn observed_prefix_len<const COUNT: usize>(
     while remaining != 0 {
         let offset = cursor.get() % 32;
         let chunk = remaining.min(32 - offset).min(COUNT - cursor.get());
-        let bits = observed_mask.words[cursor.get() / 32] >> offset;
+        let bits = observed_mask
+            .words
+            .get(cursor.get() / 32)
+            .copied()
+            .unwrap_or(0)
+            >> offset;
         let chunk_mask = if chunk == 32 {
             u32::MAX
         } else {
@@ -2803,11 +2831,12 @@ fn relink_rotated_ring<const COUNT: usize>(
         } else {
             None
         };
-        let word0 = descriptors[index.get()].word0();
+        let descriptor = descriptors.get(index.get()).ok_or(RxRingError::Corrupt)?;
+        let word0 = descriptor.word0();
         let buffer = buffer_addresses
             .get(index.get())
             .ok_or(RxRingError::Address)?;
-        descriptors[index.get()].publish_owned(word0, buffer, next);
+        descriptor.publish_owned(word0, buffer, next);
     }
     Ok(())
 }

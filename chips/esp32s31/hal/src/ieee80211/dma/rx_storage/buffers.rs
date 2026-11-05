@@ -364,14 +364,14 @@ impl<
         let detached_word = self
             .ring
             .as_deref_mut()
-            .expect("completed unit retains ring loan")
+            .ok_or(RxRingError::ResetRequired)?
             .detached_word(index)?;
         let buffer = self
             .storage
             .detach_buffer(self.unit.total_length(), buffer_id)?;
         self.ring
             .as_deref_mut()
-            .expect("completed unit retains ring loan")
+            .ok_or(RxRingError::ResetRequired)?
             .publish_detached(mmio, index, detached_word);
         self.requires_recycle = false;
         Ok(RxDmaDetachedUnit {

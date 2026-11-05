@@ -128,36 +128,32 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         ))
     }
 
-    pub fn as_ref(&self) -> Pin<&HtAmpduTxStorage<SLOTS>> {
-        self.storage
-            .as_ref()
-            .expect("retained DMA owner keeps storage until teardown")
-            .as_ref()
+    /// The metadata, until the owner's teardown took it.
+    pub fn as_ref(&self) -> Option<Pin<&HtAmpduTxStorage<SLOTS>>> {
+        self.storage.as_ref().map(Pin::as_ref)
     }
 
     /// Stable address of the metadata allocation behind this movable owner.
-    pub fn metadata_address(&self) -> usize {
-        core::ptr::from_ref(self.as_ref().get_ref()).addr()
+    pub fn metadata_address(&self) -> Option<usize> {
+        self.as_ref()
+            .map(|storage| core::ptr::from_ref(storage.get_ref()).addr())
     }
 
-    fn metadata_mut(&mut self) -> Pin<&mut HtAmpduTxStorage<SLOTS>> {
+    fn metadata_mut(&mut self) -> Result<Pin<&mut HtAmpduTxStorage<SLOTS>>, HtAmpduTxError> {
         self.storage
             .as_mut()
-            .expect("retained DMA owner keeps storage until teardown")
-            .as_mut()
+            .map(Pin::as_mut)
+            .ok_or(HtAmpduTxError::ResetRequired)
     }
 
-    fn dma_mut(&mut self) -> &mut RetainedAmpduDma<'storage, B, SLOTS, 0> {
-        self.dma
-            .as_mut()
-            .expect("retained DMA owner keeps descriptor storage until teardown")
+    fn dma_mut(&mut self) -> Result<&mut RetainedAmpduDma<'storage, B, SLOTS, 0>, HtAmpduTxError> {
+        self.dma.as_mut().ok_or(HtAmpduTxError::ResetRequired)
     }
 
     pub fn held_backing_count(&self) -> usize {
         self.dma
             .as_ref()
-            .expect("retained DMA owner keeps descriptor storage until teardown")
-            .held_backing_count()
+            .map_or(0, RetainedAmpduDma::held_backing_count)
     }
 
     /// Whether both the protocol metadata and DMA descriptor arena are idle.
@@ -184,7 +180,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
     /// Confirm that every lease has already crossed a safe release edge.
     pub fn release_free_backings(&mut self) -> Result<(), HtAmpduTxError> {
         if self.state() != TxDmaState::Free
-            || self.dma_mut().state() != AmpduDmaState::Free
+            || self.dma_mut()?.state() != AmpduDmaState::Free
             || self.held_backing_count() != 0
         {
             return Err(HtAmpduTxError::NotFree(self.state()));
@@ -211,32 +207,32 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         if self.state() != TxDmaState::Free || self.held_backing_count() != 0 {
             return Err(self);
         }
-        let dma_owner = self
-            .dma
-            .take()
-            .expect("retained DMA owner contains descriptor storage");
+        let Some(metadata) = self.storage.take() else {
+            return Err(self);
+        };
+        let Some(dma_owner) = self.dma.take() else {
+            self.storage = Some(metadata);
+            return Err(self);
+        };
         let (dma, retention) = match dma_owner.try_into_parts() {
             Ok(parts) => parts,
             Err(dma_owner) => {
+                self.storage = Some(metadata);
                 self.dma = Some(dma_owner);
                 return Err(self);
             }
         };
-        let metadata = self
-            .storage
-            .take()
-            .expect("retained DMA owner contains teardown metadata");
         Ok((HtAmpduTxResources { metadata, dma }, retention))
     }
 
     /// Begin a fresh aggregate in both protocol and descriptor owners.
     pub fn begin(&mut self) -> Result<TxCookie, HtAmpduTxError> {
-        self.dma_mut().begin()?;
-        match self.metadata_mut().begin() {
+        self.dma_mut()?.begin()?;
+        match self.metadata_mut()?.begin() {
             Ok(cookie) => Ok(cookie),
             Err(error) => {
                 // `begin` reserved an empty chain: no lease is retained.
-                self.dma_mut().cancel(drop)?;
+                self.dma_mut()?.cancel(drop)?;
                 Err(error)
             }
         }
@@ -246,7 +242,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         &mut self,
         max_aggregate_bytes: u16,
     ) -> Result<(), HtAmpduTxError> {
-        self.metadata_mut()
+        self.metadata_mut()?
             .configure_max_aggregate_bytes(max_aggregate_bytes)
     }
 
@@ -257,8 +253,8 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         cookie: TxCookie,
         returned: impl FnMut(B),
     ) -> Result<(), HtAmpduTxError> {
-        self.metadata_mut().cancel(cookie)?;
-        if let Err(error) = self.dma_mut().cancel(returned) {
+        self.metadata_mut()?.cancel(cookie)?;
+        if let Err(error) = self.dma_mut()?.cancel(returned) {
             self.quarantine();
             return Err(error.into());
         }
@@ -284,14 +280,9 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         queue: LegacyTxQueue,
         config: HtAmpduTxConfig,
     ) -> Result<(), HtAmpduTxError> {
-        let (storage, dma) = (
-            self.storage
-                .as_mut()
-                .expect("retained DMA owner keeps storage until teardown"),
-            self.dma
-                .as_mut()
-                .expect("retained DMA owner keeps descriptor storage until teardown"),
-        );
+        let (Some(storage), Some(dma)) = (self.storage.as_mut(), self.dma.as_mut()) else {
+            return Err(HtAmpduTxError::ResetRequired);
+        };
         let prepared = storage
             .as_ref()
             .get_ref()
@@ -334,14 +325,9 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         queue: LegacyTxQueue,
         config: HeAmpduTxConfig,
     ) -> Result<(), HtAmpduTxError> {
-        let (storage, dma) = (
-            self.storage
-                .as_mut()
-                .expect("retained DMA owner keeps storage until teardown"),
-            self.dma
-                .as_mut()
-                .expect("retained DMA owner keeps descriptor storage until teardown"),
-        );
+        let (Some(storage), Some(dma)) = (self.storage.as_mut(), self.dma.as_mut()) else {
+            return Err(HtAmpduTxError::ResetRequired);
+        };
         let prepared = storage
             .as_ref()
             .get_ref()
@@ -397,9 +383,9 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         &mut self,
         hardware: &mut H,
     ) -> Result<Option<CompletionObservation<HtAmpduTxCompletion>>, HtAmpduTxError> {
-        let completion = self.metadata_mut().acknowledge_completion(hardware)?;
+        let completion = self.metadata_mut()?.acknowledge_completion(hardware)?;
         if matches!(completion, Some(CompletionObservation::Observed(_)))
-            && self.dma_mut().mark_completed().is_err()
+            && self.dma_mut()?.mark_completed().is_err()
         {
             self.quarantine();
             return Err(HtAmpduTxError::ResetRequired);
@@ -413,7 +399,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         cookie: TxCookie,
         cause: MacTxAbortCause,
     ) -> Result<bool, HtAmpduTxError> {
-        self.metadata_mut()
+        self.metadata_mut()?
             .begin_timeout_abort(hardware, cookie, cause)
     }
 
@@ -426,15 +412,18 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         returned: impl FnMut(B),
     ) -> Result<bool, HtAmpduTxError> {
         let queue = {
-            let storage = self.as_ref().get_ref();
+            let storage = self
+                .as_ref()
+                .ok_or(HtAmpduTxError::ResetRequired)?
+                .get_ref();
             if storage.state != TxDmaState::HardwareOwned || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head()?;
+        let descriptor_head = self.dma_mut()?.descriptor_head()?;
         let outcome = {
-            let dma = self.dma_mut();
+            let dma = self.dma_mut()?;
             hardware.with_tx_queue_detached(
                 queue,
                 descriptor_head,
@@ -452,10 +441,10 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 return Err(HtAmpduTxError::DetachFailed);
             }
         }
-        if let Some(reservation) = self.metadata_mut().project().trigger_reservation.take() {
+        if let Some(reservation) = self.metadata_mut()?.project().trigger_reservation.take() {
             hardware.clear_he_trigger_based_queue(reservation);
         }
-        self.metadata_mut().release();
+        self.metadata_mut()?.release();
         Ok(true)
     }
 
@@ -469,15 +458,18 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         returned: impl FnMut(B),
     ) -> Result<TxAbortEnd, HtAmpduTxError> {
         let queue = {
-            let storage = self.as_ref().get_ref();
+            let storage = self
+                .as_ref()
+                .ok_or(HtAmpduTxError::ResetRequired)?
+                .get_ref();
             if storage.state != TxDmaState::HardwareOwned || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head()?;
+        let descriptor_head = self.dma_mut()?.descriptor_head()?;
         let outcome = {
-            let dma = self.dma_mut();
+            let dma = self.dma_mut()?;
             hardware.with_tx_queue_detached(
                 queue,
                 descriptor_head,
@@ -495,10 +487,10 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 return Err(HtAmpduTxError::DetachFailed);
             }
         }
-        if let Some(reservation) = self.metadata_mut().project().trigger_reservation.take() {
+        if let Some(reservation) = self.metadata_mut()?.project().trigger_reservation.take() {
             hardware.clear_he_trigger_based_queue(reservation);
         }
-        self.metadata_mut().release();
+        self.metadata_mut()?.release();
         Ok(TxAbortEnd::Detached)
     }
 
@@ -508,15 +500,18 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         cookie: TxCookie,
     ) -> Result<(), HtAmpduTxError> {
         let queue = {
-            let storage = self.as_ref().get_ref();
+            let storage = self
+                .as_ref()
+                .ok_or(HtAmpduTxError::ResetRequired)?
+                .get_ref();
             if storage.state != TxDmaState::Completed || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head()?;
+        let descriptor_head = self.dma_mut()?.descriptor_head()?;
         let outcome = {
-            let dma = self.dma_mut();
+            let dma = self.dma_mut()?;
             hardware.with_tx_queue_detached(
                 queue,
                 descriptor_head,
@@ -526,7 +521,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         };
         match outcome {
             MacTxDetachOutcome::Detached(Ok(())) => {
-                *self.metadata_mut().project().detached = true;
+                *self.metadata_mut()?.project().detached = true;
                 Ok(())
             }
             MacTxDetachOutcome::NoEvent
@@ -547,7 +542,10 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         returned: impl FnMut(B),
     ) -> Result<(), HtAmpduTxError> {
         {
-            let storage = self.as_ref().get_ref();
+            let storage = self
+                .as_ref()
+                .ok_or(HtAmpduTxError::ResetRequired)?
+                .get_ref();
             if storage.state != TxDmaState::Completed
                 || storage.active != cookie
                 || !storage.detached
@@ -555,17 +553,17 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 return Err(HtAmpduTxError::Stale);
             }
         }
-        if let Err(error) = self.dma_mut().release_detached(returned) {
+        if let Err(error) = self.dma_mut()?.release_detached(returned) {
             self.quarantine();
             return Err(error.into());
         }
-        self.metadata_mut().release();
+        self.metadata_mut()?.release();
         Ok(())
     }
 
     pub fn require_reset(&mut self, cookie: TxCookie) -> Result<(), HtAmpduTxError> {
-        self.metadata_mut().require_reset(cookie)?;
-        self.dma_mut().quarantine();
+        self.metadata_mut()?.require_reset(cookie)?;
+        self.dma_mut()?.quarantine();
         Ok(())
     }
 }
@@ -902,10 +900,10 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         hardware: &mut H,
     ) -> Result<Option<CompletionObservation<TxCompletion>>, HtAmpduTxError> {
         let completion = self
-            .metadata_mut()
+            .metadata_mut()?
             .acknowledge_single_completion(hardware)?;
         if matches!(completion, Some(CompletionObservation::Observed(_)))
-            && self.dma_mut().mark_completed().is_err()
+            && self.dma_mut()?.mark_completed().is_err()
         {
             self.quarantine();
             return Err(HtAmpduTxError::ResetRequired);
@@ -972,10 +970,10 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 return Err(HtAmpduTxError::DetachFailed);
             }
         }
-        if let Some(reservation) = self.metadata_mut().project().trigger_reservation.take() {
+        if let Some(reservation) = self.metadata_mut()?.project().trigger_reservation.take() {
             hardware.clear_he_trigger_based_queue(reservation);
         }
-        if let Err(error) = self.metadata_mut().mark_aborted_detached(cookie) {
+        if let Err(error) = self.metadata_mut()?.mark_aborted_detached(cookie) {
             self.quarantine();
             return Err(error);
         }
@@ -986,28 +984,31 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
 impl<B, const SLOTS: usize> Deref for RetainedDmaAmpduTx<'_, B, SLOTS> {
     type Target = HtAmpduTxStorage<SLOTS>;
 
+    /// The owner's metadata; a torn-down owner reads as empty storage.
     fn deref(&self) -> &Self::Target {
-        self.as_ref().get_ref()
+        match &self.storage {
+            Some(storage) => storage.as_ref().get_ref(),
+            None => const { &HtAmpduTxStorage::new() },
+        }
     }
 }
 
 impl<B, const SLOTS: usize> Drop for RetainedDmaAmpduTx<'_, B, SLOTS> {
     fn drop(&mut self) {
-        if self.storage.is_none() || self.dma.is_none() {
-            return;
-        }
         let metadata_state = self.state();
-        let dma_state = self.dma_mut().state();
-        let released = match (metadata_state, dma_state) {
+        let (Some(storage), Some(dma)) = (self.storage.as_mut(), self.dma.as_mut()) else {
+            return;
+        };
+        let cookie = storage.as_ref().get_ref().active;
+        let detached = storage.as_ref().get_ref().detached;
+        let released = match (metadata_state, dma.state()) {
             (TxDmaState::Free, AmpduDmaState::Free) => true,
             (TxDmaState::Reserved, AmpduDmaState::Reserved) => {
-                let cookie = self.active;
-                self.metadata_mut().cancel(cookie).is_ok() && self.dma_mut().cancel(drop).is_ok()
+                storage.as_mut().cancel(cookie).is_ok() && dma.cancel(drop).is_ok()
             }
-            (TxDmaState::Completed, AmpduDmaState::Detached) if self.detached => {
-                let cookie = self.active;
-                self.dma_mut().release_detached(drop).is_ok()
-                    && self.metadata_mut().release_completed(cookie).is_ok()
+            (TxDmaState::Completed, AmpduDmaState::Detached) if detached => {
+                dma.release_detached(drop).is_ok()
+                    && storage.as_mut().release_completed(cookie).is_ok()
             }
             _ => false,
         };

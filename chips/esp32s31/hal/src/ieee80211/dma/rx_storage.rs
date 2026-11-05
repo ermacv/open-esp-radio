@@ -249,18 +249,11 @@ impl<
     ) -> Option<RxDmaRecycleUnit<'storage, 'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>>
     {
         self.requires_recycle = false;
-        if self.unit.head_index()
-            != self
-                .ring
-                .as_deref()
-                .expect("completed unit retains ring loan")
-                .recycle_start()
-                .get()
-        {
+        if self.unit.head_index() != self.ring.as_deref()?.recycle_start().get() {
             return None;
         }
         let descriptor_count = self.unit.descriptor_count();
-        let ring = self.ring.take().expect("completed unit retains ring loan");
+        let ring = self.ring.take()?;
         Some(RxDmaRecycleUnit {
             storage: self.storage,
             ring,
@@ -278,10 +271,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             // observed exactly once. Losing that linear CPU owner before a
             // successful rearm would otherwise leave an arena which looks
             // live but can never transfer the same group again.
-            self.ring
-                .as_deref_mut()
-                .expect("completed unit retains ring loan")
-                .require_reset();
+            if let Some(ring) = self.ring.as_deref_mut() {
+                ring.require_reset();
+            }
         }
     }
 }
@@ -602,7 +594,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         match self.lifecycle_state() {
             RxDmaArenaState::Reusable => {}
             RxDmaArenaState::Prepared | RxDmaArenaState::Live => {
-                panic!("RX initial owner invariant");
+                return Err(RxRingError::ResetRequired);
             }
             RxDmaArenaState::ResetRequired => return Err(RxRingError::ResetRequired),
         }
@@ -610,10 +602,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         // The consumed, non-Copy placement owner is the sole constructor.
         // Keep the durable claim before publishing descriptors, so a lost
         // owner or failed preparation still leaves the arena fail-closed.
-        assert!(
-            RxDmaArenaState::claim_prepared(self.arena.lifecycle()),
-            "RX initial owner invariant"
-        );
+        if !RxDmaArenaState::claim_prepared(self.arena.lifecycle()) {
+            return Err(RxRingError::ResetRequired);
+        }
         let prepared = with_bound_buffers(
             BoundBuffers::initial(self, descriptors, reserved_buffer),
             |ring, buffers| {
@@ -647,11 +638,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         }
         match self.lifecycle_state() {
             RxDmaArenaState::Prepared => {}
-            RxDmaArenaState::ResetRequired => {
+            RxDmaArenaState::ResetRequired | RxDmaArenaState::Reusable | RxDmaArenaState::Live => {
                 return Err((binding.into_parts().1, RxRingError::ResetRequired));
-            }
-            RxDmaArenaState::Reusable | RxDmaArenaState::Live => {
-                panic!("RX halted owner invariant");
             }
         }
         let buffer_size = match u32::try_from(BUFFER_SIZE) {
