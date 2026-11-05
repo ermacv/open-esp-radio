@@ -409,9 +409,11 @@ debug = 1
 incremental = true
 codegen-units = 16
 
-# Use one crates.io copy of the Embassy utilities in the network fork and
-# the workspace.
+# One copy of the Embassy utilities in the network fork and the workspace;
+# `embassy-sync` is its 0.8.0 release with panic-free locks.
+[patch.crates-io]
+embassy-sync = { git = "https://github.com/ermacv/embassy", rev = "89ee7ece044846af1bdae83887ec619f64db9320" }
+
 [patch."https://github.com/ermacv/embassy.git"]
 embassy-futures = { version = "0.1.2", registry = "crates-io" }
-embassy-sync = { version = "0.8.0", registry = "crates-io" }
 embassy-time = { version = "0.5.1", registry = "crates-io" }
