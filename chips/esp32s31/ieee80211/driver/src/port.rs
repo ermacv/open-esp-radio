@@ -155,8 +155,34 @@ const INTERFACE_TERMINALS: usize = InterfaceCommandPool::<Station>::TERMINAL_CAP
 pub const TERMINAL_CAPACITY: usize = TX_TICKETS + 16 + 2 + 1 + INTERFACE_TERMINALS;
 // For the same reason, one installation or removal command per PTK slot.
 const COMMANDS: usize = TX_TICKETS + 16 + 2 + 2 + INTERFACE_COMMANDS;
-pub const PUBLICATION_BOUND: Duration = Duration::from_millis(250);
-pub const COMMAND_BOUND: Duration = Duration::from_millis(400);
+/// How long a published frame may stay on its queue before the port calls
+/// the MAC broken. A frame waits for the air without any fault, as long as a
+/// foreign transmitter holds the channel; the queue's own timeout ends that
+/// wait (`TxLifetimeClass::fresh_queue_timeout`, a handled end), so this
+/// bound backs it and must outlast the longest one.
+pub const PUBLICATION_BOUND: Duration = Duration::from_millis(2000);
+/// What the radio's arbiter plans for a published frame to end before it
+/// moves the port: a plan, not a limit. A frame that takes longer delays the
+/// move, and the arbiter's own checks end a lease that no longer fits.
+pub const MOVE_PLAN: Duration = Duration::from_millis(250);
+/// How long a command may go without progress. It outlasts one publication
+/// to its bound and that abort's settle, so a command held behind published
+/// frames expires only once they stop ending.
+pub const COMMAND_BOUND: Duration = Duration::from_millis(2500);
+/// The unit of a queue's timeout, in microseconds. SOURCE: complete
+/// `libpp[lmac.o]::lmacSetTxFrame` shifts a lifetime in microseconds right by
+/// ten before `hal_mac_tx_config_timeout`.
+const QUEUE_TIMEOUT_UNIT_US: u64 = 1024;
+const _: () = {
+    let longest = crate::mac::tx::TxLifetimeClass::AmpduContainer.fresh_queue_timeout() as u64;
+    if PUBLICATION_BOUND.as_micros() <= longest * QUEUE_TIMEOUT_UNIT_US {
+        panic!("the publication bound fires ahead of the queue's own timeout");
+    }
+    let settled = PUBLICATION_BOUND.as_micros() + crate::ordinary_tx::TX_ABORT_SETTLE.as_micros();
+    if COMMAND_BOUND.as_micros() <= settled {
+        panic!("a command expires behind a publication that may still end");
+    }
+};
 type Part<Id, const I: u8> = Child<Root<Id>, I>;
 type CorePath<Id: SlotIdentity> = Part<Id, 0>;
 type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<

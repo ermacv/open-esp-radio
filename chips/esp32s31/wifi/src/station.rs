@@ -342,7 +342,7 @@ fn initialize<'s, W: Binding>(
         arbiter_authority,
     } = tokens;
     let (arbiter, place_back, absence_place) = LifecycleArbiter::<radio::ActorPort<W>>::new(
-        crate::policy::arbiter(port::PUBLICATION_BOUND)
+        crate::policy::arbiter(port::MOVE_PLAN)
             .unwrap_or_else(|_| W::fail(InitializationError::Arbiter)),
         config.supported,
         arbiter_authority,

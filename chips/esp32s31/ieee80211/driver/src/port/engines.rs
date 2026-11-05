@@ -1094,6 +1094,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             driver.withdraw(&mut env)
         };
         if in_use || !drained {
+            // A publication has its own bound and the air decides how long
+            // it takes: the command's counts from the last one that held it.
+            self.group_since = Some(now);
             self.holding = Some(command.kind());
             return Ok(CommandProgress::Held(command));
         }
