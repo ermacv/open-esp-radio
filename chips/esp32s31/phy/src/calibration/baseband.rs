@@ -429,10 +429,11 @@ pub enum PhyBbBasebandMode {
 
 impl PhyBbBasebandMode {
     #[cfg(target_arch = "riscv32")]
-    const fn register_value(self) -> u8 {
+    const fn hardware(self) -> oer_chips_esp32s31_hal::phy::frequency::BasebandMode {
+        use oer_chips_esp32s31_hal::phy::frequency::BasebandMode;
         match self {
-            Self::Idle => 0,
-            Self::Calibration => 2,
+            Self::Idle => BasebandMode::Idle,
+            Self::Calibration => BasebandMode::Calibration,
         }
     }
 }
@@ -521,7 +522,7 @@ impl PhyBbMmioBinding {
             PhyBbMmioAction::SetBasebandMode { mode } => {
                 oer_chips_esp32s31_hal::phy::frequency::set_baseband_mode(
                     registers,
-                    mode.register_value(),
+                    mode.hardware(),
                 )
             }
             PhyBbMmioAction::UpdateAgcRegisters => {

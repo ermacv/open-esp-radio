@@ -13,6 +13,10 @@ use crate::{
 
 pub mod ops;
 
+#[cfg(target_arch = "riscv32")]
+use crate::layouts::PhyFrequencyMemoryWordWord;
+pub use ops::{BasebandMode, FrequencyMemoryAddress};
+
 /// Software fields modified by a held frequency-memory read transaction.
 #[derive(Debug)]
 pub struct ReadConfiguration {
@@ -86,7 +90,7 @@ pub fn prepare_common_phy_control(registers: &mut impl PhyInitializationAccess) 
 
 /// Select the two-bit baseband mode used by the Rust cold-init transition.
 #[cfg(target_arch = "riscv32")]
-pub fn set_baseband_mode(registers: &mut impl SharedPhyAccess, mode: u8) {
+pub fn set_baseband_mode(registers: &mut impl SharedPhyAccess, mode: BasebandMode) {
     ops::set_baseband_mode(
         &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
         mode,
@@ -120,22 +124,26 @@ pub fn initialize_registers(registers: &mut impl SharedPhyAccess, parameter_over
 
 /// Apply complete rev0 ROM `phy_freq_i2c_mem_write`.
 #[cfg(target_arch = "riscv32")]
-pub fn write_memory(registers: &mut impl SharedPhyAccess, address: u16, value: u32, mode: u8) {
+pub fn write_memory(
+    registers: &mut impl SharedPhyAccess,
+    address: FrequencyMemoryAddress,
+    word: PhyFrequencyMemoryWordWord,
+    mode: u8,
+) {
     ops::write_memory(
         &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
         address,
-        value,
+        word,
         mode,
     );
 }
 
 /// Apply complete rev0 ROM `phy_read_rf_freq_mem`.
 #[cfg(target_arch = "riscv32")]
-pub fn read_memory(registers: &mut impl SharedPhyAccess, address: u16, mode: u8) -> u32 {
+pub fn read_memory(registers: &mut impl SharedPhyAccess, address: FrequencyMemoryAddress) -> u32 {
     ops::read_memory(
         &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
         address,
-        mode,
     )
 }
 

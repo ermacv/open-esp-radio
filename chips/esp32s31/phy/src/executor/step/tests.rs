@@ -246,11 +246,9 @@ impl Io {
                 Memory::ReadMemory {
                     entry_index,
                     address,
-                    mode,
                 } => Done::MemoryRead {
                     entry_index,
                     address,
-                    mode,
                     value: 0xa500_0000 | u32::from(entry_index),
                 },
                 Memory::WriteMemory {

@@ -211,11 +211,9 @@ fn correction_updates_memory_only_for_nonzero_delta_and_waits_for_restore() {
                 Action::Memory(MemoryAction::ReadMemory {
                     entry_index,
                     address,
-                    mode,
                 }) => Completion::Memory(MemoryCompletion::MemoryRead {
                     entry_index,
                     address,
-                    mode,
                     value: 100,
                 }),
                 Action::Memory(MemoryAction::WriteMemory {
@@ -227,7 +225,7 @@ fn correction_updates_memory_only_for_nonzero_delta_and_waits_for_restore() {
                     assert!(measured);
                     let upward = (101..).take(DIRECTION).collect::<std::vec::Vec<i16>>();
                     assert_eq!(
-                        value as i16,
+                        value.payload() as i16,
                         mean(&upward),
                         "every entry receives the full measured correction"
                     );
