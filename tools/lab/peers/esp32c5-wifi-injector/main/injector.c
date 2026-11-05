@@ -213,6 +213,19 @@ static void command_mode(char **argv, int argc)
         }
         s_started = true;
         keep_rom_i2c_master_clock_map();
+#if CONFIG_SOC_WIFI_SUPPORT_5G
+        /* The pinned vendor refuses these two until the interface is started
+         * and its band is one. */
+        if ((error = esp_wifi_set_band_mode(WIFI_BAND_MODE_2G_ONLY)) != ESP_OK) {
+            reply_esp_error("MODE", "band_mode", error);
+            return;
+        }
+#endif
+        if ((error = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G |
+                                                            WIFI_PROTOCOL_11N)) != ESP_OK) {
+            reply_esp_error("MODE", "set_protocol", error);
+            return;
+        }
         if ((error = esp_wifi_set_ps(WIFI_PS_NONE)) != ESP_OK) {
             reply_esp_error("MODE", "set_ps", error);
             return;
@@ -366,13 +379,8 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_init(&init));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-#if CONFIG_SOC_WIFI_SUPPORT_5G
-    ESP_ERROR_CHECK(esp_wifi_set_band_mode(WIFI_BAND_MODE_2G_ONLY));
-#endif
     /* Channels 1 to 13. */
     ESP_ERROR_CHECK(esp_wifi_set_country_code("DE", false));
-    ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G |
-                                                           WIFI_PROTOCOL_11N));
     ESP_ERROR_CHECK(esp_wifi_register_80211_tx_cb(tx_done));
     keep_rom_i2c_master_clock_map();
     printf("@READY protocol=%d target=%s\n", PROTOCOL_VERSION, CONFIG_IDF_TARGET);
