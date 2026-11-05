@@ -723,18 +723,18 @@ pub use chip::{
 #[cfg(target_arch = "riscv32")]
 #[macro_export]
 macro_rules! bind_station {
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail,restarted:$restarted}
    notifies: $crate::SameHart, storage: $crate::Storage::new());
  };
  // The network end runs on another hart: `network` raises the network
  // task's signal, `actor` the datapath actor's, each a notify of the type
  // it names.
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,actor:$at:ty=$actor:expr $(,)?} $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path,across_harts:{network:$nt:ty=$network:expr,actor:$at:ty=$actor:expr $(,)?} $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail,restarted:$restarted}
    notifies: $crate::AcrossHarts<$nt,$at>, storage: $crate::Storage::across_harts($network,$actor));
  };
- (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
+ (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path} notifies: $notifies:ty, storage: $storage:expr)=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
@@ -744,6 +744,7 @@ macro_rules! bind_station {
     type Notifies=$notifies;type TxSupply=$tx_supply;
     fn take_installations()->Option<$crate::radio::Installations<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}
+    fn restarted(failure:&$crate::failure::LifecycleFailure){$restarted(failure)}
    }
    pub fn storage()->&'static mut $crate::Storage<Binding>{
     static STORAGE:static_cell::ConstStaticCell<$crate::Storage<Binding>>=static_cell::ConstStaticCell::new($storage);

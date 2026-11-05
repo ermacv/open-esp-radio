@@ -251,6 +251,8 @@ pub enum StationFailure<F> {
     },
     /// The station's key bank broke its contract.
     StationKeyBank(crate::station::contract::KeyContractViolation),
+    /// A broken contract of the port or the actor, which then stopped.
+    Fault(ActorFault<F>),
 }
 
 /// A broken contract of what the actor returned: the owner stays with the

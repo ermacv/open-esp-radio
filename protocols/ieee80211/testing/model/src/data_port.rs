@@ -1429,6 +1429,14 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         Poll::Pending
     }
 
+    fn recover_for_stop(&mut self) -> bool {
+        let recovered = self.air.recover();
+        if recovered {
+            self.fault = None;
+        }
+        recovered
+    }
+
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError> {
         self.air.radio_now()
     }

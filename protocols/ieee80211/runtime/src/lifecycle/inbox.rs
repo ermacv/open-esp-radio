@@ -154,6 +154,9 @@ where
             FromActor::Retuned(result) => self.retuned(actor, io, result),
             FromActor::Stopped(outcome) => self.stopped(actor, outcome),
             FromActor::Faulted(fault) => self.inner.end = Some(LifecycleEnd::Faulted(fault)),
+            FromActor::Recovering(fault) => self
+                .inner
+                .begin_end(Ending::Restart(StationFailure::Fault(fault)), io),
         }
     }
 

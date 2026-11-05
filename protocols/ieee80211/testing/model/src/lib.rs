@@ -1628,6 +1628,8 @@ pub struct ModelAir {
     group_rx: OwnedQueue<CapturedGroupRx>,
     group_writes: Cell<usize>,
     stream: Cell<ModelStream>,
+    /// The port may take a poison back for a stop.
+    recovery: Cell<bool>,
     disables: Cell<u32>,
     /// The EDCA set each interface's attempts contend with, by role.
     edca: Cell<ModelEdca>,
@@ -1673,6 +1675,7 @@ impl ModelAir {
             group_rx: Default::default(),
             group_writes: Default::default(),
             stream: Default::default(),
+            recovery: Default::default(),
             disables: Default::default(),
             edca: Default::default(),
             held: Default::default(),
@@ -1978,6 +1981,20 @@ impl ModelAir {
     /// Poison the backend.
     pub fn poison(&self) {
         self.stream.set(ModelStream::Ended);
+    }
+
+    /// Let the port take a poison back for a stop.
+    pub fn allow_recovery(&self) {
+        self.recovery.set(true);
+    }
+
+    /// Take a poison back, when the port may.
+    pub(crate) fn recover(&self) -> bool {
+        let allowed = self.recovery.get();
+        if allowed {
+            self.stream.set(ModelStream::Running);
+        }
+        allowed
     }
 
     /// An ordinary fault closes admission and returns every admitted owner

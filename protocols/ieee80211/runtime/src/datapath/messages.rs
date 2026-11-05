@@ -220,6 +220,9 @@ pub enum FromActor<'id, D: DatapathPort<'id>> {
     Stopped(StopOutcome),
     /// The actor ended on a broken contract; it keeps every owner it held.
     Faulted(ActorFault<<D::Port as DataPort<'id>>::Fault>),
+    /// A broken contract the actor survives: it serves a stop, and the
+    /// station restarts.
+    Recovering(ActorFault<<D::Port as DataPort<'id>>::Fault>),
 }
 
 /// An owner the actor gives back, in the return queue.

@@ -143,6 +143,18 @@ impl wifi::Callbacks for Callbacks {
     }
 }
 
+/// The station restarted after `failure`, which stayed inside the radio: the
+/// console keeps its cause and the chip runs on.
+fn restarted(failure: &wifi::failure::LifecycleFailure) {
+    let path = oer_portable_diagnostics::DiagPath::of(failure);
+    let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
+    let length =
+        oer_chips_esp32s31_compose::diagnostic_text::write(b"wifi-restarted", &path, &mut text);
+    if let Some(line) = text.get(..length) {
+        let _written = super::whole(line).and_then(|()| super::whole(b"\n"));
+    }
+}
+
 /// Product events have no consumer: the station's operations carry every
 /// result, the link snapshot its state.
 pub struct ProductEvents;
@@ -223,11 +235,11 @@ impl TxSupply<TxPacket> for WifiTx {
 }
 
 #[cfg(not(feature = "group"))]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,restarted:restarted}}
 // The station's network end runs on hart 1, with the group's IP
 // service.
 #[cfg(feature = "group")]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,actor:ActorNotify=&DATAPATH}}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,restarted:restarted,across_harts:{network:NetworkNotify=&NETWORK,actor:ActorNotify=&DATAPATH}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.

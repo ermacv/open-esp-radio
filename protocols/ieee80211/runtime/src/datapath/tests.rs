@@ -939,6 +939,34 @@ fn a_port_fault_ends_the_actor_and_tells_the_lifecycle() {
 }
 
 #[test]
+fn a_fault_the_port_stops_past_asks_for_a_restart_and_the_next_ends_the_actor() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.settle();
+        bench.air.allow_recovery();
+        bench.air.poison();
+        bench.advance(1);
+        bench.settle();
+        assert!(bench.end.is_none(), "the actor stays for the stop");
+        let mut recovering = false;
+        while let Some(message) = bench.next() {
+            recovering |= matches!(message, FromActor::Recovering(ActorFault::Port(_)));
+        }
+        assert!(recovering);
+        // A second broken contract finds no second restart.
+        bench.air.poison();
+        bench.advance(1);
+        bench.settle();
+        assert!(matches!(bench.end, Some(ActorEnd::Faulted(_))));
+    });
+}
+
+#[test]
 fn a_stop_returns_the_networks_frames_and_confirms() {
     bench(|bench| {
         bench.start();

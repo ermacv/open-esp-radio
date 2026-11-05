@@ -779,7 +779,12 @@ The terminal policy is:
   port's named fault or its own broken contract, owners kept) and
   `Contract` (an owner the lifecycle did not send), plus a failed reinstall
   and a failed radio release (`ReleaseFailed`). The image records each with
-  its typed cause path and resets; air input never ends the actor.
+  its typed cause path and resets; air input never ends the actor. A first
+  fault that leaves every owner in its place is no terminal exit: the port
+  takes it back (`DataPort::recover_for_stop`), the radio stops, the port
+  reinstalls and the station restarts, with the cause on the console. A
+  second fault of one installation, or one that holds an owner no stop can
+  return, stays a terminal exit.
 - Repeated boot failure requires a record and explicit reset with the
   watchdog preserved. An implicit watchdog expiry, diagnostic idle mode or
   a retained "three failures" counter does not implement this policy.

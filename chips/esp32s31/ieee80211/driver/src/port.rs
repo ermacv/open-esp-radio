@@ -508,6 +508,30 @@ pub enum WifiRetuneError {
     /// The radio system answered the retune with this failure.
     Radio(oer_chips_esp32s31_radio_client::Failure),
 }
+impl Fault {
+    /// Whether every owner stayed in its place when the fault was reported,
+    /// so a stop can return them: the broken contract is the port's state,
+    /// not the hardware's or a descriptor's.
+    const fn leaves_owners_whole(self) -> bool {
+        matches!(
+            self,
+            Self::Clock
+                | Self::TuneNotRecorded
+                | Self::CoreViewUnavailable(_)
+                | Self::RemovalOverflow
+                | Self::RemovalMissing
+                | Self::RemovalMismatch
+                | Self::GroupKeyIdRange
+                | Self::ConfigurationRefused
+                | Self::EdcaUnsupported
+                | Self::ChannelNotPermitted
+                | Self::ChannelUnsupported
+                | Self::KeySlotMissing(_)
+                | Self::ReceiveAccounting
+        )
+    }
+}
+
 impl From<LowerMacFault> for Fault {
     fn from(value: LowerMacFault) -> Self {
         Self::Core(value)

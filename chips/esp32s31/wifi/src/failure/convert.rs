@@ -771,6 +771,24 @@ pub(crate) fn lifecycle(
     })
 }
 
+/// The broken contract a restart of the station came from, if one did.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn restart(
+    failure: oer_protocols_ieee80211_runtime::lifecycle::StationFailure<
+        oer_chips_esp32s31_ieee80211_driver::port::Fault,
+    >,
+) -> Option<LifecycleFailure> {
+    use oer_protocols_ieee80211_runtime::datapath::ActorFault;
+    use oer_protocols_ieee80211_runtime::lifecycle::StationFailure as Failure;
+    match failure {
+        Failure::Fault(ActorFault::Port(fault)) => {
+            Some(LifecycleFailure::Port(backend_fault(fault)))
+        }
+        Failure::Fault(ActorFault::Contract(violation)) => Some(LifecycleFailure::Actor(violation)),
+        _ => None,
+    }
+}
+
 /// Why the port did not reinstall.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reinstall(

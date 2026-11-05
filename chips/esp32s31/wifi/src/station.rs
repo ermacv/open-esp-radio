@@ -539,7 +539,10 @@ async fn lifecycles<W: Binding>(
                     ) => StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
                 };
             }
-            LifecycleEnd::Restart(_) => {
+            LifecycleEnd::Restart(failure) => {
+                if let Some(failure) = crate::failure::convert::restart(failure) {
+                    W::restarted(&failure);
+                }
                 // The next installation's station takes the configuration
                 // and the events' sink back; this installation's owners
                 // drop with the retired banks.
