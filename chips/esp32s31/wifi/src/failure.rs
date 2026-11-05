@@ -4,7 +4,7 @@
 pub enum BackendFault {
     Core(LowerMacFault),
     Receive(ReceiveFault),
-    Clock,
+    Unpublished(UnpublishedCause),
     Retune(RetuneError),
     Abandoned,
     /// The data arenas quarantined themselves.
@@ -95,7 +95,6 @@ pub enum CoreOperation {
     Command,
     Tbtt,
     Arena,
-    Publish,
     Enable,
     Configure,
     Open,
@@ -124,7 +123,6 @@ pub enum KeyOperation {
     Remove,
     Replace,
     Select,
-    Transmit,
 }
 /// The kind of a data-port command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -243,6 +241,14 @@ pub enum OrdinaryTxError {
     BlockAckRequestRate,
     InvalidRetryHeader,
 }
+/// Why a publication was refused before it took any owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnpublishedCause {
+    CoreView,
+    Admission,
+    Key,
+}
+
 /// Why the hardware refused a chain, for a reason a retry does not change.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxPrepareFault {

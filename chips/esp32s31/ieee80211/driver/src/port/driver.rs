@@ -703,8 +703,30 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             },
         );
         let role = pending.role();
-        let CoreView::Open(mut core) = self.core.view() else {
-            return Err(Fault::CoreViewUnavailable(CoreOp::Publish));
+        // Everything that can refuse without an owner in hand comes first:
+        // the MPDU goes back to the head of its queue and nothing was taken.
+        let checked = match (
+            self.core.view(),
+            pending.admission(),
+            admitted_key(&self.keys, pending.key()),
+        ) {
+            (CoreView::Open(core), Some(admitted_at), Some(key)) => Ok((core, admitted_at, key)),
+            (CoreView::Open(_), None, _) => Err(Unpublished::Admission),
+            (CoreView::Open(_), Some(_), None) => Err(Unpublished::Key),
+            _ => Err(Unpublished::CoreView),
+        };
+        let (mut core, admitted_at, key_handle) = match checked {
+            Ok(checked) => checked,
+            Err(refusal) => {
+                return match self.queues[index].push_front(pending) {
+                    Ok(()) => Err(Fault::Unpublished(refusal)),
+                    // The retry stays in custody with the quarantine.
+                    Err(pending) => {
+                        core::mem::forget(pending);
+                        Err(Fault::QueueFull { queue: at })
+                    }
+                };
+            }
         };
         let observations = self
             .observations
@@ -716,7 +738,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .iter_mut()
             .find_map(Option::take)
             .ok_or(refused(PublishStep::Ticket))?;
-        let key_handle = admitted_key(&self.keys, pending.key())?;
         let admission = match key_handle {
             Some(Installed::Transmit(key)) => core
                 .admit_key(key, core_ticket)
@@ -759,7 +780,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             memory,
             core_mac::MpduParameters {
                 role,
-                admitted_at: mpdu.buffer.admission.ok_or(Fault::Clock)?,
+                admitted_at,
                 len: mpdu.layout.mpdu_len(),
                 rate,
                 protection,
@@ -1131,17 +1152,17 @@ pub(super) fn vif(role: VifRole) -> usize {
     if role == VifRole::Station { 0 } else { 1 }
 }
 
-/// The installed key `identity` names, `None` for an open attempt.
+/// The attempt's key: `Some(None)` for an open attempt, `None` when the key
+/// it names is not installed.
 fn admitted_key<'a, 'id, Id: SlotIdentity>(
     keys: &'a [Option<(RawKeyIdentity, Installed<'id, Id>)>],
     identity: Option<RawKeyIdentity>,
-) -> Result<Option<&'a Installed<'id, Id>>, Fault> {
+) -> Option<Option<&'a Installed<'id, Id>>> {
     let Some(identity) = identity else {
-        return Ok(None);
+        return Some(None);
     };
     keys.iter()
         .flatten()
         .find(|(key, _)| *key == identity)
         .map(|(_, key)| Some(key))
-        .ok_or(Fault::KeySlotMissing(KeyOp::Transmit))
 }

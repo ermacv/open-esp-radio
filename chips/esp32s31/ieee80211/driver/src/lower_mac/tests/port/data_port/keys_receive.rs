@@ -482,14 +482,19 @@ fn a_gtk_mutation_waits_for_units_the_network_holds_past_its_bound() {
 }
 
 #[test]
-fn a_fault_that_leaves_every_owner_in_place_lets_the_port_stop_and_reinstall() {
+fn a_fault_that_took_owners_keeps_the_port_quarantined() {
     with_fixture(|fixture| {
         fixture.start();
-        fixture.port.fault_for_test(Fault::ConfigurationRefused);
-        assert!(fixture.port.recover_for_stop());
-        assert_eq!(fixture.port.fault(), None);
-        fixture.stop();
-        assert_eq!(fixture.port.fault(), None);
+        // Each of these left a site with an owner in its hands.
+        for fault in [
+            Fault::RemovalOverflow,
+            Fault::RemovalMissing,
+            Fault::RemovalMismatch,
+            Fault::ReceiveAccounting,
+            Fault::KeySlotMissing(crate::port::KeyOp::Remove),
+        ] {
+            assert!(!crate::port::Fault::leaves_owners_whole(fault), "{fault:?}");
+        }
     });
 }
 

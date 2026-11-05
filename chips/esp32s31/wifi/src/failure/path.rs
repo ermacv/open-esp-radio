@@ -29,7 +29,14 @@ impl DiagnosticPath for BackendFault {
                     path.truncated();
                 }
             }
-            Self::Clock => path.name("Clock"),
+            Self::Unpublished(cause) => {
+                path.name("Unpublished");
+                path.name(match cause {
+                    UnpublishedCause::CoreView => "CoreView",
+                    UnpublishedCause::Admission => "Admission",
+                    UnpublishedCause::Key => "Key",
+                });
+            }
             Self::Retune(error) => {
                 path.name("Retune");
                 path.name(match error {
@@ -62,7 +69,6 @@ impl DiagnosticPath for BackendFault {
                     CoreOperation::Command => "Command",
                     CoreOperation::Tbtt => "Tbtt",
                     CoreOperation::Arena => "Arena",
-                    CoreOperation::Publish => "Publish",
                     CoreOperation::Enable => "Enable",
                     CoreOperation::Configure => "Configure",
                     CoreOperation::Open => "Open",
@@ -119,7 +125,6 @@ impl DiagnosticPath for BackendFault {
                     KeyOperation::Remove => "Remove",
                     KeyOperation::Replace => "Replace",
                     KeyOperation::Select => "Select",
-                    KeyOperation::Transmit => "Transmit",
                 });
             }
             Self::ReceiveAccounting => path.name("ReceiveAccounting"),

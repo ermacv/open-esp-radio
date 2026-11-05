@@ -613,6 +613,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 
     /// Report `fault` as the port would.
     #[cfg(test)]
+    pub(crate) fn uninstall_keys_for_test(&mut self) {
+        for key in &mut self.driver.keys {
+            drop(key.take());
+        }
+    }
+
+    /// Report `fault` as the port would.
+    #[cfg(test)]
     pub(crate) fn fault_for_test(&mut self, fault: Fault) {
         self.record(fault);
     }
