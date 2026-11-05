@@ -1,4 +1,5 @@
 use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_chips_esp32s31_hal::types::MacTxPrepareRefused;
 
 use crate::*;
 pub(super) use oer_chips_esp32s31_hal::ieee80211::dma::rx_dma::model::{
@@ -471,10 +472,10 @@ impl TxHardware for MockMmio {
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         let queue = queue.get() as u8;
         self.tx_control[usize::from(queue)] = Some(program.control());
-        true
+        Ok(())
     }
 
     fn prepare_bound_ht_tx(
@@ -482,10 +483,10 @@ impl TxHardware for MockMmio {
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         let queue = queue.get() as u8;
         self.tx_control[usize::from(queue)] = Some(program.control());
-        true
+        Ok(())
     }
 
     fn prepare_bound_he_tx(
@@ -493,10 +494,10 @@ impl TxHardware for MockMmio {
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: oer_chips_esp32s31_hal::types::MacHeTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         let queue = queue.get() as u8;
         self.tx_control[usize::from(queue)] = Some(program.control());
-        true
+        Ok(())
     }
 
     fn start_bound_legacy_tx(

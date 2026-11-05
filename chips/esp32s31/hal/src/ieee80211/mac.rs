@@ -24,7 +24,7 @@ use crate::types::{
     MacKeyEntryIndex, MacLegacyTxProgram, MacMinimumMpduStartSpacing, MacOrdinaryTxQueueSnapshot,
     MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow,
     MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
-    MacTxQueueDetached,
+    MacTxPrepareRefused, MacTxQueueDetached,
 };
 
 use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
@@ -556,7 +556,7 @@ impl<'registers> WifiMacHal<'registers> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         self.pac_mut()
             .prepare_bound_legacy_mac_tx(dma, queue, program)
     }
@@ -574,7 +574,7 @@ impl<'registers> WifiMacHal<'registers> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         self.pac_mut().prepare_bound_ht_mac_tx(dma, queue, program)
     }
 
@@ -583,7 +583,7 @@ impl<'registers> WifiMacHal<'registers> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         self.pac_mut().prepare_bound_he_mac_tx(dma, queue, program)
     }
 

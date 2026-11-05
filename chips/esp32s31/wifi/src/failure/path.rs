@@ -223,11 +223,25 @@ impl DiagnosticPath for LowerMacFault {
     }
 }
 
+impl DiagnosticPath for TxPrepareFault {
+    fn push_path(&self, path: &mut DiagPath) {
+        match self {
+            Self::ForeignProgram => path.name("ForeignProgram"),
+            Self::ChainNotNamed { .. } => path.name("ChainNotNamed"),
+            Self::Unsupported => path.name("Unsupported"),
+        }
+    }
+}
+
 impl DiagnosticPath for TxError {
     fn push_path(&self, path: &mut DiagPath) {
         match self {
             Self::Invalid => path.name("Invalid"),
             Self::QueueActive => path.name("QueueActive"),
+            Self::Prepare(refused) => {
+                path.name("Prepare");
+                refused.push_path(path);
+            }
             Self::Stale => path.name("Stale"),
             Self::DetachFailed => path.name("DetachFailed"),
             Self::Completion(fault) => {
@@ -315,6 +329,10 @@ impl DiagnosticPath for AggregateTxError {
             }
             Self::AggregateConfigurationMismatch => path.name("AggregateConfigurationMismatch"),
             Self::QueueActive => path.name("QueueActive"),
+            Self::Prepare(refused) => {
+                path.name("Prepare");
+                refused.push_path(path);
+            }
             Self::TriggerMsduLengthUnavailable => path.name("TriggerMsduLengthUnavailable"),
             Self::TriggerBased(_) => {
                 path.name("TriggerBased");

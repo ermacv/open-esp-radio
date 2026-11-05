@@ -1,6 +1,7 @@
 //! Host/oracle tests for A-MPDU protocol, formatting and ownership.
 
 use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_chips_esp32s31_hal::types::MacTxPrepareRefused;
 
 use super::*;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -44,8 +45,8 @@ impl TxHardware for CompletionHardware {
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacLegacyTxProgram,
-    ) -> bool {
-        false
+    ) -> Result<(), MacTxPrepareRefused> {
+        Err(MacTxPrepareRefused::QueueActive)
     }
 
     fn start_bound_legacy_tx(
@@ -60,8 +61,8 @@ impl TxHardware for CompletionHardware {
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacHtTxProgram,
-    ) -> bool {
-        true
+    ) -> Result<(), MacTxPrepareRefused> {
+        Ok(())
     }
 
     fn start_bound_ht_tx(
@@ -165,8 +166,8 @@ impl TxHardware for DetachingCompletionHardware {
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacLegacyTxProgram,
-    ) -> bool {
-        false
+    ) -> Result<(), MacTxPrepareRefused> {
+        Err(MacTxPrepareRefused::QueueActive)
     }
 
     fn start_bound_legacy_tx(
@@ -181,11 +182,15 @@ impl TxHardware for DetachingCompletionHardware {
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         if !self.reject_publication {
             self.control = Some(program.control());
         }
-        !self.reject_publication
+        if self.reject_publication {
+            Err(MacTxPrepareRefused::QueueActive)
+        } else {
+            Ok(())
+        }
     }
 
     fn start_bound_ht_tx(
@@ -200,11 +205,15 @@ impl TxHardware for DetachingCompletionHardware {
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: oer_chips_esp32s31_hal::types::MacHeTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         if !self.reject_publication {
             self.control = Some(program.control());
         }
-        !self.reject_publication
+        if self.reject_publication {
+            Err(MacTxPrepareRefused::QueueActive)
+        } else {
+            Ok(())
+        }
     }
 
     fn take_tx_completion(

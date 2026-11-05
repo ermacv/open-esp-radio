@@ -26,7 +26,8 @@ use oer_chips_esp32s31_hal::types::{
     MacHtChannelWidth, MacHtGuardInterval, MacHtMcs, MacHtProtectionSpacing, MacHtRate,
     MacHtTxFormat, MacHtTxParameters, MacHtTxProgram, MacInterface, MacLegacyRate,
     MacLegacyTxParameters, MacLegacyTxProgram, MacTxAbortCause, MacTxCompletionObservation,
-    MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason, MacTxProtection, MacTxQueueDetached,
+    MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareFault,
+    MacTxPrepareRefused, MacTxProtection, MacTxQueueDetached,
 };
 
 pub use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaState;
@@ -192,7 +193,7 @@ pub trait TxHardware {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool;
+    ) -> Result<(), MacTxPrepareRefused>;
 
     fn start_bound_legacy_tx(
         &mut self,
@@ -205,8 +206,8 @@ pub trait TxHardware {
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: MacTxQueueIndex,
         _program: MacHtTxProgram,
-    ) -> bool {
-        false
+    ) -> Result<(), MacTxPrepareRefused> {
+        Err(MacTxPrepareRefused::Fault(MacTxPrepareFault::Unsupported))
     }
 
     fn start_bound_ht_tx(
@@ -221,8 +222,8 @@ pub trait TxHardware {
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: MacTxQueueIndex,
         _program: MacHeTxProgram,
-    ) -> bool {
-        false
+    ) -> Result<(), MacTxPrepareRefused> {
+        Err(MacTxPrepareRefused::Fault(MacTxPrepareFault::Unsupported))
     }
 
     fn start_bound_he_tx(
@@ -271,7 +272,7 @@ impl TxHardware for WifiMacHal<'_> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         WifiMacHal::prepare_bound_legacy_tx(self, dma, queue, program)
     }
 
@@ -288,7 +289,7 @@ impl TxHardware for WifiMacHal<'_> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         WifiMacHal::prepare_bound_ht_tx(self, dma, queue, program)
     }
 
@@ -305,7 +306,7 @@ impl TxHardware for WifiMacHal<'_> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         WifiMacHal::prepare_bound_he_tx(self, dma, queue, program)
     }
 
@@ -362,7 +363,7 @@ impl TxHardware for RadioAccess {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         TxHardware::prepare_bound_legacy_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
@@ -379,7 +380,7 @@ impl TxHardware for RadioAccess {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         TxHardware::prepare_bound_ht_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
@@ -396,7 +397,7 @@ impl TxHardware for RadioAccess {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         TxHardware::prepare_bound_he_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
@@ -666,10 +667,20 @@ pub(crate) fn decode_or_quarantine(
 pub enum TxError {
     Invalid,
     QueueActive,
+    /// The hardware refused the chain for a reason a retry does not change.
+    Prepare(MacTxPrepareFault),
     Stale,
     DetachFailed,
     /// A completion contradicted the publication contract; retain DMA for reset.
     Completion(CompletionFault),
+}
+
+/// A busy queue is retried; any other refusal stays what it is.
+const fn prepare_refusal(refused: MacTxPrepareRefused) -> TxError {
+    match refused {
+        MacTxPrepareRefused::QueueActive => TxError::QueueActive,
+        MacTxPrepareRefused::Fault(fault) => TxError::Prepare(fault),
+    }
 }
 
 /// How a settled abort left its queue.
@@ -3264,9 +3275,9 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         let publication = slot.dma.publication().map_err(map_dma_storage_error)?;
         let program = MacLegacyTxProgram::new(&publication, config.pac_parameters())
             .ok_or(TxError::Invalid)?;
-        if !hardware.prepare_bound_legacy_tx(&publication, index, program) {
-            return Err(TxError::QueueActive);
-        }
+        hardware
+            .prepare_bound_legacy_tx(&publication, index, program)
+            .map_err(prepare_refusal)?;
 
         slot.queue = queue;
         publication.commit(|start| {
@@ -3306,9 +3317,9 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         let publication = slot.dma.publication().map_err(map_dma_storage_error)?;
         let program =
             MacHtTxProgram::new(&publication, config.pac_parameters()).ok_or(TxError::Invalid)?;
-        if !hardware.prepare_bound_ht_tx(&publication, index, program) {
-            return Err(TxError::QueueActive);
-        }
+        hardware
+            .prepare_bound_ht_tx(&publication, index, program)
+            .map_err(prepare_refusal)?;
 
         slot.queue = queue;
         publication.commit(|start| {
@@ -3352,9 +3363,9 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         }
         let program =
             MacHeTxProgram::new(&publication, config.pac_parameters()).ok_or(TxError::Invalid)?;
-        if !hardware.prepare_bound_he_tx(&publication, index, program) {
-            return Err(TxError::QueueActive);
-        }
+        hardware
+            .prepare_bound_he_tx(&publication, index, program)
+            .map_err(prepare_refusal)?;
 
         slot.queue = queue;
         publication.commit(|start| hardware.start_bound_he_tx(start, index));
@@ -3607,3 +3618,21 @@ pub mod metadata;
 pub mod policy;
 pub mod protection;
 pub mod runtime;
+
+#[cfg(test)]
+mod prepare_refusal_tests {
+    use super::*;
+
+    #[test]
+    fn a_busy_queue_is_retried_and_a_foreign_chain_is_not() {
+        assert_eq!(
+            prepare_refusal(MacTxPrepareRefused::QueueActive),
+            TxError::QueueActive
+        );
+        let fault = MacTxPrepareFault::ChainNotNamed { named: 4 };
+        assert_eq!(
+            prepare_refusal(MacTxPrepareRefused::Fault(fault)),
+            TxError::Prepare(fault)
+        );
+    }
+}

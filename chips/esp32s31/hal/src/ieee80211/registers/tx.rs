@@ -76,6 +76,30 @@ pub struct MacTxPtiProgram {
     pub count: MacTxPtiCount,
 }
 
+/// Why a queue was not prepared for a chain. Whatever the reason, its chain
+/// stays with its owner: nothing was handed to the hardware.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MacTxPrepareRefused {
+    /// The queue still runs a chain; nothing was written. Its completion
+    /// frees it.
+    QueueActive,
+    /// A retry does not change the answer.
+    Fault(MacTxPrepareFault),
+}
+
+/// A refusal of a chain that no later attempt changes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MacTxPrepareFault {
+    /// The program was bound to another chain; nothing was written.
+    ForeignProgram,
+    /// The queue does not name the chain just published to it, whose address
+    /// it should read back: its registers hold a program without an
+    /// ENABLE|VALID edge.
+    ChainNotNamed { named: u32 },
+    /// This hardware backend programs no such PPDU; nothing was written.
+    Unsupported,
+}
+
 /// Whether a program's descriptor address names the authority's chain.
 fn tx_descriptor_head_matches(
     authority_head: DmaRef<WifiTxDmaDescriptor>,
@@ -254,12 +278,16 @@ impl MacLegacyTxProgram {
         parameters: MacLegacyTxParameters,
     ) -> Option<Self> {
         if parameters.signal > 0x0fff
-            || parameters.timeout > 0x0fff
-            || parameters.scheduler_priority > 0x0f
-            || parameters.packet_priority > 0x0f
-            || parameters.priority_count > 0x0fff
-            || parameters.aifsn > 0x0f
-            || parameters.contention_window > 0x03ff
+            || u32::from(parameters.timeout) > oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX
+            || u32::from(parameters.scheduler_priority)
+                > oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX
+            || u32::from(parameters.packet_priority)
+                > oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX
+            || u32::from(parameters.priority_count)
+                > oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX
+            || u32::from(parameters.aifsn) > oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX
+            || u32::from(parameters.contention_window)
+                > oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX
             || parameters.hardware_key_selector > 0x3f
         {
             return None;
@@ -370,6 +398,19 @@ impl MacHtProtectionSpacing {
         }
     }
 }
+
+// Every spacing fits its ten-bit field.
+const _: () = {
+    use MacHtProtectionSpacing::{Density0To4, Density5, Density6, Density7};
+    let spacings = [Density0To4, Density5, Density6, Density7];
+    let mut index = 0;
+    while index < spacings.len() {
+        if spacings[index].register_value() >= 1 << 10 {
+            panic!("an HT protection spacing exceeds its field");
+        }
+        index += 1;
+    }
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacHtTxFormat {
@@ -496,15 +537,20 @@ impl MacHtTxProgram {
     ) -> Option<Self> {
         if parameters.length == 0
             || parameters.descriptor_count == 0
-            || parameters.descriptor_count > 0x7f
+            || u32::from(parameters.descriptor_count)
+                > oer_chips_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_MAX
             || (matches!(parameters.format, MacHtTxFormat::SingleMpdu)
                 && parameters.descriptor_count != 1)
-            || parameters.timeout > 0x0fff
-            || parameters.scheduler_priority > 0x0f
-            || parameters.packet_priority > 0x0f
-            || parameters.priority_count > 0x0fff
-            || parameters.aifsn > 0x0f
-            || parameters.contention_window > 0x03ff
+            || u32::from(parameters.timeout) > oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX
+            || u32::from(parameters.scheduler_priority)
+                > oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX
+            || u32::from(parameters.packet_priority)
+                > oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX
+            || u32::from(parameters.priority_count)
+                > oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX
+            || u32::from(parameters.aifsn) > oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX
+            || u32::from(parameters.contention_window)
+                > oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX
             || parameters.hardware_key_selector > 0x3f
         {
             return None;
@@ -661,12 +707,16 @@ impl MacHeTxProgram {
             || parameters.bss_color > 0x3f
             || parameters.spatial_reuse > 0x0f
             || parameters.protection_spacing > 0x03ff
-            || parameters.timeout > 0x0fff
-            || parameters.scheduler_priority > 0x0f
-            || parameters.packet_priority > 0x0f
-            || parameters.priority_count > 0x0fff
-            || parameters.aifsn > 0x0f
-            || parameters.contention_window > 0x03ff
+            || u32::from(parameters.timeout) > oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX
+            || u32::from(parameters.scheduler_priority)
+                > oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX
+            || u32::from(parameters.packet_priority)
+                > oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX
+            || u32::from(parameters.priority_count)
+                > oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX
+            || u32::from(parameters.aifsn) > oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX
+            || u32::from(parameters.contention_window)
+                > oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX
             || parameters.hardware_key_selector > 0x3f
         {
             return None;
@@ -969,19 +1019,19 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool {
-        if !(dma.descriptor_head() == program.descriptor_head) {
-            return false;
+    ) -> Result<(), MacTxPrepareRefused> {
+        if dma.descriptor_head() != program.descriptor_head {
+            return Err(MacTxPrepareRefused::Fault(
+                MacTxPrepareFault::ForeignProgram,
+            ));
         }
-        if !self.prepare_legacy_mac_tx(queue, program) {
-            return false;
-        }
+        self.prepare_legacy_mac_tx(queue, program)?;
         queue::configure_protection(
             &mut self.mac.wifi_mac_tx_queue_control,
             queue,
             program.control().protection,
         );
-        true
+        self.prepared_chain(dma, queue)
     }
 
     /// Prepare one HT queue whose descriptor chain is retained by `dma`.
@@ -990,19 +1040,19 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
-        if !(dma.descriptor_head() == program.descriptor_head) {
-            return false;
+    ) -> Result<(), MacTxPrepareRefused> {
+        if dma.descriptor_head() != program.descriptor_head {
+            return Err(MacTxPrepareRefused::Fault(
+                MacTxPrepareFault::ForeignProgram,
+            ));
         }
-        if !self.prepare_ht_mac_tx(queue, program) {
-            return false;
-        }
+        self.prepare_ht_mac_tx(queue, program)?;
         queue::configure_protection(
             &mut self.mac.wifi_mac_tx_queue_control,
             queue,
             program.control().protection,
         );
-        true
+        self.prepared_chain(dma, queue)
     }
 
     /// Prepare one HE queue whose descriptor chain is retained by `dma`.
@@ -1011,38 +1061,50 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
-    ) -> bool {
-        if !(dma.descriptor_head() == program.descriptor_head) {
-            return false;
+    ) -> Result<(), MacTxPrepareRefused> {
+        if dma.descriptor_head() != program.descriptor_head {
+            return Err(MacTxPrepareRefused::Fault(
+                MacTxPrepareFault::ForeignProgram,
+            ));
         }
-        if !self.prepare_he_mac_tx(queue, program) {
-            return false;
-        }
+        self.prepare_he_mac_tx(queue, program)?;
         queue::configure_protection(
             &mut self.mac.wifi_mac_tx_queue_control,
             queue,
             program.control().protection,
         );
-        true
+        self.prepared_chain(dma, queue)
     }
 
     /// Publish the final ENABLE|VALID edge for a hardware-owned TX chain.
     pub fn start_bound_mac_tx(
         &mut self,
-        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
-        let control = self
+        self.start_prepared_mac_tx(queue);
+    }
+
+    /// Whether the queue names the chain its preparation published. This
+    /// runs before the chain's owner hands it to the hardware, so a refusal
+    /// leaves the owner holding it.
+    fn prepared_chain(
+        &self,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: MacTxQueueIndex,
+    ) -> Result<(), MacTxPrepareRefused> {
+        let named = self
             .mac
             .wifi_mac_tx_queue_control
-            .read_control_n(queue::bank(queue));
-        // A chain the queue does not name stays unpublished: the publication
-        // watchdog ends the attempt.
-        if tx_descriptor_head_matches(
-            dma.descriptor_head(),
-            control.descriptor_address_low().get(),
-        ) {
-            self.start_prepared_mac_tx(queue);
+            .read_control_n(queue::bank(queue))
+            .descriptor_address_low()
+            .get();
+        if tx_descriptor_head_matches(dma.descriptor_head(), named) {
+            Ok(())
+        } else {
+            Err(MacTxPrepareRefused::Fault(
+                MacTxPrepareFault::ChainNotNamed { named },
+            ))
         }
     }
 
@@ -1051,17 +1113,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ///
     /// SOURCE: complete hal_mac_tx_config_timeout. This precedes every
     /// vector write in the recovered libpp[lmac.o]::lmacSetTxFrame parent.
-    fn begin_mac_tx(&mut self, queue: MacTxQueueIndex, timeout: u16) -> bool {
+    fn begin_mac_tx(
+        &mut self,
+        queue: MacTxQueueIndex,
+        timeout: u16,
+    ) -> Result<(), MacTxPrepareRefused> {
         let bank = queue::bank(queue);
         let control_bank = &mut self.mac.wifi_mac_tx_queue_control;
         let control_state = control_bank.read_control_n(bank);
         if control_state.enable() || control_state.valid() {
-            return false;
+            return Err(MacTxPrepareRefused::QueueActive);
         }
         control_bank.modify_config(bank, |w| {
             w.set_timeout(bits(u32::from(timeout)));
         });
-        true
+        Ok(())
     }
 
     /// Program one ordinary queue up to, but excluding, its ENABLE|VALID edge.
@@ -1072,43 +1138,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         let parameters = program.parameters;
-        if !(u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.scheduler_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.packet_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.priority_count)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX) {
-            return false;
-        }
-        if !(u32::from(parameters.contention_window)
-            <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX)
-        {
-            return false;
-        }
 
-        if !self.begin_mac_tx(queue, parameters.timeout) {
-            return false;
-        }
+        self.begin_mac_tx(queue, parameters.timeout)?;
 
-        if !self.program_legacy_mac_tx_ppdu(queue, program) {
-            return false;
-        }
+        self.program_legacy_mac_tx_ppdu(queue, program);
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
@@ -1117,7 +1152,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.contention_window,
             parameters.interface,
         );
-        true
+        Ok(())
     }
 
     /// The prepared CONTROL%s image of `mac_tx_set_plcp0`, stored from zero:
@@ -1277,23 +1312,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
-    ) -> bool {
+    ) {
         let parameters = program.parameters;
-        if !(u32::from(parameters.scheduler_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.packet_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.priority_count)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
-        {
-            return false;
-        }
         self.publish_prepared_control(
             queue,
             program.descriptor_head,
@@ -1330,7 +1350,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.packet_priority,
             parameters.priority_count,
         );
-        true
     }
 
     /// Program one non-aggregate HT queue up to its final ENABLE|VALID edge.
@@ -1342,30 +1361,14 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
+    ) -> Result<(), MacTxPrepareRefused> {
         let parameters = program.parameters;
-        if !(u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX) {
-            return false;
-        }
-        if !(u32::from(parameters.contention_window)
-            <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX)
-        {
-            return false;
-        }
 
         // SOURCE: complete hal_mac_tx_config_timeout, followed by the
         // libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu non-HE HT branch.
-        if !self.begin_mac_tx(queue, parameters.timeout) {
-            return false;
-        }
+        self.begin_mac_tx(queue, parameters.timeout)?;
 
-        if !self.program_ht_mac_tx_ppdu(queue, program) {
-            return false;
-        }
+        self.program_ht_mac_tx_ppdu(queue, program);
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
@@ -1374,7 +1377,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.contention_window,
             parameters.interface,
         );
-        true
+        Ok(())
     }
 
     /// Publish the complete non-HE HT responsibility of vendor
@@ -1388,31 +1391,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
-    ) -> bool {
+    ) {
         let parameters = program.parameters;
-        if !(u32::from(parameters.descriptor_count)
-            <= oer_chips_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_MAX)
-        {
-            return false;
-        }
-        if !(parameters.protection_spacing.register_value() <= 0x03ff) {
-            return false;
-        }
-        if !(u32::from(parameters.scheduler_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.packet_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.priority_count)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
-        {
-            return false;
-        }
 
         let bank = queue::bank(queue);
         let cbw40 = matches!(parameters.rate.channel_width, MacHtChannelWidth::Mhz40);
@@ -1519,55 +1499,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.packet_priority,
             parameters.priority_count,
         );
-        true
     }
 
     /// Program one HE SU A-MPDU up to its final ENABLE|VALID edge.
     ///
     /// This is separate from HT because HE publishes two different vector
     /// words and deliberately does not write the non-HE DATA_LENGTH word.
-    fn prepare_he_mac_tx(&mut self, queue: MacTxQueueIndex, program: MacHeTxProgram) -> bool {
+    fn prepare_he_mac_tx(
+        &mut self,
+        queue: MacTxQueueIndex,
+        program: MacHeTxProgram,
+    ) -> Result<(), MacTxPrepareRefused> {
         let parameters = program.parameters;
-        if !(parameters.descriptor_count <= 32) {
-            return false;
-        }
-        if !(parameters.protection_spacing <= 0x03ff) {
-            return false;
-        }
-        if !(u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.scheduler_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.packet_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.priority_count)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX) {
-            return false;
-        }
-        if !(u32::from(parameters.contention_window)
-            <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX)
-        {
-            return false;
-        }
 
-        if !self.begin_mac_tx(queue, parameters.timeout) {
-            return false;
-        }
-        if !self.program_he_mac_tx_ppdu(queue, program) {
-            return false;
-        }
+        self.begin_mac_tx(queue, parameters.timeout)?;
+        self.program_he_mac_tx_ppdu(queue, program);
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
@@ -1576,7 +1522,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.contention_window,
             parameters.interface,
         );
-        true
+        Ok(())
     }
 
     /// Publish the complete HE SU responsibility of vendor
@@ -1589,29 +1535,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
-    ) -> bool {
+    ) {
         let parameters = program.parameters;
-        if !(parameters.descriptor_count <= 32) {
-            return false;
-        }
-        if !(parameters.protection_spacing <= 0x03ff) {
-            return false;
-        }
-        if !(u32::from(parameters.scheduler_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.packet_priority)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX)
-        {
-            return false;
-        }
-        if !(u32::from(parameters.priority_count)
-            <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX)
-        {
-            return false;
-        }
         let bank = queue::bank(queue);
         self.publish_prepared_control(
             queue,
@@ -1728,7 +1653,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.packet_priority,
             parameters.priority_count,
         );
-        true
     }
 
     pub(crate) fn start_prepared_mac_tx(&mut self, queue: MacTxQueueIndex) {
