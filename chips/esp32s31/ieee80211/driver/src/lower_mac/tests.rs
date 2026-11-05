@@ -122,7 +122,7 @@ impl TxHardware for Hardware {
         Ok(())
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma>(
+    fn start_bound_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
@@ -144,17 +144,6 @@ impl TxHardware for Hardware {
         Ok(())
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        handed_over();
-        publication.commit(|_started| {});
-        Ok(())
-    }
-
     fn prepare_bound_he_tx(
         &mut self,
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
@@ -163,17 +152,6 @@ impl TxHardware for Hardware {
     ) -> Result<(), MacTxPrepareRefused> {
         let queue = queue.get() as u8;
         self.he.push((queue, program));
-        Ok(())
-    }
-
-    fn start_bound_he_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        handed_over();
-        publication.commit(|_started| {});
         Ok(())
     }
 

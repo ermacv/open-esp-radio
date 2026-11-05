@@ -196,7 +196,7 @@ pub trait TxHardware {
         program: MacLegacyTxProgram,
     ) -> Result<(), MacTxPrepareRefused>;
 
-    fn start_bound_legacy_tx<D: CommitTxDma>(
+    fn start_bound_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -212,15 +212,6 @@ pub trait TxHardware {
         Err(MacTxPrepareRefused::Fault(MacTxPrepareFault::Unsupported))
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma>(
-        &mut self,
-        _publication: D,
-        _queue: MacTxQueueIndex,
-        _handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        Err(MacTxPrepareRefused::Fault(MacTxPrepareFault::Unsupported))
-    }
-
     fn prepare_bound_he_tx(
         &mut self,
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
@@ -230,14 +221,6 @@ pub trait TxHardware {
         Err(MacTxPrepareRefused::Fault(MacTxPrepareFault::Unsupported))
     }
 
-    fn start_bound_he_tx<D: CommitTxDma>(
-        &mut self,
-        _publication: D,
-        _queue: MacTxQueueIndex,
-        _handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        Err(MacTxPrepareRefused::Fault(MacTxPrepareFault::Unsupported))
-    }
     /// Sample one ordinary queue without changing or acknowledging it.
     ///
     /// Pure/model backends may omit this low-frequency hardware diagnostic.
@@ -282,7 +265,7 @@ impl TxHardware for WifiMacHal<'_> {
         WifiMacHal::prepare_bound_legacy_tx(self, dma, queue, program)
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma>(
+    fn start_bound_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
@@ -300,15 +283,6 @@ impl TxHardware for WifiMacHal<'_> {
         WifiMacHal::prepare_bound_ht_tx(self, dma, queue, program)
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        queue: MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        WifiMacHal::start_bound_tx(self, publication, queue, handed_over)
-    }
-
     fn prepare_bound_he_tx(
         &mut self,
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
@@ -316,15 +290,6 @@ impl TxHardware for WifiMacHal<'_> {
         program: MacHeTxProgram,
     ) -> Result<(), MacTxPrepareRefused> {
         WifiMacHal::prepare_bound_he_tx(self, dma, queue, program)
-    }
-
-    fn start_bound_he_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        queue: MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        WifiMacHal::start_bound_tx(self, publication, queue, handed_over)
     }
 
     fn ordinary_tx_queue_snapshot(
@@ -376,13 +341,13 @@ impl TxHardware for RadioAccess {
         TxHardware::prepare_bound_legacy_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
-    fn start_bound_legacy_tx<D: CommitTxDma>(
+    fn start_bound_tx<D: CommitTxDma>(
         &mut self,
         publication: D,
         queue: MacTxQueueIndex,
         handed_over: impl FnOnce(),
     ) -> Result<(), MacTxPrepareRefused> {
-        TxHardware::start_bound_legacy_tx(&mut self.wifi_mac_hal(), publication, queue, handed_over)
+        TxHardware::start_bound_tx(&mut self.wifi_mac_hal(), publication, queue, handed_over)
     }
 
     fn prepare_bound_ht_tx(
@@ -394,15 +359,6 @@ impl TxHardware for RadioAccess {
         TxHardware::prepare_bound_ht_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
-    fn start_bound_ht_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        queue: MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        TxHardware::start_bound_ht_tx(&mut self.wifi_mac_hal(), publication, queue, handed_over)
-    }
-
     fn prepare_bound_he_tx(
         &mut self,
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
@@ -410,15 +366,6 @@ impl TxHardware for RadioAccess {
         program: MacHeTxProgram,
     ) -> Result<(), MacTxPrepareRefused> {
         TxHardware::prepare_bound_he_tx(&mut self.wifi_mac_hal(), dma, queue, program)
-    }
-
-    fn start_bound_he_tx<D: CommitTxDma>(
-        &mut self,
-        publication: D,
-        queue: MacTxQueueIndex,
-        handed_over: impl FnOnce(),
-    ) -> Result<(), MacTxPrepareRefused> {
-        TxHardware::start_bound_he_tx(&mut self.wifi_mac_hal(), publication, queue, handed_over)
     }
 
     fn ordinary_tx_queue_snapshot(
@@ -3292,7 +3239,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
             .map_err(prepare_refusal)?;
 
         hardware
-            .start_bound_legacy_tx(publication, index, || slot.queue = queue)
+            .start_bound_tx(publication, index, || slot.queue = queue)
             .map_err(prepare_refusal)?;
         slot.work.record_publication(
             config.signal,
@@ -3333,7 +3280,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
             .map_err(prepare_refusal)?;
 
         hardware
-            .start_bound_ht_tx(publication, index, || slot.queue = queue)
+            .start_bound_tx(publication, index, || slot.queue = queue)
             .map_err(prepare_refusal)?;
         slot.work.record_publication(
             config.length,
@@ -3378,7 +3325,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
             .map_err(prepare_refusal)?;
 
         hardware
-            .start_bound_he_tx(publication, index, || slot.queue = queue)
+            .start_bound_tx(publication, index, || slot.queue = queue)
             .map_err(prepare_refusal)?;
         // HE S-MPDU has a four-byte delimiter and a hardware-generated FCS.
         slot.work.record_publication(
