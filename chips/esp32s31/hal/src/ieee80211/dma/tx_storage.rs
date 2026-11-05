@@ -14,7 +14,7 @@ use crate::memory::dma_static::{Placed, PlacedBacking};
 use core::{marker::PhantomPinned, mem::ManuallyDrop, pin::Pin};
 
 use crate::types::MacTxQueueDetached;
-use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
+use oer_portable_memory::{CommitTxDma, HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use crate::ieee80211::dma::space::DmaSpace;
@@ -442,6 +442,14 @@ impl<L> TxDmaPublication<'_, L> {
 unsafe impl<L> PreparedTxDma<DmaRef<WifiTxDmaDescriptor>> for TxDmaPublication<'_, L> {
     fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
         self.owner.binding.descriptor_head
+    }
+}
+
+impl<L> CommitTxDma<DmaRef<WifiTxDmaDescriptor>> for TxDmaPublication<'_, L> {
+    type Started<'a> = TxDmaStart<'a>;
+
+    fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>)) {
+        TxDmaPublication::commit(self, start);
     }
 }
 

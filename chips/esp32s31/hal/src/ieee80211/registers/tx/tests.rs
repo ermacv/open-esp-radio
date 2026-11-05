@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::{ieee80211::registers::HostWords, memory::dma_address::model_reference};
+use oer_portable_memory::HardwareOwnedTxDma;
 
 /// A prepared chain of a host model: its head is recorded, never followed.
 struct ModelDma(DmaRef<WifiTxDmaDescriptor>);
@@ -21,6 +22,14 @@ unsafe impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>> for ModelDma {
 unsafe impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>> for ModelDma {
     fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
         self.0
+    }
+}
+
+impl CommitTxDma<DmaRef<WifiTxDmaDescriptor>> for ModelDma {
+    type Started<'a> = ModelDma;
+
+    fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>)) {
+        start(&self);
     }
 }
 
@@ -193,10 +202,13 @@ fn starting_a_bound_chain_sets_only_enable_and_valid() {
         .registers
         .program_legacy_mac_tx_ppdu(MacTxQueueIndex::constant::<2>(), legacy_program(&dma));
     let before = memory.clone();
-    memory
-        .owners()
-        .registers
-        .start_bound_mac_tx(&dma, MacTxQueueIndex::constant::<2>());
+    assert_eq!(
+        memory
+            .owners()
+            .registers
+            .start_bound_mac_tx(dma, MacTxQueueIndex::constant::<2>(), || {}),
+        Ok(())
+    );
     let changes = before.changes(&memory);
     assert_eq!(changes.len(), 1);
     let control = memory
@@ -392,31 +404,60 @@ fn a_foreign_dma_chain_is_refused_before_writes() {
 }
 
 #[test]
-fn a_queue_that_names_another_chain_is_refused_before_the_owner_lets_go() {
-    let dma = dma();
-    let foreign = ModelDma(model_reference(HEAD + 4));
+fn a_chain_is_not_started_on_a_queue_prepared_for_another_since() {
+    let first = dma();
+    let second = ModelDma(model_reference(HEAD + 4));
     let mut memory = HostWords::filled(0);
     let queue = MacTxQueueIndex::constant::<0>();
-    assert!(
+    let first_program = legacy_program(&first);
+    let second_program = legacy_program(&second);
+    assert_eq!(
         memory
             .owners()
             .registers
-            .prepare_bound_legacy_mac_tx(&dma, queue, legacy_program(&dma))
-            .is_ok()
+            .prepare_bound_legacy_mac_tx(&first, queue, first_program),
+        Ok(())
     );
     assert_eq!(
-        memory.owners().registers.prepared_chain(&foreign, queue),
+        memory
+            .owners()
+            .registers
+            .prepare_bound_legacy_mac_tx(&second, queue, second_program),
+        Ok(())
+    );
+
+    let handed_over = core::cell::Cell::new(false);
+    assert_eq!(
+        memory
+            .owners()
+            .registers
+            .start_bound_mac_tx(first, queue, || handed_over.set(true)),
         Err(MacTxPrepareRefused::Fault(
             MacTxPrepareFault::ChainNotNamed {
-                named: HEAD & 0xf_ffff
+                named: (HEAD + 4) & 0xf_ffff
             }
         ))
     );
-    let control = memory
-        .owners()
-        .registers
-        .mac
-        .wifi_mac_tx_queue_control
-        .read_control_n(queue::bank(queue));
-    assert!(!control.enable() && !control.valid());
+    assert!(!handed_over.get(), "the first chain stays with its owner");
+    let control = |memory: &mut HostWords| {
+        memory
+            .owners()
+            .registers
+            .mac
+            .wifi_mac_tx_queue_control
+            .read_control_n(queue::bank(queue))
+    };
+    let stopped = control(&mut memory);
+    assert!(!stopped.enable() && !stopped.valid());
+
+    assert_eq!(
+        memory
+            .owners()
+            .registers
+            .start_bound_mac_tx(second, queue, || handed_over.set(true)),
+        Ok(())
+    );
+    assert!(handed_over.get());
+    let started = control(&mut memory);
+    assert!(started.enable() && started.valid());
 }

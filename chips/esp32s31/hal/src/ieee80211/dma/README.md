@@ -105,9 +105,10 @@ alive. The arena itself is never referenced by a DMA descriptor.
 Reservation prepares the descriptor, including its hardware ownership word.
 That word alone is not the queue publication edge. `TxDmaPublication::commit`
 records software `HardwareOwned` before passing the start authority to the PAC.
-Preparation reads back that the queue names the chain, before `commit`, so a
-refusal leaves the chain with its owner. The production
-`start_prepared_mac_tx` fences device access and updates the existing control
+`start_bound_mac_tx` takes the publication by value and reads back that the
+queue names its chain before `commit`, in one call, so a refusal leaves the
+chain with its owner and a queue prepared for another chain since starts
+nothing. The production `start_prepared_mac_tx` fences device access and updates the existing control
 word's ENABLE and VALID fields without reconstructing other queue fields.
 
 The PAC checks the queue completion event, samples result registers and trigger

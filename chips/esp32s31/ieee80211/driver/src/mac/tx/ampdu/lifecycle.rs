@@ -131,18 +131,13 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// `queue`; the frames behind it stay unpublished.
     pub(super) fn record_single_publication(
         self: Pin<&mut Self>,
-        cookie: TxCookie,
         queue: crate::mac::tx::LegacyTxQueue,
-    ) -> Result<(), HtAmpduTxError> {
+    ) {
         let storage = self.project();
-        if *storage.state != TxDmaState::Reserved || *storage.active != cookie {
-            return Err(HtAmpduTxError::Stale);
-        }
         *storage.queue = queue;
         *storage.aggregate_length = storage.psdu_lengths.first().copied().unwrap_or(0);
         *storage.detached = false;
         *storage.state = TxDmaState::HardwareOwned;
-        Ok(())
     }
 
     /// Set each frame's empty delimiters to `delimiters(psdu)` (zero for

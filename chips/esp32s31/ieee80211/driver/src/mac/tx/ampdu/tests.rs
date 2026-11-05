@@ -29,9 +29,7 @@ use oer_chips_esp32s31_hal::types::{
     MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
     MacTxQueueDetached,
 };
-use oer_portable_memory::{
-    HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma,
-};
+use oer_portable_memory::{CommitTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
     completion: Option<MacHtAmpduCompletionObservation>,
@@ -49,11 +47,15 @@ impl TxHardware for CompletionHardware {
         Err(MacTxPrepareRefused::QueueActive)
     }
 
-    fn start_bound_legacy_tx(
+    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
         &mut self,
-        _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-    ) {
+        publication: D,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
     }
 
     fn prepare_bound_ht_tx(
@@ -65,11 +67,15 @@ impl TxHardware for CompletionHardware {
         Ok(())
     }
 
-    fn start_bound_ht_tx(
+    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
         &mut self,
-        _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-    ) {
+        publication: D,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
     }
 
     fn take_tx_completion(
@@ -170,11 +176,15 @@ impl TxHardware for DetachingCompletionHardware {
         Err(MacTxPrepareRefused::QueueActive)
     }
 
-    fn start_bound_legacy_tx(
+    fn start_bound_legacy_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
         &mut self,
-        _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-    ) {
+        publication: D,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
     }
 
     fn prepare_bound_ht_tx(
@@ -193,11 +203,15 @@ impl TxHardware for DetachingCompletionHardware {
         }
     }
 
-    fn start_bound_ht_tx(
+    fn start_bound_ht_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
         &mut self,
-        _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
-    ) {
+        publication: D,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
     }
 
     fn prepare_bound_he_tx(
@@ -214,6 +228,17 @@ impl TxHardware for DetachingCompletionHardware {
         } else {
             Ok(())
         }
+    }
+
+    fn start_bound_he_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
+        &mut self,
+        publication: D,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        handed_over();
+        publication.commit(|_started| {});
+        Ok(())
     }
 
     fn take_tx_completion(

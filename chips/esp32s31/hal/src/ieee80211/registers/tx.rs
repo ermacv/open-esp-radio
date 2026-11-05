@@ -9,7 +9,7 @@ use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 use core::marker::PhantomData;
 
 use oer_chips_esp32s31_pac::wifi_mac::{length_control::TxopListSelect, plcp1::Rate as PlcpRate};
-use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_portable_memory::{CommitTxDma, PreparedTxDma};
 
 use crate::ieee80211::registers::{
     MacInterface, MacPlacement, MacPti, MacTxPtiCount, MacTxQueueIndex, WifiDescriptorAddressLow,
@@ -92,9 +92,9 @@ pub enum MacTxPrepareRefused {
 pub enum MacTxPrepareFault {
     /// The program was bound to another chain; nothing was written.
     ForeignProgram,
-    /// The queue does not name the chain just published to it, whose address
-    /// it should read back: its registers hold a program without an
-    /// ENABLE|VALID edge.
+    /// The queue names another chain, at this address: it was prepared for
+    /// that one since, or the hardware reads back something else. Nothing
+    /// was started.
     ChainNotNamed { named: u32 },
     /// This hardware backend programs no such PPDU; nothing was written.
     Unsupported,
@@ -1031,7 +1031,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             queue,
             program.control().protection,
         );
-        self.prepared_chain(dma, queue)
+        Ok(())
     }
 
     /// Prepare one HT queue whose descriptor chain is retained by `dma`.
@@ -1052,7 +1052,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             queue,
             program.control().protection,
         );
-        self.prepared_chain(dma, queue)
+        Ok(())
     }
 
     /// Prepare one HE queue whose descriptor chain is retained by `dma`.
@@ -1073,21 +1073,29 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             queue,
             program.control().protection,
         );
-        self.prepared_chain(dma, queue)
+        Ok(())
     }
 
-    /// Publish the final ENABLE|VALID edge for a hardware-owned TX chain.
-    pub fn start_bound_mac_tx(
+    /// Hand `publication`'s chain to the hardware and start `queue`.
+    ///
+    /// The chain stays with its owner until the queue is seen to name it, in
+    /// this one exclusive call: a queue prepared for another chain since
+    /// refuses, and nothing is started. `handed_over` runs after that check
+    /// and before the hardware can complete the queue, for the owner to
+    /// publish its software state.
+    pub fn start_bound_mac_tx<D: CommitTxDma<DmaRef<WifiTxDmaDescriptor>>>(
         &mut self,
-        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        publication: D,
         queue: MacTxQueueIndex,
-    ) {
-        self.start_prepared_mac_tx(queue);
+        handed_over: impl FnOnce(),
+    ) -> Result<(), MacTxPrepareRefused> {
+        self.prepared_chain(&publication, queue)?;
+        handed_over();
+        publication.commit(|_started| self.start_prepared_mac_tx(queue));
+        Ok(())
     }
 
-    /// Whether the queue names the chain its preparation published. This
-    /// runs before the chain's owner hands it to the hardware, so a refusal
-    /// leaves the owner holding it.
+    /// Whether the queue names `dma`'s chain.
     fn prepared_chain(
         &self,
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,

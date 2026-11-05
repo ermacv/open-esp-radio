@@ -304,12 +304,15 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         hardware
             .prepare_bound_ht_tx(&publication, queue_index, program)
             .map_err(prepare_refusal)?;
-        let metadata = storage.as_mut().project();
-        *metadata.queue = queue;
-        *metadata.aggregate_length = prepared.aggregate.bytes;
-        *metadata.detached = false;
-        *metadata.state = TxDmaState::HardwareOwned;
-        publication.commit(|dma| hardware.start_bound_ht_tx(dma, queue_index));
+        hardware
+            .start_bound_ht_tx(publication, queue_index, || {
+                let metadata = storage.as_mut().project();
+                *metadata.queue = queue;
+                *metadata.aggregate_length = prepared.aggregate.bytes;
+                *metadata.detached = false;
+                *metadata.state = TxDmaState::HardwareOwned;
+            })
+            .map_err(prepare_refusal)?;
         storage.as_mut().project().work.record_publication(
             prepared.aggregate.bytes,
             prepared.aggregate.subframes,
@@ -363,14 +366,17 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                     .map_err(HtAmpduTxError::TriggerBased)?,
             );
         }
-        let metadata = storage.as_mut().project();
-        *metadata.trigger_reservation = prepared.trigger.map(|trigger| trigger.reservation);
-        *metadata.trigger_publication_snapshot = trigger_snapshot;
-        *metadata.queue = queue;
-        *metadata.aggregate_length = prepared.aggregate.bytes;
-        *metadata.detached = false;
-        *metadata.state = TxDmaState::HardwareOwned;
-        publication.commit(|dma| hardware.start_bound_he_tx(dma, queue_index));
+        hardware
+            .start_bound_he_tx(publication, queue_index, || {
+                let metadata = storage.as_mut().project();
+                *metadata.trigger_reservation = prepared.trigger.map(|trigger| trigger.reservation);
+                *metadata.trigger_publication_snapshot = trigger_snapshot;
+                *metadata.queue = queue;
+                *metadata.aggregate_length = prepared.aggregate.bytes;
+                *metadata.detached = false;
+                *metadata.state = TxDmaState::HardwareOwned;
+            })
+            .map_err(prepare_refusal)?;
         storage.as_mut().project().work.record_publication(
             prepared.aggregate.bytes,
             prepared.aggregate.subframes,
@@ -888,13 +894,16 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
         };
         prepared.map_err(prepare_refusal)?;
-        storage.as_mut().record_single_publication(cookie, queue)?;
-        publication.commit(|start| match config {
-            SingleTxConfig::Legacy(_) => hardware.start_bound_legacy_tx(start, index),
-            SingleTxConfig::Ht(_) => hardware.start_bound_ht_tx(start, index),
-            SingleTxConfig::He(_) => hardware.start_bound_he_tx(start, index),
-        });
-        Ok(())
+        // The checks above hold: this `&mut` lets nothing change them.
+        let handed_over = || storage.as_mut().record_single_publication(queue);
+        match config {
+            SingleTxConfig::Legacy(_) => {
+                hardware.start_bound_legacy_tx(publication, index, handed_over)
+            }
+            SingleTxConfig::Ht(_) => hardware.start_bound_ht_tx(publication, index, handed_over),
+            SingleTxConfig::He(_) => hardware.start_bound_he_tx(publication, index, handed_over),
+        }
+        .map_err(prepare_refusal)
     }
 
     /// Sample a single MPDU's completion and synchronize both ownership
