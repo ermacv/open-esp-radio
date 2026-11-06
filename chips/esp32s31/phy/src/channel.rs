@@ -109,34 +109,6 @@ const fn interpolate_tx_gain_curve(channel: u16, curve: [u8; 6]) -> i8 {
     value as i8
 }
 
-const fn select_tx_gain_index(mut index: u8, target: i16) -> u8 {
-    let mut iteration = 0;
-    while iteration != WIFI_TX_GAIN_TABLE_HIGH.len() {
-        let current = WIFI_TX_GAIN_TABLE_HIGH[index as usize] as i16;
-        if target < current {
-            if index as usize == WIFI_TX_GAIN_TABLE_HIGH.len() - 1 {
-                break;
-            }
-            index += 1;
-            let next = WIFI_TX_GAIN_TABLE_HIGH[index as usize] as i16;
-            if target >= next {
-                break;
-            }
-        } else {
-            if index == 0 {
-                break;
-            }
-            let previous = WIFI_TX_GAIN_TABLE_HIGH[index as usize - 1] as i16;
-            if target < previous {
-                break;
-            }
-            index -= 1;
-        }
-        iteration += 1;
-    }
-    index
-}
-
 const fn write_packed_byte(words: &mut [u32; 8], index: usize, value: u8) {
     let word = index >> 2;
     let shift = (index & 3) << 3;
@@ -184,7 +156,7 @@ pub(crate) const fn begin_wifi_tx_gain(
     crate::tx::gain::Generator {
         target: request.base_and_delta as i16 + 0x54 - request.correction as i16,
         interpolation: interpolate_tx_gain_curve(request.channel, request.calibration_curve),
-        table_index: 0,
+        table_index: crate::tx::gain::GainPosition::FIRST,
     }
 }
 
@@ -192,8 +164,12 @@ pub(crate) const fn begin_wifi_tx_gain(
 pub(crate) const fn next_wifi_tx_gain(
     generator: &mut crate::tx::gain::Generator,
 ) -> crate::tx::gain::Value {
-    generator.table_index = select_tx_gain_index(generator.table_index, generator.target);
-    let index = crate::ordinal::Ordinal::clamped(generator.table_index);
+    let index = crate::tx::gain::select_gain_position(
+        &WIFI_TX_GAIN_TABLE_HIGH,
+        generator.table_index,
+        generator.target,
+    );
+    generator.table_index = index;
     let residual = generator
         .target
         .wrapping_sub(index.at(&WIFI_TX_GAIN_TABLE_HIGH) as i16);
