@@ -147,19 +147,26 @@ impl EventSink<oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEven
     fn event(&mut self, _: oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent) {}
 }
 
-/// A network side that takes every frame.
-struct Network;
+/// A network side that takes every frame and counts its stop requests.
+/// `answer` is what its stop says; none yet leaves it running.
+#[derive(Default)]
+struct Network {
+    asked: Cell<u32>,
+    answer: Cell<Option<Result<(), crate::station::NetworkStopLost>>>,
+}
 
 impl NetworkStop for Network {
     fn takes_frames(&self) -> bool {
         true
     }
-    fn request_stop(&self) {}
+    fn request_stop(&self) {
+        self.asked.set(self.asked.get() + 1);
+    }
     fn poll_stopped(
         &self,
         _: &mut core::task::Context<'_>,
     ) -> Poll<Result<(), crate::station::NetworkStopLost>> {
-        Poll::Ready(Ok(()))
+        self.answer.get().map_or(Poll::Pending, Poll::Ready)
     }
 }
 
@@ -168,6 +175,7 @@ type Run<'b> = Pin<&'b mut dyn Future<Output = ActorEnd<ModelPortFault>>>;
 /// The lifecycle's, the network's and the air's side of one actor.
 struct Bench<'b, 's> {
     clock: &'b Clocked,
+    network: &'b Network,
     air: Rc<ModelAir>,
     run: Run<'b>,
     counter: Arc<Counter>,
@@ -472,17 +480,19 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
             link: link_end,
             link_return: link_return_end,
         };
+        let network_side = Network::default();
         let mut network = NetworkEnds::<_, _, _, TX_DEPTH, RX_DEPTH, SameHart> {
             transmit: transmit_end,
             returned: returned_end,
             receive: receive_end,
             receive_copied: copies_end,
-            network: &Network,
+            network: &network_side,
         };
         let run = actor.run(&mut lifecycle, &mut network, &clock);
         let mut run = core::pin::pin!(run);
         let mut bench = Bench {
             clock: &clock,
+            network: &network_side,
             air,
             run: run.as_mut(),
             counter: Arc::new(Counter(AtomicUsize::new(0))),
@@ -1019,7 +1029,10 @@ fn a_stop_returns_the_networks_frames_and_confirms() {
             .inner
             .now()
             .saturating_add(oer_portable_time::Duration::from_millis(50));
-        bench.send(ToActor::Stop { deadline });
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
         assert!(bench.returned.try_receive_with(Option::take).is_ok());
         bench
             .air
@@ -1033,6 +1046,121 @@ fn a_stop_returns_the_networks_frames_and_confirms() {
         ));
         bench.send(ToActor::Retire);
         assert_eq!(bench.end, Some(ActorEnd::Retired));
+    });
+}
+
+#[test]
+fn a_restarts_stop_leaves_the_network_running() {
+    bench(|bench| {
+        bench.start();
+        let deadline = bench.clock.inner.now();
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
+        bench.settle();
+        assert_eq!(bench.network.asked.get(), 0);
+        assert!(matches!(
+            bench.next(),
+            Some(FromActor::Stopped(StopOutcome::Confirmed))
+        ));
+    });
+}
+
+/// A stop that retires, with `window` milliseconds to end in.
+fn retire(bench: &mut Bench<'_, '_>, window: u32) {
+    let deadline = bench
+        .clock
+        .inner
+        .now()
+        .saturating_add(oer_portable_time::Duration::from_millis(window));
+    bench.send(ToActor::Stop {
+        deadline,
+        network: NetworkEnd::Stops,
+    });
+}
+
+#[test]
+fn a_retiring_stop_waits_for_the_network_and_its_lent_units() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
+        bench.settle();
+        let held = bench.receive.try_receive();
+        assert!(matches!(held, Some(Received::Lent(_))));
+        retire(bench, 50);
+        bench.advance(1);
+        bench.settle();
+        assert_eq!(bench.network.asked.get(), 1);
+        assert!(bench.next().is_none(), "the network has not stopped");
+        bench.network.answer.set(Some(Ok(())));
+        bench.settle();
+        assert!(bench.next().is_none(), "a lent unit is still out");
+        drop(held);
+        bench.settle();
+        assert!(matches!(
+            bench.next(),
+            Some(FromActor::Stopped(StopOutcome::Confirmed))
+        ));
+    });
+}
+
+#[test]
+fn a_stopped_radio_still_waits_for_its_network() {
+    bench(|bench| {
+        let deadline = bench
+            .clock
+            .inner
+            .now()
+            .saturating_add(oer_portable_time::Duration::from_millis(50));
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stops,
+        });
+        assert!(bench.next().is_none());
+        bench.network.answer.set(Some(Ok(())));
+        bench.settle();
+        assert!(matches!(
+            bench.next(),
+            Some(FromActor::Stopped(StopOutcome::Confirmed))
+        ));
+    });
+}
+
+#[test]
+fn a_lost_network_participant_leaves_the_stop_unconfirmed_at_once() {
+    bench(|bench| {
+        bench.start();
+        retire(bench, 50);
+        bench
+            .network
+            .answer
+            .set(Some(Err(crate::station::NetworkStopLost)));
+        bench.advance(1);
+        bench.settle();
+        match bench.next() {
+            Some(FromActor::Stopped(StopOutcome::Unconfirmed(observed))) => {
+                assert!(observed.network_lost && !observed.deadline);
+            }
+            _ => panic!("a lost participant proves no stop"),
+        }
+    });
+}
+
+#[test]
+fn a_network_that_never_stops_leaves_the_stop_unconfirmed_at_its_deadline() {
+    bench(|bench| {
+        bench.start();
+        retire(bench, 1);
+        bench.advance(2_000);
+        bench.settle();
+        match bench.next() {
+            Some(FromActor::Stopped(StopOutcome::Unconfirmed(observed))) => {
+                assert!(observed.network_running && observed.deadline);
+            }
+            _ => panic!("a network that never stopped proves no stop"),
+        }
     });
 }
 
@@ -1051,7 +1179,10 @@ fn a_stop_past_its_deadline_is_unconfirmed() {
             .inner
             .now()
             .saturating_add(oer_portable_time::Duration::from_millis(1));
-        bench.send(ToActor::Stop { deadline });
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
         assert!(bench.next().is_none(), "the stop waits for the frame");
         bench.advance(2_000);
         bench.settle();
@@ -1083,7 +1214,10 @@ fn a_stop_aborts_the_arena_on_the_air_and_confirms() {
             .inner
             .now()
             .saturating_add(oer_portable_time::Duration::from_millis(1));
-        bench.send(ToActor::Stop { deadline });
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
         bench.advance(2_000);
         bench.settle();
         assert!(matches!(
@@ -1522,7 +1656,10 @@ fn a_stop_of_a_failed_port_answers_unconfirmed_once_and_the_actor_sleeps() {
             .inner
             .now()
             .saturating_add(oer_portable_time::Duration::from_millis(50));
-        bench.send(ToActor::Stop { deadline });
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
         let mut stopped = Vec::new();
         while let Some(message) = bench.next() {
             if let FromActor::Stopped(outcome) = message {

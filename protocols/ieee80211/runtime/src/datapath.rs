@@ -65,8 +65,8 @@ mod turn;
 
 pub use messages::{
     ActorEnd, ActorEvent, ActorEvents, ActorFault, ActorViolation, FromActor, GroupPending,
-    LifecycleEnds, NetworkEnds, Parcel, RetuneFailed, Returned, StationTx, StopObserved,
-    StopOutcome, ToActor, from_actor_depth, returns_depth,
+    LifecycleEnds, NetworkEnd, NetworkEnds, Parcel, RetuneFailed, Returned, StationTx,
+    StopObserved, StopOutcome, ToActor, from_actor_depth, returns_depth,
 };
 
 use core::future::{Future, poll_fn};
@@ -268,6 +268,9 @@ enum Radio<K> {
     },
     /// Stopping by the deadline.
     Stopping { deadline: Instant },
+    /// Stopped already: a retiring stop waits for the network by the
+    /// deadline.
+    Draining { deadline: Instant },
     /// The stop was answered; the radio takes a start or the retirement.
     Halted,
 }
@@ -282,6 +285,21 @@ impl<K> Radio<K> {
     const fn changing(&self) -> bool {
         matches!(self, Self::Starting(_) | Self::Retuning { .. })
     }
+}
+
+/// How far the network side's stop came.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NetworkStopping {
+    /// No stop asked it to stop.
+    NotAsked,
+    /// Asked, and it has not reported.
+    Asked,
+    /// It reported its stop; lent units are still out.
+    Stopped,
+    /// It reported its stop and holds no unit.
+    Returned,
+    /// Its participant was lost.
+    Lost,
 }
 
 /// A port command the port holds at its barrier, with the group token of
@@ -386,6 +404,8 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     stage: Stage<'id, D>,
     /// Frames the lifecycle holds.
     frames_out: u8,
+    /// The network side's stop.
+    network_stopping: NetworkStopping,
     /// The reply offered to the lifecycle, until it answers.
     reply_out: Option<ReplyPlace>,
     owed: Owed<'id, D>,
@@ -470,6 +490,7 @@ where
                 overflow: None,
             },
             frames_out: 0,
+            network_stopping: NetworkStopping::NotAsked,
             reply_out: None,
             owed: Owed::new(),
             facts: Facts::default(),
@@ -533,6 +554,7 @@ where
                     })
                 },
                 frames_out: 0,
+                network_stopping: NetworkStopping::NotAsked,
                 reply_out: None,
                 owed: Owed::new(),
                 facts: Facts::default(),

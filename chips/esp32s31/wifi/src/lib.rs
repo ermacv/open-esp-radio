@@ -468,7 +468,7 @@ impl<N: Notifies> NetworkStopState<N> {
 }
 impl<N: Notifies> runtime::NetworkStop for NetworkStopState<N> {
     fn takes_frames(&self) -> bool {
-        !self.absent.load(Ordering::Acquire)
+        !self.absent.load(Ordering::Acquire) && !self.requested.load(Ordering::Acquire)
     }
     fn request_stop(&self) {
         self.requested.store(true, Ordering::Release);
@@ -884,7 +884,12 @@ mod tests {
         use runtime::NetworkStop as _;
         let mut cx = Context::from_waker(core::task::Waker::noop());
         let state = NetworkStopState::new();
+        assert!(state.takes_frames());
         state.request_stop();
+        assert!(
+            !state.takes_frames(),
+            "a stopping network takes no new frame"
+        );
         let stopper = NetworkStopper { state: &state };
         assert!(state.poll_stopped(&mut cx).is_pending());
         stopper.stopped();
