@@ -220,6 +220,41 @@ mod delays {
     }
 
     #[test]
+    fn a_refused_wait_is_reported_as_refused() {
+        struct Unclocked;
+        impl PhyShortDelay for Unclocked {
+            const MAX_MICROS: u32 = 20;
+            fn settle_micros(_: u32) -> bool {
+                false
+            }
+        }
+        let clock: VirtualClock = VirtualClock::new();
+        let mut events = Vec::new();
+        {
+            let wait = pin!(delay_observed::<Unclocked, _>(
+                &clock,
+                Kind::Settle,
+                5,
+                true,
+                |event| events.push(event),
+            ));
+            assert_eq!(
+                poll(wait),
+                Poll::Ready(Err(super::super::PhyWaitRefused::Settle))
+            );
+        }
+        assert_eq!(
+            events,
+            [
+                Event::Started {
+                    requested_micros: 5
+                },
+                Event::Refused
+            ]
+        );
+    }
+
+    #[test]
     fn an_observed_wait_reports_its_start_elapsed_time_and_lateness() {
         let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(10));
         let mut events = Vec::new();

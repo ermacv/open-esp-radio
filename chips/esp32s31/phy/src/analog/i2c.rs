@@ -69,8 +69,13 @@ pub async fn configure_i2c_initialization_stage_two(
     registers: &mut impl SharedPhyAccess,
     parameter: PhyRfInitParameterSnapshot,
     maximum_observations: u32,
-    wait: impl AsyncFnMut(),
-) -> Result<(), oer_chips_family_phy::i2c::PhyI2cInitializationStageTwoError> {
+    wait: impl AsyncFnMut() -> Result<(), crate::executor::wait::PhyWaitRefused>,
+) -> Result<
+    (),
+    oer_chips_family_phy::i2c::PhyI2cInitializationStageTwoError<
+        crate::executor::wait::PhyWaitRefused,
+    >,
+> {
     oer_chips_family_phy::i2c::configure_initialization_stage_two(
         &mut hal_phy_i2c::parallel_port(registers),
         |index| parameter.initialization_stage_two_pair(index),

@@ -156,18 +156,18 @@ const fn quartet(first: u32, second: u32) -> [u16; 4] {
     [a, b, c, d]
 }
 
-/// The seed row of a Bluetooth gain. A Bluetooth image holds only the three
-/// gains `BLUETOOTH_TX_GAIN_TABLE_MID` admits, so it has only three rows.
+/// The seed row of a Bluetooth gain.
 #[cfg(target_arch = "riscv32")]
 const fn bluetooth_tx_gain_seed(
     image: &crate::calibration::bluetooth::PhyBluetoothTxGainImage,
-    gain: u16,
+    gain: crate::calibration::bluetooth::PhyBluetoothBasebandGain,
 ) -> [u16; 4] {
+    use crate::calibration::bluetooth::PhyBluetoothBasebandGain as Gain;
     let [a, b, c, d, e, f] = image.seed;
     match gain {
-        0x0080 => quartet(c, d),
-        0x0100 => quartet(e, f),
-        _ => quartet(a, b),
+        Gain::Zero => quartet(a, b),
+        Gain::Half => quartet(c, d),
+        Gain::Full => quartet(e, f),
     }
 }
 
@@ -531,7 +531,7 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
         let memory_entry = oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
             memory_base.wrapping_add(entry),
             gain_72,
-            gain_64,
+            gain_64.word(),
             gain_32,
             bluetooth_tx_gain_seed(image, gain_64),
             image.config,

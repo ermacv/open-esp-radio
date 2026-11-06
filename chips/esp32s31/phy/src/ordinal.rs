@@ -6,11 +6,17 @@
 pub(crate) struct Ordinal<const N: usize>(u8);
 
 impl<const N: usize> Ordinal<N> {
-    /// The first position.
-    pub(crate) const FIRST: Self = {
+    /// Every constructor evaluates this: a position fits `u8`, and `next`
+    /// cannot wrap into a table of more than 256 entries.
+    const SIZE: () = {
         if N == 0 || N > u8::MAX as usize + 1 {
             panic!("an ordinal's table has between 1 and 256 entries");
         }
+    };
+
+    /// The first position.
+    pub(crate) const FIRST: Self = {
+        let () = Self::SIZE;
         Self(0)
     };
 
@@ -23,6 +29,7 @@ impl<const N: usize> Ordinal<N> {
 
     /// The position `index`, when the table has one.
     pub(crate) const fn position(index: u8) -> Option<Self> {
+        let () = Self::SIZE;
         if (index as usize) < N {
             Some(Self(index))
         } else {
@@ -36,12 +43,14 @@ impl<const N: usize> Ordinal<N> {
             if W == 0 || N % W != 0 {
                 panic!("a coarse table divides this one evenly");
             }
+            let () = Ordinal::<W>::SIZE;
         }
         Ordinal((self.0 as usize / (N / W)) as u8)
     }
 
     /// The position `index`, or the last one past the table's end.
     pub(crate) const fn clamped(index: u8) -> Self {
+        let () = Self::SIZE;
         let last = (N - 1) as u8;
         Self(if index > last { last } else { index })
     }

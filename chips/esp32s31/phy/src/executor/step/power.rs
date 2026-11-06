@@ -200,7 +200,7 @@ fn gain_record(
             crate::channel::next_wifi_tx_gain(&mut gain.generator)
         }
         crate::tracking::parameters::PhyCalibrationTrackClass::BluetoothIeee802154 => {
-            crate::calibration::bluetooth::next_bluetooth_tx_gain(&mut gain.generator, gain.entry)
+            crate::calibration::bluetooth::next_bluetooth_tx_gain(&mut gain.generator, gain.entry).0
         }
     };
     // Exactly the quartet from the general seed/output32 view. Both pinned

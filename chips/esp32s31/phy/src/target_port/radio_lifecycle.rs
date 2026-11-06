@@ -478,22 +478,19 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                         .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
                 }
                 PhyRfWakeOperation::ConfigureI2cStageTwo => {
-                    let mut refused = None;
-                    let configured = crate::analog::i2c::configure_i2c_initialization_stage_two(
+                    crate::analog::i2c::configure_i2c_initialization_stage_two(
                         registers,
                         init_parameters,
                         u32::from(HARDWARE_EDGE_LIMIT),
-                        async || {
-                            if let Err(error) = delay::<D, _>(timer, Kind::Completion, 1).await {
-                                refused = Some(error);
-                            }
-                        },
+                        async || delay::<D, _>(timer, Kind::Completion, 1).await,
                     )
-                    .await;
-                    if let Some(error) = refused {
-                        return Err(error.into());
-                    }
-                    configured.map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)?;
+                    .await
+                    .map_err(|error| match error {
+                        oer_chips_family_phy::i2c::PhyI2cInitializationStageTwoError::Wait(
+                            refused,
+                        ) => refused.into(),
+                        _ => PhyTargetPortError::HardwareEdgeTimedOut,
+                    })?;
                 }
                 PhyRfWakeOperation::PublishRetainedFrequencyI2c => {
                     publish_wake_frequency_i2c(

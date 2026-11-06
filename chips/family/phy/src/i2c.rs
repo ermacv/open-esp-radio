@@ -4,10 +4,17 @@ use oer_chips_family_analog::model::Host;
 /// One finite failure while publishing current-vendor retained-wake analog
 /// initialization through both PHY-I²C hosts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyI2cInitializationStageTwoError {
+pub enum PhyI2cInitializationStageTwoError<W = core::convert::Infallible> {
     Transition(oer_chips_family_analog::TransitionError),
-    BusyAtStart { host: Host },
-    CompletionTimeout { host: Host, pair: u8 },
+    BusyAtStart {
+        host: Host,
+    },
+    CompletionTimeout {
+        host: Host,
+        pair: u8,
+    },
+    /// The wait between observations was refused: no further pair started.
+    Wait(W),
 }
 
 pub trait PhyI2cParallelAccess {
@@ -18,12 +25,12 @@ pub trait PhyI2cParallelAccess {
     fn start_pair(&mut self, pair: Self::Pair);
 }
 
-pub async fn configure_initialization_stage_two<P: PhyI2cParallelAccess>(
+pub async fn configure_initialization_stage_two<P: PhyI2cParallelAccess, W>(
     access: &mut P,
     pair: impl Fn(usize) -> Option<P::Pair>,
     maximum_observations: u32,
-    mut wait: impl AsyncFnMut(),
-) -> Result<(), PhyI2cInitializationStageTwoError> {
+    mut wait: impl AsyncFnMut() -> Result<(), W>,
+) -> Result<(), PhyI2cInitializationStageTwoError<W>> {
     use oer_chips_family_analog::{ParallelAction, ParallelHost, ParallelTransition};
     let host = |host| match host {
         ParallelHost::First => Host::Host0,
@@ -57,7 +64,10 @@ pub async fn configure_initialization_stage_two<P: PhyI2cParallelAccess>(
                         break;
                     }
                     observations = observations.saturating_add(1);
-                    wait().await;
+                    if let Err(refused) = wait().await {
+                        result = Err(PhyI2cInitializationStageTwoError::Wait(refused));
+                        break;
+                    }
                 }
                 if result.is_err() {
                     break;
@@ -102,7 +112,7 @@ mod tests {
             access,
             |index| (index < 22).then_some(index),
             budget,
-            async || {}
+            async || Ok::<(), core::convert::Infallible>(())
         ));
         match future
             .as_mut()
@@ -206,6 +216,40 @@ mod tests {
     }
 
     #[test]
+    fn a_refused_wait_stops_the_pairs_and_restores_the_map() {
+        use core::{
+            future::Future,
+            task::{Context, Poll, Waker},
+        };
+        let mut access = FakeParallelI2c {
+            busy_after_start_host: Some(Host::Host0),
+            ..FakeParallelI2c::default()
+        };
+        let result = {
+            let mut future = core::pin::pin!(configure_initialization_stage_two(
+                &mut access,
+                |index| (index < 22).then_some(index),
+                2,
+                async || Err::<(), u8>(7)
+            ));
+            future
+                .as_mut()
+                .poll(&mut Context::from_waker(Waker::noop()))
+        };
+        assert_eq!(
+            result,
+            Poll::Ready(Err(PhyI2cInitializationStageTwoError::Wait(7)))
+        );
+        let started = access
+            .events
+            .iter()
+            .filter(|event| **event == ParallelEvent::StartPair)
+            .count();
+        assert_eq!(started, 1, "no pair starts past the refusal");
+        assert_eq!(access.events.last(), Some(&ParallelEvent::RestoreRadioMap));
+    }
+
+    #[test]
     fn a_busy_parallel_host_suspends_before_the_next_observation() {
         use core::{
             future::{Future, pending},
@@ -219,7 +263,7 @@ mod tests {
             &mut access,
             |index| (index < 22).then_some(index),
             2,
-            async || pending::<()>().await
+            async || pending::<Result<(), core::convert::Infallible>>().await
         ));
         assert_eq!(
             future
@@ -248,6 +292,7 @@ mod tests {
                 2,
                 async || {
                     clock.wait_for(Duration::from_micros(1)).await.unwrap();
+                    Ok::<(), core::convert::Infallible>(())
                 },
             ));
             let mut cx = Context::from_waker(Waker::noop());
@@ -291,6 +336,7 @@ mod tests {
                 2,
                 async || {
                     clock.wait_for(Duration::from_micros(1)).await.unwrap();
+                    Ok::<(), core::convert::Infallible>(())
                 },
             ));
             assert_eq!(
