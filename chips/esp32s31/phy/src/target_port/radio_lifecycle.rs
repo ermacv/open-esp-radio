@@ -137,13 +137,13 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
                 ) {
                     Ok(()) => {}
                     Err(PhyI2cConfigurationError::BusyAtStart) => {
-                        delay::<D, _>(timer, Kind::BusBusy, 1).await;
+                        delay::<D, _>(timer, Kind::BusBusy, 1).await?;
                     }
                     Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
                 }
             }
             PhyI2cConfigurationAction::AwaitCompletionEdge => {
-                delay::<D, _>(timer, Kind::Completion, 1).await;
+                delay::<D, _>(timer, Kind::Completion, 1).await?;
                 match oer_chips_esp32s31_hal::phy::i2c::observe_configuration(
                     &mut transaction,
                     registers,
@@ -478,14 +478,22 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                         .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
                 }
                 PhyRfWakeOperation::ConfigureI2cStageTwo => {
-                    crate::analog::i2c::configure_i2c_initialization_stage_two(
+                    let mut refused = None;
+                    let configured = crate::analog::i2c::configure_i2c_initialization_stage_two(
                         registers,
                         init_parameters,
                         u32::from(HARDWARE_EDGE_LIMIT),
-                        async || delay::<D, _>(timer, Kind::Completion, 1).await,
+                        async || {
+                            if let Err(error) = delay::<D, _>(timer, Kind::Completion, 1).await {
+                                refused = Some(error);
+                            }
+                        },
                     )
-                    .await
-                    .map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)?;
+                    .await;
+                    if let Some(error) = refused {
+                        return Err(error.into());
+                    }
+                    configured.map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)?;
                 }
                 PhyRfWakeOperation::PublishRetainedFrequencyI2c => {
                     publish_wake_frequency_i2c(
@@ -562,7 +570,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                         if timer.now() >= deadline {
                             return Err(PhyTargetPortError::HardwareEdgeTimedOut);
                         }
-                        delay::<D, _>(timer, Kind::Completion, 10).await;
+                        delay::<D, _>(timer, Kind::Completion, 10).await?;
                     }
                 }
                 PhyRfWakeOperation::ResetClockGenerator => {

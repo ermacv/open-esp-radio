@@ -503,7 +503,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 .await
             }
             PhyTxCalibrationEnvironmentExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
         }
@@ -520,7 +520,9 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         .await
     }
 
-    async fn complete_tone_sar_with<F: core::future::Future<Output = ()>>(
+    async fn complete_tone_sar_with<
+        F: core::future::Future<Output = Result<(), crate::executor::wait::PhyWaitRefused>>,
+    >(
         &self,
         binding: PhyToneSarExternalBinding,
         registers: &mut impl SharedPhyAccess,
@@ -531,7 +533,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             PhyToneSarExternalBinding::Timer(binding) => {
                 let micros = binding.micros();
                 let phase = binding.phase();
-                delay(phase, u64::from(micros)).await;
+                delay(phase, u64::from(micros)).await?;
                 Ok(binding.into_completion())
             }
         }
@@ -677,7 +679,8 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 Ok(PhyBluetoothTxGainInitCompletion::ForceTxRx(match binding {
                     PhyForceTxRxExternalBinding::Mmio(binding) => binding.execute_target(registers),
                     PhyForceTxRxExternalBinding::Timer(binding) => {
-                        delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                        delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros()))
+                            .await?;
                         binding.into_completion()
                     }
                 }))
@@ -775,7 +778,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 .await
             }
             PhyTxDcPwdetSearchExternalBinding::Timer(binding) => {
-                delay(Scope::Search, Kind::Settle, u64::from(binding.micros())).await;
+                delay(Scope::Search, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyTxDcPwdetSearchExternalBinding::ToneSar(binding) => {
@@ -831,7 +834,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 .await
             }
             PhyTxDcPwdetExternalBinding::Timer(binding) => {
-                delay(Scope::Root, Kind::Settle, u64::from(binding.micros())).await;
+                delay(Scope::Root, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyTxDcPwdetExternalBinding::Search(binding) => Ok(PhyTxDcPwdetCompletion::Search(
@@ -841,7 +844,9 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         }
     }
 
-    async fn complete_dcode<F: core::future::Future<Output = ()>>(
+    async fn complete_dcode<
+        F: core::future::Future<Output = Result<(), crate::executor::wait::PhyWaitRefused>>,
+    >(
         &self,
         binding: PhyDcodeExternalBinding,
         registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
@@ -891,7 +896,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         match binding {
             PhyTxIqMisPowerExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
             PhyTxIqMisPowerExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyTxIqMisPowerExternalBinding::LinearPower(binding) => {
@@ -1012,7 +1017,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         match binding {
             PhyDcIqExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
             PhyDcIqExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyDcIqExternalBinding::Readiness(binding) => Ok(binding
@@ -1038,7 +1043,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 .await
             }
             PhyRxDcoExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyRxDcoExternalBinding::DcIq(binding) => Ok(PhyRxDcoCompletion::DcIq(
@@ -1055,14 +1060,14 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         match binding {
             PhyRxIqEstimatorExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
             PhyRxIqEstimatorExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyRxIqEstimatorExternalBinding::Readiness(binding) => {
                 if binding.samples() >= HARDWARE_EDGE_LIMIT {
                     Ok(binding.into_timeout_completion())
                 } else {
-                    delay::<D, _>(self.timer, Kind::Completion, 1).await;
+                    delay::<D, _>(self.timer, Kind::Completion, 1).await?;
                     Ok(binding.execute_target(registers))
                 }
             }
@@ -1186,7 +1191,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     .await?,
             )),
             PhyRxIqInitExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
         }
@@ -1206,7 +1211,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 .await
             }
             PhyRxSaturationExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyRxSaturationExternalBinding::Sample(binding) => {
@@ -1239,7 +1244,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 ))
             }
             PhyChipChannelExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyChipChannelExternalBinding::I2c(binding) => {
@@ -1289,7 +1294,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 }))
             }
             PhyChipChannelExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyChipChannelExternalBinding::I2c(binding) => {
@@ -1359,17 +1364,17 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         observer: &mut O,
     ) -> Result<(), PhyTargetPortError> {
         channel.request_mac_stop();
-        delay::<D, _>(self.timer, Kind::Settle, MAC_CHANNEL_SETTLE_US).await;
+        delay::<D, _>(self.timer, Kind::Settle, MAC_CHANNEL_SETTLE_US).await?;
         for _ in 0..RF_OPERATION_LIMIT {
             if channel.mac_active_state() == 0 {
-                delay::<D, _>(self.timer, Kind::Settle, MAC_CHANNEL_IDLE_SETTLE_US).await;
+                delay::<D, _>(self.timer, Kind::Settle, MAC_CHANNEL_IDLE_SETTLE_US).await?;
                 self.select_channel_hal(state, channel_or_frequency, cbw, channel, observer)
                     .await?;
                 let regdma_link = channel.restart_mac();
                 observer.mac_channel_restarted(channel_or_frequency, cbw, regdma_link);
                 return Ok(());
             }
-            delay::<D, _>(self.timer, Kind::Completion, 1).await;
+            delay::<D, _>(self.timer, Kind::Completion, 1).await?;
         }
         Err(PhyTargetPortError::HardwareEdgeTimedOut)
     }
@@ -1400,7 +1405,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 Ok(binding.execute_target(registers, self.timer))
             }
             PhyTxDcExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyTxDcExternalBinding::Pbus(binding) => {
@@ -1447,7 +1452,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 Ok(completion)
             }
             PhyPwdetExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
             PhyPwdetExternalBinding::Pbus(mut binding) => {
@@ -1457,13 +1462,13 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                         started = true;
                         break;
                     }
-                    delay::<D, _>(self.timer, Kind::BusBusy, 1).await;
+                    delay::<D, _>(self.timer, Kind::BusBusy, 1).await?;
                 }
                 if !started {
                     return Ok(binding.into_timeout_completion());
                 }
                 for _ in 0..HARDWARE_EDGE_LIMIT {
-                    delay::<D, _>(self.timer, Kind::Completion, 1).await;
+                    delay::<D, _>(self.timer, Kind::Completion, 1).await?;
                     match binding
                         .sample_target_once(registers)
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
@@ -1568,14 +1573,14 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                             match binding.start_target(registers) {
                                 Ok(()) => {}
                                 Err(PhyColdI2cError::BusyAtStart) => {
-                                    delay::<D, _>(self.timer, Kind::BusBusy, 1).await
+                                    delay::<D, _>(self.timer, Kind::BusBusy, 1).await?
                                 }
                                 Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
                             }
                         }
                         PhyColdI2cAction::AwaitReadCompletionEdge { .. }
                         | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                            delay::<D, _>(self.timer, Kind::Completion, 1).await;
+                            delay::<D, _>(self.timer, Kind::Completion, 1).await?;
                             match binding
                                 .observe_target_edge(registers)
                                 .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
@@ -1651,7 +1656,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding),
                     PhyColdObservationRequest::ObserveDcIqReadiness { .. }
                     | PhyColdObservationRequest::ObserveSignalPowerReadiness { .. } => {
-                        delay::<D, _>(self.timer, Kind::Completion, 1).await;
+                        delay::<D, _>(self.timer, Kind::Completion, 1).await?;
                         binding
                             .execute_target(registers)
                             .map_err(|_| PhyTargetPortError::UnexpectedBinding)
@@ -1666,7 +1671,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     .start_target(registers)
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
                 for _ in 0..HARDWARE_EDGE_LIMIT {
-                    delay::<D, _>(self.timer, Kind::Completion, 1).await;
+                    delay::<D, _>(self.timer, Kind::Completion, 1).await?;
                     match binding
                         .observe_target_edge(registers)
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
@@ -1684,7 +1689,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)
             }
             PhyColdExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 binding
                     .into_elapsed_completion()
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)
@@ -2216,7 +2221,7 @@ impl<
                 ))
             }
             PhyRegisterExternalBinding::Timer(binding) => {
-                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
+                delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 self.counters.delays += 1;
                 Ok(binding.into_completion())
             }

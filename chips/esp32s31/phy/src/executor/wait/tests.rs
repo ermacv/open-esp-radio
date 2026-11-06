@@ -159,12 +159,29 @@ mod delays {
     }
 
     #[test]
+    fn a_refused_settle_is_reported_instead_of_a_panic() {
+        struct Unclocked;
+        impl PhyShortDelay for Unclocked {
+            const MAX_MICROS: u32 = 20;
+            fn settle_micros(_: u32) -> bool {
+                false
+            }
+        }
+        let clock: VirtualClock = VirtualClock::new();
+        let wait = core::pin::pin!(super::super::delay::<Unclocked, _>(&clock, Kind::Settle, 5));
+        assert_eq!(
+            poll(wait),
+            Poll::Ready(Err(super::super::PhyWaitRefused::Settle))
+        );
+    }
+
+    #[test]
     fn a_short_settle_completes_at_once_without_the_timer() {
         let clock: VirtualClock = VirtualClock::new();
         SETTLED.with(|settled| settled.set(0));
         assert_eq!(
             poll(pin!(delay::<Short, _>(&clock, Kind::Settle, 20))),
-            Poll::Ready(())
+            Poll::Ready(Ok(()))
         );
         assert_eq!(SETTLED.with(Cell::get), 20);
         assert_eq!(clock.next_deadline(), None);
@@ -187,18 +204,19 @@ mod delays {
                 Some(Instant::from_micros(100 + micros))
             );
             clock.advance(Duration::from_micros(1)).unwrap();
-            assert_eq!(poll(wait.as_mut()), Poll::Ready(()));
+            assert_eq!(poll(wait.as_mut()), Poll::Ready(Ok(())));
             assert_eq!(SETTLED.with(Cell::get), 0);
         }
     }
 
     #[test]
-    fn a_deadline_past_the_timer_range_never_completes() {
+    fn a_deadline_past_the_timer_range_is_refused() {
         let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(u64::MAX - 1));
         let mut wait = pin!(delay::<Short, _>(&clock, Kind::Completion, 2));
-        assert_eq!(poll(wait.as_mut()), Poll::Pending);
-        clock.advance_to(Instant::from_micros(u64::MAX));
-        assert_eq!(poll(wait.as_mut()), Poll::Pending);
+        assert_eq!(
+            poll(wait.as_mut()),
+            Poll::Ready(Err(super::super::PhyWaitRefused::Deadline))
+        );
     }
 
     #[test]
@@ -215,7 +233,7 @@ mod delays {
             ));
             assert_eq!(poll(wait.as_mut()), Poll::Pending);
             clock.advance(Duration::from_micros(7)).unwrap();
-            assert_eq!(poll(wait.as_mut()), Poll::Ready(()));
+            assert_eq!(poll(wait.as_mut()), Poll::Ready(Ok(())));
         }
         assert_eq!(
             events,
@@ -244,7 +262,7 @@ mod delays {
                 false,
                 |_| observed += 1,
             ))),
-            Poll::Ready(())
+            Poll::Ready(Ok(()))
         );
         assert_eq!(observed, 0);
     }
