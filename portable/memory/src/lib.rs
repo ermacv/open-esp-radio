@@ -81,8 +81,6 @@ pub use affine_spsc::{
     AffineSpscTrySendError, CachedSpscCursor, CompactSpscCursor, LocalSpscReceiver,
     LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
-/// The local notify of a queue end: the default of every queue's notifies.
-pub use atomic_waker::AtomicWaker;
 pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use context_cell::{ContextCell, ContextProof};
 pub use dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};
@@ -96,6 +94,8 @@ pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, Re
 #[doc(hidden)]
 pub use init_in_place::__InitField;
 pub use link::{LinkSlot, NamePart, SlotKind, SlotName, TraceClockSlot};
+/// The local notify of a queue end: the default of every queue's notifies.
+pub use oer_portable_waker::AtomicWaker;
 pub use once_value::OnceValue;
 pub use pinned_tx::{
     Coherent, DmaIndexReturn, DmaReadPrepare, IndexedStableDmaLease, PinnedDmaTxNetworkLease,

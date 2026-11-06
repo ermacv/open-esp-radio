@@ -67,6 +67,10 @@ prerequisites hold. A forwarding call inside an `unsafe fn` names the
 `#[allow(unsafe_code, ...)]` attribute: Clippy 1.97 does not accept a comment
 above an attribute that spans several lines.
 
+`oer-portable-waker` holds one task's waker in an `UnsafeCell`. Its state word
+gives the cell to one context at a time; a `SAFETY:` comment at each access names
+the state that holds it.
+
 Memory operations move into `oer-portable-memory`, architectural instructions into
 `oer-portable-riscv`, and PSRAM slice creation into its HAL owner. Their unsafe counts
 may grow only by the relocated operations while the branch total falls and

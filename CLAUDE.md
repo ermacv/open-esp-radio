@@ -200,7 +200,8 @@ system these rules serve.
   `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
   instructions in `portable/riscv`, Espressif interrupt bindings in
   `chips/family/interrupt-table`, typed symbol export attributes in
-  `portable/memory`, the PAC's one root claim, probe images,
+  `portable/memory`, the waker cell in `portable/waker`, the PAC's one root
+  claim, probe images,
   the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
   Only `oer-portable-riscv` contains `asm!` for architectural operations. Entry/trap

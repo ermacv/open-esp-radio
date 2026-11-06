@@ -8,9 +8,9 @@ use core::{
 };
 
 use crate::mac::rx::{RxRingError, pool::RxStageTransactionError};
-use atomic_waker::AtomicWaker;
 use oer_portable_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender};
 use oer_portable_sync::PriorityWaker;
+use oer_portable_waker::AtomicWaker;
 
 use super::frontier::RxFrontierError;
 

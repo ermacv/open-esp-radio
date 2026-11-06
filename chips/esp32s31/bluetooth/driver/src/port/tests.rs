@@ -16,9 +16,9 @@ impl Timer for TestTimer {
         self.0.wait_until(deadline).await
     }
 }
-struct Notification(atomic_waker::AtomicWaker);
+struct Notification(oer_portable_waker::AtomicWaker);
 impl Notify for Notification {
-    const NEW: Self = Self(atomic_waker::AtomicWaker::new());
+    const NEW: Self = Self(oer_portable_waker::AtomicWaker::new());
     fn notify(&self) {
         self.0.wake();
     }

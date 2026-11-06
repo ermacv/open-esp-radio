@@ -12,9 +12,17 @@ needed. Cross-core memory safety does not imply this priority progress
 guarantee.
 
 `oer-portable-sync` is a separate portable crate because memory ownership, protocol
-ports and chip drivers consume it independently. Its only dependency is the
-atomic-waker implementation; it does not pull memory's buffer machinery or
+ports and chip drivers consume it independently. Its only dependency is
+`oer-portable-waker`, whose `AtomicWaker` holds one task's waker and is the one
+place of this notification's `unsafe`; neither pulls memory's buffer machinery or
 Embassy into a protocol contract.
+
+A call to `AtomicWaker` makes a fixed number of atomic operations and at most one
+waker call, with no retry loop of its own. That bound is algorithmic, not a
+machine-time bound: a strong compare-and-swap is a reservation loop on RISC-V.
+A registration owes its task a wake when a wake came during it, and carries that
+wake through the waker it was given. Its model checks run with
+`cargo test -p oer-portable-waker --features loom --release`.
 
 ## Notification paths
 

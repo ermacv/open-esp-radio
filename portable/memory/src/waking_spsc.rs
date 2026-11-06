@@ -8,12 +8,12 @@ use crate::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender,
     AffineSpscTrySendError,
 };
-use atomic_waker::AtomicWaker;
 use core::cell::Cell;
 use core::future::{Future, poll_fn};
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering, fence};
 use core::task::{Context, Poll};
+use oer_portable_waker::AtomicWaker;
 
 /// How one end of a queue waits for its peer and how the peer tells it.
 ///

@@ -16,7 +16,7 @@ observe = []
 oer-portable-embassy-net = { path = "../../../portable/embassy/net" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-protocols-network-port = { path = "../../../protocols/network/port" }
-atomic-waker = "=1.1.2"
+oer-portable-waker = { path = "../../../portable/waker" }
 static_cell.workspace = true
 
 [dev-dependencies]

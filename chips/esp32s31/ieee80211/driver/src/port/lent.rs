@@ -8,12 +8,12 @@
 //! waiting for returns, whose port rearms what the ring got back.
 
 use super::{ReceiveBuffer, ReceiveUnit};
-use atomic_waker::AtomicWaker;
 use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     task::{Context, Poll},
 };
 use oer_portable_memory::QueueNotify;
+use oer_portable_waker::AtomicWaker;
 use oer_protocols_ieee80211_contracts_port::{
     AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer,
 };

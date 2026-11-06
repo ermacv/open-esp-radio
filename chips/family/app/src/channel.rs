@@ -9,10 +9,10 @@
 
 use core::marker::PhantomData;
 
-use atomic_waker::AtomicWaker;
 use oer_portable_memory::{
     ClaimCell, QueueNotify, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender,
 };
+use oer_portable_waker::AtomicWaker;
 use static_cell::ConstStaticCell;
 
 /// The two queues of a channel, and their notifies: `C` the application

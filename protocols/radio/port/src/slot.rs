@@ -9,8 +9,8 @@ use core::{
     task::{Context, Poll},
 };
 
-use atomic_waker::AtomicWaker;
 use oer_portable_sync::PriorityWaker;
+use oer_portable_waker::AtomicWaker;
 
 use crate::{Abandon, LocalId, Quarantine, SlotIdentity};
 

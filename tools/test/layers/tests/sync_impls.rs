@@ -15,6 +15,8 @@ const EXCEPTIONS: &[(&str, usize)] = &[
         1,
     ),
     ("chips/family/executor/src/task.rs", 1),
+    // The waker cell's home: sharing it is the crate's whole purpose.
+    ("portable/waker/src/lib.rs", 1),
 ];
 
 fn sync_or_send_trait<'a>(tokens: impl Iterator<Item = &'a TokenTree>) -> bool {

@@ -25,12 +25,12 @@ use crate::mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, decode_rx_local_timestamp, first_segment_layout,
     pool::{NetworkRxFrame, RxTimes},
 };
-use atomic_waker::AtomicWaker;
 use oer_portable_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, AffineSpscTryReceiveError,
     AffineSpscTrySendError,
 };
 use oer_portable_time::Clock;
+use oer_portable_waker::AtomicWaker;
 
 use super::{
     counters::WifiRxCounters,
