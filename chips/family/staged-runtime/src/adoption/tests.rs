@@ -95,7 +95,11 @@ fn runtime_is_published_after_driver_arming_image_preparation_and_mapping() {
 
 #[test]
 fn initialization_failure_never_reaches_mapping_or_the_image_callback() {
-    for error in [InitError::ConsoleInstalled, InitError::CoreControlInstalled] {
+    for error in [
+        InitError::DebugStatusPublished,
+        InitError::ConsoleInstalled,
+        InitError::CoreControlInstalled,
+    ] {
         let log = Log::new(Some(error));
         let result = complete::<Chip<'_>, _, ()>(
             log.owners(),

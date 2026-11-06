@@ -126,11 +126,6 @@ impl InterruptBlocks {
     /// hart's pending sources and the observers of hart 0's routes and lines
     /// for a fatal path. Every route and line stays as it is until the
     /// router installs the controller.
-    ///
-    /// # Panics
-    ///
-    /// When the pending sources were published before: the root splits the
-    /// partition once.
     pub(crate) fn new(peripherals: MatrixParts) -> Self {
         let pending = take_pending!(peripherals);
         let MatrixParts {
@@ -140,10 +135,12 @@ impl InterruptBlocks {
             interrupt_core0_observer,
             ..
         } = peripherals;
-        let _ = PENDING.get_or_init(|| pending);
+        // The root splits this partition once, so nothing is published yet;
+        // a refused second value would name the same banks as the first.
+        let _published = PENDING.publish(pending);
         set_level_bits(&mut clic_observer);
-        // Published beside the pending sources, which the assertion above
-        // finds unpublished: the observers are not installed either.
+        // Published beside the pending sources, as once: the observers are
+        // not installed either.
         let _installed = OBSERVER.install(Observer {
             routes: interrupt_core0_observer,
             lines: clic_observer,

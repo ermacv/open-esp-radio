@@ -103,8 +103,9 @@ impl Port for RuntimePort {
     fn install_core_control(parts: CoreParts) -> Result<(), InitError> {
         cores::install(parts.core, parts.uart0).map_err(|_| InitError::CoreControlInstalled)
     }
-    fn publish_debug_status(debug: DebugParts) {
-        crate::platform::port::publish_debug_status(debug.0);
+    fn publish_debug_status(debug: DebugParts) -> Result<(), InitError> {
+        crate::platform::port::publish_debug_status(debug.0)
+            .map_err(|_| InitError::DebugStatusPublished)
     }
     fn finish(
         resources: RuntimeResources,

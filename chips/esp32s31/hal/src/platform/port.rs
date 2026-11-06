@@ -45,8 +45,11 @@ static DEBUG: ZeroedOnce<DebugModeStatus> = ZeroedOnce::new();
 
 /// Publish the per-hart debug status for [`Port::debugger_connected`], from
 /// the root's partition, which the root splits once.
-pub(crate) fn publish_debug_status(peripherals: DebugPeripherals) {
-    let _ = DEBUG.get_or_init(|| peripherals.debug_mode_status);
+///
+/// # Errors
+/// It was published already: the first stays.
+pub(crate) fn publish_debug_status(peripherals: DebugPeripherals) -> Result<(), DebugModeStatus> {
+    DEBUG.publish(peripherals.debug_mode_status)
 }
 
 impl port::EarlyText for Port {

@@ -99,7 +99,7 @@ const ONCE_READY: u8 = 2;
 /// A shared value in a region the boot zeroes, written once at runtime.
 ///
 /// Zero bytes are the empty cell, whatever `T`'s own layout: the value is
-/// `MaybeUninit` until [`Self::get_or_init`] writes it, so a type without a
+/// `MaybeUninit` until [`Self::publish`] writes it, so a type without a
 /// zero representation (a waker, a mutex) can live in a zeroed static that an
 /// interrupt reads with [`Self::get`].
 #[derive(Zeroable)]
@@ -136,33 +136,31 @@ impl<T> ZeroedOnce<T> {
         Some(unsafe { (*self.value.get()).assume_init_ref() })
     }
 
-    /// The value, writing `init()` first if no one has. The cell has one
-    /// writing context at a time (an interrupt reads with [`Self::get`]); a
-    /// call that finds another write in progress panics rather than wait.
+    /// Write `value` if no one has, and answer it back otherwise: a value
+    /// published already, or another write in progress. It never waits, and
+    /// the value written stays.
+    ///
+    /// # Errors
+    /// The cell is taken: `value` comes back.
     #[allow(unsafe_code, reason = "the winning exchange is the only writer")]
-    #[expect(
-        clippy::expect_used,
-        reason = "both match arms leave the cell `ONCE_READY`; a miss is a defect of this type"
-    )]
-    pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
-        match self.state.compare_exchange(
-            ONCE_EMPTY,
-            ONCE_WRITING,
-            Ordering::Acquire,
-            Ordering::Acquire,
-        ) {
-            Ok(_) => {
-                // SAFETY: the exchange to `ONCE_WRITING` succeeded once; no
-                // reader sees the value before `ONCE_READY`.
-                unsafe { (*self.value.get()).write(init()) };
-                self.state.store(ONCE_READY, Ordering::Release);
-            }
-            Err(state) => assert!(
-                state == ONCE_READY,
-                "a zeroed once cell is written by one context at a time"
-            ),
+    pub fn publish(&self, value: T) -> Result<(), T> {
+        if self
+            .state
+            .compare_exchange(
+                ONCE_EMPTY,
+                ONCE_WRITING,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            )
+            .is_err()
+        {
+            return Err(value);
         }
-        self.get().expect("a written once cell is ready")
+        // SAFETY: the exchange to `ONCE_WRITING` succeeded once; no reader
+        // sees the value before `ONCE_READY`.
+        unsafe { (*self.value.get()).write(value) };
+        self.state.store(ONCE_READY, Ordering::Release);
+        Ok(())
     }
 }
 
@@ -228,30 +226,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_nested_initializer_is_refused_with_static_panic_bytes() {
-        extern crate std;
+    fn a_write_in_progress_refuses_a_second_and_gives_it_back() {
         let cell = ZeroedOnce::<u8>::new();
-        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            cell.get_or_init(|| *cell.get_or_init(|| 1));
-        }))
-        .expect_err("one context initializes the cell at a time");
+        cell.state.store(ONCE_WRITING, Ordering::Release);
+        assert_eq!(cell.publish(2), Err(2));
         assert_eq!(cell.state.load(Ordering::Acquire), ONCE_WRITING);
-        assert_eq!(
-            panic.downcast_ref::<&str>().map(|s| s.as_bytes()),
-            Some(b"a zeroed once cell is written by one context at a time".as_slice())
-        );
+        assert!(cell.get().is_none());
     }
 
     #[test]
     fn a_zeroed_once_cell_is_empty_until_written_once() {
         static CELL: ZeroedOnce<[u8; 4]> = zeroed();
         assert!(CELL.get().is_none());
-        assert_eq!(CELL.get_or_init(|| [1, 2, 3, 4]), &[1, 2, 3, 4]);
-        // A second initializer does not run.
-        assert_eq!(
-            CELL.get_or_init(|| panic!("a second initializer does not run")),
-            &[1, 2, 3, 4]
-        );
+        assert_eq!(CELL.publish([1, 2, 3, 4]), Ok(()));
+        assert_eq!(CELL.publish([5, 6, 7, 8]), Err([5, 6, 7, 8]));
         assert_eq!(CELL.get(), Some(&[1, 2, 3, 4]));
     }
 
@@ -262,7 +250,7 @@ mod tests {
         let shared = Rc::new(());
         {
             let cell = ZeroedOnce::new();
-            cell.get_or_init(|| Rc::clone(&shared));
+            assert!(cell.publish(Rc::clone(&shared)).is_ok());
             assert_eq!(Rc::strong_count(&shared), 2);
         }
         assert_eq!(Rc::strong_count(&shared), 1);
@@ -275,7 +263,7 @@ mod tests {
         let shared = Rc::new(());
         {
             let cell: ZeroedOnce<Rc<()>> = zeroed();
-            cell.get_or_init(|| Rc::clone(&shared));
+            assert!(cell.publish(Rc::clone(&shared)).is_ok());
             assert_eq!(Rc::strong_count(&shared), 2);
         }
         assert_eq!(Rc::strong_count(&shared), 1);
