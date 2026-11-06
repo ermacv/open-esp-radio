@@ -89,6 +89,12 @@ impl<const N: usize> Ordinal<N> {
     }
 }
 
+impl<const N: usize> Default for Ordinal<N> {
+    fn default() -> Self {
+        Self::FIRST
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Ordinal;

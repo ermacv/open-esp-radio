@@ -98,32 +98,6 @@ pub struct PhyBluetoothTxGainImage {
     pub config: u16,
 }
 
-const fn select_bluetooth_tx_gain_index(mut index: u8, target: i16) -> u8 {
-    let mut iteration = 0;
-    while iteration != BLUETOOTH_TX_GAIN_TABLE_HIGH.len() {
-        let current = BLUETOOTH_TX_GAIN_TABLE_HIGH[index as usize] as i16;
-        if target < current {
-            if index as usize == BLUETOOTH_TX_GAIN_TABLE_HIGH.len() - 1 {
-                break;
-            }
-            index += 1;
-            if target >= BLUETOOTH_TX_GAIN_TABLE_HIGH[index as usize] as i16 {
-                break;
-            }
-        } else {
-            if index == 0 {
-                break;
-            }
-            if target < BLUETOOTH_TX_GAIN_TABLE_HIGH[index as usize - 1] as i16 {
-                break;
-            }
-            index -= 1;
-        }
-        iteration += 1;
-    }
-    index
-}
-
 /// Pure Rust translation of archive `phy_bt_get_tx_tab_new` and complete ROM
 /// children `phy_bt_get_tx_gain`, `phy_get_data_sat` and
 /// `phy_get_tx_gain_value`.
@@ -159,7 +133,7 @@ pub(crate) const fn begin_bluetooth_tx_gain(
         target: (parameters.base.wrapping_sub(parameters.attenuation) as i8 as i16)
             .wrapping_sub(parameters.correction as i16),
         interpolation: parameters.calibration_curve[1] as i8,
-        table_index: 0,
+        table_index: crate::tx::gain::GainPosition::FIRST,
     }
 }
 
@@ -172,8 +146,12 @@ pub(crate) const fn next_bluetooth_tx_gain(
     let target = generator
         .target
         .wrapping_add(crate::calibration::math::saturate_signed(driver as i32, 80, -72) as i16);
-    generator.table_index = select_bluetooth_tx_gain_index(generator.table_index, target);
-    let index = crate::ordinal::Ordinal::clamped(generator.table_index);
+    let index = crate::tx::gain::select_gain_position(
+        &BLUETOOTH_TX_GAIN_TABLE_HIGH,
+        generator.table_index,
+        target,
+    );
+    generator.table_index = index;
     let residual = target
         .wrapping_sub(index.at(&BLUETOOTH_TX_GAIN_TABLE_HIGH) as i16)
         .wrapping_sub(generator.interpolation as i16);
