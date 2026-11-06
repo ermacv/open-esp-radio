@@ -459,6 +459,7 @@ async fn lifecycles<W: Binding>(
     } = service;
     let crate::ServiceConnection {
         start,
+        restarts,
         commands,
         runner: control,
     } = connection;
@@ -540,7 +541,9 @@ async fn lifecycles<W: Binding>(
                 };
             }
             LifecycleEnd::Restart(failure) => {
-                if let Some(failure) = crate::failure::convert::restart(failure) {
+                let failure = crate::failure::convert::restart(failure);
+                restarts.record(failure);
+                if let Some(failure) = failure {
                     W::restarted(&failure);
                 }
                 // The next installation's station takes the configuration
