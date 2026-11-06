@@ -151,9 +151,10 @@ impl NetworkTx {
         })
     }
 
-    /// The publisher and the buffers.
+    /// The publisher and the buffers, last built first.
     pub fn into_parts(self) -> (TxPublisher, impl Iterator<Item = TxSlot>) {
-        (self.publisher, self.slots.into_iter())
+        let mut slots = self.slots;
+        (self.publisher, core::iter::from_fn(move || slots.pop()))
     }
 }
 

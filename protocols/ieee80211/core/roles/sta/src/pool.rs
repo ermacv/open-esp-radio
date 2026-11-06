@@ -29,16 +29,26 @@ impl<X, const N: usize> Pool<X, N> {
         pool
     }
 
+    /// The items in their order, through `pop`: the Vec's own iterator indexes.
+    fn in_order(mut items: heapless::Vec<X, N>) -> impl Iterator<Item = X> {
+        let length = items.len();
+        let mut cells = [const { None }; N];
+        for cell in cells.iter_mut().take(length).rev() {
+            *cell = items.pop();
+        }
+        cells.into_iter().flatten()
+    }
+
     pub(crate) fn from_collection(items: heapless::Vec<X, N>) -> Self {
-        let mut items = items.into_iter();
+        let mut items = Self::in_order(items);
         Self {
             items: core::array::from_fn(|_| items.next()),
         }
     }
 
-    /// Partition a bounded bank without collecting through a panicking Vec iterator.
+    /// Partition a bounded bank.
     pub(crate) fn partition(items: heapless::Vec<X, N>, active: usize) -> (Self, Self) {
-        let mut items = items.into_iter();
+        let mut items = Self::in_order(items);
         let free = Self {
             items: core::array::from_fn(|index| if index < active { items.next() } else { None }),
         };

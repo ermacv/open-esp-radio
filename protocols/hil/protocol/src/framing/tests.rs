@@ -242,3 +242,42 @@ fn invalid_internal_lengths_return_typed_errors() {
     assert_eq!(take::<4>(&mut remaining), Err(DecodeError::TooShort));
     assert_eq!(remaining, &[1, 2, 3]);
 }
+
+#[test]
+fn cobs_decoding_agrees_with_the_reference_over_short_frames() {
+    const BYTES: [u8; 6] = [0, 1, 2, 3, 5, 0xFF];
+    let frames = BYTES.iter().flat_map(|a| {
+        BYTES.iter().flat_map(move |b| {
+            BYTES.iter().flat_map(move |c| {
+                BYTES
+                    .iter()
+                    .flat_map(move |d| BYTES.iter().map(move |e| [*a, *b, *c, *d, *e]))
+            })
+        })
+    });
+    for frame in frames {
+        let (mut ours, mut reference) = (frame, frame);
+        let decoded = decode_cobs_in_place(&mut ours);
+        assert_eq!(
+            decoded,
+            cobs::decode_in_place(&mut reference).ok(),
+            "{frame:?}"
+        );
+        if let Some(length) = decoded {
+            assert_eq!(ours[..length], reference[..length], "{frame:?}");
+        }
+    }
+}
+
+#[test]
+fn cobs_decoding_restores_a_block_past_one_code_and_refuses_an_empty_frame() {
+    let raw: [u8; 600] = core::array::from_fn(|index| (index % 255 + 1) as u8);
+    let mut encoded = [0; 620];
+    let written = cobs::encode(&raw, &mut encoded);
+    assert_eq!(
+        decode_cobs_in_place(&mut encoded[..written]),
+        Some(raw.len())
+    );
+    assert_eq!(encoded[..raw.len()], raw);
+    assert_eq!(decode_cobs_in_place(&mut []), None);
+}

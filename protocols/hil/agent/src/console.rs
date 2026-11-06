@@ -367,7 +367,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             self.dropped_messages.fetch_add(1, Ordering::Relaxed);
             return;
         };
-        if tx.write_all(frame).await.is_ok() && tx.write_all(b"\r\n").await.is_ok() {
+        if write_whole(tx, frame).await.is_ok() && write_whole(tx, b"\r\n").await.is_ok() {
             self.sent_frames.fetch_add(1, Ordering::Relaxed);
             if message.key == oer_protocols_hil_protocol::base::BootEvidence::KEY {
                 platform.boot_evidence_written();
@@ -383,11 +383,27 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
     async fn write_note(&self, tx: &mut impl Write, note: &Note<'_>) {
         let mut line = NoteLine::new();
         line.encode(note);
-        if tx.write_all(line.framed()).await.is_err() {
+        if write_whole(tx, line.framed()).await.is_err() {
             self.lost.write_errors.fetch_add(1, Ordering::Relaxed);
             self.lost.dropped.fetch_add(1, Ordering::Relaxed);
         }
     }
+}
+
+/// The transport did not take all the bytes: it failed, or took none of them
+/// or more than it was given.
+struct Unwritten;
+
+/// Write all of `bytes`.
+async fn write_whole(tx: &mut impl Write, mut bytes: &[u8]) -> Result<(), Unwritten> {
+    while !bytes.is_empty() {
+        let written = tx.write(bytes).await.map_err(|_| Unwritten)?;
+        bytes = bytes
+            .get(written..)
+            .filter(|_| written != 0)
+            .ok_or(Unwritten)?;
+    }
+    Ok(())
 }
 
 /// One note as the `OER-DIAG:01` line the host decodes.
