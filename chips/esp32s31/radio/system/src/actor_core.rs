@@ -19,6 +19,18 @@ pub(super) enum Action {
     Continue,
     CloseRf,
 }
+/// The answer to `cause` in a domain that keeps `kept`.
+pub(super) const fn answered(kept: Option<Poison>, cause: Failure) -> Failure {
+    match (kept, cause) {
+        (None, cause) => cause,
+        (Some(poison), Failure::PhyRefused(refusal))
+        | (Some(poison), Failure::PoisonedAfterRefusal { refusal, .. }) => {
+            Failure::PoisonedAfterRefusal { refusal, poison }
+        }
+        (Some(poison), _) => Failure::Poisoned(poison),
+    }
+}
+
 impl ActorCore {
     #[inline(always)]
     pub(super) fn new(mint: MemberMint) -> Self {
@@ -52,7 +64,7 @@ impl ActorCore {
     }
     #[inline(always)]
     pub(super) fn failed(&mut self, cause: Failure) {
-        if let Failure::Poisoned(poison) = cause {
+        if let Some(poison) = cause.poison() {
             self.poison(poison);
         }
     }
@@ -60,13 +72,7 @@ impl ActorCore {
     /// with the refusal the answer began with.
     #[inline(always)]
     pub(super) fn failure(&self, cause: Failure) -> Failure {
-        match (self.state.poisoned, cause) {
-            (None, cause) => cause,
-            (Some(poison), Failure::PhyRefused(refusal)) => {
-                Failure::PoisonedAfterRefusal { refusal, poison }
-            }
-            (Some(poison), _) => Failure::Poisoned(poison),
-        }
+        answered(self.state.poisoned, cause)
     }
     #[inline(always)]
     pub(super) fn health(&self) -> DomainHealth {
@@ -78,7 +84,7 @@ impl ActorCore {
     pub(super) fn failed_enter(&mut self, cause: Failure) -> Action {
         // Both joins admit and prepare from a healthy core before entering;
         // no other actor operation runs during that entered transaction.
-        if let Failure::Poisoned(poison) = cause {
+        if let Some(poison) = cause.poison() {
             self.poison(poison);
             Action::Continue
         } else if self.state.members == 0 {

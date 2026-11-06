@@ -93,9 +93,13 @@ struct Script {
     fail_prepare: bool,
     refuse_enter: bool,
     client_fails_enter: bool,
+    /// The next join answers this.
+    enter_answers: Option<Failure>,
     /// The PHY refuses the next join with this.
     phy_refuses_enter: Option<oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError>,
     poison_track: bool,
+    /// The next track answers this.
+    track_answers: Option<Failure>,
     poison_retune: bool,
     /// The periodic tick of this number (from 1) fails.
     fail_tick: Option<usize>,
@@ -191,6 +195,8 @@ impl ClientBackend<Wifi, RcSlow> for Model {
             let client_failed = core::mem::take(&mut script.client_fails_enter);
             if script.refuse_enter {
                 Some(Failure::Refused)
+            } else if let Some(answer) = script.enter_answers.take() {
+                Some(answer)
             } else if let Some(refusal) = script.phy_refuses_enter.take() {
                 Some(Failure::PhyRefused(refusal))
             } else {
@@ -212,6 +218,12 @@ impl ClientBackend<Wifi, RcSlow> for Model {
 
     async fn track(&mut self, track: WifiTrack) -> Result<WifiTracked, Failed<WifiClocked>> {
         self.push(Event::Track);
+        if let Some(cause) = self.0.borrow_mut().track_answers.take() {
+            return Err(Failed {
+                returned: track.wifi,
+                cause,
+            });
+        }
         if self.0.borrow().poison_track {
             return Err(Failed {
                 returned: track.wifi,
@@ -887,6 +899,111 @@ fn a_phy_refusal_stays_named_when_closing_the_rf_poisons_the_domain() {
         };
         assert_eq!(failed.cause, Failure::Poisoned(poison));
     });
+}
+
+#[test]
+fn a_backends_composite_failure_poisons_the_domain_and_keeps_its_refusal() {
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    let refusal =
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+    let poison = Poison {
+        origin: PoisonOrigin::Prepare,
+        cause: PoisonCause::Controller,
+    };
+    let answer = Failure::PoisonedAfterRefusal { refusal, poison };
+    let model = model(Script {
+        enter_answers: Some(answer),
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let Err(failed) = joined else {
+            panic!("the backend failed the join")
+        };
+        assert_eq!(failed.cause, answer);
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let Err(failed) = joined else {
+            panic!("the domain is poisoned")
+        };
+        assert_eq!(failed.cause, Failure::Poisoned(poison));
+    });
+    // A poisoned join closes no RF; the second join never entered.
+    assert_eq!(
+        model
+            .log()
+            .iter()
+            .filter(|event| matches!(event, Event::Enter))
+            .count(),
+        1
+    );
+    assert!(
+        !model
+            .log()
+            .iter()
+            .any(|event| matches!(event, Event::CloseRf))
+    );
+}
+
+#[test]
+fn a_composite_failure_of_a_track_poisons_the_domain() {
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    let refusal =
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+    let answer = Failure::PoisonedAfterRefusal {
+        refusal,
+        poison: TRACK_POISON,
+    };
+    let model = model(Script {
+        track_answers: Some(answer),
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let Ok(joined) = joined else {
+            panic!("a cold join registers")
+        };
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await
+            .unwrap();
+        let Err(failed) = tracked else {
+            panic!("the backend failed the track")
+        };
+        assert_eq!(failed.cause, answer);
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let Err(failed) = joined else {
+            panic!("the domain is poisoned")
+        };
+        assert_eq!(failed.cause, Failure::Poisoned(TRACK_POISON));
+    });
+}
+
+#[test]
+fn a_composite_failure_answers_the_kept_poison_with_its_own_refusal() {
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    let refusal =
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+    let first = Poison {
+        origin: PoisonOrigin::Prepare,
+        cause: PoisonCause::Controller,
+    };
+    let later = Poison {
+        origin: PoisonOrigin::CloseRf,
+        cause: PoisonCause::Custody,
+    };
+    assert_eq!(
+        crate::actor_core::answered(
+            Some(first),
+            Failure::PoisonedAfterRefusal {
+                refusal,
+                poison: later
+            }
+        ),
+        Failure::PoisonedAfterRefusal {
+            refusal,
+            poison: first
+        }
+    );
 }
 
 #[test]
