@@ -2155,15 +2155,22 @@ impl<'t, 'id: 't, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
         self.port.now = now;
         let mut publication = Some(publication);
         let published = self.with_port(|port| {
-            let Some(publication) = publication.take() else {
+            let Some(taken) = publication.take() else {
                 return Ok(Ok(()));
             };
-            match port.publish(publication, now) {
+            match port.publish(taken, now) {
                 Ok(()) => Ok(Ok(())),
                 Err(PublishError::Refused {
                     publication,
                     reason,
                 }) => Ok(Err((publication, reason))),
+                Err(PublishError::FaultBeforeTaking {
+                    publication: back,
+                    fault,
+                }) => {
+                    publication = Some(back);
+                    Err(fault)
+                }
                 Err(PublishError::Fault(fault)) => Err(fault),
             }
         });
@@ -2173,16 +2180,11 @@ impl<'t, 'id: 't, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
                 publication,
                 reason,
             }),
-            Err(fault) => match publication.take() {
-                // The port did not see the publication: a refusal returns it.
-                Some(publication) if fault == Fault::HardwareUnavailable => {
-                    Err(PublishError::Refused {
-                        publication,
-                        reason: PublishRefused::Busy,
-                    })
-                }
-                _ => Err(PublishError::Fault(fault)),
-            },
+            Err(fault) => Err(match publication.take() {
+                // The port did not see the publication.
+                Some(publication) => PublishError::FaultBeforeTaking { publication, fault },
+                None => PublishError::Fault(fault),
+            }),
         }
     }
 

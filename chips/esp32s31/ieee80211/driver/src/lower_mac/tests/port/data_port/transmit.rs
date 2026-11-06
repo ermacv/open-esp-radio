@@ -1040,6 +1040,43 @@ fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keep
 }
 
 #[test]
+fn an_arena_publication_without_the_registers_is_a_fault_that_returns_it() {
+    with_access(|fixture, _| {
+        fixture.start();
+        fixture.observed.borrow_mut().hardware_unavailable = true;
+        let now = fixture.now();
+        let mut arena = fixture.port.arena();
+        let [first, _] = arena.arenas().expect("the arenas");
+        let memory = crate::mac::tx::test_support::model_backing().expect("model memory");
+        assert!(arena.intake(&first, memory, write_frame).is_ok());
+        let rate = arena
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm24M))
+            .expect("the rate");
+        let id = first.id();
+        let published = arena.publish(
+            ArenaPublication {
+                arena: first,
+                format: ArenaFormat::Single(RetryPlan::new(RetryStage {
+                    rate,
+                    transmissions: core::num::NonZeroU8::MIN,
+                    protection: Protection::None,
+                })),
+                access_category: WmmAccessCategory::BestEffort,
+                protection: Protection::None,
+                encryption: MpduProtection::Open,
+                power: SupportedPower::new(TxPower::Calibrated).expect("power"),
+            },
+            now,
+        );
+        let Err(PublishError::FaultBeforeTaking { publication, fault }) = published else {
+            panic!("a fault that returns the publication");
+        };
+        assert_eq!(fault, Fault::HardwareUnavailable);
+        assert_eq!(publication.arena.id(), id, "the arena's right came back");
+    });
+}
+
+#[test]
 fn a_port_without_its_registers_faults_without_publishing() {
     // The registers are held by an actor transaction: the port's first
     // hardware access is the typed HardwareUnavailable fault, not a panic.

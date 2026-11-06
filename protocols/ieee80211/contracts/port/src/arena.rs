@@ -377,6 +377,15 @@ pub enum PublishError<'p, K, F> {
         /// Why.
         reason: PublishRefused,
     },
+    /// The backend faulted before it took the publication, which comes back
+    /// unchanged: the caller keeps the arena's right, and the fault stays a
+    /// fault.
+    FaultBeforeTaking {
+        /// The unchanged publication, with its arena right.
+        publication: ArenaPublication<'p, K>,
+        /// The fault.
+        fault: F,
+    },
     /// The backend faulted; it keeps the arena in its quarantine.
     Fault(F),
 }
@@ -391,6 +400,11 @@ impl<K: Ieee80211Capabilities, F: core::fmt::Debug> core::fmt::Debug for Publish
                 .debug_struct("Refused")
                 .field("publication", publication)
                 .field("reason", reason)
+                .finish(),
+            Self::FaultBeforeTaking { publication, fault } => f
+                .debug_struct("FaultBeforeTaking")
+                .field("publication", publication)
+                .field("fault", fault)
                 .finish(),
             Self::Fault(fault) => f.debug_tuple("Fault").field(fault).finish(),
         }
@@ -636,7 +650,8 @@ pub trait TxArena<'p, 'id: 'p> {
     ///
     /// # Errors
     ///
-    /// A refusal returns the publication unchanged; a fault quarantines.
+    /// A refusal returns the publication unchanged, and so does a fault
+    /// before the backend took it; any other fault quarantines.
     fn publish(
         &mut self,
         publication: ArenaPublication<'p, Self::Caps>,

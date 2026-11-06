@@ -265,6 +265,10 @@ where
                 plane.refused(publication);
                 Ok(())
             }
+            Err(PublishError::FaultBeforeTaking { publication, fault }) => {
+                plane.refused(publication);
+                Err(ActorFault::Port(fault))
+            }
             Err(PublishError::Fault(fault)) => Err(ActorFault::Port(fault)),
         }
     }

@@ -931,6 +931,13 @@ impl<'t, 'id: 't, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: Mod
                 publication,
                 reason,
             }),
+            Err(PublishError::FaultBeforeTaking {
+                publication,
+                fault: ModelFault,
+            }) => Err(PublishError::FaultBeforeTaking {
+                publication,
+                fault: self.fault(),
+            }),
             Err(PublishError::Fault(ModelFault)) => Err(PublishError::Fault(self.fault())),
         }
     }
