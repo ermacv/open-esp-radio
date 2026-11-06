@@ -151,9 +151,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PortState {
     Stopped,
-    Starting { since: Instant },
+    Starting {
+        since: Instant,
+    },
     Running,
-    Stopping { since: Instant },
+    /// A fault ended the run: nothing new goes out, and what is out comes
+    /// home by the same service a stop uses. The stop's bound starts with
+    /// the stop.
+    Recovering,
+    Stopping {
+        since: Instant,
+    },
 }
 
 /// The station's settings, owned by the port and applied in its turn.
@@ -737,7 +745,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     fn stopping(&self) -> bool {
-        matches!(self.state, PortState::Stopping { .. })
+        matches!(
+            self.state,
+            PortState::Stopping { .. } | PortState::Recovering
+        )
     }
 
     /// The driver, the device and the environment of one shared step.
@@ -774,7 +785,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             PortState::Starting { since } | PortState::Stopping { since } => {
                 add(Some(since.saturating_add(COMMAND_BOUND)));
             }
-            PortState::Stopped | PortState::Running => {}
+            PortState::Stopped | PortState::Running | PortState::Recovering => {}
         }
         // Work a turn owes at once: a stop's withdrawals, an opened gate,
         // settings to apply.
@@ -1490,7 +1501,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             facts.tx = Some(TxFacts::DUE);
             return facts;
         }
-        if !matches!(self.state, PortState::Running | PortState::Stopping { .. }) {
+        if !matches!(
+            self.state,
+            PortState::Running | PortState::Recovering | PortState::Stopping { .. }
+        ) {
             return facts;
         }
         for _ in 0..FACT_POLLS {
@@ -1542,7 +1556,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault> {
         self.check()?;
         self.now = now;
-        if !matches!(self.state, PortState::Running | PortState::Stopping { .. }) {
+        if !matches!(
+            self.state,
+            PortState::Running | PortState::Recovering | PortState::Stopping { .. }
+        ) {
             return Ok(None);
         }
         let done = self
@@ -1588,7 +1605,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> Result<(), SubmitRefusal> {
         let reason = match self.state {
             PortState::Running if self.check().is_ok() => None,
-            PortState::Stopping { .. } => Some(SubmitRefusal::Stopping),
+            PortState::Stopping { .. } | PortState::Recovering => Some(SubmitRefusal::Stopping),
             _ => Some(SubmitRefusal::NotEnabled),
         };
         if let Some(reason) = reason {
@@ -1821,7 +1838,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> Poll<Result<(), StartRefused<Fault>>> {
         self.now = now;
         let since = match self.state {
-            PortState::Running | PortState::Stopping { .. } => {
+            PortState::Running | PortState::Recovering | PortState::Stopping { .. } => {
                 return Poll::Ready(Err(StartRefused::Running));
             }
             PortState::Stopped => {
@@ -1898,6 +1915,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 self.recompute_deadline();
                 now
             }
+            PortState::Recovering => {
+                self.state = PortState::Stopping { since: now };
+                self.recompute_deadline();
+                now
+            }
             PortState::Stopping { since } => since,
         };
         let unconfirmed = |port: &mut Self, cause: StopCause| {
@@ -1935,6 +1957,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             && self.fault.is_some_and(|fault| fault.leaves_owners_whole());
         if recoverable {
             self.fault = None;
+            if matches!(self.state, PortState::Starting { .. } | PortState::Running) {
+                self.state = PortState::Recovering;
+                self.stop_served = false;
+                self.forget_held();
+                self.recompute_deadline();
+            }
         }
         recoverable
     }

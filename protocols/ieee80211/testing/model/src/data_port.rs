@@ -217,7 +217,11 @@ pub type ModelAdmitted<Id, C, X> = AdmittedTxParts<
 enum Radio {
     Stopped,
     Running,
-    Stopping { since: Instant },
+    /// A fault was taken back: nothing new goes out until the stop.
+    Recovering,
+    Stopping {
+        since: Instant,
+    },
 }
 
 /// The time of one port call: the model's steps read it as their clock.
@@ -1109,7 +1113,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) -> Result<(), SubmitRefusal> {
         let refusal = match self.radio {
             Radio::Stopped => Some(SubmitRefusal::NotEnabled),
-            Radio::Stopping { .. } => Some(SubmitRefusal::Stopping),
+            Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
             Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
                 Some(SubmitRefusal::Stopping)
             }
@@ -1392,7 +1396,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
         let since = match self.radio {
             Radio::Stopped => return Poll::Ready(Ok(())),
-            Radio::Running => {
+            Radio::Running | Radio::Recovering => {
                 self.air
                     .disables
                     .set(self.air.disables.get().saturating_add(1));
@@ -1433,6 +1437,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let recovered = self.air.recover();
         if recovered {
             self.fault = None;
+            if self.radio == Radio::Running {
+                self.radio = Radio::Recovering;
+                self.held.draining.set(true);
+            }
         }
         recovered
     }

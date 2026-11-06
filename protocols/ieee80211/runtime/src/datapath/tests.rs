@@ -967,6 +967,40 @@ fn a_fault_the_port_stops_past_asks_for_a_restart_and_the_next_ends_the_actor() 
 }
 
 #[test]
+fn a_port_recovering_sends_nothing_new_however_late_the_stop_comes() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.settle();
+        let sent = bench.air.sent().len();
+        bench.air.allow_recovery();
+        bench.air.poison();
+        bench.advance(1);
+        bench.settle();
+        let mut recovering = false;
+        while let Some(message) = bench.next() {
+            recovering |= matches!(message, FromActor::Recovering(ActorFault::Port(_)));
+        }
+        assert!(recovering);
+        // The lifecycle has not asked for the stop: the port waits for it,
+        // with room on the air for a new frame.
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, false);
+        bench.send_msdu(msdu(0, &[2; 8]));
+        bench.settle();
+        bench.advance(1_000);
+        bench.settle();
+        assert_eq!(bench.air.sent().len(), sent, "nothing new went out");
+        assert!(bench.end.is_none(), "and nothing faulted again");
+    });
+}
+
+#[test]
 fn a_stop_returns_the_networks_frames_and_confirms() {
     bench(|bench| {
         bench.start();
