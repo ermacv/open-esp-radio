@@ -418,6 +418,7 @@ pub(super) fn radio_failure(value: oer_chips_esp32s31_radio_client::Failure) -> 
     match value {
         Source::Refused => RadioFailure::Refused,
         Source::ClientFailed => RadioFailure::ClientFailed,
+        Source::PhyRefused(v0) => RadioFailure::PhyRefused(phy_domain_error(v0)),
         Source::Poisoned(v0) => RadioFailure::Poisoned(radio_poison(v0)),
     }
 }
@@ -481,6 +482,9 @@ pub(super) fn radio_poison_cause(
         Source::CommonPower(v0) => RadioPoisonCause::CommonPower(common_radio_power_error(v0)),
         Source::ModemClock(v0) => RadioPoisonCause::ModemClock(modem_clock_error(v0)),
         Source::Rollback => RadioPoisonCause::Rollback,
+        Source::RollbackAfterRefusal(v0) => {
+            RadioPoisonCause::RollbackAfterRefusal(phy_domain_error(v0))
+        }
         Source::Controller => RadioPoisonCause::Controller,
         Source::Custody => RadioPoisonCause::Custody,
     }

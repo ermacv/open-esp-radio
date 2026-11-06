@@ -122,6 +122,7 @@ impl TrackingFault {
             | PoisonCause::CommonPower(_)
             | PoisonCause::ModemClock(_)
             | PoisonCause::Rollback
+            | PoisonCause::RollbackAfterRefusal(_)
             | PoisonCause::Controller => Class::UnexpectedHardware,
         }
     }
@@ -439,6 +440,24 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSys
     async fn close_rf(&mut self) {
         let result = Boundary::new(self.backend.close_rf(LastClientLeft(()))).await;
         self.core.closed(result);
+    }
+}
+
+/// Why a join the PHY refused with `refusal` failed, by whether Wi-Fi's
+/// rollback finished: the refusal stays named either way.
+#[cfg(any(target_arch = "riscv32", test))]
+const fn phy_refused_join(
+    refusal: oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError,
+    rolled_back: bool,
+) -> Failure {
+    if rolled_back {
+        Failure::PhyRefused(refusal)
+    } else {
+        Failure::Poisoned(Poison::request(
+            oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
+            oer_chips_esp32s31_radio_client::RequestKind::Join,
+            PoisonCause::RollbackAfterRefusal(refusal),
+        ))
     }
 }
 

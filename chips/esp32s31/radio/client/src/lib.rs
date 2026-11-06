@@ -206,6 +206,7 @@ pub enum PhyPreparation {
 /// | --- | --- |
 /// | [`Refused`](Self::Refused) | Nothing: refused before any hardware write, a clock planner's refusal before its first write included. |
 /// | [`ClientFailed`](Self::ClientFailed) | Only the client's own hardware (its MAC partition, its clocks, its coexistence participation), and the rollback restored it. The shared domain (PHY, shared radio registers, common power) was not touched, or not left in an intermediate state. |
+/// | [`PhyRefused`](Self::PhyRefused) | The same as `ClientFailed`: the PHY refused the client before any access and the client's own work was rolled back; it names the refusal. |
 /// | [`Poisoned`](Self::Poisoned) | Shared state was written before the failure, or the rollback failed: the domain is poisoned until reset. The [`Poison`] names the first failure, which may precede this request. |
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Failure {
@@ -214,6 +215,9 @@ pub enum Failure {
     /// The client's own hardware work failed and was rolled back; the shared
     /// domain is healthy.
     ClientFailed,
+    /// The PHY refused the client before any access; the client's own work
+    /// was rolled back and the shared domain is healthy.
+    PhyRefused(oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError),
     /// Shared hardware work failed, or had failed before: the PHY domain is
     /// poisoned until reset by the first failure it names.
     Poisoned(Poison),
