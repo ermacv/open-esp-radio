@@ -611,7 +611,24 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.check().err()
     }
 
-    /// Report `fault` as the port would.
+    /// Refuse the next publication past its buffer's attachment.
+    #[cfg(test)]
+    pub(crate) fn refuse_values_for_test(&mut self) {
+        self.driver.refuse_values_for_test = true;
+    }
+
+    /// The tickets in the driver's hand and the keys' uses in the core.
+    #[cfg(test)]
+    pub(crate) fn admissions_for_test(&mut self) -> (usize, Option<u32>) {
+        let tickets = self.driver.tickets.iter().flatten().count();
+        let uses = match self.driver.core.view() {
+            CoreView::Open(core) => Some(core.key_uses_for_test()),
+            _ => None,
+        };
+        (tickets, uses)
+    }
+
+    /// Forget every installed key, so that a publication names a missing one.
     #[cfg(test)]
     pub(crate) fn uninstall_keys_for_test(&mut self) {
         for key in &mut self.driver.keys {

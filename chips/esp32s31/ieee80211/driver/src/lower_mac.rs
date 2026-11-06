@@ -1965,6 +1965,16 @@ where
             .ok_or(LowerMacFault::Key(CryptoKeyError::Occupied))
     }
 
+    /// The admitted rights of every key.
+    #[cfg(test)]
+    pub(crate) fn key_uses_for_test(&self) -> u32 {
+        self.keys
+            .uses
+            .iter()
+            .map(|uses| u32::from(uses.get()))
+            .sum()
+    }
+
     /// Return one admitted right to its key's count. A right naming no bank
     /// position poisons the core; its ticket still returns.
     fn release_key(&mut self, key: KeyUse<'core, Path>) -> (usize, TxTicket<'core, Path>) {
