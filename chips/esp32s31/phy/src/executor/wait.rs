@@ -183,37 +183,55 @@ pub trait PhyShortDelay {
     fn settle_micros(micros: u32) -> bool;
 }
 
-/// Whether a wait of `kind` and `micros` is a short settle `S` completes
-/// synchronously. Readiness retries keep their timer cadence at any size.
-const fn synchronous_settle<S: PhyShortDelay>(kind: Kind, micros: u64) -> bool {
-    matches!(kind, Kind::Settle) && micros != 0 && micros <= S::MAX_MICROS as u64
+/// The length of a wait of `kind` and `micros`, if it is a short settle `S`
+/// completes synchronously. Readiness retries keep their timer cadence at any
+/// size.
+const fn synchronous_settle<S: PhyShortDelay>(kind: Kind, micros: u64) -> Option<u32> {
+    if matches!(kind, Kind::Settle) && micros != 0 && micros <= S::MAX_MICROS as u64 {
+        Some(micros as u32)
+    } else {
+        None
+    }
+}
+
+/// Why a wait could not run its full length.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyWaitRefused {
+    /// The backend refused a settle within its stated bound.
+    Settle,
+    /// The deadline is past the timer's range.
+    Deadline,
 }
 
 /// Wait at least `micros` for `kind`.
 ///
 /// A short settle completes at its first poll through `S`; every other wait
 /// ends on `timer` at the deadline taken when this is called, so the time
-/// before the first poll counts. A deadline past the timer's range is never
-/// reached: the wait fail-stops instead of ending early.
+/// before the first poll counts.
+///
+/// # Errors
+///
+/// The wait did not run its length; the caller must not act as if it had.
 pub fn delay<S: PhyShortDelay, T: Timer + ?Sized>(
     timer: &T,
     kind: Kind,
     micros: u64,
-) -> impl Future<Output = ()> + '_ {
-    let deadline = (!synchronous_settle::<S>(kind, micros))
+) -> impl Future<Output = Result<(), PhyWaitRefused>> + '_ {
+    let settle = synchronous_settle::<S>(kind, micros);
+    let deadline = settle
+        .is_none()
         .then(|| timer.now().checked_add(Duration::from_micros(micros)));
     async move {
-        match deadline {
-            None => {
-                let micros = u32::try_from(micros).expect("a short settle fits u32");
-                assert!(
-                    S::settle_micros(micros),
-                    "a short settle is within its bound"
-                );
+        match (settle, deadline) {
+            (Some(micros), _) => {
+                if !S::settle_micros(micros) {
+                    return Err(PhyWaitRefused::Settle);
+                }
             }
-            Some(Some(deadline)) => timer.wait_until(deadline).await,
-            Some(None) => core::future::pending().await,
+            (None, Some(Some(deadline))) => timer.wait_until(deadline).await,
+            (None, _) => return Err(PhyWaitRefused::Deadline),
         }
+        Ok(())
     }
 }
 
@@ -227,7 +245,7 @@ pub fn delay_observed<'t, S: PhyShortDelay, T: Timer + ?Sized>(
     micros: u64,
     enabled: bool,
     mut observe: impl FnMut(Event) + 't,
-) -> impl Future<Output = ()> + 't {
+) -> impl Future<Output = Result<(), PhyWaitRefused>> + 't {
     let start = timer.now();
     async move {
         let mut wait = pin!(delay::<S, T>(timer, kind, micros));
@@ -249,12 +267,9 @@ pub fn delay_observed<'t, S: PhyShortDelay, T: Timer + ?Sized>(
                     });
                 }
             }
-            match result {
-                Poll::Ready(()) => Poll::Ready(()),
-                Poll::Pending => Poll::Pending,
-            }
+            result
         })
-        .await;
+        .await
     }
 }
 

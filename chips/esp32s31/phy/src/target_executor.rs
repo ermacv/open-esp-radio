@@ -233,6 +233,15 @@ impl PhyShortDelay for crate::RomShortDelay {
     }
 }
 
+impl From<crate::executor::wait::PhyWaitRefused> for PhyTargetPortError {
+    fn from(refused: crate::executor::wait::PhyWaitRefused) -> Self {
+        match refused {
+            crate::executor::wait::PhyWaitRefused::Settle => Self::HardwareCapabilityUnavailable,
+            crate::executor::wait::PhyWaitRefused::Deadline => Self::DeadlineOverflow,
+        }
+    }
+}
+
 /// Failure while completing a finite target PHY hardware operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTargetPortError {
@@ -277,11 +286,11 @@ pub async fn complete_final_i2c<D: PhyShortDelay>(
         match binding.action() {
             PhyColdI2cAction::StartRead { .. } => match binding.start_target(registers) {
                 Ok(()) => {}
-                Err(PhyColdI2cError::BusyAtStart) => delay::<D, _>(timer, Kind::BusBusy, 1).await,
+                Err(PhyColdI2cError::BusyAtStart) => delay::<D, _>(timer, Kind::BusBusy, 1).await?,
                 Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
             },
             PhyColdI2cAction::AwaitReadCompletionEdge { .. } => {
-                delay::<D, _>(timer, Kind::Completion, 1).await;
+                delay::<D, _>(timer, Kind::Completion, 1).await?;
                 match binding
                     .observe_target_edge(registers)
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
@@ -317,7 +326,7 @@ macro_rules! define_i2c_executor {
         ));
     };
     (@ $function:ident, $binding:ty, $completion:ty, $exhausted:expr) => {
-        pub async fn $function<F: Future<Output = ()>>(
+        pub async fn $function<F: Future<Output = Result<(), crate::executor::wait::PhyWaitRefused>>>(
             mut binding: $binding,
             registers: &mut impl SharedPhyAccess,
             mut delay: impl FnMut(crate::executor::wait::Kind, u64) -> F,
@@ -328,14 +337,14 @@ macro_rules! define_i2c_executor {
                         match binding.start_target(registers) {
                             Ok(()) => {}
                             Err(PhyColdI2cError::BusyAtStart) => {
-                                delay(crate::executor::wait::Kind::BusBusy, 1).await
+                                delay(crate::executor::wait::Kind::BusBusy, 1).await?
                             }
                             Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
                         }
                     }
                     PhyColdI2cAction::AwaitReadCompletionEdge { .. }
                     | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                        delay(crate::executor::wait::Kind::Completion, 1).await;
+                        delay(crate::executor::wait::Kind::Completion, 1).await?;
                         match binding
                             .observe_target_edge(registers)
                             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
@@ -368,7 +377,9 @@ macro_rules! define_i2c_executor {
 // polling bound or turn the recovered fallback path into an executor error.
 macro_rules! define_timeout_pbus_executor {
     ($function:ident, $binding:ty, $completion:ty) => {
-        pub async fn $function<F: Future<Output = ()>>(
+        pub async fn $function<
+            F: Future<Output = Result<(), crate::executor::wait::PhyWaitRefused>>,
+        >(
             mut binding: $binding,
             registers: &mut impl SharedPhyAccess,
             mut delay: impl FnMut(crate::executor::wait::Kind, u64) -> F,
@@ -379,14 +390,14 @@ macro_rules! define_timeout_pbus_executor {
                     started = true;
                     break;
                 }
-                delay(crate::executor::wait::Kind::BusBusy, 1).await;
+                delay(crate::executor::wait::Kind::BusBusy, 1).await?;
             }
             if !started {
                 return Ok(binding.into_timeout_completion());
             }
 
             for _ in 0..HARDWARE_EDGE_LIMIT {
-                delay(crate::executor::wait::Kind::Completion, 1).await;
+                delay(crate::executor::wait::Kind::Completion, 1).await?;
                 match binding
                     .observe_target_edge(registers)
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
@@ -432,11 +443,11 @@ pub async fn complete_bluetooth_i2c<D: PhyShortDelay>(
         match binding.action() {
             PhyBluetoothI2cAction::StartCommand => match binding.start_target(registers) {
                 Ok(()) => {}
-                Err(PhyColdI2cError::BusyAtStart) => delay::<D, _>(timer, Kind::BusBusy, 1).await,
+                Err(PhyColdI2cError::BusyAtStart) => delay::<D, _>(timer, Kind::BusBusy, 1).await?,
                 Err(_) => return Err(PhyTargetPortError::HardwareInvariant),
             },
             PhyBluetoothI2cAction::AwaitCompletionEdge => {
-                delay::<D, _>(timer, Kind::Completion, 1).await;
+                delay::<D, _>(timer, Kind::Completion, 1).await?;
                 match binding
                     .observe_target_edge(registers)
                     .map_err(|_| PhyTargetPortError::HardwareInvariant)?
@@ -465,13 +476,13 @@ pub async fn complete_i2c_configuration<D: PhyShortDelay>(
                 match binding.start_target(registers) {
                     Ok(()) => {}
                     Err(PhyColdI2cError::BusyAtStart) => {
-                        delay::<D, _>(timer, Kind::BusBusy, 1).await
+                        delay::<D, _>(timer, Kind::BusBusy, 1).await?
                     }
                     Err(_) => return Err(PhyTargetPortError::HardwareInvariant),
                 }
             }
             oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::AwaitCompletionEdge => {
-                delay::<D, _>(timer, Kind::Completion, 1).await;
+                delay::<D, _>(timer, Kind::Completion, 1).await?;
                 match binding
                     .observe_target_edge(registers)
                     .map_err(|_| PhyTargetPortError::HardwareInvariant)?
