@@ -129,8 +129,56 @@ pub struct OrdinaryTxReport {
     pub retries: OrdinaryTxRetryReport,
     /// Protection selected for the final publication.
     pub protection: TxProtectionDecision,
-    /// BlockAck received for a BlockAckReq.
-    pub block_ack: Option<HtBlockAckObservation>,
+}
+
+/// What answered a delivered publication: the only response it could get.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OrdinaryTxResponse {
+    /// The frame solicited no response.
+    Unsolicited,
+    /// An ACK answered it.
+    Ack,
+    /// A BlockAck answered a BlockAckReq.
+    BlockAck(HtBlockAckObservation),
+}
+
+/// Why a completed publication was not delivered.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OrdinaryTxFailure {
+    AckTimeout,
+    CtsTimeout,
+    Collision,
+    TimedOut,
+    KeyRefused,
+}
+
+impl OrdinaryTxFailure {
+    pub(crate) const fn status(self) -> oer_protocols_ieee80211_contracts_port::TxStatus {
+        use oer_protocols_ieee80211_contracts_port::TxStatus;
+        match self {
+            Self::AckTimeout => TxStatus::AckTimeout,
+            Self::CtsTimeout => TxStatus::CtsTimeout,
+            Self::Collision => TxStatus::Collision,
+            Self::TimedOut => TxStatus::TimedOut,
+            Self::KeyRefused => TxStatus::KeyRefused,
+        }
+    }
+}
+
+/// How a completion ended its publication.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OrdinaryTxEnd {
+    Delivered(OrdinaryTxResponse),
+    Failed(OrdinaryTxFailure),
+}
+
+impl OrdinaryTxEnd {
+    const fn status(self) -> oer_protocols_ieee80211_contracts_port::TxStatus {
+        match self {
+            Self::Delivered(_) => oer_protocols_ieee80211_contracts_port::TxStatus::Success,
+            Self::Failed(failure) => failure.status(),
+        }
+    }
 }
 
 /// Exact causes of re-publication within one ordinary-MPDU transaction.
@@ -197,8 +245,8 @@ impl OrdinaryTxCompleted {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrdinaryTxOutcome {
-    Success(OrdinaryTxCompleted),
-    HardwareFailure(OrdinaryTxCompleted),
+    Success(OrdinaryTxCompleted, OrdinaryTxResponse),
+    HardwareFailure(OrdinaryTxCompleted, OrdinaryTxFailure),
     HardwareTimeout(OrdinaryTxReport),
     CollisionLimit(OrdinaryTxReport),
 }
@@ -207,12 +255,12 @@ impl OrdinaryTxOutcome {
     pub const fn report(self) -> OrdinaryTxReport {
         match self {
             Self::HardwareTimeout(report) | Self::CollisionLimit(report) => report,
-            Self::Success(completed) | Self::HardwareFailure(completed) => completed.report(),
+            Self::Success(completed, _) | Self::HardwareFailure(completed, _) => completed.report(),
         }
     }
 
     pub const fn is_success(self) -> bool {
-        matches!(self, Self::Success(_))
+        matches!(self, Self::Success(..))
     }
 }
 
@@ -499,7 +547,7 @@ type OrdinaryCompletion = CompletionObservation<(TxCompletion, Option<HtBlockAck
 /// A published operation moves into this value only after Observed(status).
 struct FinishedTx {
     active: ActiveTx,
-    status: oer_protocols_ieee80211_contracts_port::TxStatus,
+    end: OrdinaryTxEnd,
 }
 
 impl ActiveTx {
@@ -509,15 +557,23 @@ impl ActiveTx {
         block_ack: Option<HtBlockAckObservation>,
     ) -> FinishedTx {
         use oer_protocols_ieee80211_contracts_port::TxStatus;
-        let status = match (self.response, block_ack, completion.tx_status()) {
-            (MacLegacyTxResponse::BlockAck, Some(_), _) => TxStatus::Success,
-            (MacLegacyTxResponse::BlockAck, None, TxStatus::Success) => TxStatus::AckTimeout,
-            (_, _, status) => status,
+        use {OrdinaryTxEnd::Delivered, OrdinaryTxEnd::Failed, OrdinaryTxResponse as Response};
+        let end = match (self.response, block_ack, completion.tx_status()) {
+            (MacLegacyTxResponse::BlockAck, Some(observed), _) => {
+                Delivered(Response::BlockAck(observed))
+            }
+            (MacLegacyTxResponse::BlockAck, None, TxStatus::Success) => {
+                Failed(OrdinaryTxFailure::AckTimeout)
+            }
+            (MacLegacyTxResponse::Ack, _, TxStatus::Success) => Delivered(Response::Ack),
+            (MacLegacyTxResponse::None, _, TxStatus::Success) => Delivered(Response::Unsolicited),
+            (_, _, TxStatus::AckTimeout) => Failed(OrdinaryTxFailure::AckTimeout),
+            (_, _, TxStatus::CtsTimeout) => Failed(OrdinaryTxFailure::CtsTimeout),
+            (_, _, TxStatus::Collision) => Failed(OrdinaryTxFailure::Collision),
+            (_, _, TxStatus::TimedOut) => Failed(OrdinaryTxFailure::TimedOut),
+            (_, _, TxStatus::KeyRefused) => Failed(OrdinaryTxFailure::KeyRefused),
         };
-        FinishedTx {
-            active: self,
-            status,
-        }
+        FinishedTx { active: self, end }
     }
 }
 
@@ -1057,7 +1113,7 @@ where
                         .as_mut()
                         .detach_completed(hardware, active.cookie)?;
                     let finished = active.finish(completion, block_ack);
-                    return self.finish_completion(hardware, finished, completion, block_ack);
+                    return self.finish_completion(hardware, finished, completion);
                 }
                 CompletionObservation::NoEffect => {}
             }
@@ -1287,7 +1343,7 @@ where
                         .as_mut()
                         .detach_completed(hardware, active.cookie)?;
                     let finished = active.finish(completion, block_ack);
-                    return self.finish_completion(hardware, finished, completion, block_ack);
+                    return self.finish_completion(hardware, finished, completion);
                 }
                 CompletionObservation::NoEffect => {}
             }
@@ -1380,7 +1436,7 @@ where
                         .as_mut()
                         .detach_completed(hardware, active.cookie)?;
                     let finished = active.finish(completion, block_ack);
-                    return self.finish_completion(hardware, finished, completion, block_ack);
+                    return self.finish_completion(hardware, finished, completion);
                 }
                 CompletionObservation::NoEffect => {}
             }
@@ -1482,9 +1538,9 @@ where
         hardware: &mut H,
         finished: FinishedTx,
         completion: TxCompletion,
-        block_ack: Option<HtBlockAckObservation>,
     ) -> Result<Step, OrdinaryTxError> {
-        let FinishedTx { mut active, status } = finished;
+        let FinishedTx { mut active, end } = finished;
+        let status = end.status();
         let attempts = active.retry.publications();
         let final_rate = active.retry.current_rate();
         let decision = if active.single_attempt.is_some() {
@@ -1522,20 +1578,19 @@ where
                     completion: Some(completion),
                     retries: active.retries,
                     protection: active.protection,
-                    block_ack: if success { block_ack } else { None },
                 };
-                let outcome = if success {
-                    OrdinaryTxOutcome::Success(OrdinaryTxCompleted {
-                        completion,
-                        status,
-                        report,
-                    })
-                } else {
-                    OrdinaryTxOutcome::HardwareFailure(OrdinaryTxCompleted {
-                        completion,
-                        status,
-                        report,
-                    })
+                let completed = OrdinaryTxCompleted {
+                    completion,
+                    status,
+                    report,
+                };
+                let outcome = match end {
+                    OrdinaryTxEnd::Delivered(response) => {
+                        OrdinaryTxOutcome::Success(completed, response)
+                    }
+                    OrdinaryTxEnd::Failed(failure) => {
+                        OrdinaryTxOutcome::HardwareFailure(completed, failure)
+                    }
                 };
                 Ok(Step::Complete(outcome))
             }
@@ -1587,7 +1642,6 @@ where
                 completion: None,
                 retries: active.retries,
                 protection: active.protection,
-                block_ack: None,
             };
             let outcome = OrdinaryTxOutcome::HardwareTimeout(report);
             return Ok(Step::Complete(outcome));
@@ -1624,7 +1678,6 @@ where
                     completion: None,
                     retries: active.retries,
                     protection: active.protection,
-                    block_ack: None,
                 };
                 let outcome = OrdinaryTxOutcome::CollisionLimit(report);
                 Ok(Step::Complete(outcome))

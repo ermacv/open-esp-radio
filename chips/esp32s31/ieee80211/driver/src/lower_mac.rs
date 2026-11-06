@@ -563,6 +563,17 @@ pub enum LowerMacFault {
     KeyBank,
 }
 
+/// What answered a delivered publication.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PublicationResponse {
+    /// The frame solicited no response.
+    Unsolicited,
+    /// An ACK answered it.
+    Ack,
+    /// A BlockAck answered a BlockAckReq.
+    BlockAck(BlockAckReport),
+}
+
 /// How one attempt ended, as the ESP32-S31 observed it. The backend maps it
 /// onto the portable completion. A detached hardware timeout is
 /// `TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)`: whether
@@ -575,13 +586,13 @@ pub enum PublicationEnd {
         /// Original aggregate member positions; bit zero for a single.
         msdus: u64,
     },
-    /// Its completion arrived: the hardware's status, the ACK's SNR and a
-    /// BlockAck the attempt solicited.
-    Completed {
-        status: TxStatus,
+    /// Its completion arrived and it was delivered.
+    Delivered {
+        response: PublicationResponse,
         ack_snr_db: Option<i8>,
-        block_ack: Option<BlockAckReport>,
     },
+    /// Its completion arrived without delivering it.
+    Undelivered(crate::ordinary_tx::OrdinaryTxFailure),
     /// An internal collision detached it: the publication did not reach
     /// the air.
     Collision,
@@ -1602,10 +1613,11 @@ where
         if matches!(
             end,
             PublicationEnd::Collision
-                | PublicationEnd::Completed {
-                    status: TxStatus::AckTimeout | TxStatus::CtsTimeout | TxStatus::Collision,
-                    ..
-                }
+                | PublicationEnd::Undelivered(
+                    crate::ordinary_tx::OrdinaryTxFailure::AckTimeout
+                        | crate::ordinary_tx::OrdinaryTxFailure::CtsTimeout
+                        | crate::ordinary_tx::OrdinaryTxFailure::Collision
+                )
         ) {
             self.tx
                 .record_retry_failure(role, LegacyTxQueue::from_access_category(queue.category()));
@@ -2783,25 +2795,23 @@ fn receive_policy(config: &LowerMacConfig, vif: &CoreVif) -> Result<ReceivePolic
 
 /// How one publication ended.
 fn publication_end(outcome: OrdinaryTxOutcome) -> PublicationEnd {
+    use crate::ordinary_tx::OrdinaryTxResponse as Response;
     match outcome {
-        OrdinaryTxOutcome::Success(completed) | OrdinaryTxOutcome::HardwareFailure(completed) => {
-            PublicationEnd::Completed {
-                status: completed.status(),
-                ack_snr_db: completed.report().status.ack_snr_db,
-                block_ack: block_ack(completed.report()),
-            }
-        }
+        OrdinaryTxOutcome::Success(completed, response) => PublicationEnd::Delivered {
+            response: match response {
+                Response::Unsolicited => PublicationResponse::Unsolicited,
+                Response::Ack => PublicationResponse::Ack,
+                Response::BlockAck(observation) => PublicationResponse::BlockAck(BlockAckReport {
+                    start_sequence: observation.block_ack.starting_sequence,
+                    bitmap: observation.block_ack.bitmap,
+                }),
+            },
+            ack_snr_db: completed.report().status.ack_snr_db,
+        },
+        OrdinaryTxOutcome::HardwareFailure(_, failure) => PublicationEnd::Undelivered(failure),
         OrdinaryTxOutcome::HardwareTimeout(_) => PublicationEnd::TimedOut,
         OrdinaryTxOutcome::CollisionLimit(_) => PublicationEnd::Collision,
     }
-}
-
-/// The BlockAck a BlockAckReq's completion carried.
-fn block_ack(report: crate::ordinary_tx::OrdinaryTxReport) -> Option<BlockAckReport> {
-    report.block_ack.map(|observation| BlockAckReport {
-        start_sequence: observation.block_ack.starting_sequence,
-        bitmap: observation.block_ack.bitmap,
-    })
 }
 
 #[cfg(test)]

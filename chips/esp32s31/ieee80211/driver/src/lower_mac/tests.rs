@@ -1296,17 +1296,25 @@ fn submit(core: &mut Core, hardware: &mut Hardware, values: Request) -> Result<(
 
 /// A publication's end by its completion, without a BlockAck.
 fn completed(status: TxStatus, ack_snr_db: Option<i8>) -> PublicationEnd {
-    PublicationEnd::Completed {
-        status,
-        ack_snr_db,
-        block_ack: None,
+    use crate::ordinary_tx::OrdinaryTxFailure as Failure;
+    match status {
+        TxStatus::Success => PublicationEnd::Delivered {
+            response: PublicationResponse::Ack,
+            ack_snr_db,
+        },
+        TxStatus::AckTimeout => PublicationEnd::Undelivered(Failure::AckTimeout),
+        TxStatus::CtsTimeout => PublicationEnd::Undelivered(Failure::CtsTimeout),
+        TxStatus::Collision => PublicationEnd::Undelivered(Failure::Collision),
+        TxStatus::TimedOut => PublicationEnd::Undelivered(Failure::TimedOut),
+        TxStatus::KeyRefused => PublicationEnd::Undelivered(Failure::KeyRefused),
     }
 }
 
 /// The hardware status of a completed publication.
 fn status_of(end: &PublicationEnd) -> Option<TxStatus> {
     match end {
-        PublicationEnd::Completed { status, .. } => Some(*status),
+        PublicationEnd::Delivered { .. } => Some(TxStatus::Success),
+        PublicationEnd::Undelivered(failure) => Some(failure.status()),
         _ => None,
     }
 }
@@ -1840,9 +1848,11 @@ fn a_block_ack_request_reports_its_block_ack() {
             .unwrap();
         assert!(matches!(
             events.completions[0],
-            PublicationEnd::Completed {
-                status: TxStatus::Success,
-                block_ack: Some(BlockAckReport { start_sequence, bitmap: 0b1011 }),
+            PublicationEnd::Delivered {
+                response: PublicationResponse::BlockAck(BlockAckReport {
+                    start_sequence,
+                    bitmap: 0b1011,
+                }),
                 ..
             } if start_sequence == SequenceNumber::new(100).unwrap()
         ));
@@ -1871,20 +1881,22 @@ fn review_bar_requires_the_solicited_block_ack_result_bit() {
             let mut events = Events::default();
             core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
                 .unwrap();
-            match events.completions[0] {
-                PublicationEnd::Completed {
-                    status: actual,
-                    block_ack,
-                    ..
-                } => {
-                    assert_eq!(
-                        actual, expected,
-                        "BAR status={status}, BA-received={received}"
-                    );
-                    assert_eq!(block_ack.is_some(), received);
-                }
-                other => panic!("wrong terminal: {other:?}"),
-            }
+            let end = events.completions[0];
+            assert_eq!(
+                status_of(&end),
+                Some(expected),
+                "BAR status={status}, BA-received={received}"
+            );
+            assert_eq!(
+                matches!(
+                    end,
+                    PublicationEnd::Delivered {
+                        response: PublicationResponse::BlockAck(_),
+                        ..
+                    }
+                ),
+                received
+            );
         });
     }
 }
@@ -1904,11 +1916,7 @@ fn review_bar_status_zero_without_block_ack_is_not_delivered() {
             .unwrap();
         assert!(matches!(
             events.completions[0],
-            PublicationEnd::Completed {
-                status: TxStatus::AckTimeout,
-                block_ack: None,
-                ..
-            }
+            PublicationEnd::Undelivered(crate::ordinary_tx::OrdinaryTxFailure::AckTimeout)
         ));
     });
 }

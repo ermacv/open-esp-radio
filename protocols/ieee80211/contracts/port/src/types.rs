@@ -1270,6 +1270,15 @@ impl<R> RetryPlan<R> {
         &self.first
     }
 
+    /// The plan past its first stage; `None` when that stage was its last.
+    pub fn after_first(self) -> Option<Self> {
+        let [second, third, fourth] = self.rest;
+        Some(Self {
+            first: second?,
+            rest: [third, fourth, None],
+        })
+    }
+
     /// The first stage, by value: a frame of one rate takes it.
     pub fn into_first(self) -> RetryStage<R> {
         self.first

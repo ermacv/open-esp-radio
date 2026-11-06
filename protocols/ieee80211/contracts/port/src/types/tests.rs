@@ -149,3 +149,24 @@ fn mapping_keeps_all_stages_and_stops_at_the_first_rate_error() {
     assert_eq!(failure.unwrap_err(), 2);
     assert_eq!(visited, [0, 1, 2]);
 }
+
+#[test]
+fn a_plan_past_its_first_stage_keeps_the_rest_in_order_and_ends() {
+    let stage = |rate: u8| RetryStage {
+        rate,
+        transmissions: core::num::NonZeroU8::MIN,
+        protection: Protection::None,
+    };
+    let plan = RetryPlan::new(stage(1)).then(stage(2)).ok().expect("room");
+    let plan = plan.then(stage(3)).ok().expect("room");
+    let plan = plan.then(stage(4)).ok().expect("room");
+    let mut rates = [0; RETRY_STAGES];
+    let mut rest = Some(plan);
+    for rate in &mut rates {
+        let plan = rest.expect("a stage for each rate");
+        *rate = plan.first().rate;
+        rest = plan.after_first();
+    }
+    assert_eq!(rates, [1, 2, 3, 4]);
+    assert!(rest.is_none(), "the last stage ends the plan");
+}

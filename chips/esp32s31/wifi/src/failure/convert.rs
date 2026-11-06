@@ -40,10 +40,6 @@ pub(crate) fn backend_fault(
         }
         Source::DescriptorMissing { queue } => BackendFault::DescriptorMissing { queue },
         Source::ReturnRefused { queue } => BackendFault::ReturnRefused { queue },
-        Source::BlockAckReportMissing { queue } => BackendFault::BlockAckReportMissing { queue },
-        Source::AirMissing { queue } => BackendFault::AirMissing { queue },
-        Source::AttemptCounter { queue } => BackendFault::AttemptCounter { queue },
-        Source::StageMissing { queue } => BackendFault::StageMissing { queue },
         Source::QueueFull { queue } => BackendFault::QueueFull { queue },
         Source::ReceiveOverflow => BackendFault::ReceiveOverflow,
         Source::ReceiveRange => BackendFault::ReceiveRange,
@@ -104,7 +100,6 @@ pub(super) fn publish_step(
         Source::HeaderBuffer => PublishStep::HeaderBuffer,
         Source::CcmpHeader => PublishStep::CcmpHeader,
         Source::Values => PublishStep::Values,
-        Source::Count => PublishStep::Count,
         Source::Queue => PublishStep::Queue,
     }
 }
