@@ -707,6 +707,93 @@ run its own executor.
   stopped hart's bus transactions after its stall, or one a stand run
   shows, and a revocation of the old owner's accesses.
 
+## Operation results
+
+Five kinds of thing come out of an operation. They are categories of meaning,
+not a mapping onto `Ok` and `Err`:
+
+| Kind | Answers | With correct code and hardware | Form |
+|---|---|---|---|
+| Excluded state | nothing: it cannot be written | never | a type, with no runtime representation |
+| Status | what is true now | yes | a read; it may accompany a result, never replace one |
+| Outcome | how an accepted operation ended | yes | a typed end stating only what is known |
+| Refusal | why an operation was not accepted | yes | `Err` with its owners back and what comes next |
+| Fault | a contract or the hardware model broke | no | a named fault with its observations, for its owner |
+
+An `Err` may carry a failed outcome or a fault on its way to its owner, and an
+operation may return the state it reached beside its result. A status may keep
+a diagnostic such as the last fault. What is forbidden is a status standing in
+for a result: `Pending`, `Busy`, a default value or a success in place of an
+error.
+
+Every API names its **acceptance point**, where the operation is accepted and
+its side effects may begin. Before it there are refusals, after it outcomes or
+faults.
+
+Whether something is a refusal or a fault is decided by one question: can it
+occur with correct code and hardware behaving as modelled? If it can, it is a
+refusal or an outcome. If it cannot, a type excludes it first; what remains is
+a fault.
+
+For each case, take the first of these that fits:
+
+1. The compiler can exclude it: a type does.
+2. It is the caller's own state: a typestate or a token.
+3. It is capacity: a token held in advance. Shortage moves to taking the token,
+   which may wait or refuse; an operation holding the token has no `Full`.
+4. It is the world's and temporary: wait, or refuse naming what comes next.
+5. It is the world's and final for this input: refuse, owners back.
+6. An accepted operation ended: an outcome. An unknown end says unknown, with
+   its named cause and known observations.
+7. Anything else: a fault, at the level that holds the owners.
+
+**Temporary unavailability** has three shapes, in order of preference:
+
+- Wait inside: `async fn` or `Poll<Result<T, E>>`. `Pending` means no result
+  yet and a wake owed by a named producer, and that producer's end wakes the
+  waiter too. Every wait defines what its cancellation does to its owners and
+  to any operation in flight. Waiting for the next external event needs no
+  timer of its own.
+- Reserve first: a token taken before the operation.
+- Refuse now: `try_*`, where the caller must not wait or chooses a refusal. The
+  value comes back, and the refusal names what comes next.
+
+What comes next is at least one of these, and they combine, as an event or a
+deadline, whichever is first: a registered waker, a release event, a retry
+time, this turn again within its budget, or a final refusal. A variant that
+can name none of them is a defect; a timer on every refusal is not required.
+
+**Re-checking** is normal after a wake, which says only "look again". What is
+forbidden is uncontrolled polling. A check runs on a wake, a timer armed for a
+named instant or the next bounded round. A waiter may check quickly, then
+registers its waker, then must check again before `Pending`, or a wake is lost.
+
+A **bound** has one of two grounds. A hardware limit needs a hardware proof, a
+`SOURCE:`; a hardware transaction has one. A chosen deadline is the
+application's or the protocol's policy and needs none. Reaching either is a
+typed end: an outcome or a fault by the question above.
+
+A side effect of unknown result is not repeated automatically. A confirmed
+result never becomes unknown through a later accounting or cleanup failure.
+
+**Compile time** covers what the caller controls: order of operations and the
+caller's state (typestate, `&mut`, tokens), a subset of a wide enum (a narrow
+enum its constructor produces), data tied to a state (held in the variant),
+combinations that cannot occur (one variant holding both), capacity (tokens
+and const generics), walking a fixed table (a cursor whose end is the terminal
+step), fixed geometry (const items and inline const checks) and a counter's
+range (a type sized to its proven maximum, with the transitions that bound it).
+
+It does not cover air, peer, host and API values, which are parsed once at the
+boundary into a type; hardware behaviour and timing; contention with a hart or
+an interrupt; a bound over generic arithmetic, checked at monomorphization; or
+a dropped obligation. Rust types are affine and `mem::forget` is safe, so
+`#[must_use]` and a guard in `Drop` catch mistakes and guarantee nothing: DMA
+safety holds under a leaked owner. A parse such as `split_first_chunk` checks
+at run time, once, and its type carries the result onward. A bounded index
+type removes a logic error, not the panic branch; a cursor, a constant index
+into an array or `.get()` does.
+
 ## Fatal decisions and reset
 
 A **handled error** is a typed outcome for reachable input or a refused
