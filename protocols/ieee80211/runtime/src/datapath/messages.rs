@@ -125,6 +125,8 @@ pub enum ToActor<'id, D: DatapathPort<'id>> {
     Stop {
         /// When the stop proves nothing more.
         deadline: Instant,
+        /// What the stop does to the network side.
+        network: NetworkEnd,
     },
     /// End the actor's run: the radio is stopped and the installation
     /// retires.
@@ -274,6 +276,17 @@ pub enum StopOutcome {
     Unconfirmed(StopObserved),
 }
 
+/// What a stop does to the network side.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NetworkEnd {
+    /// The network stays: a restart keeps its stack and its lent buffers
+    /// for the next installation.
+    Stays,
+    /// The radio retires: the stop asks the network to stop, and confirms
+    /// only once it stopped and returned every lent buffer.
+    Stops,
+}
+
 /// What a stop still held when it ended unconfirmed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StopObserved {
@@ -285,6 +298,12 @@ pub struct StopObserved {
     pub arena_on_air: bool,
     /// Frames the lifecycle has not sent back.
     pub frames_out: u8,
+    /// The stop asked the network to stop and it did not report it.
+    pub network_running: bool,
+    /// The network's stop participant was lost, which proves no stop.
+    pub network_lost: bool,
+    /// Receive units the network still holds.
+    pub lent: u16,
 }
 
 /// A broken contract that ends the actor: the port's named fault, or one
@@ -404,7 +423,7 @@ pub struct NetworkEnds<
     /// The copies `receive`'s marks stand for.
     pub receive_copied:
         WakingSpscSender<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
-    /// The network side, which says whether it takes frames at all.
+    /// The network side: whether it takes frames at all, and its stop.
     pub network: &'c S,
 }
 

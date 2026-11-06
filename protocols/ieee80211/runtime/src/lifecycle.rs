@@ -43,7 +43,10 @@
 //! # Ends
 //!
 //! The application's stop, and a failed station, take the link and the
-//! pairwise key back, then stop the radio by the stop's deadline. A
+//! pairwise key back, then stop the radio by the stop's deadline. A stop
+//! that retires the radio also stops the network ([`NetworkEnd::Stops`]) and
+//! confirms only once it stopped and returned every lent buffer; a restart
+//! keeps the network. A
 //! confirmed stop retires the actor ([`ToActor::Retire`]) after the
 //! application's stop, or ends it for the next installation
 //! ([`ToActor::Reinstall`]) after the station failed: the composition then
@@ -85,8 +88,8 @@ use oer_protocols_radio_port::Slot;
 
 use crate::datapath::{
     ActorAnyBuffer, ActorCommand, ActorEpochPath, ActorFault, ActorGatePath, ActorLink,
-    ActorTerminal, DatapathPort, FromActor, GroupPending, PARCELS, Parcel, Returned, StationTx,
-    StopObserved, ToActor,
+    ActorTerminal, DatapathPort, FromActor, GroupPending, NetworkEnd, PARCELS, Parcel, Returned,
+    StationTx, StopObserved, ToActor,
 };
 use crate::station::{
     BackendContractViolation, Notifies, Request, RunnerControl, SameHart, ServiceCommand,
@@ -1129,7 +1132,12 @@ where
             EndStage::Begin | EndStage::Link | EndStage::Key
                 if !self.inner.link.lent && !self.inner.link.key =>
             {
-                Some((EndStage::Radio, ToActor::Stop { deadline }))
+                let network = match why {
+                    // The next installation keeps the network and its buffers.
+                    Ending::Restart(_) => NetworkEnd::Stays,
+                    Ending::Stop | Ending::StartRefused(_) => NetworkEnd::Stops,
+                };
+                Some((EndStage::Radio, ToActor::Stop { deadline, network }))
             }
             _ => None,
         };

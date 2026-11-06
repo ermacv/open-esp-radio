@@ -377,9 +377,15 @@ impl DiagnosticPath for LifecycleFailure {
             }
             Self::StopUnconfirmed(observed) => {
                 path.name("StopUnconfirmed");
-                path.word(u32::from(observed.deadline));
-                path.word(u32::from(observed.arena_on_air));
+                // Four flags in one word: a path keeps a few words only.
+                path.word(
+                    u32::from(observed.deadline)
+                        | u32::from(observed.arena_on_air) << 1
+                        | u32::from(observed.network_running) << 2
+                        | u32::from(observed.network_lost) << 3,
+                );
                 path.word(u32::from(observed.frames_out));
+                path.word(u32::from(observed.lent));
                 if let Some(port) = &observed.port {
                     stop_unconfirmed(port, path);
                 }
