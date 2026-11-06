@@ -1456,6 +1456,17 @@ impl HeMcs {
         self as u8
     }
 
+    /// This MCS's entry of a table with one for each: below ten by the enum.
+    const fn entry<T: Copy>(self, table: &[T; 10]) -> T {
+        table[self as usize % 10]
+    }
+
+    /// This MCS's entry of a DCM table: a DCM rate's MCS is below five by its
+    /// constructor.
+    const fn dcm_entry<T: Copy>(self, table: &[T; 5]) -> T {
+        table[self as usize % 5]
+    }
+
     pub const fn from_index(index: u8) -> Option<Self> {
         match index {
             0 => Some(Self::Mcs0),
@@ -1835,21 +1846,20 @@ impl HeRate {
             crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf1600Ns => 1,
             crate::mac::rx::HeGuardIntervalAndLtf::FourLtf3200Ns => 2,
         };
-        let mcs = self.mcs.index() as usize;
         let units_100_kbps = if self.dcm {
-            match resource_unit {
-                HeResourceUnit::Ru26 => DCM_RU26[gi][mcs],
-                HeResourceUnit::Ru52 => DCM_RU52[gi][mcs],
-                HeResourceUnit::Ru106 => DCM_RU106[gi][mcs],
-                HeResourceUnit::Ru242 => DCM_RU242[gi][mcs],
-            }
+            self.mcs.dcm_entry(match resource_unit {
+                HeResourceUnit::Ru26 => &DCM_RU26[gi],
+                HeResourceUnit::Ru52 => &DCM_RU52[gi],
+                HeResourceUnit::Ru106 => &DCM_RU106[gi],
+                HeResourceUnit::Ru242 => &DCM_RU242[gi],
+            })
         } else {
-            match resource_unit {
-                HeResourceUnit::Ru26 => RU26[gi][mcs],
-                HeResourceUnit::Ru52 => RU52[gi][mcs],
-                HeResourceUnit::Ru106 => RU106[gi][mcs],
-                HeResourceUnit::Ru242 => RU242[gi][mcs],
-            }
+            self.mcs.entry(match resource_unit {
+                HeResourceUnit::Ru26 => &RU26[gi],
+                HeResourceUnit::Ru52 => &RU52[gi],
+                HeResourceUnit::Ru106 => &RU106[gi],
+                HeResourceUnit::Ru242 => &RU242[gi],
+            })
         };
         (units_100_kbps as u32) * 100
     }
@@ -1885,7 +1895,7 @@ impl HeRate {
             crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf1600Ns => &GI_1600,
             crate::mac::rx::HeGuardIntervalAndLtf::FourLtf3200Ns => &GI_3200,
         };
-        let limit = row[self.mcs.index() as usize];
+        let limit = self.mcs.entry(row);
         if self.dcm { limit / 2 } else { limit }
     }
 
@@ -1956,7 +1966,6 @@ impl HeRate {
     const fn nonzero_txop_apep_bytes(self, txop: core::num::NonZeroU8) -> i64 {
         const DATA_BITS_PER_SYMBOL_RU242: [i32; 10] =
             [117, 234, 351, 468, 702, 936, 1_053, 1_170, 1_404, 1_560];
-        let mcs = self.mcs.index() as usize;
         let estimated_block_ack_us = match self.mcs {
             HeMcs::Mcs0 => 68,
             HeMcs::Mcs1 | HeMcs::Mcs2 => 44,
@@ -1969,7 +1978,7 @@ impl HeRate {
             | HeMcs::Mcs9 => 32,
         };
         let exchange_budget_us = txop.get() as i64 * 32 - 36;
-        let data_bits_per_symbol = DATA_BITS_PER_SYMBOL_RU242[mcs] as i64;
+        let data_bits_per_symbol = self.mcs.entry(&DATA_BITS_PER_SYMBOL_RU242) as i64;
         match self.guard_interval_and_ltf {
             crate::mac::rx::HeGuardIntervalAndLtf::OneLtf800Ns
             | crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf800Ns => {

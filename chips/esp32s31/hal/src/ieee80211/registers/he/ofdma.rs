@@ -372,7 +372,7 @@ pub struct MacHeReceiveConfigurationSnapshot {
 /// The CONF1 element of logical trigger queue `queue`: the eight physical
 /// words are addressed in reverse logical order.
 const fn trigger_queue_element(queue: u8) -> Index<8> {
-    element(7 - queue as usize)
+    element(7 - (queue as usize & 7))
 }
 
 /// The physical bank of a reservation's ordinary queue.

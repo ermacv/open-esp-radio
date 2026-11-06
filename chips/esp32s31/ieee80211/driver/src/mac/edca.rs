@@ -251,6 +251,57 @@ pub struct EdcaQueues {
     queues: [EdcaBackoffState; 4],
 }
 
+/// The access policy of every queue of a validated EDCA set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct EdcaPolicies([EdcaAccessPolicy; 4]);
+
+impl EdcaPolicies {
+    /// The standard set's policies, proven at compile time.
+    pub(crate) const STANDARD_DEFAULT: Self =
+        match Self::from_edca(EdcaParameterSet::STANDARD_DEFAULT) {
+            Ok(policies) => policies,
+            Err(_) => panic!("standard EDCA fits the S31 queues"),
+        };
+
+    /// Validate all four records of `parameters`.
+    pub(crate) const fn from_edca(
+        parameters: EdcaParameterSet,
+    ) -> Result<Self, EdcaParametersError> {
+        const fn policy(
+            parameters: &EdcaParameterSet,
+            category: WmmAccessCategory,
+        ) -> Result<EdcaAccessPolicy, EdcaParametersError> {
+            EdcaAccessPolicy::from_edca(parameters.access_category(category))
+        }
+        let voice = match policy(&parameters, WmmAccessCategory::Voice) {
+            Ok(policy) => policy,
+            Err(error) => return Err(error),
+        };
+        let video = match policy(&parameters, WmmAccessCategory::Video) {
+            Ok(policy) => policy,
+            Err(error) => return Err(error),
+        };
+        let best_effort = match policy(&parameters, WmmAccessCategory::BestEffort) {
+            Ok(policy) => policy,
+            Err(error) => return Err(error),
+        };
+        let background = match policy(&parameters, WmmAccessCategory::Background) {
+            Ok(policy) => policy,
+            Err(error) => return Err(error),
+        };
+        let mut policies = [voice; 4];
+        policies[LegacyTxQueue::Voice as usize] = voice;
+        policies[LegacyTxQueue::Video as usize] = video;
+        policies[LegacyTxQueue::BestEffort as usize] = best_effort;
+        policies[LegacyTxQueue::Background as usize] = background;
+        Ok(Self(policies))
+    }
+
+    pub(crate) const fn access_policy(&self, queue: LegacyTxQueue) -> EdcaAccessPolicy {
+        self.0[queue as usize]
+    }
+}
+
 impl EdcaQueues {
     pub const fn standard_defaults() -> Self {
         const fn state(category: WmmAccessCategory) -> EdcaBackoffState {
