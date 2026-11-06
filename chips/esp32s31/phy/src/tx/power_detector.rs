@@ -652,7 +652,12 @@ impl PhyPwdetTransition {
                     // Complete rev0 ROM `phy_pwdet_ref_code+0x26` and `+0x52`
                     // store the raw `phy_get_tone_sar_dout_(4)` return value
                     // directly at `phy_param[0x1a]` and `[0x1c]`.
-                    self.reference_codes[measurement_index as usize] = average as i16;
+                    let [first, second] = &mut self.reference_codes;
+                    *(if measurement_index == 0 {
+                        first
+                    } else {
+                        second
+                    }) = average as i16;
                     if measurement_index == 0 {
                         PhyPwdetStep::WriteReferenceControl {
                             measurement_index: 1,

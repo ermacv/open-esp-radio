@@ -23,6 +23,8 @@ const TONE_SELECTOR: u16 = 600;
 const TONE_STEP: u8 = 120;
 const TX_GAINS: [u16; PHY_TX_DC_GAIN_COUNT as usize] = [0, 128, 256, 32, 160];
 
+type GainPosition = crate::ordinal::Ordinal<{ PHY_TX_DC_GAIN_COUNT as usize }>;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyTxDcParameters {
     pub pbus_rx_path_value: u8,
@@ -148,7 +150,7 @@ enum Terminal {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Search {
-    gain_index: u8,
+    gain_index: GainPosition,
     iteration: u8,
     i: u16,
     q: u16,
@@ -158,7 +160,7 @@ struct Search {
 }
 
 impl Search {
-    const fn new(gain_index: u8) -> Self {
+    const fn new(gain_index: GainPosition) -> Self {
         Self {
             gain_index,
             iteration: 0,
@@ -205,9 +207,9 @@ enum Step {
     ReadBluetoothGainControl { tx_path_value: u8 },
     ForceBluetoothGainControl { value: u16, tx_path_value: u8 },
     ConfigureBluetoothTxPath { tx_path_value: u8 },
-    SelectGain { gain_index: u8 },
-    InitializeDco { gain_index: u8, index: u8 },
-    ConfigureTxClock { gain_index: u8 },
+    SelectGain { gain_index: GainPosition },
+    InitializeDco { gain_index: GainPosition, index: u8 },
+    ConfigureTxClock { gain_index: GainPosition },
     ConfigureTone { search: Search, enabled: bool },
     ForceSearchQ(Search),
     ForceSearchI(Search),
@@ -217,9 +219,9 @@ enum Step {
     ReadComparators(Search),
     ForceFinalQ { search: Search, average: [u16; 2] },
     ForceFinalI { search: Search, average: [u16; 2] },
-    ClearMeasurement { gain_index: u8 },
-    DisableTone { gain_index: u8 },
-    ToneStopDelay { gain_index: u8 },
+    ClearMeasurement { gain_index: GainPosition },
+    DisableTone { gain_index: GainPosition },
+    ToneStopDelay { gain_index: GainPosition },
     CleanupTone(Terminal),
     CleanupToneDelay(Terminal),
     ExitPbus { index: u8, terminal: Terminal },
@@ -362,7 +364,7 @@ impl PhyTxDcTransition {
             Step::SelectGain { gain_index } => PhyTxDcAction::ForcePbus(PhyPbusForceTest::new(
                 1,
                 2,
-                self.selected_gain(gain_index),
+                self.selected_gain(gain_index.get()),
             )),
             Step::InitializeDco { index, .. } => PhyTxDcAction::ForcePbus(if index == 0 {
                 PhyPbusForceTest::new(2, 2, INITIAL_DCO)
@@ -383,21 +385,21 @@ impl PhyTxDcTransition {
             }
             Step::SearchDelay(search) => PhyTxDcAction::DelayMicros {
                 phase: PhyTxDcDelayPhase::ComparatorSettle {
-                    gain_index: search.gain_index,
+                    gain_index: search.gain_index.get(),
                     iteration: search.iteration,
                 },
                 micros: 2,
             },
             Step::TriggerMeasurement(search) => PhyTxDcAction::TriggerMeasurement {
-                gain_index: search.gain_index,
+                gain_index: search.gain_index.get(),
                 iteration: search.iteration,
             },
             Step::PollReady(search) => PhyTxDcAction::PollReady {
-                gain_index: search.gain_index,
+                gain_index: search.gain_index.get(),
                 iteration: search.iteration,
             },
             Step::ReadComparators(search) => PhyTxDcAction::ReadComparators {
-                gain_index: search.gain_index,
+                gain_index: search.gain_index.get(),
                 iteration: search.iteration,
             },
             Step::ForceFinalQ { average, .. } => {
@@ -445,7 +447,9 @@ impl PhyTxDcTransition {
             {
                 if index + 1 == ENTER_PBUS_COUNT {
                     match self.mode {
-                        PhyTxDcMode::Wifi => Step::SelectGain { gain_index: 0 },
+                        PhyTxDcMode::Wifi => Step::SelectGain {
+                            gain_index: GainPosition::FIRST,
+                        },
                         PhyTxDcMode::Bluetooth { tx_path_value } => {
                             Step::ReadBluetoothGainControl { tx_path_value }
                         }
@@ -492,9 +496,9 @@ impl PhyTxDcTransition {
             (
                 Step::ConfigureBluetoothTxPath { tx_path_value },
                 PhyTxDcCompletion::PbusCompleted(transaction),
-            ) if transaction == bluetooth_tx_path_transaction(tx_path_value) => {
-                Step::SelectGain { gain_index: 0 }
-            }
+            ) if transaction == bluetooth_tx_path_transaction(tx_path_value) => Step::SelectGain {
+                gain_index: GainPosition::FIRST,
+            },
             (
                 Step::ConfigureBluetoothTxPath { tx_path_value },
                 PhyTxDcCompletion::PbusTimedOut(transaction),
@@ -504,7 +508,8 @@ impl PhyTxDcTransition {
                 )))
             }
             (Step::SelectGain { gain_index }, PhyTxDcCompletion::PbusCompleted(transaction))
-                if transaction == PhyPbusForceTest::new(1, 2, self.selected_gain(gain_index)) =>
+                if transaction
+                    == PhyPbusForceTest::new(1, 2, self.selected_gain(gain_index.get())) =>
             {
                 Step::InitializeDco {
                     gain_index,
@@ -512,7 +517,8 @@ impl PhyTxDcTransition {
                 }
             }
             (Step::SelectGain { gain_index }, PhyTxDcCompletion::PbusTimedOut(transaction))
-                if transaction == PhyPbusForceTest::new(1, 2, self.selected_gain(gain_index)) =>
+                if transaction
+                    == PhyPbusForceTest::new(1, 2, self.selected_gain(gain_index.get())) =>
             {
                 Step::ConfigurePbusWorkMode(Terminal::Failed(PhyTxDcFailure::PbusTimedOut(
                     transaction,
@@ -599,7 +605,7 @@ impl PhyTxDcTransition {
                         },
                     micros: 2,
                 },
-            ) if gain_index == search.gain_index && iteration == search.iteration => {
+            ) if gain_index == search.gain_index.get() && iteration == search.iteration => {
                 Step::TriggerMeasurement(search)
             }
             (
@@ -608,7 +614,7 @@ impl PhyTxDcTransition {
                     gain_index,
                     iteration,
                 },
-            ) if gain_index == search.gain_index && iteration == search.iteration => {
+            ) if gain_index == search.gain_index.get() && iteration == search.iteration => {
                 Step::PollReady(search)
             }
             (
@@ -618,7 +624,7 @@ impl PhyTxDcTransition {
                     iteration,
                     ..
                 },
-            ) if gain_index == search.gain_index && iteration == search.iteration => {
+            ) if gain_index == search.gain_index.get() && iteration == search.iteration => {
                 Step::ReadComparators(search)
             }
             (
@@ -627,7 +633,7 @@ impl PhyTxDcTransition {
                     gain_index,
                     iteration,
                 },
-            ) if gain_index == search.gain_index && iteration == search.iteration => {
+            ) if gain_index == search.gain_index.get() && iteration == search.iteration => {
                 Step::CleanupTone(Terminal::Failed(PhyTxDcFailure::ReadyDeadlineElapsed {
                     gain_index,
                     iteration,
@@ -640,7 +646,7 @@ impl PhyTxDcTransition {
                     iteration,
                     comparator_high,
                 },
-            ) if gain_index == search.gain_index && iteration == search.iteration => {
+            ) if gain_index == search.gain_index.get() && iteration == search.iteration => {
                 search.apply_comparators(comparator_high);
                 if search.iteration == PHY_TX_DC_ITERATION_COUNT {
                     let average = search.average();
@@ -659,7 +665,7 @@ impl PhyTxDcTransition {
                 Step::ForceFinalI { search, average },
                 PhyTxDcCompletion::PbusCompleted(transaction),
             ) if transaction == PhyPbusForceTest::new(2, 1, average[0]) => {
-                self.dco[search.gain_index as usize] =
+                *search.gain_index.slot(&mut self.dco) =
                     [average[0], average[1], INITIAL_DCO, INITIAL_DCO];
                 Step::ClearMeasurement {
                     gain_index: search.gain_index,
@@ -695,18 +701,15 @@ impl PhyTxDcTransition {
                     phase: PhyTxDcDelayPhase::ToneStop,
                     micros: 5,
                 },
-            ) => {
-                if gain_index + 1 == self.gain_count() {
-                    Step::ExitPbus {
-                        index: 0,
-                        terminal: Terminal::Complete(PhyTxDcOutcome { dco: self.dco }),
-                    }
-                } else {
-                    Step::SelectGain {
-                        gain_index: gain_index + 1,
-                    }
+            ) => match gain_index.next() {
+                Some(gain_index) if gain_index.get() != self.gain_count() => {
+                    Step::SelectGain { gain_index }
                 }
-            }
+                _ => Step::ExitPbus {
+                    index: 0,
+                    terminal: Terminal::Complete(PhyTxDcOutcome { dco: self.dco }),
+                },
+            },
             (
                 Step::CleanupTone(terminal),
                 PhyTxDcCompletion::ToneConfigured {

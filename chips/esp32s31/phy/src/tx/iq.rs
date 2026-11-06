@@ -1520,7 +1520,8 @@ impl PhyTxIqInitTransition {
                     .map_err(|_| PhyTxIqInitTransitionError::WrongCompletion)?;
                 match transition.action() {
                     PhyTxIqCalibrationAction::Complete(outcome) => {
-                        self.coefficient[phase as usize] = outcome.coefficient;
+                        let [first, second] = &mut self.coefficient;
+                        *(if phase == 0 { first } else { second }) = outcome.coefficient;
                         if phase == 0 {
                             self.step = InitStep::Temperature(PhyTemperatureTransition::new());
                         } else {

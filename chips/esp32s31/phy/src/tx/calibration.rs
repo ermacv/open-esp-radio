@@ -5,6 +5,7 @@
 //! delay and a synchronous SAR callback. Rust exposes both as one externally
 //! completed operation per transition step.
 
+use crate::ordinal::Ordinal;
 use crate::{
     analog::{
         i2c::analog_i2c,
@@ -801,6 +802,15 @@ impl PhyPowerAttenuationTransition {
 
 const TX_CAP_CHANNELS: [u16; 3] = [1, 6, 11];
 
+/// The capacitances of all channels, in channel order.
+const fn flat_capacitance(capacitance: [[u8; 2]; TX_CAP_CHANNELS.len()]) -> [u8; 6] {
+    let [[a, b], [c, d], [e, f]] = capacitance;
+    [a, b, c, d, e, f]
+}
+
+type TxCapBank = Ordinal<2>;
+type TxCapChannel = Ordinal<{ TX_CAP_CHANNELS.len() }>;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyTxCapSearchRequest {
     pub tone_selector: u16,
@@ -875,7 +885,7 @@ const fn tx_cap_max(bank: u8) -> u8 {
 pub struct PhyTxCapSearchTransition {
     request: PhyTxCapSearchRequest,
     step: TxCapSearchStep,
-    bank: u8,
+    bank: TxCapBank,
     candidate: u8,
     best: [u8; 2],
     best_sample: u16,
@@ -886,7 +896,7 @@ impl PhyTxCapSearchTransition {
         Self {
             request,
             step: TxCapSearchStep::ConfigureTone,
-            bank: 0,
+            bank: Ordinal::FIRST,
             candidate: tx_cap_max(0),
             best: [tx_cap_max(0), tx_cap_max(1)],
             best_sample: 0,
@@ -897,7 +907,7 @@ impl PhyTxCapSearchTransition {
         self,
         value: u8,
     ) -> oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address> {
-        crate::analog::i2c::field_write(tx_cap_field(self.bank), value)
+        crate::analog::i2c::field_write(tx_cap_field(self.bank.get()), value)
     }
 
     pub const fn action(self) -> PhyTxCapSearchAction {
@@ -951,7 +961,11 @@ impl PhyTxCapSearchTransition {
                 self.step = if transition.action() == oer_chips_family_analog::Action::Complete(())
                 {
                     TxCapSearchStep::Measure(PhyToneSarTransition::new_nonzero(PhyToneSarRequest {
-                        measurement: self.bank.wrapping_mul(16).wrapping_add(self.candidate),
+                        measurement: self
+                            .bank
+                            .get()
+                            .wrapping_mul(16)
+                            .wrapping_add(self.candidate),
                         samples: 1,
                         clear_tone_after_ready: self.request.clear_tone_after_ready,
                     }))
@@ -970,12 +984,11 @@ impl PhyTxCapSearchTransition {
                     PhyToneSarAction::Complete(outcome) => {
                         if outcome.sample > self.best_sample {
                             self.best_sample = outcome.sample;
-                            self.best[self.bank as usize] = self.candidate;
+                            *self.bank.slot(&mut self.best) = self.candidate;
                         }
                         if self.candidate == 0 {
-                            self.step = TxCapSearchStep::WriteBest(
-                                self.write(self.best[self.bank as usize]),
-                            );
+                            self.step =
+                                TxCapSearchStep::WriteBest(self.write(self.bank.at(&self.best)));
                         } else {
                             self.candidate -= 1;
                             self.step = TxCapSearchStep::WriteCandidate(self.write(self.candidate));
@@ -996,9 +1009,9 @@ impl PhyTxCapSearchTransition {
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
                 if transition.action() == oer_chips_family_analog::Action::Complete(()) {
-                    if self.bank == 0 {
-                        self.bank = 1;
-                        self.candidate = tx_cap_max(1);
+                    if let Some(bank) = self.bank.next() {
+                        self.bank = bank;
+                        self.candidate = tx_cap_max(bank.get());
                         self.best_sample = 0;
                         self.step = TxCapSearchStep::WriteCandidate(self.write(self.candidate));
                     } else {
@@ -1106,9 +1119,10 @@ enum TxCapStep {
 pub struct PhyTxCapTransition {
     parameters: PhyTxCapParameters,
     step: TxCapStep,
-    channel: u8,
+    channel: TxCapChannel,
     attenuation: u8,
-    capacitance: [u8; 6],
+    /// The low and high capacitance of each channel.
+    capacitance: [[u8; 2]; TX_CAP_CHANNELS.len()],
 }
 
 impl PhyTxCapTransition {
@@ -1118,9 +1132,9 @@ impl PhyTxCapTransition {
             step: TxCapStep::Enter(PhyTxCalibrationEnvironmentTransition::enter(
                 parameters.environment,
             )),
-            channel: 0,
+            channel: Ordinal::FIRST,
             attenuation: parameters.initial_attenuation,
-            capacitance: [0; 6],
+            capacitance: [[0; 2]; TX_CAP_CHANNELS.len()],
         }
     }
 
@@ -1147,7 +1161,7 @@ impl PhyTxCapTransition {
             TxCapStep::Attenuation(transition) => PhyTxCapAction::Attenuation(transition.action()),
             TxCapStep::Search(transition) => PhyTxCapAction::Search(transition.action()),
             TxCapStep::Complete => PhyTxCapAction::Complete(PhyTxCapOutcome {
-                capacitance: self.capacitance,
+                capacitance: flat_capacitance(self.capacitance),
                 attenuation: self.attenuation,
             }),
             TxCapStep::Failed(failure) => PhyTxCapAction::Failed(failure),
@@ -1170,7 +1184,7 @@ impl PhyTxCapTransition {
                         self.step = TxCapStep::Rfpll(RfpllFrequencyTransition::channel(
                             RfpllFrequencyRequest {
                                 crystal_selector: self.parameters.crystal_selector,
-                                frequency_code: TX_CAP_CHANNELS[self.channel as usize],
+                                frequency_code: self.channel.at(&TX_CAP_CHANNELS),
                                 offset: 0,
                             },
                         ));
@@ -1217,7 +1231,7 @@ impl PhyTxCapTransition {
                     .advance(completion)
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
                 if transition.action() == oer_chips_family_analog::Action::Complete(()) {
-                    self.step = if self.channel == 0 {
+                    self.step = if self.channel == Ordinal::FIRST {
                         TxCapStep::Attenuation(PhyPowerAttenuationTransition::new(
                             PhyPowerAttenuationRequest {
                                 tone_selector: 0x80,
@@ -1268,20 +1282,19 @@ impl PhyTxCapTransition {
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
                 match transition.action() {
                     PhyTxCapSearchAction::Complete(outcome) => {
-                        let offset = self.channel as usize * 2;
-                        self.capacitance[offset] = outcome.capacitance[0];
-                        self.capacitance[offset + 1] = outcome.capacitance[1];
-                        self.channel += 1;
-                        if self.channel == 3 {
-                            self.exit(TxCapTerminal::Complete);
-                        } else {
-                            self.step = TxCapStep::Rfpll(RfpllFrequencyTransition::channel(
-                                RfpllFrequencyRequest {
-                                    crystal_selector: self.parameters.crystal_selector,
-                                    frequency_code: TX_CAP_CHANNELS[self.channel as usize],
-                                    offset: 0,
-                                },
-                            ));
+                        *self.channel.slot(&mut self.capacitance) = outcome.capacitance;
+                        match self.channel.next() {
+                            None => self.exit(TxCapTerminal::Complete),
+                            Some(channel) => {
+                                self.channel = channel;
+                                self.step = TxCapStep::Rfpll(RfpllFrequencyTransition::channel(
+                                    RfpllFrequencyRequest {
+                                        crystal_selector: self.parameters.crystal_selector,
+                                        frequency_code: channel.at(&TX_CAP_CHANNELS),
+                                        offset: 0,
+                                    },
+                                ));
+                            }
                         }
                     }
                     PhyTxCapSearchAction::Failed(PhyTxCapSearchFailure::ToneSar(failure)) => {

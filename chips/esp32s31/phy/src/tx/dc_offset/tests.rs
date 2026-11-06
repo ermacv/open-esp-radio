@@ -63,7 +63,7 @@ fn dco_adjustment_saturates_at_exact_nine_bit_limits() {
 
 #[test]
 fn twelve_step_search_averages_only_last_four_adjusted_values() {
-    let mut search = Search::new(0);
+    let mut search = Search::new(GainPosition::FIRST);
     let mut expected_step = [124, 63, 32, 17, 9, 5, 3, 2, 1, 1, 1, 1].into_iter();
     while search.iteration != PHY_TX_DC_ITERATION_COUNT {
         assert_eq!(search.step, expected_step.next().unwrap());
@@ -75,7 +75,7 @@ fn twelve_step_search_averages_only_last_four_adjusted_values() {
 #[test]
 fn readiness_after_any_number_of_not_ready_reads_reads_the_comparators() {
     for not_ready_samples in [0, 1, crate::HARDWARE_EDGE_LIMIT - 1] {
-        let search = Search::new(2);
+        let search = Search::new(GainPosition::nth(2));
         let mut transition = PhyTxDcTransition {
             parameters: PhyTxDcParameters {
                 pbus_rx_path_value: 0xbf,
@@ -104,7 +104,7 @@ fn readiness_after_any_number_of_not_ready_reads_reads_the_comparators() {
 
 #[test]
 fn deadline_enters_tone_cleanup_before_pbus_restore() {
-    let search = Search::new(1);
+    let search = Search::new(GainPosition::nth(1));
     let mut transition = PhyTxDcTransition {
         parameters: PhyTxDcParameters {
             pbus_rx_path_value: 0xbf,

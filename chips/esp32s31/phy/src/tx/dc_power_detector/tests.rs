@@ -534,7 +534,7 @@ fn nested_search_rejects_wrong_completions_without_changing_parent() {
         steps += 1;
         assert!(steps < 10_000);
     }
-    assert_eq!(root.row, 1);
+    assert_eq!(root.row.get(), 1);
     assert_eq!(root.dco[0][..2], [1, 2]);
     assert!(root.total_measurements > 0);
     assert!(matches!(root.action(), PhyTxDcPwdetAction::ForcePbus(_)));
@@ -559,6 +559,6 @@ fn nested_search_failure_enters_root_cleanup() {
             ..
         }
     ));
-    assert_eq!(root.row, 0);
+    assert_eq!(root.row.get(), 0);
     assert_eq!(root.total_measurements, 0);
 }

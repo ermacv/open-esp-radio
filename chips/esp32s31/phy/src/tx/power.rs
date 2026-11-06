@@ -8,6 +8,7 @@
 //! command and cleanup edge remains independently completed by the async
 //! executor.
 
+use crate::ordinal::Ordinal;
 use crate::{
     analog::{
         i2c::{Address, analog_i2c},
@@ -132,6 +133,8 @@ const fn rate_to_target_index(rate: u8) -> Option<usize> {
 
 const TX_CAP_ADDRESS: Address = analog_i2c::txrf::tx_capacitor_low::ADDRESS;
 const CHANNEL_CODES: [u16; 3] = [1, 6, 11];
+
+type PointChannel = Ordinal<{ CHANNEL_CODES.len() }>;
 const POWER_CONTROL_MAX_ITERATIONS: u8 = 10;
 
 const fn average_measured_power(first: i16, second: i16) -> i16 {
@@ -508,6 +511,26 @@ enum TxPowerTerminal {
     Failed(PhyTxPowerFailure),
 }
 
+/// One of the two reference samples.
+type ReferencePhase = Ordinal<2>;
+
+/// The reference control word before a sample, or after the last one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReferenceControl {
+    Sample(ReferencePhase),
+    Last,
+}
+
+impl ReferenceControl {
+    const fn value(self) -> u16 {
+        match self {
+            Self::Sample(phase) if phase.get() == 0 => 0,
+            Self::Sample(_) => 0x5555,
+            Self::Last => 0xaaaa,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TxPowerStep {
     Enter(PhyTxCalibrationEnvironmentTransition),
@@ -515,10 +538,10 @@ enum TxPowerStep {
     TxCap,
     ReferenceTone,
     ReferenceControl {
-        phase: u8,
+        phase: ReferenceControl,
     },
     ReferenceSample {
-        phase: u8,
+        phase: ReferencePhase,
         transition: PhyToneSarTransition,
     },
     Point(PhyPowerControlPointTransition),
@@ -571,7 +594,7 @@ pub struct PhyTxPowerTransition {
     parameters: PhyTxPowerParameters,
     mode: PhyTxPowerMode,
     step: TxPowerStep,
-    channel: u8,
+    channel: PointChannel,
     reference_codes: [i16; 2],
     power_curve: [i8; 3],
     point_corrections: [i8; 3],
@@ -608,7 +631,7 @@ impl PhyTxPowerTransition {
             parameters,
             mode,
             step,
-            channel: 0,
+            channel: Ordinal::FIRST,
             reference_codes: parameters.reference_codes,
             power_curve: [0; 3],
             point_corrections: [0; 3],
@@ -658,14 +681,14 @@ impl PhyTxPowerTransition {
     fn rfpll(&self) -> RfpllFrequencyTransition {
         RfpllFrequencyTransition::channel(RfpllFrequencyRequest {
             crystal_selector: self.parameters.crystal_selector,
-            frequency_code: CHANNEL_CODES[self.channel as usize],
+            frequency_code: self.channel.at(&CHANNEL_CODES),
             offset: 0,
         })
     }
 
     const fn tx_cap_channel_code(&self) -> u16 {
         match self.mode {
-            PhyTxPowerMode::Wifi => CHANNEL_CODES[self.channel as usize],
+            PhyTxPowerMode::Wifi => self.channel.at(&CHANNEL_CODES),
             PhyTxPowerMode::Bluetooth { .. } => 6,
         }
     }
@@ -682,7 +705,7 @@ impl PhyTxPowerTransition {
     fn point(&self) -> PhyPowerControlPointTransition {
         let base_attenuation = self.mode.base_attenuation();
         PhyPowerControlPointTransition::new(PhyPowerControlPointRequest {
-            identity: self.channel,
+            identity: self.channel.get(),
             target: 56_i16.wrapping_sub(self.parameters.target_adjustment as i16),
             tone_selector: self.mode.tone_selector(),
             base_attenuation,
@@ -735,11 +758,7 @@ impl PhyTxPowerTransition {
                 enabled: true,
             },
             TxPowerStep::ReferenceControl { phase } => PhyTxPowerAction::WriteReferenceControl {
-                value: match phase {
-                    0 => 0,
-                    1 => 0x5555,
-                    _ => 0xaaaa,
-                },
+                value: phase.value(),
             },
             TxPowerStep::ReferenceSample { transition, .. } => {
                 PhyTxPowerAction::ToneSar(transition.action())
@@ -795,7 +814,9 @@ impl PhyTxPowerTransition {
                         ) =>
             {
                 self.step = match self.mode {
-                    PhyTxPowerMode::Wifi if self.channel == 0 => TxPowerStep::ReferenceTone,
+                    PhyTxPowerMode::Wifi if self.channel == Ordinal::FIRST => {
+                        TxPowerStep::ReferenceTone
+                    }
                     PhyTxPowerMode::Wifi => TxPowerStep::Point(self.point()),
                     PhyTxPowerMode::Bluetooth { .. } => TxPowerStep::Rfpll(self.rfpll()),
                 };
@@ -807,25 +828,22 @@ impl PhyTxPowerTransition {
                     attenuation: 0x50,
                     enabled: true,
                 },
-            ) => self.step = TxPowerStep::ReferenceControl { phase: 0 },
+            ) => {
+                self.step = TxPowerStep::ReferenceControl {
+                    phase: ReferenceControl::Sample(Ordinal::FIRST),
+                };
+            }
             (
                 TxPowerStep::ReferenceControl { phase },
                 PhyTxPowerCompletion::ReferenceControlWritten { value },
-            ) if value
-                == match phase {
-                    0 => 0,
-                    1 => 0x5555,
-                    _ => 0xaaaa,
-                } =>
-            {
-                if phase == 2 {
-                    self.step = TxPowerStep::Point(self.point());
-                } else {
-                    self.step = TxPowerStep::ReferenceSample {
+            ) if value == phase.value() => {
+                self.step = match phase {
+                    ReferenceControl::Sample(phase) => TxPowerStep::ReferenceSample {
                         phase,
-                        transition: self.reference_sample(phase),
-                    };
-                }
+                        transition: self.reference_sample(phase.get()),
+                    },
+                    ReferenceControl::Last => TxPowerStep::Point(self.point()),
+                };
             }
             (
                 TxPowerStep::ReferenceSample {
@@ -839,8 +857,12 @@ impl PhyTxPowerTransition {
                     .map_err(|_| PhyTxPowerTransitionError::WrongCompletion)?;
                 match transition.action() {
                     PhyToneSarAction::Complete(outcome) => {
-                        self.reference_codes[phase as usize] = outcome.sample as i16;
-                        self.step = TxPowerStep::ReferenceControl { phase: phase + 1 };
+                        *phase.slot(&mut self.reference_codes) = outcome.sample as i16;
+                        self.step = TxPowerStep::ReferenceControl {
+                            phase: phase
+                                .next()
+                                .map_or(ReferenceControl::Last, ReferenceControl::Sample),
+                        };
                     }
                     PhyToneSarAction::Failed(failure) => {
                         self.fail(PhyTxPowerFailure::ToneSar(failure));
@@ -856,21 +878,21 @@ impl PhyTxPowerTransition {
                     .map_err(|_| PhyTxPowerTransitionError::WrongCompletion)?;
                 match transition.action() {
                     PhyPowerControlPointAction::Complete(outcome) => {
-                        let index = self.channel as usize;
-                        self.point_corrections[index] = outcome.correction;
-                        self.power_curve[index] = if self.channel == 1 {
+                        *self.channel.slot(&mut self.point_corrections) = outcome.correction;
+                        let point = if self.channel.get() == 1 {
                             outcome.correction.wrapping_add(2)
                         } else {
                             outcome.correction
                         };
-                        self.attenuation = self.power_curve[index]
-                            .wrapping_add(self.mode.base_attenuation() as i8)
-                            as u8;
-                        self.channel += 1;
-                        if self.channel == 3 {
-                            self.finish_points();
-                        } else {
-                            self.step = TxPowerStep::Rfpll(self.rfpll());
+                        *self.channel.slot(&mut self.power_curve) = point;
+                        self.attenuation =
+                            point.wrapping_add(self.mode.base_attenuation() as i8) as u8;
+                        match self.channel.next() {
+                            None => self.finish_points(),
+                            Some(channel) => {
+                                self.channel = channel;
+                                self.step = TxPowerStep::Rfpll(self.rfpll());
+                            }
                         }
                     }
                     PhyPowerControlPointAction::Failed(failure) => {
