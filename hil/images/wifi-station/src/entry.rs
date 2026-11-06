@@ -389,6 +389,7 @@ fn scan_visit(index: u8) -> wifi_station::ScanVisitAnswer {
                 observe::connect::ProbeState::Sent => wifi_station::ProbeState::Sent,
                 observe::connect::ProbeState::Answered => wifi_station::ProbeState::Answered,
                 observe::connect::ProbeState::TimedOut => wifi_station::ProbeState::TimedOut,
+                observe::connect::ProbeState::Unknown => wifi_station::ProbeState::Unknown,
             },
             best_own_rssi: visit.best_own_rssi,
         }

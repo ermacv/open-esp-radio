@@ -7,7 +7,7 @@
 //! lower-MAC trace uses ids from 100) and its channel.
 
 use oer_portable_trace::{Channel, Domain, Event, Kind};
-pub use oer_protocols_ieee80211_core_roles_sta::events::{ConnectStep, ScanHeard};
+pub use oer_protocols_ieee80211_core_roles_sta::events::{ConnectStep, ScanHeard, ScanProbeEnd};
 
 /// The station activity channel.
 const SERVICE: Channel = const {
@@ -120,11 +120,41 @@ impl core::fmt::Display for StationScanHeard {
     }
 }
 
-/// The end of a scan's probe, at a wrapping microsecond.
+/// A scan's probe built, or ended, at a wrapping microsecond.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StationScanProbe {
     pub at_micros: u32,
-    pub sent: bool,
+    pub step: ScanProbeStep,
+}
+
+/// What happened to a scan's probe.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanProbeStep {
+    Built,
+    Transmitted,
+    NotTransmitted,
+    Unknown,
+}
+
+impl ScanProbeStep {
+    const fn word(self) -> u32 {
+        match self {
+            Self::Built => 0,
+            Self::Transmitted => 1,
+            Self::NotTransmitted => 2,
+            Self::Unknown => 3,
+        }
+    }
+
+    const fn from_word(word: u32) -> Option<Self> {
+        match word {
+            0 => Some(Self::Built),
+            1 => Some(Self::Transmitted),
+            2 => Some(Self::NotTransmitted),
+            3 => Some(Self::Unknown),
+            _ => None,
+        }
+    }
 }
 
 impl Event for StationScanProbe {
@@ -132,14 +162,14 @@ impl Event for StationScanProbe {
     const CHANNEL: Channel = SERVICE;
 
     fn encode(&self) -> [u32; 2] {
-        [self.at_micros, u32::from(self.sent)]
+        [self.at_micros, self.step.word()]
     }
 
     fn decode([at_micros, word]: [u32; 2]) -> Option<Self> {
-        (word <= 1).then_some(Self {
-            at_micros,
-            sent: word == 1,
-        })
+        match ScanProbeStep::from_word(word) {
+            Some(step) => Some(Self { at_micros, step }),
+            None => None,
+        }
     }
 }
 
@@ -147,8 +177,8 @@ impl core::fmt::Display for StationScanProbe {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "station.scan_probe at_micros={} sent={}",
-            self.at_micros, self.sent
+            "station.scan_probe at_micros={} step={:?}",
+            self.at_micros, self.step
         )
     }
 }
@@ -968,12 +998,25 @@ impl<O: oer_portable_trace::Observer>
                     }
                 );
             }
-            StaEvent::ScanProbeEnded { at, sent } => {
+            StaEvent::ScanProbeBuilt { at } => {
                 oer_portable_trace::observe!(
                     self.0,
                     StationScanProbe {
                         at_micros: wrapped_micros(at),
-                        sent,
+                        step: ScanProbeStep::Built,
+                    }
+                );
+            }
+            StaEvent::ScanProbeEnded { at, end } => {
+                oer_portable_trace::observe!(
+                    self.0,
+                    StationScanProbe {
+                        at_micros: wrapped_micros(at),
+                        step: match end {
+                            ScanProbeEnd::Transmitted => ScanProbeStep::Transmitted,
+                            ScanProbeEnd::NotTransmitted => ScanProbeStep::NotTransmitted,
+                            ScanProbeEnd::Unknown => ScanProbeStep::Unknown,
+                        },
                     }
                 );
             }
@@ -1205,10 +1248,17 @@ mod tests {
                 channel: 13,
             });
         }
-        round_trip(StationScanProbe {
-            at_micros: 13,
-            sent: true,
-        });
+        for step in [
+            ScanProbeStep::Built,
+            ScanProbeStep::Transmitted,
+            ScanProbeStep::NotTransmitted,
+            ScanProbeStep::Unknown,
+        ] {
+            round_trip(StationScanProbe {
+                at_micros: 13,
+                step,
+            });
+        }
         for rssi in [None, Some(-61), Some(0)] {
             round_trip(StationScanHeard {
                 at_micros: 11,

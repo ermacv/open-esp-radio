@@ -4181,7 +4181,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 if context.purpose == TxPurpose::Probe {
                     report(events, || StaEvent::ScanProbeEnded {
                         at: now,
-                        sent: completion.is_delivered(),
+                        end: crate::events::ScanProbeEnd::of(&completion),
                     });
                 }
                 Done::Tx {
@@ -4204,7 +4204,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 if context.purpose == TxPurpose::Probe {
                     report(events, || StaEvent::ScanProbeEnded {
                         at: now,
-                        sent: false,
+                        end: crate::events::ScanProbeEnd::NotTransmitted,
                     });
                 }
                 Done::Unsent {
@@ -5769,6 +5769,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         match self.encode_probe(TxPurpose::Probe, events) {
                             Ok(transmit) => {
                                 scan.step = ScanStep::Listen { until };
+                                report(events, || StaEvent::ScanProbeBuilt { at: now });
                                 Some(Owed::Transmit(transmit))
                             }
                             Err(Unsent::NoTokens) => None,

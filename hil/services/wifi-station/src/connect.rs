@@ -41,8 +41,9 @@ pub struct GetScanVisit {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct ScanVisitAnswer(pub Option<ScanVisit>);
 
-/// What became of a visit's probe. `Sent` is the port's report and
-/// `Answered` a frame that reached the scan; neither observes the air.
+/// What became of a visit's probe. `Sent`, `Unsent` and `Unknown` are the
+/// port's report and `Answered` a frame that reached the scan; none observes
+/// the air.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum ProbeState {
     #[default]
@@ -52,6 +53,7 @@ pub enum ProbeState {
     Sent,
     Answered,
     TimedOut,
+    Unknown,
 }
 
 impl ProbeState {
@@ -63,6 +65,7 @@ impl ProbeState {
             Self::Sent => "sent",
             Self::Answered => "answer",
             Self::TimedOut => "timeout",
+            Self::Unknown => "unknown",
         }
     }
 }
@@ -252,6 +255,7 @@ mod tests {
             (ProbeState::Sent, "sent"),
             (ProbeState::Answered, "answer"),
             (ProbeState::TimedOut, "timeout"),
+            (ProbeState::Unknown, "unknown"),
         ] {
             let row = format!(
                 "{}",
