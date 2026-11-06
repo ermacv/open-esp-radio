@@ -70,24 +70,44 @@ pub struct Heard {
     pub rssi: Option<i8>,
 }
 
+const PROBE_BUILT: u32 = 1;
+const PROBE_TRANSMITTED: u32 = 2;
+const PROBE_NOT_TRANSMITTED: u32 = 3;
+const PROBE_UNKNOWN: u32 = 4;
+
+/// A fact about a visit's probe, as the station reports it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Probe {
+    /// The station built it and handed it to the port.
+    Built,
+    /// The port counted a transmission.
+    Transmitted,
+    /// The port reports no transmission.
+    NotTransmitted,
+    /// The port does not establish whether one went out.
+    Unknown,
+}
+
 /// What became of a visit's probe. Neither a sent probe nor an answer says
 /// what reached the air: the first is the port's report, the second a frame
 /// that reached the scan.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ProbeState {
-    /// None yet: the visit has not handed one over.
+    /// None: the visit built no probe.
     #[default]
     None,
-    /// Handed to the port.
+    /// Built and handed to the port, which has not ended it.
     Built,
-    /// The port reports it did not go out.
+    /// The port reports no transmission.
     Unsent,
-    /// The port reports it went out.
+    /// The port counted a transmission.
     Sent,
     /// A probe response addressed to the station arrived.
     Answered,
-    /// The visit ended with no answer.
+    /// The port counted a transmission and the visit ended with no answer.
     TimedOut,
+    /// The port does not establish whether it went out, and no answer came.
+    Unknown,
 }
 
 /// One channel visit. Times are from the connect's start.
@@ -168,7 +188,7 @@ struct VisitCells {
     responses_overheard: AtomicU32,
     probe_ended: AtomicU32,
     /// 1 when the port said the probe went out, 2 when it did not.
-    probe_sent: AtomicU32,
+    probe: AtomicU32,
     /// The level as its `u8` bits, [`NONE`] before one.
     best_own_rssi: AtomicU32,
 }
@@ -187,7 +207,7 @@ impl VisitCells {
             responses_to_us: AtomicU32::new(0),
             responses_overheard: AtomicU32::new(0),
             probe_ended: AtomicU32::new(NONE),
-            probe_sent: AtomicU32::new(0),
+            probe: AtomicU32::new(0),
             best_own_rssi: AtomicU32::new(NONE),
         }
     }
@@ -212,7 +232,7 @@ impl VisitCells {
             &self.own_probe_responses,
             &self.responses_to_us,
             &self.responses_overheard,
-            &self.probe_sent,
+            &self.probe,
         ] {
             cell.store(0, Ordering::Relaxed);
         }
@@ -227,11 +247,12 @@ impl VisitCells {
             return ProbeState::Answered;
         }
         let ended = time(self.ended.load(Ordering::Relaxed)).is_some();
-        match self.probe_sent.load(Ordering::Relaxed) {
-            2 => ProbeState::Unsent,
-            _ if ended && self.step(ScanStep::Listen).is_some() => ProbeState::TimedOut,
-            1 => ProbeState::Sent,
-            _ if self.step(ScanStep::Listen).is_some() => ProbeState::Built,
+        match self.probe.load(Ordering::Relaxed) {
+            PROBE_BUILT => ProbeState::Built,
+            PROBE_TRANSMITTED if ended => ProbeState::TimedOut,
+            PROBE_TRANSMITTED => ProbeState::Sent,
+            PROBE_NOT_TRANSMITTED => ProbeState::Unsent,
+            PROBE_UNKNOWN => ProbeState::Unknown,
             _ => ProbeState::None,
         }
     }
@@ -395,14 +416,21 @@ impl ConnectCounter {
         }
     }
 
-    /// The port ended the visit's probe at microsecond `at`.
-    pub fn probe_ended(&self, at: u32, sent: bool) {
+    /// A fact about the visit's probe, at microsecond `at`.
+    pub fn probe(&self, at: u32, probe: Probe) {
         let Some(cell) = self.current() else {
             return;
         };
-        first(&cell.probe_ended, self.since(at));
-        cell.probe_sent
-            .store(if sent { 1 } else { 2 }, Ordering::Relaxed);
+        let word = match probe {
+            Probe::Built => PROBE_BUILT,
+            Probe::Transmitted => PROBE_TRANSMITTED,
+            Probe::NotTransmitted => PROBE_NOT_TRANSMITTED,
+            Probe::Unknown => PROBE_UNKNOWN,
+        };
+        if probe != Probe::Built {
+            first(&cell.probe_ended, self.since(at));
+        }
+        cell.probe.store(word, Ordering::Relaxed);
     }
 
     /// The scan heard `heard` at microsecond `at`.
@@ -635,8 +663,10 @@ mod tests {
     fn a_probe_goes_from_built_to_answered_or_timed_out() {
         let counter = ConnectCounter::new();
         scan(&counter, 0, 13);
+        assert_eq!(counter.visit(0).unwrap().probe, ProbeState::None);
+        counter.probe(5, Probe::Built);
         assert_eq!(counter.visit(0).unwrap().probe, ProbeState::Built);
-        counter.probe_ended(10, true);
+        counter.probe(10, Probe::Transmitted);
         let visit = counter.visit(0).unwrap();
         assert_eq!(visit.probe, ProbeState::Sent);
         assert_eq!(visit.probe_ended, Some(10));
@@ -659,7 +689,8 @@ mod tests {
         // The next visit ends this one with no answer.
         scan(&counter, 500, 1);
         assert_eq!(counter.visit(0).unwrap().probe, ProbeState::TimedOut);
-        counter.probe_ended(510, true);
+        counter.probe(505, Probe::Built);
+        counter.probe(510, Probe::Transmitted);
         counter.heard(
             520,
             Heard {
@@ -678,8 +709,40 @@ mod tests {
     fn a_probe_the_port_refused_stays_unsent() {
         let counter = ConnectCounter::new();
         scan(&counter, 0, 13);
-        counter.probe_ended(10, false);
+        counter.probe(5, Probe::Built);
+        counter.probe(10, Probe::NotTransmitted);
         scan(&counter, 500, 1);
         assert_eq!(counter.visit(0).unwrap().probe, ProbeState::Unsent);
+    }
+
+    #[test]
+    fn listening_alone_builds_no_probe() {
+        let counter = ConnectCounter::new();
+        scan(&counter, 0, 13);
+        scan(&counter, 500, 1);
+        assert_eq!(counter.visit(0).unwrap().probe, ProbeState::None);
+    }
+
+    #[test]
+    fn an_unknown_end_stays_unknown_past_the_visit() {
+        let counter = ConnectCounter::new();
+        scan(&counter, 0, 13);
+        counter.probe(5, Probe::Built);
+        counter.probe(10, Probe::Unknown);
+        assert_eq!(counter.visit(0).unwrap().probe, ProbeState::Unknown);
+        assert_eq!(counter.visit(0).unwrap().probe_ended, Some(10));
+        scan(&counter, 500, 1);
+        assert_eq!(counter.visit(0).unwrap().probe, ProbeState::Unknown);
+    }
+
+    #[test]
+    fn a_built_probe_the_port_never_ended_is_no_time_out() {
+        let counter = ConnectCounter::new();
+        scan(&counter, 0, 13);
+        counter.probe(5, Probe::Built);
+        scan(&counter, 500, 1);
+        let visit = counter.visit(0).unwrap();
+        assert_eq!(visit.probe, ProbeState::Built);
+        assert_eq!(visit.probe_ended, None);
     }
 }

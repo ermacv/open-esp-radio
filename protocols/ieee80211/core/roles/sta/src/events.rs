@@ -5,6 +5,8 @@
 //! The station reports each as a [`StaEvent`] to the sink its caller lends a
 //! call ([`oer_portable_events`]). It keeps no count of them.
 
+use oer_protocols_ieee80211_contracts_port::{SingleEnd, SingleOutcome, TxOutcome};
+
 /// One decision of the station core.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaEvent {
@@ -40,12 +42,50 @@ pub enum StaEvent {
         at: oer_portable_time::Instant,
         heard: ScanHeard,
     },
-    /// The port ended the scan's probe at `at`: it reports an end on air, or
-    /// that the probe never went out.
+    /// The scan built its probe at `at` and handed it to the port.
+    ScanProbeBuilt { at: oer_portable_time::Instant },
+    /// The port ended the scan's probe at `at`.
     ScanProbeEnded {
         at: oer_portable_time::Instant,
-        sent: bool,
+        end: ScanProbeEnd,
     },
+}
+
+/// What the port's end of a scan's probe says of its transmission. It is the
+/// port's word; nothing here observes the air.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanProbeEnd {
+    /// The port counted at least one transmission, whatever ended the plan.
+    Transmitted,
+    /// The port reports no transmission.
+    NotTransmitted,
+    /// The port does not establish whether one went out.
+    Unknown,
+}
+
+impl ScanProbeEnd {
+    /// The end of `outcome`, with its evidence of air kept.
+    pub(crate) const fn of<A, D>(outcome: &SingleOutcome<A, D>) -> Self {
+        match outcome {
+            TxOutcome::Ended(
+                SingleEnd::Delivered { .. }
+                | SingleEnd::AckTimeout(_)
+                | SingleEnd::CtsTimeout(Some(_))
+                | SingleEnd::ContentionLimit(Some(_))
+                | SingleEnd::AirDenied { air: Some(_), .. },
+            ) => Self::Transmitted,
+            TxOutcome::Ended(
+                SingleEnd::CtsTimeout(None)
+                | SingleEnd::ContentionLimit(None)
+                | SingleEnd::AirDenied { air: None, .. },
+            ) => Self::NotTransmitted,
+            // An expiry or a withdrawal may follow an earlier publication,
+            // and an indeterminate end has no known result at all.
+            TxOutcome::Expired { .. } | TxOutcome::Withdrawn(_) | TxOutcome::Indeterminate(_) => {
+                Self::Unknown
+            }
+        }
+    }
 }
 
 /// Where a connect is.

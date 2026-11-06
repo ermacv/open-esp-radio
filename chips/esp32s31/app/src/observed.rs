@@ -32,7 +32,9 @@ use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
 
 use super::{Boot, Error, SamplerToken};
-use crate::observe::connect::{Connect, ConnectCounter, Heard, ScanStep, Stage, Step, Visit};
+use crate::observe::connect::{
+    Connect, ConnectCounter, Heard, Probe, ScanStep, Stage, Step, Visit,
+};
 use crate::observe::cpu::{Boundary, CpuCounter, ExecutorSample, Phase};
 use crate::observe::link::{Containment, LinkCounter, Positions, Rate, Settled, TxEnd};
 use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading};
@@ -369,7 +371,15 @@ impl oer_portable_trace::Observer for Observer {
             );
         }
         if let Some(probe) = Self::decoded::<E, station::StationScanProbe>(event) {
-            CONNECT.probe_ended(probe.at_micros, probe.sent);
+            CONNECT.probe(
+                probe.at_micros,
+                match probe.step {
+                    station::ScanProbeStep::Built => Probe::Built,
+                    station::ScanProbeStep::Transmitted => Probe::Transmitted,
+                    station::ScanProbeStep::NotTransmitted => Probe::NotTransmitted,
+                    station::ScanProbeStep::Unknown => Probe::Unknown,
+                },
+            );
         }
         if let Some(tick) = Self::decoded::<E, station::TrackingTick>(event) {
             TRACKING.observe(tracking_tick(tick), EPOCH.load(Ordering::Relaxed));

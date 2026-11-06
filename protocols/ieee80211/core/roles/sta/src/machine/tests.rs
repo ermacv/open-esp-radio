@@ -409,8 +409,10 @@ struct Losses {
     /// Each change of the connect's step.
     steps: Vec<(ConnectStep, Option<u8>)>,
     heard: Option<(Instant, crate::events::ScanHeard)>,
+    /// The scan probes built.
+    built: u32,
     /// Each scan probe's end.
-    probes: Vec<bool>,
+    probes: Vec<crate::events::ScanProbeEnd>,
 }
 
 impl EventSink<StaEvent> for Losses {
@@ -429,7 +431,8 @@ impl EventSink<StaEvent> for Losses {
                 }
             }
             StaEvent::ScanHeard { at, heard } => self.heard = Some((at, heard)),
-            StaEvent::ScanProbeEnded { sent, .. } => self.probes.push(sent),
+            StaEvent::ScanProbeBuilt { .. } => self.built += 1,
+            StaEvent::ScanProbeEnded { end, .. } => self.probes.push(end),
         }
     }
 }
@@ -1599,6 +1602,88 @@ fn a_delayed_receiver_starts_the_window_when_it_is_ready() {
 }
 
 #[test]
+fn a_window_over_before_the_next_poll_builds_no_probe() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.hold_configured = true;
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        let pending = world.configuring.take().expect("the scan's rules");
+        world
+            .station
+            .input(at(1), StaInput::Configured(pending), &mut world.losses);
+        // The configurations stay held, so the next visit stops before its
+        // own probe.
+        world.run(at(11));
+        assert!(world.take().contains(&Seen::Retune(6)));
+        assert_eq!(world.losses.built, 0);
+        assert_eq!(world.losses.probes, []);
+    });
+}
+
+#[test]
+fn a_probe_reports_what_its_end_says_of_the_air() {
+    use crate::events::ScanProbeEnd;
+    use oer_protocols_ieee80211_contracts_port::{IndeterminateCause, WithdrawCause};
+    for (outcome, expected) in [
+        (Some(ended(End::Delivered)), ScanProbeEnd::Transmitted),
+        (Some(ended(End::ContentionLimit)), ScanProbeEnd::Transmitted),
+        (
+            Some(TxOutcome::Indeterminate(
+                IndeterminateCause::HardwareTimeout,
+            )),
+            ScanProbeEnd::Unknown,
+        ),
+        (None, ScanProbeEnd::NotTransmitted),
+    ] {
+        installed(|mint| {
+            let mut world = World::new(mint, 3);
+            match outcome {
+                Some(outcome) => world.outcomes.push_back((outcome, true)),
+                None => world.unsend_next = true,
+            }
+            world.command(at(0), 1, StaCommand::Connect).unwrap();
+            world.run(at(0));
+            assert_eq!(world.losses.built, 1);
+            assert_eq!(world.losses.probes, [expected]);
+        });
+    }
+    let air = oer_protocols_ieee80211_contracts_port::Air {
+        transmissions: NonZeroU16::MIN,
+        rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+    };
+    let of = |end: SingleEnd<(), ()>| ScanProbeEnd::of(&TxOutcome::Ended(end));
+    for end in [
+        SingleEnd::AckTimeout(air),
+        SingleEnd::CtsTimeout(Some(air)),
+        SingleEnd::ContentionLimit(Some(air)),
+        SingleEnd::AirDenied {
+            denial: (),
+            air: Some(air),
+        },
+    ] {
+        assert_eq!(of(end), ScanProbeEnd::Transmitted);
+    }
+    for end in [
+        SingleEnd::CtsTimeout(None),
+        SingleEnd::ContentionLimit(None),
+        SingleEnd::AirDenied {
+            denial: (),
+            air: None,
+        },
+    ] {
+        assert_eq!(of(end), ScanProbeEnd::NotTransmitted);
+    }
+    for outcome in [
+        Outcome::Expired { msdus: 1 },
+        Outcome::Withdrawn(WithdrawCause::GateClosed),
+        Outcome::Indeterminate(IndeterminateCause::KeyRefused),
+    ] {
+        assert_eq!(ScanProbeEnd::of(&outcome), ScanProbeEnd::Unknown);
+    }
+}
+
+#[test]
 fn the_lease_ends_a_window_it_cannot_hold() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
@@ -1687,9 +1772,10 @@ fn a_connect_reports_each_step_and_what_its_scan_heard() {
         world.run(at(31));
         assert_eq!(
             world.losses.probes,
-            [true, true],
+            [crate::events::ScanProbeEnd::Transmitted; 2],
             "a probe per visit went out"
         );
+        assert_eq!(world.losses.built, 2);
         let steps = core::mem::take(&mut world.losses.steps);
         let reached = |step, channel| {
             steps

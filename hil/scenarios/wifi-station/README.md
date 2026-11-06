@@ -34,7 +34,10 @@ to the first of the network, the frames heard, the network's beacons and probe
 responses, its strongest level, the probe responses addressed to the station
 and those overheard, and the probe's state. Times are when the station handled
 a frame, not when it was received, and the beacons and `resp` count the
-connect's own network. The probe's state `sent` is the port's report, not the
-air; `answer` is a probe response addressed to the station that reached the
-scan, and `timeout` a visit that ended with none. `dhcp` prints the time to the
+connect's own network. The probe's state is `built` until the port ends it,
+then `sent` (the port counted a transmission), `unsent` (it reports none) or
+`unknown` (it does not establish one); these are the port's report, not the
+air. `answer` is a probe response addressed to the station that reached the
+scan, and `timeout` a sent probe whose visit ended with none. A visit that
+built no probe shows `-`. `dhcp` prints the time to the
 address from the join's start.
