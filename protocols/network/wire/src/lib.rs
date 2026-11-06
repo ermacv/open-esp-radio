@@ -23,7 +23,8 @@
     )
 )]
 
-//! Ethernet, VLAN, IP and transport header fields.
+//! Ethernet, VLAN, ARP, IP and transport header fields, and the Internet
+//! checksum.
 //!
 //! The codec owns byte order, bit fields, lengths and the structural
 //! dependencies between these fields. It returns checked values and borrowed
@@ -31,6 +32,8 @@
 //! tells a malformed header from a valid one it does not interpret; it never
 //! decides what a packet means for a radio.
 
+pub mod arp;
+pub mod checksum;
 pub mod ethernet;
 pub mod ip;
 pub mod transport;
