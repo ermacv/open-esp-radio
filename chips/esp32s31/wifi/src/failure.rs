@@ -456,6 +456,7 @@ pub enum PhyDomainError {
     Acquire(PhyClientAcquireError),
     Time(PhyTrackTimeError),
     ClientAbsent(RadioClient),
+    ClientPhase(RadioClient),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTrackTimeError {

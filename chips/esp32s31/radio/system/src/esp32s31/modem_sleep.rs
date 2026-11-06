@@ -26,13 +26,15 @@ pub(crate) fn suspend_wifi_rf<B: PlatformClockBackend>(
     clocks: &WifiClocksOn,
     membership: WifiPhyMembership,
 ) -> Result<(WifiPhySuspended, bool), (WifiPhyMembership, ConcurrentPhyError)> {
-    set_wifi_rx(radio, &membership, false);
+    if let Err(error) = set_wifi_rx(radio, &membership, false) {
+        return Err((membership, error));
+    }
     match suspend_wifi(radio, clocks, membership) {
         Ok(suspended) => Ok(suspended),
         Err(failure) => {
             let error = failure.error();
             let membership = failure.into_membership();
-            set_wifi_rx(radio, &membership, true);
+            let error = set_wifi_rx(radio, &membership, true).err().unwrap_or(error);
             Err((membership, error))
         }
     }
@@ -60,7 +62,7 @@ pub(crate) fn resume_wifi_rf<B: PlatformClockBackend>(
     };
     match resume_wifi(ready, clocks, suspended, clock) {
         Ok(joined) => {
-            set_wifi_rx(joined.radio, &joined.membership, true);
+            joined.radio.set_wifi_rx_enabled(true);
             Ok((joined.membership, joined.acquired))
         }
         Err(refused) => {

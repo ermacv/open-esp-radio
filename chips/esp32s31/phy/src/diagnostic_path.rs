@@ -110,6 +110,14 @@ impl DiagnosticPath for ConcurrentPhyError {
                     RadioClient::Ieee802154 => "Ieee802154",
                 });
             }
+            Self::ClientPhase(client) => {
+                path.name("ClientPhase");
+                path.name(match client {
+                    RadioClient::Wifi => "Wifi",
+                    RadioClient::Bluetooth => "Bluetooth",
+                    RadioClient::Ieee802154 => "Ieee802154",
+                });
+            }
         }
     }
 }

@@ -34,7 +34,7 @@ use crate::{
     domain::PhyDomain,
     state::client::{
         PhyClientAccess as ClientStateAccess, PhyClientAcquireError, PhyClientAcquireOutcome,
-        PhyClientKey, PhyClientSnapshot, PhyPendingTrack, PhyTrackTimeError,
+        PhyClientClaims, PhyClientKey, PhyClientSnapshot, PhyPendingTrack, PhyTrackTimeError,
     },
 };
 
@@ -93,6 +93,8 @@ pub enum ConcurrentPhyError {
     Time(PhyTrackTimeError),
     /// The client this operation serves is not in the domain's client set.
     ClientAbsent(RadioClient),
+    /// The client is not in the phase this operation needs; nothing changed.
+    ClientPhase(RadioClient),
 }
 
 /// Result of a client acquisition.
@@ -105,11 +107,31 @@ pub enum ConcurrentAcquire {
 }
 
 impl ConcurrentPhy {
-    pub(crate) fn permission_key(&self) -> PhyClientKey {
-        match &self.slot {
+    /// The registration's key.
+    ///
+    /// # Errors
+    ///
+    /// No registration, or the domain failed.
+    pub(crate) fn permission_key(&self) -> Result<PhyClientKey, ConcurrentPhyError> {
+        let key = match &self.slot {
             Slot::Registered(domain) | Slot::RfClosed(domain) => domain.clients.permission_key(),
             Slot::Pending { pending, .. } => pending.permission_key(),
-            Slot::Empty | Slot::Poisoned => panic!("PHY registration missing"),
+            Slot::Empty => None,
+            Slot::Poisoned => return Err(ConcurrentPhyError::Poisoned),
+        };
+        key.ok_or(ConcurrentPhyError::NotRegistered)
+    }
+
+    /// Whether `key` belongs to this registration.
+    ///
+    /// # Errors
+    ///
+    /// No registration, the domain failed, or another registration's key.
+    pub(crate) fn check_permission(&self, key: PhyClientKey) -> Result<(), ConcurrentPhyError> {
+        if self.permission_key()? == key {
+            Ok(())
+        } else {
+            Err(ConcurrentPhyError::EpochMismatch)
         }
     }
 
@@ -350,6 +372,10 @@ impl ConcurrentPhy {
 #[must_use = "a ready PHY is consumed by the client's join"]
 pub struct PhyReady<'l, B: PlatformClockBackend> {
     radio: &'l mut RadioDomain<B, ConcurrentPhy>,
+    /// The clients holding a claim, as the proof found them.
+    claims: PhyClientClaims,
+    /// The registration the proof is of.
+    key: PhyClientKey,
 }
 
 impl<B: PlatformClockBackend> core::fmt::Debug for PhyReady<'_, B> {
@@ -413,6 +439,11 @@ pub struct PhyClientReady<'l, B: PlatformClockBackend, K: PhyClientKind> {
 }
 
 impl<'l, B: PlatformClockBackend, K: PhyClientKind> PhyClientReady<'l, B, K> {
+    /// The registration the proof is of.
+    pub(crate) const fn key(&self) -> PhyClientKey {
+        self.ready.key()
+    }
+
     pub(crate) fn into_radio(self) -> &'l mut RadioDomain<B, ConcurrentPhy> {
         self.ready.into_radio()
     }
@@ -428,18 +459,7 @@ impl<'l, B: PlatformClockBackend, K: PhyClientKind> PhyClientReady<'l, B, K> {
 impl<'l, B: PlatformClockBackend> PhyReady<'l, B> {
     /// Lend one client's vacant phase; a member phase has no join operation.
     pub fn client<K: PhyClientKind>(self) -> PhyClientAccess<'l, B, K> {
-        #[allow(
-            clippy::ok_expect,
-            reason = "an internal phase failure needs no Debug formatter in the firmware"
-        )]
-        let clients = &self
-            .radio
-            .attachment()
-            .settled()
-            .ok()
-            .expect("PHY client phase invariant")
-            .clients;
-        if clients.is_claimed(K::CLIENT) {
+        if self.claims.contains(K::CLIENT) {
             PhyClientAccess::Member(self)
         } else {
             PhyClientAccess::Available(PhyClientReady {
@@ -451,7 +471,20 @@ impl<'l, B: PlatformClockBackend> PhyReady<'l, B> {
 
     #[cfg(test)]
     pub(crate) fn for_test(radio: &'l mut RadioDomain<B, ConcurrentPhy>) -> Self {
-        Self { radio }
+        let claims = radio
+            .attachment()
+            .settled()
+            .map_or(PhyClientClaims::NONE, |domain| domain.clients.claims());
+        let key = radio
+            .attachment()
+            .permission_key()
+            .unwrap_or_else(|_| crate::state::client::model_permission_key_for_test());
+        Self { radio, claims, key }
+    }
+
+    /// The registration this proof is of.
+    pub(crate) const fn key(&self) -> PhyClientKey {
+        self.key
     }
 
     /// The radio, for the join that consumes the proof.
@@ -499,7 +532,12 @@ pub fn phy_ready<'l, B: PlatformClockBackend>(
     if !domain.clients.describes_epoch(epoch) {
         return Err(ConcurrentPhyError::EpochMismatch);
     }
-    Ok(PhyReady { radio })
+    let claims = domain.clients.claims();
+    let key = domain
+        .clients
+        .permission_key()
+        .ok_or(ConcurrentPhyError::NotRegistered)?;
+    Ok(PhyReady { radio, claims, key })
 }
 
 /// Enter `client` into the shared domain `ready` proves ready.
@@ -518,8 +556,12 @@ pub(crate) fn acquire_client<B: PlatformClockBackend>(
         registered,
         clients,
     } = phy.settled_domain()?;
-    let ClientStateAccess::Available(available) = clients.client(client) else {
-        panic!("PHY client phase invariant");
+    let available = match clients.client(client) {
+        ClientStateAccess::Available(available) => available,
+        other => {
+            phy.slot = Slot::Registered(PhyDomain::new(registered, other.into_owner()));
+            return Err(ConcurrentPhyError::ClientPhase(client));
+        }
     };
     match available.acquire(clock) {
         Ok(outcome) => Ok(publish_acquisition(phy, registered, outcome)),
@@ -558,8 +600,13 @@ pub(crate) fn acquire_btbb_client<B: PlatformClockBackend>(
         registered,
         clients,
     } = radio.attachment_mut().settled_domain().map_err(Phy)?;
-    let ClientStateAccess::Available(available) = clients.client(client) else {
-        panic!("PHY client phase invariant");
+    let available = match clients.client(client) {
+        ClientStateAccess::Available(available) => available,
+        other => {
+            radio.attachment_mut().slot =
+                Slot::Registered(PhyDomain::new(registered, other.into_owner()));
+            return Err(Phy(ConcurrentPhyError::ClientPhase(client)));
+        }
     };
     let prepared = match available.prepare(clock) {
         Ok(prepared) => prepared,
@@ -613,13 +660,17 @@ pub(crate) fn resume_client<B: PlatformClockBackend>(
     clock: &impl oer_portable_time::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
+    phy.check_permission(key)?;
     let PhyDomain {
         registered,
         clients,
     } = phy.settled_domain()?;
-    clients.assert_permission(key);
-    let ClientStateAccess::Suspended(suspended) = clients.client(RadioClient::Wifi) else {
-        panic!("PHY client phase invariant");
+    let suspended = match clients.client(RadioClient::Wifi) {
+        ClientStateAccess::Suspended(suspended) => suspended,
+        other => {
+            phy.slot = Slot::Registered(PhyDomain::new(registered, other.into_owner()));
+            return Err(ConcurrentPhyError::ClientPhase(RadioClient::Wifi));
+        }
     };
     match suspended.resume(clock) {
         Ok(outcome) => match outcome.into_owner() {
@@ -649,15 +700,18 @@ pub(crate) fn retire_suspended_client<B: PlatformClockBackend>(
     key: PhyClientKey,
 ) -> Result<(), ConcurrentPhyError> {
     let phy = radio.attachment_mut();
+    phy.check_permission(key)?;
     let domain = match &mut phy.slot {
         Slot::Registered(domain) | Slot::RfClosed(domain) => domain,
         Slot::Pending { .. } => return Err(ConcurrentPhyError::TrackingPending),
         Slot::Empty => return Err(ConcurrentPhyError::NotRegistered),
         Slot::Poisoned => return Err(ConcurrentPhyError::Poisoned),
     };
-    domain.clients.assert_permission(key);
-    domain.clients.retire_suspended_wifi();
-    Ok(())
+    if domain.clients.retire_suspended_wifi() {
+        Ok(())
+    } else {
+        Err(ConcurrentPhyError::ClientPhase(RadioClient::Wifi))
+    }
 }
 
 /// Remove `client` from the shared domain. Returns whether it was the last.
@@ -672,13 +726,17 @@ pub(crate) fn release_client<B: PlatformClockBackend>(
     key: PhyClientKey,
 ) -> Result<bool, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
+    phy.check_permission(key)?;
     let PhyDomain {
         registered,
         clients,
     } = phy.settled_domain()?;
-    clients.assert_permission(key);
-    let ClientStateAccess::Member(member) = clients.client(client) else {
-        panic!("PHY client phase invariant");
+    let member = match clients.client(client) {
+        ClientStateAccess::Member(member) => member,
+        other => {
+            phy.slot = Slot::Registered(PhyDomain::new(registered, other.into_owner()));
+            return Err(ConcurrentPhyError::ClientPhase(client));
+        }
     };
     let outcome = member.release();
     let is_last = outcome.is_last();
@@ -692,13 +750,17 @@ pub(crate) fn suspend_client<B: PlatformClockBackend>(
     key: PhyClientKey,
 ) -> Result<bool, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
+    phy.check_permission(key)?;
     let PhyDomain {
         registered,
         clients,
     } = phy.settled_domain()?;
-    clients.assert_permission(key);
-    let ClientStateAccess::Member(member) = clients.client(RadioClient::Wifi) else {
-        panic!("PHY client phase invariant");
+    let member = match clients.client(RadioClient::Wifi) {
+        ClientStateAccess::Member(member) => member,
+        other => {
+            phy.slot = Slot::Registered(PhyDomain::new(registered, other.into_owner()));
+            return Err(ConcurrentPhyError::ClientPhase(RadioClient::Wifi));
+        }
     };
     let outcome = member.suspend();
     let last = outcome.is_last();

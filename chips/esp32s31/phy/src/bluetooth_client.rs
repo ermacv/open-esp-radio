@@ -66,7 +66,7 @@ pub fn bluetooth_rf_ready<'r, B: PlatformClockBackend>(
 ) -> Result<BluetoothRfReady<'r, B>, ConcurrentPhyError> {
     let domain = radio.attachment().settled()?;
     if !domain.clients.describes_epoch(radio.registration_epoch())
-        || domain.clients.permission_key() != membership.key
+        || domain.clients.permission_key() != Some(membership.key)
     {
         return Err(ConcurrentPhyError::EpochMismatch);
     }
@@ -106,6 +106,7 @@ pub fn join_bluetooth<'l, B: PlatformClockBackend>(
     task: &TaskOwner,
     clock: &impl oer_portable_time::Clock,
 ) -> Result<Joined<'l, B, BluetoothPhyMembership>, JoinRefused<'l, B, BluetoothPhyClientError>> {
+    let key = ready.key();
     let radio = ready.into_radio();
     let acquired = match acquire_btbb_client(radio, RadioClient::Bluetooth, clock, |radio, gain| {
         task.acquire_btbb(radio, gain)
@@ -119,7 +120,6 @@ pub fn join_bluetooth<'l, B: PlatformClockBackend>(
             return Err(JoinRefused { error, radio });
         }
     };
-    let key = radio.attachment().permission_key();
     Ok(Joined {
         membership: BluetoothPhyMembership { key },
         acquired,
@@ -177,7 +177,7 @@ pub fn leave_bluetooth<B: PlatformClockBackend>(
     }
     let key = membership.key;
     let valid = radio.attachment().settled().and_then(|domain| {
-        if domain.clients.permission_key() != key {
+        if domain.clients.permission_key() != Some(key) {
             Err(ConcurrentPhyError::EpochMismatch)
         } else if !domain.clients.snapshot().contains(RadioClient::Bluetooth) {
             Err(ConcurrentPhyError::ClientAbsent(RadioClient::Bluetooth))

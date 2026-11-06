@@ -596,6 +596,7 @@ pub(super) fn phy_domain_error(
         Source::Acquire(v0) => PhyDomainError::Acquire(phy_client_acquire_error(v0)),
         Source::Time(v0) => PhyDomainError::Time(phy_track_time_error(v0)),
         Source::ClientAbsent(v0) => PhyDomainError::ClientAbsent(radio_client(v0)),
+        Source::ClientPhase(v0) => PhyDomainError::ClientPhase(radio_client(v0)),
     }
 }
 

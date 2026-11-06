@@ -245,8 +245,46 @@ fn release_for_test(
     radio: &mut RadioDomain<crate::test_clocks::TestClockBackend, ConcurrentPhy>,
     client: RadioClient,
 ) -> Result<bool, ConcurrentPhyError> {
-    let key = radio.attachment().permission_key();
+    let key = radio.attachment().permission_key()?;
     release_client(radio, client, key)
+}
+
+#[test]
+fn a_key_of_another_registration_is_refused_and_the_domain_stays() {
+    let mut radio = registered_domain();
+    let clock = VirtualClock::<8>::new();
+    enter_client(&mut radio, RadioClient::Wifi, &clock).expect("the client enters");
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    let foreign = crate::state::client::model_permission_key_for_test();
+    assert_eq!(
+        release_client(&mut radio, RadioClient::Wifi, foreign),
+        Err(ConcurrentPhyError::EpochMismatch)
+    );
+    assert!(
+        radio.attachment().settled().is_ok(),
+        "the domain stayed in its slot"
+    );
+    assert_eq!(release_for_test(&mut radio, RadioClient::Wifi), Ok(true));
+}
+
+#[test]
+fn a_client_in_another_phase_is_refused_and_the_domain_stays() {
+    let mut radio = registered_domain();
+    let clock = VirtualClock::<8>::new();
+    assert_eq!(
+        release_for_test(&mut radio, RadioClient::Wifi),
+        Err(ConcurrentPhyError::ClientPhase(RadioClient::Wifi))
+    );
+    assert!(
+        radio.attachment().settled().is_ok(),
+        "the domain stayed in its slot"
+    );
+    enter_client(&mut radio, RadioClient::Wifi, &clock).expect("the client enters");
+    assert!(radio.attachment_mut().complete_tracking_for_test());
+    assert_eq!(
+        enter_client(&mut radio, RadioClient::Wifi, &clock),
+        Err(ConcurrentPhyError::ClientPhase(RadioClient::Wifi))
+    );
 }
 
 #[test]
