@@ -653,6 +653,65 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
 }
 
 #[test]
+fn a_publication_refused_past_its_attachment_gives_every_owner_back_to_the_restart() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(3),
+        );
+        assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+        let key = match fixture.outbox.terminals.pop() {
+            Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) => key,
+            _ => panic!("the installation terminal returns the key"),
+        };
+        let attempt = fixture.protected_mpdu(&key).expect("attempt");
+        drop(key);
+        let before = fixture.port.admissions_for_test();
+        assert_eq!(before.1, Some(0));
+        fixture.port.refuse_values_for_test();
+        let now = fixture.now();
+        let _ = fixture.port.submit(attempt, now, &mut fixture.outbox);
+        assert_eq!(
+            fixture.port.fault(),
+            Some(Fault::Unpublished(crate::port::Unpublished::Step(
+                crate::port::PublishStep::Values
+            )))
+        );
+        assert_eq!(
+            fixture.port.admissions_for_test(),
+            before,
+            "the ticket and the key's use came back"
+        );
+
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        assert_eq!(fixture.take_completed(), 1, "the MPDU came back withdrawn");
+
+        // The retire refuses a descriptor that is missing or still holds
+        // its buffer.
+        let mut second = reinstall(fixture, installations)
+            .ok()
+            .expect("the descriptor and the buffer came home");
+        second.start();
+        let attempt = second.mpdu(None).expect("attempt");
+        let now = second.now();
+        second
+            .port
+            .submit(attempt, now, &mut second.outbox)
+            .ok()
+            .expect("the new installation publishes");
+        let _ = second.turn();
+        assert_eq!(second.take_completed(), 1, "and its frame completes");
+        assert_eq!(second.port.fault(), None);
+        second.stop();
+    });
+}
+
+#[test]
 fn a_frame_left_in_an_arena_refuses_the_reinstall_as_not_retired_until_withdrawn() {
     with_installations(|mut fixture, installations| {
         fixture.start();

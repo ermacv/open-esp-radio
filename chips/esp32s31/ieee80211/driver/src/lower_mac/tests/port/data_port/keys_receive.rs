@@ -492,6 +492,11 @@ fn a_fault_that_took_owners_keeps_the_port_quarantined() {
             Fault::RemovalMismatch,
             Fault::ReceiveAccounting,
             Fault::KeySlotMissing(crate::port::KeyOp::Remove),
+            // The core recorded its own fault behind this refusal.
+            Fault::Publish {
+                queue: 0,
+                step: crate::port::PublishStep::KeyAdmission,
+            },
         ] {
             assert!(!crate::port::Fault::leaves_owners_whole(fault), "{fault:?}");
         }

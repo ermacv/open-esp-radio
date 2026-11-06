@@ -35,6 +35,7 @@ impl DiagnosticPath for BackendFault {
                     UnpublishedCause::CoreView => "CoreView",
                     UnpublishedCause::Admission => "Admission",
                     UnpublishedCause::Key => "Key",
+                    UnpublishedCause::Step(step) => publish_step(step),
                 });
             }
             Self::Retune(error) => {
@@ -76,21 +77,7 @@ impl DiagnosticPath for BackendFault {
             }
             Self::Publish { queue, step } => {
                 queue_fault(path, "Publish", *queue);
-                path.name(match step {
-                    PublishStep::Observations => "Observations",
-                    PublishStep::Ticket => "Ticket",
-                    PublishStep::KeyAdmission => "KeyAdmission",
-                    PublishStep::ReceiveKey => "ReceiveKey",
-                    PublishStep::Buffer => "Buffer",
-                    PublishStep::Descriptor => "Descriptor",
-                    PublishStep::Attach => "Attach",
-                    PublishStep::DescriptorBusy => "DescriptorBusy",
-                    PublishStep::HeaderBuffer => "HeaderBuffer",
-                    PublishStep::CcmpHeader => "CcmpHeader",
-                    PublishStep::Values => "Values",
-                    PublishStep::Count => "Count",
-                    PublishStep::Queue => "Queue",
-                });
+                path.name(publish_step(step));
             }
             Self::DuplicateCompletion { queue } => queue_fault(path, "DuplicateCompletion", *queue),
             Self::RemovalOverflow => path.name("RemovalOverflow"),
@@ -225,6 +212,24 @@ impl DiagnosticPath for LowerMacFault {
             Self::KeyUseMismatch => path.name("KeyUseMismatch"),
             Self::KeyBank => path.name("KeyBank"),
         }
+    }
+}
+
+fn publish_step(step: &PublishStep) -> &'static str {
+    match step {
+        PublishStep::Observations => "Observations",
+        PublishStep::Ticket => "Ticket",
+        PublishStep::KeyAdmission => "KeyAdmission",
+        PublishStep::ReceiveKey => "ReceiveKey",
+        PublishStep::Buffer => "Buffer",
+        PublishStep::Descriptor => "Descriptor",
+        PublishStep::Attach => "Attach",
+        PublishStep::DescriptorBusy => "DescriptorBusy",
+        PublishStep::HeaderBuffer => "HeaderBuffer",
+        PublishStep::CcmpHeader => "CcmpHeader",
+        PublishStep::Values => "Values",
+        PublishStep::Count => "Count",
+        PublishStep::Queue => "Queue",
     }
 }
 

@@ -247,6 +247,7 @@ pub enum UnpublishedCause {
     CoreView,
     Admission,
     Key,
+    Step(PublishStep),
 }
 
 /// Why the hardware refused a chain, for a reason a retry does not change.

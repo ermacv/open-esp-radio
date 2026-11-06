@@ -15,6 +15,9 @@ pub(crate) fn backend_fault(
                 UnpublishedCause::Admission
             }
             oer_chips_esp32s31_ieee80211_driver::port::Unpublished::Key => UnpublishedCause::Key,
+            oer_chips_esp32s31_ieee80211_driver::port::Unpublished::Step(step) => {
+                UnpublishedCause::Step(publish_step(step))
+            }
         }),
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,

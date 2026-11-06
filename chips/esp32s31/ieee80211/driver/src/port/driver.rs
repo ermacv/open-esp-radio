@@ -179,6 +179,9 @@ pub(super) trait DriverEnv<'id, Id: SlotIdentity, D: Device<B>, const B: usize, 
 pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) core: PortCoreOwner<'id, Id, D, B>,
     pub(super) tickets: [Option<TxTicket<'id, CorePath<Id>>>; TX_TICKETS],
+    /// Refuse the next publication's values, past its buffer's attachment.
+    #[cfg(test)]
+    pub(super) refuse_values_for_test: bool,
     pub(super) free: [Option<FreeQueue<'id, CorePath<Id>>>; 4],
     pub(super) queues: [heapless::Deque<Pending<'id, Id, D, B, O>, TX_TICKETS>; 4],
     pub(super) running: [Option<Pending<'id, Id, D, B, O>>; 4],
@@ -255,6 +258,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         Self {
             core: PortCoreOwner::<Id, D, B>::vacant(),
             tickets: [const { None }; TX_TICKETS],
+            #[cfg(test)]
+            refuse_values_for_test: false,
             free: [const { None }; 4],
             queues: [const { heapless::Deque::new() }; 4],
             running: [const { None }; 4],
@@ -723,22 +728,22 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 Ok(checked)
             }
         });
-        let (mut core, admitted_at, key_handle) = match checked {
-            Ok(checked) => checked,
-            Err(refusal) => {
-                let Some(queue) = self.queues.get_mut(index) else {
-                    core::mem::forget(pending);
-                    return Err(Fault::QueueFull { queue: at });
-                };
-                return match queue.push_front(pending) {
-                    Ok(()) => Err(Fault::Unpublished(refusal)),
-                    // The retry stays in custody with the quarantine.
-                    Err(pending) => {
-                        core::mem::forget(pending);
-                        Err(Fault::QueueFull { queue: at })
-                    }
-                };
-            }
+        let refusal = match &checked {
+            Err(refusal) => Some(*refusal),
+            Ok((_, _, key)) => owner_free_refusal(
+                self.observations.is_some(),
+                &self.tickets,
+                self.descriptors.get(index).and_then(Option::as_ref),
+                self.free.get(index).is_some_and(Option::is_some),
+                &mut pending,
+                *key,
+            ),
+        };
+        if let Some(refusal) = refusal {
+            return Err(self.back_to_queue(index, pending, refusal));
+        }
+        let Ok((mut core, admitted_at, key_handle)) = checked else {
+            return Err(refused(PublishStep::Values));
         };
         let observations = self
             .observations
@@ -781,12 +786,34 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             // A new MSDU: the descriptor's exchange record starts over.
             memory.reset_work();
             if let (Some(Installed::Transmit(key)), Some(pn)) = (key_handle, mpdu.pn) {
-                let buffer = memory
-                    .buffer_mut()
-                    .map_err(|_| refused(PublishStep::HeaderBuffer))?;
-                core.write_ccmp_header(key, buffer, mpdu.layout.header_len(), pn)
-                    .map_err(|_| refused(PublishStep::CcmpHeader))?;
+                let header = memory.buffer_mut().map(|buffer| {
+                    core.write_ccmp_header(key, buffer, mpdu.layout.header_len(), pn)
+                });
+                let refusal = match header {
+                    Ok(Ok(_)) => None,
+                    Ok(Err(_)) => Some(PublishStep::CcmpHeader),
+                    Err(_) => Some(PublishStep::HeaderBuffer),
+                };
+                if let Some(step) = refusal {
+                    return Err(self.unwind(
+                        device,
+                        index,
+                        (pending, admission),
+                        memory.into_slot(),
+                        step,
+                    ));
+                }
             }
+        }
+        #[cfg(test)]
+        if core::mem::take(&mut self.refuse_values_for_test) {
+            return Err(self.unwind(
+                device,
+                index,
+                (pending, admission),
+                memory.into_slot(),
+                PublishStep::Values,
+            ));
         }
         let values = MpduValues::checked(
             memory,
@@ -808,8 +835,20 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 // 802.11-2020, 9.2.4.1.5).
                 retry: mpdu.published && mpdu.layout.kind() != MpduKind::BlockAckRequest,
             },
-        )
-        .map_err(|_| refused(PublishStep::Values))?;
+        );
+        let values = match values {
+            Ok(values) => values,
+            Err(refused) => {
+                let slot = refused.slot.into_slot();
+                return Err(self.unwind(
+                    device,
+                    index,
+                    (pending, admission),
+                    slot,
+                    PublishStep::Values,
+                ));
+            }
+        };
         mpdu.published = true;
         pending.publications = pending
             .publications
@@ -831,6 +870,106 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         #[cfg(all(oer_trace, oer_debug_control))]
         oer_chips_family_staged_runtime::trace::emit(&publication);
         Ok(())
+    }
+    /// Put `pending` back at the head of its queue: nothing of it was
+    /// published, and a stop withdraws it there.
+    fn back_to_queue(
+        &mut self,
+        index: usize,
+        pending: Pending<'id, Id, D, B, O>,
+        refusal: Unpublished,
+    ) -> Fault {
+        let queue = index as u8;
+        let Some(place) = self.queues.get_mut(index) else {
+            core::mem::forget(pending);
+            return Fault::QueueFull { queue };
+        };
+        match place.push_front(pending) {
+            Ok(()) => Fault::Unpublished(refusal),
+            // The retry stays in custody with the quarantine.
+            Err(pending) => {
+                core::mem::forget(pending);
+                Fault::QueueFull { queue }
+            }
+        }
+    }
+    /// A publication refused after its buffer joined the descriptor, which
+    /// the hardware has not seen: the memory rejoins the buffer as at a
+    /// completion, the admission gives back its key use and ticket, the
+    /// descriptor takes its place and the MPDU its queue. An owner that
+    /// cannot go back keeps all of them with the quarantine.
+    fn unwind(
+        &mut self,
+        device: &mut D,
+        index: usize,
+        (mut pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
+        mut slot: Pin<&'static mut TxSlot<B>>,
+        step: PublishStep,
+    ) -> Fault {
+        let terminal = Fault::Publish {
+            queue: index as u8,
+            step,
+        };
+        let memory = slot.as_mut().detach().and_then(|memory| {
+            let buffer = &mut pending.operation.execute().mpdu.buffer;
+            buffer.dma.complete(memory).ok()
+        });
+        if memory.is_none() {
+            core::mem::forget((pending, admission));
+            return terminal;
+        }
+        let ticket = match self.returned_ticket(device, admission, terminal) {
+            Ok(ticket) => ticket,
+            Err(fault) => {
+                core::mem::forget(pending);
+                return fault;
+            }
+        };
+        let descriptor = self.descriptors.get_mut(index);
+        let free = self.tickets.iter_mut().find(|place| place.is_none());
+        let (Some(descriptor), Some(free)) = (descriptor, free) else {
+            core::mem::forget((pending, ticket));
+            return terminal;
+        };
+        *descriptor = Some(slot);
+        *free = Some(ticket);
+        self.back_to_queue(index, pending, Unpublished::Step(step))
+    }
+    /// The ticket of an admission never published, its key use returned. A
+    /// removal takes its key out of `keys` first, so a publication's key has
+    /// none waiting and the sink stays empty.
+    fn returned_ticket(
+        &mut self,
+        device: &mut D,
+        admission: TxAdmission<'id, CorePath<Id>>,
+        terminal: Fault,
+    ) -> Result<TxTicket<'id, CorePath<Id>>, Fault> {
+        let CoreView::Open(mut core) = self.core.view() else {
+            core::mem::forget(admission);
+            return Err(terminal);
+        };
+        let hardware = match device.hardware() {
+            Ok(hardware) => hardware,
+            Err(fault) => {
+                core::mem::forget(admission);
+                return Err(fault);
+            }
+        };
+        let mut sink = Sink::default();
+        let ticket = match core.return_admission(hardware, admission, &mut sink) {
+            Ok(ticket) => ticket,
+            Err(quarantined) => {
+                core::mem::forget(quarantined);
+                return Err(terminal);
+            }
+        };
+        let contract = sink.fault();
+        let quiet = sink.removed.is_empty() && contract.is_none();
+        if quiet {
+            return Ok(ticket);
+        }
+        core::mem::forget((sink, ticket));
+        Err(contract.unwrap_or(terminal))
     }
     pub(super) fn install(
         &mut self,
@@ -1162,6 +1301,48 @@ pub(super) fn queue(category: WmmAccessCategory) -> usize {
 }
 pub(super) fn vif(role: VifRole) -> usize {
     if role == VifRole::Station { 0 } else { 1 }
+}
+
+/// What refuses `pending` with no owner in hand: everything the publication's
+/// steps would find missing, read before any of them takes one.
+fn owner_free_refusal<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>(
+    observations: bool,
+    tickets: &[Option<TxTicket<'id, CorePath<Id>>>],
+    descriptor: Option<&Pin<&'static mut TxSlot<B>>>,
+    queue: bool,
+    pending: &mut Pending<'id, Id, D, B, O>,
+    key: Option<&Installed<'id, Id>>,
+) -> Option<Unpublished> {
+    let step = if !observations {
+        PublishStep::Observations
+    } else if !tickets.iter().any(Option::is_some) {
+        PublishStep::Ticket
+    } else if matches!(key, Some(Installed::Receive(_))) {
+        PublishStep::ReceiveKey
+    } else if pending
+        .operation
+        .execute()
+        .mpdu
+        .buffer
+        .dma
+        .memory_mut()
+        .is_none()
+    {
+        PublishStep::Buffer
+    } else if descriptor.is_none() {
+        PublishStep::Descriptor
+    } else if descriptor
+        .is_some_and(|slot| slot.state() != crate::mac::tx::TxDmaState::Free || slot.attached())
+    {
+        PublishStep::DescriptorBusy
+    } else if !queue {
+        PublishStep::Queue
+    } else if pending.publications.checked_add(1).is_none() {
+        PublishStep::Count
+    } else {
+        return None;
+    };
+    Some(Unpublished::Step(step))
 }
 
 /// The attempt's key: `Some(None)` for an open attempt, `None` when the key

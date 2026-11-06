@@ -465,6 +465,8 @@ pub enum Unpublished {
     Admission,
     /// The MPDU's key is not installed.
     Key,
+    /// A step of the publication refused; what it held went back.
+    Step(PublishStep),
 }
 
 /// The lower-MAC operation a missing core view stopped.
