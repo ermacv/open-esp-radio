@@ -389,7 +389,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// Apply the scan's station policy: Mode2, then no unicast BSSID check,
     /// so a Probe Response addressed to the station reaches DMA though its
-    /// BSSID is none the station holds. Connected stations keep the check.
+    /// BSSID is none the station holds. This covers a background scan away
+    /// from its home channel too; the home visit keeps the check.
     ///
     /// SOURCE: `libnet80211.a[ieee80211_scan.o]::scan_start_handler` calls
     /// `wifi_set_rx_policy(3)`, whose jump-table case runs

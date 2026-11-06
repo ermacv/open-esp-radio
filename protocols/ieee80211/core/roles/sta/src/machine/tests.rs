@@ -2344,6 +2344,8 @@ fn a_connected_station_scans_in_an_absence_announced_with_nulls() {
         assert_eq!(
             world.take(),
             [
+                // Away from home the receive rules hold no BSSID: the port's
+                // scan policy, without the unicast BSSID check.
                 Seen::Retune(1),
                 Seen::Configure("scan"),
                 Seen::Transmit {
@@ -2364,6 +2366,7 @@ fn a_connected_station_scans_in_an_absence_announced_with_nulls() {
                 },
                 // Channel 6 next, the network's own: no absence, the receive
                 // rules widened to the other networks, and a probe.
+                // At home they keep the BSSID, and with it the check.
                 Seen::Configure("bss+scan"),
                 Seen::Transmit {
                     subtype: 0x0040,

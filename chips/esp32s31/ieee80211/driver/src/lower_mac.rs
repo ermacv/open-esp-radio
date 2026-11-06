@@ -2744,8 +2744,9 @@ enum ReceivePolicy {
     StationOtherBss {
         bssid: [u8; 6],
     },
-    /// A scan outside a BSS: mode two with the broadcast BSSID and no unicast
-    /// BSSID check, so a Probe Response addressed to the station arrives.
+    /// A scan without a BSSID, a connect's or a background one away from its
+    /// home channel: mode two with the broadcast BSSID and no unicast BSSID
+    /// check, so a Probe Response addressed to the station arrives.
     StationScan,
     AccessPointDisabled,
     /// Access-point policy eight: the BSS-member rules and the Probe
