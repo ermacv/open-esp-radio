@@ -255,6 +255,8 @@ impl Worker {
                 let left = self.leave().await;
                 answer(identity, &left);
             }
+            Action::ConnectTimes => answer(identity, &connect_times()),
+            Action::ScanVisit(index) => answer(identity, &scan_visit(index)),
         }
     }
 
@@ -274,7 +276,12 @@ impl Worker {
                 bssid: linked.bssid,
                 channel: linked.channel,
             },
-            Err(error) => Joined::Refused(station_error(error)),
+            Err(error) => {
+                if matches!(error, ConnectError::Failed(_)) {
+                    self.phase = Phase::Idle;
+                }
+                Joined::Refused(station_error(error))
+            }
         }
     }
 
@@ -335,6 +342,46 @@ impl Worker {
             ipv4: leased(net.ipv4).map(ipv4),
         }
     }
+}
+
+/// The last connect as the service reports it.
+fn connect_times() -> wifi_station::ConnectTimes {
+    let connect = observe::connect();
+    let stages = connect.stages;
+    wifi_station::ConnectTimes {
+        visits: connect.visits,
+        lost_visits: connect.lost_visits,
+        ended: connect.ended,
+        ask: stages.ask,
+        tune: stages.tune,
+        configure: stages.configure,
+        authenticate: stages.authenticate,
+        associate: stages.associate,
+        start_link: stages.start_link,
+        handshake: stages.handshake,
+        connected: stages.connected,
+    }
+}
+
+/// Visit `index` of the last connect's scan as the service reports it.
+fn scan_visit(index: u8) -> wifi_station::ScanVisitAnswer {
+    wifi_station::ScanVisitAnswer(observe::connect_visit(usize::from(index)).map(|visit| {
+        wifi_station::ScanVisit {
+            channel: visit.channel,
+            asked: visit.asked,
+            granted: visit.granted,
+            tuned: visit.tuned,
+            configured: visit.configured,
+            listening: visit.listening,
+            ended: visit.ended,
+            first_heard: visit.first_heard,
+            first_own: visit.first_own,
+            heard: visit.heard,
+            own_beacons: visit.own_beacons,
+            own_probe_responses: visit.own_probe_responses,
+            best_own_rssi: visit.best_own_rssi,
+        }
+    }))
 }
 
 /// The Wi-Fi station service's error of a connect the station did not

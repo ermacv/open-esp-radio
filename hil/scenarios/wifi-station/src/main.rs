@@ -13,7 +13,10 @@ use std::{
 };
 
 use oer_hil_services_fault::{GetRestarts, RefusePublication, Restarts};
-use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
+use oer_hil_services_wifi_station::{
+    GetConnectTimes, GetScanVisit, GetStatus, Join, Joined, Leave, Left, ScanVisit,
+    ScanVisitAnswer, Status,
+};
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{
     Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
@@ -157,6 +160,7 @@ fn join(cx: &mut Cx<'_>) -> Result<(), Failure> {
         channel,
     };
     let answer = cx.call(request, JOIN_TIMEOUT)?;
+    connect_report(cx)?;
     let Joined::Linked {
         channel: linked, ..
     } = answer
@@ -179,6 +183,19 @@ fn join(cx: &mut Cx<'_>) -> Result<(), Failure> {
     check(joined, format!("the router's station table shows {seen}"))
 }
 
+/// Print the connect's timeline, milliseconds from its start, and its scan
+/// by channel.
+fn connect_report(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    println!("connect: {}", cx.call(GetConnectTimes, STATUS_TIMEOUT)?);
+    println!("connect: {}", ScanVisit::HEADER);
+    let mut index = 0;
+    while let ScanVisitAnswer(Some(visit)) = cx.call(GetScanVisit { index }, STATUS_TIMEOUT)? {
+        println!("connect: {visit}");
+        index += 1;
+    }
+    Ok(())
+}
+
 /// The device takes an address by DHCP: the router leased it that address,
 /// and the router is the gateway.
 fn dhcp(cx: &mut Cx<'_>) -> Result<(), Failure> {
@@ -186,6 +203,10 @@ fn dhcp(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let (address, ipv4) = loop {
         let status = status(cx)?;
         if let Some(ipv4) = status.ipv4 {
+            println!(
+                "connect: address after {} ms",
+                started.elapsed().as_millis()
+            );
             break (status.address, ipv4);
         }
         if started.elapsed() >= DHCP_TIMEOUT {

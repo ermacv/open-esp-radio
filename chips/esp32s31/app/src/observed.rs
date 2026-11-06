@@ -32,6 +32,7 @@ use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
 
 use super::{Boot, Error, SamplerToken};
+use crate::observe::connect::{Connect, ConnectCounter, Heard, ScanStep, Stage, Step, Visit};
 use crate::observe::cpu::{Boundary, CpuCounter, ExecutorSample, Phase};
 use crate::observe::link::{Containment, LinkCounter, Positions, Rate, Settled, TxEnd};
 use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading};
@@ -63,6 +64,7 @@ static NAMES: ImageNames = ImageNames::new();
 static EPOCH: AtomicU32 = AtomicU32::new(0);
 static TRACKING: TrackingCounter = TrackingCounter::new();
 static LINK: LinkCounter = LinkCounter::new();
+static CONNECT: ConnectCounter = ConnectCounter::new();
 static BRIDGE: BridgeCounter = BridgeCounter::new();
 
 const STATION_KINDS: usize = StationRxKind::ALL.len();
@@ -348,6 +350,23 @@ impl oer_portable_trace::Observer for Observer {
                 data.transmissions,
             );
         }
+        if let Some(step) = Self::decoded::<E, station::StationConnectStep>(event) {
+            CONNECT.step(
+                step.at_micros,
+                connect_step(step.step),
+                (step.channel != 0).then_some(step.channel),
+            );
+        }
+        if let Some(heard) = Self::decoded::<E, station::StationScanHeard>(event) {
+            CONNECT.heard(
+                heard.at_micros,
+                Heard {
+                    own: heard.heard.own,
+                    probe_response: heard.heard.probe_response,
+                    rssi: heard.heard.rssi,
+                },
+            );
+        }
         if let Some(tick) = Self::decoded::<E, station::TrackingTick>(event) {
             TRACKING.observe(tracking_tick(tick), EPOCH.load(Ordering::Relaxed));
         }
@@ -358,6 +377,37 @@ impl oer_portable_trace::Observer for Observer {
             let _ = KEPT.lend(|buffer| buffer.record_return(ret));
         }
     }
+}
+
+/// The library's name of the station's connect step.
+const fn connect_step(step: station::ConnectStep) -> Step {
+    use station::ConnectStep as Source;
+    match step {
+        Source::Rest => Step::Rest,
+        Source::ScanAsk => Step::Scan(ScanStep::Ask),
+        Source::ScanTune => Step::Scan(ScanStep::Tune),
+        Source::ScanConfigure => Step::Scan(ScanStep::Configure),
+        Source::ScanProbe => Step::Scan(ScanStep::Probe),
+        Source::ScanListen => Step::Scan(ScanStep::Listen),
+        Source::JoinAsk => Step::Join(Stage::Ask),
+        Source::JoinTune => Step::Join(Stage::Tune),
+        Source::JoinConfigure => Step::Join(Stage::Configure),
+        Source::Authenticate => Step::Join(Stage::Authenticate),
+        Source::Associate => Step::Join(Stage::Associate),
+        Source::StartLink => Step::Join(Stage::StartLink),
+        Source::Handshake => Step::Join(Stage::Handshake),
+        Source::Connected => Step::Join(Stage::Connected),
+    }
+}
+
+/// The last connect as a whole.
+pub fn connect() -> Connect {
+    CONNECT.read()
+}
+
+/// Visit `index` of the last connect's scan.
+pub fn connect_visit(index: usize) -> Option<Visit> {
+    CONNECT.visit(index)
 }
 
 /// The station service's sink: its receive decisions go to the library's

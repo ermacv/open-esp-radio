@@ -78,7 +78,7 @@ pub use oer_protocols_ieee80211_wire::eapol::EapolParseError;
 use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::status::reason_code;
 
-use crate::events::{RsnDrop, ScanOutcome, StaEvent};
+use crate::events::{ConnectStep, RsnDrop, ScanOutcome, StaEvent};
 use oer_portable_events::{EventSink, report};
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, ConnectionFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength,
@@ -3655,6 +3655,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     ) {
         let (mut context, state) = self.transition();
         context.input_event(state, now, input, events);
+        context.report_step(state, now, events);
         self.complete_commands();
     }
 
@@ -3690,6 +3691,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     ) -> Result<StaReceived, StaRxError> {
         let (mut context, state) = self.transition();
         let result = context.receive_frame(state, now, frame, meta, events);
+        context.report_step(state, now, events);
         self.complete_commands();
         result
     }
@@ -3742,6 +3744,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             if changed {
                 state.apply(core::mem::replace(&mut step.0, Change::Keep));
             }
+            context.report_step(state, now, events);
             match step.1 {
                 ActionProgress::Action(owed) => break owed,
                 ActionProgress::Transition => continue,
@@ -4074,6 +4077,67 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
 
     fn channel(&self, visit: usize) -> Option<SupportedChannel<K>> {
         self.config.channels.get(visit).copied()
+    }
+
+    /// Report `state`'s step of a connect at `now`.
+    #[inline(always)]
+    fn report_step(
+        &self,
+        state: &State<T, K>,
+        now: Instant,
+        events: &mut impl EventSink<StaEvent>,
+    ) {
+        report(events, || {
+            let (step, channel) = self.connect_step(state);
+            StaEvent::ConnectStep {
+                at: now,
+                step,
+                channel,
+            }
+        });
+    }
+
+    /// `state`'s step of a connect and the channel it is on.
+    fn connect_step(&self, state: &State<T, K>) -> (ConnectStep, Option<u8>) {
+        match state {
+            State::Scan(scan) => (
+                match scan.step {
+                    ScanStep::NeedLease | ScanStep::AwaitAnswer => ConnectStep::ScanAsk,
+                    ScanStep::AwaitStart => ConnectStep::ScanTune,
+                    ScanStep::NeedConfigure | ScanStep::AwaitConfigured => {
+                        ConnectStep::ScanConfigure
+                    }
+                    ScanStep::NeedProbe => ConnectStep::ScanProbe,
+                    ScanStep::Listen => ConnectStep::ScanListen,
+                },
+                self.channel(scan.visit)
+                    .map(|channel| channel.channel().number()),
+            ),
+            State::Join(join) => (
+                match join.step {
+                    JoinStep::NeedLease | JoinStep::AwaitAnswer | JoinStep::RetryAt(_) => {
+                        ConnectStep::JoinAsk
+                    }
+                    JoinStep::AwaitStart => ConnectStep::JoinTune,
+                    JoinStep::NeedConfigure | JoinStep::AwaitConfigured => {
+                        ConnectStep::JoinConfigure
+                    }
+                    JoinStep::Authenticate(_)
+                    | JoinStep::SaeSend { .. }
+                    | JoinStep::SaeAwait(_) => ConnectStep::Authenticate,
+                    JoinStep::Associate(..) => ConnectStep::Associate,
+                    JoinStep::SetEdca { .. }
+                    | JoinStep::NotifyAssociated { .. }
+                    | JoinStep::StartLink { .. } => ConnectStep::StartLink,
+                },
+                Some(join.channel.channel().number()),
+            ),
+            State::Handshake(_) => (ConnectStep::Handshake, None),
+            State::Connected(_) => (ConnectStep::Connected, None),
+            State::Idle | State::Reclaiming(_) | State::Leave(_) | State::Report(_) => {
+                (ConnectStep::Rest, None)
+            }
+        }
     }
 
     #[inline(never)]
@@ -5341,9 +5405,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     .profile
                     .as_ref()
                     .map_or(&[][..], |profile| profile.ssid.as_slice());
+                let subtype = management.subtype();
                 let observation =
                     observe_scan(&mut (*self.scan), now, management, &meta, Some(ssid));
                 report_scan(events, observation);
+                report(events, || StaEvent::ScanHeard {
+                    at: now,
+                    heard: crate::receive::scan_heard(subtype, &meta, observation),
+                });
                 Change::Keep
             }
             State::Join(join) => {

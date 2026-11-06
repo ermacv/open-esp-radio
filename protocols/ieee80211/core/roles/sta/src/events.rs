@@ -1,5 +1,6 @@
 //! What the station core decided without delivering it: lost tokens, lost
-//! data, dropped RSN input and scan table outcomes.
+//! data, dropped RSN input and scan table outcomes; and for a sink that
+//! measures, each step of a connect and each frame its scan heard.
 //!
 //! The station reports each as a [`StaEvent`] to the sink its caller lends a
 //! call ([`oer_portable_events`]). It keeps no count of them.
@@ -26,6 +27,83 @@ pub enum StaEvent {
     /// The station sent a BlockAckReq to move a recipient's window past a
     /// dropped MPDU.
     BlockAckRequestSent,
+    /// The station's step of a connect at `at`, reported at every entry
+    /// whether it changed or not: a sink keeps the changes.
+    ConnectStep {
+        at: oer_portable_time::Instant,
+        step: ConnectStep,
+        /// The channel a scan visits or a join uses.
+        channel: Option<u8>,
+    },
+    /// A beacon or probe response reached the scan at `at`.
+    ScanHeard {
+        at: oer_portable_time::Instant,
+        heard: ScanHeard,
+    },
+}
+
+/// Where a connect is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConnectStep {
+    /// Not connecting: idle, returning owners, leaving or reporting why not.
+    Rest,
+    /// A scan visit asks for its channel.
+    ScanAsk,
+    /// The visit's lease is granted; the port moves at its start.
+    ScanTune,
+    /// The port is on the channel; the receive rules change.
+    ScanConfigure,
+    /// The visit's probe is owed.
+    ScanProbe,
+    /// The visit listens until its lease ends.
+    ScanListen,
+    /// The join asks for its channel.
+    JoinAsk,
+    /// The join's lease is granted; the port moves at its start.
+    JoinTune,
+    /// The port is on the channel; the receive rules change.
+    JoinConfigure,
+    /// Authenticating.
+    Authenticate,
+    /// Associating.
+    Associate,
+    /// The association's parameters go to the port and the link starts.
+    StartLink,
+    /// The WPA2 four-way handshake.
+    Handshake,
+    /// The link is up.
+    Connected,
+}
+
+impl ConnectStep {
+    /// Every step, each at its discriminant.
+    pub const ALL: [Self; 14] = [
+        Self::Rest,
+        Self::ScanAsk,
+        Self::ScanTune,
+        Self::ScanConfigure,
+        Self::ScanProbe,
+        Self::ScanListen,
+        Self::JoinAsk,
+        Self::JoinTune,
+        Self::JoinConfigure,
+        Self::Authenticate,
+        Self::Associate,
+        Self::StartLink,
+        Self::Handshake,
+        Self::Connected,
+    ];
+}
+
+/// One beacon or probe response a scan heard.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScanHeard {
+    /// It names the connect's network.
+    pub own: bool,
+    /// A probe response, not a beacon.
+    pub probe_response: bool,
+    /// Its received level in dBm, when the receiver reported one.
+    pub rssi: Option<i8>,
 }
 
 /// How one data aggregate's members settled.

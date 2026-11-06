@@ -1,6 +1,7 @@
 //! Which requests an image answers by itself in each phase of its one
-//! station, and which its station work takes over: one join per boot, a
-//! leave only of a joined station and only once.
+//! station, and which its station work takes over: one join in progress or
+//! linked per boot, a leave only of a joined station and only once. A join
+//! that failed leaves the image idle for another.
 
 use crate::{Join, Joined, Left, Request, StationError};
 
@@ -29,6 +30,10 @@ pub enum Action {
     Join(Join),
     /// Take the leave.
     Leave,
+    /// Answer with the last connect's timeline.
+    ConnectTimes,
+    /// Answer with this visit of the last connect's scan.
+    ScanVisit(u8),
 }
 
 /// An answer the image gives by itself.
@@ -38,11 +43,12 @@ pub enum Answer {
     Left(Left),
 }
 
-/// What the image does with `request` in `phase`: one join per boot, a
-/// leave only of a joined station and only once.
+/// What the image does with `request` in `phase`.
 pub fn action(phase: Phase, request: Request) -> Action {
     match (phase, request) {
         (_, Request::GetStatus(_)) => Action::Status,
+        (_, Request::GetConnectTimes(_)) => Action::ConnectTimes,
+        (_, Request::GetScanVisit(visit)) => Action::ScanVisit(visit.index),
         (Phase::Idle, Request::Join(join)) => Action::Join(join),
         (_, Request::Join(_)) => {
             Action::Answer(Answer::Joined(Joined::Refused(StationError::AlreadyJoined)))
