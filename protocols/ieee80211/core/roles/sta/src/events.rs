@@ -40,6 +40,12 @@ pub enum StaEvent {
         at: oer_portable_time::Instant,
         heard: ScanHeard,
     },
+    /// The port ended the scan's probe at `at`: it reports an end on air, or
+    /// that the probe never went out.
+    ScanProbeEnded {
+        at: oer_portable_time::Instant,
+        sent: bool,
+    },
 }
 
 /// Where a connect is.
@@ -102,6 +108,8 @@ pub struct ScanHeard {
     pub own: bool,
     /// A probe response, not a beacon.
     pub probe_response: bool,
+    /// Addressed to this station, not overheard.
+    pub to_us: bool,
     /// Its received level in dBm, when the receiver reported one.
     pub rssi: Option<i8>,
 }

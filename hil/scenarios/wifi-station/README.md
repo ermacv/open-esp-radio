@@ -31,7 +31,10 @@ asking for the channel to the grant, to the port on the channel, to the
 receive rules, to the probe handed over, then listening, the whole time on
 the channel, the time from reaching the channel to the first frame heard and
 to the first of the network, the frames heard, the network's beacons and probe
-responses, and its strongest level. Times are when the station handled a
-frame, not when it was received, and the frames counted by network are the
-connect's own. A probe is handed over, not confirmed on air. `dhcp` prints the
-time to the address from the start of that case, not of the join.
+responses, its strongest level, the probe responses addressed to the station
+and those overheard, and the probe's state. Times are when the station handled
+a frame, not when it was received, and the beacons and `resp` count the
+connect's own network. The probe's state `sent` is the port's report, not the
+air; `answer` is a probe response addressed to the station that reached the
+scan, and `timeout` a visit that ended with none. `dhcp` prints the time to the
+address from the join's start.

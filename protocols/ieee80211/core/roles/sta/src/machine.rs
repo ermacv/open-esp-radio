@@ -4178,6 +4178,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 if Some(context.epoch) != *self.epoch {
                     return;
                 }
+                if context.purpose == TxPurpose::Probe {
+                    report(events, || StaEvent::ScanProbeEnded {
+                        at: now,
+                        sent: completion.is_delivered(),
+                    });
+                }
                 Done::Tx {
                     purpose: context.purpose,
                     completion,
@@ -4194,6 +4200,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     .put(crate::events::fresh(buffer, T::renew, events), events);
                 if Some(context.epoch) != *self.epoch {
                     return;
+                }
+                if context.purpose == TxPurpose::Probe {
+                    report(events, || StaEvent::ScanProbeEnded {
+                        at: now,
+                        sent: false,
+                    });
                 }
                 Done::Unsent {
                     purpose: context.purpose,
@@ -5430,12 +5442,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     .as_ref()
                     .map_or(&[][..], |profile| profile.ssid.as_slice());
                 let subtype = management.subtype();
+                let to_us = management.header().receiver() == self.config.address.get();
                 let observation =
                     observe_scan(&mut (*self.scan), now, management, &meta, Some(ssid));
                 report_scan(events, observation);
                 report(events, || StaEvent::ScanHeard {
                     at: now,
-                    heard: crate::receive::scan_heard(subtype, &meta, observation),
+                    heard: crate::receive::scan_heard(subtype, to_us, &meta, observation),
                 });
                 Change::Keep
             }

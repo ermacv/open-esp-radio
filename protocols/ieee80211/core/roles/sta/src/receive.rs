@@ -92,12 +92,14 @@ pub fn observe_scan<const N: usize>(
 /// [`observe_scan`] recorded as `observation`.
 pub(crate) fn scan_heard(
     subtype: u16,
+    to_us: bool,
     meta: &impl RxMetadata,
     observation: ScanObservation,
 ) -> crate::events::ScanHeard {
     crate::events::ScanHeard {
         own: !matches!(observation, ScanObservation::Ignored),
         probe_response: subtype == PROBE_RESPONSE,
+        to_us,
         rssi: match meta.common().rssi_dbm {
             RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => Some(rssi),
             RxEvidence::Unavailable => None,

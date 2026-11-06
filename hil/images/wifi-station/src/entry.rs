@@ -379,6 +379,17 @@ fn scan_visit(index: u8) -> wifi_station::ScanVisitAnswer {
             heard: visit.heard,
             own_beacons: visit.own_beacons,
             own_probe_responses: visit.own_probe_responses,
+            responses_to_us: visit.responses_to_us,
+            responses_overheard: visit.responses_overheard,
+            probe_ended: visit.probe_ended,
+            probe: match visit.probe {
+                observe::connect::ProbeState::None => wifi_station::ProbeState::None,
+                observe::connect::ProbeState::Built => wifi_station::ProbeState::Built,
+                observe::connect::ProbeState::Unsent => wifi_station::ProbeState::Unsent,
+                observe::connect::ProbeState::Sent => wifi_station::ProbeState::Sent,
+                observe::connect::ProbeState::Answered => wifi_station::ProbeState::Answered,
+                observe::connect::ProbeState::TimedOut => wifi_station::ProbeState::TimedOut,
+            },
             best_own_rssi: visit.best_own_rssi,
         }
     }))
