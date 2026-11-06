@@ -48,6 +48,7 @@ pub use embassy_net;
 pub use oer_portable_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
 pub use oer_protocols_ieee80211_runtime::station::contract::{CommandRefusal, DisconnectReason};
 pub use oer_protocols_network_port::{LinkSnapshot, LinkState};
+pub use wifi::Restarts;
 
 use super::{
     AesPeripheral, Boot, Error, GroupBoot, PhyToken, RadioAlarmToken, RadioToken, WakeToken,
@@ -146,48 +147,18 @@ impl wifi::Callbacks for Callbacks {
 /// The one-shot fault of a diagnostic image.
 #[cfg(oer_fault_injection)]
 pub mod debug {
-    use core::sync::atomic::{AtomicU8, AtomicU32, Ordering};
-
     pub use super::wifi::refuse_next_publication;
+}
 
-    /// The longest cause text kept.
-    pub const CAUSE_BYTES: usize = 64;
-
-    /// Even while no write is under way; each write moves it by two.
-    static SEQUENCE: AtomicU32 = AtomicU32::new(0);
-    static RESTARTS: AtomicU32 = AtomicU32::new(0);
-    static LENGTH: AtomicU32 = AtomicU32::new(0);
-    static CAUSE: [AtomicU8; CAUSE_BYTES] = [const { AtomicU8::new(0) }; CAUSE_BYTES];
-
-    /// Count a restart and keep its cause text. The station task is the one
-    /// writer.
-    pub(super) fn record(cause: &[u8]) {
-        SEQUENCE.fetch_add(1, Ordering::AcqRel);
-        let mut length = 0_u32;
-        for (place, byte) in CAUSE.iter().zip(cause) {
-            place.store(*byte, Ordering::Relaxed);
-            length = length.saturating_add(1);
-        }
-        LENGTH.store(length, Ordering::Relaxed);
-        RESTARTS.fetch_add(1, Ordering::Relaxed);
-        SEQUENCE.fetch_add(1, Ordering::AcqRel);
-    }
-
-    /// How often the station restarted in this boot, and the last cause's
-    /// text with its length; `None` while a restart is being recorded.
-    pub fn restarts() -> Option<(u32, [u8; CAUSE_BYTES], usize)> {
-        let before = SEQUENCE.load(Ordering::Acquire);
-        if before % 2 != 0 {
-            return None;
-        }
-        let mut cause = [0; CAUSE_BYTES];
-        for (byte, place) in cause.iter_mut().zip(&CAUSE) {
-            *byte = place.load(Ordering::Relaxed);
-        }
-        let length = usize::try_from(LENGTH.load(Ordering::Relaxed)).unwrap_or(CAUSE_BYTES);
-        let count = RESTARTS.load(Ordering::Relaxed);
-        (SEQUENCE.load(Ordering::Acquire) == before).then_some((count, cause, length))
-    }
+/// The last cause in `restarts` as its console line reads, written to `out`;
+/// the bytes written.
+pub fn restart_cause_text(restarts: &wifi::Restarts, out: &mut [u8]) -> usize {
+    let path = restarts
+        .last
+        .as_ref()
+        .map(oer_portable_diagnostics::DiagPath::of)
+        .unwrap_or_default();
+    oer_chips_esp32s31_compose::diagnostic_text::write(b"wifi-restarted", &path, out)
 }
 
 /// The station restarted after `failure`, which stayed inside the radio: the
@@ -197,9 +168,8 @@ fn restarted(failure: &wifi::failure::LifecycleFailure) {
     let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
     let length =
         oer_chips_esp32s31_compose::diagnostic_text::write(b"wifi-restarted", &path, &mut text);
-    #[cfg(oer_fault_injection)]
-    debug::record(text.get(..length).unwrap_or(&[]));
-    // Once the application opened the console, this line goes nowhere.
+    // Once the application opened the console this line goes nowhere: the
+    // cause stays readable through `Station::restarts`.
     if let Some(line) = text.get(..length) {
         let _written = super::whole(line).and_then(|()| super::whole(b"\n"));
     }
@@ -834,6 +804,11 @@ impl Station {
     /// The link's state and epoch now.
     pub fn link(&self) -> LinkSnapshot {
         self.control.link()
+    }
+
+    /// How often the station restarted without a reset, and why it last did.
+    pub fn restarts(&self) -> wifi::Restarts {
+        self.control.restarts()
     }
 
     /// The network the station is linked to now: its link is up and its last

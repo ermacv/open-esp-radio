@@ -63,13 +63,9 @@ pub const MAX_CAUSE: usize = 64;
 /// The answer to [`GetRestarts`]: how often the station restarted in this
 /// boot and the last restart's cause, as its console line would read.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub enum Restarts {
-    Counted {
-        count: u32,
-        cause: heapless::String<MAX_CAUSE>,
-    },
-    /// A restart was being recorded: ask again.
-    Recording,
+pub struct Restarts {
+    pub count: u32,
+    pub cause: heapless::String<MAX_CAUSE>,
 }
 
 oer_protocols_hil_agent::service! {

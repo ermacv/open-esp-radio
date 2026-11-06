@@ -274,15 +274,10 @@ fn restart(cx: &mut Cx<'_>) -> Result<(), Failure> {
     ping(cx)
 }
 
-/// The restart count and the last cause, asking again while the image
-/// records one.
+/// The restart count and the last cause.
 fn restarts(cx: &mut Cx<'_>) -> Result<(u32, String), Failure> {
-    for _ in 0..10 {
-        if let Restarts::Counted { count, cause } = cx.call(GetRestarts, STATUS_TIMEOUT)? {
-            return Ok((count, cause.to_string()));
-        }
-    }
-    Err(Failure::Fail("the image kept recording a restart".into()))
+    let Restarts { count, cause } = cx.call(GetRestarts, STATUS_TIMEOUT)?;
+    Ok((count, cause.to_string()))
 }
 
 /// The device leaves: its link is down and the router's station table no

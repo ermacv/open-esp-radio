@@ -101,6 +101,7 @@ pub type Exit = core::convert::Infallible;
 /// The sole product command end. Its type carries no port identity or loan.
 pub struct Control<'a, N: Notifies = SameHart> {
     start: &'a StartState,
+    restarts: &'a RestartState,
     stop: &'a StopState<Exit>,
     inner: runtime::Control<'a, Caps, 2, Ch<N>>,
 }
@@ -120,6 +121,11 @@ impl<'a, N: Notifies> Control<'a, N> {
         StatusReader {
             inner: self.inner.status_reader(),
         }
+    }
+    /// How often the station restarted and why it last did: whatever owns
+    /// the console, the application reads the cause here.
+    pub fn restarts(&self) -> Restarts {
+        self.restarts.read()
     }
     pub fn status(&self) -> runtime::Status {
         self.inner.status()
@@ -360,6 +366,37 @@ impl<N: Notifies> NetDevice for Network<'_, N> {
 pub enum StartError {
     Unavailable,
 }
+/// The station's restarts since its service began.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Restarts {
+    pub count: u32,
+    /// The last restart's cause, when it came from the port or the actor;
+    /// a restart for a command the lifecycle could not admit has none.
+    pub last: Option<failure::LifecycleFailure>,
+}
+
+/// [`Restarts`], in the one context of the station and its control: a read
+/// takes the whole value.
+struct RestartState(core::cell::Cell<Restarts>);
+impl RestartState {
+    const fn new() -> Self {
+        Self(core::cell::Cell::new(Restarts {
+            count: 0,
+            last: None,
+        }))
+    }
+    fn read(&self) -> Restarts {
+        self.0.get()
+    }
+    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    fn record(&self, cause: Option<failure::LifecycleFailure>) {
+        let Restarts { count, .. } = self.0.get();
+        self.0.set(Restarts {
+            count: count.saturating_add(1),
+            last: cause,
+        });
+    }
+}
 struct StartState {
     result: core::cell::Cell<Option<Result<(), StartError>>>,
     waker: oer_portable_sync::PriorityWaker,
@@ -503,6 +540,7 @@ impl<N: Notifies> Drop for NetworkStopper<'_, N> {
 pub struct Channels<N: Notifies, M> {
     network_stop: NetworkStopState<N>,
     start: StartState,
+    restarts: RestartState,
     stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
     tx: oer_portable_memory::WakingSlotQueue<
@@ -525,6 +563,7 @@ impl<M> Channels<SameHart, M> {
         Self {
             network_stop: NetworkStopState::new(),
             start: StartState::new(),
+            restarts: RestartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
             tx: oer_portable_memory::WakingSlotQueue::new(),
@@ -548,6 +587,7 @@ where
         Self {
             network_stop: NetworkStopState::with(network, station),
             start: StartState::new(),
+            restarts: RestartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
             tx: oer_portable_memory::WakingSlotQueue::across_harts(station, network),
@@ -588,6 +628,7 @@ impl<N: Notifies, M> Channels<N, M> {
             Control {
                 inner: control,
                 start: &self.start,
+                restarts: &self.restarts,
                 stop: &self.stop,
             },
             Network { inner: network },
@@ -600,6 +641,7 @@ impl<N: Notifies, M> Channels<N, M> {
             Connection {
                 service: ServiceConnection {
                     start: StartGuard(&self.start),
+                    restarts: &self.restarts,
                     commands,
                     runner,
                 },
@@ -631,6 +673,7 @@ pub struct Connection<'a, N: Notifies, M> {
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 struct ServiceConnection<'a, N: Notifies> {
     start: StartGuard<'a>,
+    restarts: &'a RestartState,
     commands: oer_portable_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
     runner: runtime::RunnerControl<'a, Ch<N>>,
 }
@@ -775,6 +818,29 @@ mod tests {
     extern crate std;
     use self::std::{cell::Cell, rc::Rc};
     use super::*;
+    #[test]
+    fn a_read_takes_the_count_and_the_cause_of_one_restart() {
+        let state = RestartState::new();
+        assert_eq!(state.read(), Restarts::default());
+        state.record(Some(failure::LifecycleFailure::Mailbox));
+        assert_eq!(
+            state.read(),
+            Restarts {
+                count: 1,
+                last: Some(failure::LifecycleFailure::Mailbox),
+            }
+        );
+        // A restart without a port cause does not keep the one before it.
+        state.record(None);
+        assert_eq!(
+            state.read(),
+            Restarts {
+                count: 2,
+                last: None,
+            }
+        );
+    }
+
     struct Packet(Rc<Cell<usize>>);
     impl Drop for Packet {
         fn drop(&mut self) {
@@ -877,6 +943,7 @@ mod tests {
             service:
                 crate::ServiceConnection {
                     start,
+                    restarts: _,
                     commands,
                     runner,
                 },

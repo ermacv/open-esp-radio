@@ -2196,6 +2196,7 @@ dependencies = [
 name = "oer-hil-services-fault"
 version = "0.1.0"
 dependencies = [
+ "heapless",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
  "postcard-schema",

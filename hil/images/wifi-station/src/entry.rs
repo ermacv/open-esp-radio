@@ -199,16 +199,16 @@ impl Worker {
                     answer(identity, &oer_hil_services_fault::Refusing);
                 }
                 Either::First(Either::Second(oer_hil_services_fault::Request::GetRestarts(_))) => {
-                    let answer_body = match oer::wifi::debug::restarts() {
-                        Some((count, cause, length)) => oer_hil_services_fault::Restarts::Counted {
-                            count,
-                            cause: cause
-                                .get(..length)
-                                .and_then(|text| core::str::from_utf8(text).ok())
-                                .and_then(|text| heapless::String::try_from(text).ok())
-                                .unwrap_or_default(),
-                        },
-                        None => oer_hil_services_fault::Restarts::Recording,
+                    let restarts = self.station.restarts();
+                    let mut cause = [0; oer_hil_services_fault::MAX_CAUSE];
+                    let length = oer::wifi::restart_cause_text(&restarts, &mut cause);
+                    let answer_body = oer_hil_services_fault::Restarts {
+                        count: restarts.count,
+                        cause: cause
+                            .get(..length)
+                            .and_then(|text| core::str::from_utf8(text).ok())
+                            .and_then(|text| heapless::String::try_from(text).ok())
+                            .unwrap_or_default(),
                     };
                     answer(identity, &answer_body);
                 }
