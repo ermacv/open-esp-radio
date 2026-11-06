@@ -125,7 +125,7 @@ pub trait Port: Sized {
     fn install_console(console: Self::Console) -> Result<(), InitError>;
     fn adopt_clocks(parts: Self::ClockParts) -> Self::Clocks;
     fn install_core_control(core: Self::CoreControl) -> Result<(), InitError>;
-    fn publish_debug_status(debug: Self::Debug);
+    fn publish_debug_status(debug: Self::Debug) -> Result<(), InitError>;
     /// Publish the interrupt observers/configuration and assemble the remaining
     /// owners after watchdog arming. No cold-start register owner is returned.
     fn finish(
@@ -152,6 +152,7 @@ pub struct Owners<P: Port> {
 pub enum InitError {
     ConsoleInstalled,
     CoreControlInstalled,
+    DebugStatusPublished,
 }
 
 impl InitError {
@@ -160,6 +161,7 @@ impl InitError {
         match self {
             Self::ConsoleInstalled => "console-installed",
             Self::CoreControlInstalled => "core-control-installed",
+            Self::DebugStatusPublished => "debug-status-published",
         }
     }
 }
@@ -181,7 +183,7 @@ pub fn initialize<P: Port>(owners: Owners<P>) -> Result<P::Output, InitError> {
     P::install_console(console)?;
     let clocks = P::adopt_clocks(clocks);
     P::install_core_control(core_control)?;
-    P::publish_debug_status(debug);
+    P::publish_debug_status(debug)?;
     let watchdogs = arm_watchdogs(watchdogs, P::WATCHDOGS);
     Ok(P::finish(resources, clocks, watchdogs))
 }

@@ -120,8 +120,13 @@ impl<'a> Port for Fake<'a> {
             Ok(())
         }
     }
-    fn publish_debug_status(part: Part<'a>) {
+    fn publish_debug_status(part: Part<'a>) -> Result<(), InitError> {
         part.log.push(Op::Debug);
+        if part.log.refusal == Some(InitError::DebugStatusPublished) {
+            Err(InitError::DebugStatusPublished)
+        } else {
+            Ok(())
+        }
     }
     fn finish(
         resources: Part<'a>,

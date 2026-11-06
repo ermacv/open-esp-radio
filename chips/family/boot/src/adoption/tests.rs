@@ -78,6 +78,10 @@ fn refused_installation_stops_at_its_original_step_before_any_watchdog_write() {
             InitError::CoreControlInstalled,
             vec![Op::Cpu, Op::Console, Op::Clocks, Op::Cores],
         ),
+        (
+            InitError::DebugStatusPublished,
+            vec![Op::Cpu, Op::Console, Op::Clocks, Op::Cores, Op::Debug],
+        ),
     ] {
         let log = Log::new(Some(error));
         assert!(matches!(initialize(log.owners()), Err(actual) if actual == error));

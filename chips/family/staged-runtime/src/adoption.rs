@@ -108,6 +108,9 @@ impl Error {
             Self::Initialization(driver::InitError::CoreControlInstalled) => {
                 oer_portable_diagnostics::name!("core-control-installed"; 32)
             }
+            Self::Initialization(driver::InitError::DebugStatusPublished) => {
+                oer_portable_diagnostics::name!("debug-status-published"; 32)
+            }
             Self::Context(error) => error.name(),
         }
     }
