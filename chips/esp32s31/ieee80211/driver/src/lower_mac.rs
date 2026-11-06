@@ -170,7 +170,7 @@ use crate::mac::{
     },
     init::{
         MacSnifferHardware, StaEspNowRxPolicyHardware, StaLinkRxPolicyHardware,
-        StaNoiseFloorHardware,
+        StaNoiseFloorHardware, StaScanRxPolicyHardware,
     },
     portable,
     rx::{
@@ -486,6 +486,7 @@ pub trait LowerMacHardware:
     + StaLinkRxPolicyHardware
     + StaNoiseFloorHardware
     + StaEspNowRxPolicyHardware
+    + StaScanRxPolicyHardware
     + MacSnifferHardware
     + ApRxPolicyHardware
     + ApTsfHardware
@@ -504,6 +505,7 @@ impl<H> LowerMacHardware for H where
         + StaLinkRxPolicyHardware
         + StaNoiseFloorHardware
         + StaEspNowRxPolicyHardware
+        + StaScanRxPolicyHardware
         + MacSnifferHardware
         + ApRxPolicyHardware
         + ApTsfHardware
@@ -1782,6 +1784,7 @@ where
             ReceivePolicy::StationDisabled => hardware.disable_station_receive_registers(),
             ReceivePolicy::Station { bssid } => hardware.apply_sta_link_policy(bssid),
             ReceivePolicy::StationOtherBss { bssid } => hardware.apply_sta_esp_now_policy(bssid),
+            ReceivePolicy::StationScan => hardware.apply_sta_scan_policy(),
             ReceivePolicy::AccessPointDisabled => hardware.disable_ap_link_policy(),
             ReceivePolicy::AccessPoint { address } => hardware.apply_ap_link_policy(address),
         }
@@ -2741,6 +2744,9 @@ enum ReceivePolicy {
     StationOtherBss {
         bssid: [u8; 6],
     },
+    /// A scan outside a BSS: mode two with the broadcast BSSID and no unicast
+    /// BSSID check, so a Probe Response addressed to the station arrives.
+    StationScan,
     AccessPointDisabled,
     /// Access-point policy eight: the BSS-member rules and the Probe
     /// Requests the access point answers, wildcard ones included.
@@ -2765,13 +2771,9 @@ fn receive_policy(config: &LowerMacConfig, vif: &CoreVif) -> Result<ReceivePolic
             let other_bss = vif.receive.contains(ReceiveFilter::OTHER_BSS_MANAGEMENT);
             match vif.bssid {
                 _ if vif.receive.is_empty() => Ok(ReceivePolicy::StationDisabled),
-                // Outside a BSS only other BSSs' management is defined; the
-                // policy matches the broadcast BSSID, as standalone ESP-NOW
-                // reception does.
+                // Outside a BSS only other BSSs' management is defined.
                 None if vif.receive == ReceiveFilter::OTHER_BSS_MANAGEMENT => {
-                    Ok(ReceivePolicy::StationOtherBss {
-                        bssid: BROADCAST_ADDRESS,
-                    })
+                    Ok(ReceivePolicy::StationScan)
                 }
                 None => Err(UnsupportedVif),
                 Some(bssid) if other_bss => Ok(ReceivePolicy::StationOtherBss { bssid }),

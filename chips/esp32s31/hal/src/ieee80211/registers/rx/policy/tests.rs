@@ -123,6 +123,40 @@ fn mode_two_admits_management_without_the_bssid_and_beacons() {
 }
 
 #[test]
+fn a_scan_keeps_mode_two_and_drops_the_unicast_bssid_check() {
+    let mut words = HostWords::filled(0);
+    let mut owners = words.owners();
+    owners.registers.apply_sta_scan_policy(BSSID);
+    let filter = owners.registers.mac.wifi_mac_rx_filter.read_policy(STATION);
+    assert!(filter.receive_management_not_check_bssid() && filter.pass_beacon());
+    assert!(!filter.receive_unicast_check_bssid() && !filter.dump_unicast_check_bssid());
+}
+
+#[test]
+fn a_link_policy_after_a_scan_checks_the_unicast_bssid_again() {
+    let mut words = HostWords::filled(0);
+    let mut owners = words.owners();
+    owners.registers.apply_sta_scan_policy(BSSID);
+    owners
+        .registers
+        .apply_sta_policy_six(BSSID, MacStaPolicyMode::Mode1);
+    let filter = owners.registers.mac.wifi_mac_rx_filter.read_policy(STATION);
+    assert!(filter.receive_unicast_check_bssid() && filter.dump_unicast_check_bssid());
+    assert!(!filter.pass_beacon());
+}
+
+#[test]
+fn mode_two_for_a_connected_station_keeps_the_unicast_bssid_check() {
+    let mut words = HostWords::filled(0);
+    let mut owners = words.owners();
+    owners
+        .registers
+        .apply_sta_policy_six(BSSID, MacStaPolicyMode::Mode2);
+    let filter = owners.registers.mac.wifi_mac_rx_filter.read_policy(STATION);
+    assert!(filter.receive_unicast_check_bssid() && filter.dump_unicast_check_bssid());
+}
+
+#[test]
 fn disabling_the_access_point_keeps_the_station_context() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();

@@ -4,8 +4,8 @@ pub use crate::mac::{
     sniffer::MacSnifferHardware,
     sta_link_policy::{
         StaEspNowRxPolicyHardware, StaLinkRxPolicyHardware, StaNoiseFloorHardware,
-        configure_sta_esp_now_receive_policy, configure_sta_link_receive_policy,
-        configure_standalone_esp_now_receive_policy,
+        StaScanRxPolicyHardware, configure_sta_esp_now_receive_policy,
+        configure_sta_link_receive_policy, configure_standalone_esp_now_receive_policy,
     },
 };
 
