@@ -46,6 +46,8 @@ pub enum Event {
         elapsed_micros: u64,
         lateness_micros: u64,
     },
+    /// The wait did not run its length.
+    Refused,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -90,6 +92,10 @@ impl Recorder {
                     return;
                 }
                 self.active = Some((scope, kind, requested_micros));
+            }
+            Event::Refused => {
+                self.active = None;
+                self.invalid = true;
             }
             Event::Completed {
                 elapsed_micros,
@@ -259,12 +265,17 @@ pub fn delay_observed<'t, S: PhyShortDelay, T: Timer + ?Sized>(
                     });
                     started = true;
                 }
-                if result.is_ready() {
-                    let elapsed_micros = timer.now().saturating_duration_since(start).as_micros();
-                    observe(Event::Completed {
-                        elapsed_micros,
-                        lateness_micros: elapsed_micros.saturating_sub(micros),
-                    });
+                match result {
+                    Poll::Ready(Ok(())) => {
+                        let elapsed_micros =
+                            timer.now().saturating_duration_since(start).as_micros();
+                        observe(Event::Completed {
+                            elapsed_micros,
+                            lateness_micros: elapsed_micros.saturating_sub(micros),
+                        });
+                    }
+                    Poll::Ready(Err(_)) => observe(Event::Refused),
+                    Poll::Pending => {}
                 }
             }
             result

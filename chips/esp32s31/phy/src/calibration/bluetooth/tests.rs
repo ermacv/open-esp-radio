@@ -27,7 +27,7 @@ fn bluetooth_gain_image_matches_the_linked_vendor_cold_state() {
         [1, 1, 1, 2, 3, 5, 11, 13, 14, 22, 22, 31, 63, 63, 63, 63]
     );
     assert_eq!(
-        image.output_64,
+        image.output_64.map(PhyBluetoothBasebandGain::word),
         [
             0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x100, 0x100, 0x100, 0x100, 0x100,
             0x100, 0x100, 0x100,

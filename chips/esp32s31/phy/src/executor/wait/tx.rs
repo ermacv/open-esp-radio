@@ -43,6 +43,10 @@ impl Recorder {
                 }
                 self.active = Some((scope, kind, requested_micros));
             }
+            Event::Refused => {
+                self.active = None;
+                self.invalid = true;
+            }
             Event::Completed {
                 elapsed_micros,
                 lateness_micros,

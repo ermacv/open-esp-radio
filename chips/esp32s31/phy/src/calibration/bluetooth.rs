@@ -43,18 +43,31 @@ const BLUETOOTH_TX_GAIN_TABLE_LOW: [u16; 18] = [
     0x003f, 0x002f, 0x001f, 0x0016, 0x000f, 0x000e, 0x000d, 0x000d, 0x000c, 0x000b, 0x0005, 0x0004,
     0x0003, 0x0002, 0x0001, 0x0001, 0x0000, 0x0000,
 ];
-const BLUETOOTH_TX_GAIN_TABLE_MID: [u16; 18] = [
-    0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0100, 0x0080, 0x0080, 0x0080, 0x0080, 0x0080,
-    0x0080, 0x0080, 0x0080, 0x0000, 0x0080, 0x0000,
-];
-const _: () = {
-    let mut index = 0;
-    while index < BLUETOOTH_TX_GAIN_TABLE_MID.len() {
-        if !matches!(BLUETOOTH_TX_GAIN_TABLE_MID[index], 0 | 0x0080 | 0x0100) {
-            panic!("a Bluetooth gain has one of the image's three seed rows");
+/// A Bluetooth baseband gain: each has a row of the image's seed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyBluetoothBasebandGain {
+    Zero,
+    Half,
+    Full,
+}
+
+impl PhyBluetoothBasebandGain {
+    /// The gain's hardware encoding.
+    pub const fn word(self) -> u16 {
+        match self {
+            Self::Zero => 0,
+            Self::Half => 0x0080,
+            Self::Full => 0x0100,
         }
-        index += 1;
     }
+}
+
+const BLUETOOTH_TX_GAIN_TABLE_MID: [PhyBluetoothBasebandGain; 18] = {
+    use PhyBluetoothBasebandGain::{Full, Half, Zero};
+    [
+        Full, Full, Full, Full, Full, Full, Full, Half, Half, Half, Half, Half, Half, Half, Half,
+        Zero, Half, Zero,
+    ]
 };
 const BLUETOOTH_TX_GAIN_TABLE_HIGH: [u16; 18] = [
     0x002f, 0x0027, 0x001a, 0x000c, 0x0005, 0x0000, 0xfffb, 0xfff3, 0xffed, 0xffe5, 0xffda, 0xffd4,
@@ -80,7 +93,7 @@ pub struct PhyBluetoothTxGainParameters {
 pub struct PhyBluetoothTxGainImage {
     pub seed: [u32; 6],
     pub output_32: [u8; 16],
-    pub output_64: [u16; 16],
+    pub output_64: [PhyBluetoothBasebandGain; 16],
     pub output_72: [u16; 16],
     pub config: u16,
 }
@@ -123,16 +136,16 @@ pub const fn calculate_bluetooth_tx_gain(
     let mut image = PhyBluetoothTxGainImage {
         seed: parameters.seed,
         output_32: [0; 16],
-        output_64: [0; 16],
+        output_64: [PhyBluetoothBasebandGain::Zero; 16],
         output_72: [0; 16],
         config: parameters.config,
     };
     let mut generator = begin_bluetooth_tx_gain(parameters);
     let mut output_index = 0;
     while output_index != 16 {
-        let value = next_bluetooth_tx_gain(&mut generator, output_index as u8);
+        let (value, gain) = next_bluetooth_tx_gain(&mut generator, output_index as u8);
         image.output_72[output_index] = value.gain_72;
-        image.output_64[output_index] = value.gain_64;
+        image.output_64[output_index] = gain;
         image.output_32[output_index] = value.gain_32;
         output_index += 1;
     }
@@ -154,7 +167,7 @@ pub(crate) const fn begin_bluetooth_tx_gain(
 pub(crate) const fn next_bluetooth_tx_gain(
     generator: &mut crate::tx::gain::Generator,
     entry: u8,
-) -> crate::tx::gain::Value {
+) -> (crate::tx::gain::Value, PhyBluetoothBasebandGain) {
     let driver = -96_i16 + entry as i16 * 12;
     let target = generator
         .target
@@ -164,11 +177,15 @@ pub(crate) const fn next_bluetooth_tx_gain(
     let residual = target
         .wrapping_sub(index.at(&BLUETOOTH_TX_GAIN_TABLE_HIGH) as i16)
         .wrapping_sub(generator.interpolation as i16);
-    crate::tx::gain::Value {
-        gain_72: index.at(&BLUETOOTH_TX_GAIN_TABLE_LOW),
-        gain_64: index.at(&BLUETOOTH_TX_GAIN_TABLE_MID),
-        gain_32: crate::calibration::math::saturate_signed(residual as i32, 24, -60) as u8,
-    }
+    let gain = index.at(&BLUETOOTH_TX_GAIN_TABLE_MID);
+    (
+        crate::tx::gain::Value {
+            gain_72: index.at(&BLUETOOTH_TX_GAIN_TABLE_LOW),
+            gain_64: gain.word(),
+            gain_32: crate::calibration::math::saturate_signed(residual as i32, 24, -60) as u8,
+        },
+        gain,
+    )
 }
 
 /// Direct PAC-backed publication edge for one canonical Bluetooth gain image.

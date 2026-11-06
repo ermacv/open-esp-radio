@@ -347,7 +347,7 @@ fn expected_records(
             let image = state.bluetooth_ieee802154_tracking_gain_image(gain_base);
             (0..16)
                 .map(|i| {
-                    let gain_64 = image.output_64[i];
+                    let gain_64 = image.output_64[i].word();
                     let index = usize::from(tx_baseband_gain_row(gain_64).get()) * 4;
                     oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
                         0xf3_u8.wrapping_add(32).wrapping_add(i as u8),
