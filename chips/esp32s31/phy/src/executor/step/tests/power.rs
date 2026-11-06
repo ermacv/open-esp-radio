@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    analog::pbus::PhyForceTxRxAction as Force,
+    analog::pbus::PhyForceTxRxEdge as Force,
     state::{PhyConfig, PhyState},
     tracking::{
         parameters::{
@@ -61,7 +61,6 @@ impl Io {
                     completed_phase,
                     micros,
                 },
-                Force::Complete { .. } => panic!("terminal force cannot reach hardware"),
             }),
             Action::RegenerateWifiGain { channel, gain_base } => {
                 Completion::WifiGainRegenerated { channel, gain_base }

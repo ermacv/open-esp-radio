@@ -107,11 +107,11 @@ fn complete_force(transition: &mut PhyTxPowerTrackingTransition) -> std::vec::Ve
     let mut writes = std::vec::Vec::new();
     while let PhyTxPowerTrackingAction::ForceTxRx(action) = transition.action() {
         let completion = match action {
-            PhyForceTxRxAction::Configure { enabled, phase } => {
+            PhyForceTxRxEdge::Configure { enabled, phase } => {
                 writes.push((enabled, phase));
                 PhyForceTxRxCompletion::Configured { enabled, phase }
             }
-            PhyForceTxRxAction::DelayMicros {
+            PhyForceTxRxEdge::DelayMicros {
                 enabled,
                 completed_phase,
                 micros,
@@ -123,7 +123,6 @@ fn complete_force(transition: &mut PhyTxPowerTrackingTransition) -> std::vec::Ve
                     micros,
                 }
             }
-            PhyForceTxRxAction::Complete { .. } => unreachable!(),
         };
         transition
             .advance(PhyTxPowerTrackingCompletion::ForceTxRx(completion))

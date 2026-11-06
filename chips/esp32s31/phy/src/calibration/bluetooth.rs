@@ -202,9 +202,9 @@ pub enum PhyBluetoothTxGainChildCompletion {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PhyBluetoothTxGainChildStep {
-    Enter(crate::analog::pbus::PhyForceTxRxTransition),
+    Enter(crate::analog::pbus::PhyForceTxRxRunning),
     Publish,
-    Leave(crate::analog::pbus::PhyForceTxRxTransition),
+    Leave(crate::analog::pbus::PhyForceTxRxRunning),
     Complete,
 }
 
@@ -241,7 +241,7 @@ impl PhyBluetoothTxGainChild {
         match self.step {
             PhyBluetoothTxGainChildStep::Enter(child)
             | PhyBluetoothTxGainChildStep::Leave(child) => {
-                PhyBluetoothTxGainChildAction::ForceTxRx(child.action())
+                PhyBluetoothTxGainChildAction::ForceTxRx(child.edge().action())
             }
             PhyBluetoothTxGainChildStep::Publish => {
                 PhyBluetoothTxGainChildAction::Publish(self.publication)
@@ -254,16 +254,15 @@ impl PhyBluetoothTxGainChild {
         &mut self,
         completion: PhyBluetoothTxGainChildCompletion,
     ) -> Result<(), PhyBluetoothTxGainInitTransitionError> {
-        use crate::analog::pbus::PhyForceTxRxAction;
         use PhyBluetoothTxGainChildStep as Step;
         self.step = match (self.step, completion) {
-            (Step::Enter(mut child), PhyBluetoothTxGainChildCompletion::ForceTxRx(completion)) => {
-                child
+            (Step::Enter(child), PhyBluetoothTxGainChildCompletion::ForceTxRx(completion)) => {
+                match child
                     .advance(completion)
-                    .map_err(|_| PhyBluetoothTxGainInitTransitionError::WrongCompletion)?;
-                match child.action() {
-                    PhyForceTxRxAction::Complete { .. } => Step::Publish,
-                    _ => Step::Enter(child),
+                    .map_err(|_| PhyBluetoothTxGainInitTransitionError::WrongCompletion)?
+                {
+                    Some(child) => Step::Enter(child),
+                    None => Step::Publish,
                 }
             }
             (Step::Publish, PhyBluetoothTxGainChildCompletion::Published(published))
@@ -274,13 +273,13 @@ impl PhyBluetoothTxGainChild {
                     None => Step::Complete,
                 }
             }
-            (Step::Leave(mut child), PhyBluetoothTxGainChildCompletion::ForceTxRx(completion)) => {
-                child
+            (Step::Leave(child), PhyBluetoothTxGainChildCompletion::ForceTxRx(completion)) => {
+                match child
                     .advance(completion)
-                    .map_err(|_| PhyBluetoothTxGainInitTransitionError::WrongCompletion)?;
-                match child.action() {
-                    PhyForceTxRxAction::Complete { .. } => Step::Complete,
-                    _ => Step::Leave(child),
+                    .map_err(|_| PhyBluetoothTxGainInitTransitionError::WrongCompletion)?
+                {
+                    Some(child) => Step::Leave(child),
+                    None => Step::Complete,
                 }
             }
             (Step::Complete, _) => {
