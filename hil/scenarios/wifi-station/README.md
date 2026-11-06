@@ -21,3 +21,14 @@ After the run the LAB service disables the router's AP section again.
 ```console
 cargo test -p oer-hil-scenarios-wifi-station
 ```
+
+## Connect report
+
+After the join, answered or not, the run prints lines starting `connect:`:
+when each stage after the scan began, in milliseconds from the connect's
+start, then one row per channel visit. A row's columns are the time from
+asking for the channel to the grant, to the port on the channel, to the
+receive rules, to the probe handed over, then listening, the whole time on
+the channel, the time from reaching the channel to the first frame heard and
+to the first of the network, the frames heard, the network's beacons and probe
+responses, and its strongest level. `dhcp` prints the time to the address.

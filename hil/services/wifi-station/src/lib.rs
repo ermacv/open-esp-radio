@@ -42,6 +42,8 @@ pub const MAX_SSID: usize = 32;
 /// The longest WPA2 passphrase (IEEE 802.11-2020 J.4.1).
 pub const MAX_PASSPHRASE: usize = 63;
 
+pub use connect::{ConnectTimes, GetConnectTimes, GetScanVisit, ScanVisit, ScanVisitAnswer};
+
 oer_protocols_hil_protocol::messages! {
     endpoint Join = "wifi-station/join" => Joined;
     topic Joined = "wifi-station/joined";
@@ -49,6 +51,10 @@ oer_protocols_hil_protocol::messages! {
     topic Status = "wifi-station/status-report";
     endpoint Leave = "wifi-station/leave" => Left;
     topic Left = "wifi-station/left";
+    endpoint GetConnectTimes = "wifi-station/connect-times" => ConnectTimes;
+    topic ConnectTimes = "wifi-station/connect-times-report";
+    endpoint GetScanVisit = "wifi-station/scan-visit" => ScanVisitAnswer;
+    topic ScanVisitAnswer = "wifi-station/scan-visit-report";
 }
 
 /// Join the WPA2-Personal network `ssid` with `passphrase` on `channel`,
@@ -134,9 +140,12 @@ oer_protocols_hil_agent::service! {
         Join(Join) => join,
         GetStatus(GetStatus) => status,
         Leave(Leave) => leave,
+        GetConnectTimes(GetConnectTimes) => connect_times,
+        GetScanVisit(GetScanVisit) => scan_visit,
     }
 }
 
+mod connect;
 pub mod phase;
 pub mod runtime;
 

@@ -88,5 +88,25 @@ pub fn observe_scan<const N: usize>(
     }
 }
 
+/// What a scan reports of `meta`'s frame of Frame Control `subtype`, which
+/// [`observe_scan`] recorded as `observation`.
+pub(crate) fn scan_heard(
+    subtype: u16,
+    meta: &impl RxMetadata,
+    observation: ScanObservation,
+) -> crate::events::ScanHeard {
+    crate::events::ScanHeard {
+        own: !matches!(observation, ScanObservation::Ignored),
+        probe_response: subtype == PROBE_RESPONSE,
+        rssi: match meta.common().rssi_dbm {
+            RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => Some(rssi),
+            RxEvidence::Unavailable => None,
+        },
+    }
+}
+
+/// The Frame Control subtype of a probe response (IEEE 802.11-2020 9.2.4.1.3).
+const PROBE_RESPONSE: u16 = 5;
+
 #[cfg(test)]
 mod tests;

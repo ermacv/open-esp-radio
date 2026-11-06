@@ -53,7 +53,9 @@ sink. The calls that can lose or drop something (`Station::input`,
 (`TokenLost`), a lost data MSDU or MPDU with its reason (`DataLost`), an RSN
 input dropped without a returned error (`RsnInputDropped`: key data that did
 not unwrap, fit or install, or a refused unwrap result) and each beacon or
-probe response the scan table took (`ScanBssObserved`), values of
+probe response the scan table took (`ScanBssObserved`), a connect's step
+(`ConnectStep`, sent at each entry for a sink to keep the changes) and each
+frame the scan heard (`ScanHeard`), values of
 `events::StaEvent`. A refusal a call returns, such as an EAPOL frame's
 `StaRxError` or a preparation refusal the service passes to `returned`, is
 its caller's to count and is no event. The scan result keeps its typed

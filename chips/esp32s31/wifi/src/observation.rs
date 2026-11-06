@@ -7,6 +7,7 @@
 //! lower-MAC trace uses ids from 100) and its channel.
 
 use oer_portable_trace::{Channel, Domain, Event, Kind};
+pub use oer_protocols_ieee80211_core_roles_sta::events::{ConnectStep, ScanHeard};
 
 /// The station activity channel.
 const SERVICE: Channel = const {
@@ -15,6 +16,105 @@ const SERVICE: Channel = const {
         Err(_) => panic!("the station activity channel lies in the IEEE 802.11 range"),
     }
 };
+/// A connect's step at a wrapping microsecond.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StationConnectStep {
+    pub at_micros: u32,
+    pub step: ConnectStep,
+    /// The channel, 0 for none.
+    pub channel: u8,
+}
+
+impl Event for StationConnectStep {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 41);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [
+            self.at_micros,
+            u32::from_le_bytes([self.step as u8, self.channel, 0, 0]),
+        ]
+    }
+
+    fn decode([at_micros, word]: [u32; 2]) -> Option<Self> {
+        let [step, channel, 0, 0] = word.to_le_bytes() else {
+            return None;
+        };
+        Some(Self {
+            at_micros,
+            step: ConnectStep::ALL.get(usize::from(step)).copied()?,
+            channel,
+        })
+    }
+}
+
+impl core::fmt::Display for StationConnectStep {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "station.connect at_micros={} step={:?} channel={}",
+            self.at_micros, self.step, self.channel
+        )
+    }
+}
+
+/// A frame a scan heard, at a wrapping microsecond.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StationScanHeard {
+    pub at_micros: u32,
+    pub heard: ScanHeard,
+}
+
+impl Event for StationScanHeard {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 42);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        let ScanHeard {
+            own,
+            probe_response,
+            rssi,
+        } = self.heard;
+        [
+            self.at_micros,
+            u32::from_le_bytes([
+                u8::from(own),
+                u8::from(probe_response),
+                u8::from(rssi.is_some()),
+                rssi.unwrap_or(0).to_le_bytes()[0],
+            ]),
+        ]
+    }
+
+    fn decode([at_micros, word]: [u32; 2]) -> Option<Self> {
+        let flag = |byte| match byte {
+            0 => Some(false),
+            1 => Some(true),
+            _ => None,
+        };
+        let [own, probe_response, known, rssi] = word.to_le_bytes();
+        let known = flag(known)?;
+        Some(Self {
+            at_micros,
+            heard: ScanHeard {
+                own: flag(own)?,
+                probe_response: flag(probe_response)?,
+                rssi: known.then_some(i8::from_le_bytes([rssi])),
+            },
+        })
+    }
+}
+
+impl core::fmt::Display for StationScanHeard {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "station.scan_heard at_micros={} {:?}",
+            self.at_micros, self.heard
+        )
+    }
+}
+
 /// The rate selection channel.
 const AGGREGATION: Channel = const {
     match Channel::new(Domain::Ieee80211, 4) {
@@ -648,6 +748,16 @@ impl<O: oer_portable_trace::Observer> TracedStationEvents<O> {
     }
 }
 
+/// `at`'s low 32 bits of microseconds.
+#[cfg_attr(
+    not(oer_trace),
+    allow(dead_code, reason = "only a trace build reports")
+)]
+fn wrapped_micros(at: oer_portable_time::Instant) -> u32 {
+    let [a, b, c, d, ..] = at.as_micros().to_le_bytes();
+    u32::from_le_bytes([a, b, c, d])
+}
+
 /// The receive decisions of one service event, each to `emit`.
 fn service_rx(
     event: oer_protocols_ieee80211_runtime::station::ServiceEvent,
@@ -810,6 +920,25 @@ impl<O: oer_portable_trace::Observer>
                 block_ack_request: true,
                 ..StationTxAmpdu::default()
             }),
+            StaEvent::ConnectStep { at, step, channel } => {
+                oer_portable_trace::observe!(
+                    self.0,
+                    StationConnectStep {
+                        at_micros: wrapped_micros(at),
+                        step,
+                        channel: channel.unwrap_or(0),
+                    }
+                );
+            }
+            StaEvent::ScanHeard { at, heard } => {
+                oer_portable_trace::observe!(
+                    self.0,
+                    StationScanHeard {
+                        at_micros: wrapped_micros(at),
+                        heard,
+                    }
+                );
+            }
             _ => {}
         }
     }
@@ -1022,6 +1151,23 @@ mod tests {
     fn every_facade_event_decodes_to_itself() {
         round_trip(StationAuthenticated);
         round_trip(StationBeacon { at_millis: 7 });
+        for step in ConnectStep::ALL {
+            round_trip(StationConnectStep {
+                at_micros: 9,
+                step,
+                channel: 13,
+            });
+        }
+        for rssi in [None, Some(-61), Some(0)] {
+            round_trip(StationScanHeard {
+                at_micros: 11,
+                heard: ScanHeard {
+                    own: true,
+                    probe_response: false,
+                    rssi,
+                },
+            });
+        }
         round_trip(StationAssociated);
         round_trip(TxIndeterminate);
         round_trip(TxHardwareTimeout);

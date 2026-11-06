@@ -406,6 +406,9 @@ struct Losses {
     tokens: u32,
     rsn: u32,
     scan: Option<crate::events::ScanOutcome>,
+    /// Each change of the connect's step.
+    steps: Vec<(ConnectStep, Option<u8>)>,
+    heard: Option<(Instant, crate::events::ScanHeard)>,
 }
 
 impl EventSink<StaEvent> for Losses {
@@ -418,6 +421,12 @@ impl EventSink<StaEvent> for Losses {
             | StaEvent::BufferMemoryUnavailable
             | StaEvent::AggregateSettled(_)
             | StaEvent::BlockAckRequestSent => {}
+            StaEvent::ConnectStep { step, channel, .. } => {
+                if self.steps.last() != Some(&(step, channel)) {
+                    self.steps.push((step, channel));
+                }
+            }
+            StaEvent::ScanHeard { at, heard } => self.heard = Some((at, heard)),
         }
     }
 }
@@ -1545,6 +1554,76 @@ fn refused_background_absence_returns_the_original_request_and_exact_reason() {
             assert!(world.station.poll_deadline().is_none());
         });
     }
+}
+
+#[test]
+fn a_connect_reports_each_step_and_what_its_scan_heard() {
+    use ConnectStep as Step;
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        world.advance();
+        let now = at(13);
+        let mut heard = meta();
+        heard.rssi_dbm = RxEvidence::HardwareObserved(-40);
+        let _ = world.deliver(now, &beacon(), heard);
+        assert_eq!(
+            world.losses.heard,
+            Some((
+                now,
+                crate::events::ScanHeard {
+                    own: true,
+                    probe_response: false,
+                    rssi: Some(-40),
+                }
+            ))
+        );
+        world.advance();
+        world.answer_authentication(at(30), 0);
+        let _ = world.deliver(at(31), &open_association_response(), meta());
+        world.run(at(31));
+        let steps = core::mem::take(&mut world.losses.steps);
+        let reached = |step, channel| {
+            steps
+                .iter()
+                .position(|reached| *reached == (step, channel))
+                .unwrap_or_else(|| panic!("{step:?} on {channel:?} in {steps:?}"))
+        };
+        let order = [
+            reached(Step::ScanAsk, Some(1)),
+            reached(Step::ScanConfigure, Some(1)),
+            reached(Step::ScanProbe, Some(1)),
+            reached(Step::ScanListen, Some(1)),
+            reached(Step::ScanAsk, Some(6)),
+            reached(Step::ScanTune, Some(6)),
+            reached(Step::ScanListen, Some(6)),
+            reached(Step::JoinAsk, Some(6)),
+            reached(Step::Authenticate, Some(6)),
+            reached(Step::Associate, Some(6)),
+            reached(Step::Connected, None),
+        ];
+        assert!(order.is_sorted(), "{steps:?}");
+    });
+}
+
+#[test]
+fn a_scan_reports_another_networks_frame_as_not_its_own() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        world.advance();
+        let mut frame = beacon();
+        // The SSID element's first byte: another network's name.
+        let ssid = frame
+            .windows(4)
+            .position(|bytes| bytes == &SSID[..4])
+            .expect("the beacon names its network");
+        frame[ssid] = b'T';
+        let _ = world.deliver(at(13), &frame, meta());
+        assert_eq!(world.losses.heard.map(|(_, heard)| heard.own), Some(false));
+    });
 }
 
 #[test]

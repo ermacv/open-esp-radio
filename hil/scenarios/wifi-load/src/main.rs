@@ -32,7 +32,10 @@ use oer_hil_services_load::{
     PartWindow, PartsCollected, Positions, PositionsCollected, Report, Start, Started, TUNE_KNOBS,
     TUNE_UNSET, Tracking, TrackingCollected, Transmit,
 };
-use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
+use oer_hil_services_wifi_station::{
+    GetConnectTimes, GetScanVisit, GetStatus, Join, Joined, Leave, Left, ScanVisit,
+    ScanVisitAnswer, Status,
+};
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{
     Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
@@ -118,6 +121,7 @@ const PROBE_PERIOD: Duration = Duration::from_millis(50);
 const PROBES_ENV: &str = "OER_WIFI_LOAD_PROBES";
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 const DHCP_TIMEOUT: Duration = Duration::from_secs(30);
+const REPORT_TIMEOUT: Duration = Duration::from_secs(2);
 const CALL: Duration = Duration::from_secs(2);
 
 fn main() -> ExitCode {
@@ -734,7 +738,15 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             .map_err(|_| Failure::Incomplete("the generated passphrase is too long".into()))?,
         channel,
     };
-    let (bssid, linked) = match cx.call(join, JOIN_TIMEOUT)? {
+    let joined = cx.call(join, JOIN_TIMEOUT)?;
+    println!("connect: {}", cx.call(GetConnectTimes, REPORT_TIMEOUT)?);
+    println!("connect: {}", ScanVisit::HEADER);
+    let mut index = 0;
+    while let ScanVisitAnswer(Some(visit)) = cx.call(GetScanVisit { index }, REPORT_TIMEOUT)? {
+        println!("connect: {visit}");
+        index += 1;
+    }
+    let (bssid, linked) = match joined {
         Joined::Linked { bssid, channel } => (bssid, channel),
         other => {
             return Err(Failure::Fail(format!(
