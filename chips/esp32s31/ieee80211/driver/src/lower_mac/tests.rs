@@ -2107,8 +2107,9 @@ fn receive_filters_map_onto_the_smallest_superset_policy() {
                 Some(BSSID),
                 StationPolicy::OtherBss(BSSID),
             ),
-            // Scanning outside a BSS has its own policy; a connected
-            // station's background scan above keeps its BSSID's.
+            // A scan without a BSSID has its own policy: a connect's scan,
+            // and a background scan away from its home channel. Its home
+            // visit is the case above, with the BSSID.
             (
                 ReceiveFilter::OTHER_BSS_MANAGEMENT,
                 None,
