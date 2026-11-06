@@ -307,7 +307,10 @@ fn expected_records(
     class: Class,
     gain_base: i8,
 ) -> Vec<oer_chips_esp32s31_hal::types::PhyGainMemoryEntry> {
-    use crate::hardware::{packed_halfword, tx_baseband_gain_index};
+    use crate::hardware::tx_baseband_gain_row;
+    const fn packed_halfword(words: &[u32], index: usize) -> u16 {
+        (words[index >> 1] >> ((index & 1) * 16)) as u16
+    }
     match class {
         Class::Wifi => {
             let image = state
@@ -316,7 +319,7 @@ fn expected_records(
             (0..32)
                 .map(|i| {
                     let gain_64 = packed_halfword(&image.output_64, i);
-                    let seed_index = tx_baseband_gain_index(gain_64) * 4;
+                    let seed_index = usize::from(tx_baseband_gain_row(gain_64).get()) * 4;
                     let seed = |index| {
                         if index < 12 {
                             packed_halfword(&image.seed, index)
@@ -345,7 +348,7 @@ fn expected_records(
             (0..16)
                 .map(|i| {
                     let gain_64 = image.output_64[i];
-                    let index = tx_baseband_gain_index(gain_64) * 4;
+                    let index = usize::from(tx_baseband_gain_row(gain_64).get()) * 4;
                     oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
                         0xf3_u8.wrapping_add(32).wrapping_add(i as u8),
                         image.output_72[i],

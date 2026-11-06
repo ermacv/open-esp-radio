@@ -13,6 +13,7 @@
 //! accesses per entry. It has no callback, allocation, hidden software state,
 //! wait, delay, or hardware-dependent exit.
 
+use crate::ordinal::Ordinal;
 pub use oer_chips_esp32s31_hal::types::PhyGainMemoryEntry;
 
 pub const PHY_TX_CFR_ENTRY_COUNT: u8 = 32;
@@ -46,9 +47,40 @@ pub enum PhyRxGainBank {
     Shared,
 }
 
+/// The base gain of a generated word, in its bank.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxGainSource {
+    Wifi(Ordinal<{ PHY_RX_GAIN_BASE_BANK_0.len() }>),
+    Shared(Ordinal<{ PHY_RX_GAIN_BASE_BANK_1.len() }>),
+}
+
+impl PhyRxGainSource {
+    const fn of(bank: PhyRxGainBank, index: usize) -> Self {
+        let source = match bank {
+            PhyRxGainBank::Wifi => match Ordinal::position(index as u8) {
+                Some(position) => Some(Self::Wifi(position)),
+                None => None,
+            },
+            PhyRxGainBank::Shared => match Ordinal::position(index as u8) {
+                Some(position) => Some(Self::Shared(position)),
+                None => None,
+            },
+        };
+        match source {
+            Some(source) => source,
+            None => panic!("the generator walks its bank's base gains"),
+        }
+    }
+}
+
+/// A position in a generated gain table.
+pub(crate) type PhyRxGainEntry = Ordinal<PHY_WIFI_RX_GAIN_GENERATED_CAPACITY>;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyGeneratedRxGainTable {
     pub words: [u32; PHY_WIFI_RX_GAIN_GENERATED_CAPACITY],
+    /// The base gain each word came from.
+    sources: [PhyRxGainSource; PHY_WIFI_RX_GAIN_GENERATED_CAPACITY],
     /// Highest valid generated index, matching the return value of ROM
     /// `phy_gen_rx_gain_table`.
     pub last_index: u8,
@@ -64,22 +96,7 @@ pub struct PhyRxGainMemoryParameters {
     pub wifi_auxiliary: u16,
 }
 
-fn rfrx_gain_index(bank: PhyRxGainBank, encoded_gain: u16) -> usize {
-    let bases = match bank {
-        PhyRxGainBank::Wifi => &PHY_RX_GAIN_BASE_BANK_0[..],
-        PhyRxGainBank::Shared => &PHY_RX_GAIN_BASE_BANK_1[..],
-    };
-    let mut index = 0;
-    while index != bases.len() {
-        if bases[index] == encoded_gain {
-            return index;
-        }
-        index += 1;
-    }
-    bases.len()
-}
-
-const fn shared_rx_mixer_digital_gain(index: usize) -> u8 {
+const fn shared_rx_mixer_digital_gain(index: u8) -> u8 {
     match index {
         9 => 4,
         10 => 7,
@@ -96,13 +113,13 @@ pub fn phy_generated_rx_gain_memory_entry(
     parameters: &PhyRxGainMemoryParameters,
     bank: PhyRxGainBank,
     table: &PhyGeneratedRxGainTable,
-    index: u8,
+    index: PhyRxGainEntry,
 ) -> PhyGainMemoryEntry {
-    let encoded = table.words[index as usize];
-    let gain_index = rfrx_gain_index(bank, ((encoded >> 12) & 0xffff) as u16);
-    let index_dc = match bank {
-        PhyRxGainBank::Wifi => parameters.wifi_index_dc[gain_index],
-        PhyRxGainBank::Shared => parameters.shared_index_dc[gain_index],
+    let encoded = index.at(&table.words);
+    let source = index.at(&table.sources);
+    let index_dc = match source {
+        PhyRxGainSource::Wifi(source) => source.at(&parameters.wifi_index_dc),
+        PhyRxGainSource::Shared(source) => source.at(&parameters.shared_index_dc),
     };
     let mut selected_bits = 0_u8;
     let mut bit = 4_u8;
@@ -128,13 +145,13 @@ pub fn phy_generated_rx_gain_memory_entry(
         PhyRxGainBank::Wifi => parameters.wifi_auxiliary,
         PhyRxGainBank::Shared => 0,
     };
-    let mixer_digital_gain: u8 = match bank {
-        PhyRxGainBank::Wifi => 7,
-        PhyRxGainBank::Shared => shared_rx_mixer_digital_gain(gain_index),
+    let mixer_digital_gain: u8 = match source {
+        PhyRxGainSource::Wifi(_) => 7,
+        PhyRxGainSource::Shared(source) => shared_rx_mixer_digital_gain(source.get()),
     };
     let memory_index = match bank {
-        PhyRxGainBank::Wifi => index,
-        PhyRxGainBank::Shared => index.wrapping_add(0x50),
+        PhyRxGainBank::Wifi => index.get(),
+        PhyRxGainBank::Shared => index.get().wrapping_add(0x50),
     };
     PhyGainMemoryEntry::generated_receive(
         memory_index,
@@ -159,6 +176,7 @@ pub const fn generate_phy_rx_gain_table(bank: PhyRxGainBank) -> PhyGeneratedRxGa
         PhyRxGainBank::Shared => (0x12_u8, PHY_RX_GAIN_BASE_BANK_1.len()),
     };
     let mut words = [0_u32; PHY_WIFI_RX_GAIN_GENERATED_CAPACITY];
+    let mut sources = [PhyRxGainSource::of(bank, 0); PHY_WIFI_RX_GAIN_GENERATED_CAPACITY];
     let mut gain = match bank {
         PhyRxGainBank::Wifi => PHY_RX_GAIN_THRESHOLD_BANK_0[0],
         PhyRxGainBank::Shared => PHY_RX_GAIN_THRESHOLD_BANK_1[0],
@@ -196,9 +214,11 @@ pub const fn generate_phy_rx_gain_table(bank: PhyRxGainBank) -> PhyGeneratedRxGa
         };
         let low = PHY_RX_GAIN_LOW_FIELD[(gain / 6) as usize] & 0x0fff;
         words[output_index] = base as u32 * 0x1000 + low as u32 * 0x10 + (gain % 6) as u32;
+        sources[output_index] = PhyRxGainSource::of(bank, source_index);
         if maximum_gain < gain || output_index + 1 == PHY_WIFI_RX_GAIN_GENERATED_CAPACITY {
             return PhyGeneratedRxGainTable {
                 words,
+                sources,
                 last_index: output_index as u8,
             };
         }

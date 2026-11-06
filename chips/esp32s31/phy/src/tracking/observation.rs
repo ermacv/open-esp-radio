@@ -196,9 +196,9 @@ pub struct RfpllEngineTrace {
     pub invalid: bool,
 }
 impl RfpllEngineTrace {
-    fn prepare(&mut self, sample: RfpllCommandSample) -> &mut RfpllCommandMaximum {
+    fn prepare(&mut self, sample: RfpllCommandSample) -> Option<&mut RfpllCommandMaximum> {
         self.invalid |= sample.invalid;
-        &mut self.commands[sample.command as usize]
+        self.commands.get_mut(sample.command as usize)
     }
 }
 impl RfpllCommandMaximum {
@@ -286,7 +286,7 @@ impl EngineTiming {
                 self.invalid = true;
             }
         }
-        let command = rfpll.map(|(trace, sample)| (trace.prepare(sample), sample));
+        let command = rfpll.and_then(|(trace, sample)| Some((trace.prepare(sample)?, sample)));
         // Includes the event/overflow/ready/command accounting above. No observer,
         // formatter or report runs inside this measured interval.
         let finished = clock.now();

@@ -26,7 +26,7 @@ use crate::{
     },
     calibration::{
         baseband::{
-            PhyGainMemoryEntry, PhyRxGainBank, PhyRxGainMemoryParameters,
+            PhyGainMemoryEntry, PhyRxGainBank, PhyRxGainEntry, PhyRxGainMemoryParameters,
             phy_generated_rx_gain_memory_entry,
         },
         cold::{PhyColdI2cAction, PhyColdI2cTransaction},
@@ -127,7 +127,9 @@ struct Cursor {
     bank: PhyRxGainDcBank,
     gain: u8,
     index: u8,
-    fine: Option<u8>,
+    fine: Option<dc::FinePosition>,
+    /// The next word of the bank being published.
+    entry: PhyRxGainEntry,
     high: bool,
     after_dc: AfterDc,
 }
@@ -280,6 +282,7 @@ impl RxProgram {
                 gain: 0,
                 index: 0,
                 fine: None,
+                entry: PhyRxGainEntry::FIRST,
                 high: false,
                 after_dc: AfterDc::Complete,
             },
@@ -538,7 +541,7 @@ impl RxProgram {
             Pc::BasebandI => PhyPbusForceTest::new(2, 2, self.baseband()[0]),
             Pc::BasebandQ => PhyPbusForceTest::new(3, 2, self.baseband()[1]),
             Pc::Gain => dc::set_rx_gain_transaction(
-                u32::from(dc::gain(c.bank, c.gain)) << 12,
+                u32::from(dc::gain(c.bank, c.gain)?) << 12,
                 self.inputs.pbus_rx_path_value,
                 c.index,
             ),
@@ -734,21 +737,16 @@ impl RxProgram {
             });
         }
         if let Some(index) = self.cursor.fine {
-            let slot = self
-                .memory
-                .wifi_fine_dc
-                .get_mut(usize::from(index))
-                .ok_or(RxError::WrongCompletion)?;
-            self.quality.record_wifi_fine(index, outcome.converged);
+            self.quality
+                .record_wifi_fine(index.get(), outcome.converged);
             self.fine_current = outcome.configuration;
-            *slot = outcome.configuration;
+            *index.slot(&mut self.memory.wifi_fine_dc) = outcome.configuration;
             self.work = Work::Idle;
-            if usize::from(index) + 1 == dc::FINE_CODES {
-                self.cursor.fine = None;
-                self.next_gain();
-            } else {
-                self.cursor.fine = Some(index + 1);
+            self.cursor.fine = index.next();
+            if self.cursor.fine.is_some() {
                 self.cursor.pc = Pc::FineCode;
+            } else {
+                self.next_gain();
             }
         } else {
             let index = self.cursor.gain;
@@ -774,7 +772,7 @@ impl RxProgram {
             }
             self.work = Work::Idle;
             if self.cursor.bank == PhyRxGainDcBank::Wifi && index == 0 {
-                self.cursor.fine = Some(0);
+                self.cursor.fine = Some(dc::FinePosition::FIRST);
                 self.cursor.pc = Pc::FineCode;
             } else {
                 self.next_gain();
@@ -1101,15 +1099,19 @@ impl GainEntryStep<'_> {
             &self.program.memory,
             bank,
             generated_table(bank),
-            self.program.cursor.index,
+            self.program.cursor.entry,
         )
     }
     pub(crate) fn complete(self, result: Result<(), RxError>) -> Result<(), RxError> {
         self.program.hardware_result(result)?;
-        if self.program.cursor.index == generated_table(self.program.publish_bank()).last_index {
-            self.program.cursor.pc = Pc::PublishRxClockOff;
-        } else {
-            self.program.cursor.index += 1;
+        let entry = self.program.cursor.entry;
+        let last = generated_table(self.program.publish_bank()).last_index;
+        match entry.next() {
+            Some(next) if entry.get() != last => self.program.cursor.entry = next,
+            _ => {
+                self.program.cursor.entry = PhyRxGainEntry::FIRST;
+                self.program.cursor.pc = Pc::PublishRxClockOff;
+            }
         }
         Ok(())
     }
