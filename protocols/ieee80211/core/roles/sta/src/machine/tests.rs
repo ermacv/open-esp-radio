@@ -1557,6 +1557,104 @@ fn refused_background_absence_returns_the_original_request_and_exact_reason() {
 }
 
 #[test]
+fn a_scan_listens_its_dwell_from_the_ready_receiver_and_moves_on() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        let lease_end = world.arbiter.poll_deadline().expect("the lease ends");
+        assert!(lease_end > at(10), "the lease outlasts the window");
+        assert_eq!(world.station.poll_deadline(), Some(at(10)));
+        world.take();
+        assert_eq!(world.advance(), at(10));
+        assert_eq!(
+            world.take(),
+            [
+                Seen::Retune(6),
+                Seen::Configure("scan"),
+                Seen::Transmit {
+                    subtype: 0x0040,
+                    on: 6
+                },
+            ]
+        );
+    });
+}
+
+#[test]
+fn a_delayed_receiver_starts_the_window_when_it_is_ready() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.hold_configured = true;
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        assert_eq!(world.station.poll_deadline(), None);
+        world.hold_configured = false;
+        world.run(at(4));
+        assert_eq!(world.station.poll_deadline(), Some(at(14)));
+    });
+}
+
+#[test]
+fn the_lease_ends_a_window_it_cannot_hold() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.hold_configured = true;
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        let lease_end = world.arbiter.poll_deadline().expect("the lease ends");
+        // Ready 1 ms before the lease's end: the window would outlast it.
+        let ready = lease_end
+            .checked_sub(Duration::from_millis(1))
+            .expect("the lease ends after the epoch");
+        world.hold_configured = false;
+        world.run(ready);
+        world.take();
+        assert_eq!(world.advance(), lease_end);
+        assert_eq!(
+            world.take().first(),
+            Some(&Seen::Retune(6)),
+            "the next channel follows at the lease's end"
+        );
+    });
+}
+
+#[test]
+fn a_scan_that_hears_nothing_ends_not_found_after_one_window_per_channel() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        let mut ended = at(0);
+        for _ in 0..16 {
+            if world.seen.iter().any(|seen| {
+                matches!(
+                    seen,
+                    Seen::Notify(StaNotice::Disconnected(StaDisconnectReason::NotFound {
+                        partial: false
+                    }))
+                )
+            }) {
+                break;
+            }
+            ended = world.advance();
+        }
+        assert!(
+            world.seen.iter().any(|seen| matches!(
+                seen,
+                Seen::Notify(StaNotice::Disconnected(StaDisconnectReason::NotFound {
+                    partial: false
+                }))
+            )),
+            "{:?}",
+            world.seen
+        );
+        // Channels 1 and 6, a window each.
+        assert_eq!(ended, at(20));
+    });
+}
+
+#[test]
 fn a_connect_reports_each_step_and_what_its_scan_heard() {
     use ConnectStep as Step;
     installed(|mint| {
@@ -1721,7 +1819,7 @@ fn beside_an_access_point_the_scan_goes_in_absences_after_its_tbtts() {
         // Channel 6 only in the absence after the TBTT at 50 ms: the port
         // moves at 52 ms, and the station probes there.
         let ended = world.advance();
-        assert_eq!(ended, at(12));
+        assert_eq!(ended, at(10));
         assert_eq!(world.take(), []);
         let started = world.advance();
         assert_eq!(started, at(52));
@@ -1738,7 +1836,7 @@ fn beside_an_access_point_the_scan_goes_in_absences_after_its_tbtts() {
         );
         // The absence ends before the next beacon: the port is back home.
         let back = world.advance();
-        assert_eq!(back, at(64));
+        assert_eq!(back, at(62));
         assert_eq!(world.take().first(), Some(&Seen::Retune(1)));
     });
 }
@@ -4611,7 +4709,7 @@ fn probe_encoding_failure_returns_credit_and_missing_epoch_reports_link_change()
         let State::Scan(scan) = &mut world.station.state else {
             panic!("scan");
         };
-        scan.step = ScanStep::NeedProbe;
+        scan.step = ScanStep::NeedProbe { until: at(1_000) };
         let mut buffers = Vec::new();
         while let Some(mut buffer) = world.station.buffers.take() {
             buffer.1 = 0;
