@@ -193,13 +193,13 @@ pub(crate) const fn next_wifi_tx_gain(
     generator: &mut crate::tx::gain::Generator,
 ) -> crate::tx::gain::Value {
     generator.table_index = select_tx_gain_index(generator.table_index, generator.target);
-    let index = generator.table_index as usize;
+    let index = crate::ordinal::Ordinal::clamped(generator.table_index);
     let residual = generator
         .target
-        .wrapping_sub(WIFI_TX_GAIN_TABLE_HIGH[index] as i16);
+        .wrapping_sub(index.at(&WIFI_TX_GAIN_TABLE_HIGH) as i16);
     let value = crate::tx::gain::Value {
-        gain_72: WIFI_TX_GAIN_TABLE_LOW[index],
-        gain_64: WIFI_TX_GAIN_TABLE_MID[index],
+        gain_72: index.at(&WIFI_TX_GAIN_TABLE_LOW),
+        gain_64: index.at(&WIFI_TX_GAIN_TABLE_MID),
         gain_32: residual.wrapping_sub(generator.interpolation as i16) as u8,
     };
     generator.target = generator.target.wrapping_sub(4);
@@ -371,11 +371,7 @@ enum CleanupContinuation {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Step {
-    DisableAgc,
-    ForceTxRx(PhyForceTxRxRunning),
-    EnableBbpll,
-    Temperature(PhyTemperatureTransition),
+enum Tuning {
     StartFrequencySwitch,
     FrequencyStartDelay,
     ClearFrequencySwitch,
@@ -398,6 +394,19 @@ enum Step {
     },
     ConfigureChannelCbw,
     ConfigureRxCompensationSecond,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Step {
+    DisableAgc,
+    ForceTxRx(PhyForceTxRxRunning),
+    EnableBbpll,
+    Temperature(PhyTemperatureTransition),
+    /// Every step past the temperature reading, which it carries.
+    Tuning {
+        temperature: PhyTemperatureOutcome,
+        step: Tuning,
+    },
     DisableBbpll(CleanupContinuation),
     ReleaseTxRx(PhyForceTxRxRunning, CleanupContinuation),
     ClearDcMemory(CleanupContinuation),
@@ -536,7 +545,6 @@ pub struct PhyChipChannelTransition {
     depth: PhyForceTxRxDepth,
     channel: u16,
     frequency_mhz: u16,
-    temperature: Option<PhyTemperatureOutcome>,
     step: Step,
 }
 
@@ -561,7 +569,6 @@ impl PhyChipChannelTransition {
             depth,
             channel,
             frequency_mhz,
-            temperature: None,
             step,
         }
     }
@@ -570,10 +577,7 @@ impl PhyChipChannelTransition {
         self.frequency_mhz.wrapping_sub(2_400) as u8
     }
 
-    const fn outcome(self) -> PhyChipChannelOutcome {
-        let Some(temperature) = self.temperature else {
-            panic!("channel transition completed without a temperature outcome");
-        };
+    const fn outcome(self, temperature: PhyTemperatureOutcome) -> PhyChipChannelOutcome {
         PhyChipChannelOutcome {
             channel: self.channel,
             frequency_mhz: self.frequency_mhz,
@@ -601,68 +605,231 @@ impl PhyChipChannelTransition {
         matches!(&self.step, Step::Complete(_) | Step::Failed(_))
     }
 
-    pub const fn action(self) -> PhyChipChannelAction {
-        match self.step {
-            Step::DisableAgc => PhyChipChannelAction::SetAgc { enabled: false },
-            Step::ForceTxRx(child) | Step::ReassertTxRx(child) | Step::ReleaseTxRx(child, _) => {
-                force_txrx_action(child)
-            }
-            Step::EnableBbpll => PhyChipChannelAction::SetBbpllCalibration { enabled: true },
-            Step::Temperature(transition) => PhyChipChannelAction::Temperature(transition.action()),
-            Step::StartFrequencySwitch => PhyChipChannelAction::StartFrequencySwitch {
+    const fn tuning_action(self, step: Tuning) -> PhyChipChannelAction {
+        match step {
+            Tuning::StartFrequencySwitch => PhyChipChannelAction::StartFrequencySwitch {
                 frequency_index: self.frequency_index(),
                 crystal_selector: self.request.parameters.crystal_selector,
             },
-            Step::FrequencyStartDelay => PhyChipChannelAction::DelayMicros {
+            Tuning::FrequencyStartDelay => PhyChipChannelAction::DelayMicros {
                 phase: PhyChipChannelDelay::FrequencyStartPulse,
                 micros: 1,
             },
-            Step::ClearFrequencySwitch => PhyChipChannelAction::ClearFrequencySwitch,
-            Step::FrequencySettleDelay => PhyChipChannelAction::DelayMicros {
+            Tuning::ClearFrequencySwitch => PhyChipChannelAction::ClearFrequencySwitch,
+            Tuning::FrequencySettleDelay => PhyChipChannelAction::DelayMicros {
                 phase: PhyChipChannelDelay::FrequencySettle,
                 micros: 10,
             },
-            Step::AwaitFrequencyReady { samples } => {
+            Tuning::AwaitFrequencyReady { samples } => {
                 PhyChipChannelAction::AwaitFrequencyReadyEdge { samples }
             }
-            Step::ConfigureNrxFirst => PhyChipChannelAction::ConfigureNrx {
+            Tuning::ConfigureNrxFirst => PhyChipChannelAction::ConfigureNrx {
                 frequency_mhz: self.frequency_mhz,
             },
             // The pinned root accepts off-grid MHz inputs. Its first NRX
             // update receives that raw input, while the second update follows
             // TX-cap programming and receives the canonical frequency of the
             // truncated channel number.
-            Step::ConfigureNrxSecond => PhyChipChannelAction::ConfigureNrx {
+            Tuning::ConfigureNrxSecond => PhyChipChannelAction::ConfigureNrx {
                 frequency_mhz: channel_to_frequency(self.channel),
             },
-            Step::ConfigureBssCbw => PhyChipChannelAction::ConfigureBssCbw {
+            Tuning::ConfigureBssCbw => PhyChipChannelAction::ConfigureBssCbw {
                 cbw: self.request.cbw,
             },
-            Step::ConfigureRxCompensationFirst => PhyChipChannelAction::ConfigureRxCompensation,
-            Step::ProgramTxCap => PhyChipChannelAction::WriteI2c {
+            Tuning::ConfigureRxCompensationFirst => PhyChipChannelAction::ConfigureRxCompensation,
+            Tuning::ProgramTxCap => PhyChipChannelAction::WriteI2c {
                 phase: PhyChipChannelI2cPhase::ProgramTxCap,
                 address: TX_CAP_ADDRESS,
                 value: tx_cap_value(self.channel, self.request.parameters.tx_capacitance),
             },
-            Step::CalculateTxGain => PhyChipChannelAction::CalculateTxGain(self.tx_gain_request()),
-            Step::PublishTxGain(image) => PhyChipChannelAction::PublishTxGain(image),
-            Step::CaptureTxCap => PhyChipChannelAction::ReadI2c {
+            Tuning::CalculateTxGain => {
+                PhyChipChannelAction::CalculateTxGain(self.tx_gain_request())
+            }
+            Tuning::PublishTxGain(image) => PhyChipChannelAction::PublishTxGain(image),
+            Tuning::CaptureTxCap => PhyChipChannelAction::ReadI2c {
                 phase: PhyChipChannelI2cPhase::CaptureTxCap,
                 address: TX_CAP_ADDRESS,
             },
-            Step::PublishTxCapCommandMemory { value } => {
+            Tuning::PublishTxCapCommandMemory { value } => {
                 PhyChipChannelAction::PublishTxCapCommandMemory { value }
             }
-            Step::ConfigureChannelCbw => PhyChipChannelAction::ConfigureChannelCbw {
+            Tuning::ConfigureChannelCbw => PhyChipChannelAction::ConfigureChannelCbw {
                 cbw: self.request.cbw,
             },
-            Step::ConfigureRxCompensationSecond => PhyChipChannelAction::ConfigureRxCompensation,
+            Tuning::ConfigureRxCompensationSecond => PhyChipChannelAction::ConfigureRxCompensation,
+            Tuning::ReassertTxRx(child) => force_txrx_action(child),
+        }
+    }
+
+    pub const fn action(self) -> PhyChipChannelAction {
+        match self.step {
+            Step::DisableAgc => PhyChipChannelAction::SetAgc { enabled: false },
+            Step::ForceTxRx(child) | Step::ReleaseTxRx(child, _) => force_txrx_action(child),
+            Step::EnableBbpll => PhyChipChannelAction::SetBbpllCalibration { enabled: true },
+            Step::Temperature(transition) => PhyChipChannelAction::Temperature(transition.action()),
+            Step::Tuning { step, .. } => self.tuning_action(step),
             Step::DisableBbpll(_) => PhyChipChannelAction::SetBbpllCalibration { enabled: false },
             Step::ClearDcMemory(_) => PhyChipChannelAction::ClearDcMemory,
             Step::EnableAgc(_) => PhyChipChannelAction::SetAgc { enabled: true },
             Step::Complete(outcome) => PhyChipChannelAction::Complete(outcome),
             Step::Failed(failure) => PhyChipChannelAction::Failed(failure),
         }
+    }
+
+    /// A completion of a step past the temperature reading.
+    fn advance_tuning(
+        &self,
+        temperature: PhyTemperatureOutcome,
+        step: Tuning,
+        completion: PhyChipChannelCompletion,
+    ) -> Result<Step, PhyChipChannelTransitionError> {
+        let tuned = |step| Step::Tuning { temperature, step };
+        Ok(match (step, completion) {
+            (
+                Tuning::StartFrequencySwitch,
+                PhyChipChannelCompletion::FrequencySwitchStarted {
+                    frequency_index,
+                    crystal_selector,
+                },
+            ) if frequency_index == self.frequency_index()
+                && crystal_selector == self.request.parameters.crystal_selector =>
+            {
+                tuned(Tuning::FrequencyStartDelay)
+            }
+            (
+                Tuning::FrequencyStartDelay,
+                PhyChipChannelCompletion::DelayElapsed {
+                    phase: PhyChipChannelDelay::FrequencyStartPulse,
+                    micros: 1,
+                },
+            ) => tuned(Tuning::ClearFrequencySwitch),
+            (Tuning::ClearFrequencySwitch, PhyChipChannelCompletion::FrequencySwitchCleared) => {
+                tuned(Tuning::FrequencySettleDelay)
+            }
+            (
+                Tuning::FrequencySettleDelay,
+                PhyChipChannelCompletion::DelayElapsed {
+                    phase: PhyChipChannelDelay::FrequencySettle,
+                    micros: 10,
+                },
+            ) => tuned(Tuning::AwaitFrequencyReady { samples: 0 }),
+            (
+                Tuning::AwaitFrequencyReady { samples },
+                PhyChipChannelCompletion::FrequencyReadyObserved { ready },
+            ) => {
+                if ready {
+                    tuned(Tuning::ConfigureNrxFirst)
+                } else {
+                    tuned(Tuning::AwaitFrequencyReady {
+                        samples: samples.wrapping_add(1),
+                    })
+                }
+            }
+            (
+                Tuning::AwaitFrequencyReady { samples },
+                PhyChipChannelCompletion::FrequencyReadyTimedOut,
+            ) => Step::DisableBbpll(CleanupContinuation::Failed(
+                PhyChipChannelFailure::FrequencyReadyTimedOut { samples },
+            )),
+            (
+                Tuning::ConfigureNrxFirst,
+                PhyChipChannelCompletion::NrxConfigured { frequency_mhz },
+            ) if frequency_mhz == self.frequency_mhz => tuned(Tuning::ConfigureBssCbw),
+            (Tuning::ConfigureBssCbw, PhyChipChannelCompletion::BssCbwConfigured { cbw })
+                if cbw == self.request.cbw =>
+            {
+                tuned(Tuning::ConfigureRxCompensationFirst)
+            }
+            (
+                Tuning::ConfigureRxCompensationFirst,
+                PhyChipChannelCompletion::RxCompensationConfigured,
+            ) => tuned(Tuning::ProgramTxCap),
+            (
+                Tuning::ProgramTxCap,
+                PhyChipChannelCompletion::I2cWriteCompleted {
+                    phase: PhyChipChannelI2cPhase::ProgramTxCap,
+                    address: TX_CAP_ADDRESS,
+                    value,
+                },
+            ) if value == tx_cap_value(self.channel, self.request.parameters.tx_capacitance) => {
+                tuned(Tuning::ConfigureNrxSecond)
+            }
+            (
+                Tuning::ProgramTxCap,
+                PhyChipChannelCompletion::I2cTimedOut {
+                    phase: PhyChipChannelI2cPhase::ProgramTxCap,
+                    address: TX_CAP_ADDRESS,
+                },
+            ) => Step::DisableBbpll(CleanupContinuation::Failed(
+                PhyChipChannelFailure::I2cTimedOut {
+                    address: TX_CAP_ADDRESS,
+                },
+            )),
+            (
+                Tuning::ConfigureNrxSecond,
+                PhyChipChannelCompletion::NrxConfigured { frequency_mhz },
+            ) if frequency_mhz == channel_to_frequency(self.channel) => {
+                tuned(Tuning::CalculateTxGain)
+            }
+            (
+                Tuning::CalculateTxGain,
+                PhyChipChannelCompletion::TxGainCalculated { request, mut image },
+            ) if request == self.tx_gain_request() => {
+                image.seed = self.request.parameters.tx_gain_seed;
+                image.config = self.request.parameters.tx_gain_config;
+                if self.request.parameters.tx_gain_skip_publication {
+                    tuned(Tuning::CaptureTxCap)
+                } else {
+                    tuned(Tuning::PublishTxGain(image))
+                }
+            }
+            // `phy_wifi_set_tx_gain_new` brackets its publication with a
+            // pair nested inside this root's pair.
+            (Tuning::PublishTxGain(_), PhyChipChannelCompletion::TxGainPublished) => {
+                match self.depth.nested().leave() {
+                    Some(child) => tuned(Tuning::ReassertTxRx(child)),
+                    None => tuned(Tuning::CaptureTxCap),
+                }
+            }
+            (
+                Tuning::CaptureTxCap,
+                PhyChipChannelCompletion::I2cReadCompleted {
+                    phase: PhyChipChannelI2cPhase::CaptureTxCap,
+                    address: TX_CAP_ADDRESS,
+                    value,
+                },
+            ) => tuned(Tuning::PublishTxCapCommandMemory { value }),
+            (
+                Tuning::CaptureTxCap,
+                PhyChipChannelCompletion::I2cTimedOut {
+                    phase: PhyChipChannelI2cPhase::CaptureTxCap,
+                    address: TX_CAP_ADDRESS,
+                },
+            ) => Step::DisableBbpll(CleanupContinuation::Failed(
+                PhyChipChannelFailure::I2cTimedOut {
+                    address: TX_CAP_ADDRESS,
+                },
+            )),
+            (
+                Tuning::PublishTxCapCommandMemory { value },
+                PhyChipChannelCompletion::TxCapCommandMemoryPublished { value: completed },
+            ) if value == completed => tuned(Tuning::ConfigureChannelCbw),
+            (
+                Tuning::ConfigureChannelCbw,
+                PhyChipChannelCompletion::ChannelCbwConfigured { cbw },
+            ) if cbw == self.request.cbw => tuned(Tuning::ConfigureRxCompensationSecond),
+            (
+                Tuning::ConfigureRxCompensationSecond,
+                PhyChipChannelCompletion::RxCompensationConfigured,
+            ) => Step::DisableBbpll(CleanupContinuation::Complete(self.outcome(temperature))),
+            (Tuning::ReassertTxRx(child), completion) => {
+                match advance_force_txrx(child, completion)? {
+                    Some(child) => tuned(Tuning::ReassertTxRx(child)),
+                    None => tuned(Tuning::CaptureTxCap),
+                }
+            }
+            _ => return Err(PhyChipChannelTransitionError::WrongCompletion),
+        })
     }
 
     pub fn advance(
@@ -676,11 +843,6 @@ impl PhyChipChannelTransition {
                     None => Step::EnableBbpll,
                 }
             }
-            (Step::ReassertTxRx(child), completion) => match advance_force_txrx(child, completion)?
-            {
-                Some(child) => Step::ReassertTxRx(child),
-                None => Step::CaptureTxCap,
-            },
             (Step::ForceTxRx(child), completion) => match advance_force_txrx(child, completion)? {
                 Some(child) => Step::ForceTxRx(child),
                 None => Step::EnableBbpll,
@@ -703,10 +865,10 @@ impl PhyChipChannelTransition {
                     .advance(completion)
                     .map_err(|_| PhyChipChannelTransitionError::WrongCompletion)?;
                 match transition.action() {
-                    PhyTemperatureAction::Complete(outcome) => {
-                        self.temperature = Some(outcome);
-                        Step::StartFrequencySwitch
-                    }
+                    PhyTemperatureAction::Complete(outcome) => Step::Tuning {
+                        temperature: outcome,
+                        step: Tuning::StartFrequencySwitch,
+                    },
                     PhyTemperatureAction::Failed(failure) => {
                         let continuation = CleanupContinuation::Failed(
                             PhyChipChannelFailure::Temperature(failure),
@@ -716,142 +878,9 @@ impl PhyChipChannelTransition {
                     _ => Step::Temperature(transition),
                 }
             }
-            (
-                Step::StartFrequencySwitch,
-                PhyChipChannelCompletion::FrequencySwitchStarted {
-                    frequency_index,
-                    crystal_selector,
-                },
-            ) if frequency_index == self.frequency_index()
-                && crystal_selector == self.request.parameters.crystal_selector =>
-            {
-                Step::FrequencyStartDelay
+            (Step::Tuning { temperature, step }, completion) => {
+                self.advance_tuning(temperature, step, completion)?
             }
-            (
-                Step::FrequencyStartDelay,
-                PhyChipChannelCompletion::DelayElapsed {
-                    phase: PhyChipChannelDelay::FrequencyStartPulse,
-                    micros: 1,
-                },
-            ) => Step::ClearFrequencySwitch,
-            (Step::ClearFrequencySwitch, PhyChipChannelCompletion::FrequencySwitchCleared) => {
-                Step::FrequencySettleDelay
-            }
-            (
-                Step::FrequencySettleDelay,
-                PhyChipChannelCompletion::DelayElapsed {
-                    phase: PhyChipChannelDelay::FrequencySettle,
-                    micros: 10,
-                },
-            ) => Step::AwaitFrequencyReady { samples: 0 },
-            (
-                Step::AwaitFrequencyReady { samples },
-                PhyChipChannelCompletion::FrequencyReadyObserved { ready },
-            ) => {
-                if ready {
-                    Step::ConfigureNrxFirst
-                } else {
-                    Step::AwaitFrequencyReady {
-                        samples: samples.wrapping_add(1),
-                    }
-                }
-            }
-            (
-                Step::AwaitFrequencyReady { samples },
-                PhyChipChannelCompletion::FrequencyReadyTimedOut,
-            ) => Step::DisableBbpll(CleanupContinuation::Failed(
-                PhyChipChannelFailure::FrequencyReadyTimedOut { samples },
-            )),
-            (
-                Step::ConfigureNrxFirst,
-                PhyChipChannelCompletion::NrxConfigured { frequency_mhz },
-            ) if frequency_mhz == self.frequency_mhz => Step::ConfigureBssCbw,
-            (Step::ConfigureBssCbw, PhyChipChannelCompletion::BssCbwConfigured { cbw })
-                if cbw == self.request.cbw =>
-            {
-                Step::ConfigureRxCompensationFirst
-            }
-            (
-                Step::ConfigureRxCompensationFirst,
-                PhyChipChannelCompletion::RxCompensationConfigured,
-            ) => Step::ProgramTxCap,
-            (
-                Step::ProgramTxCap,
-                PhyChipChannelCompletion::I2cWriteCompleted {
-                    phase: PhyChipChannelI2cPhase::ProgramTxCap,
-                    address: TX_CAP_ADDRESS,
-                    value,
-                },
-            ) if value == tx_cap_value(self.channel, self.request.parameters.tx_capacitance) => {
-                Step::ConfigureNrxSecond
-            }
-            (
-                Step::ProgramTxCap,
-                PhyChipChannelCompletion::I2cTimedOut {
-                    phase: PhyChipChannelI2cPhase::ProgramTxCap,
-                    address: TX_CAP_ADDRESS,
-                },
-            ) => Step::DisableBbpll(CleanupContinuation::Failed(
-                PhyChipChannelFailure::I2cTimedOut {
-                    address: TX_CAP_ADDRESS,
-                },
-            )),
-            (
-                Step::ConfigureNrxSecond,
-                PhyChipChannelCompletion::NrxConfigured { frequency_mhz },
-            ) if frequency_mhz == channel_to_frequency(self.channel) => Step::CalculateTxGain,
-            (
-                Step::CalculateTxGain,
-                PhyChipChannelCompletion::TxGainCalculated { request, mut image },
-            ) if request == self.tx_gain_request() => {
-                image.seed = self.request.parameters.tx_gain_seed;
-                image.config = self.request.parameters.tx_gain_config;
-                if self.request.parameters.tx_gain_skip_publication {
-                    Step::CaptureTxCap
-                } else {
-                    Step::PublishTxGain(image)
-                }
-            }
-            // `phy_wifi_set_tx_gain_new` brackets its publication with a
-            // pair nested inside this root's pair.
-            (Step::PublishTxGain(_), PhyChipChannelCompletion::TxGainPublished) => {
-                match self.depth.nested().leave() {
-                    Some(child) => Step::ReassertTxRx(child),
-                    None => Step::CaptureTxCap,
-                }
-            }
-            (
-                Step::CaptureTxCap,
-                PhyChipChannelCompletion::I2cReadCompleted {
-                    phase: PhyChipChannelI2cPhase::CaptureTxCap,
-                    address: TX_CAP_ADDRESS,
-                    value,
-                },
-            ) => Step::PublishTxCapCommandMemory { value },
-            (
-                Step::CaptureTxCap,
-                PhyChipChannelCompletion::I2cTimedOut {
-                    phase: PhyChipChannelI2cPhase::CaptureTxCap,
-                    address: TX_CAP_ADDRESS,
-                },
-            ) => Step::DisableBbpll(CleanupContinuation::Failed(
-                PhyChipChannelFailure::I2cTimedOut {
-                    address: TX_CAP_ADDRESS,
-                },
-            )),
-            (
-                Step::PublishTxCapCommandMemory { value },
-                PhyChipChannelCompletion::TxCapCommandMemoryPublished { value: completed },
-            ) if value == completed => Step::ConfigureChannelCbw,
-            (Step::ConfigureChannelCbw, PhyChipChannelCompletion::ChannelCbwConfigured { cbw })
-                if cbw == self.request.cbw =>
-            {
-                Step::ConfigureRxCompensationSecond
-            }
-            (
-                Step::ConfigureRxCompensationSecond,
-                PhyChipChannelCompletion::RxCompensationConfigured,
-            ) => Step::DisableBbpll(CleanupContinuation::Complete(self.outcome())),
             (
                 Step::DisableBbpll(continuation),
                 PhyChipChannelCompletion::BbpllCalibrationSet { enabled: false },

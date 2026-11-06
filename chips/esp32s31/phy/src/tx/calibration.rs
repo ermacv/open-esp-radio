@@ -877,17 +877,37 @@ const fn tx_cap_field(bank: u8) -> crate::analog::i2c::Field {
     }
 }
 
-const fn tx_cap_max(bank: u8) -> u8 {
-    if bank == 0 { 7 } else { 13 }
+const fn tx_cap_max(bank: TxCapBank) -> TxCapCandidate {
+    Ordinal::clamped(if bank.get() == 0 { 7 } else { 13 })
 }
+
+/// A value of a capacitance field, four bits wide.
+type TxCapCandidate = Ordinal<16>;
+
+type TxCapWrite = oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>;
+
+/// Every value's write of one bank.
+const fn tx_cap_writes(bank: u8) -> [TxCapWrite; 16] {
+    let field = tx_cap_field(bank);
+    let mut writes = [crate::analog::i2c::field_write(field, 0); 16];
+    let mut value = 0;
+    while value < 16 {
+        writes[value] = crate::analog::i2c::field_write(field, value as u8);
+        value += 1;
+    }
+    writes
+}
+
+/// The write of each value of each bank: all of them fit, at compile time.
+const TX_CAP_WRITES: [[TxCapWrite; 16]; 2] = [tx_cap_writes(0), tx_cap_writes(1)];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyTxCapSearchTransition {
     request: PhyTxCapSearchRequest,
     step: TxCapSearchStep,
     bank: TxCapBank,
-    candidate: u8,
-    best: [u8; 2],
+    candidate: TxCapCandidate,
+    best: [TxCapCandidate; 2],
     best_sample: u16,
 }
 
@@ -897,17 +917,17 @@ impl PhyTxCapSearchTransition {
             request,
             step: TxCapSearchStep::ConfigureTone,
             bank: Ordinal::FIRST,
-            candidate: tx_cap_max(0),
-            best: [tx_cap_max(0), tx_cap_max(1)],
+            candidate: tx_cap_max(TxCapBank::FIRST),
+            best: [
+                tx_cap_max(TxCapBank::FIRST),
+                tx_cap_max(TxCapBank::clamped(1)),
+            ],
             best_sample: 0,
         }
     }
 
-    const fn write(
-        self,
-        value: u8,
-    ) -> oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address> {
-        crate::analog::i2c::field_write(tx_cap_field(self.bank.get()), value)
+    const fn write(self, value: TxCapCandidate) -> TxCapWrite {
+        value.at(&self.bank.at(&TX_CAP_WRITES))
     }
 
     pub const fn action(self) -> PhyTxCapSearchAction {
@@ -965,7 +985,7 @@ impl PhyTxCapSearchTransition {
                             .bank
                             .get()
                             .wrapping_mul(16)
-                            .wrapping_add(self.candidate),
+                            .wrapping_add(self.candidate.get()),
                         samples: 1,
                         clear_tone_after_ready: self.request.clear_tone_after_ready,
                     }))
@@ -986,12 +1006,16 @@ impl PhyTxCapSearchTransition {
                             self.best_sample = outcome.sample;
                             *self.bank.slot(&mut self.best) = self.candidate;
                         }
-                        if self.candidate == 0 {
-                            self.step =
-                                TxCapSearchStep::WriteBest(self.write(self.bank.at(&self.best)));
-                        } else {
-                            self.candidate -= 1;
-                            self.step = TxCapSearchStep::WriteCandidate(self.write(self.candidate));
+                        match self.candidate.previous() {
+                            None => {
+                                self.step = TxCapSearchStep::WriteBest(
+                                    self.write(self.bank.at(&self.best)),
+                                );
+                            }
+                            Some(candidate) => {
+                                self.candidate = candidate;
+                                self.step = TxCapSearchStep::WriteCandidate(self.write(candidate));
+                            }
                         }
                     }
                     PhyToneSarAction::Failed(failure) => {
@@ -1011,7 +1035,7 @@ impl PhyTxCapSearchTransition {
                 if transition.action() == oer_chips_family_analog::Action::Complete(()) {
                     if let Some(bank) = self.bank.next() {
                         self.bank = bank;
-                        self.candidate = tx_cap_max(bank.get());
+                        self.candidate = tx_cap_max(bank);
                         self.best_sample = 0;
                         self.step = TxCapSearchStep::WriteCandidate(self.write(self.candidate));
                     } else {
@@ -1032,7 +1056,10 @@ impl PhyTxCapSearchTransition {
                 && attenuation == self.request.attenuation =>
             {
                 self.step = TxCapSearchStep::Complete(PhyTxCapSearchOutcome {
-                    capacitance: self.best,
+                    capacitance: {
+                        let [low, high] = self.best;
+                        [low.get(), high.get()]
+                    },
                 });
             }
             (TxCapSearchStep::Complete(_), _) | (TxCapSearchStep::Failed(_), _) => {
@@ -1201,10 +1228,14 @@ impl PhyTxCapTransition {
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
                 match transition.action() {
                     RfpllFrequencyAction::Complete(_) => {
-                        self.step = TxCapStep::SetLow(crate::analog::i2c::field_write(
-                            analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_LOW,
-                            7,
-                        ));
+                        self.step = TxCapStep::SetLow(
+                            const {
+                                crate::analog::i2c::field_write(
+                                    analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_LOW,
+                                    7,
+                                )
+                            },
+                        );
                     }
                     RfpllFrequencyAction::Failed(failure) => {
                         self.fail(PhyTxCapFailure::Rfpll(failure));
@@ -1218,10 +1249,14 @@ impl PhyTxCapTransition {
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
                 self.step = if transition.action() == oer_chips_family_analog::Action::Complete(())
                 {
-                    TxCapStep::SetHigh(crate::analog::i2c::field_write(
-                        analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_HIGH,
-                        13,
-                    ))
+                    TxCapStep::SetHigh(
+                        const {
+                            crate::analog::i2c::field_write(
+                                analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_HIGH,
+                                13,
+                            )
+                        },
+                    )
                 } else {
                     TxCapStep::SetLow(transition)
                 };

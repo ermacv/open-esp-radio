@@ -736,10 +736,12 @@ pub struct PhyTxIqLoopbackTransition {
 
 impl PhyTxIqLoopbackTransition {
     pub fn new(enabled: bool) -> Self {
-        let transition = crate::analog::i2c::field_write(
-            analog_i2c::bbtop::tx_iq_loopback_enable::TX_IQ_LOOPBACK_ENABLE,
-            enabled as u8,
-        );
+        use analog_i2c::bbtop::tx_iq_loopback_enable::TX_IQ_LOOPBACK_ENABLE as ENABLE;
+        let transition = if enabled {
+            const { crate::analog::i2c::field_write(ENABLE, 1) }
+        } else {
+            const { crate::analog::i2c::field_write(ENABLE, 0) }
+        };
         Self {
             enabled,
             step: LoopbackStep::I2c(transition),

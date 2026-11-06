@@ -9,6 +9,8 @@
 use crate::analog::i2c::{MaskedI2cWriteBinding, MaskedI2cWriteBindingError, analog_i2c};
 
 /// Semantic replacement for the vendor range byte at `phy_param + 0x4d`.
+type Write = oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWifiI2cTrackingBand {
     Nominal,
@@ -29,6 +31,21 @@ impl PhyWifiI2cTrackingBand {
         } else {
             Self::Hot
         }
+    }
+
+    /// The band's two writes.
+    const fn writes(self) -> [Write; 2] {
+        let (first, second) = self.values();
+        [
+            crate::analog::i2c::field_write(
+                analog_i2c::txrf::wifi_tx_temperature_tracking_0::WIFI_TX_TEMPERATURE_TRACKING_0,
+                first,
+            ),
+            crate::analog::i2c::field_write(
+                analog_i2c::txrf::wifi_tx_temperature_tracking_1::WIFI_TX_TEMPERATURE_TRACKING_1,
+                second,
+            ),
+        ]
     }
 
     const fn values(self) -> (u8, u8) {
@@ -107,19 +124,20 @@ impl PhyWifiI2cTrackingTransition {
         band: PhyWifiI2cTrackingBand,
         index: u8,
     ) -> oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address> {
-        let (first, second) = band.values();
-        let (field, value) = if index == 0 {
-            (
-                analog_i2c::txrf::wifi_tx_temperature_tracking_0::WIFI_TX_TEMPERATURE_TRACKING_0,
-                first,
-            )
-        } else {
-            (
-                analog_i2c::txrf::wifi_tx_temperature_tracking_1::WIFI_TX_TEMPERATURE_TRACKING_1,
-                second,
-            )
+        // Both values of every band fit their fields, at compile time.
+        const WRITES: [[Write; 2]; 4] = [
+            PhyWifiI2cTrackingBand::Nominal.writes(),
+            PhyWifiI2cTrackingBand::Cold.writes(),
+            PhyWifiI2cTrackingBand::Elevated.writes(),
+            PhyWifiI2cTrackingBand::Hot.writes(),
+        ];
+        let [first, second] = match band {
+            PhyWifiI2cTrackingBand::Nominal => WRITES[0],
+            PhyWifiI2cTrackingBand::Cold => WRITES[1],
+            PhyWifiI2cTrackingBand::Elevated => WRITES[2],
+            PhyWifiI2cTrackingBand::Hot => WRITES[3],
         };
-        crate::analog::i2c::field_write(field, value)
+        if index == 0 { first } else { second }
     }
 
     pub const fn action(&self) -> PhyWifiI2cTrackingAction {
