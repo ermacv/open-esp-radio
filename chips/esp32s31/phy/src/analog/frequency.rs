@@ -566,24 +566,85 @@ pub enum PhyFrequencyCapMemoryBindingError {
 /// Non-cloneable owner of one RF frequency-memory MMIO transaction.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyFrequencyCapMemoryExternalBinding {
-    action: PhyFrequencyCapMemoryAction,
+    action: PhyFrequencyCapMemoryMmioAction,
+}
+
+/// The actions a binding carries out.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyFrequencyCapMemoryMmioAction {
+    ReadMemory {
+        entry_index: u8,
+        address: FrequencyMemoryAddress,
+    },
+    WriteMemory {
+        entry_index: u8,
+        address: FrequencyMemoryAddress,
+        value: PhyFrequencyMemoryWordWord,
+        mode: u8,
+    },
+    RestoreChannelIndex {
+        frequency_index: u8,
+    },
 }
 
 impl PhyFrequencyCapMemoryExternalBinding {
     pub const fn lower(
         action: PhyFrequencyCapMemoryAction,
     ) -> Result<Self, PhyFrequencyCapMemoryBindingError> {
-        match action {
-            PhyFrequencyCapMemoryAction::Complete(_) => {
-                Err(PhyFrequencyCapMemoryBindingError::UnsupportedAction)
+        let action = match action {
+            PhyFrequencyCapMemoryAction::ReadMemory {
+                entry_index,
+                address,
+            } => PhyFrequencyCapMemoryMmioAction::ReadMemory {
+                entry_index,
+                address,
+            },
+            PhyFrequencyCapMemoryAction::WriteMemory {
+                entry_index,
+                address,
+                value,
+                mode,
+            } => PhyFrequencyCapMemoryMmioAction::WriteMemory {
+                entry_index,
+                address,
+                value,
+                mode,
+            },
+            PhyFrequencyCapMemoryAction::RestoreChannelIndex { frequency_index } => {
+                PhyFrequencyCapMemoryMmioAction::RestoreChannelIndex { frequency_index }
             }
-            _ => Ok(Self { action }),
-        }
+            PhyFrequencyCapMemoryAction::Complete(_) => {
+                return Err(PhyFrequencyCapMemoryBindingError::UnsupportedAction);
+            }
+        };
+        Ok(Self { action })
     }
 
     #[cfg(test)]
     pub const fn action(&self) -> PhyFrequencyCapMemoryAction {
-        self.action
+        match self.action {
+            PhyFrequencyCapMemoryMmioAction::ReadMemory {
+                entry_index,
+                address,
+            } => PhyFrequencyCapMemoryAction::ReadMemory {
+                entry_index,
+                address,
+            },
+            PhyFrequencyCapMemoryMmioAction::WriteMemory {
+                entry_index,
+                address,
+                value,
+                mode,
+            } => PhyFrequencyCapMemoryAction::WriteMemory {
+                entry_index,
+                address,
+                value,
+                mode,
+            },
+            PhyFrequencyCapMemoryMmioAction::RestoreChannelIndex { frequency_index } => {
+                PhyFrequencyCapMemoryAction::RestoreChannelIndex { frequency_index }
+            }
+        }
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -592,7 +653,7 @@ impl PhyFrequencyCapMemoryExternalBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyFrequencyCapMemoryCompletion {
         match self.action {
-            PhyFrequencyCapMemoryAction::ReadMemory {
+            PhyFrequencyCapMemoryMmioAction::ReadMemory {
                 entry_index,
                 address,
             } => {
@@ -603,7 +664,7 @@ impl PhyFrequencyCapMemoryExternalBinding {
                     value,
                 }
             }
-            PhyFrequencyCapMemoryAction::WriteMemory {
+            PhyFrequencyCapMemoryMmioAction::WriteMemory {
                 entry_index,
                 address,
                 value,
@@ -618,15 +679,12 @@ impl PhyFrequencyCapMemoryExternalBinding {
                     mode,
                 }
             }
-            PhyFrequencyCapMemoryAction::RestoreChannelIndex { frequency_index } => {
+            PhyFrequencyCapMemoryMmioAction::RestoreChannelIndex { frequency_index } => {
                 oer_chips_esp32s31_hal::phy::frequency::restore_channel_index(
                     registers,
                     frequency_index,
                 );
                 PhyFrequencyCapMemoryCompletion::ChannelIndexRestored { frequency_index }
-            }
-            PhyFrequencyCapMemoryAction::Complete(_) => {
-                unreachable!("terminal frequency-memory action cannot be externally lowered")
             }
         }
     }

@@ -877,6 +877,9 @@ impl PhyBbInitTransition {
     // Retain this child's temporary slots in its own bounded model step.
     #[inline(never)]
     pub fn step_local(&mut self) -> Result<PhyBbInitLocalStep, PhyBbInitTransitionError> {
+        const fn mmio(action: PhyBbMmioAction) -> PhyBbInitLocalStep {
+            PhyBbInitLocalStep::External(PhyBbInitAction::Mmio(action))
+        }
         let local = match &mut self.step {
             PhyBbInitStep::TxDc(transition) => match transition.action() {
                 crate::tx::dc_offset::PhyTxDcAction::Complete(outcome) => {
@@ -1111,7 +1114,48 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::Complete(outcome) => PhyBbInitLocalStep::Complete(*outcome),
             PhyBbInitStep::Failed(failure) => PhyBbInitLocalStep::Failed(*failure),
-            step => PhyBbInitLocalStep::External(PhyBbInitAction::Mmio(step.mmio_action())),
+            PhyBbInitStep::EnableInitialization => {
+                mmio(PhyBbMmioAction::EnableBasebandInitialization)
+            }
+            PhyBbInitStep::EnableForcedDigitalGain => {
+                mmio(PhyBbMmioAction::SetForcedDigitalGain { enabled: true })
+            }
+            PhyBbInitStep::DisableForcedDigitalGain
+            | PhyBbInitStep::FailureDisableForcedDigitalGain(_) => {
+                mmio(PhyBbMmioAction::SetForcedDigitalGain { enabled: false })
+            }
+            PhyBbInitStep::SetCalibrationMode => mmio(PhyBbMmioAction::SetBasebandMode {
+                mode: PhyBbBasebandMode::Calibration,
+            }),
+            PhyBbInitStep::RxTable(parameters) => mmio(PhyBbMmioAction::ConfigureRxTable {
+                parameters: *parameters,
+            }),
+            PhyBbInitStep::RxSaturationPrepare => mmio(PhyBbMmioAction::ConfigureRfRxSaturation {
+                phase: PhyRfRxSaturationPhase::PrepareCheck,
+            }),
+            PhyBbInitStep::RxSaturationFinalize => mmio(PhyBbMmioAction::ConfigureRfRxSaturation {
+                phase: PhyRfRxSaturationPhase::Finalize,
+            }),
+            PhyBbInitStep::RegisterInit(parameters) => {
+                mmio(PhyBbMmioAction::ConfigurePhyRegisters {
+                    parameters: *parameters,
+                })
+            }
+            PhyBbInitStep::UpdateAgc => mmio(PhyBbMmioAction::UpdateAgcRegisters),
+            PhyBbInitStep::UpdatePostInit => mmio(PhyBbMmioAction::UpdatePostInitRegisters),
+            PhyBbInitStep::EnableAgc | PhyBbInitStep::FailureEnableAgc(_) => {
+                mmio(PhyBbMmioAction::EnableAgc)
+            }
+            PhyBbInitStep::SetIdleMode | PhyBbInitStep::FailureSetIdle(_) => {
+                mmio(PhyBbMmioAction::SetBasebandMode {
+                    mode: PhyBbBasebandMode::Idle,
+                })
+            }
+            PhyBbInitStep::DisableWifi => mmio(PhyBbMmioAction::SetWifiEnabled { enabled: false }),
+            PhyBbInitStep::ConfigureI2cTxRate => mmio(PhyBbMmioAction::ConfigureI2cTxRate),
+            PhyBbInitStep::ConfigureTxPowerTracking => {
+                mmio(PhyBbMmioAction::ConfigureTxPowerTracking { enabled: true })
+            }
         };
         Ok(local)
     }
@@ -1362,47 +1406,6 @@ impl PhyBbInitTransition {
         };
         self.step = step;
         Ok(())
-    }
-}
-
-impl PhyBbInitStep {
-    const fn mmio_action(&self) -> PhyBbMmioAction {
-        match self {
-            Self::EnableInitialization => PhyBbMmioAction::EnableBasebandInitialization,
-            Self::EnableForcedDigitalGain => {
-                PhyBbMmioAction::SetForcedDigitalGain { enabled: true }
-            }
-            Self::DisableForcedDigitalGain | Self::FailureDisableForcedDigitalGain(_) => {
-                PhyBbMmioAction::SetForcedDigitalGain { enabled: false }
-            }
-            Self::SetCalibrationMode => PhyBbMmioAction::SetBasebandMode {
-                mode: PhyBbBasebandMode::Calibration,
-            },
-            Self::RxTable(parameters) => PhyBbMmioAction::ConfigureRxTable {
-                parameters: *parameters,
-            },
-            Self::RxSaturationPrepare => PhyBbMmioAction::ConfigureRfRxSaturation {
-                phase: PhyRfRxSaturationPhase::PrepareCheck,
-            },
-            Self::RxSaturationFinalize => PhyBbMmioAction::ConfigureRfRxSaturation {
-                phase: PhyRfRxSaturationPhase::Finalize,
-            },
-            Self::RegisterInit(parameters) => PhyBbMmioAction::ConfigurePhyRegisters {
-                parameters: *parameters,
-            },
-            Self::UpdateAgc => PhyBbMmioAction::UpdateAgcRegisters,
-            Self::UpdatePostInit => PhyBbMmioAction::UpdatePostInitRegisters,
-            Self::EnableAgc | Self::FailureEnableAgc(_) => PhyBbMmioAction::EnableAgc,
-            Self::SetIdleMode | Self::FailureSetIdle(_) => PhyBbMmioAction::SetBasebandMode {
-                mode: PhyBbBasebandMode::Idle,
-            },
-            Self::DisableWifi => PhyBbMmioAction::SetWifiEnabled { enabled: false },
-            Self::ConfigureI2cTxRate => PhyBbMmioAction::ConfigureI2cTxRate,
-            Self::ConfigureTxPowerTracking => {
-                PhyBbMmioAction::ConfigureTxPowerTracking { enabled: true }
-            }
-            _ => panic!("non-MMIO baseband step"),
-        }
     }
 }
 

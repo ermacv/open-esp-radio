@@ -371,6 +371,20 @@ pub enum PhyForceTxRxAction {
     },
 }
 
+/// An edge of a force sequence that has one left.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyForceTxRxEdge {
+    Configure {
+        enabled: bool,
+        phase: u8,
+    },
+    DelayMicros {
+        enabled: bool,
+        completed_phase: u8,
+        micros: u32,
+    },
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyForceTxRxCompletion {
     Configured {
@@ -421,18 +435,18 @@ impl PhyForceTxRxDepth {
     }
 
     /// Sequence the pair's first call runs.
-    pub const fn enter(self) -> Option<PhyForceTxRxTransition> {
+    pub const fn enter(self) -> Option<PhyForceTxRxRunning> {
         match self.0 {
-            0 => Some(PhyForceTxRxTransition::new(true)),
+            0 => Some(PhyForceTxRxRunning::start(true)),
             _ => None,
         }
     }
 
     /// Sequence the pair's second call runs, restoring the count to `self`.
-    pub const fn leave(self) -> Option<PhyForceTxRxTransition> {
+    pub const fn leave(self) -> Option<PhyForceTxRxRunning> {
         match self.0 {
-            0 => Some(PhyForceTxRxTransition::new(false)),
-            1 => Some(PhyForceTxRxTransition::new(true)),
+            0 => Some(PhyForceTxRxRunning::start(false)),
+            1 => Some(PhyForceTxRxRunning::start(true)),
             _ => None,
         }
     }
@@ -519,6 +533,68 @@ impl PhyForceTxRxTransition {
             _ => return Err(PhyForceTxRxTransitionError::WrongCompletion),
         };
         Ok(())
+    }
+}
+
+impl PhyForceTxRxEdge {
+    /// The edge as a step of the sequence.
+    pub const fn action(self) -> PhyForceTxRxAction {
+        match self {
+            Self::Configure { enabled, phase } => PhyForceTxRxAction::Configure { enabled, phase },
+            Self::DelayMicros {
+                enabled,
+                completed_phase,
+                micros,
+            } => PhyForceTxRxAction::DelayMicros {
+                enabled,
+                completed_phase,
+                micros,
+            },
+        }
+    }
+}
+
+/// A force sequence with an edge left: its end is no state of this type.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhyForceTxRxRunning {
+    transition: PhyForceTxRxTransition,
+    edge: PhyForceTxRxEdge,
+}
+
+impl PhyForceTxRxRunning {
+    pub const fn start(enabled: bool) -> Self {
+        Self {
+            transition: PhyForceTxRxTransition::new(enabled),
+            edge: PhyForceTxRxEdge::Configure { enabled, phase: 0 },
+        }
+    }
+
+    pub const fn edge(self) -> PhyForceTxRxEdge {
+        self.edge
+    }
+
+    /// The sequence past `completion`; `None` when that was its last edge.
+    pub fn advance(
+        mut self,
+        completion: PhyForceTxRxCompletion,
+    ) -> Result<Option<Self>, PhyForceTxRxTransitionError> {
+        self.transition.advance(completion)?;
+        self.edge = match self.transition.action() {
+            PhyForceTxRxAction::Configure { enabled, phase } => {
+                PhyForceTxRxEdge::Configure { enabled, phase }
+            }
+            PhyForceTxRxAction::DelayMicros {
+                enabled,
+                completed_phase,
+                micros,
+            } => PhyForceTxRxEdge::DelayMicros {
+                enabled,
+                completed_phase,
+                micros,
+            },
+            PhyForceTxRxAction::Complete { .. } => return Ok(None),
+        };
+        Ok(Some(self))
     }
 }
 

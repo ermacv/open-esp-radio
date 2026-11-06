@@ -17,7 +17,7 @@
 
 use crate::analog::{
     i2c::{Address, analog_i2c},
-    pbus::{PhyForceTxRxAction, PhyForceTxRxCompletion, PhyForceTxRxDepth, PhyForceTxRxTransition},
+    pbus::{PhyForceTxRxCompletion, PhyForceTxRxDepth, PhyForceTxRxEdge, PhyForceTxRxRunning},
     temperature::{
         PhyTemperatureAction, PhyTemperatureCompletion, PhyTemperatureFailure,
         PhyTemperatureOutcome, PhyTemperatureTransition,
@@ -373,7 +373,7 @@ enum CleanupContinuation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Step {
     DisableAgc,
-    ForceTxRx(PhyForceTxRxTransition),
+    ForceTxRx(PhyForceTxRxRunning),
     EnableBbpll,
     Temperature(PhyTemperatureTransition),
     StartFrequencySwitch,
@@ -391,7 +391,7 @@ enum Step {
     CalculateTxGain,
     PublishTxGain(PhyWifiTxGainImage),
     /// The TX-gain child's release, which forces again at depth one.
-    ReassertTxRx(PhyForceTxRxTransition),
+    ReassertTxRx(PhyForceTxRxRunning),
     CaptureTxCap,
     PublishTxCapCommandMemory {
         value: u8,
@@ -399,7 +399,7 @@ enum Step {
     ConfigureChannelCbw,
     ConfigureRxCompensationSecond,
     DisableBbpll(CleanupContinuation),
-    ReleaseTxRx(PhyForceTxRxTransition, CleanupContinuation),
+    ReleaseTxRx(PhyForceTxRxRunning, CleanupContinuation),
     ClearDcMemory(CleanupContinuation),
     EnableAgc(CleanupContinuation),
     Complete(PhyChipChannelOutcome),
@@ -464,12 +464,12 @@ pub(crate) const fn retained_tx_cap_value(channel: u16, capacitance: [u8; 6]) ->
     capacitance[index] | capacitance[index + 1].wrapping_shl(4)
 }
 
-const fn force_txrx_action(child: PhyForceTxRxTransition) -> PhyChipChannelAction {
-    match child.action() {
-        PhyForceTxRxAction::Configure { enabled, phase } => {
+const fn force_txrx_action(child: PhyForceTxRxRunning) -> PhyChipChannelAction {
+    match child.edge() {
+        PhyForceTxRxEdge::Configure { enabled, phase } => {
             PhyChipChannelAction::ConfigureForceTxRx { enabled, phase }
         }
-        PhyForceTxRxAction::DelayMicros {
+        PhyForceTxRxEdge::DelayMicros {
             enabled,
             completed_phase,
             micros,
@@ -480,16 +480,14 @@ const fn force_txrx_action(child: PhyForceTxRxTransition) -> PhyChipChannelActio
             },
             micros,
         },
-        // The parent leaves a force step as soon as its child completes.
-        PhyForceTxRxAction::Complete { .. } => unreachable!(),
     }
 }
 
-/// Advance a force-TX/RX child; `true` once both writes and settles completed.
+/// Advance a force-TX/RX child; `None` once both writes and settles completed.
 fn advance_force_txrx(
-    child: &mut PhyForceTxRxTransition,
+    child: PhyForceTxRxRunning,
     completion: PhyChipChannelCompletion,
-) -> Result<bool, PhyChipChannelTransitionError> {
+) -> Result<Option<PhyForceTxRxRunning>, PhyChipChannelTransitionError> {
     let completion = match completion {
         PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase } => {
             PhyForceTxRxCompletion::Configured { enabled, phase }
@@ -510,11 +508,7 @@ fn advance_force_txrx(
     };
     child
         .advance(completion)
-        .map_err(|_| PhyChipChannelTransitionError::WrongCompletion)?;
-    Ok(matches!(
-        child.action(),
-        PhyForceTxRxAction::Complete { .. }
-    ))
+        .map_err(|_| PhyChipChannelTransitionError::WrongCompletion)
 }
 
 impl PhyChipChannelRequest {
@@ -682,25 +676,19 @@ impl PhyChipChannelTransition {
                     None => Step::EnableBbpll,
                 }
             }
-            (Step::ReassertTxRx(mut child), completion) => {
-                if advance_force_txrx(&mut child, completion)? {
-                    Step::CaptureTxCap
-                } else {
-                    Step::ReassertTxRx(child)
-                }
-            }
-            (Step::ForceTxRx(mut child), completion) => {
-                if advance_force_txrx(&mut child, completion)? {
-                    Step::EnableBbpll
-                } else {
-                    Step::ForceTxRx(child)
-                }
-            }
-            (Step::ReleaseTxRx(mut child, continuation), completion) => {
-                if advance_force_txrx(&mut child, completion)? {
-                    Step::ClearDcMemory(continuation)
-                } else {
-                    Step::ReleaseTxRx(child, continuation)
+            (Step::ReassertTxRx(child), completion) => match advance_force_txrx(child, completion)?
+            {
+                Some(child) => Step::ReassertTxRx(child),
+                None => Step::CaptureTxCap,
+            },
+            (Step::ForceTxRx(child), completion) => match advance_force_txrx(child, completion)? {
+                Some(child) => Step::ForceTxRx(child),
+                None => Step::EnableBbpll,
+            },
+            (Step::ReleaseTxRx(child, continuation), completion) => {
+                match advance_force_txrx(child, completion)? {
+                    Some(child) => Step::ReleaseTxRx(child, continuation),
+                    None => Step::ClearDcMemory(continuation),
                 }
             }
             (
@@ -1244,25 +1232,49 @@ impl PhyChipChannelTimerBinding {
     }
 }
 
+/// The actions an I2C binding carries out.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyChipChannelI2cAction {
+    Write {
+        phase: PhyChipChannelI2cPhase,
+        address: Address,
+        value: u8,
+    },
+    Read {
+        phase: PhyChipChannelI2cPhase,
+        address: Address,
+    },
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyChipChannelI2cBinding {
-    outer_action: PhyChipChannelAction,
+    outer_action: PhyChipChannelI2cAction,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }
 
 impl PhyChipChannelI2cBinding {
     pub fn new(action: PhyChipChannelAction) -> Result<Self, PhyChipChannelExternalBindingError> {
-        let request = match action {
-            PhyChipChannelAction::WriteI2c { address, value, .. } => {
-                crate::calibration::cold::PhyColdI2cRequest::write_byte(address, value)
-            }
-            PhyChipChannelAction::ReadI2c { address, .. } => {
-                crate::calibration::cold::PhyColdI2cRequest::read_byte(address)
-            }
+        let (outer_action, request) = match action {
+            PhyChipChannelAction::WriteI2c {
+                phase,
+                address,
+                value,
+            } => (
+                PhyChipChannelI2cAction::Write {
+                    phase,
+                    address,
+                    value,
+                },
+                crate::calibration::cold::PhyColdI2cRequest::write_byte(address, value),
+            ),
+            PhyChipChannelAction::ReadI2c { phase, address } => (
+                PhyChipChannelI2cAction::Read { phase, address },
+                crate::calibration::cold::PhyColdI2cRequest::read_byte(address),
+            ),
             _ => return Err(PhyChipChannelExternalBindingError::UnsupportedAction),
         };
         Ok(Self {
-            outer_action: action,
+            outer_action,
             transaction: crate::calibration::cold::PhyColdI2cTransaction::new(request),
         })
     }
@@ -1332,7 +1344,7 @@ impl PhyChipChannelI2cBinding {
         };
         match (self.outer_action, outcome) {
             (
-                PhyChipChannelAction::WriteI2c {
+                PhyChipChannelI2cAction::Write {
                     phase,
                     address,
                     value,
@@ -1344,7 +1356,7 @@ impl PhyChipChannelI2cBinding {
                 value,
             }),
             (
-                PhyChipChannelAction::ReadI2c { phase, address },
+                PhyChipChannelI2cAction::Read { phase, address },
                 crate::calibration::cold::PhyColdI2cOutcome::Read {
                     address: completed,
                     value,
@@ -1360,11 +1372,10 @@ impl PhyChipChannelI2cBinding {
 
     pub const fn into_timeout_completion(self) -> PhyChipChannelCompletion {
         match self.outer_action {
-            PhyChipChannelAction::WriteI2c { phase, address, .. }
-            | PhyChipChannelAction::ReadI2c { phase, address } => {
+            PhyChipChannelI2cAction::Write { phase, address, .. }
+            | PhyChipChannelI2cAction::Read { phase, address } => {
                 PhyChipChannelCompletion::I2cTimedOut { phase, address }
             }
-            _ => unreachable!(),
         }
     }
 }

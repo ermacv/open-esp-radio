@@ -1,7 +1,7 @@
 //! T2/T4 own their state in the shared P2 step driver; gain publication has its own poll.
 use super::{Failure, Io, Registers, Step};
 use crate::{
-    analog::pbus::PhyForceTxRxAction,
+    analog::pbus::PhyForceTxRxEdge,
     state::PhyState,
     tracking::{
         observation::{EngineTiming, GainTiming},
@@ -142,7 +142,7 @@ pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_t
             let next = transition.action();
             if matches!(
                 next,
-                Action::ForceTxRx(PhyForceTxRxAction::DelayMicros { .. })
+                Action::ForceTxRx(PhyForceTxRxEdge::DelayMicros { .. })
             ) {
                 let binding = crate::tracking::power::ControlBinding::lower(next)
                     .map_err(|_| Failure::Binding)?;
