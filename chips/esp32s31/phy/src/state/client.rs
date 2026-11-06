@@ -168,6 +168,31 @@ pub enum PhyClientAccess {
     Suspended(PhyClientSuspended),
 }
 
+/// The clients holding a claim in a client set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PhyClientClaims(u8);
+
+impl PhyClientClaims {
+    /// No client holds a claim.
+    #[cfg(test)]
+    pub(crate) const NONE: Self = Self(0);
+
+    pub(crate) fn contains(self, client: RadioClient) -> bool {
+        self.0 & client_bit(client) != 0
+    }
+}
+
+impl PhyClientAccess {
+    /// The client set, whatever this client's phase in it.
+    pub(crate) fn into_owner(self) -> PhyClientState {
+        match self {
+            Self::Available(available) => available.owner,
+            Self::Member(member) => member.owner,
+            Self::Suspended(suspended) => suspended.owner,
+        }
+    }
+}
+
 /// Consumed authority for one acquisition; it cannot start another acquisition.
 ///
 /// ```no_run
@@ -420,6 +445,11 @@ impl PhyClientState {
         (self.bits | self.loaned_clients) & client_bit(client) != 0
     }
 
+    /// The clients holding a claim now.
+    pub(crate) const fn claims(&self) -> PhyClientClaims {
+        PhyClientClaims(self.bits | self.loaned_clients)
+    }
+
     pub fn client(mut self, client: RadioClient) -> PhyClientAccess {
         self.selected_client = client;
         if self.snapshot().contains(client) {
@@ -431,28 +461,25 @@ impl PhyClientState {
         }
     }
 
-    pub(crate) fn retire_suspended_wifi(&mut self) {
-        (self.bits & WIFI_BIT == 0 && self.loaned_clients & WIFI_BIT != 0)
-            .then_some(())
-            .expect("PHY suspended claim missing");
-        self.loaned_clients &= !WIFI_BIT;
+    /// Whether `self` holds Wi-Fi as suspended: then that claim is retired.
+    pub(crate) fn retire_suspended_wifi(&mut self) -> bool {
+        let suspended = self.bits & WIFI_BIT == 0 && self.loaned_clients & WIFI_BIT != 0;
+        if suspended {
+            self.loaned_clients &= !WIFI_BIT;
+        }
+        suspended
     }
 
-    pub(crate) fn permission_key(&self) -> PhyClientKey {
+    /// The registration's key; `None` before a registration.
+    pub(crate) fn permission_key(&self) -> Option<PhyClientKey> {
         #[cfg(target_arch = "riscv32")]
         {
-            PhyClientKey(self.epoch.expect("PHY registration missing"))
+            self.epoch.map(PhyClientKey)
         }
         #[cfg(not(target_arch = "riscv32"))]
         {
-            PhyClientKey(self.model_identity)
+            Some(PhyClientKey(self.model_identity))
         }
-    }
-
-    pub(crate) fn assert_permission(&self, key: PhyClientKey) {
-        (self.permission_key() == key)
-            .then_some(())
-            .expect("PHY registration mismatch");
     }
 
     /// Only the consumed available phase can set a client bit. The reviewed
@@ -768,7 +795,7 @@ impl fmt::Debug for PhyPendingTrack {
 }
 
 impl PhyPendingTrack {
-    pub(crate) fn permission_key(&self) -> PhyClientKey {
+    pub(crate) fn permission_key(&self) -> Option<PhyClientKey> {
         self.owner.permission_key()
     }
 

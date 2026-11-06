@@ -89,6 +89,7 @@ pub fn join_ieee802154<'l, B: PlatformClockBackend>(
     clocked: &Ieee802154Clocked,
     clock: &impl oer_portable_time::Clock,
 ) -> Result<Joined<'l, B, Ieee802154PhyMembership>, JoinRefused<'l, B, Ieee802154PhyClientError>> {
+    let key = ready.key();
     let radio = ready.into_radio();
     let acquired =
         match acquire_btbb_client(radio, RadioClient::Ieee802154, clock, |radio, gain| {
@@ -103,7 +104,6 @@ pub fn join_ieee802154<'l, B: PlatformClockBackend>(
                 return Err(JoinRefused { error, radio });
             }
         };
-    let key = radio.attachment().permission_key();
     Ok(Joined {
         membership: Ieee802154PhyMembership { key },
         acquired,

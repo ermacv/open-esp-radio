@@ -719,11 +719,17 @@ where
             None
         };
 
-        set_wifi_rx(
+        if let Err(error) = set_wifi_rx(
             require_radio(self.radio.as_mut(), self.radio_fault),
             &membership,
             true,
-        );
+        ) {
+            self.wifi.membership = Some(membership);
+            return Err(Failed {
+                returned: wifi,
+                cause: wifi_poisoned(RequestKind::Track, PoisonCause::Domain(error)),
+            });
+        }
         let lowered = crate::channel::lower_wifi_channel(channel.channel().channel());
         let mut observer = self.observer.clone();
         let mut platform = ();
@@ -751,12 +757,14 @@ where
                 ConcurrentWifiChannelError::Rejected(_) => {
                     // ClientFailed: the channel transaction did not start; the
                     // only shared write is Wi-Fi's own RX enable, cleared again.
-                    set_wifi_rx(
+                    match set_wifi_rx(
                         require_radio(self.radio.as_mut(), self.radio_fault),
                         &membership,
                         false,
-                    );
-                    Failure::ClientFailed
+                    ) {
+                        Ok(()) => Failure::ClientFailed,
+                        Err(error) => wifi_poisoned(RequestKind::Track, PoisonCause::Domain(error)),
+                    }
                 }
                 ConcurrentWifiChannelError::Failed(error) => {
                     wifi_poisoned(RequestKind::Track, PoisonCause::Channel(phy_fault(error)))
@@ -830,12 +838,18 @@ where
                 // register as it was; the half-started MAC is Wi-Fi's
                 // partition. The TX power queries come later and read only
                 // the owned profile. Wi-Fi's RX enable is cleared again.
-                set_wifi_rx(
+                let cleared = set_wifi_rx(
                     require_radio(self.radio.as_mut(), self.radio_fault),
                     &membership,
                     false,
                 );
                 self.wifi.membership = Some(membership);
+                if let Err(error) = cleared {
+                    return Err(Failed {
+                        returned: wifi,
+                        cause: wifi_poisoned(RequestKind::Track, PoisonCause::Domain(error)),
+                    });
+                }
                 Err(Failed {
                     returned: wifi,
                     cause: Failure::ClientFailed,
@@ -944,11 +958,18 @@ where
         let Some(membership) = self.wifi.membership.take() else {
             return poisoned(WifiReturned::Clocked(wifi), false, PoisonCause::Custody);
         };
-        set_wifi_rx(
+        if let Err(error) = set_wifi_rx(
             require_radio(self.radio.as_mut(), self.radio_fault),
             &membership,
             false,
-        );
+        ) {
+            self.wifi.membership = Some(membership);
+            return poisoned(
+                WifiReturned::Clocked(wifi),
+                false,
+                PoisonCause::Domain(error),
+            );
+        }
         let last = match leave_wifi(
             require_radio(self.radio.as_mut(), self.radio_fault),
             &wifi,

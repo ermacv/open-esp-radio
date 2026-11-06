@@ -200,8 +200,7 @@ fn resume_wifi_prepared(
 }
 
 #[test]
-#[should_panic(expected = "PHY registration mismatch")]
-fn a_foreign_membership_is_an_internal_identity_fault() {
+fn a_foreign_membership_is_refused_and_returned() {
     let (mut first, first_clocked) = registered();
     let (mut second, second_clocked) = registered();
     let (membership, _) = join_wifi_prepared(&mut first, &first_clocked, &VirtualClock::<8>::new())
@@ -213,7 +212,10 @@ fn a_foreign_membership_is_an_internal_identity_fault() {
     assert!(second.attachment_mut().complete_tracking_for_test());
     // Test deliberately violates the private handoff invariant. Neither
     // public construction nor copying can manufacture a matching permission.
-    let _ = leave_wifi(&mut second, &second_clocked, membership);
+    let Err(failure) = leave_wifi(&mut second, &second_clocked, membership) else {
+        panic!("a foreign membership cannot leave");
+    };
+    assert_eq!(failure.error(), ConcurrentPhyError::EpochMismatch);
 }
 
 #[test]

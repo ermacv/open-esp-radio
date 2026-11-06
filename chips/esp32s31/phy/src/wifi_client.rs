@@ -62,12 +62,11 @@ pub fn join_wifi<'l, B: PlatformClockBackend>(
     clock: &impl oer_portable_time::Clock,
 ) -> Result<Joined<'l, B, WifiPhyMembership>, JoinRefused<'l, B, ConcurrentPhyError>> {
     let _ = clocked;
+    let key = ready.key();
     let radio = ready.into_radio();
     match acquire_client(radio, RadioClient::Wifi, clock) {
         Ok(acquired) => Ok(Joined {
-            membership: WifiPhyMembership {
-                key: radio.attachment().permission_key(),
-            },
+            membership: WifiPhyMembership { key },
             acquired,
             radio,
         }),
@@ -84,11 +83,10 @@ pub fn set_wifi_rx<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     membership: &WifiPhyMembership,
     enabled: bool,
-) {
-    (radio.attachment().permission_key() == membership.key)
-        .then_some(())
-        .expect("PHY registration mismatch");
+) -> Result<(), ConcurrentPhyError> {
+    radio.attachment().check_permission(membership.key)?;
     radio.set_wifi_rx_enabled(enabled);
+    Ok(())
 }
 
 /// Failed leave retaining the membership.
