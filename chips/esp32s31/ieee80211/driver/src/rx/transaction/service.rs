@@ -106,17 +106,10 @@ where
     // publication let land in it completed before any ring unit this pass
     // takes, so its copy goes first. R is rearmed only once the copy is
     // published; a landing after the walker reached the ring fails closed.
-    let Some(reserved_bytes) = stage_reserved(ring, storage, pool, publisher)? else {
+    let Some(reserved_bytes) = stage_reserved(ring, storage, pool, publisher, admission, reserved)?
+    else {
         return Ok(DatapathRxProgress::StageCapacityBlocked);
     };
-    if reserved_bytes != 0 {
-        // R is no ring descriptor: its head index is past the ring.
-        admission.observe(Observation::Staged(CompletedUnit {
-            head_index: COUNT,
-            descriptor_count: 1,
-            payload_length: reserved_bytes,
-        }));
-    }
     storage
         .observe_reserved(ring, hardware)
         .map_err(RxStageTransactionError::Ring)?;
@@ -573,15 +566,16 @@ where
     })
 }
 
-/// Publish a copy of the frame in R, if there is one, and answer its bytes,
-/// zero without one. `None` leaves it there for a later pass: nothing can
-/// take its place in the order, because R is not rearmed and this pass takes
-/// no ring unit. A frame the stage cannot hold stays for
-/// [`RxDmaStorage::observe_reserved`] to drop.
+/// Publish a copy of the frame in R, if there is one, under the admission a
+/// ring unit gets, and answer its bytes, zero without one or when admission
+/// drops it: [`RxDmaStorage::observe_reserved`] then counts and drops it. `None`
+/// leaves it there for a later pass: nothing can take its place in the order,
+/// because R is not rearmed and this pass takes no ring unit.
 #[inline(always)]
 fn stage_reserved<
     'pool,
     E: Publisher<'pool, STAGE_CAPACITY, STAGE_SLOTS>,
+    P: Admission,
     const COUNT: usize,
     const STAGE_CAPACITY: usize,
     const STAGE_SLOTS: usize,
@@ -593,6 +587,8 @@ fn stage_reserved<
     storage: &'static RxDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     pool: &'pool RxStagePool<STAGE_SLOTS, STAGE_CAPACITY>,
     publisher: &E,
+    admission: &P,
+    reserved: usize,
 ) -> Result<Option<usize>, RxStageTransactionError> {
     let Some(frame) = storage
         .reserved_frame(ring)
@@ -600,12 +596,49 @@ fn stage_reserved<
     else {
         return Ok(Some(0));
     };
-    let length = frame.bytes().len();
-    if length > STAGE_CAPACITY {
+    let bytes = frame.bytes();
+    // R is no ring descriptor: its head index is past the ring.
+    let unit = CompletedUnit {
+        head_index: COUNT,
+        descriptor_count: 1,
+        payload_length: bytes.len(),
+    };
+    let maximum = admission
+        .maximum_payload_length(unit, STAGE_CAPACITY)
+        .min(STAGE_CAPACITY);
+    if bytes.len() > maximum {
+        admission.observe(Observation::DiscardRetained {
+            unit,
+            reason: Discard::TooLong,
+        });
         return Ok(Some(0));
     }
-    if pool.available_slots() == 0 || publisher.free_capacity() == 0 {
-        return Ok(None);
+    let credits = pool.available_slots().min(publisher.free_capacity());
+    if credits <= reserved {
+        let header = bytes
+            .get(PUBLIC_HEADER_SIZE..)
+            .and_then(|mpdu| mpdu.first_chunk::<24>());
+        let preview = match header {
+            Some(header) => publisher.preview(unit, *header),
+            None => publisher.unclassified_preview(unit),
+        };
+        match admission.unavailable_disposition(preview) {
+            Unavailable::PreserveForCapacity => {
+                admission.observe(Observation::BulkAdmissionBlocked(preview));
+                return Ok(None);
+            }
+            Unavailable::PreserveForCriticalAdmission if credits == 0 => {
+                admission.observe(Observation::CriticalAdmissionBlocked(preview));
+                return Ok(None);
+            }
+            Unavailable::PreserveForCriticalAdmission => {
+                admission.observe(Observation::CriticalReserveAdmitted(preview));
+            }
+            Unavailable::DiscardAndRecycle => {
+                admission.observe(Observation::OverloadDiscardedAndRecycled(preview));
+                return Ok(Some(0));
+            }
+        }
     }
     let Some(copy) = storage
         .claim_reserved_copy(&frame)
@@ -614,10 +647,14 @@ fn stage_reserved<
         return Ok(None);
     };
     let mut staged = pool.stage_detached_unit(copy, STAGE_CAPACITY)?;
-    for (to, from) in staged.storage_mut().iter_mut().zip(frame.bytes()) {
+    for (to, from) in staged.storage_mut().iter_mut().zip(bytes) {
         *to = *from;
     }
-    Ok(publisher.try_send(staged).is_ok().then_some(length))
+    if publisher.try_send(staged).is_err() {
+        return Ok(None);
+    }
+    admission.observe(Observation::Staged(unit));
+    Ok(Some(bytes.len()))
 }
 
 #[cfg(test)]

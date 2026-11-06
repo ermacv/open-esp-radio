@@ -2562,6 +2562,40 @@ fn the_copy_buffer_is_out_until_its_copy_returns() {
 }
 
 #[test]
+fn a_copy_that_came_back_serves_the_landing_of_the_next_epoch() {
+    let mut ring = Walked::<4>::start();
+    assert!(ring.land(4, true));
+    let frame = ring.storage.reserved_frame(&ring.live).unwrap().unwrap();
+    let copy = ring.storage.claim_reserved_copy(&frame).unwrap().unwrap();
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    // A pause waits for this return before it stops the ring.
+    drop(copy);
+    let reserved_low = ring.reserved_address() & ADDRESS_LOW_MASK;
+    let halted = ring
+        .live
+        .try_stop(&mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    let stopped = ring
+        .storage
+        .prepare_halted(halted, &mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    // A quiet epoch leaves the walker at R.
+    ring.walker.next_descriptor_low = reserved_low;
+    ring.live = stopped
+        .try_start(&mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    assert!(ring.land(4, true));
+    let frame = ring.storage.reserved_frame(&ring.live).unwrap().unwrap();
+    assert_eq!(frame.bytes(), [0xa5; 4]);
+    assert!(ring.storage.claim_reserved_copy(&frame).unwrap().is_some());
+}
+
+#[test]
 fn a_ring_that_resumed_at_a_retained_next_never_holds_a_frame_in_r() {
     let storage = Box::leak(Box::new(RxDmaStorage::<4, 16, 16, HostDma>::new()));
     let placed = place(storage);

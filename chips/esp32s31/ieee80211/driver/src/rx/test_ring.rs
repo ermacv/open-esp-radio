@@ -150,13 +150,10 @@ impl Ring {
 
     /// Run the product service until it settles, as the runner does: on a
     /// drained frontier or a pass blocked on staging capacity.
-    pub(crate) fn settle<E>(
-        &mut self,
-        publisher: &E,
-        admission: &CountingAdmission<'_>,
-    ) -> DatapathRxProgress
+    pub(crate) fn settle<E, A>(&mut self, publisher: &E, admission: &A) -> DatapathRxProgress
     where
         E: Publisher<'static, BUFFER, SLOTS>,
+        A: super::transaction::Admission,
     {
         let (mut descriptors, mut units, mut bytes) = (0, 0, 0);
         let clock = oer_portable_time_virtual::VirtualClock::<1>::default();
