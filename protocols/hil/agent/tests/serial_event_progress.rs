@@ -40,6 +40,30 @@ fn serialization_wait_sleeps_and_accepts_progress_past_its_own_event() {
 }
 
 #[test]
+fn a_repolled_wait_is_woken_through_its_latest_waker_once() {
+    let events = progress::SerializedEvents::new();
+    let (old, new) = (Arc::new(Wakes::default()), Arc::new(Wakes::default()));
+    let (old_waker, new_waker) = (Waker::from(Arc::clone(&old)), Waker::from(Arc::clone(&new)));
+    let mut waiting = std::pin::pin!(events.wait_for(3));
+    assert!(
+        waiting
+            .as_mut()
+            .poll(&mut Context::from_waker(&old_waker))
+            .is_pending()
+    );
+    assert!(
+        waiting
+            .as_mut()
+            .poll(&mut Context::from_waker(&new_waker))
+            .is_pending()
+    );
+    events.publish_next(1);
+    events.publish_next(2);
+    assert_eq!(old.0.load(Ordering::Relaxed), 0);
+    assert_eq!(new.0.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn already_written_and_wrapped_sequences_need_no_new_notification() {
     let events = progress::SerializedEvents::new();
     events.publish_next(0);

@@ -427,10 +427,10 @@ impl FrameDecoder {
             .encoded
             .get_mut(..length)
             .ok_or(DecodeError::TooShort)?;
-        let decoded_length = cobs::decode_in_place(encoded).map_err(|_| {
+        let Some(decoded_length) = decode_cobs_in_place(encoded) else {
             self.counters.cobs_errors = self.counters.cobs_errors.saturating_add(1);
-            DecodeError::Cobs
-        })?;
+            return Err(DecodeError::Cobs);
+        };
         if decoded_length < WIRE_HEADER_BYTES + CHECKSUM_BYTES {
             self.counters.too_short = self.counters.too_short.saturating_add(1);
             return Err(DecodeError::TooShort);
@@ -555,6 +555,37 @@ impl Drop for FrameDecoder {
     fn drop(&mut self) {
         self.encoded.zeroize();
     }
+}
+
+/// Decode a COBS frame over itself, up to its first zero, into its length;
+/// `None` when a code runs past the frame's end, or the frame is empty.
+fn decode_cobs_in_place(buffer: &mut [u8]) -> Option<usize> {
+    if buffer.is_empty() {
+        return None;
+    }
+    let end = buffer
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(buffer.len());
+    let (mut read, mut write) = (0usize, 0usize);
+    while read < end {
+        let code = *buffer.get(read)?;
+        if read.checked_add(usize::from(code))? > end {
+            return None;
+        }
+        read = read.checked_add(1)?;
+        for _ in 1..code {
+            let byte = *buffer.get(read)?;
+            *buffer.get_mut(write)? = byte;
+            read = read.checked_add(1)?;
+            write = write.checked_add(1)?;
+        }
+        if code != u8::MAX && read < end {
+            *buffer.get_mut(write)? = 0;
+            write = write.checked_add(1)?;
+        }
+    }
+    Some(write)
 }
 
 #[cfg(test)]

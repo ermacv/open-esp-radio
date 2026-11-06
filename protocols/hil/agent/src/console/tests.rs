@@ -466,6 +466,34 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
 }
 
 #[test]
+fn a_transport_that_takes_nothing_or_too_much_loses_the_message() {
+    struct Takes(usize);
+    impl embedded_io_async::ErrorType for Takes {
+        type Error = core::convert::Infallible;
+    }
+    impl Write for Takes {
+        async fn write(&mut self, _bytes: &[u8]) -> Result<usize, Self::Error> {
+            Ok(self.0)
+        }
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    for taken in [0, usize::MAX] {
+        let console = console();
+        console.start(BOOT);
+        block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)));
+        let message = console.messages.try_receive().expect("queued reply");
+        let lost = console.dropped_messages.load(Ordering::Relaxed);
+        let sent = console.sent_frames.load(Ordering::Relaxed);
+        block_on(console.write_message(&mut Takes(taken), &message, &Chip));
+        assert_eq!(console.dropped_messages.load(Ordering::Relaxed), lost + 1);
+        assert_eq!(console.sent_frames.load(Ordering::Relaxed), sent);
+    }
+}
+
+#[test]
 fn reset_acknowledgement_requires_the_complete_write_and_keeps_correlation() {
     use core::{
         future::Future as _,
