@@ -923,18 +923,45 @@ pub enum PhyTxPowerBindingError {
     NotDirectMmio,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyPowerControlPointMmioAction {
+    ConfigureTone {
+        identity: u8,
+        iteration: u8,
+        selector: u16,
+        attenuation: u8,
+    },
+    StopTone {
+        identity: u8,
+    },
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyPowerControlPointMmioBinding {
-    action: PhyPowerControlPointAction,
+    action: PhyPowerControlPointMmioAction,
 }
 
 impl PhyPowerControlPointMmioBinding {
     pub fn new(action: PhyPowerControlPointAction) -> Result<Self, PhyTxPowerBindingError> {
-        match action {
-            PhyPowerControlPointAction::ConfigureTone { .. }
-            | PhyPowerControlPointAction::StopTone { .. } => Ok(Self { action }),
-            _ => Err(PhyTxPowerBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyPowerControlPointAction::ConfigureTone {
+                identity,
+                iteration,
+                selector,
+                attenuation,
+            } => PhyPowerControlPointMmioAction::ConfigureTone {
+                identity,
+                iteration,
+                selector,
+                attenuation,
+            },
+            PhyPowerControlPointAction::StopTone { identity } => {
+                PhyPowerControlPointMmioAction::StopTone { identity }
+            }
+            _ => return Err(PhyTxPowerBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -943,7 +970,7 @@ impl PhyPowerControlPointMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyPowerControlPointCompletion {
         match self.action {
-            PhyPowerControlPointAction::ConfigureTone {
+            PhyPowerControlPointMmioAction::ConfigureTone {
                 identity,
                 iteration,
                 selector,
@@ -957,27 +984,43 @@ impl PhyPowerControlPointMmioBinding {
                     attenuation,
                 }
             }
-            PhyPowerControlPointAction::StopTone { identity } => {
+            PhyPowerControlPointMmioAction::StopTone { identity } => {
                 crate::hardware::stop_phy_power_detector_tone(registers);
                 PhyPowerControlPointCompletion::ToneStopped { identity }
             }
-            _ => unreachable!(),
         }
     }
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxPowerMmioAction {
+    ConfigureTone { selector: u16, attenuation: u8 },
+    WriteReferenceControl { value: u16 },
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxPowerMmioBinding {
-    action: PhyTxPowerAction,
+    action: PhyTxPowerMmioAction,
 }
 
 impl PhyTxPowerMmioBinding {
     pub fn new(action: PhyTxPowerAction) -> Result<Self, PhyTxPowerBindingError> {
-        match action {
-            PhyTxPowerAction::ConfigureTone { enabled: true, .. }
-            | PhyTxPowerAction::WriteReferenceControl { .. } => Ok(Self { action }),
-            _ => Err(PhyTxPowerBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxPowerAction::ConfigureTone {
+                selector,
+                attenuation,
+                enabled: true,
+            } => PhyTxPowerMmioAction::ConfigureTone {
+                selector,
+                attenuation,
+            },
+            PhyTxPowerAction::WriteReferenceControl { value } => {
+                PhyTxPowerMmioAction::WriteReferenceControl { value }
+            }
+            _ => return Err(PhyTxPowerBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -986,10 +1029,9 @@ impl PhyTxPowerMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxPowerCompletion {
         match self.action {
-            PhyTxPowerAction::ConfigureTone {
+            PhyTxPowerMmioAction::ConfigureTone {
                 selector,
                 attenuation,
-                enabled: true,
             } => {
                 crate::hardware::configure_phy_power_control_tone(registers, selector, attenuation);
                 PhyTxPowerCompletion::ToneConfigured {
@@ -998,11 +1040,10 @@ impl PhyTxPowerMmioBinding {
                     enabled: true,
                 }
             }
-            PhyTxPowerAction::WriteReferenceControl { value } => {
+            PhyTxPowerMmioAction::WriteReferenceControl { value } => {
                 oer_chips_esp32s31_hal::phy::power_detector::write_reference(registers, value);
                 PhyTxPowerCompletion::ReferenceControlWritten { value }
             }
-            _ => unreachable!(),
         }
     }
 }

@@ -611,9 +611,6 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
         let super::rfpll::thermal::Action::Complete(outcome) = self.child.action() else {
             return Err(self);
         };
-        let PhyParamTrackingAction::RfpllCapTrack { .. } = self.parent_action else {
-            unreachable!()
-        };
         self.state.commit_rfpll_tracking(outcome);
         Ok(PhyParamTrackingCompletion::RfpllCapTracked(
             PhyParamTrackingRfpllCompletion {
@@ -631,6 +628,7 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
 /// child reaches its terminal action and commits its outcome.
 pub struct PhyParamTrackingCalibrationTransition<'state> {
     parent_action: PhyParamTrackingAction,
+    clients: PhyParamTrackRequest,
     child: crate::tracking::calibration::PhyCalibrationTrackingTransition,
     state: &'state mut crate::state::PhyState,
 }
@@ -656,6 +654,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         };
         Ok(Self {
             parent_action,
+            clients,
             child: crate::tracking::calibration::PhyCalibrationTrackingTransition::start(
                 crate::tracking::calibration::PhyCalibrationTrackingRequest { clients },
                 state.calibration_tracking_parameters(policy.calibration_tracking_threshold),
@@ -785,13 +784,10 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         else {
             return Err(self);
         };
-        let PhyParamTrackingAction::CalibrationTrack { clients, .. } = self.parent_action else {
-            unreachable!()
-        };
         self.state.apply_calibration_tracking_outcome(outcome);
         Ok(PhyParamTrackingCompletion::CalibrationTracked(
             PhyParamTrackingCalibrationCompletion {
-                clients,
+                clients: self.clients,
                 common_updated: outcome.common_updated,
                 transmit_updated: outcome.transmit_updated,
             },

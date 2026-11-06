@@ -1580,21 +1580,37 @@ pub enum PhyTxIqHardwareInvariant {
     RestoreNotPending,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxIqMmioAction {
+    ConfigureCorrection { begin: bool },
+    ConfigurePbusDebugMode,
+    PrepareToneControlRestore,
+    RestoreToneControl,
+}
+
 /// Non-cloneable direct-MMIO token for TXIQ-specific register edges.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxIqMmioBinding {
-    action: PhyTxIqCalibrationAction,
+    action: PhyTxIqMmioAction,
 }
 
 impl PhyTxIqMmioBinding {
     pub fn new(action: PhyTxIqCalibrationAction) -> Result<Self, PhyTxIqBindingError> {
-        match action {
-            PhyTxIqCalibrationAction::ConfigureCorrection { .. }
-            | PhyTxIqCalibrationAction::ConfigurePbusDebugMode
-            | PhyTxIqCalibrationAction::PrepareToneControlRestore
-            | PhyTxIqCalibrationAction::RestoreToneControl => Ok(Self { action }),
-            _ => Err(PhyTxIqBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxIqCalibrationAction::ConfigureCorrection { begin } => {
+                PhyTxIqMmioAction::ConfigureCorrection { begin }
+            }
+            PhyTxIqCalibrationAction::ConfigurePbusDebugMode => {
+                PhyTxIqMmioAction::ConfigurePbusDebugMode
+            }
+            PhyTxIqCalibrationAction::PrepareToneControlRestore => {
+                PhyTxIqMmioAction::PrepareToneControlRestore
+            }
+            PhyTxIqCalibrationAction::RestoreToneControl => PhyTxIqMmioAction::RestoreToneControl,
+            _ => return Err(PhyTxIqBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1603,42 +1619,66 @@ impl PhyTxIqMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyTxIqCalibrationCompletion, PhyTxIqHardwareInvariant> {
         match self.action {
-            PhyTxIqCalibrationAction::ConfigureCorrection { begin } => {
+            PhyTxIqMmioAction::ConfigureCorrection { begin } => {
                 crate::hardware::configure_phy_txiq_correction(registers, begin);
                 Ok(PhyTxIqCalibrationCompletion::CorrectionConfigured { begin })
             }
-            PhyTxIqCalibrationAction::ConfigurePbusDebugMode => {
+            PhyTxIqMmioAction::ConfigurePbusDebugMode => {
                 oer_chips_family_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 Ok(PhyTxIqCalibrationCompletion::PbusDebugModeConfigured)
             }
-            PhyTxIqCalibrationAction::PrepareToneControlRestore => {
+            PhyTxIqMmioAction::PrepareToneControlRestore => {
                 crate::hardware::prepare_phy_txiq_tone_control_restore(registers)
                     .map_err(|_| PhyTxIqHardwareInvariant::RestoreAlreadyPending)?;
                 Ok(PhyTxIqCalibrationCompletion::ToneControlRestorePrepared)
             }
-            PhyTxIqCalibrationAction::RestoreToneControl => {
+            PhyTxIqMmioAction::RestoreToneControl => {
                 crate::hardware::restore_phy_txiq_tone_control(registers)
                     .map_err(|_| PhyTxIqHardwareInvariant::RestoreNotPending)?;
                 Ok(PhyTxIqCalibrationCompletion::ToneControlRestored)
             }
-            _ => unreachable!(),
         }
     }
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxIqMisPowerMmioAction {
+    Configure {
+        identity: u8,
+        first: bool,
+        polarity: bool,
+        attenuation: u8,
+        selector: u16,
+    },
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxIqMisPowerMmioBinding {
-    action: PhyTxIqMisPowerAction,
+    action: PhyTxIqMisPowerMmioAction,
 }
 
 impl PhyTxIqMisPowerMmioBinding {
     pub fn new(action: PhyTxIqMisPowerAction) -> Result<Self, PhyTxIqBindingError> {
-        match action {
-            PhyTxIqMisPowerAction::Configure { .. } => Ok(Self { action }),
-            _ => Err(PhyTxIqBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxIqMisPowerAction::Configure {
+                identity,
+                first,
+                polarity,
+                attenuation,
+                selector,
+            } => PhyTxIqMisPowerMmioAction::Configure {
+                identity,
+                first,
+                polarity,
+                attenuation,
+                selector,
+            },
+            _ => return Err(PhyTxIqBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1647,7 +1687,7 @@ impl PhyTxIqMisPowerMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxIqMisPowerCompletion {
         match self.action {
-            PhyTxIqMisPowerAction::Configure {
+            PhyTxIqMisPowerMmioAction::Configure {
                 identity,
                 first,
                 polarity,
@@ -1669,22 +1709,43 @@ impl PhyTxIqMisPowerMmioBinding {
                     selector,
                 }
             }
-            _ => unreachable!(),
         }
     }
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxIqCoverMmioAction {
+    ConfigureCoefficient {
+        identity: u8,
+        iteration: u8,
+        kind: PhyTxIqCoefficientKind,
+        value: i8,
+    },
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxIqCoverMmioBinding {
-    action: PhyTxIqCoverAction,
+    action: PhyTxIqCoverMmioAction,
 }
 
 impl PhyTxIqCoverMmioBinding {
     pub fn new(action: PhyTxIqCoverAction) -> Result<Self, PhyTxIqBindingError> {
-        match action {
-            PhyTxIqCoverAction::ConfigureCoefficient { .. } => Ok(Self { action }),
-            _ => Err(PhyTxIqBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxIqCoverAction::ConfigureCoefficient {
+                identity,
+                iteration,
+                kind,
+                value,
+            } => PhyTxIqCoverMmioAction::ConfigureCoefficient {
+                identity,
+                iteration,
+                kind,
+                value,
+            },
+            _ => return Err(PhyTxIqBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1693,7 +1754,7 @@ impl PhyTxIqCoverMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxIqCoverCompletion {
         match self.action {
-            PhyTxIqCoverAction::ConfigureCoefficient {
+            PhyTxIqCoverMmioAction::ConfigureCoefficient {
                 identity,
                 iteration,
                 kind,
@@ -1707,23 +1768,34 @@ impl PhyTxIqCoverMmioBinding {
                     value,
                 }
             }
-            _ => unreachable!(),
         }
     }
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxIqLoopbackMmioAction {
+    ConfigureTxClock { enabled: bool },
+    ConfigureRxClock { enabled: bool },
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxIqLoopbackMmioBinding {
-    action: PhyTxIqLoopbackAction,
+    action: PhyTxIqLoopbackMmioAction,
 }
 
 impl PhyTxIqLoopbackMmioBinding {
     pub fn new(action: PhyTxIqLoopbackAction) -> Result<Self, PhyTxIqBindingError> {
-        match action {
-            PhyTxIqLoopbackAction::ConfigureTxClock { .. }
-            | PhyTxIqLoopbackAction::ConfigureRxClock { .. } => Ok(Self { action }),
-            _ => Err(PhyTxIqBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
+                PhyTxIqLoopbackMmioAction::ConfigureTxClock { enabled }
+            }
+            PhyTxIqLoopbackAction::ConfigureRxClock { enabled } => {
+                PhyTxIqLoopbackMmioAction::ConfigureRxClock { enabled }
+            }
+            _ => return Err(PhyTxIqBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1732,15 +1804,14 @@ impl PhyTxIqLoopbackMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxIqLoopbackCompletion {
         match self.action {
-            PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
+            PhyTxIqLoopbackMmioAction::ConfigureTxClock { enabled } => {
                 oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
                 PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
             }
-            PhyTxIqLoopbackAction::ConfigureRxClock { enabled } => {
+            PhyTxIqLoopbackMmioAction::ConfigureRxClock { enabled } => {
                 oer_chips_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled);
                 PhyTxIqLoopbackCompletion::RxClockConfigured { enabled }
             }
-            _ => unreachable!(),
         }
     }
 }

@@ -2111,21 +2111,47 @@ pub enum PhyRxIqEstimatorBindingError {
     NotDirectMmio,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxIqEstimatorMmioAction {
+    Configure(PhyRxIqEstimatorRequest),
+    SetEnable {
+        request: PhyRxIqEstimatorRequest,
+        phase: PhyDcIqEnablePhase,
+        enabled: bool,
+    },
+    ReadTotalPower(PhyRxIqEstimatorRequest),
+    ReadMismatch(PhyRxIqEstimatorRequest),
+}
+
 /// Non-cloneable target token for one direct estimator MMIO edge.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqEstimatorMmioBinding {
-    action: PhyRxIqEstimatorAction,
+    action: PhyRxIqEstimatorMmioAction,
 }
 
 impl PhyRxIqEstimatorMmioBinding {
     pub fn new(action: PhyRxIqEstimatorAction) -> Result<Self, PhyRxIqEstimatorBindingError> {
-        match action {
-            PhyRxIqEstimatorAction::Configure(_)
-            | PhyRxIqEstimatorAction::SetEnable { .. }
-            | PhyRxIqEstimatorAction::ReadTotalPower(_)
-            | PhyRxIqEstimatorAction::ReadMismatch(_) => Ok(Self { action }),
-            _ => Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyRxIqEstimatorAction::Configure(v0) => PhyRxIqEstimatorMmioAction::Configure(v0),
+            PhyRxIqEstimatorAction::SetEnable {
+                request,
+                phase,
+                enabled,
+            } => PhyRxIqEstimatorMmioAction::SetEnable {
+                request,
+                phase,
+                enabled,
+            },
+            PhyRxIqEstimatorAction::ReadTotalPower(v0) => {
+                PhyRxIqEstimatorMmioAction::ReadTotalPower(v0)
+            }
+            PhyRxIqEstimatorAction::ReadMismatch(v0) => {
+                PhyRxIqEstimatorMmioAction::ReadMismatch(v0)
+            }
+            _ => return Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -2134,11 +2160,11 @@ impl PhyRxIqEstimatorMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyRxIqEstimatorCompletion {
         match self.action {
-            PhyRxIqEstimatorAction::Configure(request) => {
+            PhyRxIqEstimatorMmioAction::Configure(request) => {
                 crate::calibration::estimator::configure_target(registers, request.control);
                 PhyRxIqEstimatorCompletion::Configured(request)
             }
-            PhyRxIqEstimatorAction::SetEnable {
+            PhyRxIqEstimatorMmioAction::SetEnable {
                 request,
                 phase,
                 enabled,
@@ -2150,13 +2176,13 @@ impl PhyRxIqEstimatorMmioBinding {
                     enabled,
                 }
             }
-            PhyRxIqEstimatorAction::ReadTotalPower(request) => {
+            PhyRxIqEstimatorMmioAction::ReadTotalPower(request) => {
                 PhyRxIqEstimatorCompletion::TotalPowerRead {
                     request,
                     value: oer_chips_esp32s31_hal::phy::iq_estimator::read_total_power(registers),
                 }
             }
-            PhyRxIqEstimatorAction::ReadMismatch(request) => {
+            PhyRxIqEstimatorMmioAction::ReadMismatch(request) => {
                 let snapshot =
                     oer_chips_esp32s31_hal::phy::iq_estimator::read_rxiq_mismatch(registers);
                 PhyRxIqEstimatorCompletion::MismatchRead {
@@ -2169,31 +2195,48 @@ impl PhyRxIqEstimatorMmioBinding {
                     },
                 }
             }
-            _ => unreachable!(),
         }
     }
+}
+
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxIqEstimatorReadinessAction {
+    AwaitReadinessEdge {
+        request: PhyRxIqEstimatorRequest,
+        readiness_activity_edges: u16,
+        readiness_samples: u16,
+    },
 }
 
 /// Non-cloneable async boundary for one scheduled RXIQ readiness observation.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqEstimatorReadinessBinding {
-    action: PhyRxIqEstimatorAction,
+    action: PhyRxIqEstimatorReadinessAction,
 }
 
 impl PhyRxIqEstimatorReadinessBinding {
     pub fn new(action: PhyRxIqEstimatorAction) -> Result<Self, PhyRxIqEstimatorBindingError> {
-        match action {
-            PhyRxIqEstimatorAction::AwaitReadinessEdge { .. } => Ok(Self { action }),
-            _ => Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyRxIqEstimatorAction::AwaitReadinessEdge {
+                request,
+                readiness_activity_edges,
+                readiness_samples,
+            } => PhyRxIqEstimatorReadinessAction::AwaitReadinessEdge {
+                request,
+                readiness_activity_edges,
+                readiness_samples,
+            },
+            _ => return Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     pub const fn samples(&self) -> u16 {
         match self.action {
-            PhyRxIqEstimatorAction::AwaitReadinessEdge {
+            PhyRxIqEstimatorReadinessAction::AwaitReadinessEdge {
                 readiness_samples, ..
             } => readiness_samples,
-            _ => unreachable!(),
         }
     }
 
@@ -2202,9 +2245,7 @@ impl PhyRxIqEstimatorReadinessBinding {
         self,
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyRxIqEstimatorCompletion {
-        let PhyRxIqEstimatorAction::AwaitReadinessEdge { request, .. } = self.action else {
-            unreachable!();
-        };
+        let PhyRxIqEstimatorReadinessAction::AwaitReadinessEdge { request, .. } = self.action;
         PhyRxIqEstimatorCompletion::ReadinessObserved {
             request,
             snapshot: crate::calibration::estimator::sample_readiness_target(registers),
@@ -2212,9 +2253,7 @@ impl PhyRxIqEstimatorReadinessBinding {
     }
 
     pub fn into_timeout_completion(self) -> PhyRxIqEstimatorCompletion {
-        let PhyRxIqEstimatorAction::AwaitReadinessEdge { request, .. } = self.action else {
-            unreachable!();
-        };
+        let PhyRxIqEstimatorReadinessAction::AwaitReadinessEdge { request, .. } = self.action;
         PhyRxIqEstimatorCompletion::ReadinessTimedOut(request)
     }
 }
@@ -2277,19 +2316,41 @@ impl PhyRxIqEstimatorExternalBinding {
     }
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxIqCalibrationMmioAction {
+    ConfigureCalibrationMode,
+    ConfigureTone {
+        enabled: bool,
+        selector: u16,
+        attenuation: u8,
+    },
+}
+
 /// Non-cloneable target token for RXIQ mode and tone edges.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqCalibrationMmioBinding {
-    action: PhyRxIqRfCalibrationAction,
+    action: PhyRxIqCalibrationMmioAction,
 }
 
 impl PhyRxIqCalibrationMmioBinding {
     pub fn new(action: PhyRxIqRfCalibrationAction) -> Result<Self, PhyRxIqEstimatorBindingError> {
-        match action {
-            PhyRxIqRfCalibrationAction::ConfigureCalibrationMode
-            | PhyRxIqRfCalibrationAction::ConfigureTone { .. } => Ok(Self { action }),
-            _ => Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyRxIqRfCalibrationAction::ConfigureCalibrationMode => {
+                PhyRxIqCalibrationMmioAction::ConfigureCalibrationMode
+            }
+            PhyRxIqRfCalibrationAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            } => PhyRxIqCalibrationMmioAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            },
+            _ => return Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -2298,11 +2359,11 @@ impl PhyRxIqCalibrationMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyRxIqRfCalibrationCompletion {
         match self.action {
-            PhyRxIqRfCalibrationAction::ConfigureCalibrationMode => {
+            PhyRxIqCalibrationMmioAction::ConfigureCalibrationMode => {
                 crate::hardware::configure_phy_rxiq_calibration_mode(registers);
                 PhyRxIqRfCalibrationCompletion::CalibrationModeConfigured
             }
-            PhyRxIqRfCalibrationAction::ConfigureTone {
+            PhyRxIqCalibrationMmioAction::ConfigureTone {
                 enabled,
                 selector,
                 attenuation,
@@ -2319,23 +2380,47 @@ impl PhyRxIqCalibrationMmioBinding {
                     attenuation,
                 }
             }
-            _ => unreachable!(),
         }
     }
+}
+
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxIqCoverMmioAction {
+    ConfigureCoefficient {
+        identity: u8,
+        iteration: u8,
+        kind: PhyRxIqCoefficientKind,
+        value: i8,
+        final_value: bool,
+    },
 }
 
 /// Non-cloneable target token for one RXIQ coefficient publication.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqCoverMmioBinding {
-    action: PhyRxIqCoverAction,
+    action: PhyRxIqCoverMmioAction,
 }
 
 impl PhyRxIqCoverMmioBinding {
     pub fn new(action: PhyRxIqCoverAction) -> Result<Self, PhyRxIqEstimatorBindingError> {
-        match action {
-            PhyRxIqCoverAction::ConfigureCoefficient { .. } => Ok(Self { action }),
-            _ => Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyRxIqCoverAction::ConfigureCoefficient {
+                identity,
+                iteration,
+                kind,
+                value,
+                final_value,
+            } => PhyRxIqCoverMmioAction::ConfigureCoefficient {
+                identity,
+                iteration,
+                kind,
+                value,
+                final_value,
+            },
+            _ => return Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -2344,7 +2429,7 @@ impl PhyRxIqCoverMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyRxIqCoverCompletion {
         match self.action {
-            PhyRxIqCoverAction::ConfigureCoefficient {
+            PhyRxIqCoverMmioAction::ConfigureCoefficient {
                 identity,
                 iteration,
                 kind,
@@ -2360,26 +2445,49 @@ impl PhyRxIqCoverMmioBinding {
                     final_value,
                 }
             }
-            _ => unreachable!(),
         }
     }
+}
+
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxIqGainMmioAction {
+    ConfigureTxIq {
+        kind: PhyTxIqCoefficientKind,
+        value: i8,
+    },
+    ConfigureTone {
+        enabled: bool,
+        selector: u16,
+        attenuation: u8,
+    },
 }
 
 /// Non-cloneable direct-MMIO token for the power-selection portion of
 /// `phy_set_rx_gain_cal_iq`.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqGainMmioBinding {
-    action: PhyRxIqGainAction,
+    action: PhyRxIqGainMmioAction,
 }
 
 impl PhyRxIqGainMmioBinding {
     pub fn new(action: PhyRxIqGainAction) -> Result<Self, PhyRxIqEstimatorBindingError> {
-        match action {
-            PhyRxIqGainAction::ConfigureTxIq { .. } | PhyRxIqGainAction::ConfigureTone { .. } => {
-                Ok(Self { action })
+        let action = match action {
+            PhyRxIqGainAction::ConfigureTxIq { kind, value } => {
+                PhyRxIqGainMmioAction::ConfigureTxIq { kind, value }
             }
-            _ => Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
-        }
+            PhyRxIqGainAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            } => PhyRxIqGainMmioAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            },
+            _ => return Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -2388,11 +2496,11 @@ impl PhyRxIqGainMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyRxIqGainCompletion {
         match self.action {
-            PhyRxIqGainAction::ConfigureTxIq { kind, value } => {
+            PhyRxIqGainMmioAction::ConfigureTxIq { kind, value } => {
                 crate::hardware::configure_phy_txiq_coefficient(registers, kind, value);
                 PhyRxIqGainCompletion::TxIqConfigured { kind, value }
             }
-            PhyRxIqGainAction::ConfigureTone {
+            PhyRxIqGainMmioAction::ConfigureTone {
                 enabled,
                 selector,
                 attenuation,
@@ -2409,28 +2517,49 @@ impl PhyRxIqGainMmioBinding {
                     attenuation,
                 }
             }
-            _ => unreachable!(),
         }
     }
+}
+
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxIqInitMmioAction {
+    ConfigureRootStatus,
+    ConfigurePbusDebugMode,
+    ConfigureCorrection { begin: bool },
+    ConfigurePbusWorkMode,
+    ConfigurePbusWorkModePulse,
+    ClearPbusWorkModePulse,
 }
 
 /// Non-cloneable direct-MMIO token for the RXIQ archive root.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxIqInitMmioBinding {
-    action: PhyRxIqInitAction,
+    action: PhyRxIqInitMmioAction,
 }
 
 impl PhyRxIqInitMmioBinding {
     pub fn new(action: PhyRxIqInitAction) -> Result<Self, PhyRxIqEstimatorBindingError> {
-        match action {
-            PhyRxIqInitAction::ConfigureRootStatus
-            | PhyRxIqInitAction::ConfigurePbusDebugMode
-            | PhyRxIqInitAction::ConfigureCorrection { .. }
-            | PhyRxIqInitAction::ConfigurePbusWorkMode
-            | PhyRxIqInitAction::ConfigurePbusWorkModePulse
-            | PhyRxIqInitAction::ClearPbusWorkModePulse => Ok(Self { action }),
-            _ => Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyRxIqInitAction::ConfigureRootStatus => PhyRxIqInitMmioAction::ConfigureRootStatus,
+            PhyRxIqInitAction::ConfigurePbusDebugMode => {
+                PhyRxIqInitMmioAction::ConfigurePbusDebugMode
+            }
+            PhyRxIqInitAction::ConfigureCorrection { begin } => {
+                PhyRxIqInitMmioAction::ConfigureCorrection { begin }
+            }
+            PhyRxIqInitAction::ConfigurePbusWorkMode => {
+                PhyRxIqInitMmioAction::ConfigurePbusWorkMode
+            }
+            PhyRxIqInitAction::ConfigurePbusWorkModePulse => {
+                PhyRxIqInitMmioAction::ConfigurePbusWorkModePulse
+            }
+            PhyRxIqInitAction::ClearPbusWorkModePulse => {
+                PhyRxIqInitMmioAction::ClearPbusWorkModePulse
+            }
+            _ => return Err(PhyRxIqEstimatorBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -2439,38 +2568,37 @@ impl PhyRxIqInitMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyRxIqInitCompletion {
         match self.action {
-            PhyRxIqInitAction::ConfigureRootStatus => {
+            PhyRxIqInitMmioAction::ConfigureRootStatus => {
                 oer_chips_esp32s31_hal::phy::baseband::configure_rxiq_root_status(registers);
                 PhyRxIqInitCompletion::RootStatusConfigured
             }
-            PhyRxIqInitAction::ConfigurePbusDebugMode => {
+            PhyRxIqInitMmioAction::ConfigurePbusDebugMode => {
                 oer_chips_family_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyRxIqInitCompletion::PbusDebugModeConfigured
             }
-            PhyRxIqInitAction::ConfigureCorrection { begin } => {
+            PhyRxIqInitMmioAction::ConfigureCorrection { begin } => {
                 oer_chips_esp32s31_hal::phy::baseband::configure_rxiq_root_correction(
                     registers, begin,
                 );
                 PhyRxIqInitCompletion::CorrectionConfigured { begin }
             }
-            PhyRxIqInitAction::ConfigurePbusWorkMode => {
+            PhyRxIqInitMmioAction::ConfigurePbusWorkMode => {
                 PhyRxIqInitCompletion::PbusWorkModeConfigured {
                     settle_required: oer_chips_family_phy::pbus::configure_work_mode(
                         &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                     ),
                 }
             }
-            PhyRxIqInitAction::ConfigurePbusWorkModePulse => {
+            PhyRxIqInitMmioAction::ConfigurePbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyRxIqInitCompletion::PbusWorkModePulseConfigured
             }
-            PhyRxIqInitAction::ClearPbusWorkModePulse => {
+            PhyRxIqInitMmioAction::ClearPbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyRxIqInitCompletion::PbusWorkModePulseCleared
             }
-            _ => unreachable!(),
         }
     }
 }

@@ -476,18 +476,25 @@ pub enum PhyPbusMemoryBindingError {
     InvalidCommand,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyPbusMemoryMmioAction {
+    Program(PhyPbusMemoryEntry),
+}
+
 /// One finite direct-MMIO edge of the PBus-memory initializer.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyPbusMemoryMmioBinding {
-    action: PhyPbusMemoryAction,
+    action: PhyPbusMemoryMmioAction,
 }
 
 impl PhyPbusMemoryMmioBinding {
     pub fn new(action: PhyPbusMemoryAction) -> Result<Self, PhyPbusMemoryBindingError> {
-        match action {
-            PhyPbusMemoryAction::Program(_) => Ok(Self { action }),
-            PhyPbusMemoryAction::Complete(_) => Err(PhyPbusMemoryBindingError::UnsupportedAction),
-        }
+        let action = match action {
+            PhyPbusMemoryAction::Program(v0) => PhyPbusMemoryMmioAction::Program(v0),
+            _ => return Err(PhyPbusMemoryBindingError::UnsupportedAction),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -496,7 +503,7 @@ impl PhyPbusMemoryMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyPbusMemoryCompletion, PhyPbusMemoryBindingError> {
         match self.action {
-            PhyPbusMemoryAction::Program(entry) => {
+            PhyPbusMemoryMmioAction::Program(entry) => {
                 let boundary = entry.boundary().map(|field| {
                     oer_chips_esp32s31_hal::phy::memory::PbusMemoryGroupBoundary {
                         group: field.group(),
@@ -520,7 +527,6 @@ impl PhyPbusMemoryMmioBinding {
                 })?;
                 Ok(PhyPbusMemoryCompletion::Programmed(entry))
             }
-            PhyPbusMemoryAction::Complete(_) => unreachable!(),
         }
     }
 }

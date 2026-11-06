@@ -512,12 +512,9 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             PhyToneSarExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
             PhyToneSarExternalBinding::Timer(binding) => {
                 let micros = binding.micros();
-                let completion = binding.into_completion();
-                let PhyToneSarCompletion::DelayElapsed { phase, .. } = completion else {
-                    unreachable!()
-                };
+                let phase = binding.phase();
                 delay(phase, u64::from(micros)).await;
-                Ok(completion)
+                Ok(binding.into_completion())
             }
         }
     }

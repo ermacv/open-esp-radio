@@ -372,23 +372,35 @@ pub enum PhyTxCfrBindingError {
     TerminalAction,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxCfrMmioAction {
+    ReadStartIndex,
+    ProgramEntry(PhyTxCfrEntry),
+}
+
 /// A non-cloneable identity token for one finite TX-CFR MMIO edge.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxCfrMmioBinding {
-    action: PhyTxCfrAction,
+    action: PhyTxCfrMmioAction,
 }
 
 impl PhyTxCfrMmioBinding {
     pub fn new(action: PhyTxCfrAction) -> Result<Self, PhyTxCfrBindingError> {
-        match action {
-            PhyTxCfrAction::ReadStartIndex | PhyTxCfrAction::ProgramEntry(_) => Ok(Self { action }),
-            PhyTxCfrAction::Complete(_) => Err(PhyTxCfrBindingError::TerminalAction),
-        }
+        let action = match action {
+            PhyTxCfrAction::ReadStartIndex => PhyTxCfrMmioAction::ReadStartIndex,
+            PhyTxCfrAction::ProgramEntry(v0) => PhyTxCfrMmioAction::ProgramEntry(v0),
+            _ => return Err(PhyTxCfrBindingError::TerminalAction),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(test)]
     pub const fn action(&self) -> PhyTxCfrAction {
-        self.action
+        match self.action {
+            PhyTxCfrMmioAction::ReadStartIndex => PhyTxCfrAction::ReadStartIndex,
+            PhyTxCfrMmioAction::ProgramEntry(v0) => PhyTxCfrAction::ProgramEntry(v0),
+        }
     }
 
     /// Execute exactly one finite target transaction and consume its token.
@@ -398,12 +410,12 @@ impl PhyTxCfrMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxCfrCompletion {
         match self.action {
-            PhyTxCfrAction::ReadStartIndex => PhyTxCfrCompletion::StartIndexRead {
+            PhyTxCfrMmioAction::ReadStartIndex => PhyTxCfrCompletion::StartIndexRead {
                 base_index: oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(
                     registers,
                 ),
             },
-            PhyTxCfrAction::ProgramEntry(entry) => {
+            PhyTxCfrMmioAction::ProgramEntry(entry) => {
                 oer_chips_esp32s31_hal::phy::memory::program_tx_cfr_entry(
                     registers,
                     entry.data,
@@ -411,7 +423,6 @@ impl PhyTxCfrMmioBinding {
                 );
                 PhyTxCfrCompletion::EntryProgrammed(entry)
             }
-            PhyTxCfrAction::Complete(_) => unreachable!(),
         }
     }
 }

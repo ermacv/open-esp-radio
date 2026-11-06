@@ -539,19 +539,32 @@ pub enum PhyRxDcoRestoreInvariant {
     NotPending,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxDcoMmioAction {
+    PrepareRxDcoControlRestore,
+    ReadPbus { selector: u8, path: u8 },
+    RestoreRxDcoControl,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxDcoMmioBinding {
-    action: PhyRxDcoAction,
+    action: PhyRxDcoMmioAction,
 }
 
 impl PhyRxDcoMmioBinding {
     pub fn new(action: PhyRxDcoAction) -> Result<Self, PhyRxDcoBindingError> {
-        match action {
-            PhyRxDcoAction::PrepareRxDcoControlRestore
-            | PhyRxDcoAction::ReadPbus { .. }
-            | PhyRxDcoAction::RestoreRxDcoControl => Ok(Self { action }),
-            _ => Err(PhyRxDcoBindingError::UnsupportedAction),
-        }
+        let action = match action {
+            PhyRxDcoAction::PrepareRxDcoControlRestore => {
+                PhyRxDcoMmioAction::PrepareRxDcoControlRestore
+            }
+            PhyRxDcoAction::ReadPbus { selector, path } => {
+                PhyRxDcoMmioAction::ReadPbus { selector, path }
+            }
+            PhyRxDcoAction::RestoreRxDcoControl => PhyRxDcoMmioAction::RestoreRxDcoControl,
+            _ => return Err(PhyRxDcoBindingError::UnsupportedAction),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -560,7 +573,7 @@ impl PhyRxDcoMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyRxDcoCompletion, PhyRxDcoRestoreInvariant> {
         match self.action {
-            PhyRxDcoAction::PrepareRxDcoControlRestore => {
+            PhyRxDcoMmioAction::PrepareRxDcoControlRestore => {
                 oer_chips_esp32s31_hal::phy::rx_dco::prepare_control_restore(registers).map_err(
                     |error| match error {
                         oer_chips_esp32s31_hal::types::RxDcoControlPrepareError::TemperatureUnavailable => {
@@ -576,7 +589,7 @@ impl PhyRxDcoMmioBinding {
                 )?;
                 Ok(PhyRxDcoCompletion::RxDcoControlRestorePrepared)
             }
-            PhyRxDcoAction::ReadPbus { selector, path } => Ok(PhyRxDcoCompletion::PbusRead {
+            PhyRxDcoMmioAction::ReadPbus { selector, path } => Ok(PhyRxDcoCompletion::PbusRead {
                 selector,
                 path,
                 value: {
@@ -589,12 +602,11 @@ impl PhyRxDcoMmioBinding {
                     u32::from(result.unwrap_or(0))
                 },
             }),
-            PhyRxDcoAction::RestoreRxDcoControl => {
+            PhyRxDcoMmioAction::RestoreRxDcoControl => {
                 oer_chips_esp32s31_hal::phy::rx_dco::restore_control(registers)
                     .map_err(|_| PhyRxDcoRestoreInvariant::NotPending)?;
                 Ok(PhyRxDcoCompletion::RxDcoControlRestored)
             }
-            _ => unreachable!(),
         }
     }
 }
