@@ -200,7 +200,7 @@ fn terminal_event<T, E>(result: &Result<T, E>) -> crate::tracking::observation::
 pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
     physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
-    observer: &core::cell::RefCell<&mut O>,
+    observer: &super::ObserverSlot<'_, O>,
     clock: &impl oer_portable_cooperate::CooperativeTimer,
 ) -> Result<(), PhyTargetPortError> {
     child
@@ -209,16 +209,14 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
             physical,
             |scope, micros| tx_settle::<D, O>(observer, clock, scope, micros),
             |elapsed, observations, ready| {
-                observer
-                    .borrow_mut()
-                    .tx_sar_wait(elapsed, observations, ready)
+                observer.with(|observer| observer.tx_sar_wait(elapsed, observations, ready))
             },
         )
         .await
 }
 
 fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
-    observer: &core::cell::RefCell<&mut O>,
+    observer: &super::ObserverSlot<'_, O>,
     clock: &impl oer_portable_time::Clock,
     scope: crate::executor::wait::tx::Scope,
     micros: u32,
@@ -226,27 +224,31 @@ fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
     use crate::executor::wait::{Event, Kind};
     let started = O::OBSERVE_DELAYS.then(|| clock.now());
     if O::OBSERVE_DELAYS {
-        observer.borrow_mut().tx_wait(
-            scope,
-            Kind::Settle,
-            Event::Started {
-                requested_micros: u64::from(micros),
-            },
-        );
+        observer.with(|observer| {
+            observer.tx_wait(
+                scope,
+                Kind::Settle,
+                Event::Started {
+                    requested_micros: u64::from(micros),
+                },
+            )
+        });
     }
     let result = short_settle::<D>(micros);
     // A failed settle reports no completion, which leaves the evidence
     // incomplete.
     if let (Ok(()), Some(started)) = (&result, started) {
         let elapsed_micros = clock.now().saturating_duration_since(started).as_micros();
-        observer.borrow_mut().tx_wait(
-            scope,
-            Kind::Settle,
-            Event::Completed {
-                elapsed_micros,
-                lateness_micros: elapsed_micros.saturating_sub(u64::from(micros)),
-            },
-        );
+        observer.with(|observer| {
+            observer.tx_wait(
+                scope,
+                Kind::Settle,
+                Event::Completed {
+                    elapsed_micros,
+                    lateness_micros: elapsed_micros.saturating_sub(u64::from(micros)),
+                },
+            )
+        });
     }
     result
 }

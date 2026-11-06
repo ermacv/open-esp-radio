@@ -604,7 +604,9 @@ impl PhyToneSarTransition {
                 if self.sample + 1 == self.request.samples {
                     ToneSarStep::Complete(PhyToneSarOutcome {
                         request: self.request,
-                        sample: (self.sum / u32::from(self.request.samples)) as u16,
+                        sample: (self.sum
+                            / core::num::NonZeroU32::MIN.saturating_add(u32::from(self.sample)))
+                            as u16,
                     })
                 } else {
                     self.sample += 1;

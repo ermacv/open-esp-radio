@@ -192,8 +192,8 @@ pub fn rxiq_mismatch(exponent: u8, snapshot: PhyRxIqMismatchSnapshot) -> [i8; 2]
         .wrapping_add(i64::from(imaginary).wrapping_mul(i64::from(conjugate_real)))
         .wrapping_mul(0x400);
 
-    let gain = (gain_numerator / denominator) as i8;
-    let phase = (phase_numerator / denominator) as i8;
+    let gain = gain_numerator.wrapping_div(denominator) as i8;
+    let phase = phase_numerator.wrapping_div(denominator) as i8;
     [
         ((i16::from(gain) + 1) >> 1) as i8,
         ((i16::from(phase) + 1) >> 1) as i8,

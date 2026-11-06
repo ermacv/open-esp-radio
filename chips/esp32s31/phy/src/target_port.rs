@@ -199,6 +199,24 @@ pub enum PhyRfBoundary {
 /// Production integrations normally use [`NoopPhyTargetObserver`]. Diagnostic
 /// code can implement this trait to compare a completed Rust result with ROM or to
 /// capture diagnostic MMIO without placing either dependency in this crate.
+/// The observer, shared by the callbacks of one operation. A callback takes
+/// it for its call; an observer method runs no callback, so nothing finds it
+/// taken.
+pub(crate) struct ObserverSlot<'o, O>(core::cell::Cell<Option<&'o mut O>>);
+
+impl<'o, O> ObserverSlot<'o, O> {
+    fn new(observer: &'o mut O) -> Self {
+        Self(core::cell::Cell::new(Some(observer)))
+    }
+
+    fn with(&self, observe: impl FnOnce(&mut O)) {
+        if let Some(observer) = self.0.take() {
+            observe(&mut *observer);
+            self.0.set(Some(observer));
+        }
+    }
+}
+
 pub trait PhyTargetObserver {
     #[cfg(feature = "radio-health")]
     const OBSERVE_HEALTH: bool = false;
@@ -741,12 +759,12 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyTxDcPwdetSearchExternalBinding,
         registers: &mut impl SharedPhyAccess,
-        observer: &core::cell::RefCell<&mut O>,
+        observer: &ObserverSlot<'_, O>,
     ) -> Result<PhyTxDcPwdetSearchCompletion, PhyTargetPortError> {
         use crate::executor::wait::{Kind, tx::Scope};
         let delay = |scope, kind, micros| {
             delay_observed::<D, _>(self.timer, kind, micros, O::OBSERVE_DELAYS, move |event| {
-                observer.borrow_mut().tx_wait(scope, kind, event)
+                observer.with(|observer| observer.tx_wait(scope, kind, event))
             })
         };
         match binding {
@@ -773,7 +791,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     })
                     .await?;
                 if let PhyToneSarCompletion::ReadySampled { ready, .. } = completion {
-                    observer.borrow_mut().tx_sar_ready(ready);
+                    observer.with(|observer| observer.tx_sar_ready(ready));
                 }
                 Ok(PhyTxDcPwdetSearchCompletion::ToneSar(completion))
             }
@@ -786,7 +804,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         registers: &mut impl SharedPhyContext,
     ) -> Result<PhyTxDcPwdetCompletion, PhyTargetPortError> {
         let mut observer = NoopPhyTargetObserver;
-        self.complete_tx_dc_pwdet_with(binding, registers, &core::cell::RefCell::new(&mut observer))
+        self.complete_tx_dc_pwdet_with(binding, registers, &ObserverSlot::new(&mut observer))
             .await
     }
 
@@ -794,12 +812,12 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         binding: PhyTxDcPwdetExternalBinding,
         registers: &mut impl SharedPhyContext,
-        observer: &core::cell::RefCell<&mut O>,
+        observer: &ObserverSlot<'_, O>,
     ) -> Result<PhyTxDcPwdetCompletion, PhyTargetPortError> {
         use crate::executor::wait::{Kind, tx::Scope};
         let delay = |scope, kind, micros| {
             delay_observed::<D, _>(self.timer, kind, micros, O::OBSERVE_DELAYS, move |event| {
-                observer.borrow_mut().tx_wait(scope, kind, event)
+                observer.with(|observer| observer.tx_wait(scope, kind, event))
             })
         };
         match binding {
@@ -1707,7 +1725,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         &self,
         mut child: PhyCalibrationTxDcPwdetTransition,
         physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
-        observer: &core::cell::RefCell<&mut O>,
+        observer: &ObserverSlot<'_, O>,
     ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
         calibration::tx_dc_pwdet_init::<D, _>(
             child.transition_mut(),
@@ -1911,10 +1929,10 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
             }
             PhyCalibrationTrackingAction::RecalibrateRxGain => {
                 use crate::tracking::observation::{Event, Operation};
-                let observer = core::cell::RefCell::new(&mut *self.observer);
-                observer
-                    .borrow_mut()
-                    .tracking_operation(Operation::RxGain, Event::PollStarted);
+                let observer = ObserverSlot::new(&mut *self.observer);
+                observer.with(|observer| {
+                    observer.tracking_operation(Operation::RxGain, Event::PollStarted)
+                });
                 let mut timing = crate::tracking::observation::EngineTiming::default();
                 let mut child = transition
                     .begin_rx_gain_recalibration()
@@ -1925,21 +1943,19 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
                     self.physical.hardware(),
                     |operation, event| {
                         if operation.is_rx_gain_region() {
-                            observer.borrow_mut().tracking_operation(operation, event);
+                            observer.with(|observer| observer.tracking_operation(operation, event));
                         }
                     },
-                    |execution| observer.borrow_mut().rx_gain_execution(execution),
+                    |execution| observer.with(|observer| observer.rx_gain_execution(execution)),
                     O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
                 )
                 .await;
                 if O::OBSERVE_ENGINE_POLLS {
-                    observer
-                        .borrow_mut()
-                        .engine_completed(Operation::RxGain, timing);
+                    observer.with(|observer| observer.engine_completed(Operation::RxGain, timing));
                 }
-                observer
-                    .borrow_mut()
-                    .tracking_operation(Operation::RxGain, Event::PollReady);
+                observer.with(|observer| {
+                    observer.tracking_operation(Operation::RxGain, Event::PollReady)
+                });
                 result?;
                 child
                     .commit()
@@ -1971,10 +1987,10 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
             }
             PhyCalibrationTrackingAction::CalibrateTxDcPwdet { .. } => {
                 use crate::tracking::observation::{Event, Operation};
-                let observer = core::cell::RefCell::new(&mut *self.observer);
-                observer
-                    .borrow_mut()
-                    .tracking_operation(Operation::TxDcPwdet, Event::PollStarted);
+                let observer = ObserverSlot::new(&mut *self.observer);
+                observer.with(|observer| {
+                    observer.tracking_operation(Operation::TxDcPwdet, Event::PollStarted)
+                });
                 let result = TargetCompleter::<D, T>::new(self.timer)
                     .run_calibration_tx_dc_pwdet(
                         transition
@@ -1984,9 +2000,9 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
                         &observer,
                     )
                     .await;
-                observer
-                    .borrow_mut()
-                    .tracking_operation(Operation::TxDcPwdet, Event::PollReady);
+                observer.with(|observer| {
+                    observer.tracking_operation(Operation::TxDcPwdet, Event::PollReady)
+                });
                 result?
             }
             PhyCalibrationTrackingAction::PublishWifiTxGain { .. }
