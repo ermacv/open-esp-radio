@@ -1066,7 +1066,8 @@ pub struct StaConfig<K, C: StaCallbacks> {
     /// the access point's scanned channel and whose secondary its HT
     /// Operation names. Without one, the join stays on the scanned channel.
     pub wide_channels: heapless::Vec<SupportedChannel<K>, WIDE_CHANNEL_CAPACITY>,
-    /// How long the scan listens on each channel.
+    /// How long the scan listens on each channel, from the moment its
+    /// receive rules are in place, within the visit's lease.
     pub dwell: Duration,
     /// The consecutive cancelled leases after which a scan ends with a
     /// partial result.
@@ -2095,9 +2096,18 @@ enum ScanStep {
     AwaitStart,
     NeedConfigure,
     AwaitConfigured,
-    NeedProbe,
-    /// Listening until the lease's end.
-    Listen,
+    /// The receive rules are in place; the visit listens until `until`.
+    NeedProbe {
+        until: Instant,
+    },
+    /// Listening until `until`, or the lease's end if that comes first.
+    Listen {
+        until: Instant,
+    },
+    /// The window ended: the lease goes back.
+    NeedRelease,
+    /// The lease is given back and its end is due.
+    AwaitEnd,
 }
 
 /// The join of one access point.
@@ -3911,6 +3921,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 step: JoinStep::RetryAt(at),
                 ..
             }) => Some(*at),
+            State::Scan(Scan {
+                step: ScanStep::NeedProbe { until } | ScanStep::Listen { until },
+                ..
+            }) => Some(*until),
             State::Handshake(Handshake { deadline, .. }) => Some(deadline.deadline()),
             State::Connected(connected) => {
                 if let Some(deadline) = connected.confirmation {
@@ -4107,8 +4121,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     ScanStep::NeedConfigure | ScanStep::AwaitConfigured => {
                         ConnectStep::ScanConfigure
                     }
-                    ScanStep::NeedProbe => ConnectStep::ScanProbe,
-                    ScanStep::Listen => ConnectStep::ScanListen,
+                    ScanStep::NeedProbe { .. } => ConnectStep::ScanProbe,
+                    ScanStep::Listen { .. } | ScanStep::NeedRelease | ScanStep::AwaitEnd => {
+                        ConnectStep::ScanListen
+                    }
                 },
                 self.channel(scan.visit)
                     .map(|channel| channel.channel().number()),
@@ -4681,8 +4697,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             (State::Connected(connected), done) => self.confirming_step(connected, now, done),
             (State::Scan(scan), Done::Configured) if scan.step == ScanStep::AwaitConfigured => {
-                scan.step = ScanStep::NeedProbe;
-                Change::Keep
+                match now.checked_add(self.config.dwell) {
+                    Some(until) => {
+                        scan.step = ScanStep::NeedProbe { until };
+                        Change::Keep
+                    }
+                    None => leave_unkeyed(StaDisconnectReason::DeadlineOverflow),
+                }
             }
             (State::Join(join), done) => self.join_step(join, now, done),
             (State::Handshake(handshake), Done::Command(StaCommand::Disconnect)) => {
@@ -5398,7 +5419,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         let frame = management.frame();
         let change = match &mut *state {
             State::Scan(scan)
-                if scan.step == ScanStep::Listen || scan.step == ScanStep::NeedProbe =>
+                if matches!(
+                    scan.step,
+                    ScanStep::Listen { .. } | ScanStep::NeedProbe { .. }
+                ) =>
             {
                 // A connect's scan keeps its table for its own network.
                 let ssid = self
@@ -5678,7 +5702,32 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 )
             }
             State::Scan(scan) => {
+                if matches!(
+                    scan.step,
+                    ScanStep::NeedProbe { until } | ScanStep::Listen { until } if now >= until
+                ) {
+                    scan.step = ScanStep::NeedRelease;
+                }
                 let owed = match scan.step {
+                    ScanStep::NeedRelease => {
+                        match core::mem::replace(&mut (*self.lease), Held::None) {
+                            Held::Lease(lease) => {
+                                (*self.lease) = Held::Released(lease.id());
+                                scan.step = ScanStep::AwaitEnd;
+                                Some(Owed::Release(lease))
+                            }
+                            // No lease to give back: its end was reported.
+                            held => {
+                                (*self.lease) = held;
+                                let next = scan.visit.saturating_add(1);
+                                let access_point = scan.access_point;
+                                return (
+                                    self.visit(next, 0, access_point),
+                                    ActionProgress::Transition,
+                                );
+                            }
+                        }
+                    }
                     ScanStep::NeedLease if self.place.is_some() => {
                         match (self.channel(scan.visit), self.place.take()) {
                             (Some(channel), Some(place)) => {
@@ -5703,27 +5752,29 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         scan.step = ScanStep::AwaitConfigured;
                         self.configure(StationReceive::OtherBssManagement)
                     }
-                    ScanStep::NeedProbe => match self.encode_probe(TxPurpose::Probe, events) {
-                        Ok(transmit) => {
-                            scan.step = ScanStep::Listen;
-                            Some(Owed::Transmit(transmit))
+                    ScanStep::NeedProbe { until } => {
+                        match self.encode_probe(TxPurpose::Probe, events) {
+                            Ok(transmit) => {
+                                scan.step = ScanStep::Listen { until };
+                                Some(Owed::Transmit(transmit))
+                            }
+                            Err(Unsent::NoTokens) => None,
+                            Err(Unsent::Encode) => {
+                                return (
+                                    leave_unkeyed(StaDisconnectReason::Encode),
+                                    ActionProgress::Transition,
+                                );
+                            }
+                            Err(Unsent::NoConnection) => {
+                                return (
+                                    leave_unkeyed(StaDisconnectReason::TransmitRefused(
+                                        TxRefusal::LinkChanged,
+                                    )),
+                                    ActionProgress::Transition,
+                                );
+                            }
                         }
-                        Err(Unsent::NoTokens) => None,
-                        Err(Unsent::Encode) => {
-                            return (
-                                leave_unkeyed(StaDisconnectReason::Encode),
-                                ActionProgress::Transition,
-                            );
-                        }
-                        Err(Unsent::NoConnection) => {
-                            return (
-                                leave_unkeyed(StaDisconnectReason::TransmitRefused(
-                                    TxRefusal::LinkChanged,
-                                )),
-                                ActionProgress::Transition,
-                            );
-                        }
-                    },
+                    }
                     _ => None,
                 };
                 (Change::Keep, owed.into())
