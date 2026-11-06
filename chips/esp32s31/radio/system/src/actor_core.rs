@@ -56,10 +56,17 @@ impl ActorCore {
             self.poison(poison);
         }
     }
-    /// The answer's cause: the kept poison once the domain is poisoned.
+    /// The answer's cause: the kept poison once the domain is poisoned,
+    /// with the refusal the answer began with.
     #[inline(always)]
     pub(super) fn failure(&self, cause: Failure) -> Failure {
-        self.state.poisoned.map_or(cause, Failure::Poisoned)
+        match (self.state.poisoned, cause) {
+            (None, cause) => cause,
+            (Some(poison), Failure::PhyRefused(refusal)) => {
+                Failure::PoisonedAfterRefusal { refusal, poison }
+            }
+            (Some(poison), _) => Failure::Poisoned(poison),
+        }
     }
     #[inline(always)]
     pub(super) fn health(&self) -> DomainHealth {

@@ -207,6 +207,7 @@ pub enum PhyPreparation {
 /// | [`Refused`](Self::Refused) | Nothing: refused before any hardware write, a clock planner's refusal before its first write included. |
 /// | [`ClientFailed`](Self::ClientFailed) | Only the client's own hardware (its MAC partition, its clocks, its coexistence participation), and the rollback restored it. The shared domain (PHY, shared radio registers, common power) was not touched, or not left in an intermediate state. |
 /// | [`PhyRefused`](Self::PhyRefused) | The same as `ClientFailed`: the PHY refused the client before any access and the client's own work was rolled back; it names the refusal. |
+/// | [`PoisonedAfterRefusal`](Self::PoisonedAfterRefusal) | As `PhyRefused`, then closing the RF the client had opened poisoned the domain: the answer names both. |
 /// | [`Poisoned`](Self::Poisoned) | Shared state was written before the failure, or the rollback failed: the domain is poisoned until reset. The [`Poison`] names the first failure, which may precede this request. |
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Failure {
@@ -218,9 +219,25 @@ pub enum Failure {
     /// The PHY refused the client before any access; the client's own work
     /// was rolled back and the shared domain is healthy.
     PhyRefused(oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError),
+    /// The PHY refused the client, and closing the RF opened for it then
+    /// poisoned the domain until reset by `poison`.
+    PoisonedAfterRefusal {
+        refusal: oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError,
+        poison: Poison,
+    },
     /// Shared hardware work failed, or had failed before: the PHY domain is
     /// poisoned until reset by the first failure it names.
     Poisoned(Poison),
+}
+
+impl Failure {
+    /// The poison of a domain this failure left poisoned.
+    pub const fn poison(self) -> Option<Poison> {
+        match self {
+            Self::Poisoned(poison) | Self::PoisonedAfterRefusal { poison, .. } => Some(poison),
+            Self::Refused | Self::ClientFailed | Self::PhyRefused(_) => None,
+        }
+    }
 }
 
 /// A failed request and what it hands back.
