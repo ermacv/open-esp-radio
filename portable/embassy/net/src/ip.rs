@@ -12,7 +12,7 @@ use oer_protocols_network_port::{
     EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetTransmit, NetworkInterfaceId,
 };
 use owned_embassy_net::{
-    Stack, StackStorage,
+    ClaimedPool, Stack, StackStorage,
     iface::{Iface, dhcpv4::DhcpConfig},
     wire::{IpCidr, Ipv4Addr, Ipv4Cidr},
 };
@@ -281,11 +281,9 @@ impl<
         {
             return Err(Error::InvalidPrefixLength(config.prefix_length));
         }
-        // The stack claims the general allocator's waiter: refuse one
-        // another stack holds, before anything is built.
-        if general.waiter_claimed() {
-            return Err(Error::GeneralWaiterUnavailable);
-        }
+        // The stack needs the general allocator's waiter: refuse one another
+        // stack holds, before anything is built.
+        let pool = ClaimedPool::claim(general).ok_or(Error::GeneralWaiterUnavailable)?;
         let receive = self
             .rx_pool
             .insert(PacketPool::new(&mut self.rx_storage))
@@ -294,9 +292,7 @@ impl<
             .endpoint
             .split(interface, address, receive, transmit)
             .map_err(Error::from)?;
-        // Checked above, on this executor: no other stack claims the
-        // general waiter before Stack::new.
-        let (stack, mut runner) = Stack::new(&mut self.stack, seed, general);
+        let (stack, mut runner) = Stack::new(&mut self.stack, seed, pool);
         runner.set_poll_budget(owned_embassy_net::PollBudget::new(4, 8));
         let iface = stack
             .add_iface_borrowed(self.device.insert(device))

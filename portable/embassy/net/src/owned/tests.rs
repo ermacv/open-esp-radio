@@ -262,7 +262,8 @@ fn device_constructs_the_owned_embassy_stack() {
         .expect("endpoint split");
     let storage = Box::leak(Box::new(owned_embassy_net::StackStorage::new()));
 
-    let (stack, mut runner) = owned_embassy_net::Stack::new(storage, 0x1234, general);
+    let pool = owned_embassy_net::ClaimedPool::claim(general).expect("a free waiter");
+    let (stack, mut runner) = owned_embassy_net::Stack::new(storage, 0x1234, pool);
     stack
         .add_iface_borrowed(Box::leak(Box::new(device)))
         .unwrap();
