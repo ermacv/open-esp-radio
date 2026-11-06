@@ -104,9 +104,7 @@ impl<W> WifiRetuneFailure<W> {
     /// nothing: only a poisoned domain cannot resume an RF role.
     pub fn resume(self) -> Result<WifiStopped<W>, Self> {
         match self.cause {
-            WifiRetuneError::Radio(oer_chips_esp32s31_radio_client::Failure::Poisoned(_)) => {
-                Err(self)
-            }
+            WifiRetuneError::Radio(failure) if failure.poison().is_some() => Err(self),
             WifiRetuneError::Radio(_) | WifiRetuneError::NotStopped(_) => Ok(self.stopped),
         }
     }

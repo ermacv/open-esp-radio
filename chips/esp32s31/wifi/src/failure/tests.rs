@@ -231,4 +231,20 @@ fn a_phy_refusal_keeps_its_name_through_the_conversion() {
         super::convert::radio_poison_cause(PoisonCause::RollbackAfterRefusal(refusal)),
         RadioPoisonCause::RollbackAfterRefusal(named)
     );
+    let poison = oer_chips_esp32s31_radio_client::Poison {
+        origin: oer_chips_esp32s31_radio_client::PoisonOrigin::CloseRf,
+        cause: PoisonCause::Controller,
+    };
+    assert_eq!(Failure::PhyRefused(refusal).poison(), None);
+    assert_eq!(
+        Failure::PoisonedAfterRefusal { refusal, poison }.poison(),
+        Some(poison)
+    );
+    assert_eq!(
+        super::convert::radio_failure(Failure::PoisonedAfterRefusal { refusal, poison }),
+        RadioFailure::PoisonedAfterRefusal {
+            refusal: named,
+            poison: super::convert::radio_poison(poison),
+        }
+    );
 }

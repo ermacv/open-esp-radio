@@ -340,6 +340,10 @@ pub enum RadioFailure {
     Refused,
     ClientFailed,
     PhyRefused(PhyDomainError),
+    PoisonedAfterRefusal {
+        refusal: PhyDomainError,
+        poison: RadioPoison,
+    },
     Poisoned(RadioPoison),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -419,6 +419,10 @@ pub(super) fn radio_failure(value: oer_chips_esp32s31_radio_client::Failure) -> 
         Source::Refused => RadioFailure::Refused,
         Source::ClientFailed => RadioFailure::ClientFailed,
         Source::PhyRefused(v0) => RadioFailure::PhyRefused(phy_domain_error(v0)),
+        Source::PoisonedAfterRefusal { refusal, poison } => RadioFailure::PoisonedAfterRefusal {
+            refusal: phy_domain_error(refusal),
+            poison: radio_poison(poison),
+        },
         Source::Poisoned(v0) => RadioFailure::Poisoned(radio_poison(v0)),
     }
 }

@@ -93,6 +93,8 @@ struct Script {
     fail_prepare: bool,
     refuse_enter: bool,
     client_fails_enter: bool,
+    /// The PHY refuses the next join with this.
+    phy_refuses_enter: Option<oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError>,
     poison_track: bool,
     poison_retune: bool,
     /// The periodic tick of this number (from 1) fails.
@@ -100,6 +102,8 @@ struct Script {
     ticks: usize,
     not_last: bool,
     close_recoverable: bool,
+    /// Closing RF poisons the domain with this.
+    close_poisons: Option<PoisonCause>,
     deadline: Option<Instant>,
     /// The tracking deadline does not fit the clock.
     deadline_fault: Option<PoisonCause>,
@@ -144,6 +148,9 @@ impl PhyDomain for Model {
         if script.close_recoverable {
             return Err(CloseFault::Recoverable);
         }
+        if let Some(cause) = script.close_poisons {
+            return Err(CloseFault::Poisoned(cause));
+        }
         script.rf_open = false;
         Ok(())
     }
@@ -184,6 +191,8 @@ impl ClientBackend<Wifi, RcSlow> for Model {
             let client_failed = core::mem::take(&mut script.client_fails_enter);
             if script.refuse_enter {
                 Some(Failure::Refused)
+            } else if let Some(refusal) = script.phy_refuses_enter.take() {
+                Some(Failure::PhyRefused(refusal))
             } else {
                 client_failed.then_some(Failure::ClientFailed)
             }
@@ -846,6 +855,56 @@ fn a_recoverable_close_keeps_rf_open_in_the_same_epoch() {
             Event::Enter,
         ]
     );
+}
+
+#[test]
+fn a_phy_refusal_stays_named_when_closing_the_rf_poisons_the_domain() {
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    let refusal =
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+    let model = model(Script {
+        phy_refuses_enter: Some(refusal),
+        close_poisons: Some(PoisonCause::Controller),
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let Err(failed) = joined else {
+            panic!("the PHY refused")
+        };
+        let poison = Poison {
+            origin: PoisonOrigin::CloseRf,
+            cause: PoisonCause::Controller,
+        };
+        assert_eq!(
+            failed.cause,
+            Failure::PoisonedAfterRefusal { refusal, poison }
+        );
+        // The domain keeps the first poison for every later answer.
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let Err(failed) = joined else {
+            panic!("the domain is poisoned")
+        };
+        assert_eq!(failed.cause, Failure::Poisoned(poison));
+    });
+}
+
+#[test]
+fn a_phy_refusal_stays_a_refusal_when_the_rf_closes() {
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    let refusal =
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+    let model = model(Script {
+        phy_refuses_enter: Some(refusal),
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (_cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let Err(failed) = joined else {
+            panic!("the PHY refused")
+        };
+        assert_eq!(failed.cause, Failure::PhyRefused(refusal));
+    });
 }
 
 #[test]
