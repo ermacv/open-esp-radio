@@ -78,6 +78,46 @@ impl Ring {
         }
     }
 
+    /// As [`Self::new`], but a cold start: the walker begins at R.
+    pub(crate) fn cold() -> Self {
+        let placed = RxDmaStorage::place(Placed::host(Box::leak(Box::new(Storage::new()))))
+            .expect("the host storage has a layout");
+        let storage: &'static Storage = placed.storage();
+        let buffers: &'static [u32; COUNT] = storage.buffer_addresses().bits();
+        let base = placed.descriptor_base();
+        let mut walker = RxWalkerModel::new();
+        let live = placed
+            .prepare_ring(&mut walker)
+            .and_then(|ring| ring.core_ready_for_test().publish(&mut walker))
+            .unwrap()
+            .try_start(&mut walker)
+            .map_err(|(_, error)| error)
+            .unwrap();
+        Self {
+            storage,
+            buffers,
+            base,
+            walker,
+            live,
+            pool: Box::leak(Box::new(RxStagePool::new())),
+            next: 0,
+        }
+    }
+
+    /// Land `bytes` in R as the DMA engine would.
+    pub(crate) fn land_reserved(&mut self, bytes: &[u8]) {
+        let reserved = self.storage.reserved_descriptor();
+        self.storage
+            .dma_write(&self.live, reserved.buffer_address(), bytes)
+            .unwrap();
+        reserved.write_word0(rx_landed_word(BUFFER as u32, bytes.len() as u32, true));
+    }
+
+    /// The frame R holds, if any.
+    pub(crate) fn reserved_held(&self) -> bool {
+        self.storage.reserved_frame(&self.live).unwrap().is_some()
+    }
+
     /// Complete one unit of `lengths` segments as the DMA engine would:
     /// every non-terminal buffer is written, the terminal carries `RX_DONE`.
     pub(crate) fn complete(&mut self, lengths: &[u32]) {

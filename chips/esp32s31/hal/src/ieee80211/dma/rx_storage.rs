@@ -107,6 +107,22 @@ pub struct RxDmaCompletedUnit<
     _not_send: PhantomData<*mut ()>,
 }
 
+/// A completed frame in R, before R is rearmed: the shared ring borrow keeps
+/// [`RxDmaStorage::observe_reserved`] out while it lives.
+#[derive(Clone, Copy, Debug)]
+pub struct RxReservedFrame<'a> {
+    bytes: &'a [u8],
+    descriptor_address: u32,
+    descriptor_word0: WifiRxDmaDescriptorControl,
+}
+
+impl<'a> RxReservedFrame<'a> {
+    /// The received bytes, the RX-control prefix first.
+    pub const fn bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+}
+
 /// One complete single-buffer unit detached from its descriptor.
 pub struct RxDmaDetachedUnit {
     buffer: ExternalRxBuffer,
@@ -301,6 +317,10 @@ pub struct RxDmaStorage<
     buffers: [RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>; COUNT],
     /// R's buffer: never one of `buffers`, never detached or leased.
     reserved_buffer: RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
+    /// Where a frame that landed in R goes on: no descriptor ever names it,
+    /// so it stays the CPU's, and it is free again before each epoch because
+    /// a pause waits for every lease.
+    reserved_copy: RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
     /// Per descriptor, the distance to its bound buffer: descriptor `i` uses
     /// buffer `(i + offset) % COUNT`. Zero is the identity binding, so the
     /// arena's zero bytes bind every descriptor to its own buffer.
@@ -404,6 +424,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             descriptors: RxDescriptorTable::new(),
             buffers: [const { RxDmaBuffer::new() }; COUNT],
             reserved_buffer: RxDmaBuffer::new(),
+            reserved_copy: RxDmaBuffer::new(),
             descriptor_buffer_offsets: [const { AtomicU8::new(0) }; COUNT],
             buffer_addresses: RxDmaBufferAddresses::new(),
             arena: RxArenaWords::new(),

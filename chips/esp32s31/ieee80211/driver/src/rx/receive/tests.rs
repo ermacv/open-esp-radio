@@ -481,9 +481,10 @@ impl<X: SignalExecutor> Harness<X> {
     /// leave the walker past them.
     fn complete_unit(&mut self, lengths: &[u32]) {
         // A cold walker must finish its reserved unit before a distinct
-        // frame can start wholly at the ring head.
+        // frame can start wholly at the ring head. An empty one, so these
+        // ring tests count their own frames.
         if self.host.walker.borrow().next_descriptor_low == self.reserved_low() {
-            self.land_in_reserved(4);
+            self.land_in_reserved(0);
         }
         for (step, &length) in lengths.iter().enumerate() {
             let index = (self.next + step) % COUNT;
@@ -959,7 +960,7 @@ impl<X: SignalExecutor> Harness<X> {
 }
 
 #[test]
-fn the_epochs_first_frame_in_the_reserved_descriptor_is_counted_and_dropped() {
+fn the_epochs_first_frame_in_the_reserved_descriptor_is_received_first() {
     let mut harness = harness().started();
     assert_eq!(
         harness.host.walker.borrow().next_descriptor_low,
@@ -970,14 +971,17 @@ fn the_epochs_first_frame_in_the_reserved_descriptor_is_counted_and_dropped() {
     harness.rx_event();
     harness.settle();
     let report = harness.report();
-    assert_eq!((report.units, report.reload.reserved_landings), (0, 1));
+    assert_eq!(
+        (report.units, report.bytes, report.reload.reserved_landings),
+        (1, 80, 1)
+    );
     assert_eq!(report.service_errors, 0);
     assert!(harness.host.mac().rx_delivery_enabled());
     // The next frame lands in the ring head and is received.
     harness.frame(200);
     harness.settle();
     let report = harness.report();
-    assert_eq!((report.units, report.bytes), (1, 200));
+    assert_eq!((report.units, report.bytes), (2, 280));
     assert_eq!(
         (
             report.reload.reserved_landings,

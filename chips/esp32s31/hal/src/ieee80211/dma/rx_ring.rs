@@ -1197,6 +1197,16 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         reserved_snapshot(self.table, self.descriptor_table.base())
     }
 
+    /// R's control word.
+    pub(crate) fn reserved_word0(&self) -> WifiRxDmaDescriptorControl {
+        self.table.reserved().word0()
+    }
+
+    /// R's address.
+    pub(crate) fn reserved_descriptor_address(&self) -> u32 {
+        self.binding.reserved_address()
+    }
+
     /// Whether the first ring take of this epoch cleared R's link.
     pub const fn reserved_left(&self) -> bool {
         matches!(self.reserved_cursor, ReservedCursor::Left)

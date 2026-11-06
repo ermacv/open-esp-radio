@@ -65,12 +65,6 @@ where
     if O::SAMPLE_ENTRY_REMAINING {
         hooks.entry_remaining(ring.accepted_list_remaining_from_next(hardware.next_descriptor()));
     }
-    // The reserved descriptor: count a frame the epoch's cold publication
-    // let land in it, and fail closed on a write into it after the walker
-    // reached the ring.
-    storage
-        .observe_reserved(ring, hardware)
-        .map_err(RxStageTransactionError::Ring)?;
     let mut recycled_descriptors = 0_usize;
     // Upper ownership returns the exact original DMA allocations.
     // Rearm only the longest ordered released prefix before freezing
@@ -107,6 +101,24 @@ where
     // cannot make this service call unbounded by refilling the ring.
     let mut frozen_cursor = ring
         .freeze_cursor(hardware)
+        .map_err(RxStageTransactionError::Ring)?;
+    // The reserved descriptor, after the freeze: a frame the epoch's cold
+    // publication let land in it completed before any ring unit this pass
+    // takes, so its copy goes first. R is rearmed only once the copy is
+    // published; a landing after the walker reached the ring fails closed.
+    let Some(reserved_bytes) = stage_reserved(ring, storage, pool, publisher)? else {
+        return Ok(DatapathRxProgress::StageCapacityBlocked);
+    };
+    if reserved_bytes != 0 {
+        // R is no ring descriptor: its head index is past the ring.
+        admission.observe(Observation::Staged(CompletedUnit {
+            head_index: COUNT,
+            descriptor_count: 1,
+            payload_length: reserved_bytes,
+        }));
+    }
+    storage
+        .observe_reserved(ring, hardware)
         .map_err(RxStageTransactionError::Ring)?;
     let mut deferred_recycle_pending = false;
     // A discard which followed a detached valid frame could not be
@@ -469,15 +481,19 @@ where
     }
 
     hooks.phase(Phase::Tail);
+    let reserved_unit = u64::from(reserved_bytes != 0);
     *counters.descriptors = counters
         .descriptors
-        .saturating_add(u64::try_from(admitted_descriptors).unwrap_or(u64::MAX));
+        .saturating_add(u64::try_from(admitted_descriptors).unwrap_or(u64::MAX))
+        .saturating_add(reserved_unit);
     *counters.units = counters
         .units
-        .saturating_add(u64::try_from(admitted).unwrap_or(u64::MAX));
+        .saturating_add(u64::try_from(admitted).unwrap_or(u64::MAX))
+        .saturating_add(reserved_unit);
     *counters.bytes = counters
         .bytes
-        .saturating_add(u64::try_from(staged_bytes).unwrap_or(u64::MAX));
+        .saturating_add(u64::try_from(staged_bytes).unwrap_or(u64::MAX))
+        .saturating_add(u64::try_from(reserved_bytes).unwrap_or(u64::MAX));
 
     // Every append changes descriptor generation. Retain one
     // cooperative post-append confirmation before the moderated IRQ
@@ -555,6 +571,53 @@ where
     } else {
         DatapathRxProgress::Drained
     })
+}
+
+/// Publish a copy of the frame in R, if there is one, and answer its bytes,
+/// zero without one. `None` leaves it there for a later pass: nothing can
+/// take its place in the order, because R is not rearmed and this pass takes
+/// no ring unit. A frame the stage cannot hold stays for
+/// [`RxDmaStorage::observe_reserved`] to drop.
+#[inline(always)]
+fn stage_reserved<
+    'pool,
+    E: Publisher<'pool, STAGE_CAPACITY, STAGE_SLOTS>,
+    const COUNT: usize,
+    const STAGE_CAPACITY: usize,
+    const STAGE_SLOTS: usize,
+    const DMA_BUFFER_SIZE: usize,
+    const DMA_STORAGE_SIZE: usize,
+    S: oer_chips_esp32s31_hal::ieee80211::dma::space::DmaSpace,
+>(
+    ring: &RxRingLive<'_, COUNT>,
+    storage: &'static RxDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
+    pool: &'pool RxStagePool<STAGE_SLOTS, STAGE_CAPACITY>,
+    publisher: &E,
+) -> Result<Option<usize>, RxStageTransactionError> {
+    let Some(frame) = storage
+        .reserved_frame(ring)
+        .map_err(RxStageTransactionError::Ring)?
+    else {
+        return Ok(Some(0));
+    };
+    let length = frame.bytes().len();
+    if length > STAGE_CAPACITY {
+        return Ok(Some(0));
+    }
+    if pool.available_slots() == 0 || publisher.free_capacity() == 0 {
+        return Ok(None);
+    }
+    let Some(copy) = storage
+        .claim_reserved_copy(&frame)
+        .map_err(RxStageTransactionError::Ring)?
+    else {
+        return Ok(None);
+    };
+    let mut staged = pool.stage_detached_unit(copy, STAGE_CAPACITY)?;
+    for (to, from) in staged.storage_mut().iter_mut().zip(frame.bytes()) {
+        *to = *from;
+    }
+    Ok(publisher.try_send(staged).is_ok().then_some(length))
 }
 
 #[cfg(test)]
