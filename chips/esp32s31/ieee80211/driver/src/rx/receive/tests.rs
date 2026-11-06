@@ -1467,6 +1467,36 @@ fn teardown_halts_after_p1_drains_queued_frames() {
 }
 
 #[test]
+fn a_stop_waits_for_the_copy_of_the_frame_in_r() {
+    let (mut harness, mut frames) = queue_harness();
+    harness.land_in_reserved(64);
+    harness.rx_event();
+    harness.settle();
+    assert_eq!(harness.report().units, 1);
+
+    harness.stop.request_stop();
+    harness.settle();
+    assert!(harness.stop.try_exit().is_none(), "the copy is out");
+    assert_eq!(harness.walker_stops(), 0);
+
+    let held = poll_next(&mut frames).expect("the copy is the first frame");
+    harness.settle();
+    assert!(harness.stop.try_exit().is_none(), "the copy is still out");
+    assert_eq!(harness.walker_stops(), 0);
+
+    drop(held);
+    harness.settle();
+    assert_eq!(harness.walker_stops(), 1);
+    assert_eq!(
+        harness.stop.try_exit(),
+        Some(WifiRxExit {
+            cause: WifiRxCause::StopRequested,
+            end: WifiRxEnd::Halted,
+        })
+    );
+}
+
+#[test]
 fn teardown_quarantines_when_p1_never_drains() {
     let (mut harness, mut frames) = queue_harness();
     for _ in 0..3 {

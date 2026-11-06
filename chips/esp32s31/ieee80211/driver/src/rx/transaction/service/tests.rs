@@ -439,3 +439,103 @@ fn a_warm_start_publishes_only_its_ring_frames() {
     assert_eq!(publisher.first_bytes(), [0xb2]);
     assert!(!ring.reserved_held());
 }
+
+/// Admits `limit` bytes and records what it observed.
+struct Limited<'a> {
+    limit: usize,
+    inner: CountingAdmission<'a>,
+    observed: RefCell<Vec<Observation>>,
+}
+
+impl Admission for Limited<'_> {
+    fn maximum_payload_length(&self, _: CompletedUnit, physical_capacity: usize) -> usize {
+        self.limit.min(physical_capacity)
+    }
+
+    fn observe(&self, observation: Observation) {
+        self.observed.borrow_mut().push(observation);
+        self.inner.observe(observation);
+    }
+}
+
+fn limited(limit: usize) -> Limited<'static> {
+    Limited {
+        limit,
+        inner: admission(counters()),
+        observed: RefCell::new(Vec::new()),
+    }
+}
+
+/// An RX-control prefix and frame control `control`, the MPDU's start.
+fn with_control(control: [u8; 2]) -> [u8; PUBLIC_HEADER_SIZE + 24] {
+    let mut frame = [0_u8; PUBLIC_HEADER_SIZE + 24];
+    frame[PUBLIC_HEADER_SIZE..PUBLIC_HEADER_SIZE + 2].copy_from_slice(&control);
+    frame
+}
+
+const PROTECTED_DATA: [u8; 2] = [0x08, 0x40];
+const BEACON: [u8; 2] = [0x80, 0x00];
+
+#[test]
+fn a_frame_in_r_longer_than_the_policy_admits_is_dropped_and_counted() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(4);
+    let admission = limited(16);
+    ring.land_reserved(&[0xb1; 64]);
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.first_bytes(), [0_u8; 0]);
+    assert!(!ring.reserved_held(), "R is rearmed as a discard is");
+    assert!(matches!(
+        admission.observed.borrow()[0],
+        Observation::DiscardRetained {
+            reason: Discard::TooLong,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn a_protected_frame_in_r_leaves_the_critical_credit_alone() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(1);
+    let admission = limited(RING_BUFFER);
+    ring.land_reserved(&with_control(PROTECTED_DATA));
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.kept.borrow().len(), 0);
+    assert_eq!(publisher.room.get(), 1, "the last credit stays");
+    assert!(matches!(
+        admission.observed.borrow()[0],
+        Observation::OverloadDiscardedAndRecycled(_)
+    ));
+}
+
+#[test]
+fn a_critical_frame_in_r_takes_the_critical_credit() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(1);
+    let admission = limited(RING_BUFFER);
+    ring.land_reserved(&with_control(BEACON));
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.kept.borrow().len(), 1);
+    assert!(matches!(
+        admission.observed.borrow()[0],
+        Observation::CriticalReserveAdmitted(_)
+    ));
+}
+
+#[test]
+fn a_critical_frame_in_r_waits_when_no_credit_is_left() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(0);
+    let admission = limited(RING_BUFFER);
+    ring.land_reserved(&with_control(BEACON));
+    assert_eq!(
+        ring.settle(&publisher, &admission),
+        DatapathRxProgress::StageCapacityBlocked
+    );
+    assert!(ring.reserved_held());
+    assert!(matches!(
+        admission.observed.borrow()[0],
+        Observation::CriticalAdmissionBlocked(_)
+    ));
+}
