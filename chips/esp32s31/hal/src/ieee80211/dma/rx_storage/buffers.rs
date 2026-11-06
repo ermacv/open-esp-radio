@@ -316,6 +316,60 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     ) -> Result<u32, RxDmaStorageError> {
         S::address(self, buffer.0.get()).ok_or(RxDmaStorageError::AddressWidth)
     }
+    /// The completed frame in R of `ring`, this arena's, while R is still
+    /// the way into the ring. An empty or oversized one is `None`:
+    /// [`Self::observe_reserved`] counts and drops it, as it fails closed on
+    /// a landing after the walker left R.
+    ///
+    /// # Errors
+    /// `ring` is another arena's.
+    pub fn reserved_frame<'a>(
+        &'a self,
+        ring: &'a RxRingLive<'_, COUNT>,
+    ) -> Result<Option<RxReservedFrame<'a>>, RxRingError> {
+        self.validate_live_ring(ring)?;
+        let word0 = ring.reserved_word0();
+        if ring.reserved_left() || !word0.rx_done() {
+            return Ok(None);
+        }
+        let length = usize::from(word0.length());
+        if length == 0 {
+            return Ok(None);
+        }
+        // `RX_DONE` ends DMA's use of R, and nothing rearms R while the ring
+        // borrow lives; the range is within the buffer by `get`.
+        Ok(self
+            .reserved_buffer
+            .completed()
+            .get(..length)
+            .map(|bytes| RxReservedFrame {
+                bytes,
+                descriptor_address: ring.reserved_descriptor_address(),
+                descriptor_word0: word0,
+            }))
+    }
+
+    /// The CPU-owned buffer for `frame`'s copy, sized to it and still
+    /// unwritten; `None` while the last copy is out.
+    ///
+    /// # Errors
+    /// The buffer's return state is corrupt.
+    pub fn claim_reserved_copy(
+        &'static self,
+        frame: &RxReservedFrame<'_>,
+    ) -> Result<Option<RxDmaDetachedUnit>, RxRingError> {
+        if self.reserved_copy.state() == ExternalRxReturnState::Detached {
+            return Ok(None);
+        }
+        self.reserved_copy.prepare_for_stopped_ring()?;
+        Ok(Some(RxDmaDetachedUnit {
+            buffer: self.reserved_copy.detach_with(frame.bytes.len())?,
+            descriptor_address: frame.descriptor_address,
+            descriptor_word0: frame.descriptor_word0,
+            length: frame.bytes.len(),
+        }))
+    }
+
     fn detach_buffer(
         &'static self,
         length: usize,

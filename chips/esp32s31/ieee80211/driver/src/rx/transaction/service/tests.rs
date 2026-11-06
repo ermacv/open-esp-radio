@@ -10,7 +10,11 @@ use oer_chips_esp32s31_hal::ieee80211::dma::{
 };
 
 use super::*;
+use crate::rx::counters::WifiRxCounters;
+use crate::rx::sink::CountingAdmission;
+use crate::rx::test_ring::{BUFFER as RING_BUFFER, Ring, SLOTS as RING_SLOTS};
 use crate::rx::transaction::{CompletedUnit, IngressClass, IngressRoute, Preview};
+use core::cell::Cell;
 
 const COUNT: usize = 4;
 const BUFFER: usize = 8_192;
@@ -270,4 +274,168 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
     assert_eq!(*publisher.seen.borrow(), [completed.with_owner(false)]);
     assert_eq!(ring.reload_evidence().walker_on_detached, 0);
     assert!(ring.try_stop(&mut hardware).is_ok());
+}
+
+/// Keeps what it is sent, while it has room.
+struct Keeping<'a> {
+    room: Cell<usize>,
+    /// Sends refused though `room` says there is some.
+    refuse: Cell<usize>,
+    kept: RefCell<Vec<NetworkRxFrame<'a, RING_SLOTS, RING_BUFFER>>>,
+}
+
+impl<'a> Keeping<'a> {
+    fn new(room: usize) -> Self {
+        Self {
+            room: Cell::new(room),
+            refuse: Cell::new(0),
+            kept: RefCell::new(Vec::new()),
+        }
+    }
+
+    fn first_bytes(&self) -> Vec<u8> {
+        self.kept
+            .borrow()
+            .iter()
+            .map(|frame| frame.segment().buffer[0])
+            .collect()
+    }
+}
+
+impl<'a> Publisher<'a, RING_BUFFER, RING_SLOTS> for Keeping<'a> {
+    const DEPTH: usize = 4;
+
+    fn free_capacity(&self) -> usize {
+        self.room.get()
+    }
+
+    fn preview(&self, unit: CompletedUnit, bytes: [u8; 24]) -> Preview {
+        crate::rx::sink::frame_control_preview(unit, bytes)
+    }
+
+    fn unclassified_preview(&self, unit: CompletedUnit) -> Preview {
+        crate::rx::sink::unclassified_preview(unit)
+    }
+
+    fn try_send(
+        &self,
+        frame: NetworkRxFrame<'a, RING_SLOTS, RING_BUFFER>,
+    ) -> Result<(), NetworkRxFrame<'a, RING_SLOTS, RING_BUFFER>> {
+        if self.room.get() == 0 {
+            return Err(frame);
+        }
+        if self.refuse.get() != 0 {
+            self.refuse.set(self.refuse.get() - 1);
+            return Err(frame);
+        }
+        self.room.set(self.room.get() - 1);
+        self.kept.borrow_mut().push(frame);
+        Ok(())
+    }
+}
+
+fn admission(counters: &'static WifiRxCounters) -> CountingAdmission<'static> {
+    CountingAdmission::new(counters)
+}
+
+fn counters() -> &'static WifiRxCounters {
+    Box::leak(Box::new(WifiRxCounters::new()))
+}
+
+#[test]
+fn a_frame_that_landed_in_r_goes_out_first_and_once() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(4);
+    let admission = admission(counters());
+    ring.land_reserved(&[0xb1; 64]);
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.first_bytes(), [0xb1]);
+    assert_eq!(publisher.kept.borrow()[0].segment().buffer, [0xb1; 64]);
+    assert!(!ring.reserved_held(), "R is rearmed once the copy is out");
+    assert_eq!(ring.pool.claimed_slots(), 1);
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.first_bytes(), [0xb1], "published once");
+}
+
+#[test]
+fn a_frame_in_r_goes_ahead_of_a_ring_frame_of_the_same_pass() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(4);
+    let admission = admission(counters());
+    ring.land_reserved(&[0xb1; 64]);
+    ring.complete_with(&[0xb2; 64]);
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.first_bytes(), [0xb1, 0xb2]);
+}
+
+#[test]
+fn a_full_queue_leaves_the_frame_in_r_and_takes_no_later_frame() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(0);
+    let admission = admission(counters());
+    ring.land_reserved(&[0xb1; 64]);
+    ring.complete_with(&[0xb2; 64]);
+    assert_eq!(
+        ring.settle(&publisher, &admission),
+        DatapathRxProgress::StageCapacityBlocked
+    );
+    assert!(ring.reserved_held(), "R keeps its frame");
+    assert_eq!(ring.pool.claimed_slots(), 0, "no copy stays out");
+    publisher.room.set(4);
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.first_bytes(), [0xb1, 0xb2]);
+}
+
+#[test]
+fn a_refused_publication_keeps_the_frame_in_r_and_returns_the_copy() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(4);
+    publisher.refuse.set(1);
+    let admission = admission(counters());
+    ring.land_reserved(&[0xb1; 64]);
+    assert_eq!(
+        ring.settle(&publisher, &admission),
+        DatapathRxProgress::StageCapacityBlocked
+    );
+    assert!(ring.reserved_held(), "R is rearmed only after publication");
+    assert_eq!(ring.pool.claimed_slots(), 0, "the copy came back");
+    ring.settle(&publisher, &admission);
+    assert_eq!(
+        publisher.first_bytes(),
+        [0xb1],
+        "published once it could be"
+    );
+    assert!(!ring.reserved_held());
+}
+
+#[test]
+fn a_copy_still_out_holds_the_next_landing_and_the_pause_sees_it() {
+    let mut ring = Ring::cold();
+    let publisher = Keeping::new(4);
+    let admission = admission(counters());
+    ring.land_reserved(&[0xb1; 64]);
+    ring.settle(&publisher, &admission);
+    // A pause waits on the claimed slots ([`crate::rx::session`]).
+    assert_eq!(ring.pool.claimed_slots(), 1);
+    ring.land_reserved(&[0xb2; 64]);
+    assert_eq!(
+        ring.settle(&publisher, &admission),
+        DatapathRxProgress::StageCapacityBlocked
+    );
+    assert!(ring.reserved_held());
+    publisher.kept.borrow_mut().clear();
+    assert_eq!(ring.pool.claimed_slots(), 0);
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.first_bytes(), [0xb2]);
+}
+
+#[test]
+fn a_warm_start_publishes_only_its_ring_frames() {
+    let mut ring = Ring::new();
+    let publisher = Keeping::new(4);
+    let admission = admission(counters());
+    ring.complete_with(&[0xb2; 64]);
+    ring.settle(&publisher, &admission);
+    assert_eq!(publisher.first_bytes(), [0xb2]);
+    assert!(!ring.reserved_held());
 }

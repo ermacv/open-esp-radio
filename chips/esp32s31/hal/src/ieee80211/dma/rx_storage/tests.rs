@@ -2515,6 +2515,72 @@ fn admission_preview_refuses_a_dirty_nonterminal_head_then_reads_a_single_frame(
 }
 
 #[test]
+fn a_frame_in_r_reads_back_for_its_own_ring_until_r_is_rearmed() {
+    let mut ring = Walked::<4>::start();
+    let mut foreign = Walked::<4>::start();
+    assert!(ring.storage.reserved_frame(&ring.live).unwrap().is_none());
+    assert!(ring.land(4, true));
+    let frame = ring.storage.reserved_frame(&ring.live).unwrap().unwrap();
+    assert_eq!(frame.bytes(), [0xa5; 4]);
+    assert!(
+        ring.storage.reserved_frame(&foreign.live).is_err(),
+        "another arena's ring proves nothing of this R"
+    );
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    assert!(
+        ring.storage.reserved_frame(&ring.live).unwrap().is_none(),
+        "a rearmed R holds no frame"
+    );
+    assert!(foreign.live.try_stop(&mut foreign.walker).is_ok());
+}
+
+#[test]
+fn a_length_past_the_buffer_reads_nothing() {
+    let mut ring = Walked::<4>::start();
+    assert!(ring.land(4, true));
+    ring.storage.reserved_descriptor().write_word0(
+        crate::ieee80211::dma::descriptor::rx_landed_word(16, 17, true),
+    );
+    assert!(ring.storage.reserved_frame(&ring.live).unwrap().is_none());
+}
+
+#[test]
+fn the_copy_buffer_is_out_until_its_copy_returns() {
+    let mut ring = Walked::<4>::start();
+    assert!(ring.land(4, true));
+    let frame = ring.storage.reserved_frame(&ring.live).unwrap().unwrap();
+    let copy = ring.storage.claim_reserved_copy(&frame).unwrap().unwrap();
+    assert_eq!(copy.length(), 4);
+    assert!(
+        ring.storage.claim_reserved_copy(&frame).unwrap().is_none(),
+        "one copy at a time"
+    );
+    drop(copy);
+    assert!(ring.storage.claim_reserved_copy(&frame).unwrap().is_some());
+}
+
+#[test]
+fn a_ring_that_resumed_at_a_retained_next_never_holds_a_frame_in_r() {
+    let storage = Box::leak(Box::new(RxDmaStorage::<4, 16, 16, HostDma>::new()));
+    let placed = place(storage);
+    let storage = placed.storage();
+    let mut walker = crate::ieee80211::dma::rx_dma::model::RxWalkerModel::new();
+    walker.next_descriptor_low = (placed.descriptor_base()
+        + crate::ieee80211::dma::descriptor::DESCRIPTOR_BYTES as u32)
+        & ADDRESS_LOW_MASK;
+    let live = placed
+        .prepare_ring(&mut walker)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut walker))
+        .unwrap()
+        .try_start(&mut walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    assert!(storage.reserved_frame(&live).unwrap().is_none());
+}
+
+#[test]
 fn a_cold_landing_is_dropped_and_r_next_clears_only_at_the_first_ring_take() {
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
