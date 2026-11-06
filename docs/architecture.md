@@ -276,7 +276,7 @@ including aliases, optional entries and target-specific entries:
   `bt_hci::controller`.
 
 The sans-IO safety and panic rules cover all crates under `protocols/` and
-`portable/`, except the unsafe homes `oer-portable-mmio`, `oer-portable-riscv` and `oer-portable-memory`.
+`portable/`, except the unsafe homes `oer-portable-mmio`, `oer-portable-riscv`, `oer-portable-memory` and `oer-portable-waker`.
 They also cover the following Espressif crates: their ordinary dependency closures
 contain no PAC, HAL, mmio or riscv crate, and their roots forbid unsafe code.
 Build and development dependencies do not determine this membership.

@@ -19,11 +19,11 @@
 //! preempted producer holds WAKING. [`PriorityWaker`] binds the other slot;
 //! the lower-priority producer can then resume and complete its notification.
 
-use atomic_waker::AtomicWaker;
 use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     task::Waker,
 };
+use oer_portable_waker::AtomicWaker;
 
 struct Slot {
     waker: AtomicWaker,

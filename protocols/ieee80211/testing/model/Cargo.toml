@@ -11,7 +11,7 @@ description = "Allocating host reference backend for the IEEE 802.11 lower-MAC p
 test-support = ["oer-protocols-radio-port/test-support"]
 
 [dependencies]
-atomic-waker = "1.1.2"
+oer-portable-waker = { path = "../../../../portable/waker" }
 heapless = "0.9.3"
 oer-protocols-ieee80211-contracts-port = { path = "../../contracts/port" }
 oer-protocols-ieee80211-testing-conformance = { path = "../conformance" }
@@ -25,7 +25,7 @@ oer-portable-time = { path = "../../../../portable/time" }
 oer-portable-wire = { path = "../../../../portable/wire" }
 oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../core/upper-mac" }
-atomic-waker = "1.1.2"
+oer-portable-waker = { path = "../../../../portable/waker" }
 embassy-futures = "0.1.2"
 oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-protocols-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }

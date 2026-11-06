@@ -484,10 +484,10 @@ pub type GroupEnd<A, B, const N: usize> = crate::channel::End<B, A, N, GroupNoti
 /// with the group on hart 1 the application's executor signal, which
 /// hart 1 raises.
 #[cfg(not(feature = "group"))]
-pub type AppNotify = atomic_waker::AtomicWaker;
+pub type AppNotify = oer_portable_waker::AtomicWaker;
 /// How a wait of the group's future is told, likewise.
 #[cfg(not(feature = "group"))]
-pub type GroupNotify = atomic_waker::AtomicWaker;
+pub type GroupNotify = oer_portable_waker::AtomicWaker;
 #[cfg(feature = "group")]
 pub type AppNotify =
     &'static oer_chips_family_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 0>>;
@@ -497,7 +497,7 @@ pub type GroupNotify =
 
 /// The application's notify, which the IP status publication tells.
 #[cfg(all(feature = "wifi", not(feature = "group")))]
-pub(crate) static APPLICATION: AppNotify = atomic_waker::AtomicWaker::new();
+pub(crate) static APPLICATION: AppNotify = oer_portable_waker::AtomicWaker::new();
 #[cfg(all(feature = "wifi", feature = "group"))]
 pub(crate) static APPLICATION: AppNotify = &hart1::APPLICATION;
 

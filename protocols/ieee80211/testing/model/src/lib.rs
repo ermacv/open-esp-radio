@@ -1254,7 +1254,7 @@ pub const MODEL_RX_STORAGE: usize = 1664;
 #[derive(Default)]
 struct ModelNetwork {
     held: core::sync::atomic::AtomicUsize,
-    waker: atomic_waker::AtomicWaker,
+    waker: oer_portable_waker::AtomicWaker,
 }
 
 impl ModelNetwork {

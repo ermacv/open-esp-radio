@@ -56,18 +56,20 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
     // Each exception has a direction and a reason in the audit. Counting uses
     // also catches another raw field added to a previously reviewed file.
     let expected = [
-        ("chips/esp32s31/app/src/lib.rs", 6),
-        ("chips/esp32s31/ieee80211/driver/src/port/lent.rs", 4),
-        ("chips/esp32s31/ieee80211/driver/src/rx/control.rs", 7),
-        ("chips/esp32s31/ieee80211/driver/src/rx/upper.rs", 7),
-        ("chips/family/app/src/channel.rs", 4),
-        ("portable/memory/src/lib.rs", 2),
-        ("portable/memory/src/slot_queue.rs", 10),
-        ("portable/memory/src/waking_spsc.rs", 14),
-        ("portable/sync/src/lib.rs", 6),
+        ("chips/esp32s31/app/src/lib.rs", 3),
+        ("chips/esp32s31/ieee80211/driver/src/port/lent.rs", 3),
+        ("chips/esp32s31/ieee80211/driver/src/rx/control.rs", 6),
+        ("chips/esp32s31/ieee80211/driver/src/rx/upper.rs", 6),
+        ("chips/family/app/src/channel.rs", 3),
+        ("portable/memory/src/lib.rs", 1),
+        ("portable/memory/src/slot_queue.rs", 9),
+        ("portable/memory/src/waking_spsc.rs", 13),
+        ("portable/sync/src/lib.rs", 5),
+        ("portable/waker/src/lib.rs", 7),
+        ("portable/waker/src/model.rs", 3),
         ("protocols/ieee80211/runtime/src/station/notifies.rs", 3),
-        ("protocols/ieee80211/testing/model/src/lib.rs", 2),
-        ("protocols/radio/port/src/slot.rs", 4),
+        ("protocols/ieee80211/testing/model/src/lib.rs", 1),
+        ("protocols/radio/port/src/slot.rs", 3),
     ]
     .into_iter()
     .map(|(path, count)| (String::from(path), count))

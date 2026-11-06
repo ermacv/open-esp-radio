@@ -14,10 +14,10 @@
 //! finds the burst, not its first value.
 
 use crate::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, ClaimCell, QueueNotify};
-use atomic_waker::AtomicWaker;
 use core::future::poll_fn;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering, fence};
 use core::task::Poll;
+use oer_portable_waker::AtomicWaker;
 
 #[cfg(test)]
 mod tests;

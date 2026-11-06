@@ -15,7 +15,7 @@ test-support = []
 
 [dependencies]
 oer-portable-sync = { path = "../../../portable/sync" }
-atomic-waker = { version = "1.1.2", default-features = false }
+oer-portable-waker = { path = "../../../portable/waker" }
 scopeguard = { version = "1.2.0", default-features = false }
 pin-project-lite = "0.2.17"
 oer-portable-time = { path = "../../../portable/time" }

@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Lock-free notification across task priorities"
 
 [dependencies]
-atomic-waker = "=1.1.2"
+oer-portable-waker = { path = "../waker" }
 
 [lints]
 workspace = true

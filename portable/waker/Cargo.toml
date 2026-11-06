@@ -1,0 +1,18 @@
+[package]
+name = "oer-portable-waker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A cell holding one task's waker, shared with its producers"
+
+[features]
+# Runs the cell's model checks: `cargo test -p oer-portable-waker --features loom --release`.
+loom = ["dep:loom"]
+
+[dependencies]
+loom = { version = "0.7", optional = true, features = ["futures"] }
+
+[lints]
+workspace = true

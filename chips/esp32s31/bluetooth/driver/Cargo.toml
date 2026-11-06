@@ -24,7 +24,7 @@ oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table" }
 [dev-dependencies]
 oer-protocols-radio-port = { path = "../../../../protocols/radio/port", features = ["test-support"] }
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
-atomic-waker = "1.1.2"
+oer-portable-waker = { path = "../../../../portable/waker" }
 bytemuck = { version = "1.25.2", default-features = false }
 oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-chips-esp32s31-hal = { path = "../../hal", features = ["test-support"] }

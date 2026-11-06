@@ -121,6 +121,7 @@ const BELOW_THE_BOUNDARY: &[&str] = &[
     "portable/memory",
     "portable/mmio",
     "portable/riscv",
+    "portable/waker",
     "chips/family/interrupt-table",
     "tools/os/process",
     "tools/os/serial",
@@ -185,7 +186,13 @@ const ESPRESSIF_SANS_IO: &[&str] = &[
 fn sans_io(package: &str) -> bool {
     package.starts_with("protocols/")
         || (package.starts_with("portable/")
-            && !["portable/mmio", "portable/riscv", "portable/memory"].contains(&package))
+            && ![
+                "portable/mmio",
+                "portable/riscv",
+                "portable/memory",
+                "portable/waker",
+            ]
+            .contains(&package))
         || ESPRESSIF_SANS_IO.contains(&package)
 }
 

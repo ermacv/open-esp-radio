@@ -11,7 +11,7 @@ description = "Role-neutral ESP32-S31 Wi-Fi device composition"
 oer-portable-wire = { path = "../../../../portable/wire" }
 oer-portable-sync = { path = "../../../../portable/sync" }
 oer-portable-events = { path = "../../../../portable/events" }
-atomic-waker = "1.1.2"
+oer-portable-waker = { path = "../../../../portable/waker" }
 heapless = "0.9.2"
 pin-project = "1.1.13"
 subtle = { version = "2.6.1", default-features = false }
