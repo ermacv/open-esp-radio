@@ -248,7 +248,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                 publication,
                 reason,
             }) => Err((publication.arena, reason)),
-            Err(PublishError::Fault(fault)) => panic!("publication fault {fault:?}"),
+            Err(fault) => panic!("publication fault {fault:?}"),
         }
     }
 
