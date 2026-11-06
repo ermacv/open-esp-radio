@@ -40,6 +40,20 @@ impl<const N: usize> Ordinal<N> {
         Ordinal((self.0 as usize / (N / W)) as u8)
     }
 
+    /// The position `index`, or the last one past the table's end.
+    pub(crate) const fn clamped(index: u8) -> Self {
+        let last = (N - 1) as u8;
+        Self(if index > last { last } else { index })
+    }
+
+    /// The position before this one; `None` at the first.
+    pub(crate) const fn previous(self) -> Option<Self> {
+        match self.0.checked_sub(1) {
+            Some(index) => Some(Self(index)),
+            None => None,
+        }
+    }
+
     /// The position as the hardware sequence and its completions name it.
     pub(crate) const fn get(self) -> u8 {
         self.0
@@ -80,6 +94,16 @@ mod tests {
             position = at.next();
         }
         assert_eq!(walked, [(0, 10), (1, 20), (2, 30)]);
+    }
+
+    #[test]
+    fn a_position_walks_back_and_clamps_at_the_end() {
+        let last = Ordinal::<3>::clamped(9);
+        assert_eq!(last.get(), 2);
+        assert_eq!(last.previous().map(Ordinal::get), Some(1));
+        assert_eq!(Ordinal::<3>::FIRST.previous(), None);
+        assert_eq!(Ordinal::<3>::clamped(1).get(), 1);
+        assert_eq!(Ordinal::<3>::position(3), None);
     }
 
     #[test]

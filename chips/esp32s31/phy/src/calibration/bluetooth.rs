@@ -160,13 +160,13 @@ pub(crate) const fn next_bluetooth_tx_gain(
         .target
         .wrapping_add(crate::calibration::math::saturate_signed(driver as i32, 80, -72) as i16);
     generator.table_index = select_bluetooth_tx_gain_index(generator.table_index, target);
-    let index = generator.table_index as usize;
+    let index = crate::ordinal::Ordinal::clamped(generator.table_index);
     let residual = target
-        .wrapping_sub(BLUETOOTH_TX_GAIN_TABLE_HIGH[index] as i16)
+        .wrapping_sub(index.at(&BLUETOOTH_TX_GAIN_TABLE_HIGH) as i16)
         .wrapping_sub(generator.interpolation as i16);
     crate::tx::gain::Value {
-        gain_72: BLUETOOTH_TX_GAIN_TABLE_LOW[index],
-        gain_64: BLUETOOTH_TX_GAIN_TABLE_MID[index],
+        gain_72: index.at(&BLUETOOTH_TX_GAIN_TABLE_LOW),
+        gain_64: index.at(&BLUETOOTH_TX_GAIN_TABLE_MID),
         gain_32: crate::calibration::math::saturate_signed(residual as i32, 24, -60) as u8,
     }
 }
