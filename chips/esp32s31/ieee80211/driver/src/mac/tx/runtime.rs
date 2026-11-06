@@ -4,7 +4,9 @@ use oer_protocols_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet,
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 use crate::mac::{
-    edca::{EdcaAccessPolicy, EdcaContentionParameters, EdcaParametersError, EdcaQueues},
+    edca::{
+        EdcaAccessPolicy, EdcaContentionParameters, EdcaParametersError, EdcaPolicies, EdcaQueues,
+    },
     tx::{HeEdcaTxopLimit, HtPeerAmpduParameters, LegacyTxQueue},
 };
 
@@ -68,6 +70,8 @@ pub struct WifiTxRuntimePolicy {
     he_bss_color: u8,
     /// Parameter tables by VIF; contention belongs to the four AC queues.
     edca: [EdcaParameterSet; 2],
+    /// Each interface's policies, from the set it installed.
+    policies: [EdcaPolicies; 2],
     queues: EdcaQueues,
     heads: [Option<VifRole>; 4],
 }
@@ -79,6 +83,7 @@ impl WifiTxRuntimePolicy {
             ht_ampdu: HtPeerAmpduParameters::from_capability_byte(0),
             he_bss_color: 0,
             edca: [EdcaParameterSet::STANDARD_DEFAULT; 2],
+            policies: [EdcaPolicies::STANDARD_DEFAULT; 2],
             queues: EdcaQueues::standard_defaults(),
             heads: [None; 4],
         }
@@ -143,10 +148,13 @@ impl WifiTxRuntimePolicy {
         role: VifRole,
         parameters: EdcaParameterSet,
     ) -> Result<(), EdcaParametersError> {
-        for category in WmmAccessCategory::ALL {
-            EdcaAccessPolicy::from_edca(parameters.access_category(category))?;
-        }
+        let policies = EdcaPolicies::from_edca(parameters)?;
         *self.edca_mut(role) = parameters;
+        let [station, access_point] = &mut self.policies;
+        *(match role {
+            VifRole::Station => station,
+            VifRole::AccessPoint => access_point,
+        }) = policies;
         Ok(())
     }
 
@@ -159,10 +167,10 @@ impl WifiTxRuntimePolicy {
     }
 
     pub const fn access_policy(&self, role: VifRole, queue: LegacyTxQueue) -> EdcaAccessPolicy {
-        match EdcaAccessPolicy::from_edca(self.edca(role).access_category(queue.access_category()))
-        {
-            Ok(policy) => policy,
-            Err(_) => panic!("installed EDCA was validated"),
+        let [station, access_point] = &self.policies;
+        match role {
+            VifRole::Station => station.access_policy(queue),
+            VifRole::AccessPoint => access_point.access_policy(queue),
         }
     }
 
