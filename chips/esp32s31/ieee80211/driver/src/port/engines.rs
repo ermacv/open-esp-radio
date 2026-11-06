@@ -1952,7 +1952,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             Poll::Ready(Err(_)) => unconfirmed(self, StopCause::Device),
             Poll::Pending if expired => unconfirmed(self, StopCause::Deadline),
-            Poll::Pending => Poll::Pending,
+            Poll::Pending => {
+                // The device may have asked to look again before the bound.
+                self.recompute_deadline();
+                Poll::Pending
+            }
         }
     }
 
