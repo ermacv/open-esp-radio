@@ -369,6 +369,11 @@ impl<'registers> WifiMacHal<'registers> {
         self.configure_role_receive_policy(MacRoleReceivePolicy::Station { bssid, mode });
     }
 
+    /// Apply the scan's station policy: Mode2 without the unicast BSSID check.
+    pub fn configure_station_scan_policy(&mut self, bssid: [u8; 6]) {
+        self.pac_mut().apply_sta_scan_policy(bssid);
+    }
+
     pub fn configure_access_point_receive_policy(&mut self, address: [u8; 6]) {
         self.configure_role_receive_policy(MacRoleReceivePolicy::AccessPoint { address });
     }

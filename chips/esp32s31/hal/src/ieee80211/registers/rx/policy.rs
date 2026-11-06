@@ -387,6 +387,28 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
     }
 
+    /// Apply the scan's station policy: Mode2, then no unicast BSSID check,
+    /// so a Probe Response addressed to the station reaches DMA though its
+    /// BSSID is none the station holds. Connected stations keep the check.
+    ///
+    /// SOURCE: `libnet80211.a[ieee80211_scan.o]::scan_start_handler` calls
+    /// `wifi_set_rx_policy(3)`, whose jump-table case runs
+    /// `ic_set_rx_policy(0, 2, 1, 1)` and
+    /// `ic_set_rx_policy_ubssid_check(0, false)`; `libpp.a`
+    /// `hal_mac_set_rxq_policy` then clears the receive check, then the dump
+    /// check, as two ordered RMWs. A stand run confirmed the Probe Response
+    /// reaches DMA only with the dump check clear.
+    pub fn apply_sta_scan_policy(&mut self, bssid_address: [u8; 6]) {
+        self.apply_sta_policy_six(bssid_address, MacStaPolicyMode::Mode2);
+        let filters = &mut self.mac.wifi_mac_rx_filter;
+        filters.modify_policy(STATION, |w| {
+            w.set_receive_unicast_check_bssid(false);
+        });
+        filters.modify_policy(STATION, |w| {
+            w.set_dump_unicast_check_bssid(false);
+        });
+    }
+
     /// Activate the exact first-interface SoftAP receive policy.
     ///
     /// SOURCE: complete `libnet80211.a::wifi_set_rx_policy`, case eight,

@@ -50,6 +50,7 @@ const TIMEOUT: u64 = 250_000;
 enum StationPolicy {
     Link([u8; 6]),
     OtherBss([u8; 6]),
+    Scan,
 }
 
 /// The hardware index of the best-effort queue, where the helpers' attempts
@@ -356,6 +357,12 @@ impl StaLinkRxPolicyHardware for Hardware {
 impl StaEspNowRxPolicyHardware for Hardware {
     fn apply_sta_esp_now_policy(&mut self, bssid: [u8; 6]) {
         self.station_policy = Some(StationPolicy::OtherBss(bssid));
+    }
+}
+
+impl StaScanRxPolicyHardware for Hardware {
+    fn apply_sta_scan_policy(&mut self) {
+        self.station_policy = Some(StationPolicy::Scan);
     }
 }
 
@@ -2100,11 +2107,12 @@ fn receive_filters_map_onto_the_smallest_superset_policy() {
                 Some(BSSID),
                 StationPolicy::OtherBss(BSSID),
             ),
-            // Scanning outside a BSS matches the broadcast BSSID.
+            // Scanning outside a BSS has its own policy; a connected
+            // station's background scan above keeps its BSSID's.
             (
                 ReceiveFilter::OTHER_BSS_MANAGEMENT,
                 None,
-                StationPolicy::OtherBss([0xff; 6]),
+                StationPolicy::Scan,
             ),
         ] {
             core.configure_checked_vif(
@@ -2148,10 +2156,7 @@ fn receive_filters_map_onto_the_smallest_superset_policy() {
                 Err(UnsupportedVif)
             );
         }
-        assert_eq!(
-            hardware.station_policy,
-            Some(StationPolicy::OtherBss([0xff; 6]))
-        );
+        assert_eq!(hardware.station_policy, Some(StationPolicy::Scan));
         assert_eq!(hardware.access_point_policy, Some(ACCESS_POINT));
 
         // No receive filter closes the role's context.

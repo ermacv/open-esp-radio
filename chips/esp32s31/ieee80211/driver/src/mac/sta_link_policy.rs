@@ -14,6 +14,12 @@ pub trait StaEspNowRxPolicyHardware {
     fn apply_sta_esp_now_policy(&mut self, bssid: [u8; 6]);
 }
 
+/// Hardware owner capable of a scan's reception outside a BSS: every BSS's
+/// management and the unicast frames addressed to the station.
+pub trait StaScanRxPolicyHardware {
+    fn apply_sta_scan_policy(&mut self);
+}
+
 /// Read-only PHY observation used by the STA layer to complete peer policy.
 pub trait StaNoiseFloorHardware {
     fn read_noise_floor_dbm(&self) -> i8;
@@ -35,6 +41,16 @@ impl StaEspNowRxPolicyHardware for WifiMacHal<'_> {
     }
 }
 
+impl StaScanRxPolicyHardware for WifiMacHal<'_> {
+    fn apply_sta_scan_policy(&mut self) {
+        let bssid = oer_protocols_ieee80211_wire::management::BROADCAST_ADDRESS;
+        // As ESP-NOW's: the normal transition clears queue three's
+        // AUTOACK_DISABLE bit first.
+        self.configure_station_receive_policy(bssid);
+        self.configure_station_scan_policy(bssid);
+    }
+}
+
 impl StaNoiseFloorHardware for WifiMacHal<'_> {
     fn read_noise_floor_dbm(&self) -> i8 {
         self.read_noise_floor_dbm()
@@ -50,6 +66,12 @@ impl StaLinkRxPolicyHardware for RadioAccess {
 impl StaEspNowRxPolicyHardware for RadioAccess {
     fn apply_sta_esp_now_policy(&mut self, bssid: [u8; 6]) {
         self.wifi_mac_hal().apply_sta_esp_now_policy(bssid);
+    }
+}
+
+impl StaScanRxPolicyHardware for RadioAccess {
+    fn apply_sta_scan_policy(&mut self) {
+        StaScanRxPolicyHardware::apply_sta_scan_policy(&mut self.wifi_mac_hal());
     }
 }
 
