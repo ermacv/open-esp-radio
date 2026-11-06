@@ -29,11 +29,12 @@ pub(super) struct Pending<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O
     pub protection: Protection,
     pub power: TxPower,
     pub coex: TxOperation,
-    pub stage: usize,
-    pub stage_tries: u8,
-    pub transmissions: u16,
-    pub publications: u16,
-    pub air_rate: Option<PhyRate>,
+    /// The transmissions left at the plan's first stage after this one.
+    pub tries_left: u8,
+    /// Whether this attempt was published before.
+    pub published: bool,
+    /// What it has put on the air.
+    pub air: Option<Air>,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_, Id, D, B, O> {
     fn role(&self) -> VifRole {
@@ -46,11 +47,38 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
     fn admission(&self) -> Option<Instant> {
         self.operation.payload().buffer.admission
     }
-    fn air(&self) -> Option<Air> {
-        Some(Air {
-            transmissions: core::num::NonZeroU16::new(self.transmissions)?,
-            rate: self.air_rate?,
-        })
+    /// One more transmission went out at `rate`. A plan bounds them, and the
+    /// bound fits the count.
+    fn transmitted(&mut self, rate: PhyRate) -> Air {
+        const {
+            if RETRY_STAGES * (u8::MAX as usize) > u16::MAX as usize {
+                panic!("a retry plan's transmissions fit their count");
+            }
+        }
+        let transmissions = self.air.map_or(core::num::NonZeroU16::MIN, |air| {
+            air.transmissions.saturating_add(1)
+        });
+        let air = Air {
+            transmissions,
+            rate,
+        };
+        self.air = Some(air);
+        air
+    }
+    /// Spend one transmission of the plan: whether any is left.
+    fn spend(&mut self) -> bool {
+        if let Some(left) = self.tries_left.checked_sub(1) {
+            self.tries_left = left;
+            return true;
+        }
+        match self.plan.after_first() {
+            Some(rest) => {
+                self.tries_left = rest.first().transmissions.get().saturating_sub(1);
+                self.plan = rest;
+                true
+            }
+            None => false,
+        }
     }
 }
 pub(super) struct Completion<'id, Id: SlotIdentity, const B: usize> {
@@ -348,7 +376,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         pending: Pending<'id, Id, D, B, O>,
         outcome: SingleOutcome<Ack, Infallible>,
     ) {
-        if pending.publications != 0 {
+        if pending.published {
             core_views::reset_contention::<Id, D, B>(
                 self.core.view(),
                 pending.role(),
@@ -430,6 +458,24 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             now.saturating_duration_since(at) >= env.lifetime(vif(pending.role()), pending.category)
         })
     }
+    /// A transmission ended without delivery: `end` if the plan is spent, a
+    /// withdrawal behind a stop or a gate, otherwise `None` to go again.
+    fn next_try(
+        &self,
+        pending: &mut Pending<'id, Id, D, B, O>,
+        stopping: bool,
+        end: SingleEnd<Ack, Infallible>,
+    ) -> Option<SingleOutcome<Ack, Infallible>> {
+        if !pending.spend() {
+            Some(TxOutcome::Ended(end))
+        } else if stopping {
+            Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
+        } else if self.closing.is_some() || self.closed {
+            Some(TxOutcome::Withdrawn(WithdrawCause::GateClosed))
+        } else {
+            None
+        }
+    }
     pub(super) fn collect(
         &mut self,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
@@ -473,84 +519,44 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             {
                 return Err(Fault::ReturnRefused { queue: at });
             }
-            let sent = matches!(
-                completion.end,
-                PublicationEnd::Completed {
-                    status: TxStatus::Success | TxStatus::AckTimeout,
-                    ..
-                }
-            );
-            if sent {
-                pending.transmissions = pending
-                    .transmissions
-                    .checked_add(1)
-                    .ok_or(Fault::AttemptCounter { queue: at })?;
-                pending.air_rate = Some(completion.rate);
-            }
+            use crate::ordinary_tx::OrdinaryTxFailure as Failure;
+            let rate = completion.rate;
             let outcome = match completion.end {
                 PublicationEnd::Expired { msdus } => Some(TxOutcome::Expired { msdus }),
                 PublicationEnd::Withdrawn => Some(TxOutcome::Withdrawn(WithdrawCause::Disabled)),
-                PublicationEnd::TimedOut => Some(TxOutcome::Indeterminate(
-                    IndeterminateCause::HardwareTimeout,
-                )),
-                PublicationEnd::Completed {
-                    status: TxStatus::KeyRefused,
-                    ..
-                } => Some(TxOutcome::Indeterminate(IndeterminateCause::KeyRefused)),
-                PublicationEnd::Completed {
-                    status: TxStatus::Success,
+                PublicationEnd::TimedOut | PublicationEnd::Undelivered(Failure::TimedOut) => Some(
+                    TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
+                ),
+                PublicationEnd::Undelivered(Failure::KeyRefused) => {
+                    Some(TxOutcome::Indeterminate(IndeterminateCause::KeyRefused))
+                }
+                PublicationEnd::Delivered {
+                    response,
                     ack_snr_db,
-                    block_ack,
-                } => {
-                    let response = match pending.operation.payload().layout.kind() {
-                        MpduKind::Group | MpduKind::IndividualNoAck => SingleResponse::Unsolicited,
-                        MpduKind::Individual => SingleResponse::Ack(Ack::from_sample(ack_snr_db)),
-                        MpduKind::BlockAckRequest => SingleResponse::BlockAck {
-                            report: block_ack.ok_or(Fault::BlockAckReportMissing { queue: at })?,
+                } => Some(TxOutcome::Ended(SingleEnd::Delivered {
+                    air: pending.transmitted(rate),
+                    response: match response {
+                        PublicationResponse::Unsolicited => SingleResponse::Unsolicited,
+                        PublicationResponse::Ack => {
+                            SingleResponse::Ack(Ack::from_sample(ack_snr_db))
+                        }
+                        PublicationResponse::BlockAck(report) => SingleResponse::BlockAck {
+                            report,
                             ack: Ack::from_sample(ack_snr_db),
                         },
-                    };
-                    Some(TxOutcome::Ended(SingleEnd::Delivered {
-                        air: pending.air().ok_or(Fault::AirMissing { queue: at })?,
-                        response,
-                    }))
+                    },
+                })),
+                PublicationEnd::Undelivered(Failure::AckTimeout) => {
+                    let air = pending.transmitted(rate);
+                    self.next_try(&mut pending, stopping, SingleEnd::AckTimeout(air))
                 }
-                end => {
-                    pending.stage_tries = pending
-                        .stage_tries
-                        .checked_add(1)
-                        .ok_or(Fault::AttemptCounter { queue: at })?;
-                    let stage = pending
-                        .plan
-                        .stages()
-                        .nth(pending.stage)
-                        .ok_or(Fault::StageMissing { queue: at })?;
-                    if pending.stage_tries >= stage.transmissions.get() {
-                        pending.stage += 1;
-                        pending.stage_tries = 0;
-                    }
-                    if pending.plan.stages().nth(pending.stage).is_none() {
-                        Some(TxOutcome::Ended(match end {
-                            PublicationEnd::Collision
-                            | PublicationEnd::Completed {
-                                status: TxStatus::Collision,
-                                ..
-                            } => SingleEnd::ContentionLimit(pending.air()),
-                            PublicationEnd::Completed {
-                                status: TxStatus::CtsTimeout,
-                                ..
-                            } => SingleEnd::CtsTimeout(pending.air()),
-                            _ => SingleEnd::AckTimeout(
-                                pending.air().ok_or(Fault::AirMissing { queue: at })?,
-                            ),
-                        }))
-                    } else if stopping {
-                        Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
-                    } else if self.closing.is_some() || self.closed {
-                        Some(TxOutcome::Withdrawn(WithdrawCause::GateClosed))
-                    } else {
-                        None
-                    }
+                PublicationEnd::Undelivered(Failure::CtsTimeout) => {
+                    let end = SingleEnd::CtsTimeout(pending.air);
+                    self.next_try(&mut pending, stopping, end)
+                }
+                PublicationEnd::Collision | PublicationEnd::Undelivered(Failure::Collision) => {
+                    let end = SingleEnd::ContentionLimit(pending.air);
+                    self.next_try(&mut pending, stopping, end)
                 }
             };
             if let Some(outcome) = outcome {
@@ -694,14 +700,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     ) -> Result<(), Fault> {
         let at = index as u8;
         let refused = |step| Fault::Publish { queue: at, step };
-        let stage = pending
-            .plan
-            .stages()
-            .nth(pending.stage)
-            .ok_or(Fault::StageMissing { queue: at })?;
+        let stage = pending.plan.first();
         let (rate, protection) = (
             stage.rate,
-            if pending.publications == 0 {
+            if !pending.published {
                 pending.protection
             } else {
                 stage.protection
@@ -850,10 +852,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         };
         mpdu.published = true;
-        pending.publications = pending
-            .publications
-            .checked_add(1)
-            .ok_or(refused(PublishStep::Count))?;
+        pending.published = true;
         #[cfg(all(oer_trace, oer_debug_control))]
         let publication = super::trace::Publication {
             ticket: pending.operation.ticket().index(),
@@ -1337,8 +1336,6 @@ fn owner_free_refusal<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
         PublishStep::DescriptorBusy
     } else if !queue {
         PublishStep::Queue
-    } else if pending.publications.checked_add(1).is_none() {
-        PublishStep::Count
     } else {
         return None;
     };

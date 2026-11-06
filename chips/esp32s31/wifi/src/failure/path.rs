@@ -90,12 +90,6 @@ impl DiagnosticPath for BackendFault {
             }
             Self::DescriptorMissing { queue } => queue_fault(path, "DescriptorMissing", *queue),
             Self::ReturnRefused { queue } => queue_fault(path, "ReturnRefused", *queue),
-            Self::BlockAckReportMissing { queue } => {
-                queue_fault(path, "BlockAckReportMissing", *queue);
-            }
-            Self::AirMissing { queue } => queue_fault(path, "AirMissing", *queue),
-            Self::AttemptCounter { queue } => queue_fault(path, "AttemptCounter", *queue),
-            Self::StageMissing { queue } => queue_fault(path, "StageMissing", *queue),
             Self::QueueFull { queue } => queue_fault(path, "QueueFull", *queue),
             Self::ReceiveOverflow => path.name("ReceiveOverflow"),
             Self::ReceiveRange => path.name("ReceiveRange"),
@@ -228,7 +222,6 @@ fn publish_step(step: &PublishStep) -> &'static str {
         PublishStep::HeaderBuffer => "HeaderBuffer",
         PublishStep::CcmpHeader => "CcmpHeader",
         PublishStep::Values => "Values",
-        PublishStep::Count => "Count",
         PublishStep::Queue => "Queue",
     }
 }

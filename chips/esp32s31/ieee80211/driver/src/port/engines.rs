@@ -1626,6 +1626,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             buffer.admission = Some(now);
         }
         let index = queue(attempt.access_category);
+        let tries_left = attempt
+            .execution
+            .plan
+            .first()
+            .transmissions
+            .get()
+            .saturating_sub(1);
         let pending = Pending {
             operation: attempt.operation,
             plan: attempt.execution.plan,
@@ -1633,11 +1640,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             protection: attempt.protection,
             power: attempt.power.get(),
             coex: attempt.coex_operation,
-            stage: 0,
-            stage_tries: 0,
-            transmissions: 0,
-            publications: 0,
-            air_rate: None,
+            tries_left,
+            published: false,
+            air: None,
         };
         let Some(queued) = self.driver.queues.get_mut(index) else {
             // The attempt stays in custody with the quarantine.

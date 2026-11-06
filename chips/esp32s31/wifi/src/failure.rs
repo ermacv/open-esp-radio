@@ -44,22 +44,6 @@ pub enum BackendFault {
     ReturnRefused {
         queue: u8,
     },
-    /// A delivered BlockAckReq came without its BlockAck report.
-    BlockAckReportMissing {
-        queue: u8,
-    },
-    /// An ended MPDU recorded no transmission.
-    AirMissing {
-        queue: u8,
-    },
-    /// An attempt's transmission or retry count overflowed.
-    AttemptCounter {
-        queue: u8,
-    },
-    /// An attempt's retry plan had no stage at its position.
-    StageMissing {
-        queue: u8,
-    },
     /// A queue held more attempts than there are tickets.
     QueueFull {
         queue: u8,
@@ -113,7 +97,6 @@ pub enum PublishStep {
     HeaderBuffer,
     CcmpHeader,
     Values,
-    Count,
     Queue,
 }
 /// The key operation that found no key.

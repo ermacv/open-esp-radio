@@ -383,26 +383,6 @@ pub enum Fault {
         /// The hardware queue.
         queue: u8,
     },
-    /// A delivered BlockAckReq came without its BlockAck report.
-    BlockAckReportMissing {
-        /// The hardware queue.
-        queue: u8,
-    },
-    /// An ended MPDU recorded no transmission.
-    AirMissing {
-        /// The hardware queue.
-        queue: u8,
-    },
-    /// An attempt's transmission or retry count overflowed.
-    AttemptCounter {
-        /// The hardware queue.
-        queue: u8,
-    },
-    /// An attempt's retry plan has no stage at its position.
-    StageMissing {
-        /// The hardware queue.
-        queue: u8,
-    },
     /// A queue held more attempts than there are tickets.
     QueueFull {
         /// The hardware queue.
@@ -511,8 +491,6 @@ pub enum PublishStep {
     CcmpHeader,
     /// The MPDU's values were refused.
     Values,
-    /// The attempt's publication count overflowed.
-    Count,
     /// The queue's token was not in its place.
     Queue,
 }
