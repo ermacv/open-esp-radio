@@ -34,9 +34,15 @@ system these rules serve.
   success. A refusal for temporary unavailability exists only where it is
   needed and proven, and it names what comes next: a release event, a
   registered waker, a retry time, or a final refusal returning its owners. A
-  permanent fault is never reported as temporary. A removed panic leaves its
-  owners kept, the operation's outcome correct and progress assured; the panic
-  count is a secondary measure.
+  permanent fault is never reported as temporary. A status may accompany a
+  result or keep a diagnostic such as the last fault; it never replaces a
+  result. Every API names its acceptance point: before it a refusal, after it
+  an outcome or a fault. A confirmed result never becomes unknown through a
+  later failure, and a side effect of unknown result is not repeated
+  automatically. A removed panic leaves its owners kept, the operation's
+  outcome correct and progress assured; the panic count is a secondary
+  measure. [Operation results](docs/architecture.md#operation-results) is the
+  decision procedure.
 - **Panics and unsafe.** A change introduces no new runtime panic sites or
   `unsafe` code. Sans-IO crates (the layer in `docs/architecture.md`)
   start with `#![forbid(unsafe_code)]` and contain no runtime panic paths:
