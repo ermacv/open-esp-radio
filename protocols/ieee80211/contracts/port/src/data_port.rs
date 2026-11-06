@@ -526,8 +526,10 @@ pub trait DataPort<'id> {
     ) -> Poll<Result<(), StopUnconfirmed>>;
 
     /// Take back the fault the port last reported, so that a stop can run
-    /// and return the owners it holds: whether it can. A port that holds an
-    /// owner no stop can return keeps its fault.
+    /// and return the owners it holds: whether it can. From then on the port
+    /// admits and publishes nothing new, as a stopping port does, however
+    /// late the stop comes; only its service of what is out goes on. A port
+    /// that holds an owner no stop can return keeps its fault.
     fn recover_for_stop(&mut self) -> bool {
         false
     }

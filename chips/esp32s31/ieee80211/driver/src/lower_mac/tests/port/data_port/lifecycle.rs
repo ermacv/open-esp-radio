@@ -630,8 +630,22 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         );
 
         assert!(fixture.port.recover_for_stop());
-        fixture.stop();
+        // The key is still missing: the next service withdraws the MPDU
+        // instead of publishing it, so the refusal cannot recur.
+        let _ = fixture.turn();
+        assert_eq!(fixture.port.fault(), None);
         assert_eq!(fixture.take_completed(), 1, "the MPDU came back withdrawn");
+        let attempt = fixture.mpdu(None).expect("attempt");
+        let now = fixture.now();
+        assert_eq!(
+            fixture.port.submit(attempt, now, &mut fixture.outbox).err(),
+            Some(oer_protocols_ieee80211_contracts_port::SubmitRefusal::Stopping)
+        );
+        assert_eq!(fixture.take_completed(), 1, "a new one is refused back");
+        // The stop's bound starts with the stop, however late it comes.
+        fixture.advance(crate::port::COMMAND_BOUND);
+        fixture.advance(crate::port::COMMAND_BOUND);
+        fixture.stop();
         assert_eq!(fixture.port.fault(), None);
 
         let mut second = reinstall(fixture, installations)
