@@ -204,7 +204,7 @@ fn dhcp(cx: &mut Cx<'_>) -> Result<(), Failure> {
         let status = status(cx)?;
         if let Some(ipv4) = status.ipv4 {
             println!(
-                "connect: address after {} ms",
+                "connect: address {} ms into the dhcp case",
                 started.elapsed().as_millis()
             );
             break (status.address, ipv4);
