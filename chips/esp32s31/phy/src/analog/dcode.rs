@@ -24,8 +24,11 @@ use crate::analog::{
         RfpllFrequencyRequest, RfpllFrequencyTransition,
     },
 };
+use crate::ordinal::Ordinal;
 
 const CHANNELS: [u8; 4] = [1, 5, 10, 14];
+
+type Channel = Ordinal<{ CHANNELS.len() }>;
 
 const CKGEN_WRITES: [(Field, u8); 4] = [
     (
@@ -83,27 +86,30 @@ pub enum PhyDcodeTransitionError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PhyDcodeStep {
     Rfpll {
-        calibration_index: u8,
+        calibration_index: Channel,
         transition: RfpllFrequencyTransition,
     },
     ResetCkgen {
-        calibration_index: u8,
-        write_index: u8,
+        calibration_index: Channel,
+        write_index: Ordinal<{ CKGEN_WRITES.len() }>,
     },
     ReadLow {
-        calibration_index: u8,
+        calibration_index: Channel,
     },
     ReadHigh {
-        calibration_index: u8,
+        calibration_index: Channel,
     },
     Complete(PhyDcodeOutcome),
     Failed(PhyDcodeFailure),
 }
 
-const fn rfpll_transition(calibration_index: u8, crystal_selector: u8) -> RfpllFrequencyTransition {
+const fn rfpll_transition(
+    calibration_index: Channel,
+    crystal_selector: u8,
+) -> RfpllFrequencyTransition {
     RfpllFrequencyTransition::channel(RfpllFrequencyRequest {
         crystal_selector,
-        frequency_code: CHANNELS[calibration_index as usize] as u16,
+        frequency_code: calibration_index.at(&CHANNELS) as u16,
         offset: 0,
     })
 }
@@ -111,7 +117,8 @@ const fn rfpll_transition(calibration_index: u8, crystal_selector: u8) -> RfpllF
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyDcodeTransition {
     parameters: PhyDcodeParameters,
-    codes: [u8; 8],
+    /// The low and high code of each channel.
+    codes: [[u8; 2]; CHANNELS.len()],
     step: PhyDcodeStep,
 }
 
@@ -119,10 +126,10 @@ impl PhyDcodeTransition {
     pub const fn new(parameters: PhyDcodeParameters) -> Self {
         Self {
             parameters,
-            codes: [0; 8],
+            codes: [[0; 2]; CHANNELS.len()],
             step: PhyDcodeStep::Rfpll {
-                calibration_index: 0,
-                transition: rfpll_transition(0, parameters.crystal_selector),
+                calibration_index: Ordinal::FIRST,
+                transition: rfpll_transition(Ordinal::FIRST, parameters.crystal_selector),
             },
         }
     }
@@ -131,7 +138,7 @@ impl PhyDcodeTransition {
         match &self.step {
             PhyDcodeStep::Rfpll { transition, .. } => PhyDcodeAction::Rfpll(transition.action()),
             PhyDcodeStep::ResetCkgen { write_index, .. } => {
-                let (field, value) = CKGEN_WRITES[*write_index as usize];
+                let (field, value) = write_index.at(&CKGEN_WRITES);
                 PhyDcodeAction::WriteMasked { field, value }
             }
             PhyDcodeStep::ReadLow { .. } => PhyDcodeAction::ReadMasked {
@@ -166,12 +173,12 @@ impl PhyDcodeTransition {
                     RfpllFrequencyAction::Complete(_) => {
                         self.step = PhyDcodeStep::ResetCkgen {
                             calibration_index: *calibration_index,
-                            write_index: 0,
+                            write_index: Ordinal::FIRST,
                         };
                     }
                     RfpllFrequencyAction::Failed(failure) => {
                         self.step = PhyDcodeStep::Failed(PhyDcodeFailure::Rfpll {
-                            calibration_index: *calibration_index,
+                            calibration_index: calibration_index.get(),
                             failure,
                         });
                     }
@@ -185,16 +192,17 @@ impl PhyDcodeTransition {
                 },
                 PhyDcodeCompletion::MaskedWrite { field, value },
             ) => {
-                let (expected_field, expected_value) = CKGEN_WRITES[*write_index as usize];
+                let (expected_field, expected_value) = write_index.at(&CKGEN_WRITES);
                 if field != expected_field || value != expected_value {
                     return Err(PhyDcodeTransitionError::WrongCompletion);
                 }
-                if *write_index + 1 == CKGEN_WRITES.len() as u8 {
-                    self.step = PhyDcodeStep::ReadLow {
-                        calibration_index: *calibration_index,
-                    };
-                } else {
-                    *write_index += 1;
+                match write_index.next() {
+                    Some(next) => *write_index = next,
+                    None => {
+                        self.step = PhyDcodeStep::ReadLow {
+                            calibration_index: *calibration_index,
+                        };
+                    }
                 }
             }
             (
@@ -204,7 +212,8 @@ impl PhyDcodeTransition {
                     value,
                 },
             ) if value <= 0x3f => {
-                self.codes[*calibration_index as usize * 2] = value;
+                let [low, _] = calibration_index.slot(&mut self.codes);
+                *low = value;
                 self.step = PhyDcodeStep::ReadHigh {
                     calibration_index: *calibration_index,
                 };
@@ -216,16 +225,19 @@ impl PhyDcodeTransition {
                     value,
                 },
             ) if value <= 0x3f => {
-                self.codes[*calibration_index as usize * 2 + 1] = value;
-                if *calibration_index + 1 == CHANNELS.len() as u8 {
-                    self.step = PhyDcodeStep::Complete(PhyDcodeOutcome { codes: self.codes });
-                } else {
-                    let next = *calibration_index + 1;
-                    self.step = PhyDcodeStep::Rfpll {
-                        calibration_index: next,
-                        transition: rfpll_transition(next, self.parameters.crystal_selector),
-                    };
-                }
+                let [_, high] = calibration_index.slot(&mut self.codes);
+                *high = value;
+                let Some(next) = calibration_index.next() else {
+                    let [[a, b], [c, d], [e, f], [g, h]] = self.codes;
+                    self.step = PhyDcodeStep::Complete(PhyDcodeOutcome {
+                        codes: [a, b, c, d, e, f, g, h],
+                    });
+                    return Ok(());
+                };
+                self.step = PhyDcodeStep::Rfpll {
+                    calibration_index: next,
+                    transition: rfpll_transition(next, self.parameters.crystal_selector),
+                };
             }
             (PhyDcodeStep::Complete(_), _) | (PhyDcodeStep::Failed(_), _) => {
                 return Err(PhyDcodeTransitionError::AlreadyComplete);

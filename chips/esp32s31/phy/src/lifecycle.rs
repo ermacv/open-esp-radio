@@ -129,19 +129,21 @@ pub enum PhyRfWakeTransitionError {
 /// Source-owned parent ordering for one retained RF wake transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyRfWakeTransition {
-    index: u8,
+    /// The next operation; `None` once all ran.
+    next: Option<crate::ordinal::Ordinal<{ PHY_RF_WAKE_OPERATIONS.len() }>>,
 }
 
 impl PhyRfWakeTransition {
     pub const fn new() -> Self {
-        Self { index: 0 }
+        Self {
+            next: Some(crate::ordinal::Ordinal::FIRST),
+        }
     }
 
     pub const fn action(self) -> PhyRfWakeAction {
-        if self.index as usize == PHY_RF_WAKE_OPERATIONS.len() {
-            PhyRfWakeAction::Complete(PhyRfWakeOutcome)
-        } else {
-            PhyRfWakeAction::Execute(PHY_RF_WAKE_OPERATIONS[self.index as usize])
+        match self.next {
+            Some(next) => PhyRfWakeAction::Execute(next.at(&PHY_RF_WAKE_OPERATIONS)),
+            None => PhyRfWakeAction::Complete(PhyRfWakeOutcome),
         }
     }
 
@@ -149,13 +151,13 @@ impl PhyRfWakeTransition {
         &mut self,
         completion: PhyRfWakeCompletion,
     ) -> Result<(), PhyRfWakeTransitionError> {
-        let PhyRfWakeAction::Execute(operation) = self.action() else {
+        let Some(next) = self.next else {
             return Err(PhyRfWakeTransitionError::AlreadyComplete);
         };
-        if completion.operation != operation {
+        if completion.operation != next.at(&PHY_RF_WAKE_OPERATIONS) {
             return Err(PhyRfWakeTransitionError::WrongCompletion);
         }
-        self.index += 1;
+        self.next = next.next();
         Ok(())
     }
 }

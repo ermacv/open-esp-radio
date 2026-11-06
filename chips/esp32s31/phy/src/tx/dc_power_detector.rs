@@ -10,6 +10,7 @@
 //! each SAR/PWDET conversion transfers hardware custody to the P2 timer
 //! handler and returns before the search advances.
 
+use crate::ordinal::Ordinal;
 use crate::{
     analog::pbus::PhyPbusForceTest,
     tx::calibration::{
@@ -27,6 +28,8 @@ const MEASUREMENT_CAPACITY: usize = 100;
 const DIRECT_OPERATION_LIMIT: u32 = 100_000;
 const DEFAULT_DCO: [u16; 4] = [0x100; 4];
 const TX_BB_GAIN: [u16; 3] = [0, 0x80, 0x100];
+
+type Row = Ordinal<{ TX_BB_GAIN.len() }>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyTxDcPwdetSearchRequest {
@@ -265,8 +268,15 @@ impl PhyTxDcPwdetSearchTransition {
         Err(PhyTargetPortError::RfOperationLimit)
     }
 
-    const fn component_index(&self) -> usize {
-        2 + self.component as usize
+    /// This component's place in a DCO word: its last two entries.
+    fn component_of(&self, word: [u16; 4]) -> u16 {
+        let [_, _, first, second] = word;
+        if self.component == 0 { first } else { second }
+    }
+
+    fn set_component(&mut self, value: u16) {
+        let [_, _, first, second] = &mut self.working;
+        *(if self.component == 0 { first } else { second }) = value;
     }
 
     const fn dco_transaction(&self, transaction: u8) -> PhyPbusForceTest {
@@ -292,8 +302,8 @@ impl PhyTxDcPwdetSearchTransition {
     }
 
     fn set_component_delta(&mut self, delta: i16) {
-        let index = self.component_index();
-        self.working[index] = self.request.initial[index].wrapping_add(delta as u16);
+        let value = self.component_of(self.request.initial);
+        self.set_component(value.wrapping_add(delta as u16));
     }
 
     fn program(&mut self, kind: MeasurementKind) {
@@ -332,9 +342,15 @@ impl PhyTxDcPwdetSearchTransition {
     }
 
     fn scan_sample(&mut self, sample: u16) {
-        let index = self.sample_count as usize;
-        self.samples[index] = sample;
-        self.sample_count += 1;
+        const {
+            if 2 * SCAN_POINT_LIMIT as usize > MEASUREMENT_CAPACITY {
+                panic!("the samples of both directions fit their array");
+            }
+        }
+        if let Some(place) = self.samples.get_mut(usize::from(self.sample_count)) {
+            *place = sample;
+        }
+        self.sample_count = self.sample_count.saturating_add(1);
         if sample < self.minimum {
             self.minimum = sample;
         }
@@ -362,31 +378,44 @@ impl PhyTxDcPwdetSearchTransition {
     }
 
     fn finish_component(&mut self) {
-        let count = self.sample_count as usize;
+        let count = usize::from(self.sample_count).min(MEASUREMENT_CAPACITY);
         let boundary = self.boundary as usize;
-        let mut index = 0;
-        while index != count {
-            if index == 0 || index == boundary + 1 {
-                if index + 1 < count && self.samples[index + 1] < self.samples[index] {
-                    self.samples[index] = self.samples[index + 1];
-                }
-            } else if self.samples[index] < self.samples[index - 1] {
-                self.samples[index] = self.samples[index - 1];
+        let samples = self.samples.get_mut(..count).unwrap_or_default();
+        for index in 0..count {
+            let neighbour = if index == 0 || index == boundary + 1 {
+                samples.get(index + 1).copied()
+            } else {
+                index
+                    .checked_sub(1)
+                    .and_then(|before| samples.get(before).copied())
+            };
+            let head = index == 0 || index == boundary + 1;
+            if let (Some(neighbour), Some(place)) = (neighbour, samples.get_mut(index))
+                && (if head {
+                    neighbour < *place
+                } else {
+                    *place < neighbour
+                })
+            {
+                *place = neighbour;
             }
-            index += 1;
         }
 
         let first = self.samples[0];
-        let first_negative = self.samples[(boundary + 1).min(count - 1)];
+        let first_negative = self
+            .samples
+            .get(..count)
+            .and_then(|samples| samples.get(boundary + 1).or(samples.last()))
+            .copied()
+            .unwrap_or(first);
         let threshold = first.abs_diff(first_negative).max(20);
         let minimum = first.min(first_negative);
-        let base = self.request.initial[self.component_index()] as i16;
+        let base = self.component_of(self.request.initial) as i16;
         let mut upper = base.wrapping_add(self.positive_step as i16);
         let low_bound = base.wrapping_sub(self.negative_step as i16);
         let mut lower = low_bound;
-        index = 0;
-        while index != count {
-            if self.samples[index] <= minimum.wrapping_add(threshold) {
+        for (index, sample) in self.samples.iter().take(count).enumerate() {
+            if *sample <= minimum.wrapping_add(threshold) {
                 let mut candidate = base
                     .wrapping_add(boundary as i16)
                     .wrapping_add(1)
@@ -400,11 +429,9 @@ impl PhyTxDcPwdetSearchTransition {
                 }
                 lower = candidate;
             }
-            index += 1;
         }
         let result = upper.wrapping_add(lower).wrapping_add(1) / 2;
-        let component_index = self.component_index();
-        self.working[component_index] = result as u16;
+        self.set_component(result as u16);
 
         self.component += 1;
         if self.component == COMPONENT_COUNT {
@@ -695,8 +722,8 @@ pub struct PhyTxDcPwdetTransition {
     parameters: PhyTxDcPwdetParameters,
     mode: PhyTxDcPwdetMode,
     step: RootStep,
-    dco: [[u16; 4]; 3],
-    row: u8,
+    dco: [[u16; 4]; TX_BB_GAIN.len()],
+    row: Row,
     total_measurements: u16,
 }
 
@@ -770,7 +797,7 @@ impl PhyTxDcPwdetTransition {
             mode,
             step: RootStep::Prepare,
             dco: parameters.dco,
-            row: 0,
+            row: Ordinal::FIRST,
             total_measurements: 0,
         }
     }
@@ -873,10 +900,12 @@ impl PhyTxDcPwdetTransition {
         }
         if terminal == RootTerminal::Complete {
             oer_chips_esp32s31_hal::phy::power_detector::configure_txdc_sar(physical.hardware());
-            for row in 0..3_u8 {
+            let mut next_row = Some(Row::FIRST);
+            while let Some(row) = next_row {
+                next_row = row.next();
                 for transaction in [
-                    PhyPbusForceTest::new(5, 1, if row == 2 { 0x1e7 } else { 0x1ef }),
-                    PhyPbusForceTest::new(1, 2, TX_BB_GAIN[row as usize]),
+                    PhyPbusForceTest::new(5, 1, if row.next().is_none() { 0x1e7 } else { 0x1ef }),
+                    PhyPbusForceTest::new(1, 2, row.at(&TX_BB_GAIN)),
                 ] {
                     if !force_pbus_direct(clock, physical.hardware(), transaction) {
                         terminal =
@@ -888,8 +917,8 @@ impl PhyTxDcPwdetTransition {
                     break;
                 }
                 let mut search = PhyTxDcPwdetSearchTransition::new(PhyTxDcPwdetSearchRequest {
-                    identity: row,
-                    initial: self.dco[row as usize],
+                    identity: row.get(),
+                    initial: row.at(&self.dco),
                     clear_tone_after_ready: self.parameters.clear_tone_after_ready,
                 });
                 match search
@@ -897,7 +926,7 @@ impl PhyTxDcPwdetTransition {
                     .await?
                 {
                     Ok(outcome) => {
-                        self.dco[row as usize] = outcome.dco;
+                        *row.slot(&mut self.dco) = outcome.dco;
                         self.total_measurements = self
                             .total_measurements
                             .wrapping_add(u16::from(outcome.measurements));
@@ -977,13 +1006,15 @@ impl PhyTxDcPwdetTransition {
             RootStep::ForceTxPath => PhyTxDcPwdetAction::ForcePbus(PhyPbusForceTest::new(
                 5,
                 1,
-                if self.row == 2 { 0x1e7 } else { 0x1ef },
+                if self.row.next().is_none() {
+                    0x1e7
+                } else {
+                    0x1ef
+                },
             )),
-            RootStep::Gain => PhyTxDcPwdetAction::ForcePbus(PhyPbusForceTest::new(
-                1,
-                2,
-                TX_BB_GAIN[self.row as usize],
-            )),
+            RootStep::Gain => {
+                PhyTxDcPwdetAction::ForcePbus(PhyPbusForceTest::new(1, 2, self.row.at(&TX_BB_GAIN)))
+            }
             RootStep::Search(ref transition) => PhyTxDcPwdetAction::Search(transition.action()),
             RootStep::CleanupDco { index, .. } => PhyTxDcPwdetAction::ForcePbus(default_dco(index)),
             RootStep::ToneOff(_) => PhyTxDcPwdetAction::ConfigureTone {
@@ -1062,15 +1093,23 @@ impl PhyTxDcPwdetTransition {
                 RootStep::Sar,
             ),
             RootStep::ForceTxPath => (
-                PhyPbusForceTest::new(5, 1, if self.row == 2 { 0x1e7 } else { 0x1ef }),
+                PhyPbusForceTest::new(
+                    5,
+                    1,
+                    if self.row.next().is_none() {
+                        0x1e7
+                    } else {
+                        0x1ef
+                    },
+                ),
                 RootStep::Gain,
             ),
             RootStep::Gain => (
-                PhyPbusForceTest::new(1, 2, TX_BB_GAIN[self.row as usize]),
+                PhyPbusForceTest::new(1, 2, self.row.at(&TX_BB_GAIN)),
                 RootStep::Search(PhyTxDcPwdetSearchTransition::new(
                     PhyTxDcPwdetSearchRequest {
-                        identity: self.row,
-                        initial: self.dco[self.row as usize],
+                        identity: self.row.get(),
+                        initial: self.row.at(&self.dco),
                         clear_tone_after_ready: self.parameters.clear_tone_after_ready,
                     },
                 )),
@@ -1172,15 +1211,16 @@ impl PhyTxDcPwdetTransition {
                 if let Some(failure) = transition.failure() {
                     self.fail(PhyTxDcPwdetFailure::Search(failure));
                 } else if let PhyTxDcPwdetSearchAction::Complete(outcome) = transition.action() {
-                    self.dco[self.row as usize] = outcome.dco;
+                    *self.row.slot(&mut self.dco) = outcome.dco;
                     self.total_measurements = self
                         .total_measurements
                         .wrapping_add(u16::from(outcome.measurements));
-                    self.row += 1;
-                    if self.row == 3 {
-                        self.cleanup(RootTerminal::Complete);
-                    } else {
-                        self.step = RootStep::ForceTxPath;
+                    match self.row.next() {
+                        None => self.cleanup(RootTerminal::Complete),
+                        Some(row) => {
+                            self.row = row;
+                            self.step = RootStep::ForceTxPath;
+                        }
                     }
                 }
             }

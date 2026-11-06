@@ -66,6 +66,7 @@ mod channel;
 mod hardware;
 #[cfg(any(target_arch = "riscv32", test))]
 mod lifecycle;
+mod ordinal;
 mod rx;
 pub mod state;
 pub mod tracking;

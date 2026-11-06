@@ -119,10 +119,10 @@ fn ckgen_and_two_reads_commit_the_final_owned_pair() {
         parameters: PhyDcodeParameters {
             crystal_selector: 0x31,
         },
-        codes: [1, 2, 3, 4, 5, 6, 0, 0],
+        codes: [[1, 2], [3, 4], [5, 6], [0, 0]],
         step: PhyDcodeStep::ResetCkgen {
-            calibration_index: 3,
-            write_index: 0,
+            calibration_index: crate::ordinal::Ordinal::nth(3),
+            write_index: crate::ordinal::Ordinal::FIRST,
         },
     };
 
@@ -158,9 +158,9 @@ fn six_bit_read_validation_fails_closed() {
         parameters: PhyDcodeParameters {
             crystal_selector: 0x31,
         },
-        codes: [0; 8],
+        codes: [[0; 2]; 4],
         step: PhyDcodeStep::ReadLow {
-            calibration_index: 0,
+            calibration_index: crate::ordinal::Ordinal::FIRST,
         },
     };
     let PhyDcodeAction::ReadMasked { field } = transition.action() else {
