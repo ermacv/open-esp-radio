@@ -1123,6 +1123,26 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
 }
 
 #[test]
+fn a_stop_the_device_holds_wakes_at_the_devices_own_settle() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.observed.borrow_mut().hold_stop = true;
+        assert!(fixture.poll_stop_now().is_pending());
+        let _ = fixture.turn();
+        // The device's pause asks to look again soon, as a receive slot
+        // still claimed or a MAC still stopping does.
+        let settle = fixture.now().saturating_add(Duration::from_micros(100));
+        fixture.observed.borrow_mut().rx_continuation = Some(settle);
+        assert!(fixture.poll_stop_now().is_pending());
+        assert_eq!(
+            fixture.port.deadline(),
+            Some(settle),
+            "the port sleeps until the device looks again, not to its bound"
+        );
+    });
+}
+
+#[test]
 fn a_stop_past_its_bound_is_unconfirmed_and_the_port_neither_reinstalls_nor_releases() {
     with_installations(|mut fixture, installations| {
         fixture.start();
