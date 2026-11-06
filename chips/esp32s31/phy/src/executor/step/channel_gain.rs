@@ -25,8 +25,10 @@ impl Cursor {
             self.base = io.channel_gain_base()?;
         }
         let end = (self.next + ENTRIES_PER_POLL).min(32);
-        while self.next < end {
-            let entry = crate::hardware::tx_gain_memory_entry(image, self.base, self.next);
+        while let Some(position) = crate::hardware::TxGainEntry::position(self.next)
+            && self.next < end
+        {
+            let entry = crate::hardware::tx_gain_memory_entry(image, self.base, position);
             io.gain_entry(entry)?;
             self.next += 1;
         }

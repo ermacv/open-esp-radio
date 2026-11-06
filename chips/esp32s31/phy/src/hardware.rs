@@ -101,42 +101,74 @@ pub(crate) fn configure_phy_rx_table(
     enable_phy_agc(registers);
 }
 
+/// An entry of a transmit gain image.
+pub(crate) type TxGainEntry = crate::ordinal::Ordinal<32>;
+
+/// The seed row of a baseband gain, a row of [`tx_gain_seed_rows`].
 #[cfg(any(target_arch = "riscv32", test))]
-pub(crate) const fn tx_baseband_gain_index(gain: u16) -> usize {
-    match gain {
-        0x0080 => 1,
-        0x0100 => 2,
-        0x0020 => 3,
-        0x00a0 => 4,
-        _ => 0,
+pub(crate) const fn tx_baseband_gain_row(gain: u16) -> crate::ordinal::Ordinal<5> {
+    let row = match gain {
+        0x0080 => crate::ordinal::Ordinal::position(1),
+        0x0100 => crate::ordinal::Ordinal::position(2),
+        0x0020 => crate::ordinal::Ordinal::position(3),
+        0x00a0 => crate::ordinal::Ordinal::position(4),
+        _ => None,
+    };
+    match row {
+        Some(row) => row,
+        None => crate::ordinal::Ordinal::FIRST,
     }
 }
 
 #[cfg(any(target_arch = "riscv32", test))]
-pub(crate) const fn packed_halfword(words: &[u32], index: usize) -> u16 {
-    (words[index >> 1] >> ((index & 1) * 16)) as u16
+pub(crate) const fn packed_halfword(words: &[u32; 16], entry: TxGainEntry) -> u16 {
+    (entry.coarse::<16>().at(words) >> ((entry.get() & 1) * 16)) as u16
 }
 
 #[cfg(any(target_arch = "riscv32", test))]
-const fn packed_byte(words: &[u32], index: usize) -> u8 {
-    (words[index >> 2] >> ((index & 3) * 8)) as u8
+const fn packed_byte(words: &[u32; 8], entry: TxGainEntry) -> u8 {
+    (entry.coarse::<8>().at(words) >> ((entry.get() & 3) * 8)) as u8
 }
 
+/// A 32-bit word's two halves, low first.
+const fn halves(word: u32) -> [u16; 2] {
+    [word as u16, (word >> 16) as u16]
+}
+
+/// The four seed halfwords of each baseband gain: the image's seed, then the
+/// start of its 32-bit output.
 #[cfg(any(target_arch = "riscv32", test))]
-fn tx_gain_seed_halfword(image: &crate::channel::PhyWifiTxGainImage, index: usize) -> u16 {
-    if index < image.seed.len() * 2 {
-        packed_halfword(&image.seed, index)
-    } else {
-        packed_halfword(&image.output_32, index - image.seed.len() * 2)
-    }
+const fn tx_gain_seed_rows(image: &crate::channel::PhyWifiTxGainImage) -> [[u16; 4]; 5] {
+    let [a, b, c, d, e, f] = image.seed;
+    let [g, h, i, j, ..] = image.output_32;
+    [
+        quartet(a, b),
+        quartet(c, d),
+        quartet(e, f),
+        quartet(g, h),
+        quartet(i, j),
+    ]
 }
 
+const fn quartet(first: u32, second: u32) -> [u16; 4] {
+    let [a, b] = halves(first);
+    let [c, d] = halves(second);
+    [a, b, c, d]
+}
+
+/// The seed row of a Bluetooth gain. A Bluetooth image holds only the three
+/// gains `BLUETOOTH_TX_GAIN_TABLE_MID` admits, so it has only three rows.
 #[cfg(target_arch = "riscv32")]
-fn bluetooth_tx_gain_seed_halfword(
+const fn bluetooth_tx_gain_seed(
     image: &crate::calibration::bluetooth::PhyBluetoothTxGainImage,
-    index: usize,
-) -> u16 {
-    packed_halfword(&image.seed, index)
+    gain: u16,
+) -> [u16; 4] {
+    let [a, b, c, d, e, f] = image.seed;
+    match gain {
+        0x0080 => quartet(c, d),
+        0x0100 => quartet(e, f),
+        _ => quartet(a, b),
+    }
 }
 
 /// Apply the complete direct-register prefix/suffix of ROM
@@ -429,24 +461,18 @@ impl<P> PhyGainMemory for RadioChannelHal<'_, P> {
 pub(crate) fn tx_gain_memory_entry(
     image: &crate::channel::PhyWifiTxGainImage,
     memory_base: u8,
-    entry: u8,
+    entry: TxGainEntry,
 ) -> oer_chips_esp32s31_hal::types::PhyGainMemoryEntry {
-    let entry_index = usize::from(entry);
-    let gain_72 = packed_halfword(&image.output_72, entry_index);
-    let gain_64 = packed_halfword(&image.output_64, entry_index);
-    let gain_32 = packed_byte(&image.output_32, entry_index);
-    let seed_index = tx_baseband_gain_index(gain_64) * 4;
+    let gain_72 = packed_halfword(&image.output_72, entry);
+    let gain_64 = packed_halfword(&image.output_64, entry);
+    let gain_32 = packed_byte(&image.output_32, entry);
+    let seed = tx_baseband_gain_row(gain_64).at(&tx_gain_seed_rows(image));
     oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
-        memory_base.wrapping_add(entry),
+        memory_base.wrapping_add(entry.get()),
         gain_72,
         gain_64,
         gain_32,
-        [
-            tx_gain_seed_halfword(image, seed_index),
-            tx_gain_seed_halfword(image, seed_index + 1),
-            tx_gain_seed_halfword(image, seed_index + 2),
-            tx_gain_seed_halfword(image, seed_index + 3),
-        ],
+        seed,
         image.config,
     )
 }
@@ -459,10 +485,10 @@ fn publish_phy_tx_gain_memory_to(
 ) {
     let hardware_base = registers.table_memory_base_index();
     let memory_base = hardware_base.wrapping_add(if bank { 32 } else { 0 });
-    let mut entry = 0_u8;
-    while entry != 32 {
-        registers.program_gain_memory_entry(tx_gain_memory_entry(image, memory_base, entry));
-        entry += 1;
+    let mut entry = Some(TxGainEntry::FIRST);
+    while let Some(at) = entry {
+        registers.program_gain_memory_entry(tx_gain_memory_entry(image, memory_base, at));
+        entry = at.next();
     }
 }
 
@@ -496,28 +522,21 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
     let hardware_base =
         oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(registers);
     let memory_base = hardware_base.wrapping_add(32);
-    let mut entry = 0_u8;
-    while entry != 16 {
-        let entry_index = usize::from(entry);
-        let gain_72 = image.output_72[entry_index];
-        let gain_64 = image.output_64[entry_index];
-        let gain_32 = image.output_32[entry_index];
-        let seed_index = tx_baseband_gain_index(gain_64) * 4;
+    let gains = image
+        .output_72
+        .iter()
+        .zip(&image.output_64)
+        .zip(&image.output_32);
+    for (entry, ((&gain_72, &gain_64), &gain_32)) in (0_u8..).zip(gains) {
         let memory_entry = oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
             memory_base.wrapping_add(entry),
             gain_72,
             gain_64,
             gain_32,
-            [
-                bluetooth_tx_gain_seed_halfword(image, seed_index),
-                bluetooth_tx_gain_seed_halfword(image, seed_index + 1),
-                bluetooth_tx_gain_seed_halfword(image, seed_index + 2),
-                bluetooth_tx_gain_seed_halfword(image, seed_index + 3),
-            ],
+            bluetooth_tx_gain_seed(image, gain_64),
             image.config,
         );
         oer_chips_esp32s31_hal::phy::memory::program_gain_memory_entry(registers, memory_entry);
-        entry += 1;
     }
 }
 

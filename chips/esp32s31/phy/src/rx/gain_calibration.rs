@@ -303,9 +303,11 @@ pub(crate) const fn rx_off(index: u8) -> PhyPbusForceTest {
 const FINE_CODE_TABLE: [u16; FINE_CODES] = [0x00, 0x20, 0x30, 0x38, 0x3c];
 /// Searches of `phy_rxdc_fine_cal`.
 pub const FINE_CODES: usize = 5;
+/// A search of `phy_rxdc_fine_cal`.
+pub(crate) type FinePosition = crate::ordinal::Ordinal<FINE_CODES>;
 
-pub(crate) const fn fine_code(index: u8) -> u16 {
-    FINE_CODE_TABLE[index as usize]
+pub(crate) const fn fine_code(index: FinePosition) -> u16 {
+    index.at(&FINE_CODE_TABLE)
 }
 
 pub(super) const fn bank_count(bank: PhyRxGainDcBank) -> u8 {
@@ -315,11 +317,13 @@ pub(super) const fn bank_count(bank: PhyRxGainDcBank) -> u8 {
     }
 }
 
-pub(super) const fn gain(bank: PhyRxGainDcBank, index: u8) -> u16 {
-    match bank {
-        PhyRxGainDcBank::Wifi => WIFI_CALIBRATION_GAIN[index as usize],
-        PhyRxGainDcBank::Shared => SHARED_CALIBRATION_GAIN[index as usize],
-    }
+/// The bank's calibration gain at `index`, when it has one.
+pub(super) fn gain(bank: PhyRxGainDcBank, index: u8) -> Option<u16> {
+    let gains = match bank {
+        PhyRxGainDcBank::Wifi => WIFI_CALIBRATION_GAIN.get(usize::from(index)),
+        PhyRxGainDcBank::Shared => SHARED_CALIBRATION_GAIN.get(usize::from(index)),
+    };
+    gains.copied()
 }
 
 /// Expand complete ROM `phy_pbus_set_rxgain`, size 92, into its three

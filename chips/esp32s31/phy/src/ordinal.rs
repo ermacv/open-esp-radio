@@ -21,6 +21,25 @@ impl<const N: usize> Ordinal<N> {
         Self(index)
     }
 
+    /// The position `index`, when the table has one.
+    pub(crate) const fn position(index: u8) -> Option<Self> {
+        if (index as usize) < N {
+            Some(Self(index))
+        } else {
+            None
+        }
+    }
+
+    /// The position in a table of `W` entries, each covering `N / W` of these.
+    pub(crate) const fn coarse<const W: usize>(self) -> Ordinal<W> {
+        const {
+            if W == 0 || N % W != 0 {
+                panic!("a coarse table divides this one evenly");
+            }
+        }
+        Ordinal((self.0 as usize / (N / W)) as u8)
+    }
+
     /// The position as the hardware sequence and its completions name it.
     pub(crate) const fn get(self) -> u8 {
         self.0

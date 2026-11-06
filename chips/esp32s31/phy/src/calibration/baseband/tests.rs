@@ -70,7 +70,12 @@ fn rx_gain_memory_entry_uses_only_copied_owner_state() {
     };
     let table = generate_phy_rx_gain_table(PhyRxGainBank::Wifi);
     assert_eq!(
-        phy_generated_rx_gain_memory_entry(&parameters, PhyRxGainBank::Wifi, &table, 0),
+        phy_generated_rx_gain_memory_entry(
+            &parameters,
+            PhyRxGainBank::Wifi,
+            &table,
+            super::PhyRxGainEntry::FIRST
+        ),
         PhyGainMemoryEntry::generated_receive(0, [11, 22], [3, 4], 5, table.words[0], 7, 0xbf,)
     );
 }
@@ -385,4 +390,25 @@ fn complete_parent_failure_always_restores_idle_mode_and_agc() {
             crate::channel::PhyChipChannelFailure::UnsupportedChannel(0)
         ))
     );
+}
+
+#[test]
+fn every_generated_word_records_the_base_gain_it_came_from() {
+    for bank in [PhyRxGainBank::Wifi, PhyRxGainBank::Shared] {
+        let table = generate_phy_rx_gain_table(bank);
+        let mut entry = Some(super::PhyRxGainEntry::FIRST);
+        while let Some(at) = entry
+            && at.get() <= table.last_index
+        {
+            let base = (at.at(&table.words) >> 12) as u16;
+            let recorded = match at.at(&table.sources) {
+                super::PhyRxGainSource::Wifi(source) => source.at(&super::PHY_RX_GAIN_BASE_BANK_0),
+                super::PhyRxGainSource::Shared(source) => {
+                    source.at(&super::PHY_RX_GAIN_BASE_BANK_1)
+                }
+            };
+            assert_eq!(recorded, base);
+            entry = at.next();
+        }
+    }
 }
