@@ -1039,3 +1039,18 @@ fn no_tracking_deadline_waits_only_for_a_posted_request() {
     assert!(join.as_mut().poll(&mut cx).is_pending());
     assert_eq!(wait.as_mut().poll(&mut cx), Poll::Ready(false));
 }
+
+#[test]
+fn a_join_the_phy_refused_names_the_refusal_after_either_rollback() {
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    let refusal =
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+    assert_eq!(
+        crate::phy_refused_join(refusal, true),
+        Failure::PhyRefused(refusal)
+    );
+    let Failure::Poisoned(poison) = crate::phy_refused_join(refusal, false) else {
+        panic!("an unfinished rollback poisons the domain")
+    };
+    assert_eq!(poison.cause, PoisonCause::RollbackAfterRefusal(refusal));
+}

@@ -339,6 +339,7 @@ pub enum MaintenanceError {
 pub enum RadioFailure {
     Refused,
     ClientFailed,
+    PhyRefused(PhyDomainError),
     Poisoned(RadioPoison),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -381,6 +382,7 @@ pub enum RadioPoisonCause {
     CommonPower(CommonRadioPowerError),
     ModemClock(ModemClockError),
     Rollback,
+    RollbackAfterRefusal(PhyDomainError),
     Controller,
     Custody,
 }

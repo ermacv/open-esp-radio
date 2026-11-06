@@ -14,7 +14,7 @@ PHY domain, without the actor itself.
   `track` produces `Tracked`, which alone permits RF use. `RfEpoch` changes at
   every registration and RF wake.
 - A failed request hands back what it lent; `Failure` (`Refused`,
-  `ClientFailed`, `Poisoned`) says what the failure touched, as the table on
+  `ClientFailed`, `PhyRefused`, `Poisoned`) says what the failure touched, as the table on
   `Failure` defines.
 - `LpClock<RcSlow>` is the board's low-power clock, claimed once.
 - `wifi` holds the Wi-Fi payloads. The actor brings the Wi-Fi MAC up in

@@ -103,6 +103,10 @@ impl DiagnosticPath for PoisonCause {
                 error.push_path(path);
             }
             Self::Rollback => path.name("Rollback"),
+            Self::RollbackAfterRefusal(error) => {
+                path.name("RollbackAfterRefusal");
+                error.push_path(path);
+            }
             Self::Controller => path.name("Controller"),
             Self::Custody => path.name("Custody"),
         }

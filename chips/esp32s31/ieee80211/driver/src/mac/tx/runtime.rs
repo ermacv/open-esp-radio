@@ -229,3 +229,69 @@ impl Default for WifiTxRuntimePolicy {
         Self::vendor_defaults()
     }
 }
+
+#[cfg(test)]
+mod edca_tests {
+    use oer_protocols_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+
+    use super::*;
+
+    const QUEUES: [LegacyTxQueue; 4] = [
+        LegacyTxQueue::Voice,
+        LegacyTxQueue::Video,
+        LegacyTxQueue::BestEffort,
+        LegacyTxQueue::Background,
+    ];
+
+    /// A set whose four records differ, so a queue or a role read from the
+    /// wrong place shows.
+    fn set(txop: u16, maximum_exponent: u8) -> EdcaParameterSet {
+        let nibble = |value| oer_portable_wire::U8::<4>::new(value).expect("four bits");
+        let record = |offset: u16| WmmAcParameters {
+            admission_control_mandatory: false,
+            aifsn: nibble(2),
+            ecw_min: nibble(4),
+            ecw_max: nibble(maximum_exponent),
+            txop_limit_units_32_us: txop + offset,
+        };
+        EdcaParameterSet::from_wmm(WmmParameterSet::new(
+            0,
+            false,
+            [record(0), record(1), record(2), record(3)],
+        ))
+    }
+
+    #[test]
+    fn installed_edca_policies_are_read_per_role() {
+        let mut policy = WifiTxRuntimePolicy::vendor_defaults();
+        for (role, txop) in [(VifRole::Station, 100), (VifRole::AccessPoint, 200)] {
+            policy.install_edca(role, set(txop, 10)).unwrap();
+        }
+        for (role, txop) in [(VifRole::Station, 100), (VifRole::AccessPoint, 200)] {
+            let parameters = set(txop, 10);
+            for queue in QUEUES {
+                assert_eq!(
+                    Ok(policy.access_policy(role, queue)),
+                    EdcaAccessPolicy::from_edca(
+                        parameters.access_category(queue.access_category())
+                    )
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_refused_set_leaves_every_policy_of_both_roles() {
+        let mut policy = WifiTxRuntimePolicy::vendor_defaults();
+        policy.install_edca(VifRole::Station, set(100, 10)).unwrap();
+        policy
+            .install_edca(VifRole::AccessPoint, set(200, 10))
+            .unwrap();
+        let before = policy;
+        assert_eq!(
+            policy.install_edca(VifRole::Station, set(300, 11)),
+            Err(EdcaParametersError::MaximumExponentOutOfRange(11))
+        );
+        assert_eq!(policy, before);
+    }
+}

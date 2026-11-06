@@ -83,6 +83,8 @@ pub enum PoisonCause {
     ModemClock(ModemClockError),
     /// The client's rollback to cold did not complete.
     Rollback,
+    /// The rollback after this PHY refusal did not complete.
+    RollbackAfterRefusal(ConcurrentPhyError),
     /// A client controller's step failed after shared writes.
     Controller,
     /// An owner the actor keeps for a client was missing.

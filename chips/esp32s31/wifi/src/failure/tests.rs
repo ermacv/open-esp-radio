@@ -215,3 +215,20 @@ fn a_publication_fault_keeps_its_queue_and_step_across_the_boundary() {
         }
     );
 }
+
+#[test]
+fn a_phy_refusal_keeps_its_name_through_the_conversion() {
+    use oer_chips_esp32s31_hal::domain::RadioClient;
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_radio_client::{Failure, PoisonCause};
+    let refusal = ConcurrentPhyError::ClientPhase(RadioClient::Wifi);
+    let named = super::convert::phy_domain_error(refusal);
+    assert_eq!(
+        super::convert::radio_failure(Failure::PhyRefused(refusal)),
+        RadioFailure::PhyRefused(named)
+    );
+    assert_eq!(
+        super::convert::radio_poison_cause(PoisonCause::RollbackAfterRefusal(refusal)),
+        RadioPoisonCause::RollbackAfterRefusal(named)
+    );
+}

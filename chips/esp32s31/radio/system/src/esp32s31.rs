@@ -362,17 +362,21 @@ where
         }
     }
 
-    /// Roll a clocked client back to cold: `ClientFailed` when the rollback
-    /// completed, `Poisoned` when it did not.
-    fn client_failed(&mut self, clocked: WifiClocked) -> Failed<WifiReturned> {
+    /// Roll a clocked client back to cold after the PHY's `refusal`, which
+    /// stays named whether the rollback completed or not.
+    fn refused_join(
+        &mut self,
+        clocked: WifiClocked,
+        refusal: ConcurrentPhyError,
+    ) -> Failed<WifiReturned> {
         match self.roll_back(clocked) {
             Ok(cold) => Failed {
                 returned: WifiReturned::Cold(cold),
-                cause: Failure::ClientFailed,
+                cause: crate::phy_refused_join(refusal, true),
             },
             Err(returned) => Failed {
                 returned,
-                cause: wifi_poisoned(RequestKind::Join, PoisonCause::Rollback),
+                cause: crate::phy_refused_join(refusal, false),
             },
         }
     }
@@ -643,11 +647,9 @@ where
                         .map_err(|refused| refused.error)
                 }
                 // The join phase owns the client: one already held refuses.
-                _ => Err(
-                    oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::ClientPhase(
-                        oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
-                    ),
-                ),
+                _ => Err(ConcurrentPhyError::ClientPhase(
+                    oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
+                )),
             },
             Err(error) => Err(error),
         };
@@ -657,10 +659,10 @@ where
                 self.wifi.tracking_due = acquired == ConcurrentAcquire::TrackingDue;
                 Ok(WifiJoined { wifi: clocked, phy })
             }
-            // ClientFailed: the PHY refused the client before any access;
-            // only Wi-Fi's clocks, power and coexistence changed, and the
-            // rollback restores them.
-            Err(_) => Err(self.client_failed(clocked)),
+            // PhyRefused: the PHY refused the client before any access; only
+            // Wi-Fi's clocks, power and coexistence changed, and the rollback
+            // restores them.
+            Err(refusal) => Err(self.refused_join(clocked, refusal)),
         }
     }
 
