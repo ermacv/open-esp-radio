@@ -190,7 +190,6 @@ enum PreludeStep {
     I2cResetPulse { index: u8 },
     I2cResetDelay { index: u8, sample: u16 },
     I2cResetSample { index: u8, sample: u16 },
-    ApplyProfile,
     ConfigureXtal,
     CalibrationClockOn,
 }
@@ -216,6 +215,7 @@ enum TailStep {
 )]
 enum Phase {
     Prelude(PreludeStep),
+    ApplyProfile,
     Rf(crate::calibration::cold::PhyRfColdInit),
     Baseband(crate::calibration::baseband::PhyBbInitTransition),
     Temperature(crate::analog::temperature::PhyTemperatureTransition),
@@ -635,14 +635,14 @@ impl PhyRegisterTransition {
             .take()
             .ok_or(PhyRegisterTransitionError::AlreadyComplete)?;
         match phase {
-            Phase::Prelude(PreludeStep::ApplyProfile) => {
+            Phase::ApplyProfile => {
                 let Some(config) = self.config.take() else {
-                    self.phase = Some(Phase::Prelude(PreludeStep::ApplyProfile));
+                    self.phase = Some(Phase::ApplyProfile);
                     return Err(PhyRegisterTransitionError::MissingStateOwner);
                 };
                 let Some(state) = self.state.as_mut() else {
                     self.config = Some(config);
-                    self.phase = Some(Phase::Prelude(PreludeStep::ApplyProfile));
+                    self.phase = Some(Phase::ApplyProfile);
                     return Err(PhyRegisterTransitionError::MissingStateOwner);
                 };
                 self.calibration_cache_ready = false;
@@ -733,7 +733,6 @@ impl PhyRegisterTransition {
                             enabled: true,
                         })
                     }
-                    PreludeStep::ApplyProfile => unreachable!(),
                 };
                 self.phase = Some(Phase::Prelude(step));
                 Ok(PhyRegisterLocalStep::External(action))
@@ -997,7 +996,7 @@ impl PhyRegisterTransition {
                 } else if index == 0 {
                     Phase::Prelude(PreludeStep::I2cInitialSample { index: 1 })
                 } else {
-                    Phase::Prelude(PreludeStep::ApplyProfile)
+                    Phase::ApplyProfile
                 }
             }
             (
@@ -1031,7 +1030,7 @@ impl PhyRegisterTransition {
                     if index == 0 {
                         Phase::Prelude(PreludeStep::I2cInitialSample { index: 1 })
                     } else {
-                        Phase::Prelude(PreludeStep::ApplyProfile)
+                        Phase::ApplyProfile
                     }
                 } else if sample + 1 == PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT {
                     self.begin_cleanup(PhyRegisterFailure::I2cMasterResetTimedOut {

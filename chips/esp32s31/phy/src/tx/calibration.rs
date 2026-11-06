@@ -1332,17 +1332,36 @@ pub enum PhyPowerAttenuationBindingError {
     NotDirectMmio,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyPowerAttenuationMmioAction {
+    ConfigureTone {
+        iteration: u8,
+        selector: u16,
+        attenuation: u8,
+    },
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyPowerAttenuationMmioBinding {
-    action: PhyPowerAttenuationAction,
+    action: PhyPowerAttenuationMmioAction,
 }
 
 impl PhyPowerAttenuationMmioBinding {
     pub fn new(action: PhyPowerAttenuationAction) -> Result<Self, PhyPowerAttenuationBindingError> {
-        match action {
-            PhyPowerAttenuationAction::ConfigureTone { .. } => Ok(Self { action }),
-            _ => Err(PhyPowerAttenuationBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyPowerAttenuationAction::ConfigureTone {
+                iteration,
+                selector,
+                attenuation,
+            } => PhyPowerAttenuationMmioAction::ConfigureTone {
+                iteration,
+                selector,
+                attenuation,
+            },
+            _ => return Err(PhyPowerAttenuationBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1351,7 +1370,7 @@ impl PhyPowerAttenuationMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyPowerAttenuationCompletion {
         match self.action {
-            PhyPowerAttenuationAction::ConfigureTone {
+            PhyPowerAttenuationMmioAction::ConfigureTone {
                 iteration,
                 selector,
                 attenuation,
@@ -1363,7 +1382,6 @@ impl PhyPowerAttenuationMmioBinding {
                     attenuation,
                 }
             }
-            _ => unreachable!(),
         }
     }
 }
@@ -1373,21 +1391,62 @@ pub enum PhyToneSarBindingError {
     NotDirectMmio,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyToneSarMmioAction {
+    ArmTone { measurement: u8, sample: u8 },
+    TriggerSar { measurement: u8, sample: u8 },
+    PollReady { measurement: u8, sample: u8 },
+    ClearTone { measurement: u8, sample: u8 },
+    ReadSar { measurement: u8, sample: u8 },
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyToneSarMmioBinding {
-    action: PhyToneSarAction,
+    action: PhyToneSarMmioAction,
 }
 
 impl PhyToneSarMmioBinding {
     pub fn new(action: PhyToneSarAction) -> Result<Self, PhyToneSarBindingError> {
-        match action {
-            PhyToneSarAction::ArmTone { .. }
-            | PhyToneSarAction::TriggerSar { .. }
-            | PhyToneSarAction::PollReady { .. }
-            | PhyToneSarAction::ClearTone { .. }
-            | PhyToneSarAction::ReadSar { .. } => Ok(Self { action }),
-            _ => Err(PhyToneSarBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyToneSarAction::ArmTone {
+                measurement,
+                sample,
+            } => PhyToneSarMmioAction::ArmTone {
+                measurement,
+                sample,
+            },
+            PhyToneSarAction::TriggerSar {
+                measurement,
+                sample,
+            } => PhyToneSarMmioAction::TriggerSar {
+                measurement,
+                sample,
+            },
+            PhyToneSarAction::PollReady {
+                measurement,
+                sample,
+            } => PhyToneSarMmioAction::PollReady {
+                measurement,
+                sample,
+            },
+            PhyToneSarAction::ClearTone {
+                measurement,
+                sample,
+            } => PhyToneSarMmioAction::ClearTone {
+                measurement,
+                sample,
+            },
+            PhyToneSarAction::ReadSar {
+                measurement,
+                sample,
+            } => PhyToneSarMmioAction::ReadSar {
+                measurement,
+                sample,
+            },
+            _ => return Err(PhyToneSarBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1396,7 +1455,7 @@ impl PhyToneSarMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyToneSarCompletion {
         match self.action {
-            PhyToneSarAction::ArmTone {
+            PhyToneSarMmioAction::ArmTone {
                 measurement,
                 sample,
             } => {
@@ -1406,7 +1465,7 @@ impl PhyToneSarMmioBinding {
                     sample,
                 }
             }
-            PhyToneSarAction::TriggerSar {
+            PhyToneSarMmioAction::TriggerSar {
                 measurement,
                 sample,
             } => {
@@ -1416,7 +1475,7 @@ impl PhyToneSarMmioBinding {
                     sample,
                 }
             }
-            PhyToneSarAction::PollReady {
+            PhyToneSarMmioAction::PollReady {
                 measurement,
                 sample,
             } => PhyToneSarCompletion::ReadySampled {
@@ -1424,7 +1483,7 @@ impl PhyToneSarMmioBinding {
                 sample,
                 ready: oer_chips_esp32s31_hal::phy::power_detector::sample_ready(registers),
             },
-            PhyToneSarAction::ClearTone {
+            PhyToneSarMmioAction::ClearTone {
                 measurement,
                 sample,
             } => {
@@ -1434,7 +1493,7 @@ impl PhyToneSarMmioBinding {
                     sample,
                 }
             }
-            PhyToneSarAction::ReadSar {
+            PhyToneSarMmioAction::ReadSar {
                 measurement,
                 sample,
             } => PhyToneSarCompletion::SarRead {
@@ -1442,7 +1501,6 @@ impl PhyToneSarMmioBinding {
                 sample,
                 value: oer_chips_esp32s31_hal::phy::power_detector::sample_sar(registers),
             },
-            _ => unreachable!(),
         }
     }
 }
@@ -1452,29 +1510,59 @@ pub enum PhyTxCalibrationBindingError {
     NotDirectMmio,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxCalibrationEnvironmentMmioAction {
+    ConfigurePbusDebugMode,
+    ConfigureTxClock { enabled: bool },
+    ConfigurePowerDetector,
+    ConfigureCalibrationMode,
+    StopTone,
+    ConfigurePbusWorkMode,
+    ConfigurePbusWorkModePulse,
+    ClearPbusWorkModePulse,
+}
+
 /// Non-cloneable direct-MMIO token for entering or leaving TX calibration.
 /// PBus force commands and both one-microsecond intervals stay separately
 /// bound to the async executor.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxCalibrationEnvironmentMmioBinding {
-    action: PhyTxCalibrationEnvironmentAction,
+    action: PhyTxCalibrationEnvironmentMmioAction,
 }
 
 impl PhyTxCalibrationEnvironmentMmioBinding {
     pub fn new(
         action: PhyTxCalibrationEnvironmentAction,
     ) -> Result<Self, PhyTxCalibrationBindingError> {
-        match action {
-            PhyTxCalibrationEnvironmentAction::ConfigurePbusDebugMode
-            | PhyTxCalibrationEnvironmentAction::ConfigureTxClock { .. }
-            | PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector
-            | PhyTxCalibrationEnvironmentAction::ConfigureCalibrationMode
-            | PhyTxCalibrationEnvironmentAction::StopTone
-            | PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkMode
-            | PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkModePulse
-            | PhyTxCalibrationEnvironmentAction::ClearPbusWorkModePulse => Ok(Self { action }),
-            _ => Err(PhyTxCalibrationBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxCalibrationEnvironmentAction::ConfigurePbusDebugMode => {
+                PhyTxCalibrationEnvironmentMmioAction::ConfigurePbusDebugMode
+            }
+            PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled } => {
+                PhyTxCalibrationEnvironmentMmioAction::ConfigureTxClock { enabled }
+            }
+            PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector => {
+                PhyTxCalibrationEnvironmentMmioAction::ConfigurePowerDetector
+            }
+            PhyTxCalibrationEnvironmentAction::ConfigureCalibrationMode => {
+                PhyTxCalibrationEnvironmentMmioAction::ConfigureCalibrationMode
+            }
+            PhyTxCalibrationEnvironmentAction::StopTone => {
+                PhyTxCalibrationEnvironmentMmioAction::StopTone
+            }
+            PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkMode => {
+                PhyTxCalibrationEnvironmentMmioAction::ConfigurePbusWorkMode
+            }
+            PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkModePulse => {
+                PhyTxCalibrationEnvironmentMmioAction::ConfigurePbusWorkModePulse
+            }
+            PhyTxCalibrationEnvironmentAction::ClearPbusWorkModePulse => {
+                PhyTxCalibrationEnvironmentMmioAction::ClearPbusWorkModePulse
+            }
+            _ => return Err(PhyTxCalibrationBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1483,60 +1571,78 @@ impl PhyTxCalibrationEnvironmentMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyTxCalibrationEnvironmentCompletion {
         match self.action {
-            PhyTxCalibrationEnvironmentAction::ConfigurePbusDebugMode => {
+            PhyTxCalibrationEnvironmentMmioAction::ConfigurePbusDebugMode => {
                 oer_chips_family_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyTxCalibrationEnvironmentCompletion::PbusDebugModeConfigured
             }
-            PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled } => {
+            PhyTxCalibrationEnvironmentMmioAction::ConfigureTxClock { enabled } => {
                 oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
                 PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { enabled }
             }
-            PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector => {
+            PhyTxCalibrationEnvironmentMmioAction::ConfigurePowerDetector => {
                 oer_chips_esp32s31_hal::phy::power_detector::configure_enabled(registers);
                 PhyTxCalibrationEnvironmentCompletion::PowerDetectorConfigured
             }
-            PhyTxCalibrationEnvironmentAction::ConfigureCalibrationMode => {
+            PhyTxCalibrationEnvironmentMmioAction::ConfigureCalibrationMode => {
                 oer_chips_esp32s31_hal::phy::power_detector::configure_calibration_mode(registers);
                 PhyTxCalibrationEnvironmentCompletion::CalibrationModeConfigured
             }
-            PhyTxCalibrationEnvironmentAction::StopTone => {
+            PhyTxCalibrationEnvironmentMmioAction::StopTone => {
                 crate::hardware::stop_phy_power_detector_tone(registers);
                 PhyTxCalibrationEnvironmentCompletion::ToneStopped
             }
-            PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkMode => {
+            PhyTxCalibrationEnvironmentMmioAction::ConfigurePbusWorkMode => {
                 PhyTxCalibrationEnvironmentCompletion::PbusWorkModeConfigured {
                     settle_required: oer_chips_family_phy::pbus::configure_work_mode(
                         &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                     ),
                 }
             }
-            PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkModePulse => {
+            PhyTxCalibrationEnvironmentMmioAction::ConfigurePbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyTxCalibrationEnvironmentCompletion::PbusWorkModePulseConfigured
             }
-            PhyTxCalibrationEnvironmentAction::ClearPbusWorkModePulse => {
+            PhyTxCalibrationEnvironmentMmioAction::ClearPbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyTxCalibrationEnvironmentCompletion::PbusWorkModePulseCleared
             }
-            _ => unreachable!(),
         }
     }
+}
+
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxCapSearchMmioAction {
+    ConfigureTone {
+        selector: u16,
+        attenuation: u8,
+        enabled: bool,
+    },
 }
 
 /// Direct tone-programming edge of the TX-capacitance search.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxCapSearchMmioBinding {
-    action: PhyTxCapSearchAction,
+    action: PhyTxCapSearchMmioAction,
 }
 
 impl PhyTxCapSearchMmioBinding {
     pub fn new(action: PhyTxCapSearchAction) -> Result<Self, PhyTxCalibrationBindingError> {
-        match action {
-            PhyTxCapSearchAction::ConfigureTone { .. } => Ok(Self { action }),
-            _ => Err(PhyTxCalibrationBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxCapSearchAction::ConfigureTone {
+                selector,
+                attenuation,
+                enabled,
+            } => PhyTxCapSearchMmioAction::ConfigureTone {
+                selector,
+                attenuation,
+                enabled,
+            },
+            _ => return Err(PhyTxCalibrationBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1545,7 +1651,7 @@ impl PhyTxCapSearchMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxCapSearchCompletion {
         match self.action {
-            PhyTxCapSearchAction::ConfigureTone {
+            PhyTxCapSearchMmioAction::ConfigureTone {
                 selector,
                 attenuation,
                 enabled,
@@ -1565,7 +1671,6 @@ impl PhyTxCapSearchMmioBinding {
                     enabled,
                 }
             }
-            _ => unreachable!(),
         }
     }
 }
@@ -1712,6 +1817,10 @@ pub struct PhyToneSarTimerBinding {
 }
 
 impl PhyToneSarTimerBinding {
+    pub const fn phase(&self) -> PhyToneSarDelayPhase {
+        self.phase
+    }
+
     pub fn new(action: PhyToneSarAction) -> Result<Self, PhyTxCapExternalBindingError> {
         match action {
             PhyToneSarAction::DelayMicros {

@@ -310,7 +310,7 @@ enum Step {
     RestoreTxGainCompensation,
     ReleaseGrant,
     Complete,
-    Failed,
+    Failed(PhyCalibrationTrackingFailure),
 }
 
 /// The calibration branch a step belongs to. The vendor brackets each with
@@ -412,7 +412,7 @@ impl PhyCalibrationTrackingTransition {
             | Step::CommonReleaseTxRxOff
             | Step::CommonRestoreTxGainCompensation
             | Step::CommonReleaseGrant => Some(PhyCalibrationTrackingBranch::Common),
-            Step::Complete | Step::Failed => None,
+            Step::Complete | Step::Failed(_) => None,
             Step::TxAcquireGrant
             | Step::TxDisableHardwareFrequency
             | Step::TxSoftwareFrequencySettle
@@ -496,10 +496,7 @@ impl PhyCalibrationTrackingTransition {
                 PhyCalibrationTrackingAction::SetGrantProtect { enabled: false }
             }
             Step::Complete => PhyCalibrationTrackingAction::Complete(self.outcome()),
-            Step::Failed => match self.failure {
-                Some(failure) => PhyCalibrationTrackingAction::Failed(failure),
-                None => unreachable!(),
-            },
+            Step::Failed(failure) => PhyCalibrationTrackingAction::Failed(failure),
         }
     }
 
@@ -707,14 +704,11 @@ impl PhyCalibrationTrackingTransition {
             (
                 Step::ReleaseGrant,
                 PhyCalibrationTrackingCompletion::GrantProtectSet { enabled: false },
-            ) => {
-                if self.failure.is_some() {
-                    Step::Failed
-                } else {
-                    Step::Complete
-                }
-            }
-            (Step::Complete | Step::Failed, _) => {
+            ) => match self.failure {
+                Some(failure) => Step::Failed(failure),
+                None => Step::Complete,
+            },
+            (Step::Complete | Step::Failed(_), _) => {
                 return Err(PhyCalibrationTrackingTransitionError::AlreadyComplete);
             }
             _ => return Err(PhyCalibrationTrackingTransitionError::WrongCompletion),

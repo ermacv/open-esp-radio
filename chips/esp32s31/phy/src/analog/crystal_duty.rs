@@ -68,37 +68,35 @@ enum XtalDutySearchStep {
     Delay {
         candidate: u8,
     },
-    InitialSamples {
+    Measuring {
+        signal: PhySignalPowerTransition,
+        work: XtalDutySearchWork,
+    },
+    Complete(XtalDutySearchOutcome),
+    Failed(PhySignalPowerFailure),
+}
+
+/// What a signal-power measurement is for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum XtalDutySearchWork {
+    Initial {
         candidate: u8,
         samples: [i64; INITIAL_SAMPLE_COUNT as usize],
         count: u8,
     },
-    Review {
-        candidate: u8,
-        samples: [i64; INITIAL_SAMPLE_COUNT as usize],
-        lower: i64,
-        upper: i64,
-        index: u8,
-        filtered_sum: i64,
-    },
-    FirstReplacement {
-        candidate: u8,
-        samples: [i64; INITIAL_SAMPLE_COUNT as usize],
-        lower: i64,
-        upper: i64,
-        index: u8,
-        filtered_sum: i64,
-    },
-    SecondReplacement {
-        candidate: u8,
-        samples: [i64; INITIAL_SAMPLE_COUNT as usize],
-        lower: i64,
-        upper: i64,
-        index: u8,
-        filtered_sum: i64,
-    },
-    Complete(XtalDutySearchOutcome),
-    Failed(PhySignalPowerFailure),
+    FirstReplacement(XtalDutySearchReview),
+    SecondReplacement(XtalDutySearchReview),
+}
+
+/// The initial samples of a candidate, read against their outlier bounds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct XtalDutySearchReview {
+    candidate: u8,
+    samples: [i64; INITIAL_SAMPLE_COUNT as usize],
+    lower: i64,
+    upper: i64,
+    index: u8,
+    filtered_sum: i64,
 }
 
 /// Fixed-size translation of the vendor crystal-duty candidate search.
@@ -110,7 +108,6 @@ enum XtalDutySearchStep {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct XtalDutySearchTransition {
     step: XtalDutySearchStep,
-    signal_power: Option<PhySignalPowerTransition>,
     best_candidate: u8,
     best_filtered_power: i64,
     has_best: bool,
@@ -136,7 +133,6 @@ impl XtalDutySearchTransition {
         };
         Self {
             step: XtalDutySearchStep::WriteCandidate { candidate: first },
-            signal_power: None,
             best_candidate: first,
             best_filtered_power: 0,
             has_best: false,
@@ -145,9 +141,6 @@ impl XtalDutySearchTransition {
     }
 
     pub const fn action(self) -> XtalDutySearchAction {
-        if let Some(transition) = self.signal_power {
-            return XtalDutySearchAction::SignalPower(transition.action());
-        }
         match self.step {
             XtalDutySearchStep::WriteCandidate { candidate } => {
                 XtalDutySearchAction::WriteCandidate {
@@ -159,11 +152,8 @@ impl XtalDutySearchTransition {
                 candidate,
                 micros: 20,
             },
-            XtalDutySearchStep::InitialSamples { .. }
-            | XtalDutySearchStep::Review { .. }
-            | XtalDutySearchStep::FirstReplacement { .. }
-            | XtalDutySearchStep::SecondReplacement { .. } => {
-                panic!()
+            XtalDutySearchStep::Measuring { signal, .. } => {
+                XtalDutySearchAction::SignalPower(signal.action())
             }
             XtalDutySearchStep::Complete(outcome) => XtalDutySearchAction::Complete(outcome),
             XtalDutySearchStep::Failed(failure) => XtalDutySearchAction::Failed(failure),
@@ -182,37 +172,39 @@ impl XtalDutySearchTransition {
         }
     }
 
-    fn arm_signal_power(&mut self) {
-        if self.signal_power.is_some() {
-            return;
-        }
-        let request = match self.step {
-            XtalDutySearchStep::InitialSamples {
+    /// The step that measures for `work`.
+    fn measuring(work: XtalDutySearchWork) -> XtalDutySearchStep {
+        let request = match work {
+            XtalDutySearchWork::Initial {
                 candidate, count, ..
             } => Self::measurement_request(candidate, XtalDutySampleKind::Initial(count)),
-            XtalDutySearchStep::FirstReplacement {
-                candidate, index, ..
-            } => Self::measurement_request(candidate, XtalDutySampleKind::FirstReplacement(index)),
-            XtalDutySearchStep::SecondReplacement {
-                candidate, index, ..
-            } => Self::measurement_request(candidate, XtalDutySampleKind::SecondReplacement(index)),
-            _ => return,
+            XtalDutySearchWork::FirstReplacement(review) => Self::measurement_request(
+                review.candidate,
+                XtalDutySampleKind::FirstReplacement(review.index),
+            ),
+            XtalDutySearchWork::SecondReplacement(review) => Self::measurement_request(
+                review.candidate,
+                XtalDutySampleKind::SecondReplacement(review.index),
+            ),
         };
-        self.signal_power = Some(PhySignalPowerTransition::new(request));
+        XtalDutySearchStep::Measuring {
+            signal: PhySignalPowerTransition::new(request),
+            work,
+        }
     }
 
     fn outlier(value: i64, lower: i64, upper: i64) -> bool {
         value < lower || value > upper
     }
 
-    fn finish_candidate(&mut self, candidate: u8, filtered_sum: i64) {
+    fn finish_candidate(&mut self, candidate: u8, filtered_sum: i64) -> XtalDutySearchStep {
         let filtered_power = filtered_sum / i64::from(INITIAL_SAMPLE_COUNT);
         if !self.has_best || filtered_power < self.best_filtered_power {
             self.has_best = true;
             self.best_candidate = candidate;
             self.best_filtered_power = filtered_power;
         }
-        self.step = if candidate == self.last_candidate {
+        if candidate == self.last_candidate {
             XtalDutySearchStep::Complete(XtalDutySearchOutcome {
                 best_candidate: self.best_candidate,
                 best_filtered_power: self.best_filtered_power,
@@ -221,156 +213,80 @@ impl XtalDutySearchTransition {
             XtalDutySearchStep::WriteCandidate {
                 candidate: candidate.wrapping_add(1),
             }
-        };
-    }
-
-    fn normalize_review(&mut self) {
-        loop {
-            let XtalDutySearchStep::Review {
-                candidate,
-                samples,
-                lower,
-                upper,
-                index,
-                filtered_sum,
-            } = self.step
-            else {
-                return;
-            };
-            if index == INITIAL_SAMPLE_COUNT {
-                self.finish_candidate(candidate, filtered_sum);
-                return;
-            }
-            let sample = samples[index as usize];
-            if Self::outlier(sample, lower, upper) {
-                self.step = XtalDutySearchStep::FirstReplacement {
-                    candidate,
-                    samples,
-                    lower,
-                    upper,
-                    index,
-                    filtered_sum,
-                };
-                return;
-            }
-            self.step = XtalDutySearchStep::Review {
-                candidate,
-                samples,
-                lower,
-                upper,
-                index: index + 1,
-                filtered_sum: filtered_sum.wrapping_add(sample),
-            };
         }
     }
 
-    fn accept_signal_power(&mut self, value: i64) -> Result<(), XtalDutySearchTransitionError> {
-        self.step = match self.step {
-            XtalDutySearchStep::InitialSamples {
+    /// Read the samples on from `review`: the first outlier is measured again.
+    fn review(&mut self, mut review: XtalDutySearchReview) -> XtalDutySearchStep {
+        while let Some(&sample) = review.samples.get(usize::from(review.index)) {
+            if Self::outlier(sample, review.lower, review.upper) {
+                return Self::measuring(XtalDutySearchWork::FirstReplacement(review));
+            }
+            review = review.taken(sample);
+        }
+        self.finish_candidate(review.candidate, review.filtered_sum)
+    }
+
+    fn accept_signal_power(&mut self, work: XtalDutySearchWork, value: i64) -> XtalDutySearchStep {
+        match work {
+            XtalDutySearchWork::Initial {
                 candidate,
-                mut samples,
+                samples: [_, second, third, fourth],
                 count,
             } => {
-                samples[count as usize] = value;
+                // Each sample moves down: the fourth leaves them in order.
+                let samples = [second, third, fourth, value];
                 if count + 1 != INITIAL_SAMPLE_COUNT {
-                    XtalDutySearchStep::InitialSamples {
+                    return Self::measuring(XtalDutySearchWork::Initial {
                         candidate,
                         samples,
                         count: count + 1,
-                    }
+                    });
+                }
+                let sum = samples
+                    .into_iter()
+                    .fold(0_i64, |sum, sample| sum.wrapping_add(sample));
+                let mean = sum / i64::from(INITIAL_SAMPLE_COUNT);
+                self.review(XtalDutySearchReview {
+                    candidate,
+                    samples,
+                    lower: mean.wrapping_mul(2) / 3,
+                    upper: mean.wrapping_mul(3) / 2,
+                    index: 0,
+                    filtered_sum: 0,
+                })
+            }
+            XtalDutySearchWork::FirstReplacement(review) => {
+                if Self::outlier(value, review.lower, review.upper) {
+                    Self::measuring(XtalDutySearchWork::SecondReplacement(review))
                 } else {
-                    let sum = samples
-                        .into_iter()
-                        .fold(0_i64, |sum, sample| sum.wrapping_add(sample));
-                    let mean = sum / i64::from(INITIAL_SAMPLE_COUNT);
-                    XtalDutySearchStep::Review {
-                        candidate,
-                        samples,
-                        lower: mean.wrapping_mul(2) / 3,
-                        upper: mean.wrapping_mul(3) / 2,
-                        index: 0,
-                        filtered_sum: 0,
-                    }
+                    self.review(review.taken(value))
                 }
             }
-            XtalDutySearchStep::FirstReplacement {
-                candidate,
-                samples,
-                lower,
-                upper,
-                index,
-                filtered_sum,
-            } => {
-                if Self::outlier(value, lower, upper) {
-                    XtalDutySearchStep::SecondReplacement {
-                        candidate,
-                        samples,
-                        lower,
-                        upper,
-                        index,
-                        filtered_sum,
-                    }
-                } else {
-                    XtalDutySearchStep::Review {
-                        candidate,
-                        samples,
-                        lower,
-                        upper,
-                        index: index + 1,
-                        filtered_sum: filtered_sum.wrapping_add(value),
-                    }
-                }
-            }
-            XtalDutySearchStep::SecondReplacement {
-                candidate,
-                samples,
-                lower,
-                upper,
-                index,
-                filtered_sum,
-            } => XtalDutySearchStep::Review {
-                candidate,
-                samples,
-                lower,
-                upper,
-                index: index + 1,
-                filtered_sum: filtered_sum.wrapping_add(value),
-            },
-            _ => return Err(XtalDutySearchTransitionError::WrongCompletion),
-        };
-        self.normalize_review();
-        self.arm_signal_power();
-        Ok(())
+            XtalDutySearchWork::SecondReplacement(review) => self.review(review.taken(value)),
+        }
     }
 
     pub fn advance(
         &mut self,
         completion: XtalDutySearchCompletion,
     ) -> Result<(), XtalDutySearchTransitionError> {
-        if let Some(mut transition) = self.signal_power {
-            let XtalDutySearchCompletion::SignalPower(completion) = completion else {
-                return Err(XtalDutySearchTransitionError::WrongCompletion);
-            };
-            transition
-                .advance(completion)
-                .map_err(|_| XtalDutySearchTransitionError::WrongCompletion)?;
-            return match transition.action() {
-                PhySignalPowerAction::Complete(outcome) => {
-                    self.signal_power = None;
-                    self.accept_signal_power(outcome.value)
-                }
-                PhySignalPowerAction::Failed(failure) => {
-                    self.signal_power = None;
-                    self.step = XtalDutySearchStep::Failed(failure);
-                    Ok(())
-                }
-                _ => {
-                    self.signal_power = Some(transition);
-                    Ok(())
-                }
-            };
-        }
         self.step = match (self.step, completion) {
+            (
+                XtalDutySearchStep::Measuring { mut signal, work },
+                XtalDutySearchCompletion::SignalPower(completion),
+            ) => {
+                signal
+                    .advance(completion)
+                    .map_err(|_| XtalDutySearchTransitionError::WrongCompletion)?;
+                match signal.action() {
+                    PhySignalPowerAction::Complete(outcome) => {
+                        self.accept_signal_power(work, outcome.value)
+                    }
+                    PhySignalPowerAction::Failed(failure) => XtalDutySearchStep::Failed(failure),
+                    _ => XtalDutySearchStep::Measuring { signal, work },
+                }
+            }
             (
                 XtalDutySearchStep::WriteCandidate { candidate },
                 XtalDutySearchCompletion::CandidateWritten {
@@ -385,19 +301,28 @@ impl XtalDutySearchTransition {
                 XtalDutySearchCompletion::DelayElapsed {
                     candidate: completed,
                 },
-            ) if candidate == completed => XtalDutySearchStep::InitialSamples {
+            ) if candidate == completed => Self::measuring(XtalDutySearchWork::Initial {
                 candidate,
                 samples: [0; INITIAL_SAMPLE_COUNT as usize],
                 count: 0,
-            },
+            }),
             (XtalDutySearchStep::Complete(_), _) | (XtalDutySearchStep::Failed(_), _) => {
                 return Err(XtalDutySearchTransitionError::AlreadyComplete);
             }
             _ => return Err(XtalDutySearchTransitionError::WrongCompletion),
         };
-        self.normalize_review();
-        self.arm_signal_power();
         Ok(())
+    }
+}
+
+impl XtalDutySearchReview {
+    /// The review past its current sample, counting `value` in its place.
+    fn taken(self, value: i64) -> Self {
+        Self {
+            index: self.index + 1,
+            filtered_sum: self.filtered_sum.wrapping_add(value),
+            ..self
+        }
     }
 }
 

@@ -800,31 +800,99 @@ impl PhyPwdetReadyBinding {
     }
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyPwdetMmioAction {
+    ConfigurePbusDebugMode,
+    ConfigureTxClock {
+        enabled: bool,
+    },
+    ConfigurePowerDetector,
+    ConfigureCalibrationMode,
+    ConfigureTone,
+    WriteReferenceControl {
+        value: u16,
+    },
+    ArmTone {
+        measurement_index: u8,
+        sample_index: u8,
+    },
+    TriggerSar {
+        measurement_index: u8,
+        sample_index: u8,
+    },
+    ClearToneArm {
+        measurement_index: u8,
+        sample_index: u8,
+    },
+    ReadSarSample {
+        measurement_index: u8,
+        sample_index: u8,
+    },
+    StopTone,
+    ConfigurePbusWorkMode,
+    ConfigurePbusWorkModePulse,
+    ClearPbusWorkModePulse,
+}
+
 /// Non-cloneable lowering for one finite PWDET MMIO action.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyPwdetMmioBinding {
-    action: PhyPwdetAction,
+    action: PhyPwdetMmioAction,
 }
 
 impl PhyPwdetMmioBinding {
     pub fn new(action: PhyPwdetAction) -> Result<Self, PhyPwdetBindingError> {
-        match action {
-            PhyPwdetAction::ConfigurePbusDebugMode
-            | PhyPwdetAction::ConfigureTxClock { .. }
-            | PhyPwdetAction::ConfigurePowerDetector
-            | PhyPwdetAction::ConfigureCalibrationMode
-            | PhyPwdetAction::ConfigureTone
-            | PhyPwdetAction::WriteReferenceControl { .. }
-            | PhyPwdetAction::ArmTone { .. }
-            | PhyPwdetAction::TriggerSar { .. }
-            | PhyPwdetAction::ClearToneArm { .. }
-            | PhyPwdetAction::ReadSarSample { .. }
-            | PhyPwdetAction::StopTone
-            | PhyPwdetAction::ConfigurePbusWorkMode
-            | PhyPwdetAction::ConfigurePbusWorkModePulse
-            | PhyPwdetAction::ClearPbusWorkModePulse => Ok(Self { action }),
-            _ => Err(PhyPwdetBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyPwdetAction::ConfigurePbusDebugMode => PhyPwdetMmioAction::ConfigurePbusDebugMode,
+            PhyPwdetAction::ConfigureTxClock { enabled } => {
+                PhyPwdetMmioAction::ConfigureTxClock { enabled }
+            }
+            PhyPwdetAction::ConfigurePowerDetector => PhyPwdetMmioAction::ConfigurePowerDetector,
+            PhyPwdetAction::ConfigureCalibrationMode => {
+                PhyPwdetMmioAction::ConfigureCalibrationMode
+            }
+            PhyPwdetAction::ConfigureTone => PhyPwdetMmioAction::ConfigureTone,
+            PhyPwdetAction::WriteReferenceControl { value } => {
+                PhyPwdetMmioAction::WriteReferenceControl { value }
+            }
+            PhyPwdetAction::ArmTone {
+                measurement_index,
+                sample_index,
+            } => PhyPwdetMmioAction::ArmTone {
+                measurement_index,
+                sample_index,
+            },
+            PhyPwdetAction::TriggerSar {
+                measurement_index,
+                sample_index,
+            } => PhyPwdetMmioAction::TriggerSar {
+                measurement_index,
+                sample_index,
+            },
+            PhyPwdetAction::ClearToneArm {
+                measurement_index,
+                sample_index,
+            } => PhyPwdetMmioAction::ClearToneArm {
+                measurement_index,
+                sample_index,
+            },
+            PhyPwdetAction::ReadSarSample {
+                measurement_index,
+                sample_index,
+            } => PhyPwdetMmioAction::ReadSarSample {
+                measurement_index,
+                sample_index,
+            },
+            PhyPwdetAction::StopTone => PhyPwdetMmioAction::StopTone,
+            PhyPwdetAction::ConfigurePbusWorkMode => PhyPwdetMmioAction::ConfigurePbusWorkMode,
+            PhyPwdetAction::ConfigurePbusWorkModePulse => {
+                PhyPwdetMmioAction::ConfigurePbusWorkModePulse
+            }
+            PhyPwdetAction::ClearPbusWorkModePulse => PhyPwdetMmioAction::ClearPbusWorkModePulse,
+            _ => return Err(PhyPwdetBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -833,25 +901,25 @@ impl PhyPwdetMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyPwdetCompletion {
         match self.action {
-            PhyPwdetAction::ConfigurePbusDebugMode => {
+            PhyPwdetMmioAction::ConfigurePbusDebugMode => {
                 oer_chips_family_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyPwdetCompletion::PbusDebugModeConfigured
             }
-            PhyPwdetAction::ConfigureTxClock { enabled } => {
+            PhyPwdetMmioAction::ConfigureTxClock { enabled } => {
                 oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
                 PhyPwdetCompletion::TxClockConfigured { enabled }
             }
-            PhyPwdetAction::ConfigurePowerDetector => {
+            PhyPwdetMmioAction::ConfigurePowerDetector => {
                 oer_chips_esp32s31_hal::phy::power_detector::configure_enabled(registers);
                 PhyPwdetCompletion::PowerDetectorConfigured
             }
-            PhyPwdetAction::ConfigureCalibrationMode => {
+            PhyPwdetMmioAction::ConfigureCalibrationMode => {
                 oer_chips_esp32s31_hal::phy::power_detector::configure_calibration_mode(registers);
                 PhyPwdetCompletion::CalibrationModeConfigured
             }
-            PhyPwdetAction::ConfigureTone => {
+            PhyPwdetMmioAction::ConfigureTone => {
                 // Rev0 ROM `phy_pwdet_ref_code+0x1c` calls the original
                 // `phy_start_tx_tone_step(1, 0x80, 0x50, 0, 0, 0)`.
                 // Its measurement invariant requires DAC scale and TX-gain
@@ -859,11 +927,11 @@ impl PhyPwdetMmioBinding {
                 crate::hardware::configure_phy_power_control_tone(registers, 0x80, 0x50);
                 PhyPwdetCompletion::ToneConfigured
             }
-            PhyPwdetAction::WriteReferenceControl { value } => {
+            PhyPwdetMmioAction::WriteReferenceControl { value } => {
                 oer_chips_esp32s31_hal::phy::power_detector::write_reference(registers, value);
                 PhyPwdetCompletion::ReferenceControlWritten { value }
             }
-            PhyPwdetAction::ArmTone {
+            PhyPwdetMmioAction::ArmTone {
                 measurement_index,
                 sample_index,
             } => {
@@ -873,7 +941,7 @@ impl PhyPwdetMmioBinding {
                     sample_index,
                 }
             }
-            PhyPwdetAction::TriggerSar {
+            PhyPwdetMmioAction::TriggerSar {
                 measurement_index,
                 sample_index,
             } => {
@@ -883,7 +951,7 @@ impl PhyPwdetMmioBinding {
                     sample_index,
                 }
             }
-            PhyPwdetAction::ClearToneArm {
+            PhyPwdetMmioAction::ClearToneArm {
                 measurement_index,
                 sample_index,
             } => {
@@ -893,7 +961,7 @@ impl PhyPwdetMmioBinding {
                     sample_index,
                 }
             }
-            PhyPwdetAction::ReadSarSample {
+            PhyPwdetMmioAction::ReadSarSample {
                 measurement_index,
                 sample_index,
             } => PhyPwdetCompletion::SarSampled {
@@ -901,24 +969,25 @@ impl PhyPwdetMmioBinding {
                 sample_index,
                 value: oer_chips_esp32s31_hal::phy::power_detector::sample_sar(registers),
             },
-            PhyPwdetAction::StopTone => {
+            PhyPwdetMmioAction::StopTone => {
                 crate::hardware::stop_phy_power_detector_tone(registers);
                 PhyPwdetCompletion::ToneStopped
             }
-            PhyPwdetAction::ConfigurePbusWorkMode => PhyPwdetCompletion::PbusWorkModeConfigured {
-                settle_required: oer_chips_family_phy::pbus::configure_work_mode(
-                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
-                ),
-            },
-            PhyPwdetAction::ConfigurePbusWorkModePulse => {
+            PhyPwdetMmioAction::ConfigurePbusWorkMode => {
+                PhyPwdetCompletion::PbusWorkModeConfigured {
+                    settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                        &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
+                    ),
+                }
+            }
+            PhyPwdetMmioAction::ConfigurePbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyPwdetCompletion::PbusWorkModePulseConfigured
             }
-            PhyPwdetAction::ClearPbusWorkModePulse => {
+            PhyPwdetMmioAction::ClearPbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyPwdetCompletion::PbusWorkModePulseCleared
             }
-            _ => unreachable!(),
         }
     }
 }

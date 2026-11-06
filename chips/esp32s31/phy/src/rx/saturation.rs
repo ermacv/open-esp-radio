@@ -237,18 +237,30 @@ pub enum PhyRxSaturationBindingError {
     Pbus(crate::analog::pbus::PhyPbusHardwareBindingError),
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyRxSaturationMmioAction {
+    ConfigureDebugMode,
+    ConfigureWorkMode,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRxSaturationMmioBinding {
-    action: PhyRxSaturationAction,
+    action: PhyRxSaturationMmioAction,
 }
 
 impl PhyRxSaturationMmioBinding {
     pub fn new(action: PhyRxSaturationAction) -> Result<Self, PhyRxSaturationBindingError> {
-        match action {
-            PhyRxSaturationAction::ConfigureDebugMode
-            | PhyRxSaturationAction::ConfigureWorkMode => Ok(Self { action }),
-            _ => Err(PhyRxSaturationBindingError::UnsupportedAction),
-        }
+        let action = match action {
+            PhyRxSaturationAction::ConfigureDebugMode => {
+                PhyRxSaturationMmioAction::ConfigureDebugMode
+            }
+            PhyRxSaturationAction::ConfigureWorkMode => {
+                PhyRxSaturationMmioAction::ConfigureWorkMode
+            }
+            _ => return Err(PhyRxSaturationBindingError::UnsupportedAction),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -257,19 +269,18 @@ impl PhyRxSaturationMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyRxSaturationCompletion {
         match self.action {
-            PhyRxSaturationAction::ConfigureDebugMode => {
+            PhyRxSaturationMmioAction::ConfigureDebugMode => {
                 oer_chips_family_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyRxSaturationCompletion::DebugModeConfigured
             }
-            PhyRxSaturationAction::ConfigureWorkMode => {
+            PhyRxSaturationMmioAction::ConfigureWorkMode => {
                 let _ = oer_chips_family_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyRxSaturationCompletion::WorkModeConfigured
             }
-            _ => unreachable!(),
         }
     }
 }

@@ -193,13 +193,18 @@ impl Search {
     }
 }
 
+/// The PBus force selecting the Bluetooth transmit path.
+const fn bluetooth_tx_path_transaction(tx_path_value: u8) -> PhyPbusForceTest {
+    PhyPbusForceTest::new(4, 2, (tx_path_value as u16) << 3)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Step {
     ConfigurePbusDebugMode,
     EnterPbus { index: u8 },
-    ReadBluetoothGainControl,
-    ForceBluetoothGainControl { value: u16 },
-    ConfigureBluetoothTxPath,
+    ReadBluetoothGainControl { tx_path_value: u8 },
+    ForceBluetoothGainControl { value: u16, tx_path_value: u8 },
+    ConfigureBluetoothTxPath { tx_path_value: u8 },
     SelectGain { gain_index: u8 },
     InitializeDco { gain_index: u8, index: u8 },
     ConfigureTxClock { gain_index: u8 },
@@ -340,26 +345,19 @@ impl PhyTxDcTransition {
         }
     }
 
-    const fn bluetooth_tx_path_transaction(self) -> PhyPbusForceTest {
-        let PhyTxDcMode::Bluetooth { tx_path_value } = self.mode else {
-            unreachable!()
-        };
-        PhyPbusForceTest::new(4, 2, (tx_path_value as u16) << 3)
-    }
-
     pub const fn action(self) -> PhyTxDcAction {
         match self.step {
             Step::ConfigurePbusDebugMode => PhyTxDcAction::ConfigurePbusDebugMode,
             Step::EnterPbus { index } => PhyTxDcAction::ForcePbus(enter_pbus_transaction(index)),
-            Step::ReadBluetoothGainControl => PhyTxDcAction::ReadPbus {
+            Step::ReadBluetoothGainControl { .. } => PhyTxDcAction::ReadPbus {
                 selector: 1,
                 path: 1,
             },
-            Step::ForceBluetoothGainControl { value } => {
+            Step::ForceBluetoothGainControl { value, .. } => {
                 PhyTxDcAction::ForcePbus(PhyPbusForceTest::new(1, 1, value | 2))
             }
-            Step::ConfigureBluetoothTxPath => {
-                PhyTxDcAction::ForcePbus(self.bluetooth_tx_path_transaction())
+            Step::ConfigureBluetoothTxPath { tx_path_value } => {
+                PhyTxDcAction::ForcePbus(bluetooth_tx_path_transaction(tx_path_value))
             }
             Step::SelectGain { gain_index } => PhyTxDcAction::ForcePbus(PhyPbusForceTest::new(
                 1,
@@ -448,7 +446,9 @@ impl PhyTxDcTransition {
                 if index + 1 == ENTER_PBUS_COUNT {
                     match self.mode {
                         PhyTxDcMode::Wifi => Step::SelectGain { gain_index: 0 },
-                        PhyTxDcMode::Bluetooth { .. } => Step::ReadBluetoothGainControl,
+                        PhyTxDcMode::Bluetooth { tx_path_value } => {
+                            Step::ReadBluetoothGainControl { tx_path_value }
+                        }
                     }
                 } else {
                     Step::EnterPbus { index: index + 1 }
@@ -462,35 +462,43 @@ impl PhyTxDcTransition {
                 )))
             }
             (
-                Step::ReadBluetoothGainControl,
+                Step::ReadBluetoothGainControl { tx_path_value },
                 PhyTxDcCompletion::PbusRead {
                     selector: 1,
                     path: 1,
                     value,
                 },
-            ) => Step::ForceBluetoothGainControl { value },
+            ) => Step::ForceBluetoothGainControl {
+                value,
+                tx_path_value,
+            },
             (
-                Step::ForceBluetoothGainControl { value },
+                Step::ForceBluetoothGainControl {
+                    value,
+                    tx_path_value,
+                },
                 PhyTxDcCompletion::PbusCompleted(transaction),
             ) if transaction == PhyPbusForceTest::new(1, 1, value | 2) => {
-                Step::ConfigureBluetoothTxPath
+                Step::ConfigureBluetoothTxPath { tx_path_value }
             }
             (
-                Step::ForceBluetoothGainControl { value },
+                Step::ForceBluetoothGainControl { value, .. },
                 PhyTxDcCompletion::PbusTimedOut(transaction),
             ) if transaction == PhyPbusForceTest::new(1, 1, value | 2) => {
                 Step::ConfigurePbusWorkMode(Terminal::Failed(PhyTxDcFailure::PbusTimedOut(
                     transaction,
                 )))
             }
-            (Step::ConfigureBluetoothTxPath, PhyTxDcCompletion::PbusCompleted(transaction))
-                if transaction == self.bluetooth_tx_path_transaction() =>
-            {
+            (
+                Step::ConfigureBluetoothTxPath { tx_path_value },
+                PhyTxDcCompletion::PbusCompleted(transaction),
+            ) if transaction == bluetooth_tx_path_transaction(tx_path_value) => {
                 Step::SelectGain { gain_index: 0 }
             }
-            (Step::ConfigureBluetoothTxPath, PhyTxDcCompletion::PbusTimedOut(transaction))
-                if transaction == self.bluetooth_tx_path_transaction() =>
-            {
+            (
+                Step::ConfigureBluetoothTxPath { tx_path_value },
+                PhyTxDcCompletion::PbusTimedOut(transaction),
+            ) if transaction == bluetooth_tx_path_transaction(tx_path_value) => {
                 Step::ConfigurePbusWorkMode(Terminal::Failed(PhyTxDcFailure::PbusTimedOut(
                     transaction,
                 )))
@@ -825,30 +833,118 @@ impl PhyTxDcReadyBinding {
     }
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxDcMmioAction {
+    ConfigurePbusDebugMode,
+    ReadPbus {
+        selector: u8,
+        path: u8,
+    },
+    ConfigureTxClock,
+    ConfigureTone {
+        enabled: bool,
+        selector: u16,
+        step: u8,
+    },
+    TriggerMeasurement {
+        gain_index: u8,
+        iteration: u8,
+    },
+    ReadComparators {
+        gain_index: u8,
+        iteration: u8,
+    },
+    ClearMeasurement,
+    ConfigurePbusWorkMode,
+    ConfigurePbusWorkModePulse,
+    ClearPbusWorkModePulse,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxDcMmioBinding {
-    action: PhyTxDcAction,
+    action: PhyTxDcMmioAction,
 }
 
 impl PhyTxDcMmioBinding {
     pub fn new(action: PhyTxDcAction) -> Result<Self, PhyTxDcBindingError> {
-        match action {
-            PhyTxDcAction::ConfigurePbusDebugMode
-            | PhyTxDcAction::ReadPbus { .. }
-            | PhyTxDcAction::ConfigureTxClock
-            | PhyTxDcAction::ConfigureTone { .. }
-            | PhyTxDcAction::TriggerMeasurement { .. }
-            | PhyTxDcAction::ReadComparators { .. }
-            | PhyTxDcAction::ClearMeasurement
-            | PhyTxDcAction::ConfigurePbusWorkMode
-            | PhyTxDcAction::ConfigurePbusWorkModePulse
-            | PhyTxDcAction::ClearPbusWorkModePulse => Ok(Self { action }),
-            _ => Err(PhyTxDcBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxDcAction::ConfigurePbusDebugMode => PhyTxDcMmioAction::ConfigurePbusDebugMode,
+            PhyTxDcAction::ReadPbus { selector, path } => {
+                PhyTxDcMmioAction::ReadPbus { selector, path }
+            }
+            PhyTxDcAction::ConfigureTxClock => PhyTxDcMmioAction::ConfigureTxClock,
+            PhyTxDcAction::ConfigureTone {
+                enabled,
+                selector,
+                step,
+            } => PhyTxDcMmioAction::ConfigureTone {
+                enabled,
+                selector,
+                step,
+            },
+            PhyTxDcAction::TriggerMeasurement {
+                gain_index,
+                iteration,
+            } => PhyTxDcMmioAction::TriggerMeasurement {
+                gain_index,
+                iteration,
+            },
+            PhyTxDcAction::ReadComparators {
+                gain_index,
+                iteration,
+            } => PhyTxDcMmioAction::ReadComparators {
+                gain_index,
+                iteration,
+            },
+            PhyTxDcAction::ClearMeasurement => PhyTxDcMmioAction::ClearMeasurement,
+            PhyTxDcAction::ConfigurePbusWorkMode => PhyTxDcMmioAction::ConfigurePbusWorkMode,
+            PhyTxDcAction::ConfigurePbusWorkModePulse => {
+                PhyTxDcMmioAction::ConfigurePbusWorkModePulse
+            }
+            PhyTxDcAction::ClearPbusWorkModePulse => PhyTxDcMmioAction::ClearPbusWorkModePulse,
+            _ => return Err(PhyTxDcBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     pub const fn action(&self) -> PhyTxDcAction {
-        self.action
+        match self.action {
+            PhyTxDcMmioAction::ConfigurePbusDebugMode => PhyTxDcAction::ConfigurePbusDebugMode,
+            PhyTxDcMmioAction::ReadPbus { selector, path } => {
+                PhyTxDcAction::ReadPbus { selector, path }
+            }
+            PhyTxDcMmioAction::ConfigureTxClock => PhyTxDcAction::ConfigureTxClock,
+            PhyTxDcMmioAction::ConfigureTone {
+                enabled,
+                selector,
+                step,
+            } => PhyTxDcAction::ConfigureTone {
+                enabled,
+                selector,
+                step,
+            },
+            PhyTxDcMmioAction::TriggerMeasurement {
+                gain_index,
+                iteration,
+            } => PhyTxDcAction::TriggerMeasurement {
+                gain_index,
+                iteration,
+            },
+            PhyTxDcMmioAction::ReadComparators {
+                gain_index,
+                iteration,
+            } => PhyTxDcAction::ReadComparators {
+                gain_index,
+                iteration,
+            },
+            PhyTxDcMmioAction::ClearMeasurement => PhyTxDcAction::ClearMeasurement,
+            PhyTxDcMmioAction::ConfigurePbusWorkMode => PhyTxDcAction::ConfigurePbusWorkMode,
+            PhyTxDcMmioAction::ConfigurePbusWorkModePulse => {
+                PhyTxDcAction::ConfigurePbusWorkModePulse
+            }
+            PhyTxDcMmioAction::ClearPbusWorkModePulse => PhyTxDcAction::ClearPbusWorkModePulse,
+        }
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -857,13 +953,13 @@ impl PhyTxDcMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyTxDcCompletion {
         match self.action {
-            PhyTxDcAction::ConfigurePbusDebugMode => {
+            PhyTxDcMmioAction::ConfigurePbusDebugMode => {
                 oer_chips_family_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyTxDcCompletion::PbusDebugModeConfigured
             }
-            PhyTxDcAction::ReadPbus { selector, path } => PhyTxDcCompletion::PbusRead {
+            PhyTxDcMmioAction::ReadPbus { selector, path } => PhyTxDcCompletion::PbusRead {
                 selector,
                 path,
                 value: {
@@ -876,11 +972,11 @@ impl PhyTxDcMmioBinding {
                     result.unwrap_or(0)
                 },
             },
-            PhyTxDcAction::ConfigureTxClock => {
+            PhyTxDcMmioAction::ConfigureTxClock => {
                 oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, true);
                 PhyTxDcCompletion::TxClockConfigured
             }
-            PhyTxDcAction::ConfigureTone {
+            PhyTxDcMmioAction::ConfigureTone {
                 enabled,
                 selector,
                 step,
@@ -908,7 +1004,7 @@ impl PhyTxDcMmioBinding {
                     step,
                 }
             }
-            PhyTxDcAction::TriggerMeasurement {
+            PhyTxDcMmioAction::TriggerMeasurement {
                 gain_index,
                 iteration,
             } => {
@@ -918,7 +1014,7 @@ impl PhyTxDcMmioBinding {
                     iteration,
                 }
             }
-            PhyTxDcAction::ReadComparators {
+            PhyTxDcMmioAction::ReadComparators {
                 gain_index,
                 iteration,
             } => PhyTxDcCompletion::ComparatorsRead {
@@ -926,24 +1022,23 @@ impl PhyTxDcMmioBinding {
                 iteration,
                 comparator_high: crate::hardware::read_phy_tx_dc_comparator_status(registers),
             },
-            PhyTxDcAction::ClearMeasurement => {
+            PhyTxDcMmioAction::ClearMeasurement => {
                 crate::hardware::clear_phy_tx_dc_measurement(registers);
                 PhyTxDcCompletion::MeasurementCleared
             }
-            PhyTxDcAction::ConfigurePbusWorkMode => PhyTxDcCompletion::PbusWorkModeConfigured {
+            PhyTxDcMmioAction::ConfigurePbusWorkMode => PhyTxDcCompletion::PbusWorkModeConfigured {
                 settle_required: oer_chips_family_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 ),
             },
-            PhyTxDcAction::ConfigurePbusWorkModePulse => {
+            PhyTxDcMmioAction::ConfigurePbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyTxDcCompletion::PbusWorkModePulseConfigured
             }
-            PhyTxDcAction::ClearPbusWorkModePulse => {
+            PhyTxDcMmioAction::ClearPbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyTxDcCompletion::PbusWorkModePulseCleared
             }
-            _ => unreachable!(),
         }
     }
 }

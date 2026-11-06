@@ -669,9 +669,9 @@ enum RootStep {
     ToneOn,
     InitialDelay,
     TxOn { index: u8 },
-    BluetoothReadForcedPath,
-    BluetoothForcePath { value: u16 },
-    BluetoothForceTxPath,
+    BluetoothReadForcedPath { tx_path_value: u8 },
+    BluetoothForcePath { value: u16, tx_path_value: u8 },
+    BluetoothForceTxPath { tx_path_value: u8 },
     Sar,
     ForceTxPath,
     Gain,
@@ -949,23 +949,16 @@ impl PhyTxDcPwdetTransition {
             RootStep::ClockOn => PhyTxDcPwdetAction::ConfigureTxClock { enabled: true },
             RootStep::PowerDetector => PhyTxDcPwdetAction::ConfigurePowerDetector,
             RootStep::Debug => PhyTxDcPwdetAction::ConfigurePbusDebugMode,
-            RootStep::BluetoothReadForcedPath => PhyTxDcPwdetAction::ReadPbus {
+            RootStep::BluetoothReadForcedPath { .. } => PhyTxDcPwdetAction::ReadPbus {
                 selector: 1,
                 path: 1,
             },
-            RootStep::BluetoothForcePath { value } => {
+            RootStep::BluetoothForcePath { value, .. } => {
                 PhyTxDcPwdetAction::ForcePbus(PhyPbusForceTest::new(1, 1, value | 2))
             }
-            RootStep::BluetoothForceTxPath => {
-                let PhyTxDcPwdetMode::Bluetooth { tx_path_value } = self.mode else {
-                    unreachable!()
-                };
-                PhyTxDcPwdetAction::ForcePbus(PhyPbusForceTest::new(
-                    4,
-                    2,
-                    (tx_path_value as u16) << 3,
-                ))
-            }
+            RootStep::BluetoothForceTxPath { tx_path_value } => PhyTxDcPwdetAction::ForcePbus(
+                PhyPbusForceTest::new(4, 2, (tx_path_value as u16) << 3),
+            ),
             RootStep::TxOff { index } | RootStep::CleanupTxOff { index, .. } => {
                 PhyTxDcPwdetAction::ForcePbus(tx_off(index))
             }
@@ -1049,25 +1042,25 @@ impl PhyTxDcPwdetTransition {
                 if index == 10 {
                     match self.mode {
                         PhyTxDcPwdetMode::Wifi => RootStep::Sar,
-                        PhyTxDcPwdetMode::Bluetooth { .. } => RootStep::BluetoothReadForcedPath,
+                        PhyTxDcPwdetMode::Bluetooth { tx_path_value } => {
+                            RootStep::BluetoothReadForcedPath { tx_path_value }
+                        }
                     }
                 } else {
                     RootStep::TxOn { index: index + 1 }
                 },
             ),
-            RootStep::BluetoothForcePath { value } => (
+            RootStep::BluetoothForcePath {
+                value,
+                tx_path_value,
+            } => (
                 PhyPbusForceTest::new(1, 1, value | 2),
-                RootStep::BluetoothForceTxPath,
+                RootStep::BluetoothForceTxPath { tx_path_value },
             ),
-            RootStep::BluetoothForceTxPath => {
-                let PhyTxDcPwdetMode::Bluetooth { tx_path_value } = self.mode else {
-                    return Err(PhyTxDcPwdetTransitionError::WrongCompletion);
-                };
-                (
-                    PhyPbusForceTest::new(4, 2, u16::from(tx_path_value) << 3),
-                    RootStep::Sar,
-                )
-            }
+            RootStep::BluetoothForceTxPath { tx_path_value } => (
+                PhyPbusForceTest::new(4, 2, u16::from(tx_path_value) << 3),
+                RootStep::Sar,
+            ),
             RootStep::ForceTxPath => (
                 PhyPbusForceTest::new(5, 1, if self.row == 2 { 0x1e7 } else { 0x1ef }),
                 RootStep::Gain,
@@ -1160,13 +1153,18 @@ impl PhyTxDcPwdetTransition {
                 self.step = RootStep::ForceTxPath;
             }
             (
-                RootStep::BluetoothReadForcedPath,
+                RootStep::BluetoothReadForcedPath { tx_path_value },
                 PhyTxDcPwdetCompletion::PbusRead {
                     selector: 1,
                     path: 1,
                     value,
                 },
-            ) => self.step = RootStep::BluetoothForcePath { value },
+            ) => {
+                self.step = RootStep::BluetoothForcePath {
+                    value,
+                    tx_path_value: *tx_path_value,
+                }
+            }
             (RootStep::Search(transition), PhyTxDcPwdetCompletion::Search(completion)) => {
                 transition
                     .advance(completion)
@@ -1243,7 +1241,7 @@ impl PhyTxDcPwdetTransition {
                 | RootStep::RxOff { .. }
                 | RootStep::TxOn { .. }
                 | RootStep::BluetoothForcePath { .. }
-                | RootStep::BluetoothForceTxPath
+                | RootStep::BluetoothForceTxPath { .. }
                 | RootStep::ForceTxPath
                 | RootStep::Gain
                 | RootStep::CleanupDco { .. }
@@ -1255,7 +1253,7 @@ impl PhyTxDcPwdetTransition {
                 | RootStep::RxOff { .. }
                 | RootStep::TxOn { .. }
                 | RootStep::BluetoothForcePath { .. }
-                | RootStep::BluetoothForceTxPath
+                | RootStep::BluetoothForceTxPath { .. }
                 | RootStep::ForceTxPath
                 | RootStep::Gain
                 | RootStep::CleanupDco { .. }
@@ -1295,27 +1293,77 @@ fn require_pbus_result(result: Option<u16>) -> Result<u16, PhyTxDcPwdetHardwareI
     result.ok_or(PhyTxDcPwdetHardwareInvariant::UnsupportedPbusRead)
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxDcPwdetMmioAction {
+    PrepareRegisters,
+    ConfigureTxClock {
+        enabled: bool,
+    },
+    ConfigurePowerDetector,
+    ConfigurePbusDebugMode,
+    ReadPbus {
+        selector: u8,
+        path: u8,
+    },
+    ConfigureTone {
+        enabled: bool,
+        selector: u16,
+        attenuation: u8,
+    },
+    ConfigureSarCalibration,
+    ConfigurePbusWorkMode,
+    ConfigurePbusWorkModePulse,
+    ClearPbusWorkModePulse,
+    RestoreRegisters,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyTxDcPwdetMmioBinding {
-    action: PhyTxDcPwdetAction,
+    action: PhyTxDcPwdetMmioAction,
 }
 
 impl PhyTxDcPwdetMmioBinding {
     pub fn new(action: PhyTxDcPwdetAction) -> Result<Self, PhyTxDcPwdetBindingError> {
-        match action {
-            PhyTxDcPwdetAction::PrepareRegisters
-            | PhyTxDcPwdetAction::ConfigureTxClock { .. }
-            | PhyTxDcPwdetAction::ConfigurePowerDetector
-            | PhyTxDcPwdetAction::ConfigurePbusDebugMode
-            | PhyTxDcPwdetAction::ReadPbus { .. }
-            | PhyTxDcPwdetAction::ConfigureTone { .. }
-            | PhyTxDcPwdetAction::ConfigureSarCalibration
-            | PhyTxDcPwdetAction::ConfigurePbusWorkMode
-            | PhyTxDcPwdetAction::ConfigurePbusWorkModePulse
-            | PhyTxDcPwdetAction::ClearPbusWorkModePulse
-            | PhyTxDcPwdetAction::RestoreRegisters => Ok(Self { action }),
-            _ => Err(PhyTxDcPwdetBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyTxDcPwdetAction::PrepareRegisters => PhyTxDcPwdetMmioAction::PrepareRegisters,
+            PhyTxDcPwdetAction::ConfigureTxClock { enabled } => {
+                PhyTxDcPwdetMmioAction::ConfigureTxClock { enabled }
+            }
+            PhyTxDcPwdetAction::ConfigurePowerDetector => {
+                PhyTxDcPwdetMmioAction::ConfigurePowerDetector
+            }
+            PhyTxDcPwdetAction::ConfigurePbusDebugMode => {
+                PhyTxDcPwdetMmioAction::ConfigurePbusDebugMode
+            }
+            PhyTxDcPwdetAction::ReadPbus { selector, path } => {
+                PhyTxDcPwdetMmioAction::ReadPbus { selector, path }
+            }
+            PhyTxDcPwdetAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            } => PhyTxDcPwdetMmioAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            },
+            PhyTxDcPwdetAction::ConfigureSarCalibration => {
+                PhyTxDcPwdetMmioAction::ConfigureSarCalibration
+            }
+            PhyTxDcPwdetAction::ConfigurePbusWorkMode => {
+                PhyTxDcPwdetMmioAction::ConfigurePbusWorkMode
+            }
+            PhyTxDcPwdetAction::ConfigurePbusWorkModePulse => {
+                PhyTxDcPwdetMmioAction::ConfigurePbusWorkModePulse
+            }
+            PhyTxDcPwdetAction::ClearPbusWorkModePulse => {
+                PhyTxDcPwdetMmioAction::ClearPbusWorkModePulse
+            }
+            PhyTxDcPwdetAction::RestoreRegisters => PhyTxDcPwdetMmioAction::RestoreRegisters,
+            _ => return Err(PhyTxDcPwdetBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1324,26 +1372,26 @@ impl PhyTxDcPwdetMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> Result<PhyTxDcPwdetCompletion, PhyTxDcPwdetHardwareInvariant> {
         match self.action {
-            PhyTxDcPwdetAction::PrepareRegisters => {
+            PhyTxDcPwdetMmioAction::PrepareRegisters => {
                 oer_chips_esp32s31_hal::phy::power_detector::prepare_txdc_calibration(registers)
                     .map_err(|_| PhyTxDcPwdetHardwareInvariant::RestoreAlreadyPending)?;
                 Ok(PhyTxDcPwdetCompletion::RegistersPrepared)
             }
-            PhyTxDcPwdetAction::ConfigureTxClock { enabled } => {
+            PhyTxDcPwdetMmioAction::ConfigureTxClock { enabled } => {
                 oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
                 Ok(PhyTxDcPwdetCompletion::TxClockConfigured { enabled })
             }
-            PhyTxDcPwdetAction::ConfigurePowerDetector => {
+            PhyTxDcPwdetMmioAction::ConfigurePowerDetector => {
                 oer_chips_esp32s31_hal::phy::power_detector::configure_enabled(registers);
                 Ok(PhyTxDcPwdetCompletion::PowerDetectorConfigured)
             }
-            PhyTxDcPwdetAction::ConfigurePbusDebugMode => {
+            PhyTxDcPwdetMmioAction::ConfigurePbusDebugMode => {
                 oer_chips_family_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 Ok(PhyTxDcPwdetCompletion::PbusDebugModeConfigured)
             }
-            PhyTxDcPwdetAction::ReadPbus { selector, path } => {
+            PhyTxDcPwdetMmioAction::ReadPbus { selector, path } => {
                 let value = require_pbus_result(oer_chips_esp32s31_hal::phy::pbus::read_result(
                     registers, selector, path,
                 ))?;
@@ -1353,7 +1401,7 @@ impl PhyTxDcPwdetMmioBinding {
                     value,
                 })
             }
-            PhyTxDcPwdetAction::ConfigureTone {
+            PhyTxDcPwdetMmioAction::ConfigureTone {
                 enabled,
                 selector,
                 attenuation,
@@ -1370,31 +1418,30 @@ impl PhyTxDcPwdetMmioBinding {
                     attenuation,
                 })
             }
-            PhyTxDcPwdetAction::ConfigureSarCalibration => {
+            PhyTxDcPwdetMmioAction::ConfigureSarCalibration => {
                 oer_chips_esp32s31_hal::phy::power_detector::configure_txdc_sar(registers);
                 Ok(PhyTxDcPwdetCompletion::SarCalibrationConfigured)
             }
-            PhyTxDcPwdetAction::ConfigurePbusWorkMode => {
+            PhyTxDcPwdetMmioAction::ConfigurePbusWorkMode => {
                 Ok(PhyTxDcPwdetCompletion::PbusWorkModeConfigured {
                     settle_required: oer_chips_family_phy::pbus::configure_work_mode(
                         &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                     ),
                 })
             }
-            PhyTxDcPwdetAction::ConfigurePbusWorkModePulse => {
+            PhyTxDcPwdetMmioAction::ConfigurePbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 Ok(PhyTxDcPwdetCompletion::PbusWorkModePulseConfigured)
             }
-            PhyTxDcPwdetAction::ClearPbusWorkModePulse => {
+            PhyTxDcPwdetMmioAction::ClearPbusWorkModePulse => {
                 oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 Ok(PhyTxDcPwdetCompletion::PbusWorkModePulseCleared)
             }
-            PhyTxDcPwdetAction::RestoreRegisters => {
+            PhyTxDcPwdetMmioAction::RestoreRegisters => {
                 oer_chips_esp32s31_hal::phy::power_detector::restore_txdc_calibration(registers)
                     .map_err(|_| PhyTxDcPwdetHardwareInvariant::RestoreNotPending)?;
                 Ok(PhyTxDcPwdetCompletion::RegistersRestored)
             }
-            _ => unreachable!(),
         }
     }
 }

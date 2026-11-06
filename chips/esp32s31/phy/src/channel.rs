@@ -894,41 +894,146 @@ pub enum PhyChipChannelBindingError {
     NotDirectMmio,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyChipChannelMmioAction {
+    SetAgc {
+        enabled: bool,
+    },
+    ConfigureForceTxRx {
+        enabled: bool,
+        phase: u8,
+    },
+    SetBbpllCalibration {
+        enabled: bool,
+    },
+    StartFrequencySwitch {
+        frequency_index: u8,
+        crystal_selector: u8,
+    },
+    ClearFrequencySwitch,
+    AwaitFrequencyReadyEdge {
+        samples: u32,
+    },
+    ConfigureNrx {
+        frequency_mhz: u16,
+    },
+    ConfigureBssCbw {
+        cbw: u8,
+    },
+    ConfigureRxCompensation,
+    PublishTxGain(PhyWifiTxGainImage),
+    PublishTxCapCommandMemory {
+        value: u8,
+    },
+    ConfigureChannelCbw {
+        cbw: u8,
+    },
+    ClearDcMemory,
+}
+
 /// Non-cloneable token for one finite channel-specific MMIO edge.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyChipChannelMmioBinding {
-    action: PhyChipChannelAction,
+    action: PhyChipChannelMmioAction,
 }
 
 impl PhyChipChannelMmioBinding {
     #[cfg(any(target_arch = "riscv32", test))]
     pub(crate) fn tx_gain_image(&self) -> Option<&PhyWifiTxGainImage> {
         match &self.action {
-            PhyChipChannelAction::PublishTxGain(image) => Some(image),
+            PhyChipChannelMmioAction::PublishTxGain(image) => Some(image),
             _ => None,
         }
     }
     pub fn new(action: PhyChipChannelAction) -> Result<Self, PhyChipChannelBindingError> {
-        match action {
-            PhyChipChannelAction::SetAgc { .. }
-            | PhyChipChannelAction::ConfigureForceTxRx { .. }
-            | PhyChipChannelAction::SetBbpllCalibration { .. }
-            | PhyChipChannelAction::StartFrequencySwitch { .. }
-            | PhyChipChannelAction::ClearFrequencySwitch
-            | PhyChipChannelAction::AwaitFrequencyReadyEdge { .. }
-            | PhyChipChannelAction::ConfigureNrx { .. }
-            | PhyChipChannelAction::ConfigureBssCbw { .. }
-            | PhyChipChannelAction::ConfigureRxCompensation
-            | PhyChipChannelAction::PublishTxGain(_)
-            | PhyChipChannelAction::PublishTxCapCommandMemory { .. }
-            | PhyChipChannelAction::ConfigureChannelCbw { .. }
-            | PhyChipChannelAction::ClearDcMemory => Ok(Self { action }),
-            _ => Err(PhyChipChannelBindingError::NotDirectMmio),
-        }
+        let action = match action {
+            PhyChipChannelAction::SetAgc { enabled } => {
+                PhyChipChannelMmioAction::SetAgc { enabled }
+            }
+            PhyChipChannelAction::ConfigureForceTxRx { enabled, phase } => {
+                PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase }
+            }
+            PhyChipChannelAction::SetBbpllCalibration { enabled } => {
+                PhyChipChannelMmioAction::SetBbpllCalibration { enabled }
+            }
+            PhyChipChannelAction::StartFrequencySwitch {
+                frequency_index,
+                crystal_selector,
+            } => PhyChipChannelMmioAction::StartFrequencySwitch {
+                frequency_index,
+                crystal_selector,
+            },
+            PhyChipChannelAction::ClearFrequencySwitch => {
+                PhyChipChannelMmioAction::ClearFrequencySwitch
+            }
+            PhyChipChannelAction::AwaitFrequencyReadyEdge { samples } => {
+                PhyChipChannelMmioAction::AwaitFrequencyReadyEdge { samples }
+            }
+            PhyChipChannelAction::ConfigureNrx { frequency_mhz } => {
+                PhyChipChannelMmioAction::ConfigureNrx { frequency_mhz }
+            }
+            PhyChipChannelAction::ConfigureBssCbw { cbw } => {
+                PhyChipChannelMmioAction::ConfigureBssCbw { cbw }
+            }
+            PhyChipChannelAction::ConfigureRxCompensation => {
+                PhyChipChannelMmioAction::ConfigureRxCompensation
+            }
+            PhyChipChannelAction::PublishTxGain(v0) => PhyChipChannelMmioAction::PublishTxGain(v0),
+            PhyChipChannelAction::PublishTxCapCommandMemory { value } => {
+                PhyChipChannelMmioAction::PublishTxCapCommandMemory { value }
+            }
+            PhyChipChannelAction::ConfigureChannelCbw { cbw } => {
+                PhyChipChannelMmioAction::ConfigureChannelCbw { cbw }
+            }
+            PhyChipChannelAction::ClearDcMemory => PhyChipChannelMmioAction::ClearDcMemory,
+            _ => return Err(PhyChipChannelBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
     }
 
     pub const fn action(&self) -> PhyChipChannelAction {
-        self.action
+        match self.action {
+            PhyChipChannelMmioAction::SetAgc { enabled } => {
+                PhyChipChannelAction::SetAgc { enabled }
+            }
+            PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase } => {
+                PhyChipChannelAction::ConfigureForceTxRx { enabled, phase }
+            }
+            PhyChipChannelMmioAction::SetBbpllCalibration { enabled } => {
+                PhyChipChannelAction::SetBbpllCalibration { enabled }
+            }
+            PhyChipChannelMmioAction::StartFrequencySwitch {
+                frequency_index,
+                crystal_selector,
+            } => PhyChipChannelAction::StartFrequencySwitch {
+                frequency_index,
+                crystal_selector,
+            },
+            PhyChipChannelMmioAction::ClearFrequencySwitch => {
+                PhyChipChannelAction::ClearFrequencySwitch
+            }
+            PhyChipChannelMmioAction::AwaitFrequencyReadyEdge { samples } => {
+                PhyChipChannelAction::AwaitFrequencyReadyEdge { samples }
+            }
+            PhyChipChannelMmioAction::ConfigureNrx { frequency_mhz } => {
+                PhyChipChannelAction::ConfigureNrx { frequency_mhz }
+            }
+            PhyChipChannelMmioAction::ConfigureBssCbw { cbw } => {
+                PhyChipChannelAction::ConfigureBssCbw { cbw }
+            }
+            PhyChipChannelMmioAction::ConfigureRxCompensation => {
+                PhyChipChannelAction::ConfigureRxCompensation
+            }
+            PhyChipChannelMmioAction::PublishTxGain(v0) => PhyChipChannelAction::PublishTxGain(v0),
+            PhyChipChannelMmioAction::PublishTxCapCommandMemory { value } => {
+                PhyChipChannelAction::PublishTxCapCommandMemory { value }
+            }
+            PhyChipChannelMmioAction::ConfigureChannelCbw { cbw } => {
+                PhyChipChannelAction::ConfigureChannelCbw { cbw }
+            }
+            PhyChipChannelMmioAction::ClearDcMemory => PhyChipChannelAction::ClearDcMemory,
+        }
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -937,19 +1042,19 @@ impl PhyChipChannelMmioBinding {
         channel: &mut oer_chips_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
     ) -> PhyChipChannelCompletion {
         match self.action {
-            PhyChipChannelAction::SetAgc { enabled } => {
+            PhyChipChannelMmioAction::SetAgc { enabled } => {
                 channel.set_agc_enabled(enabled);
                 PhyChipChannelCompletion::AgcSet { enabled }
             }
-            PhyChipChannelAction::ConfigureForceTxRx { enabled, phase } => {
+            PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase } => {
                 oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(channel, enabled, phase);
                 PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
             }
-            PhyChipChannelAction::SetBbpllCalibration { enabled } => {
+            PhyChipChannelMmioAction::SetBbpllCalibration { enabled } => {
                 channel.set_bbpll_calibration_enabled(enabled);
                 PhyChipChannelCompletion::BbpllCalibrationSet { enabled }
             }
-            PhyChipChannelAction::StartFrequencySwitch {
+            PhyChipChannelMmioAction::StartFrequencySwitch {
                 frequency_index,
                 crystal_selector,
             } => {
@@ -959,44 +1064,43 @@ impl PhyChipChannelMmioBinding {
                     crystal_selector,
                 }
             }
-            PhyChipChannelAction::ClearFrequencySwitch => {
+            PhyChipChannelMmioAction::ClearFrequencySwitch => {
                 channel.clear_frequency_switch();
                 PhyChipChannelCompletion::FrequencySwitchCleared
             }
-            PhyChipChannelAction::AwaitFrequencyReadyEdge { .. } => {
+            PhyChipChannelMmioAction::AwaitFrequencyReadyEdge { .. } => {
                 PhyChipChannelCompletion::FrequencyReadyObserved {
                     ready: channel.frequency_ready(),
                 }
             }
-            PhyChipChannelAction::ConfigureNrx { frequency_mhz } => {
+            PhyChipChannelMmioAction::ConfigureNrx { frequency_mhz } => {
                 channel.configure_nrx(frequency_mhz);
                 PhyChipChannelCompletion::NrxConfigured { frequency_mhz }
             }
-            PhyChipChannelAction::ConfigureBssCbw { cbw } => {
+            PhyChipChannelMmioAction::ConfigureBssCbw { cbw } => {
                 channel.configure_bss_cbw(cbw);
                 PhyChipChannelCompletion::BssCbwConfigured { cbw }
             }
-            PhyChipChannelAction::ConfigureRxCompensation => {
+            PhyChipChannelMmioAction::ConfigureRxCompensation => {
                 channel.configure_rx_compensation();
                 PhyChipChannelCompletion::RxCompensationConfigured
             }
-            PhyChipChannelAction::PublishTxGain(image) => {
+            PhyChipChannelMmioAction::PublishTxGain(image) => {
                 crate::hardware::publish_phy_tx_gain_memory_channel(channel, false, image);
                 PhyChipChannelCompletion::TxGainPublished
             }
-            PhyChipChannelAction::PublishTxCapCommandMemory { value } => {
+            PhyChipChannelMmioAction::PublishTxCapCommandMemory { value } => {
                 channel.publish_tx_cap(value);
                 PhyChipChannelCompletion::TxCapCommandMemoryPublished { value }
             }
-            PhyChipChannelAction::ConfigureChannelCbw { cbw } => {
+            PhyChipChannelMmioAction::ConfigureChannelCbw { cbw } => {
                 channel.configure_channel_cbw(cbw);
                 PhyChipChannelCompletion::ChannelCbwConfigured { cbw }
             }
-            PhyChipChannelAction::ClearDcMemory => {
+            PhyChipChannelMmioAction::ClearDcMemory => {
                 channel.clear_dc_memory();
                 PhyChipChannelCompletion::DcMemoryCleared
             }
-            _ => unreachable!(),
         }
     }
 
@@ -1007,19 +1111,19 @@ impl PhyChipChannelMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyChipChannelCompletion {
         match self.action {
-            PhyChipChannelAction::SetAgc { enabled } => {
+            PhyChipChannelMmioAction::SetAgc { enabled } => {
                 crate::hardware::set_phy_channel_agc(registers, enabled);
                 PhyChipChannelCompletion::AgcSet { enabled }
             }
-            PhyChipChannelAction::ConfigureForceTxRx { enabled, phase } => {
+            PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase } => {
                 oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
                 PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
             }
-            PhyChipChannelAction::SetBbpllCalibration { enabled } => {
+            PhyChipChannelMmioAction::SetBbpllCalibration { enabled } => {
                 oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
                 PhyChipChannelCompletion::BbpllCalibrationSet { enabled }
             }
-            PhyChipChannelAction::StartFrequencySwitch {
+            PhyChipChannelMmioAction::StartFrequencySwitch {
                 frequency_index,
                 crystal_selector,
             } => {
@@ -1032,52 +1136,51 @@ impl PhyChipChannelMmioBinding {
                     crystal_selector,
                 }
             }
-            PhyChipChannelAction::ClearFrequencySwitch => {
+            PhyChipChannelMmioAction::ClearFrequencySwitch => {
                 oer_chips_esp32s31_hal::phy::frequency::clear_channel_switch(registers);
                 PhyChipChannelCompletion::FrequencySwitchCleared
             }
-            PhyChipChannelAction::AwaitFrequencyReadyEdge { .. } => {
+            PhyChipChannelMmioAction::AwaitFrequencyReadyEdge { .. } => {
                 PhyChipChannelCompletion::FrequencyReadyObserved {
                     ready: oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(
                         registers,
                     ),
                 }
             }
-            PhyChipChannelAction::ConfigureNrx { frequency_mhz } => {
+            PhyChipChannelMmioAction::ConfigureNrx { frequency_mhz } => {
                 oer_chips_esp32s31_hal::phy::frequency::configure_nrx_frequency(
                     registers,
                     u32::from(frequency_mhz),
                 );
                 PhyChipChannelCompletion::NrxConfigured { frequency_mhz }
             }
-            PhyChipChannelAction::ConfigureBssCbw { cbw } => {
+            PhyChipChannelMmioAction::ConfigureBssCbw { cbw } => {
                 oer_chips_esp32s31_hal::phy::frequency::configure_bss_cbw(registers, cbw);
                 PhyChipChannelCompletion::BssCbwConfigured { cbw }
             }
-            PhyChipChannelAction::ConfigureRxCompensation => {
+            PhyChipChannelMmioAction::ConfigureRxCompensation => {
                 oer_chips_esp32s31_hal::phy::agc::configure_rx_compensation(registers);
                 PhyChipChannelCompletion::RxCompensationConfigured
             }
-            PhyChipChannelAction::PublishTxGain(ref image) => {
+            PhyChipChannelMmioAction::PublishTxGain(ref image) => {
                 crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
                 PhyChipChannelCompletion::TxGainPublished
             }
-            PhyChipChannelAction::PublishTxCapCommandMemory { value } => {
+            PhyChipChannelMmioAction::PublishTxCapCommandMemory { value } => {
                 oer_chips_esp32s31_hal::phy::frequency::publish_tx_cap(registers, value);
                 PhyChipChannelCompletion::TxCapCommandMemoryPublished { value }
             }
-            PhyChipChannelAction::ConfigureChannelCbw { cbw } => {
+            PhyChipChannelMmioAction::ConfigureChannelCbw { cbw } => {
                 oer_chips_esp32s31_hal::phy::frequency::configure_channel_cbw(
                     registers,
                     u32::from(cbw),
                 );
                 PhyChipChannelCompletion::ChannelCbwConfigured { cbw }
             }
-            PhyChipChannelAction::ClearDcMemory => {
+            PhyChipChannelMmioAction::ClearDcMemory => {
                 oer_chips_esp32s31_hal::phy::agc::clear_dc_memory(registers);
                 PhyChipChannelCompletion::DcMemoryCleared
             }
-            _ => unreachable!(),
         }
     }
 }

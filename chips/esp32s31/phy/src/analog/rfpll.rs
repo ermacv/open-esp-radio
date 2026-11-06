@@ -919,25 +919,71 @@ impl RfpllFrequencyTimerBinding {
     }
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RfpllFrequencyMmioAction {
+    StartChannelSwitch {
+        frequency_index: u8,
+        crystal_selector: u8,
+    },
+    ClearChannelSwitch,
+    ReadChannelReady {
+        samples: u32,
+    },
+    ConfigureNrx {
+        frequency_mhz: u16,
+    },
+}
+
 /// Non-cloneable owner of one finite fast-channel MMIO edge.
 #[derive(Debug, Eq, PartialEq)]
 pub struct RfpllFrequencyMmioBinding {
-    action: RfpllFrequencyAction,
+    action: RfpllFrequencyMmioAction,
 }
 
 impl RfpllFrequencyMmioBinding {
     pub fn new(action: RfpllFrequencyAction) -> Result<Self, RfpllFrequencyBindingError> {
-        match action {
-            RfpllFrequencyAction::StartChannelSwitch { .. }
-            | RfpllFrequencyAction::ClearChannelSwitch
-            | RfpllFrequencyAction::ReadChannelReady { .. }
-            | RfpllFrequencyAction::ConfigureNrx { .. } => Ok(Self { action }),
-            _ => Err(RfpllFrequencyBindingError::UnsupportedAction),
-        }
+        let action = match action {
+            RfpllFrequencyAction::StartChannelSwitch {
+                frequency_index,
+                crystal_selector,
+            } => RfpllFrequencyMmioAction::StartChannelSwitch {
+                frequency_index,
+                crystal_selector,
+            },
+            RfpllFrequencyAction::ClearChannelSwitch => {
+                RfpllFrequencyMmioAction::ClearChannelSwitch
+            }
+            RfpllFrequencyAction::ReadChannelReady { samples } => {
+                RfpllFrequencyMmioAction::ReadChannelReady { samples }
+            }
+            RfpllFrequencyAction::ConfigureNrx { frequency_mhz } => {
+                RfpllFrequencyMmioAction::ConfigureNrx { frequency_mhz }
+            }
+            _ => return Err(RfpllFrequencyBindingError::UnsupportedAction),
+        };
+        Ok(Self { action })
     }
 
     pub const fn action(&self) -> RfpllFrequencyAction {
-        self.action
+        match self.action {
+            RfpllFrequencyMmioAction::StartChannelSwitch {
+                frequency_index,
+                crystal_selector,
+            } => RfpllFrequencyAction::StartChannelSwitch {
+                frequency_index,
+                crystal_selector,
+            },
+            RfpllFrequencyMmioAction::ClearChannelSwitch => {
+                RfpllFrequencyAction::ClearChannelSwitch
+            }
+            RfpllFrequencyMmioAction::ReadChannelReady { samples } => {
+                RfpllFrequencyAction::ReadChannelReady { samples }
+            }
+            RfpllFrequencyMmioAction::ConfigureNrx { frequency_mhz } => {
+                RfpllFrequencyAction::ConfigureNrx { frequency_mhz }
+            }
+        }
     }
 
     /// Execute exactly one MMIO edge from the ROM fast-channel path.
@@ -953,7 +999,7 @@ impl RfpllFrequencyMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> RfpllFrequencyCompletion {
         match self.action {
-            RfpllFrequencyAction::StartChannelSwitch {
+            RfpllFrequencyMmioAction::StartChannelSwitch {
                 frequency_index,
                 crystal_selector,
             } => {
@@ -966,25 +1012,24 @@ impl RfpllFrequencyMmioBinding {
                     crystal_selector,
                 }
             }
-            RfpllFrequencyAction::ClearChannelSwitch => {
+            RfpllFrequencyMmioAction::ClearChannelSwitch => {
                 oer_chips_esp32s31_hal::phy::frequency::clear_channel_switch(registers);
                 RfpllFrequencyCompletion::ChannelSwitchCleared
             }
-            RfpllFrequencyAction::ReadChannelReady { .. } => {
+            RfpllFrequencyMmioAction::ReadChannelReady { .. } => {
                 RfpllFrequencyCompletion::ChannelReadyObserved {
                     ready: oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(
                         registers,
                     ),
                 }
             }
-            RfpllFrequencyAction::ConfigureNrx { frequency_mhz } => {
+            RfpllFrequencyMmioAction::ConfigureNrx { frequency_mhz } => {
                 oer_chips_esp32s31_hal::phy::frequency::configure_nrx_frequency(
                     registers,
                     u32::from(frequency_mhz),
                 );
                 RfpllFrequencyCompletion::NrxConfigured { frequency_mhz }
             }
-            _ => unreachable!(),
         }
     }
 }

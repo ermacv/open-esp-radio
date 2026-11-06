@@ -169,17 +169,14 @@ fn lowering_failure_identifies_the_pending_action_without_calling_the_port() {
 #[test]
 fn apply_profile_invariant_errors_restore_the_exact_parent_phase() {
     let mut transition = PhyRegisterTransition::with_production_config();
-    transition.phase = Some(super::Phase::Prelude(super::PreludeStep::ApplyProfile));
+    transition.phase = Some(super::Phase::ApplyProfile);
     let config = transition.config.take().unwrap();
 
     assert_eq!(
         transition.step_local(),
         Err(super::PhyRegisterTransitionError::MissingStateOwner)
     );
-    assert!(matches!(
-        transition.phase,
-        Some(super::Phase::Prelude(super::PreludeStep::ApplyProfile))
-    ));
+    assert!(matches!(transition.phase, Some(super::Phase::ApplyProfile)));
 
     transition.config = Some(config);
     let state = transition.state.take().unwrap();
@@ -188,10 +185,7 @@ fn apply_profile_invariant_errors_restore_the_exact_parent_phase() {
         Err(super::PhyRegisterTransitionError::MissingStateOwner)
     );
     assert!(transition.config.is_some());
-    assert!(matches!(
-        transition.phase,
-        Some(super::Phase::Prelude(super::PreludeStep::ApplyProfile))
-    ));
+    assert!(matches!(transition.phase, Some(super::Phase::ApplyProfile)));
 
     transition.state = Some(state);
     assert_eq!(
@@ -716,7 +710,7 @@ fn complete_cache_selects_partial_calibration_and_republishes_hardware_tables() 
         CALIBRATION_IDENTITY,
         Some(cache),
     );
-    transition.phase = Some(super::Phase::Prelude(super::PreludeStep::ApplyProfile));
+    transition.phase = Some(super::Phase::ApplyProfile);
 
     assert_eq!(
         transition.step_local().unwrap(),
@@ -772,7 +766,7 @@ fn rejected_caller_cache_falls_back_to_full_calibration() {
         CALIBRATION_IDENTITY,
         Some(cache),
     );
-    transition.phase = Some(super::Phase::Prelude(super::PreludeStep::ApplyProfile));
+    transition.phase = Some(super::Phase::ApplyProfile);
 
     assert_eq!(
         transition.step_local().unwrap(),
@@ -806,7 +800,7 @@ fn incomplete_cache_falls_back_without_retaining_partial_state() {
         CALIBRATION_IDENTITY,
         Some(cache),
     );
-    transition.phase = Some(super::Phase::Prelude(super::PreludeStep::ApplyProfile));
+    transition.phase = Some(super::Phase::ApplyProfile);
 
     assert_eq!(
         transition.step_local().unwrap(),

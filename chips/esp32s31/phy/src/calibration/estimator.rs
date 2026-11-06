@@ -602,30 +602,88 @@ pub enum PhyDcIqBindingError {
     UnsupportedAction,
 }
 
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyDcIqMmioAction {
+    Configure(PhyDcIqEstimateRequest),
+    SetEnable {
+        request: PhyDcIqEstimateRequest,
+        phase: PhyDcIqEnablePhase,
+        enabled: bool,
+    },
+    ReadAccumulators(PhyDcIqEstimateRequest),
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyDcIqMmioBinding {
-    action: PhyDcIqAction,
+    action: PhyDcIqMmioAction,
 }
 
 impl PhyDcIqMmioBinding {
     pub fn new(action: PhyDcIqAction) -> Result<Self, PhyDcIqBindingError> {
-        match action {
-            PhyDcIqAction::Configure(_)
-            | PhyDcIqAction::SetEnable { .. }
-            | PhyDcIqAction::ReadAccumulators(_) => Ok(Self { action }),
-            _ => Err(PhyDcIqBindingError::UnsupportedAction),
-        }
+        let action = match action {
+            PhyDcIqAction::Configure(v0) => PhyDcIqMmioAction::Configure(v0),
+            PhyDcIqAction::SetEnable {
+                request,
+                phase,
+                enabled,
+            } => PhyDcIqMmioAction::SetEnable {
+                request,
+                phase,
+                enabled,
+            },
+            PhyDcIqAction::ReadAccumulators(v0) => PhyDcIqMmioAction::ReadAccumulators(v0),
+            _ => return Err(PhyDcIqBindingError::UnsupportedAction),
+        };
+        Ok(Self { action })
     }
 
     pub const fn action(&self) -> PhyDcIqAction {
-        self.action
+        match self.action {
+            PhyDcIqMmioAction::Configure(v0) => PhyDcIqAction::Configure(v0),
+            PhyDcIqMmioAction::SetEnable {
+                request,
+                phase,
+                enabled,
+            } => PhyDcIqAction::SetEnable {
+                request,
+                phase,
+                enabled,
+            },
+            PhyDcIqMmioAction::ReadAccumulators(v0) => PhyDcIqAction::ReadAccumulators(v0),
+        }
     }
 
     /// Start and observe the first edge without yielding inside the enable sequence.
-    #[cfg(any(target_arch = "riscv32", test))]
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn capture_with<C, E>(
         self,
+        context: &mut C,
+        configure: impl FnOnce(&mut C, u16),
+        enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
+        settle: impl FnMut(&mut C, u32) -> Result<(), E>,
+        read: impl FnOnce(&mut C) -> PhyDcIqReadinessSnapshot,
+        accumulators: impl FnOnce(&mut C) -> PhyDcIqAccumulatorSnapshot,
+    ) -> Result<PhyDcIqCompletion, E> {
+        let PhyDcIqMmioAction::Configure(request) = self.action else {
+            panic!("capture starts only from estimator configuration");
+        };
+        Self::capture_request(
+            request,
+            context,
+            configure,
+            enable,
+            settle,
+            read,
+            accumulators,
+        )
+    }
+
+    #[cfg(any(target_arch = "riscv32", test))]
+    #[allow(clippy::too_many_arguments)]
+    fn capture_request<C, E>(
+        request: PhyDcIqEstimateRequest,
         context: &mut C,
         configure: impl FnOnce(&mut C, u16),
         mut enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
@@ -633,15 +691,12 @@ impl PhyDcIqMmioBinding {
         read: impl FnOnce(&mut C) -> PhyDcIqReadinessSnapshot,
         accumulators: impl FnOnce(&mut C) -> PhyDcIqAccumulatorSnapshot,
     ) -> Result<PhyDcIqCompletion, E> {
-        let PhyDcIqAction::Configure(request) = self.action else {
-            unreachable!("capture starts only from estimator configuration");
-        };
         configure(context, request.control);
         enable(context, PhyDcIqEnablePhase::Start, true);
         settle(context, 1)?;
         enable(context, PhyDcIqEnablePhase::Measurement, true);
         let binding = PhyDcIqReadinessBinding {
-            action: PhyDcIqAction::AwaitReadinessEdge {
+            action: PhyDcIqReadinessAction::AwaitReadinessEdge {
                 request,
                 readiness_activity_edges: 0,
                 readiness_samples: 0,
@@ -668,10 +723,11 @@ impl PhyDcIqMmioBinding {
         self,
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyDcIqCompletion, crate::target_executor::PhyTargetPortError> {
-        if !matches!(self.action, PhyDcIqAction::Configure(_)) {
+        let PhyDcIqMmioAction::Configure(request) = self.action else {
             return Ok(self.execute_target(registers));
-        }
-        self.capture_with(
+        };
+        Self::capture_request(
+            request,
             registers,
             configure_target,
             set_enable_target,
@@ -691,11 +747,11 @@ impl PhyDcIqMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyDcIqCompletion {
         match self.action {
-            PhyDcIqAction::Configure(request) => {
+            PhyDcIqMmioAction::Configure(request) => {
                 configure_target(registers, request.control);
                 PhyDcIqCompletion::Configured(request)
             }
-            PhyDcIqAction::SetEnable {
+            PhyDcIqMmioAction::SetEnable {
                 request,
                 phase,
                 enabled,
@@ -707,19 +763,28 @@ impl PhyDcIqMmioBinding {
                     enabled,
                 }
             }
-            PhyDcIqAction::ReadAccumulators(request) => PhyDcIqCompletion::AccumulatorsRead {
+            PhyDcIqMmioAction::ReadAccumulators(request) => PhyDcIqCompletion::AccumulatorsRead {
                 request,
                 snapshot: read_accumulators_target(registers),
             },
-            _ => unreachable!(),
         }
     }
+}
+
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyDcIqReadinessAction {
+    AwaitReadinessEdge {
+        request: PhyDcIqEstimateRequest,
+        readiness_activity_edges: u16,
+        readiness_samples: u16,
+    },
 }
 
 /// Non-cloneable async boundary for one scheduled readiness observation.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyDcIqReadinessBinding {
-    action: PhyDcIqAction,
+    action: PhyDcIqReadinessAction,
 }
 
 impl PhyDcIqReadinessBinding {
@@ -753,9 +818,7 @@ impl PhyDcIqReadinessBinding {
         mut enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
         settle: impl FnOnce(&mut C, u32) -> Result<(), E>,
     ) -> Result<PhyDcIqCompletion, E> {
-        let PhyDcIqAction::AwaitReadinessEdge { request, .. } = self.action else {
-            unreachable!("readiness binding contains a readiness action");
-        };
+        let PhyDcIqReadinessAction::AwaitReadinessEdge { request, .. } = self.action;
         let accumulators = if self.samples() >= maximum_samples {
             None
         } else {
@@ -774,18 +837,26 @@ impl PhyDcIqReadinessBinding {
         })
     }
     pub fn new(action: PhyDcIqAction) -> Result<Self, PhyDcIqBindingError> {
-        match action {
-            PhyDcIqAction::AwaitReadinessEdge { .. } => Ok(Self { action }),
-            _ => Err(PhyDcIqBindingError::UnsupportedAction),
-        }
+        let action = match action {
+            PhyDcIqAction::AwaitReadinessEdge {
+                request,
+                readiness_activity_edges,
+                readiness_samples,
+            } => PhyDcIqReadinessAction::AwaitReadinessEdge {
+                request,
+                readiness_activity_edges,
+                readiness_samples,
+            },
+            _ => return Err(PhyDcIqBindingError::UnsupportedAction),
+        };
+        Ok(Self { action })
     }
 
     pub const fn samples(&self) -> u16 {
         match self.action {
-            PhyDcIqAction::AwaitReadinessEdge {
+            PhyDcIqReadinessAction::AwaitReadinessEdge {
                 readiness_samples, ..
             } => readiness_samples,
-            _ => unreachable!(),
         }
     }
 
@@ -802,9 +873,7 @@ impl PhyDcIqReadinessBinding {
         if self.samples() >= maximum_samples {
             return self.into_timeout_completion();
         }
-        let PhyDcIqAction::AwaitReadinessEdge { request, .. } = self.action else {
-            unreachable!();
-        };
+        let PhyDcIqReadinessAction::AwaitReadinessEdge { request, .. } = self.action;
         PhyDcIqCompletion::ReadinessObserved {
             request,
             snapshot: read(),
@@ -817,9 +886,7 @@ impl PhyDcIqReadinessBinding {
         self,
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyDcIqCompletion {
-        let PhyDcIqAction::AwaitReadinessEdge { request, .. } = self.action else {
-            unreachable!();
-        };
+        let PhyDcIqReadinessAction::AwaitReadinessEdge { request, .. } = self.action;
         PhyDcIqCompletion::ReadinessObserved {
             request,
             snapshot: sample_readiness_target(registers),
@@ -827,9 +894,7 @@ impl PhyDcIqReadinessBinding {
     }
 
     pub fn into_timeout_completion(self) -> PhyDcIqCompletion {
-        let PhyDcIqAction::AwaitReadinessEdge { request, .. } = self.action else {
-            unreachable!();
-        };
+        let PhyDcIqReadinessAction::AwaitReadinessEdge { request, .. } = self.action;
         PhyDcIqCompletion::ReadinessTimedOut(request)
     }
 }
