@@ -55,6 +55,9 @@ const CASES: [Case; 5] = [
     },
 ];
 
+/// When the run's join was sent.
+static JOIN_STARTED: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
 /// Scanning, authentication, association and the 4-way handshake.
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long the router may take to show what the device did.
@@ -159,6 +162,7 @@ fn join(cx: &mut Cx<'_>) -> Result<(), Failure> {
             .map_err(|_| Failure::Incomplete("the generated passphrase is too long".into()))?,
         channel,
     };
+    let _ = JOIN_STARTED.set(Instant::now());
     let answer = cx.call(request, JOIN_TIMEOUT)?;
     connect_report(cx)?;
     let Joined::Linked {
@@ -204,8 +208,11 @@ fn dhcp(cx: &mut Cx<'_>) -> Result<(), Failure> {
         let status = status(cx)?;
         if let Some(ipv4) = status.ipv4 {
             println!(
-                "connect: address {} ms into the dhcp case",
-                started.elapsed().as_millis()
+                "connect: address {} ms from the join's start",
+                JOIN_STARTED
+                    .get()
+                    .map_or(started.elapsed(), Instant::elapsed)
+                    .as_millis()
             );
             break (status.address, ipv4);
         }

@@ -73,12 +73,13 @@ impl Event for StationScanHeard {
         let ScanHeard {
             own,
             probe_response,
+            to_us,
             rssi,
         } = self.heard;
         [
             self.at_micros,
             u32::from_le_bytes([
-                u8::from(own),
+                u8::from(own) | u8::from(to_us) << 1,
                 u8::from(probe_response),
                 u8::from(rssi.is_some()),
                 rssi.unwrap_or(0).to_le_bytes()[0],
@@ -92,12 +93,16 @@ impl Event for StationScanHeard {
             1 => Some(true),
             _ => None,
         };
-        let [own, probe_response, known, rssi] = word.to_le_bytes();
+        let [flags, probe_response, known, rssi] = word.to_le_bytes();
         let known = flag(known)?;
+        if flags > 3 {
+            return None;
+        }
         Some(Self {
             at_micros,
             heard: ScanHeard {
-                own: flag(own)?,
+                own: flags & 1 != 0,
+                to_us: flags & 2 != 0,
                 probe_response: flag(probe_response)?,
                 rssi: known.then_some(i8::from_le_bytes([rssi])),
             },
@@ -111,6 +116,39 @@ impl core::fmt::Display for StationScanHeard {
             f,
             "station.scan_heard at_micros={} {:?}",
             self.at_micros, self.heard
+        )
+    }
+}
+
+/// The end of a scan's probe, at a wrapping microsecond.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StationScanProbe {
+    pub at_micros: u32,
+    pub sent: bool,
+}
+
+impl Event for StationScanProbe {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 43);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [self.at_micros, u32::from(self.sent)]
+    }
+
+    fn decode([at_micros, word]: [u32; 2]) -> Option<Self> {
+        (word <= 1).then_some(Self {
+            at_micros,
+            sent: word == 1,
+        })
+    }
+}
+
+impl core::fmt::Display for StationScanProbe {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "station.scan_probe at_micros={} sent={}",
+            self.at_micros, self.sent
         )
     }
 }
@@ -930,6 +968,15 @@ impl<O: oer_portable_trace::Observer>
                     }
                 );
             }
+            StaEvent::ScanProbeEnded { at, sent } => {
+                oer_portable_trace::observe!(
+                    self.0,
+                    StationScanProbe {
+                        at_micros: wrapped_micros(at),
+                        sent,
+                    }
+                );
+            }
             StaEvent::ScanHeard { at, heard } => {
                 oer_portable_trace::observe!(
                     self.0,
@@ -1158,12 +1205,17 @@ mod tests {
                 channel: 13,
             });
         }
+        round_trip(StationScanProbe {
+            at_micros: 13,
+            sent: true,
+        });
         for rssi in [None, Some(-61), Some(0)] {
             round_trip(StationScanHeard {
                 at_micros: 11,
                 heard: ScanHeard {
                     own: true,
                     probe_response: false,
+                    to_us: true,
                     rssi,
                 },
             });

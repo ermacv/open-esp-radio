@@ -65,7 +65,29 @@ pub struct Heard {
     /// It names the connect's network.
     pub own: bool,
     pub probe_response: bool,
+    /// Addressed to the station, not overheard.
+    pub to_us: bool,
     pub rssi: Option<i8>,
+}
+
+/// What became of a visit's probe. Neither a sent probe nor an answer says
+/// what reached the air: the first is the port's report, the second a frame
+/// that reached the scan.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ProbeState {
+    /// None yet: the visit has not handed one over.
+    #[default]
+    None,
+    /// Handed to the port.
+    Built,
+    /// The port reports it did not go out.
+    Unsent,
+    /// The port reports it went out.
+    Sent,
+    /// A probe response addressed to the station arrived.
+    Answered,
+    /// The visit ended with no answer.
+    TimedOut,
 }
 
 /// One channel visit. Times are from the connect's start.
@@ -89,6 +111,13 @@ pub struct Visit {
     pub heard: u32,
     pub own_beacons: u32,
     pub own_probe_responses: u32,
+    /// Probe responses of any network addressed to the station.
+    pub responses_to_us: u32,
+    /// Probe responses overheard, addressed to another.
+    pub responses_overheard: u32,
+    /// The port ended the probe.
+    pub probe_ended: Option<u32>,
+    pub probe: ProbeState,
     /// The strongest frame of the connect's network.
     pub best_own_rssi: Option<i8>,
 }
@@ -135,6 +164,11 @@ struct VisitCells {
     heard: AtomicU32,
     own_beacons: AtomicU32,
     own_probe_responses: AtomicU32,
+    responses_to_us: AtomicU32,
+    responses_overheard: AtomicU32,
+    probe_ended: AtomicU32,
+    /// 1 when the port said the probe went out, 2 when it did not.
+    probe_sent: AtomicU32,
     /// The level as its `u8` bits, [`NONE`] before one.
     best_own_rssi: AtomicU32,
 }
@@ -150,6 +184,10 @@ impl VisitCells {
             heard: AtomicU32::new(0),
             own_beacons: AtomicU32::new(0),
             own_probe_responses: AtomicU32::new(0),
+            responses_to_us: AtomicU32::new(0),
+            responses_overheard: AtomicU32::new(0),
+            probe_ended: AtomicU32::new(NONE),
+            probe_sent: AtomicU32::new(0),
             best_own_rssi: AtomicU32::new(NONE),
         }
     }
@@ -159,6 +197,7 @@ impl VisitCells {
             &self.ended,
             &self.first_heard,
             &self.first_own,
+            &self.probe_ended,
             &self.best_own_rssi,
         ]
         .into_iter()
@@ -171,6 +210,9 @@ impl VisitCells {
             &self.heard,
             &self.own_beacons,
             &self.own_probe_responses,
+            &self.responses_to_us,
+            &self.responses_overheard,
+            &self.probe_sent,
         ] {
             cell.store(0, Ordering::Relaxed);
         }
@@ -178,6 +220,20 @@ impl VisitCells {
 
     fn step(&self, step: ScanStep) -> Option<u32> {
         time(self.steps.get(step as usize)?.load(Ordering::Relaxed))
+    }
+
+    fn probe_state(&self) -> ProbeState {
+        if self.responses_to_us.load(Ordering::Relaxed) != 0 {
+            return ProbeState::Answered;
+        }
+        let ended = time(self.ended.load(Ordering::Relaxed)).is_some();
+        match self.probe_sent.load(Ordering::Relaxed) {
+            2 => ProbeState::Unsent,
+            _ if ended && self.step(ScanStep::Listen).is_some() => ProbeState::TimedOut,
+            1 => ProbeState::Sent,
+            _ if self.step(ScanStep::Listen).is_some() => ProbeState::Built,
+            _ => ProbeState::None,
+        }
     }
 
     fn read(&self) -> Visit {
@@ -195,6 +251,10 @@ impl VisitCells {
             heard: self.heard.load(Ordering::Relaxed),
             own_beacons: self.own_beacons.load(Ordering::Relaxed),
             own_probe_responses: self.own_probe_responses.load(Ordering::Relaxed),
+            responses_to_us: self.responses_to_us.load(Ordering::Relaxed),
+            responses_overheard: self.responses_overheard.load(Ordering::Relaxed),
+            probe_ended: load(&self.probe_ended),
+            probe: self.probe_state(),
             best_own_rssi: load(&self.best_own_rssi)
                 .map(|bits| i8::from_le_bytes([bits.to_le_bytes()[0]])),
         }
@@ -335,6 +395,16 @@ impl ConnectCounter {
         }
     }
 
+    /// The port ended the visit's probe at microsecond `at`.
+    pub fn probe_ended(&self, at: u32, sent: bool) {
+        let Some(cell) = self.current() else {
+            return;
+        };
+        first(&cell.probe_ended, self.since(at));
+        cell.probe_sent
+            .store(if sent { 1 } else { 2 }, Ordering::Relaxed);
+    }
+
     /// The scan heard `heard` at microsecond `at`.
     pub fn heard(&self, at: u32, heard: Heard) {
         let Some(cell) = self.current() else {
@@ -343,6 +413,16 @@ impl ConnectCounter {
         let since = self.since(at);
         first(&cell.first_heard, since);
         bump(&cell.heard, 1);
+        if heard.probe_response {
+            bump(
+                if heard.to_us {
+                    &cell.responses_to_us
+                } else {
+                    &cell.responses_overheard
+                },
+                1,
+            );
+        }
         if !heard.own {
             return;
         }
@@ -409,6 +489,7 @@ mod tests {
     const OWN_BEACON: Heard = Heard {
         own: true,
         probe_response: false,
+        to_us: false,
         rssi: Some(-40),
     };
 
@@ -469,6 +550,7 @@ mod tests {
             Heard {
                 own: false,
                 probe_response: false,
+                to_us: false,
                 rssi: Some(-20),
             },
         );
@@ -478,6 +560,7 @@ mod tests {
             Heard {
                 own: true,
                 probe_response: true,
+                to_us: true,
                 rssi: Some(-30),
             },
         );
@@ -546,5 +629,57 @@ mod tests {
         assert_eq!(usize::from(connect.visits), VISITS);
         assert_eq!(connect.lost_visits, 2);
         assert_eq!(counter.visit(15).unwrap().asked, Some(1500));
+    }
+
+    #[test]
+    fn a_probe_goes_from_built_to_answered_or_timed_out() {
+        let counter = ConnectCounter::new();
+        scan(&counter, 0, 13);
+        assert_eq!(counter.visit(0).unwrap().probe, ProbeState::Built);
+        counter.probe_ended(10, true);
+        let visit = counter.visit(0).unwrap();
+        assert_eq!(visit.probe, ProbeState::Sent);
+        assert_eq!(visit.probe_ended, Some(10));
+        counter.heard(
+            20,
+            Heard {
+                own: false,
+                probe_response: true,
+                to_us: false,
+                rssi: None,
+            },
+        );
+        let visit = counter.visit(0).unwrap();
+        assert_eq!(visit.responses_overheard, 1);
+        assert_eq!(
+            visit.probe,
+            ProbeState::Sent,
+            "an overheard response is no answer"
+        );
+        // The next visit ends this one with no answer.
+        scan(&counter, 500, 1);
+        assert_eq!(counter.visit(0).unwrap().probe, ProbeState::TimedOut);
+        counter.probe_ended(510, true);
+        counter.heard(
+            520,
+            Heard {
+                own: true,
+                probe_response: true,
+                to_us: true,
+                rssi: None,
+            },
+        );
+        let visit = counter.visit(1).unwrap();
+        assert_eq!(visit.responses_to_us, 1);
+        assert_eq!(visit.probe, ProbeState::Answered);
+    }
+
+    #[test]
+    fn a_probe_the_port_refused_stays_unsent() {
+        let counter = ConnectCounter::new();
+        scan(&counter, 0, 13);
+        counter.probe_ended(10, false);
+        scan(&counter, 500, 1);
+        assert_eq!(counter.visit(0).unwrap().probe, ProbeState::Unsent);
     }
 }

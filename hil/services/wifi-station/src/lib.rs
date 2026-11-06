@@ -42,7 +42,9 @@ pub const MAX_SSID: usize = 32;
 /// The longest WPA2 passphrase (IEEE 802.11-2020 J.4.1).
 pub const MAX_PASSPHRASE: usize = 63;
 
-pub use connect::{ConnectTimes, GetConnectTimes, GetScanVisit, ScanVisit, ScanVisitAnswer};
+pub use connect::{
+    ConnectTimes, GetConnectTimes, GetScanVisit, ProbeState, ScanVisit, ScanVisitAnswer,
+};
 
 oer_protocols_hil_protocol::messages! {
     endpoint Join = "wifi-station/join" => Joined;

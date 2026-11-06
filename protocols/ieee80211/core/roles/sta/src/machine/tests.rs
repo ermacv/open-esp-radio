@@ -409,6 +409,8 @@ struct Losses {
     /// Each change of the connect's step.
     steps: Vec<(ConnectStep, Option<u8>)>,
     heard: Option<(Instant, crate::events::ScanHeard)>,
+    /// Each scan probe's end.
+    probes: Vec<bool>,
 }
 
 impl EventSink<StaEvent> for Losses {
@@ -427,6 +429,7 @@ impl EventSink<StaEvent> for Losses {
                 }
             }
             StaEvent::ScanHeard { at, heard } => self.heard = Some((at, heard)),
+            StaEvent::ScanProbeEnded { sent, .. } => self.probes.push(sent),
         }
     }
 }
@@ -1673,6 +1676,7 @@ fn a_connect_reports_each_step_and_what_its_scan_heard() {
                 crate::events::ScanHeard {
                     own: true,
                     probe_response: false,
+                    to_us: false,
                     rssi: Some(-40),
                 }
             ))
@@ -1681,6 +1685,11 @@ fn a_connect_reports_each_step_and_what_its_scan_heard() {
         world.answer_authentication(at(30), 0);
         let _ = world.deliver(at(31), &open_association_response(), meta());
         world.run(at(31));
+        assert_eq!(
+            world.losses.probes,
+            [true, true],
+            "a probe per visit went out"
+        );
         let steps = core::mem::take(&mut world.losses.steps);
         let reached = |step, channel| {
             steps
@@ -1702,6 +1711,26 @@ fn a_connect_reports_each_step_and_what_its_scan_heard() {
             reached(Step::Connected, None),
         ];
         assert!(order.is_sorted(), "{steps:?}");
+    });
+}
+
+#[test]
+fn a_probe_response_addressed_to_the_station_is_reported_as_such() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        world.advance();
+        let mut response = beacon();
+        response[0] = 0x50;
+        response[4..10].copy_from_slice(&LOCAL);
+        let _ = world.deliver(at(13), &response, meta());
+        let heard = world.losses.heard.map(|(_, heard)| heard).unwrap();
+        assert!(heard.probe_response && heard.to_us && heard.own);
+        response[4..10].copy_from_slice(&[0x02; 6]);
+        let _ = world.deliver(at(14), &response, meta());
+        let heard = world.losses.heard.map(|(_, heard)| heard).unwrap();
+        assert!(heard.probe_response && !heard.to_us);
     });
 }
 

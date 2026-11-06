@@ -41,6 +41,32 @@ pub struct GetScanVisit {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct ScanVisitAnswer(pub Option<ScanVisit>);
 
+/// What became of a visit's probe. `Sent` is the port's report and
+/// `Answered` a frame that reached the scan; neither observes the air.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum ProbeState {
+    #[default]
+    None,
+    Built,
+    Unsent,
+    Sent,
+    Answered,
+    TimedOut,
+}
+
+impl ProbeState {
+    const fn text(self) -> &'static str {
+        match self {
+            Self::None => "-",
+            Self::Built => "built",
+            Self::Unsent => "unsent",
+            Self::Sent => "sent",
+            Self::Answered => "answer",
+            Self::TimedOut => "timeout",
+        }
+    }
+}
+
 /// One channel visit.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct ScanVisit {
@@ -62,6 +88,13 @@ pub struct ScanVisit {
     pub heard: u32,
     pub own_beacons: u32,
     pub own_probe_responses: u32,
+    /// Probe responses of any network addressed to the station.
+    pub responses_to_us: u32,
+    /// Probe responses overheard, addressed to another.
+    pub responses_overheard: u32,
+    /// The port ended the probe.
+    pub probe_ended: Option<u32>,
+    pub probe: ProbeState,
     pub best_own_rssi: Option<i8>,
 }
 
@@ -95,10 +128,11 @@ impl ScanVisit {
     /// asking to the grant, to the port on the channel, to the receive rules,
     /// to the probe handed over, listening, the whole time on the channel,
     /// and from reaching the channel to the first frame and the first of the
-    /// connect's network. Then the frames heard, the network's beacons and
-    /// probe responses, and its strongest level.
-    pub const HEADER: &'static str =
-        "ch    ask   tune config  probe listen onchan  first    own frames beacon  resp  dBm";
+    /// connect's network, and to the port's end of the probe. Then the frames
+    /// heard, the network's beacons and probe responses, its strongest level,
+    /// the probe responses addressed to the station and those overheard, and
+    /// the probe's state.
+    pub const HEADER: &'static str = "ch    ask   tune config  probe listen onchan  first    own  pdone frames beacon  resp  dBm   us over   probe";
 }
 
 impl fmt::Display for ScanVisit {
@@ -113,6 +147,7 @@ impl fmt::Display for ScanVisit {
             between(self.tuned, self.ended),
             between(self.tuned, self.first_heard),
             between(self.tuned, self.first_own),
+            between(self.tuned, self.probe_ended),
         ] {
             f.write_str(" ")?;
             ms(f, 6, micros)?;
@@ -123,9 +158,16 @@ impl fmt::Display for ScanVisit {
             self.heard, self.own_beacons, self.own_probe_responses
         )?;
         match self.best_own_rssi {
-            Some(rssi) => write!(f, " {rssi:4}"),
-            None => f.write_str("    -"),
+            Some(rssi) => write!(f, " {rssi:4}")?,
+            None => f.write_str("    -")?,
         }
+        write!(
+            f,
+            " {:4} {:4} {:>7}",
+            self.responses_to_us,
+            self.responses_overheard,
+            self.probe.text()
+        )
     }
 }
 
@@ -172,6 +214,7 @@ mod tests {
             own_beacons: 0,
             own_probe_responses: 0,
             best_own_rssi: None,
+            ..ScanVisit::default()
         }
     }
 
@@ -183,7 +226,8 @@ mod tests {
         assert_eq!(
             columns,
             [
-                "13", "0.5", "1.5", "0.2", "0.1", "250.0", "250.3", "7.0", "-", "4", "0", "0", "-"
+                "13", "0.5", "1.5", "0.2", "0.1", "250.0", "250.3", "7.0", "-", "-", "4", "0", "0",
+                "-", "0", "0", "-"
             ]
         );
     }
@@ -198,6 +242,30 @@ mod tests {
             }
         );
         assert_eq!(row.len(), ScanVisit::HEADER.len());
+    }
+
+    #[test]
+    fn a_visit_row_names_the_probes_state() {
+        for (state, text) in [
+            (ProbeState::Built, "built"),
+            (ProbeState::Unsent, "unsent"),
+            (ProbeState::Sent, "sent"),
+            (ProbeState::Answered, "answer"),
+            (ProbeState::TimedOut, "timeout"),
+        ] {
+            let row = format!(
+                "{}",
+                ScanVisit {
+                    probe: state,
+                    responses_to_us: 2,
+                    responses_overheard: 3,
+                    ..visit()
+                }
+            );
+            assert_eq!(row.len(), ScanVisit::HEADER.len());
+            let columns: std::vec::Vec<_> = row.split_whitespace().rev().take(3).collect();
+            assert_eq!(columns, [text, "3", "2"]);
+        }
     }
 
     #[test]
@@ -227,6 +295,10 @@ mod tests {
             heard: u32::MAX,
             own_beacons: u32::MAX,
             own_probe_responses: u32::MAX,
+            responses_to_us: u32::MAX,
+            responses_overheard: u32::MAX,
+            probe_ended: Some(u32::MAX - 1),
+            probe: ProbeState::TimedOut,
             best_own_rssi: Some(-128),
         };
         let mut buffer = [0; 256];

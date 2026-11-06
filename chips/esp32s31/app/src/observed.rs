@@ -363,9 +363,13 @@ impl oer_portable_trace::Observer for Observer {
                 Heard {
                     own: heard.heard.own,
                     probe_response: heard.heard.probe_response,
+                    to_us: heard.heard.to_us,
                     rssi: heard.heard.rssi,
                 },
             );
+        }
+        if let Some(probe) = Self::decoded::<E, station::StationScanProbe>(event) {
+            CONNECT.probe_ended(probe.at_micros, probe.sent);
         }
         if let Some(tick) = Self::decoded::<E, station::TrackingTick>(event) {
             TRACKING.observe(tracking_tick(tick), EPOCH.load(Ordering::Relaxed));
