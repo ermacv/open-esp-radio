@@ -129,6 +129,7 @@
 
 mod block;
 mod interface;
+mod loans;
 mod machine;
 mod neighbor;
 mod owner;
@@ -138,6 +139,7 @@ pub use block::{
     GroupsFull, Pool, claim,
 };
 pub use interface::{Interface, InterfaceError};
+pub use loans::{Loan, Loans, LoansRefused, NotLent};
 pub use machine::{
     CommandId, CommandState, Core, Datagram, Demand, Eviction, Grant, NetEvent, OpenRefused,
     Outcome, Queued, Remote, RetiredResults, SendRefusal, SendRefused, SocketId, StaleSocket,

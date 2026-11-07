@@ -1186,6 +1186,8 @@ impl<
         self,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> (RetiredResults<B, SOCKETS, CREDITS>, CoreBrand<B>) {
+        // Loans outlive a core: what is out stays owed, to this pool.
+        pool.loans().reinstall();
         let Self {
             sockets,
             serial,
