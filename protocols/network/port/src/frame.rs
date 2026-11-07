@@ -26,19 +26,20 @@ pub trait FramePort {
     ) -> Result<Self::Ticket, Self::Refusal>;
 }
 
-/// Frames coming in, frames ended, and the wakes of a port.
+/// Frames coming in, news for the egress policy, and the wakes of a port.
 pub trait FrameSource {
-    /// How an accepted frame ended, for the egress policy alone.
-    type Completion;
+    /// What the port tells the policy: how an accepted frame ended, and
+    /// whatever else its account needs. The network passes it on unread.
+    type Notice;
 
     /// Show the next received frame to `read`; whether there was one.
     fn take_frame(&mut self, read: impl FnOnce(&[u8])) -> bool;
 
-    /// The next frame that ended.
-    fn take_completion(&mut self) -> Option<Self::Completion>;
+    /// The next notice.
+    fn take_notice(&mut self) -> Option<Self::Notice>;
 
-    /// Make `cx` the one a received frame, a completion or room to publish
-    /// wakes, at once if any came since the last look.
+    /// Make `cx` the one a received frame, a notice or room to publish wakes,
+    /// at once if any came since the last look.
     fn register(&mut self, cx: &mut Context<'_>);
 }
 
@@ -72,8 +73,8 @@ pub trait Candidate {
 
 /// Chooses what goes out before any frame exists, and keeps the account of what
 /// it chose. Reserve in `choose`; exactly one of `accepted`, `refused` or
-/// `unknown` answers each reservation. `Ticket` and `Completion` are the port's.
-pub trait Egress<Ticket, Completion> {
+/// `unknown` answers each reservation. `Ticket` and `Notice` are the port's.
+pub trait Egress<Ticket, Notice> {
     /// What a choice holds until it is answered.
     type Reservation;
     /// Why the policy cannot go on.
@@ -89,7 +90,7 @@ pub trait Egress<Ticket, Completion> {
         ready: impl Iterator<Item = C> + Clone,
     ) -> Result<Option<(C, Self::Reservation)>, Self::Fault>;
 
-    /// The port took the frame: its charge waits for `completed`.
+    /// The port took the frame: its charge waits for a notice.
     ///
     /// # Errors
     /// [`Self::Fault`].
@@ -112,11 +113,11 @@ pub trait Egress<Ticket, Completion> {
     /// [`Self::Fault`].
     fn unknown(&mut self, reservation: Self::Reservation) -> Result<(), Self::Fault>;
 
-    /// A frame the port took has ended.
+    /// The port has news.
     ///
     /// # Errors
     /// [`Self::Fault`].
-    fn completed(&mut self, completion: Completion) -> Result<(), Self::Fault>;
+    fn notice(&mut self, notice: Notice) -> Result<(), Self::Fault>;
 }
 
 /// The room a port gave does not hold the frame.

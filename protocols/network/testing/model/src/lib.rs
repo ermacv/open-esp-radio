@@ -10,7 +10,7 @@ use std::task::{Context, Waker};
 
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeCandidate;
-use oer_protocols_ieee80211_runtime::egress::{Exchange, PeerAir};
+use oer_protocols_ieee80211_runtime::egress::{Exchange, PeerAir, RadioNotice};
 use oer_protocols_network_port::{FramePort, FrameSource, Ready, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
@@ -19,7 +19,10 @@ use oer_protocols_network_wire::transport::UdpHeader;
 
 const BROADCAST: [u8; 6] = [0xff; 6];
 /// The account of frames to everyone.
-const BROADCAST_KEY: u8 = u8::MAX;
+const BROADCAST_KEY: PeerKey = (u8::MAX, 0);
+
+/// An association: a peer's number and its generation.
+pub type PeerKey = (u8, u16);
 
 /// One peer's rate and addresses.
 #[derive(Clone, Copy, Debug)]
@@ -30,6 +33,12 @@ pub struct PeerSpec {
     pub overhead_micros: u32,
     /// The cost of each octet.
     pub micros_per_octet: u32,
+    /// What the radio believes each octet costs.
+    pub estimated_per_octet: u32,
+    /// Extra attempts each frame takes, at full cost each.
+    pub retries: u32,
+    /// The most attempts past the first a frame can take.
+    pub retry_limit: u32,
 }
 
 /// What the air carried.
@@ -62,6 +71,7 @@ pub struct NoRoom;
 #[derive(Debug)]
 struct Peer {
     spec: PeerSpec,
+    generation: u16,
     asleep: bool,
     unknown_cost: bool,
     spent: Spent,
@@ -91,7 +101,7 @@ struct State {
     refusals: u32,
     refused: u64,
     received: VecDeque<Vec<u8>>,
-    ended: VecDeque<Exchange<u32>>,
+    notices: VecDeque<RadioNotice<u32, PeerKey>>,
     waker: Option<Waker>,
 }
 
@@ -108,21 +118,61 @@ impl State {
             .position(|peer| peer.spec.hardware == hardware)
     }
 
-    fn cost(&self, peer: Option<usize>, length: usize) -> u32 {
-        // A frame to everyone goes at the slowest peer's rate.
-        let (overhead, per_octet) = peer.and_then(|peer| self.peers.get(peer)).map_or_else(
-            || {
-                let slowest = self
-                    .peers
-                    .iter()
-                    .map(|peer| (peer.spec.overhead_micros, peer.spec.micros_per_octet))
-                    .max_by_key(|(_, per_octet)| *per_octet);
-                slowest.unwrap_or((1, 1))
+    /// A frame to everyone goes once, at the slowest peer's rate.
+    fn slowest(&self) -> PeerSpec {
+        let slowest = self
+            .peers
+            .iter()
+            .map(|peer| peer.spec)
+            .max_by_key(|spec| spec.micros_per_octet);
+        slowest.unwrap_or(PeerSpec {
+            hardware: BROADCAST,
+            address: [0; 4],
+            overhead_micros: 1,
+            micros_per_octet: 1,
+            estimated_per_octet: 1,
+            retries: 0,
+            retry_limit: 0,
+        })
+    }
+
+    fn spec(&self, peer: Option<usize>) -> PeerSpec {
+        let spec = peer.and_then(|peer| self.peers.get(peer));
+        spec.map_or_else(
+            || PeerSpec {
+                retries: 0,
+                retry_limit: 0,
+                ..self.slowest()
             },
-            |peer| (peer.spec.overhead_micros, peer.spec.micros_per_octet),
-        );
+            |peer| peer.spec,
+        )
+    }
+
+    /// What one attempt at `per_octet` costs.
+    fn attempt(spec: &PeerSpec, per_octet: u32, length: usize) -> u32 {
         let octets = u32::try_from(length).unwrap_or(u32::MAX);
-        overhead.saturating_add(octets.saturating_mul(per_octet))
+        spec.overhead_micros
+            .saturating_add(octets.saturating_mul(per_octet))
+    }
+
+    /// What a frame really costs, its retries included.
+    fn cost(&self, peer: Option<usize>, length: usize) -> u32 {
+        let spec = self.spec(peer);
+        Self::attempt(&spec, spec.micros_per_octet, length)
+            .saturating_mul(spec.retries.saturating_add(1))
+    }
+
+    /// What the radio believes it will cost.
+    fn estimate(&self, peer: Option<usize>, length: usize) -> u32 {
+        let spec = self.spec(peer);
+        Self::attempt(&spec, spec.estimated_per_octet, length)
+    }
+
+    /// The most it can cost.
+    fn ceiling(&self, peer: Option<usize>, length: usize) -> u32 {
+        let spec = self.spec(peer);
+        let rate = spec.micros_per_octet.max(spec.estimated_per_octet);
+        Self::attempt(&spec, rate, length).saturating_mul(spec.retry_limit.saturating_add(1))
     }
 
     /// Answer an ARP request for a peer's address, as that peer.
@@ -209,10 +259,10 @@ impl State {
         if let Some(port) = flight.port {
             self.flows.entry(port).or_default().add(flight.cost);
         }
-        self.ended.push_back(Exchange {
+        self.notices.push_back(RadioNotice::Ended(Exchange {
             ticket: flight.ticket,
             charged,
-        });
+        }));
     }
 }
 
@@ -232,6 +282,7 @@ impl Medium {
                 .iter()
                 .map(|spec| Peer {
                     spec: *spec,
+                    generation: 0,
                     asleep: false,
                     unknown_cost: false,
                     spent: Spent::default(),
@@ -247,7 +298,7 @@ impl Medium {
             refusals: 0,
             refused: 0,
             received: VecDeque::new(),
-            ended: VecDeque::new(),
+            notices: VecDeque::new(),
             waker: None,
         })))
     }
@@ -285,6 +336,19 @@ impl Medium {
         let mut state = self.0.borrow_mut();
         if let Some(peer) = state.peers.get_mut(peer) {
             peer.asleep = asleep;
+        }
+        state.wake();
+    }
+
+    /// A peer's association ends and the next begins: its frames on the air
+    /// still settle on the old one.
+    pub fn leave(&self, peer: usize) {
+        let mut state = self.0.borrow_mut();
+        let number = u8::try_from(peer).unwrap_or(u8::MAX);
+        if let Some(peer) = state.peers.get_mut(peer) {
+            let key = (number, peer.generation);
+            peer.generation = peer.generation.wrapping_add(1);
+            state.notices.push_back(RadioNotice::Left(key));
         }
         state.wake();
     }
@@ -353,7 +417,7 @@ impl FramePort for Medium {
 }
 
 impl FrameSource for Medium {
-    type Completion = Exchange<u32>;
+    type Notice = RadioNotice<u32, PeerKey>;
 
     fn take_frame(&mut self, read: impl FnOnce(&[u8])) -> bool {
         let frame = self.0.borrow_mut().received.pop_front();
@@ -363,36 +427,43 @@ impl FrameSource for Medium {
         })
     }
 
-    fn take_completion(&mut self) -> Option<Exchange<u32>> {
-        self.0.borrow_mut().ended.pop_front()
+    fn take_notice(&mut self) -> Option<Self::Notice> {
+        self.0.borrow_mut().notices.pop_front()
     }
 
     fn register(&mut self, cx: &mut Context<'_>) {
         let mut state = self.0.borrow_mut();
         state.waker = Some(cx.waker().clone());
-        if !state.received.is_empty() || !state.ended.is_empty() {
+        if !state.received.is_empty() || !state.notices.is_empty() {
             cx.waker().wake_by_ref();
         }
     }
 }
 
 impl PeerAir for Medium {
-    type Key = u8;
+    type Key = PeerKey;
 
-    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<u8>> {
+    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<PeerKey>> {
         let state = self.0.borrow();
         let (key, peer) = if ready.peer == BROADCAST {
             (BROADCAST_KEY, None)
         } else {
-            let peer = state.peer_of(ready.peer)?;
-            if state.peers.get(peer)?.asleep {
+            let number = state.peer_of(ready.peer)?;
+            let peer = state.peers.get(number)?;
+            if peer.asleep {
                 return None;
             }
-            (u8::try_from(peer).ok()?, Some(peer))
+            ((u8::try_from(number).ok()?, peer.generation), Some(number))
         };
         Some(AirtimeCandidate {
             key,
-            minimum_micros: NonZeroU32::new(state.cost(peer, ready.length))?,
+            minimum_micros: NonZeroU32::new(state.estimate(peer, ready.length))?,
         })
+    }
+
+    fn ceiling(&self, ready: &Ready) -> NonZeroU32 {
+        let state = self.0.borrow();
+        let ceiling = state.ceiling(state.peer_of(ready.peer), ready.length);
+        NonZeroU32::new(ceiling).unwrap_or(NonZeroU32::MIN)
     }
 }

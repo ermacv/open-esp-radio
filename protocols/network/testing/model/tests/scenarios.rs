@@ -14,13 +14,13 @@ use oer_portable_memory::WakingSpscSender;
 use oer_portable_time::{Clock, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
-use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, Exchange};
+use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, RadioNotice};
 use oer_protocols_network_core::{Block, Interface, NetworkOwner, Remote, claim};
 use oer_protocols_network_port::{Egress, FrameSource};
 use oer_protocols_network_runtime::{
     Direct, EndCause, Ended, Service, Socket, SocketLanes, StopLane,
 };
-use oer_protocols_network_testing_model::{Medium, PeerSpec, Spent};
+use oer_protocols_network_testing_model::{Medium, PeerKey, PeerSpec, Spent};
 use oer_protocols_network_wire::ip::Dscp;
 
 const SIZE: usize = 1200;
@@ -38,6 +38,7 @@ const AT_PORT: usize = 2;
 const LOCAL: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const OUR_IP: [u8; 4] = [192, 0, 2, 1];
 const QUANTUM: u32 = 2_000;
+const RETRY_LIMIT: u32 = 3;
 const OVERHEAD: u32 = 100;
 const FAST: u32 = 1;
 const SLOW: u32 = 8;
@@ -47,15 +48,19 @@ const PAYLOAD: usize = 1_000;
 const FRAME: u64 = PAYLOAD as u64 + 42;
 /// The most one frame can cost here.
 const LARGEST_FRAME: u64 = OVERHEAD as u64 + FRAME * SLOW as u64;
-/// How far two backlogged peers' air may differ: what the frames at the port
-/// and each peer's quantum leave open. Worked out from the deficit rule, not read
-/// from the scheduler.
-const FAIR_TO: u64 = 2 * (AT_PORT as u64 + 1) * LARGEST_FRAME + QUANTUM as u64;
+/// How far two backlogged peers' air may differ where a frame costs at most
+/// `largest`: what the frames at the port and each peer's quantum leave open.
+/// Worked out from the deficit rule, not read from the scheduler.
+const fn fair_to(largest: u64) -> u64 {
+    2 * (AT_PORT as u64 + 1) * largest + QUANTUM as u64
+}
+const FAIR_TO: u64 = fair_to(LARGEST_FRAME);
 /// How long a scenario runs.
 const SECOND: u64 = 1_000_000;
 /// Passes before a scenario counts as spinning.
 const PASSES: u64 = 50_000_000;
 
+type Notice = RadioNotice<u32, PeerKey>;
 type Fair = AirtimeEgress<'static, Medium, u32, PEERS, HORIZON>;
 type Stopper = WakingSpscSender<'static, (), 1>;
 type Sock<B> = Socket<'static, 'static, B, SIZE, DEPTH, LANE, CREDITS>;
@@ -73,7 +78,7 @@ type Run<B, E, const N: usize> = Ended<
     LANE,
     Medium,
     E,
-    <E as Egress<u32, Exchange<u32>>>::Fault,
+    <E as Egress<u32, Notice>>::Fault,
 >;
 
 fn peer(number: u8, micros_per_octet: u32) -> PeerSpec {
@@ -82,6 +87,9 @@ fn peer(number: u8, micros_per_octet: u32) -> PeerSpec {
         address: [192, 0, 2, 10 + number],
         overhead_micros: OVERHEAD,
         micros_per_octet,
+        estimated_per_octet: micros_per_octet,
+        retries: 0,
+        retry_limit: RETRY_LIMIT,
     }
 }
 
@@ -118,6 +126,7 @@ enum At {
     Sleep(usize, bool),
     Refuse(u32),
     UnknownCost(usize),
+    Leave(usize),
     /// Keep what the medium has counted.
     Mark,
     Stop,
@@ -218,7 +227,7 @@ async fn flood<B>(mut socket: Sock<B>, flow: Flow, left: &RefCell<Vec<Block<'sta
     }
 }
 
-struct Report<B: 'static, E: Egress<u32, Exchange<u32>>, const N: usize> {
+struct Report<B: 'static, E: Egress<u32, Notice>, const N: usize> {
     ended: Run<B, E, N>,
     marks: Vec<Vec<Spent>>,
     /// Every datagram a client still held is back in the pool.
@@ -249,7 +258,7 @@ fn scenario<'s>(medium: &'s Medium, flows: &'s [Flow], script: Vec<(u64, At)>) -
 }
 
 impl Scenario<'_> {
-    fn run<B: 'static, E: Egress<u32, Exchange<u32>> + 'static, const N: usize>(
+    fn run<B: 'static, E: Egress<u32, Notice> + 'static, const N: usize>(
         self,
         owner: Owner<B, N>,
         egress: E,
@@ -314,6 +323,7 @@ impl Scenario<'_> {
                     At::Sleep(peer, asleep) => Box::new(move || medium.set_asleep(peer, asleep)),
                     At::Refuse(count) => Box::new(move || medium.refuse(count)),
                     At::UnknownCost(peer) => Box::new(move || medium.set_unknown_cost(peer)),
+                    At::Leave(peer) => Box::new(move || medium.leave(peer)),
                     At::Mark => Box::new(move || marks_ref.borrow_mut().push(medium.spent())),
                     At::Stop => Box::new(move || {
                         if let Some(stop) = stop_ref.take() {
@@ -587,29 +597,81 @@ fn land_all<B, const N: usize>(medium: &Medium, report: &mut Report<B, Fair, N>)
     while let Some(at) = medium.next_landing() {
         medium.advance(at);
     }
-    while let Some(completion) = report.ended.retired.port.take_completion() {
-        report.ended.egress.completed(completion).unwrap();
+    while let Some(notice) = report.ended.retired.port.take_notice() {
+        report.ended.egress.notice(notice).unwrap();
     }
 }
 
+/// One peer's estimate is a quarter of what its frames cost, by retries; the
+/// other's frames cost that same air in one attempt, as it believes.
+fn underestimated_and_accurate() -> ([PeerSpec; 2], u64) {
+    let low = PeerSpec {
+        retries: RETRY_LIMIT,
+        ..peer(1, FAST)
+    };
+    let attempts = u64::from(RETRY_LIMIT) + 1;
+    let real = attempts * (u64::from(OVERHEAD) + FRAME * u64::from(FAST));
+    let accurate = PeerSpec {
+        overhead_micros: 0,
+        ..peer(2, u32::try_from(real / FRAME).unwrap() + 1)
+    };
+    ([low, accurate], real + FRAME)
+}
+
 #[test]
-fn a_peer_of_unknown_cost_is_charged_and_still_served() {
+fn a_peer_estimated_too_low_still_pays_what_it_spent() {
     struct Net;
-    let peers = [peer(1, SLOW), peer(2, FAST)];
+    let (peers, largest) = underestimated_and_accurate();
     let medium = medium(&peers);
     let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
-    let script = vec![(1_000, At::UnknownCost(0)), (SECOND, At::Stop)];
+    let script = vec![(2 * SECOND, At::Stop)];
+    scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium), fair(&medium));
+    let air = airs(&medium.spent());
+    assert!(air[0].abs_diff(air[1]) <= fair_to(largest), "{air:?}");
+}
+
+#[test]
+fn a_peer_of_unknown_cost_buys_no_air_with_a_low_estimate() {
+    struct Net;
+    let (peers, largest) = underestimated_and_accurate();
+    let medium = medium(&peers);
+    let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
+    let script = vec![(1_000, At::UnknownCost(0)), (2 * SECOND, At::Stop)];
     let mut report =
         scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium), fair(&medium));
     let [unknown, known] = medium.spent()[..] else {
         panic!();
     };
-    assert!(unknown.frames > 10, "{unknown:?} {known:?}");
-    // Charged its whole reservation, this peer may get less than its share.
+    assert!(unknown.frames > 10, "still served: {unknown:?} {known:?}");
+    // Charged its ceiling, this peer may get less than its share, never more.
     assert!(
-        unknown.air_micros <= known.air_micros + FAIR_TO,
-        "an unknown cost buys no air: {unknown:?} {known:?}"
+        unknown.air_micros <= known.air_micros + fair_to(largest),
+        "{unknown:?} {known:?}"
     );
+    land_all(&medium, &mut report);
+    assert_eq!(report.ended.egress.in_flight(), 0);
+}
+
+#[test]
+fn associations_come_and_go_past_the_accounts_there_are() {
+    struct Net;
+    let peers = [peer(1, FAST), peer(2, FAST)];
+    let medium = medium(&peers);
+    let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
+    let script = (1..=u64::try_from(4 * PEERS).unwrap())
+        .map(|step| (step * 20_000, At::Leave(0)))
+        .chain([(SECOND, At::Stop)])
+        .collect();
+    let mut report =
+        scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium), fair(&medium));
+    assert_eq!(
+        report.ended.cause,
+        EndCause::Stopped,
+        "{:?}",
+        report.ended.fault
+    );
+    let air = airs(&medium.spent());
+    assert!(air[0].abs_diff(air[1]) <= FAIR_TO, "{air:?}");
     land_all(&medium, &mut report);
     assert_eq!(report.ended.egress.in_flight(), 0);
 }

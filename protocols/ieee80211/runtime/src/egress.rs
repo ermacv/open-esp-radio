@@ -3,7 +3,8 @@
 //! Peers share the air by [`airtime`](oer_protocols_ieee80211_core_upper_mac::airtime)
 //! deficits, keyed by peer and never by flow, so a peer's flows take turns within
 //! its share. What the radio knows of a peer stays behind [`PeerAir`], and what
-//! the air charged comes back in [`Exchange`]: the network sees neither.
+//! the air charged or which association ended comes back in a [`RadioNotice`]:
+//! the network sees neither.
 
 use core::num::NonZeroU32;
 
@@ -21,15 +22,29 @@ pub trait PeerAir {
     /// The account `ready` spends and its least useful grant, or `None` while
     /// this work may not go: its peer sleeps or has left.
     fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<Self::Key>>;
+
+    /// The most `ready` can cost, every retry at the lowest rate included. A
+    /// frame whose cost is not known is charged this, so no peer gains by not
+    /// knowing it. It holds only as far as this is a true ceiling.
+    fn ceiling(&self, ready: &Ready) -> NonZeroU32;
 }
 
 /// How a frame ended, as a radio port's completion.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Exchange<T> {
     pub ticket: T,
-    /// What the air cost, or `None` when that is not known. An unknown cost
-    /// keeps the whole reservation: it is never free.
+    /// What the air cost, or `None` when that is not known, which charges the
+    /// frame's ceiling or its reservation, whichever is more.
     pub charged: Option<NonZeroU32>,
+}
+
+/// What a radio port tells the policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RadioNotice<T, K> {
+    /// A frame the port took has ended.
+    Ended(Exchange<T>),
+    /// An association has ended: its account goes, once its frames settle.
+    Left(K),
 }
 
 /// Why the policy cannot go on. The scheduler keeps a charge it could not
@@ -54,13 +69,21 @@ impl From<AirtimeError> for AirtimeFault {
 pub struct Held<'o, K> {
     reservation: AirtimeReservation<'o, K>,
     flow: Option<u8>,
+    ceiling: NonZeroU32,
+}
+
+/// A frame the port holds.
+struct Flight<'o, T, K> {
+    ticket: T,
+    flight: AirtimeInFlight<'o, K>,
+    ceiling: NonZeroU32,
 }
 
 /// Airtime between peers, turns between one peer's flows, and control first.
 pub struct AirtimeEgress<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize> {
     scheduler: AirtimeScheduler<'o, A::Key, PEERS, RESERVATIONS>,
     air: A,
-    flights: [Option<(T, AirtimeInFlight<'o, A::Key>)>; RESERVATIONS],
+    flights: [Option<Flight<'o, T, A::Key>>; RESERVATIONS],
     /// Each peer's last served flow.
     flows: [Option<(A::Key, u8)>; PEERS],
 }
@@ -139,14 +162,26 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
     }
 
     /// Hold `flight` for its completion.
-    fn fly(&mut self, ticket: T, flight: AirtimeInFlight<'o, A::Key>) -> Result<(), AirtimeFault> {
+    fn fly(&mut self, flight: Flight<'o, T, A::Key>) -> Result<(), AirtimeFault> {
         let slot = self
             .flights
             .iter_mut()
             .find(|slot| slot.is_none())
             .ok_or(AirtimeFault::NoPlace)?;
-        *slot = Some((ticket, flight));
+        *slot = Some(flight);
         Ok(())
+    }
+
+    /// Settle `flight` at `charged`.
+    fn settle(
+        &mut self,
+        flight: AirtimeInFlight<'o, A::Key>,
+        charged: NonZeroU32,
+    ) -> Result<(), AirtimeFault> {
+        self.scheduler
+            .settle(flight.completed(()), charged, &mut ())
+            .map_err(|(error, _)| error.into())
+            .map(|()| ())
     }
 }
 
@@ -157,8 +192,8 @@ fn turn(ready: &Ready, last: Option<u8>) -> (bool, u8) {
     (ready.class != Class::Control, distance)
 }
 
-impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize> Egress<T, Exchange<T>>
-    for AirtimeEgress<'o, A, T, PEERS, RESERVATIONS>
+impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
+    Egress<T, RadioNotice<T, A::Key>> for AirtimeEgress<'o, A, T, PEERS, RESERVATIONS>
 {
     type Reservation = Held<'o, A::Key>;
     type Fault = AirtimeFault;
@@ -181,7 +216,13 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize> Egres
         match self.pick(ready, reservation.key()) {
             Some(work) => {
                 let flow = work.ready().flow;
-                Ok(Some((work, Held { reservation, flow })))
+                let ceiling = self.air.ceiling(work.ready());
+                let held = Held {
+                    reservation,
+                    flow,
+                    ceiling,
+                };
+                Ok(Some((work, held)))
             }
             // The candidates were this work, so one of them holds the key.
             None => match self.scheduler.cancel(reservation, &mut ()) {
@@ -192,11 +233,19 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize> Egres
     }
 
     fn accepted(&mut self, held: Held<'o, A::Key>, ticket: T) -> Result<(), AirtimeFault> {
-        let Held { reservation, flow } = held;
+        let Held {
+            reservation,
+            flow,
+            ceiling,
+        } = held;
         if let Some(flow) = flow {
             self.remember(reservation.key(), flow);
         }
-        self.fly(ticket, reservation.published())
+        self.fly(Flight {
+            ticket,
+            flight: reservation.published(),
+            ceiling,
+        })
     }
 
     fn refused(&mut self, held: Held<'o, A::Key>) -> Result<(), AirtimeFault> {
@@ -207,28 +256,33 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize> Egres
 
     fn unknown(&mut self, held: Held<'o, A::Key>) -> Result<(), AirtimeFault> {
         let flight = held.reservation.published();
-        let charged = flight.reserved_micros();
-        self.scheduler
-            .settle(flight.completed(()), charged, &mut ())
-            .map_err(|(error, _)| error.into())
+        let charged = held.ceiling.max(flight.reserved_micros());
+        self.settle(flight, charged)
     }
 
-    fn completed(&mut self, exchange: Exchange<T>) -> Result<(), AirtimeFault> {
+    fn notice(&mut self, notice: RadioNotice<T, A::Key>) -> Result<(), AirtimeFault> {
+        let exchange = match notice {
+            RadioNotice::Ended(exchange) => exchange,
+            RadioNotice::Left(key) => {
+                self.retire(key);
+                return Ok(());
+            }
+        };
         let flight = self
             .flights
             .iter_mut()
             .find(|slot| {
                 slot.as_ref()
-                    .is_some_and(|(ticket, _)| *ticket == exchange.ticket)
+                    .is_some_and(|flight| flight.ticket == exchange.ticket)
             })
             .and_then(Option::take);
-        let Some((_, flight)) = flight else {
+        let Some(flight) = flight else {
             return Err(AirtimeFault::UnknownTicket);
         };
-        let charged = exchange.charged.unwrap_or(flight.reserved_micros());
-        self.scheduler
-            .settle(flight.completed(()), charged, &mut ())
-            .map_err(|(error, _)| error.into())
+        let charged = exchange
+            .charged
+            .unwrap_or_else(|| flight.ceiling.max(flight.flight.reserved_micros()));
+        self.settle(flight.flight, charged)
     }
 }
 

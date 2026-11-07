@@ -167,12 +167,12 @@ impl<
             .take_frame(|frame| core.input(now, frame, pool, events))
     }
 
-    /// The port's next ended frame, for the egress policy.
-    pub fn take_completion(&mut self) -> Option<P::Completion>
+    /// The port's next notice, for the egress policy.
+    pub fn take_notice(&mut self) -> Option<P::Notice>
     where
         P: FrameSource,
     {
-        self.port.take_completion()
+        self.port.take_notice()
     }
 
     /// Make `cx` the one the port wakes.
