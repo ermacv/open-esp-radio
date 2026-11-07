@@ -13,8 +13,12 @@
 //! - a configuration waits at the published data arena as `Held`, then
 //!   runs ([`Case::ConfigureBarrier`]);
 //! - the deadline follows a submitted MPDU and its completion
-//!   ([`Case::Deadline`]).
+//!   ([`Case::Deadline`]);
+//! - a station MPDU carries the Retry bit once an earlier transmission of it
+//!   could have reached the air, across every explicit send of its `Sent`
+//!   ([`Case::RetryHistory`], [`RETRY_HISTORIES`]).
 
+use core::num::NonZeroU8;
 use core::task::{Context, Poll, Waker};
 
 use oer_portable_time::{Duration, Instant};
@@ -81,7 +85,175 @@ pub trait DataPortHarness<'id> {
         &mut self,
         done: oer_protocols_ieee80211_contracts_port::PortCompleted<'id, Self::Port>,
     );
+    /// Answer the next transmissions of station MPDUs with `ends`, in order.
+    fn answer_station(&mut self, ends: &[StationEnd]);
+    /// Submit a station data MPDU under one stage of `transmissions`: a fresh
+    /// one, or with `again` the `Sent` MPDU the last station terminal
+    /// returned, as a retransmission.
+    ///
+    /// # Errors
+    ///
+    /// [`Violation::Fixture`] without the owners, a refusal otherwise.
+    fn submit_station(&mut self, again: bool, transmissions: NonZeroU8) -> Result<(), Violation>;
+    /// Take the station MPDU's terminal from the sink, keeping its `Sent`
+    /// for a later send: how it ended and whether its last publication
+    /// carried the Retry bit. `None` while it has not ended.
+    fn take_station(&mut self) -> Option<StationSent>;
 }
+
+/// How one transmission of a station MPDU ends, as the fixture's air
+/// answers it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StationEnd {
+    /// The ACK came.
+    Ack,
+    /// No ACK came.
+    AckTimeout,
+    /// The protection exchange drew no CTS.
+    CtsTimeout,
+    /// The attempt collided.
+    Collision,
+    /// The hardware refused the MPDU's key.
+    KeyRefused,
+    /// No completion: the hardware timed out and the publication is aborted.
+    HardwareTimeout,
+}
+
+/// How a station send ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SentEnd {
+    /// Its solicited response came.
+    Delivered,
+    /// The plan ran out without delivery.
+    Undelivered,
+    /// Whether the MPDU went out is unknown.
+    Indeterminate,
+    /// Its MSDU lifetime ran out before it went out.
+    Expired,
+    /// Any other end.
+    Other,
+}
+
+/// A station send's end and the Retry bit of its MPDU as its last
+/// publication left it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StationSent {
+    /// How the send ended.
+    pub end: SentEnd,
+    /// Whether its MPDU carries the Retry bit.
+    pub retry: bool,
+}
+
+/// One explicit send of a station MPDU in a [`RETRY_HISTORIES`] entry.
+#[derive(Clone, Copy, Debug)]
+pub struct Send {
+    /// The transmissions its plan makes and how each ends; an empty list
+    /// makes a plan of one that never reaches the air.
+    pub ends: &'static [StationEnd],
+    /// The MSDU's lifetime runs out before this send.
+    pub aged: bool,
+    /// What the send returns; the Retry bit is compared only for a send that
+    /// reached the air.
+    pub expect: StationSent,
+}
+
+const fn send(ends: &'static [StationEnd], end: SentEnd, retry: bool) -> Send {
+    Send {
+        ends,
+        aged: false,
+        expect: StationSent { end, retry },
+    }
+}
+
+/// The idle time that runs any MSDU lifetime out.
+const AGE: Duration = Duration::from_secs(3_600);
+
+/// Histories of one MPDU, each send after the first a retransmission of the
+/// `Sent` the previous one returned. The Retry bit of each send's last
+/// publication follows one rule: it is set once an earlier transmission
+/// could have reached the air (an ACK timeout, a delivery, or an indeterminate
+/// end: a hardware timeout or a refused key), stays set, and is never set by
+/// a CTS timeout or a collision alone.
+pub const RETRY_HISTORIES: [&[Send]; 21] = {
+    use SentEnd::{Delivered, Expired, Indeterminate, Undelivered};
+    use StationEnd::{Ack, AckTimeout, Collision, CtsTimeout, HardwareTimeout, KeyRefused};
+    [
+        &[send(&[Ack], Delivered, false)],
+        &[send(&[AckTimeout, Ack], Delivered, true)],
+        &[send(&[Collision, Ack], Delivered, false)],
+        &[send(&[CtsTimeout, Ack], Delivered, false)],
+        &[send(&[Collision, CtsTimeout, Ack], Delivered, false)],
+        &[send(&[AckTimeout, Collision, Ack], Delivered, true)],
+        &[send(&[AckTimeout, CtsTimeout, Ack], Delivered, true)],
+        &[send(&[Collision, AckTimeout, Ack], Delivered, true)],
+        &[send(&[CtsTimeout, AckTimeout, Ack], Delivered, true)],
+        &[
+            send(&[Collision, Collision], Undelivered, false),
+            send(&[Ack], Delivered, false),
+        ],
+        &[
+            send(&[CtsTimeout], Undelivered, false),
+            send(&[Ack], Delivered, false),
+        ],
+        &[
+            send(&[AckTimeout], Undelivered, false),
+            send(&[Ack], Delivered, true),
+        ],
+        &[
+            send(&[AckTimeout], Undelivered, false),
+            send(&[Collision], Undelivered, true),
+            send(&[Ack], Delivered, true),
+        ],
+        &[
+            send(&[KeyRefused], Indeterminate, false),
+            send(&[Ack], Delivered, true),
+        ],
+        &[
+            send(&[AckTimeout, KeyRefused], Indeterminate, true),
+            send(&[Ack], Delivered, true),
+        ],
+        &[
+            send(&[HardwareTimeout], Indeterminate, false),
+            send(&[Ack], Delivered, true),
+        ],
+        &[
+            send(&[Ack], Delivered, false),
+            send(&[Ack], Delivered, true),
+        ],
+        &[
+            send(&[Collision], Undelivered, false),
+            send(&[AckTimeout], Undelivered, false),
+            send(&[Ack], Delivered, true),
+        ],
+        &[
+            send(&[Collision], Undelivered, false),
+            send(&[HardwareTimeout], Indeterminate, false),
+            send(&[Ack], Delivered, true),
+        ],
+        &[
+            send(&[Collision], Undelivered, false),
+            Send {
+                ends: &[],
+                aged: true,
+                expect: StationSent {
+                    end: Expired,
+                    retry: false,
+                },
+            },
+        ],
+        &[
+            send(&[AckTimeout], Undelivered, false),
+            Send {
+                ends: &[],
+                aged: true,
+                expect: StationSent {
+                    end: Expired,
+                    retry: false,
+                },
+            },
+        ],
+    ]
+};
 
 /// One case of the suite.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -96,16 +268,19 @@ pub enum Case {
     ConfigureBarrier,
     /// The deadline follows a published MPDU and its completion.
     Deadline,
+    /// Each send of [`RETRY_HISTORIES`] ends and carries Retry as listed.
+    RetryHistory,
 }
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::QuietCalls,
         Self::Refusals,
         Self::ReceiveRoom,
         Self::ConfigureBarrier,
         Self::Deadline,
+        Self::RetryHistory,
     ];
 }
 
@@ -128,6 +303,14 @@ pub enum Violation {
     Fault,
     /// The fixture could not set up the case.
     Fixture,
+    /// A send of a [`RETRY_HISTORIES`] entry, by its positions, ended
+    /// otherwise than listed or never ended.
+    Retry {
+        /// The entry.
+        history: u8,
+        /// The send in it.
+        send: u8,
+    },
 }
 
 /// Run `case` on a fresh fixture.
@@ -142,6 +325,7 @@ pub fn check<'id, H: DataPortHarness<'id>>(harness: &mut H, case: Case) -> Resul
         Case::ReceiveRoom => receive_room(harness),
         Case::ConfigureBarrier => configure_barrier(harness),
         Case::Deadline => deadline(harness),
+        Case::RetryHistory => retry_history(harness),
     }
 }
 
@@ -348,4 +532,62 @@ fn deadline<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violati
         }
     }
     Err(Violation::Deadline)
+}
+
+fn retry_history<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+    start(harness)?;
+    for (history, sends) in RETRY_HISTORIES.iter().enumerate() {
+        for (at, send) in sends.iter().enumerate() {
+            let wrong = Violation::Retry {
+                history: u8::try_from(history).unwrap_or(u8::MAX),
+                send: u8::try_from(at).unwrap_or(u8::MAX),
+            };
+            if send.aged {
+                harness.advance(AGE);
+            }
+            harness.answer_station(send.ends);
+            let transmissions = u8::try_from(send.ends.len())
+                .ok()
+                .and_then(NonZeroU8::new)
+                .unwrap_or(NonZeroU8::MIN);
+            harness.submit_station(at != 0, transmissions)?;
+            let sent = serve_station(harness)?.ok_or(wrong)?;
+            // A send that never reached the air put no Retry bit on it; what
+            // its memory holds then is the backend's own.
+            let aired = send.expect.end != SentEnd::Expired;
+            if sent.end != send.expect.end || (aired && sent.retry != send.expect.retry) {
+                return Err(wrong);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Serve the port until the station MPDU's terminal, moving time to the
+/// port's deadline whenever two services in a row change nothing.
+fn serve_station<'id, H: DataPortHarness<'id>>(
+    harness: &mut H,
+) -> Result<Option<StationSent>, Violation> {
+    let mut idle = 0_u8;
+    for _ in 0..PROGRESS_STEPS {
+        harness.settle();
+        if let Some(done) = service(harness)? {
+            harness.settle_arena(done);
+        }
+        if let Some(sent) = harness.take_station() {
+            return Ok(Some(sent));
+        }
+        idle = idle.saturating_add(1);
+        if idle >= 2 {
+            idle = 0;
+            let now = harness.now();
+            let (port, _) = harness.parts();
+            if let Some(at) = port.deadline()
+                && at > now
+            {
+                harness.advance(at.saturating_duration_since(now));
+            }
+        }
+    }
+    Ok(None)
 }

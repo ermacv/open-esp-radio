@@ -52,6 +52,8 @@ const COLLISION: (u8, u8) = (4, 1);
 const KEY_REFUSED: (u8, u8) = (4, 0xc0);
 /// No completion: the hardware's internal collision detaches the queue.
 const COLLISION_DETACH: (u8, u8) = (u8::MAX, u8::MAX);
+/// No completion: the hardware's TX-timeout edge, which starts the abort.
+const TIMEOUT_EDGE: (u8, u8) = (u8::MAX, 0);
 
 #[derive(Default)]
 struct Observed {
@@ -405,7 +407,8 @@ impl Device<512> for TestDevice {
             })));
         }
         if let Some((index, queue)) = next
-            && self.observed.borrow().timeout_edge
+            && (self.observed.borrow().timeout_edge
+                || self.observed.borrow().statuses.get(self.completed) == Some(&TIMEOUT_EDGE))
         {
             self.hardware.timeout_pending[usize::from(queue)] = true;
             self.done[index] = true;

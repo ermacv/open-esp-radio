@@ -460,9 +460,10 @@ fn an_mpdus_plan_takes_each_status_history_to_its_retry_bit() {
 fn a_retransmission_of_a_returned_mpdu_keeps_its_retry_history() {
     // Each plan is one submission of the same MPDU: the decision of an
     // earlier plan reaches the next one through the returned `Sent`, and the
-    // last one is delivered. A delivered or indeterminate frame the caller
-    // sends again goes as a retry: it reached a receiver or may have.
-    let histories: [(&[&[(u8, u8)]], bool); 10] = [
+    // last one is delivered. A delivered frame, or one whose end is
+    // indeterminate (a hardware timeout, a refused key), goes again as a
+    // retry: it reached the air or may have.
+    let histories: [(&[&[(u8, u8)]], bool); 12] = [
         (&[&[ACK_TIMEOUT], &[SUCCESS]], true),
         (&[&[COLLISION], &[SUCCESS]], false),
         (&[&[COLLISION_DETACH], &[SUCCESS]], false),
@@ -473,6 +474,8 @@ fn a_retransmission_of_a_returned_mpdu_keeps_its_retry_history() {
         (&[&[ACK_TIMEOUT], &[COLLISION], &[SUCCESS]], true),
         (&[&[SUCCESS], &[SUCCESS]], true),
         (&[&[KEY_REFUSED], &[SUCCESS]], true),
+        (&[&[ACK_TIMEOUT, KEY_REFUSED], &[SUCCESS]], true),
+        (&[&[COLLISION, COLLISION], &[SUCCESS]], false),
     ];
     for (plans, retry) in histories {
         with_access(|fixture, access| {

@@ -111,6 +111,9 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
     gate: Option<GateOpen<'id, radio::Child<radio::Root<Id>, 1>>>,
     /// The terminals' access, which opens a single MPDU's terminal.
     access: Option<TerminalAccess<'id, Tickets, radio::Child<radio::Root<Id>, 2>>>,
+    /// The station MPDU the last station terminal returned `Sent`, kept for a
+    /// retransmission.
+    station: Option<(Ticket<'id, Id>, Sent<'id, Id, TestDevice, 512, Draws>)>,
 }
 
 fn supported(
@@ -171,6 +174,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             group_permission: Some(resources.station_group_permission),
             gate: Some(resources.gate),
             access: Some(resources.terminal_access),
+            station: None,
         }
     }
 
@@ -232,6 +236,15 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         &mut self,
         key: Option<&PairwiseKey<'id, Id, Station>>,
     ) -> Option<<Port<'id, Id> as DataPort<'id>>::Admitted> {
+        self.mpdu_of(key, core::num::NonZeroU8::MIN)
+    }
+
+    /// A fresh station data MPDU under one stage of `transmissions`.
+    fn mpdu_of(
+        &mut self,
+        key: Option<&PairwiseKey<'id, Id, Station>>,
+        transmissions: core::num::NonZeroU8,
+    ) -> Option<<Port<'id, Id> as DataPort<'id>>::Admitted> {
         let buffer = self.buffers.pop()?;
         let ticket = self.tickets.pop()?;
         let rate = self.port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))?;
@@ -255,7 +268,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             .expect("frame"),
             plan: RetryPlan::new(RetryStage {
                 rate,
-                transmissions: core::num::NonZeroU8::MIN,
+                transmissions,
                 protection: Protection::None,
             }),
         })
@@ -414,6 +427,120 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
     ) {
         let mut arena = self.port.arena();
         let _right = arena.release(done, drop::<TxBacking<512>>).expect("settle");
+    }
+    fn answer_station(&mut self, ends: &[cases::StationEnd]) {
+        use cases::StationEnd;
+        self.observed
+            .borrow_mut()
+            .statuses
+            .extend(ends.iter().map(|end| match end {
+                StationEnd::Ack => SUCCESS,
+                StationEnd::AckTimeout => ACK_TIMEOUT,
+                StationEnd::CtsTimeout => CTS_TIMEOUT,
+                StationEnd::Collision => COLLISION,
+                StationEnd::KeyRefused => KEY_REFUSED,
+                StationEnd::HardwareTimeout => TIMEOUT_EDGE,
+            }));
+    }
+    fn submit_station(
+        &mut self,
+        again: bool,
+        transmissions: core::num::NonZeroU8,
+    ) -> Result<(), cases::Violation> {
+        let kept = self.station.take();
+        let attempt = match (again, kept) {
+            (true, Some((ticket, mpdu))) => {
+                let rate = self
+                    .port
+                    .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+                    .ok_or(cases::Violation::Fixture)?;
+                let source = TxSource::Retransmission {
+                    mpdu,
+                    plan: RetransmissionPlan::Individual(RetryPlan::new(RetryStage {
+                        rate,
+                        transmissions,
+                        protection: Protection::None,
+                    })),
+                }
+                .check()
+                .map_err(|_| cases::Violation::Fixture)?;
+                let source = <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::prepare::<
+                    Station,
+                    Caps,
+                >(source)
+                .map_err(|_| cases::Violation::Fixture)?;
+                self.port.admit(
+                    Attempt {
+                        context: Tag(92, None),
+                        ticket,
+                        source,
+                        access_category:
+                            oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+                        protection: Protection::None,
+                        power: SupportedPower::new(TxPower::Calibrated).expect("power"),
+                        coex_operation: TxOperation::Data,
+                    }
+                    .admit(),
+                )
+            }
+            (true, None) => return Err(cases::Violation::Fixture),
+            (false, kept) => {
+                if let Some((ticket, sent)) = kept {
+                    // The old MPDU ends here; its memory starts a new one.
+                    let (mut buffer, _) =
+                        <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
+                    buffer.renew_msdu().expect("renewed");
+                    self.buffers.push(buffer);
+                    self.tickets.push(ticket);
+                }
+                self.mpdu_of(None, transmissions)
+                    .ok_or(cases::Violation::Fixture)?
+            }
+        };
+        let now = self.now();
+        self.port
+            .submit(attempt, now, &mut self.outbox)
+            .map_err(|_| cases::Violation::Refusal)
+    }
+    fn take_station(&mut self) -> Option<cases::StationSent> {
+        use cases::SentEnd;
+        let at = self.outbox.terminals.iter().position(|terminal| {
+            matches!(
+                terminal,
+                LowerMacTerminal::TxCompleted(TxCompleted::Single(_))
+            )
+        })?;
+        let LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) =
+            self.outbox.terminals.remove(at)
+        else {
+            panic!("the station terminal");
+        };
+        let parts = completed.into_parts(self.access.as_mut().expect("terminal access"));
+        let end = match parts.outcome {
+            TxOutcome::Ended(SingleEnd::Delivered { .. }) => SentEnd::Delivered,
+            TxOutcome::Ended(_) => SentEnd::Undelivered,
+            TxOutcome::Indeterminate(_) => SentEnd::Indeterminate,
+            TxOutcome::Expired { .. } => SentEnd::Expired,
+            _ => SentEnd::Other,
+        };
+        let (buffer, _) = parts.payload.into_parts();
+        let retry = match buffer {
+            AnyBuffer::Sent(mut sent) => {
+                let retry =
+                    oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(sent.published())
+                        .expect("the published header")
+                        .control()
+                        .retry();
+                self.station = Some((parts.ticket, sent));
+                retry
+            }
+            AnyBuffer::Fresh(buffer) => {
+                self.buffers.push(buffer);
+                self.tickets.push(parts.ticket);
+                false
+            }
+        };
+        Some(cases::StationSent { end, retry })
     }
 }
 

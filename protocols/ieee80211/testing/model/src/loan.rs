@@ -35,6 +35,7 @@ impl<'p, B: ModelComposition, C: ModelClass> ModelSent<'p, B, C> {
             key: self.key,
             body: self.body,
             packet_number: self.packet_number,
+            retry: self.retry,
         }
     }
 }
@@ -48,6 +49,7 @@ impl<B: ModelComposition, C: ModelClass> ModelSent<'static, B, C> {
             key: self.key,
             body: self.body,
             packet_number: self.packet_number,
+            retry: self.retry,
         }
     }
 }
@@ -80,6 +82,7 @@ impl<'p, B: ModelComposition> BodyPayload<'p, B::Identity, B> for ModelMpdu<'p, 
             response: self.response,
             body: self.body,
             published: self.published,
+            retry: self.retry,
             packet_number: self.packet_number,
         }
     }
@@ -103,6 +106,7 @@ impl<B: ModelComposition> OwnedPayload<B::Identity, B> for ModelMpdu<'static, B>
             response: self.response,
             body: self.body,
             published: self.published,
+            retry: self.retry,
             packet_number: self.packet_number,
         }
     }

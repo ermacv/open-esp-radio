@@ -102,6 +102,12 @@ struct Harness<'s> {
     group: Option<GroupTokens<'s>>,
     arenas: Vec<Arena>,
     counter: Arc<Counter>,
+    /// The station MPDU the last station terminal returned `Sent`, kept for a
+    /// retransmission.
+    station: Option<(
+        Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ModelSent<'s, B<'s>, ModelSmall>,
+    )>,
 }
 
 fn channel() -> Channel {
@@ -164,6 +170,7 @@ impl<'s> Harness<'s> {
             )),
             arenas: Vec::new(),
             counter: Arc::new(Counter(AtomicUsize::new(0))),
+            station: None,
         }
     }
 
@@ -204,8 +211,19 @@ impl<'s> Harness<'s> {
     fn admitted_numbered(
         &mut self,
         ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
+        key: Option<(&ModelPairwiseKey<'s, B<'s>, Station>, u64)>,
+    ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
+        self.admitted_planned(ticket, buffer, key, NonZeroU8::new(2).unwrap())
+    }
+
+    /// The station's data frame under one stage of `transmissions`.
+    fn admitted_planned(
+        &mut self,
+        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
         mut buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: Option<(&ModelPairwiseKey<'s, B<'s>, Station>, u64)>,
+        transmissions: NonZeroU8,
     ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
         buffer.bytes_mut().unwrap().fill(0);
         let rate = self.port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M)).unwrap();
@@ -226,7 +244,7 @@ impl<'s> Harness<'s> {
             frame: SizedFrame::new(header, MpduLength::new(40).unwrap()).unwrap(),
             plan: RetryPlan::new(RetryStage {
                 rate,
-                transmissions: NonZeroU8::new(2).unwrap(),
+                transmissions,
                 protection: Protection::None,
             }),
         };
@@ -458,6 +476,122 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         let mut arena = self.port.arena();
         let right = arena.release(done, |_| {}).unwrap();
         self.arenas.push(right);
+    }
+    fn answer_station(&mut self, ends: &[cases::StationEnd]) {
+        use cases::StationEnd;
+        for end in ends {
+            self.air.answer(match end {
+                StationEnd::Ack => AirAnswer::Ack,
+                StationEnd::AckTimeout => AirAnswer::NoResponse,
+                StationEnd::CtsTimeout => AirAnswer::CtsTimeout,
+                StationEnd::Collision => AirAnswer::Collision,
+                StationEnd::KeyRefused => AirAnswer::KeyRefused,
+                StationEnd::HardwareTimeout => AirAnswer::HardwareTimeout,
+            });
+        }
+    }
+    fn submit_station(
+        &mut self,
+        again: bool,
+        transmissions: NonZeroU8,
+    ) -> Result<(), cases::Violation> {
+        let kept = self.station.take();
+        let attempt = match (again, kept) {
+            (true, Some((ticket, sent))) => {
+                let rate = self
+                    .port
+                    .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+                    .ok_or(cases::Violation::Fixture)?;
+                let source = TxSource::Retransmission {
+                    mpdu: sent,
+                    plan: oer_protocols_ieee80211_contracts_port::RetransmissionPlan::Individual(
+                        RetryPlan::new(RetryStage {
+                            rate,
+                            transmissions,
+                            protection: Protection::None,
+                        }),
+                    ),
+                }
+                .check()
+                .map_err(|_| cases::Violation::Fixture)?;
+                let source = prepare_model::<Station, ModelCaps, B<'_>, ModelSmall>(source)
+                    .map_err(|_| cases::Violation::Fixture)?;
+                self.port.admit(
+                    Attempt {
+                        context: (),
+                        ticket,
+                        source,
+                        access_category: CATEGORY,
+                        protection: Protection::None,
+                        power: SupportedPower::new(TxPower::Calibrated).unwrap(),
+                        coex_operation: TxOperation::Data,
+                    }
+                    .admit(),
+                )
+            }
+            (true, None) => return Err(cases::Violation::Fixture),
+            (false, kept) => {
+                if let Some((ticket, sent)) = kept {
+                    // The old MPDU ends here; its memory starts a new one.
+                    let mut buffer = <Types<'s> as TxBufferPool<'s, ModelSmall>>::renew(sent).0;
+                    buffer.renew_msdu().unwrap();
+                    self.small.push(buffer);
+                    self.tickets.push(ticket);
+                }
+                let ticket = self.tickets.pop().ok_or(cases::Violation::Fixture)?;
+                let buffer = self.small.pop().ok_or(cases::Violation::Fixture)?;
+                self.admitted_planned(ticket, buffer, None, transmissions)
+            }
+        };
+        let now = self.clock.now();
+        self.port
+            .submit(attempt, now, &mut self.sink)
+            .map_err(|_| cases::Violation::Refusal)
+    }
+    fn take_station(&mut self) -> Option<cases::StationSent> {
+        use cases::SentEnd;
+        let at = self.sink.terminals.iter().position(|terminal| {
+            matches!(
+                terminal,
+                LowerMacTerminal::TxCompleted(TxCompleted::Single(_))
+            )
+        })?;
+        let LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) =
+            self.sink.terminals.remove(at)
+        else {
+            panic!("the station terminal");
+        };
+        let TerminalParts {
+            ticket,
+            payload,
+            outcome,
+            ..
+        } = terminal.into_parts(&mut self.terminal_access);
+        let end = match outcome {
+            TxOutcome::Ended(SingleEnd::Delivered { .. }) => SentEnd::Delivered,
+            TxOutcome::Ended(_) => SentEnd::Undelivered,
+            TxOutcome::Indeterminate(_) => SentEnd::Indeterminate,
+            TxOutcome::Expired { .. } => SentEnd::Expired,
+            _ => SentEnd::Other,
+        };
+        let retry = match payload.into_parts() {
+            (ModelAnyBuffer::SmallSent(sent), _) => {
+                let memory: &[u8] = sent.buffer.memory.as_ref();
+                let retry = oer_protocols_ieee80211_wire::frame::FrameControlFields::from_bytes(
+                    *memory.first_chunk::<2>().unwrap(),
+                )
+                .retry();
+                self.station = Some((ticket, sent));
+                retry
+            }
+            (ModelAnyBuffer::Small(buffer), _) => {
+                self.small.push(buffer);
+                self.tickets.push(ticket);
+                false
+            }
+            _ => panic!("the harness submits small buffers"),
+        };
+        Some(cases::StationSent { end, retry })
     }
 }
 

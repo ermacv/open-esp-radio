@@ -958,7 +958,10 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
             (AirAnswer::NoResponse, _) => Some(ModelArenaAnswer::NoResponse),
             (AirAnswer::Collision, _) => Some(ModelArenaAnswer::Collision),
             (AirAnswer::AirDenied, _) => Some(ModelArenaAnswer::AirDenied),
-            (AirAnswer::HardwareTimeout, _) => Some(ModelArenaAnswer::Aborted),
+            (AirAnswer::HardwareTimeout | AirAnswer::KeyRefused, _) => {
+                Some(ModelArenaAnswer::Aborted)
+            }
+            (AirAnswer::CtsTimeout, _) => Some(ModelArenaAnswer::ProtectionFailure),
             (AirAnswer::Ack, false)
             | (AirAnswer::BlockAck(_) | AirAnswer::BlockAckUnmeasured(_), true) => None,
         };

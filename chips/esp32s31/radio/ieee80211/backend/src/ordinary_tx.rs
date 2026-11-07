@@ -304,17 +304,22 @@ pub(crate) fn mark_retry(buffer: &mut [u8], frame_length: usize) -> Result<(), O
 
 /// The retry machine's decision on the Retry bit: whether an MPDU whose
 /// transmission ended in `status` carries the bit from its next publication
-/// on, because that transmission may have reached a receiver. An ACK timeout
-/// sets it. After a CTS timeout or a collision the MPDU never reached the
-/// receiver: neither sets the bit, and neither clears one an earlier
-/// transmission set. Every other status ends the MPDU, and counts only if the
-/// caller sends the returned `Sent` again: a delivery reached a receiver, a
-/// hardware timeout or a refused key may have.
+/// on. The bit marks a Data or Management frame that is a retransmission of
+/// an earlier frame (IEEE Std 802.11, the Retry subfield of the Frame Control
+/// field), so it is set once an earlier transmission could have reached the
+/// air, and a status that rules that out leaves the bit as it was:
 ///
-/// SOURCE: `libpp[lmac.o]::lmacProcessShortRetryFail` stores Retry only on an
-/// ACK timeout (+0x20a, +0x25c); a collision (+0x17e) and a CTS timeout
-/// (+0x182) skip it. `libpp[lmac.o]::lmacProcessLongRetryFail` skips it on a
-/// collision (+0x144).
+/// - an ACK timeout: the frame went out;
+/// - a delivery: it reached a receiver (only a caller that sends the
+///   returned `Sent` again reads this);
+/// - a hardware timeout or a refused key: the end is indeterminate, and no
+///   evidence shows the frame did not reach the air, so it may have. A
+///   receiver discards a repeat it already accepted only when the repeat
+///   carries Retry and matches the sequence number it cached; without the
+///   bit a frame it did receive would be taken a second time;
+/// - a CTS timeout or a collision: the status handling treats the frame as
+///   not sent, and neither sets the bit. What each such S31 status means on
+///   the air is not confirmed.
 pub(crate) const fn sets_retry_bit(
     status: oer_protocols_ieee80211_contracts_port::TxStatus,
 ) -> bool {
