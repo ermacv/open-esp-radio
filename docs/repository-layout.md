@@ -55,7 +55,7 @@ protocols/ieee80211/core/roles/{ap, sta}/
 protocols/ieee80211/core/security/{cipher, rsn}/
 protocols/ieee80211/testing/{conformance, model}/
 protocols/ieee802154/{mac, model, port, wire}/
-protocols/network/{port, wire}/
+protocols/network/{core, port, runtime, wire}/
 protocols/radio/{coex, port, regulatory}/
 chips/esp32s31/{app, board, boot, bootstrap, compose, crypto, hal,
     instrumentation, knowledge, layout, pac, phy, wifi}/

@@ -1,0 +1,23 @@
+[package]
+name = "oer-protocols-network-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The network core's task and its sockets over messages"
+readme = "README.md"
+
+[dependencies]
+embassy-futures = "0.1.2"
+oer-portable-events = { path = "../../../portable/events" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-protocols-network-core = { path = "../core" }
+oer-protocols-network-wire = { path = "../wire" }
+
+[dev-dependencies]
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
+
+[lints]
+workspace = true
