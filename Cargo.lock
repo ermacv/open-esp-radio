@@ -1632,6 +1632,7 @@ version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-knowledge",
+ "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-coex",
  "oer-chips-family-ieee802154-engine",
  "oer-chips-family-ieee802154-mac-values",
@@ -1649,7 +1650,6 @@ version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-hal",
  "oer-chips-family-analog",
- "oer-chips-family-ieee802154-engine",
  "oer-chips-family-interrupt-table",
  "oer-chips-family-phy",
  "oer-portable-cooperate",

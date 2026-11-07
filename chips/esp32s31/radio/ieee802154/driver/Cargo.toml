@@ -11,6 +11,7 @@ description = "ESP32-S31 IEEE 802.15.4 engine adapter and placed MAC ownership"
 oer-chips-family-interrupt-table = { path = "../../../../family/interrupt-table" }
 oer-protocols-ieee802154-port = { path = "../../../../../protocols/ieee802154/port" }
 oer-chips-esp32s31-hal = { path = "../../../hal" }
+oer-chips-esp32s31-radio-phy = { path = "../../phy" }
 oer-chips-esp32s31-knowledge = { path = "../../../knowledge" }
 oer-chips-family-ieee802154-engine = { path = "../../../../family/ieee802154-engine" }
 oer-chips-family-ieee802154-mac-values = { path = "../../../../family/ieee802154-mac-values" }
