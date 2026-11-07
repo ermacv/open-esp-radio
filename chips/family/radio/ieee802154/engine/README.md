@@ -35,7 +35,7 @@ completion types, PIB, coexistence policy and storage/owner contracts.
 
 Each chip's driver implements `Ieee802154LowLevel`; HAL converts semantic
 values into its own PAC register types. The ESP32-S31 implementation is
-`oer_chips_esp32s31_radio_ieee802154_driver::ll::S31Mac`. What differs between
+`oer_chips_esp32s31_radio_ieee802154_backend::ll::S31Mac`. What differs between
 chips stays with the chip: register geometry, transmit-on delay atoms,
 module-clock/partition owners, the transmit-power level set, the coexistence
 table and the diagnostic counters a chip's LL adds. Each HAL places its frame

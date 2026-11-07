@@ -285,11 +285,11 @@ async fn hardware_cases(aes: &mut InterruptingAes, wait: Wait, mode: &str) -> bo
     agree
 }
 
-/// The AES driver's engine (`oer-chips-esp32s31-peripherals-crypto`: each block waited for on
+/// The AES driver's engine (`oer-chips-esp32s31-drivers-aes`: each block waited for on
 /// `STATE` within its named settle on the executors' clock), unwrapping in
 /// place as the Wi-Fi station does in its step.
 async fn driver_mode(aes: InterruptingAes) -> bool {
-    let mut engine = oer_chips_esp32s31_peripherals_crypto::AesBlocks::new(aes, EmbassyClock);
+    let mut engine = oer_chips_esp32s31_drivers_aes::AesBlocks::new(aes, EmbassyClock);
     let mut agree = true;
     for plain in UNWRAP_PLAIN {
         let (plaintext, wrapped) = wrapped(plain);

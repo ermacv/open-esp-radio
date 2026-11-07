@@ -21,12 +21,12 @@ use oer_chips_esp32s31_hal::{
 };
 use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
-use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::{
+use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::{
     TxBacking, TxSlot,
     ampdu::{HtAmpduTxResources, HtAmpduTxStorage, RetainedAmpduDmaStorage, RetainedDmaAmpduTx},
     runtime::WifiTxRuntimePolicy,
 };
-use oer_chips_esp32s31_radio_ieee80211_driver::{
+use oer_chips_esp32s31_radio_ieee80211_backend::{
     lower_mac::{ConnectionFramePriorities, LowerMacConfig, RadioCoexPriorities},
     ordinary_tx::{OrdinaryTxOwner, WifiTxEntropy},
     port::{
@@ -129,7 +129,7 @@ pub(crate) struct Boot<W: Binding> {
     pub power:
         &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<DriverExecutor>,
     pub rx: oer_chips_esp32s31_hal::system::memory::dma_static::Placed<
-        oer_chips_esp32s31_radio_ieee80211_driver::rx::arena::WifiRxStatic<
+        oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxStatic<
             N,
             B,
             S,
@@ -596,7 +596,7 @@ async fn install<W: Binding>(
     let stopped = stopped.map_err(|_| InitializationError::Radio)?;
     let power = stopped.start_report().track.tx_power;
     let arena = boot.rx;
-    let (rx, _, _) = oer_chips_esp32s31_radio_ieee80211_driver::rx::arena::WifiRxArena::<
+    let (rx, _, _) = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxArena::<
         N,
         B,
         S,
@@ -743,7 +743,7 @@ impl<W: Binding> port::Device<TX> for Device<W> {
         let result = <Inner<W> as port::Device<TX>>::poll_event(&mut self.0, cx);
         #[cfg(oer_trace)]
         if let Poll::Ready(Ok(DeviceEvent::Tx(
-            oer_chips_esp32s31_radio_ieee80211_driver::tx::WifiTxWake::Interrupt { .. },
+            oer_chips_esp32s31_radio_ieee80211_backend::tx::WifiTxWake::Interrupt { .. },
         ))) = &result
         {
             for queue in oer_chips_esp32s31_hal::types::MacTxQueueIndex::ALL {

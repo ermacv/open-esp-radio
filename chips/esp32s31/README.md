@@ -10,9 +10,9 @@ The chip implementation, from its facts up to the application entry, on the
 | PAC | [`pac/`](pac/README.md) | Sourced hardware geometry, typed access and one root claim |
 | HAL | [`hal/`](hal/README.md) | Owners and hardware atoms: `system`, `power`, `peripherals`, `radio` |
 | Platform | [`platform/layout/`](platform/layout/README.md), [`platform/board/`](platform/board/README.md), [`platform/bootstrap/`](platform/bootstrap/README.md) | The address map, the board's settings, cold boot |
-| Drivers | [`peripherals/crypto/`](peripherals/crypto/README.md), [`radio/phy/`](radio/phy/README.md) | Typical AES; calibration, tracking, retained state and RF lifecycle |
+| Drivers | [`drivers/aes/`](drivers/aes/README.md), [`radio/phy/`](radio/phy/README.md) | Typical AES; calibration, tracking, retained state and RF lifecycle |
 | Service | [`radio/system/`](radio/system/README.md), [`radio/client/`](radio/client/README.md) | One shared-domain actor, client membership and ordered handoff |
-| Chip adapters | [`radio/ieee80211/driver/`](radio/ieee80211/driver/README.md), [`radio/bluetooth/driver/`](radio/bluetooth/driver/README.md), [`radio/ieee802154/driver/`](radio/ieee802154/driver/README.md) | Each protocol's port over the HAL: DMA, interrupts and lower MAC |
+| Backends | [`radio/ieee80211/backend/`](radio/ieee80211/backend/README.md), [`radio/bluetooth/backend/`](radio/bluetooth/backend/README.md), [`radio/ieee802154/backend/`](radio/ieee802154/backend/README.md) | Each protocol's port over the HAL: DMA, interrupts and lower MAC |
 | Facade and composition | [`radio/ieee80211/station/`](radio/ieee80211/station/README.md), [`platform/runtime/`](platform/runtime/README.md) | The Wi-Fi station; the image's chip platform and retained faults |
 | Application entry | [`app/`](app/README.md) | Boot, interrupt layout, executors and service tasks behind `oer` |
 

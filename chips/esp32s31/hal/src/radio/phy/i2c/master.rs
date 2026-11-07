@@ -10,7 +10,7 @@ use oer_chips_esp32s31_pac::{
     i2c_ana_mst::I2cAnaMst,
     i2c_ana_mst_mem::PhyI2cCommandRam,
 };
-use oer_chips_family_peripherals_analog::BusRefusal;
+use oer_chips_family_drivers_regi2c::BusRefusal;
 use oer_chips_family_radio_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
 use oer_portable_mmio::{Bits, Index, Placement};
 
@@ -318,9 +318,7 @@ impl<'a, P: Placement> ConfigurationBus<'a, P> {
         Self(AnalogBus::new(MasterPort::new(master)))
     }
 }
-impl<P: Placement> oer_chips_family_peripherals_analog::AnalogRegisterBus
-    for ConfigurationBus<'_, P>
-{
+impl<P: Placement> oer_chips_family_drivers_regi2c::AnalogRegisterBus for ConfigurationBus<'_, P> {
     type Address = Address;
     fn try_start_read(&mut self, address: Address) -> Result<(), BusRefusal> {
         self.0.try_start_read(address).map_err(refusal)

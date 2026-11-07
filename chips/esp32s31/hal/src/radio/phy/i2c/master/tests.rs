@@ -165,7 +165,7 @@ fn an_unrouted_block_publishes_nothing() {
 
 #[test]
 fn the_configuration_bus_calls_an_unrouted_block_what_it_is() {
-    use oer_chips_family_peripherals_analog::{AnalogRegisterBus, BusRefusal};
+    use oer_chips_family_drivers_regi2c::{AnalogRegisterBus, BusRefusal};
     let mut words = memory();
     let mut master = I2cAnaMst::host(&mut words).expect("memory holds the block");
     let mut bus = ConfigurationBus::new(&mut master);

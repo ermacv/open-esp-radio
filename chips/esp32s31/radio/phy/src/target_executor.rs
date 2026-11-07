@@ -422,7 +422,7 @@ macro_rules! define_timeout_pbus_executor {
 define_i2c_executor!(
     complete_masked_i2c,
     MaskedI2cWriteBinding,
-    oer_chips_family_peripherals_analog::Completion<crate::analog::i2c::Address>
+    oer_chips_family_drivers_regi2c::Completion<crate::analog::i2c::Address>
 );
 define_i2c_executor!(
     complete_temperature_i2c,

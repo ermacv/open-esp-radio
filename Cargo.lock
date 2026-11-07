@@ -1417,6 +1417,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-chips-esp32s31-drivers-aes"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "oer-chips-esp32s31-hal",
+ "oer-portable-crypto",
+ "oer-portable-time",
+ "zeroize",
+]
+
+[[package]]
 name = "oer-chips-esp32s31-hal"
 version = "0.1.0"
 dependencies = [
@@ -1425,21 +1436,21 @@ dependencies = [
  "oer-chips-esp32s31-knowledge",
  "oer-chips-esp32s31-pac",
  "oer-chips-family-boot",
+ "oer-chips-family-drivers-efuse",
+ "oer-chips-family-drivers-pmu",
+ "oer-chips-family-drivers-regi2c",
+ "oer-chips-family-drivers-system-timer",
+ "oer-chips-family-drivers-usb-serial-jtag",
+ "oer-chips-family-drivers-watchdog",
  "oer-chips-family-facts",
- "oer-chips-family-peripherals-analog",
- "oer-chips-family-peripherals-efuse",
- "oer-chips-family-peripherals-power",
- "oer-chips-family-peripherals-system-timer",
- "oer-chips-family-peripherals-usb-serial-jtag",
- "oer-chips-family-peripherals-watchdog",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
- "oer-chips-family-radio-bluetooth",
+ "oer-chips-family-radio-bluetooth-ports",
  "oer-chips-family-radio-coex",
- "oer-chips-family-radio-domain",
  "oer-chips-family-radio-ieee802154-values",
  "oer-chips-family-radio-modem-clock",
  "oer-chips-family-radio-phy",
+ "oer-chips-family-radio-power",
  "oer-portable-diagnostics",
  "oer-portable-memory",
  "oer-portable-mmio",
@@ -1463,20 +1474,9 @@ name = "oer-chips-esp32s31-pac"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-chips-family-peripherals-analog",
+ "oer-chips-family-drivers-regi2c",
  "oer-portable-memory",
  "oer-portable-mmio",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-peripherals-crypto"
-version = "0.1.0"
-dependencies = [
- "aes",
- "oer-chips-esp32s31-hal",
- "oer-portable-crypto",
- "oer-portable-time",
- "zeroize",
 ]
 
 [[package]]
@@ -1495,8 +1495,8 @@ dependencies = [
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-family-boot",
+ "oer-chips-family-drivers-system-timer",
  "oer-chips-family-facts",
- "oer-chips-family-peripherals-system-timer",
  "oer-chips-family-platform-bootstrap",
  "oer-portable-time",
  "static_cell",
@@ -1516,10 +1516,10 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embedded-io-async",
+ "oer-chips-esp32s31-drivers-aes",
  "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-peripherals-crypto",
  "oer-chips-family-boot",
- "oer-chips-family-peripherals-usb-serial-jtag",
+ "oer-chips-family-drivers-usb-serial-jtag",
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
@@ -1534,7 +1534,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-esp32s31-radio-bluetooth-driver"
+name = "oer-chips-esp32s31-radio-bluetooth-backend"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
@@ -1544,7 +1544,7 @@ dependencies = [
  "oer-chips-esp32s31-radio-client",
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-platform-interrupt-table",
- "oer-chips-family-radio-bluetooth",
+ "oer-chips-family-radio-bluetooth-ports",
  "oer-portable-memory",
  "oer-portable-sync",
  "oer-portable-time",
@@ -1573,7 +1573,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-esp32s31-radio-ieee80211-driver"
+name = "oer-chips-esp32s31-radio-ieee80211-backend"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
@@ -1619,14 +1619,14 @@ dependencies = [
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-runtime",
  "oer-chips-esp32s31-radio-client",
- "oer-chips-esp32s31-radio-ieee80211-driver",
+ "oer-chips-esp32s31-radio-ieee80211-backend",
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-esp32s31-radio-system",
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-radio-coex",
- "oer-chips-family-radio-domain",
  "oer-chips-family-radio-ieee80211-policy",
+ "oer-chips-family-radio-power",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-events",
@@ -1650,7 +1650,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-esp32s31-radio-ieee802154-driver"
+name = "oer-chips-esp32s31-radio-ieee802154-backend"
 version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-hal",
@@ -1672,7 +1672,7 @@ name = "oer-chips-esp32s31-radio-phy"
 version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-hal",
- "oer-chips-family-peripherals-analog",
+ "oer-chips-family-drivers-regi2c",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-radio-phy",
  "oer-portable-cooperate",
@@ -1720,9 +1720,47 @@ dependencies = [
 name = "oer-chips-family-boot"
 version = "0.1.0"
 dependencies = [
- "oer-chips-family-peripherals-analog",
- "oer-chips-family-peripherals-watchdog",
+ "oer-chips-family-drivers-regi2c",
+ "oer-chips-family-drivers-watchdog",
  "oer-chips-family-platform-layout",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+]
+
+[[package]]
+name = "oer-chips-family-drivers-efuse"
+version = "0.1.0"
+
+[[package]]
+name = "oer-chips-family-drivers-pmu"
+version = "0.1.0"
+
+[[package]]
+name = "oer-chips-family-drivers-regi2c"
+version = "0.1.0"
+
+[[package]]
+name = "oer-chips-family-drivers-system-timer"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+]
+
+[[package]]
+name = "oer-chips-family-drivers-usb-serial-jtag"
+version = "0.1.0"
+dependencies = [
+ "embedded-io-async",
+ "oer-chips-family-platform-interrupt-table",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+]
+
+[[package]]
+name = "oer-chips-family-drivers-watchdog"
+version = "0.1.0"
+dependencies = [
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1739,50 +1777,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-family-peripherals-analog"
-version = "0.1.0"
-
-[[package]]
-name = "oer-chips-family-peripherals-efuse"
-version = "0.1.0"
-
-[[package]]
-name = "oer-chips-family-peripherals-power"
-version = "0.1.0"
-
-[[package]]
-name = "oer-chips-family-peripherals-system-timer"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
- "oer-portable-time-virtual",
-]
-
-[[package]]
-name = "oer-chips-family-peripherals-usb-serial-jtag"
-version = "0.1.0"
-dependencies = [
- "embedded-io-async",
- "oer-chips-family-platform-interrupt-table",
- "oer-portable-diagnostics",
- "oer-portable-memory",
-]
-
-[[package]]
-name = "oer-chips-family-peripherals-watchdog"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
- "oer-portable-time-virtual",
-]
-
-[[package]]
 name = "oer-chips-family-platform-bootstrap"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "oer-chips-family-boot",
- "oer-chips-family-peripherals-system-timer",
+ "oer-chips-family-drivers-system-timer",
  "oer-chips-family-platform-layout",
  "oer-chips-family-platform-port",
  "oer-portable-memory",
@@ -1796,7 +1796,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embassy-time-driver",
- "oer-chips-family-peripherals-system-timer",
+ "oer-chips-family-drivers-system-timer",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
  "oer-chips-family-platform-runtime",
@@ -1847,8 +1847,8 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "oer-chips-family-boot",
+ "oer-chips-family-drivers-watchdog",
  "oer-chips-family-facts",
- "oer-chips-family-peripherals-watchdog",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-layout",
  "oer-chips-family-platform-port",
@@ -1863,7 +1863,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-family-radio-bluetooth"
+name = "oer-chips-family-radio-bluetooth-ports"
 version = "0.1.0"
 dependencies = [
  "oer-portable-time",
@@ -1877,20 +1877,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-family-radio-domain"
-version = "0.1.0"
-dependencies = [
- "oer-chips-family-radio-modem-clock",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-protocols-radio-coex",
-]
-
-[[package]]
 name = "oer-chips-family-radio-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
- "oer-chips-esp32s31-radio-ieee80211-driver",
+ "oer-chips-esp32s31-radio-ieee80211-backend",
  "oer-portable-time",
  "oer-portable-wire",
  "oer-protocols-ieee80211-contracts-port",
@@ -1933,9 +1923,19 @@ dependencies = [
 name = "oer-chips-family-radio-phy"
 version = "0.1.0"
 dependencies = [
- "oer-chips-family-peripherals-analog",
+ "oer-chips-family-drivers-regi2c",
  "oer-portable-time",
  "oer-portable-time-virtual",
+]
+
+[[package]]
+name = "oer-chips-family-radio-power"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-family-radio-modem-clock",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-radio-coex",
 ]
 
 [[package]]
@@ -2003,8 +2003,8 @@ dependencies = [
  "aes",
  "ccm",
  "cmac",
+ "oer-chips-esp32s31-drivers-aes",
  "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-peripherals-crypto",
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-esp32s31-platform-runtime",
@@ -2055,8 +2055,8 @@ dependencies = [
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-esp32s31-platform-runtime",
- "oer-chips-family-peripherals-power",
- "oer-chips-family-peripherals-watchdog",
+ "oer-chips-family-drivers-pmu",
+ "oer-chips-family-drivers-watchdog",
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
@@ -2110,7 +2110,7 @@ dependencies = [
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-esp32s31-platform-runtime",
- "oer-chips-esp32s31-radio-ieee80211-driver",
+ "oer-chips-esp32s31-radio-ieee80211-backend",
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-boot",
  "oer-chips-family-platform-executor",
@@ -2170,10 +2170,10 @@ dependencies = [
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-esp32s31-platform-runtime",
  "oer-chips-esp32s31-radio-client",
- "oer-chips-esp32s31-radio-ieee80211-driver",
+ "oer-chips-esp32s31-radio-ieee80211-backend",
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-esp32s31-radio-system",
- "oer-chips-family-peripherals-usb-serial-jtag",
+ "oer-chips-family-drivers-usb-serial-jtag",
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-runtime",

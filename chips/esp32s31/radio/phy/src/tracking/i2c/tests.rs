@@ -81,13 +81,13 @@ fn complete_write(
 ) {
     assert_eq!(
         transition.action(),
-        PhyWifiI2cTrackingAction::MaskedWrite(oer_chips_family_peripherals_analog::Action::Read {
+        PhyWifiI2cTrackingAction::MaskedWrite(oer_chips_family_drivers_regi2c::Action::Read {
             address
         })
     );
     transition
         .advance(PhyWifiI2cTrackingCompletion::MaskedWrite(
-            oer_chips_family_peripherals_analog::Completion::Read {
+            oer_chips_family_drivers_regi2c::Completion::Read {
                 address,
                 value: read_value,
             },
@@ -95,14 +95,14 @@ fn complete_write(
         .unwrap();
     assert_eq!(
         transition.action(),
-        PhyWifiI2cTrackingAction::MaskedWrite(oer_chips_family_peripherals_analog::Action::Write {
+        PhyWifiI2cTrackingAction::MaskedWrite(oer_chips_family_drivers_regi2c::Action::Write {
             address,
             value: written_value,
         })
     );
     transition
         .advance(PhyWifiI2cTrackingCompletion::MaskedWrite(
-            oer_chips_family_peripherals_analog::Completion::Written { address },
+            oer_chips_family_drivers_regi2c::Completion::Written { address },
         ))
         .unwrap();
 }

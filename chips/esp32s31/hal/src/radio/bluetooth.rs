@@ -35,7 +35,7 @@ pub use registers::{BluetoothControllerParts, BluetoothModemLpTimerParts};
 mod controller_time;
 mod ports;
 pub(crate) mod registers;
-use oer_chips_family_radio_bluetooth::port::SchedulerInterruptPort;
+use oer_chips_family_radio_bluetooth_ports::port::SchedulerInterruptPort;
 mod scheduler_execution_lock;
 mod scheduler_execution_modify;
 mod scheduler_stop;

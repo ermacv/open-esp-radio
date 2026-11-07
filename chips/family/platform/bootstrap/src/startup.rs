@@ -6,7 +6,7 @@ use oer_chips_family_boot::{
     flash, mmu, psram,
     wait::{BootBudget, BootDeadline, BootWait},
 };
-use oer_chips_family_peripherals_system_timer::LatchStuck;
+use oer_chips_family_drivers_system_timer::LatchStuck;
 use oer_chips_family_platform_layout::Layout;
 use oer_chips_family_platform_port::EarlyText;
 use oer_portable_time::Clock;

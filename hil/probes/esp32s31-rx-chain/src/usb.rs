@@ -6,7 +6,7 @@ use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
-use oer_chips_family_peripherals_usb_serial_jtag::{Endpoint, Interrupt};
+use oer_chips_family_drivers_usb_serial_jtag::{Endpoint, Interrupt};
 use oer_chips_family_platform_executor::Executor;
 use oer_chips_family_platform_interrupt_table::{Controller, Router};
 

@@ -319,7 +319,7 @@ impl AdcRateTransition {
 }
 
 /// One owned replacement for ROM `phy_i2c_writeReg_Mask`: the portable
-/// [`oer_chips_family_peripherals_analog::FieldWriteTransition`] over this chip's analog
+/// [`oer_chips_family_drivers_regi2c::FieldWriteTransition`] over this chip's analog
 /// identities. The current byte crosses the async read edge as a completion
 /// value, is transformed in Rust, and is then owned until the separately
 /// completed write.
@@ -329,8 +329,8 @@ impl AdcRateTransition {
 pub const fn field_write(
     field: Field,
     value: u8,
-) -> oer_chips_family_peripherals_analog::FieldWriteTransition<Address> {
-    match oer_chips_family_peripherals_analog::FieldWriteTransition::new(field, value) {
+) -> oer_chips_family_drivers_regi2c::FieldWriteTransition<Address> {
+    match oer_chips_family_drivers_regi2c::FieldWriteTransition::new(field, value) {
         Ok(write) => write,
         Err(_) => panic!("a production value fits its analog field"),
     }
@@ -344,10 +344,10 @@ pub enum MaskedI2cWriteBindingError {
 }
 
 /// Non-cloneable lowering for one explicit read or write emitted by
-/// [`oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>`].
+/// [`oer_chips_family_drivers_regi2c::FieldWriteTransition<crate::analog::i2c::Address>`].
 #[derive(Debug, Eq, PartialEq)]
 pub struct MaskedI2cWriteBinding {
-    outer_action: oer_chips_family_peripherals_analog::Action<crate::analog::i2c::Address, ()>,
+    outer_action: oer_chips_family_drivers_regi2c::Action<crate::analog::i2c::Address, ()>,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }
 
@@ -359,16 +359,16 @@ impl MaskedI2cWriteBinding {
     }
 
     pub fn new(
-        action: oer_chips_family_peripherals_analog::Action<crate::analog::i2c::Address, ()>,
+        action: oer_chips_family_drivers_regi2c::Action<crate::analog::i2c::Address, ()>,
     ) -> Result<Self, MaskedI2cWriteBindingError> {
         let request = match action {
-            oer_chips_family_peripherals_analog::Action::Read { address } => {
+            oer_chips_family_drivers_regi2c::Action::Read { address } => {
                 crate::calibration::cold::PhyColdI2cRequest::read_byte(address)
             }
-            oer_chips_family_peripherals_analog::Action::Write { address, value } => {
+            oer_chips_family_drivers_regi2c::Action::Write { address, value } => {
                 crate::calibration::cold::PhyColdI2cRequest::write_byte(address, value)
             }
-            oer_chips_family_peripherals_analog::Action::Complete(()) => {
+            oer_chips_family_drivers_regi2c::Action::Complete(()) => {
                 return Err(MaskedI2cWriteBindingError::UnsupportedAction);
             }
         };
@@ -436,12 +436,12 @@ impl MaskedI2cWriteBinding {
     pub fn into_completion(
         self,
     ) -> Result<
-        oer_chips_family_peripherals_analog::Completion<crate::analog::i2c::Address>,
+        oer_chips_family_drivers_regi2c::Completion<crate::analog::i2c::Address>,
         MaskedI2cWriteBindingError,
     > {
         match (self.outer_action, self.transaction.action()) {
             (
-                oer_chips_family_peripherals_analog::Action::Read { address },
+                oer_chips_family_drivers_regi2c::Action::Read { address },
                 crate::calibration::cold::PhyColdI2cAction::Complete(
                     crate::calibration::cold::PhyColdI2cOutcome::Read {
                         address: completed_address,
@@ -449,17 +449,17 @@ impl MaskedI2cWriteBinding {
                     },
                 ),
             ) if completed_address == address => {
-                Ok(oer_chips_family_peripherals_analog::Completion::Read { address, value })
+                Ok(oer_chips_family_drivers_regi2c::Completion::Read { address, value })
             }
             (
-                oer_chips_family_peripherals_analog::Action::Write { address, .. },
+                oer_chips_family_drivers_regi2c::Action::Write { address, .. },
                 crate::calibration::cold::PhyColdI2cAction::Complete(
                     crate::calibration::cold::PhyColdI2cOutcome::Written {
                         address: completed_address,
                     },
                 ),
             ) if completed_address == address => {
-                Ok(oer_chips_family_peripherals_analog::Completion::Written { address })
+                Ok(oer_chips_family_drivers_regi2c::Completion::Written { address })
             }
             (_, crate::calibration::cold::PhyColdI2cAction::Complete(_)) => {
                 Err(MaskedI2cWriteBindingError::UnexpectedOutcome)

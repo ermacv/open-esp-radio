@@ -43,7 +43,7 @@ controller engine, scheduler and modem timer, the boot policy and waits in
 new file joins it. The scan does not find driver code without such a marker.
 
 Shared radio membership, epoch policy, common power, semantic verification,
-cold-baseline restore and clock refcounts live in `oer-chips-family-radio-domain`;
+cold-baseline restore and clock refcounts live in `oer-chips-family-radio-power`;
 HAL supplies owned atom ports and affine proofs.
 `oer-chips-family-radio-phy` owns analog-I2C power/reset readback decisions, retained-wake
 parallel-host waits, serial-byte routing decisions and publication/completion
@@ -53,7 +53,7 @@ caller or substituted with a fake port’s address. PHY calibration
 configuration/restore machines and other cross-block calibration operations
 remain here; the no-wait scan does not classify them as atoms.
 
-For BLE, `oer-chips-family-radio-bluetooth` supplies the task/interrupt register
+For BLE, `oer-chips-family-radio-bluetooth-ports` supplies the task/interrupt register
 contracts, controller-time contracts, modify/stop progress values and
 non-repeating installation identity. The existing HAL owners implement these
 ports without transferring a P3 writer to P2. HAL retains affine publication
@@ -64,7 +64,7 @@ request/reply exchange, terminal output release and role workers remain here.
 For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the
 permanent DMA static and projects each frame into the typed DMA window.
-`oer-chips-esp32s31-radio-ieee802154-driver` implements the family engine's LL contract
+`oer-chips-esp32s31-radio-ieee802154-backend` implements the family engine's LL contract
 and owns its service/placement wrapper above HAL. HAL has no normal or test
 engine dependency.
 The family engine owns reset/foundation validation, static policy and
@@ -196,7 +196,7 @@ root's one-shot `LaunchPermit`; the released hart's grant moves out once
 (`Released::take_interrupts`). Confirmation counts at most 10,000 completed status reads, with a fence
 before sampling and after success, and no peripheral takeover authority.
 
-`oer-chips-family-peripherals-system-timer` owns latch settling and LO/HI/LO verification: 64
+`oer-chips-family-drivers-system-timer` owns latch settling and LO/HI/LO verification: 64
 VALID polls per settle and 16 verification rounds, preserving the unverified
 floor. HAL implements only strobe/VALID/LO/HI atoms. The executor reaches the
 owned counter through `platform-port` and its binding requires the family's
@@ -208,7 +208,7 @@ deadline over the returned monotonic clock.
 `power::ChipClocks` is the one owner of the platform clock words the radio
 shares with the SoC (`MODEM_LPCON.CLK_CONF`, `HP_SYS_CLKRST.REF_160M_CTRL0`):
 the family adoption driver installs it through the HAL adapter. Its
-`oer-chips-family-radio-domain::clocks::ClockCounts` counts the references of every user;
+`oer-chips-family-radio-power::clocks::ClockCounts` counts the references of every user;
 the HAL retains the word claim and permanent `PsramMpll`. A refused acquire or
 release is the caller's typed error.
 
@@ -325,7 +325,7 @@ the generated ordinary-queue geometry. Raw input is admitted with `new`;
 fixed identities use `constant`, checked during monomorphization. Bank selection
 and event acknowledgement match that domain exhaustively.
 The reserved-TXOP-slot adjustment is a known vendor difference, documented in
-[the driver](../radio/ieee80211/driver/README.md#tx-control-bit-22)
+[the driver](../radio/ieee80211/backend/README.md#tx-control-bit-22)
 (`VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS`).
 FE `+0x8d0[21:20]` remains opaque: its nonzero sample contributes diagnostic
 and RX-saturation observations, while estimator completion uses READY.
@@ -403,7 +403,7 @@ pending-zero claim covers it (SOURCE: `BLOB_LIBBLE_PHY_INIT_REGISTERS` and
 `BLOB_LIBBLE_HW_CTE_RING_CONTROL`).
 
 Shared radio membership and registration epoch policy execute in
-`oer-chips-family-radio-domain` over the S31 binding. The HAL retains affine power,
+`oer-chips-family-radio-power` over the S31 binding. The HAL retains affine power,
 coexistence and registration proofs, platform clock guards, register owners,
 restore storage, transaction seat/reunion checks and both quarantine guards.
 BTBB and module membership, first/last common-power ordering and low-power /
@@ -423,6 +423,6 @@ channel 0 (`peripherals::aes_dma`: the channel, its placed descriptors and
 three buffer pairs in the DMA window, no cache maintenance as internal SRAM
 is outside the L1 cache; SOURCE: ESP_IDF_4D80C1B2_S31_AES_DMA). Both owners
 expose the same Typical register atoms;
-`oer-chips-esp32s31-peripherals-crypto` owns the sequence and waits. Clock/reset writes preserve
+`oer-chips-esp32s31-drivers-aes` owns the sequence and waits. Clock/reset writes preserve
 sibling and reserved bits; no fixed whole-word clock image is granted.
 SOURCE: ESP_IDF_4D80C1B2_S31_AES and TRM_S31_V01_AES in the register model.

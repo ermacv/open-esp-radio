@@ -17,8 +17,8 @@ oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
 oer-chips-family-platform-port = { path = "../../../chips/family/platform/port", features = ["esp32s31"] }
-oer-chips-family-peripherals-power = { path = "../../../chips/family/peripherals/power" }
-oer-chips-family-peripherals-watchdog = { path = "../../../chips/family/peripherals/watchdog" }
+oer-chips-family-drivers-pmu = { path = "../../../chips/family/drivers/pmu" }
+oer-chips-family-drivers-watchdog = { path = "../../../chips/family/drivers/watchdog" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-chips-family-platform-interrupt-table = { path = "../../../chips/family/platform/interrupt-table" }

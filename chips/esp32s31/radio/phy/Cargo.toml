@@ -12,7 +12,7 @@ radio-health = []
 
 [dependencies]
 oer-chips-family-radio-phy = { path = "../../../family/radio/phy" }
-oer-chips-family-peripherals-analog = { path = "../../../family/peripherals/analog" }
+oer-chips-family-drivers-regi2c = { path = "../../../family/drivers/regi2c" }
 oer-portable-diagnostics = { path = "../../../../portable/diagnostics" }
 oer-portable-time = { path = "../../../../portable/time" }
 oer-portable-cooperate = { path = "../../../../portable/cooperate" }

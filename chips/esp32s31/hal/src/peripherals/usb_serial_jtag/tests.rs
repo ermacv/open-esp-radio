@@ -7,7 +7,7 @@
 use std::{vec, vec::Vec};
 
 use oer_chips_esp32s31_pac::instances;
-use oer_chips_family_peripherals_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
+use oer_chips_family_drivers_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
 
 use super::{ConsoleRegisters, parts};
 

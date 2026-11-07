@@ -5,7 +5,7 @@ use oer_chips_esp32s31_hal::{
     system::root::{Bootstrap, Root},
 };
 use oer_chips_family_boot::watchdog::BootWatchdogs;
-use oer_chips_family_peripherals_system_timer::{LatchStuck, Monotonic};
+use oer_chips_family_drivers_system_timer::{LatchStuck, Monotonic};
 use oer_chips_family_platform_bootstrap::startup::{BootProfile, Owners};
 
 type WatchdogParts = (

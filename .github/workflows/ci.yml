@@ -65,7 +65,7 @@ jobs:
           cargo test --locked -p oer-chips-esp32s31-radio-phy --features radio-health
           cargo clippy --locked -p oer-chips-esp32s31-radio-phy --features radio-health --all-targets
           cargo test --locked -p oer-protocols-ieee80211-core-roles-sta
-          cargo test --locked -p oer-chips-esp32s31-radio-ieee80211-driver
+          cargo test --locked -p oer-chips-esp32s31-radio-ieee80211-backend
           cargo test --locked -p oer-portable-time --features serde
           cargo test --locked -p oer-portable-time --features schema
           cargo test --locked -p oer-chips-family-platform-executor --features installations --lib --test installations

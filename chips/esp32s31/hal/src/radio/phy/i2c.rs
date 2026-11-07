@@ -19,7 +19,7 @@ pub use commands::{
     PhyI2cConfigurationCommand, PhyI2cConfigurationOperation, PhyI2cInitializationStageOneInputs,
 };
 use master::{ConfigurationBus, MasterPort};
-use oer_chips_family_peripherals_analog::BusRefusal;
+use oer_chips_family_drivers_regi2c::BusRefusal;
 use oer_chips_family_radio_phy::serial::AnalogBus;
 
 pub use crate::radio::phy::restore::{
@@ -63,14 +63,14 @@ pub enum PhyI2cConfigurationError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct OperationCommands(PhyI2cConfigurationOperation);
 
-impl oer_chips_family_peripherals_analog::ConfigurationCommands for OperationCommands {
+impl oer_chips_family_drivers_regi2c::ConfigurationCommands for OperationCommands {
     type Address = Address;
 
     fn command(
         &self,
         index: usize,
-    ) -> Option<oer_chips_family_peripherals_analog::ConfigurationCommand<Address>> {
-        use oer_chips_family_peripherals_analog::ConfigurationCommand;
+    ) -> Option<oer_chips_family_drivers_regi2c::ConfigurationCommand<Address>> {
+        use oer_chips_family_drivers_regi2c::ConfigurationCommand;
         let index = u8::try_from(index).ok()?;
         Some(match self.0.command(index)? {
             PhyI2cConfigurationCommand::Read(address) => ConfigurationCommand::Read(address),
@@ -87,20 +87,20 @@ impl oer_chips_family_peripherals_analog::ConfigurationCommands for OperationCom
 /// Non-cloneable owner of one complete recovered PHY-I²C write plan.
 ///
 /// [`commands`] supplies the operation's commands with opaque analog identities;
-/// the portable [`oer_chips_family_peripherals_analog::ConfigurationTransition`] owns the
+/// the portable [`oer_chips_family_drivers_regi2c::ConfigurationTransition`] owns the
 /// command order and read-modify-write value, and this transaction owns the
 /// start and completion edges of each byte command.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyI2cConfigurationTransaction {
     transition:
-        oer_chips_family_peripherals_analog::ConfigurationTransition<OperationCommands, Address>,
+        oer_chips_family_drivers_regi2c::ConfigurationTransition<OperationCommands, Address>,
     started: bool,
 }
 
 impl PhyI2cConfigurationTransaction {
     pub fn new(operation: PhyI2cConfigurationOperation) -> Self {
         Self {
-            transition: oer_chips_family_peripherals_analog::ConfigurationTransition::new(
+            transition: oer_chips_family_drivers_regi2c::ConfigurationTransition::new(
                 OperationCommands(operation),
             ),
             started: false,
@@ -108,9 +108,9 @@ impl PhyI2cConfigurationTransaction {
     }
 
     pub fn action(&self) -> PhyI2cConfigurationAction {
-        use oer_chips_family_peripherals_analog::ByteTransition;
+        use oer_chips_family_drivers_regi2c::ByteTransition;
         match self.transition.action() {
-            oer_chips_family_peripherals_analog::Action::Complete(_) => {
+            oer_chips_family_drivers_regi2c::Action::Complete(_) => {
                 PhyI2cConfigurationAction::Complete
             }
             _ if self.started => PhyI2cConfigurationAction::AwaitCompletionEdge,
@@ -120,9 +120,9 @@ impl PhyI2cConfigurationTransaction {
 
     fn start_with(
         &mut self,
-        bus: &mut impl oer_chips_family_peripherals_analog::AnalogRegisterBus<Address = Address>,
+        bus: &mut impl oer_chips_family_drivers_regi2c::AnalogRegisterBus<Address = Address>,
     ) -> Result<(), PhyI2cConfigurationError> {
-        use oer_chips_family_peripherals_analog::{Action, ByteTransition};
+        use oer_chips_family_drivers_regi2c::{Action, ByteTransition};
         if self.started {
             return Err(PhyI2cConfigurationError::WrongAction);
         }
@@ -142,9 +142,9 @@ impl PhyI2cConfigurationTransaction {
 
     fn observe_with(
         &mut self,
-        bus: &impl oer_chips_family_peripherals_analog::AnalogRegisterBus<Address = Address>,
+        bus: &impl oer_chips_family_drivers_regi2c::AnalogRegisterBus<Address = Address>,
     ) -> Result<PhyI2cConfigurationObservation, PhyI2cConfigurationError> {
-        use oer_chips_family_peripherals_analog::{Action, ByteTransition, Completion};
+        use oer_chips_family_drivers_regi2c::{Action, ByteTransition, Completion};
         if !self.started {
             return Err(match self.transition.action() {
                 Action::Complete(_) => PhyI2cConfigurationError::AlreadyComplete,

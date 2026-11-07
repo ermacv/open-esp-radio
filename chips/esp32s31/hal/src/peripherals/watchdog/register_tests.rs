@@ -1,6 +1,6 @@
 //! The watchdog owners over host memory from each instance's base: each
 //! test fills the words with a pattern, runs one sequence of
-//! `oer-chips-family-peripherals-watchdog` on an owner, reads the fields back through a
+//! `oer-chips-family-drivers-watchdog` on an owner, reads the fields back through a
 //! typed view of the same words and checks that no other word changed.
 //!
 //! Word offsets are ESP-IDF 4d80c1b2's: `timer_group_reg.h`
@@ -12,7 +12,7 @@
 use core::num::NonZeroU32;
 use std::{vec, vec::Vec};
 
-use oer_chips_family_peripherals_watchdog::{
+use oer_chips_family_drivers_watchdog::{
     LOCK, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog, StoppedMainWatchdog,
     SuperWatchdog,
 };
@@ -226,7 +226,7 @@ fn the_rtc_watchdog_counts_through_sleep_keeping_its_other_fields() {
             .arm_rtc_reset(super::super::RTC_WATCHDOG_STAGE0_HOLD);
     armed.pause_in_sleep(true);
     armed.pause_in_sleep(false);
-    armed.stage0_action(oer_chips_family_peripherals_watchdog::RtcStageAction::ResetSystem);
+    armed.stage0_action(oer_chips_family_drivers_watchdog::RtcStageAction::ResetSystem);
     drop(armed);
     let view = RwdtRegisters::host(&mut words).expect("host memory holds the block");
     let config = view.0.read_config0();

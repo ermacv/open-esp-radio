@@ -170,7 +170,7 @@ call, and consuming the request erases the key. Mode algorithms
 buffer over a synchronous block engine that finishes each block on return or
 refuses it with a typed error. A protocol's synchronous software primitive
 lives in its `cipher`. The chip composition chooses the engine as a static type.
-The S31 Typical AES engine lives in `chips/esp32s31/peripherals/crypto`, over the HAL's
+The S31 Typical AES engine lives in `chips/esp32s31/drivers/aes`, over the HAL's
 `peripherals::aes` atoms and exclusive crypto clock/reset word. The shared
 `runtime::crypto` selects it and supplies it to the Wi-Fi facade in
 `Resources`. The image's composition places the AES owner on a hart: the
@@ -179,7 +179,7 @@ launches hart 1 moves `AesParts` into hart 1's launch parts and builds the
 engine there over hart 1's router (boot-smoke). Its `Silent` proof holds on
 either hart: the proof checks the table's entries of every hart and that
 router's own bank, and every hart's router silences its own bank at install,
-before that hart first unmasks. The engine (`oer-chips-esp32s31-peripherals-crypto::AesBlocks`)
+before that hart first unmasks. The engine (`oer-chips-esp32s31-drivers-aes::AesBlocks`)
 is a synchronous AES-128 engine: it owns AES by value, retains IRQ55 with
 `Silent`, waits for each Typical block on its `STATE` flag within a named
 settle and erases the hardware key and intermediates when its keyed view
@@ -288,20 +288,20 @@ existing local entries.
 
 | Package | Directory |
 | --- | --- |
-| `oer-chips-family-peripherals-analog` | `chips/family/peripherals/analog` |
+| `oer-chips-family-drivers-regi2c` | `chips/family/drivers/regi2c` |
 | `oer-chips-family-boot` | `chips/family/boot` |
 | `oer-chips-family-radio-coex` | `chips/family/radio/coex` |
-| `oer-chips-family-peripherals-efuse` | `chips/family/peripherals/efuse` |
+| `oer-chips-family-drivers-efuse` | `chips/family/drivers/efuse` |
 | `oer-chips-family-facts` | `chips/family/facts` |
 | `oer-chips-family-radio-ieee80211-policy` | `chips/family/radio/ieee80211/policy` |
 | `oer-chips-family-radio-ieee802154-engine` | `chips/family/radio/ieee802154/engine` |
 | `oer-chips-family-radio-ieee802154-values` | `chips/family/radio/ieee802154/values` |
 | `oer-chips-family-radio-modem-clock` | `chips/family/radio/modem-clock` |
-| `oer-chips-family-radio-domain` | `chips/family/radio/domain` |
+| `oer-chips-family-radio-power` | `chips/family/radio/power` |
 | `oer-chips-family-radio-phy` | `chips/family/radio/phy` |
-| `oer-chips-family-radio-bluetooth` | `chips/family/radio/bluetooth` |
+| `oer-chips-family-radio-bluetooth-ports` | `chips/family/radio/bluetooth/ports` |
 
-The console `oer-chips-family-peripherals-usb-serial-jtag` depends transitively on mmio
+The console `oer-chips-family-drivers-usb-serial-jtag` depends transitively on mmio
 through `oer-chips-family-platform-interrupt-table`, which owns platform interrupt
 bindings below the unsafe boundary. Staged-layout owns an unsafe memory/ABI
 contract;
@@ -324,7 +324,7 @@ statics once in the chip's composition crate: the storage of the port's owned
 blocks and the one waker vtable. Each image declares its Embassy time driver
 and observer through `time_driver!`; the driver's exported ABI remains shared.
 The platform port names the counter owner; the executor binding requires
-`oer-chips-family-peripherals-system-timer::CounterLatch` on it. HAL supplies
+`oer-chips-family-drivers-system-timer::CounterLatch` on it. HAL supplies
 strobe/VALID/LO/HI atoms, and the family driver owns settling, verification
 and the bootstrap's named `Monotonic::start_initial_latch_check` check.
 The core driver likewise owns status, confirmation, peer-stop and reset
@@ -377,7 +377,7 @@ facades, platform, interrupt table) besides it; `oer-tools-test-layers`
 checks these direct dependencies. Every HIL image is an image on the entry;
 `oer-tools-test-layers` checks that each depends on it. Probes select their
 entries, priorities and task spawning through the compositions directly.
-These crates are outside the sans-IO layer. `oer-chips-family-peripherals-watchdog` is
+These crates are outside the sans-IO layer. `oer-chips-family-drivers-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-portable-time::deadline` contains only the deadline policy,
 taking time observations and returning typed completion errors; it owns no
@@ -473,7 +473,7 @@ run its own executor.
   when it serves its timers at the start of a round), then the alarm
   interrupt and the receiving executor's round. Every context of every hart
   reads the one SYSTIMER counter latch through
-  `oer-chips-family-peripherals-system-timer`: across harts strobes and reads
+  `oer-chips-family-drivers-system-timer`: across harts strobes and reads
   interleave access by access, and the LO/HI/LO verification still returns
   one whole copy completed during the read, monotonic across harts, or an
   unverified monotonic floor once another hart's strobes exhaust its rounds
@@ -1075,7 +1075,7 @@ defines the scan's scope and limits.
   the runtime epoch and lends it with `&mut`. There is no shared register
   arena or dynamic borrow guard.
 
-The family `oer-chips-family-radio-domain` executes common radio power prerequisites,
+The family `oer-chips-family-radio-power` executes common radio power prerequisites,
 semantic power checks, ordered cold-baseline restoration and platform clock
 reference transitions over HAL register ports. HAL keeps the clock-word claim,
 register atoms, the permanent PSRAM MPLL owner and PHY custody. S31 modem clock
@@ -1274,7 +1274,7 @@ its model and conformance case.
   port as a `LeDeviceAddress`, separately from encoded packet bytes. Role
   images contain only hardware scheduler values, SRAM layout, channels and
   execution timing.
-  The family `oer-chips-family-radio-bluetooth` declares separate task/interrupt
+  The family `oer-chips-family-radio-bluetooth-ports` declares separate task/interrupt
   register ports, controller-time ports, modify/stop progress and non-repeating
   installation identities. HAL implements them with its existing owners and
   retains affine receipts, arena brands, memory projection and DMA custody.
@@ -1330,7 +1330,7 @@ its model and conformance case.
   production has no enabled CTE interrupt consumer. These sequential reads
   neither prove producer shutdown nor name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`, driver
-  `chips/esp32s31/radio/ieee802154/driver`). The S31 driver implements the family
+  `chips/esp32s31/radio/ieee802154/backend`). The S31 driver implements the family
   engine's LL contract over HAL's owned polling transactions and retains the
   engine with its placed DMA storage through detach/rebind. The family owner's
   borrowed `service` returns `Fault` with the complete source observation and

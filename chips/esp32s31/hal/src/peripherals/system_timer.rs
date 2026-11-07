@@ -10,7 +10,7 @@
 use oer_chips_esp32s31_pac::{
     hp_sys_clkrst::HpSysClkrstSystimer, instances, ownership::SystemTimerPeripherals, systimer,
 };
-use oer_chips_family_peripherals_system_timer::CounterLatch;
+use oer_chips_family_drivers_system_timer::CounterLatch;
 use oer_chips_family_platform_port::{AlarmPart, Comparator, Comparators};
 use oer_portable_mmio::{Bits, Fixed, Index, InterruptSource, Placement};
 

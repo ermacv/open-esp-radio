@@ -1,23 +1,23 @@
 //! Exhaustive conversion at the facade's target boundary.
 use super::*;
 pub(crate) fn backend_fault(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::port::Fault,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
 ) -> BackendFault {
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::Fault as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::Fault as Source;
     match value {
         Source::Core(v0) => BackendFault::Core(lower_mac_fault(v0)),
         Source::Receive(v0) => BackendFault::Receive(receive_fault(v0)),
         Source::Unpublished(cause) => BackendFault::Unpublished(match cause {
-            oer_chips_esp32s31_radio_ieee80211_driver::port::Unpublished::CoreView => {
+            oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::CoreView => {
                 UnpublishedCause::CoreView
             }
-            oer_chips_esp32s31_radio_ieee80211_driver::port::Unpublished::Admission => {
+            oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Admission => {
                 UnpublishedCause::Admission
             }
-            oer_chips_esp32s31_radio_ieee80211_driver::port::Unpublished::Key => {
+            oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Key => {
                 UnpublishedCause::Key
             }
-            oer_chips_esp32s31_radio_ieee80211_driver::port::Unpublished::Step(step) => {
+            oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Step(step) => {
                 UnpublishedCause::Step(publish_step(step))
             }
         }),
@@ -60,7 +60,7 @@ pub(crate) fn backend_fault(
 /// A refused start, with a refused retune's cause.
 pub(crate) fn start_refused(
     value: oer_protocols_ieee80211_contracts_port::StartRefused<
-        oer_chips_esp32s31_radio_ieee80211_driver::port::Fault,
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
     >,
 ) -> oer_protocols_ieee80211_contracts_port::StartRefused<BackendFault> {
     use oer_protocols_ieee80211_contracts_port::StartRefused as Source;
@@ -73,9 +73,9 @@ pub(crate) fn start_refused(
 }
 
 pub(super) fn core_operation(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::port::CoreOp,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::port::CoreOp,
 ) -> CoreOperation {
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::CoreOp as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::CoreOp as Source;
     match value {
         Source::Command => CoreOperation::Command,
         Source::Tbtt => CoreOperation::Tbtt,
@@ -87,9 +87,9 @@ pub(super) fn core_operation(
 }
 
 pub(super) fn publish_step(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::port::PublishStep,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::port::PublishStep,
 ) -> PublishStep {
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::PublishStep as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::PublishStep as Source;
     match value {
         Source::Observations => PublishStep::Observations,
         Source::Ticket => PublishStep::Ticket,
@@ -107,9 +107,9 @@ pub(super) fn publish_step(
 }
 
 pub(super) fn key_operation(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::port::KeyOp,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::port::KeyOp,
 ) -> KeyOperation {
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::KeyOp as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::KeyOp as Source;
     match value {
         Source::Install => KeyOperation::Install,
         Source::Remove => KeyOperation::Remove,
@@ -137,9 +137,9 @@ pub(super) fn command_kind(
 }
 
 pub(super) fn aggregate_tx_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::ampdu::HtAmpduTxError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::ampdu::HtAmpduTxError,
 ) -> AggregateTxError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::ampdu::HtAmpduTxError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::ampdu::HtAmpduTxError as Source;
     match value {
         Source::NotFree(v0) => AggregateTxError::NotFree(tx_dma_state(v0)),
         Source::SlotCapacity => AggregateTxError::SlotCapacity,
@@ -178,9 +178,9 @@ pub(super) fn aggregate_tx_error(
 }
 
 pub(super) fn tx_dma_state(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::TxDmaState,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::TxDmaState,
 ) -> TxDmaState {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::TxDmaState as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::TxDmaState as Source;
     match value {
         Source::Free => TxDmaState::Free,
         Source::Reserved => TxDmaState::Reserved,
@@ -191,9 +191,9 @@ pub(super) fn tx_dma_state(
 }
 
 pub(super) fn aggregate_format(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::ampdu::HtAmpduTxFormat,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::ampdu::HtAmpduTxFormat,
 ) -> AggregateFormat {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::ampdu::HtAmpduTxFormat as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::ampdu::HtAmpduTxFormat as Source;
     match value {
         Source::HtAmpdu => AggregateFormat::Ht,
         Source::HeAmpdu => AggregateFormat::He,
@@ -201,9 +201,9 @@ pub(super) fn aggregate_format(
 }
 
 pub(super) fn aggregate_length_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::ampdu::HtAmpduLengthError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::ampdu::HtAmpduLengthError,
 ) -> AggregateLengthError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::ampdu::HtAmpduLengthError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::ampdu::HtAmpduLengthError as Source;
     match value {
         Source::InvalidLimits => AggregateLengthError::InvalidLimits,
         Source::Empty => AggregateLengthError::Empty,
@@ -241,9 +241,9 @@ pub(super) fn chain_storage_error(
 }
 
 pub(super) fn arena_fault(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::lower_mac::arena::ArenaFault,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::lower_mac::arena::ArenaFault,
 ) -> ArenaFault {
-    use oer_chips_esp32s31_radio_ieee80211_driver::lower_mac::arena::ArenaFault as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::lower_mac::arena::ArenaFault as Source;
     match value {
         Source::Chain(v0) => ArenaFault::Chain(aggregate_tx_error(v0)),
         Source::Core(v0) => ArenaFault::Core(lower_mac_fault(v0)),
@@ -253,9 +253,9 @@ pub(super) fn arena_fault(
 }
 
 pub(super) fn lower_mac_fault(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::lower_mac::LowerMacFault,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::lower_mac::LowerMacFault,
 ) -> LowerMacFault {
-    use oer_chips_esp32s31_radio_ieee80211_driver::lower_mac::LowerMacFault as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::lower_mac::LowerMacFault as Source;
     match value {
         Source::Tx(v0) => LowerMacFault::Tx(ordinary_tx_error(v0)),
         Source::RxBlockAckReadback => LowerMacFault::RxBlockAckReadback,
@@ -269,9 +269,9 @@ pub(super) fn lower_mac_fault(
 }
 
 pub(super) fn ordinary_tx_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::ordinary_tx::OrdinaryTxError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::ordinary_tx::OrdinaryTxError,
 ) -> OrdinaryTxError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::ordinary_tx::OrdinaryTxError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::ordinary_tx::OrdinaryTxError as Source;
     match value {
         Source::BufferSizeOverflow => OrdinaryTxError::BufferSizeOverflow,
         Source::UnsupportedPhyRate => OrdinaryTxError::UnsupportedPhyRate,
@@ -293,9 +293,9 @@ fn tx_prepare_fault(value: oer_chips_esp32s31_hal::types::MacTxPrepareFault) -> 
 }
 
 pub(super) fn tx_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::TxError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::TxError,
 ) -> TxError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::TxError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::TxError as Source;
     match value {
         Source::Invalid => TxError::Invalid,
         Source::QueueActive => TxError::QueueActive,
@@ -307,18 +307,18 @@ pub(super) fn tx_error(
 }
 
 pub(super) fn completion_fault(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::CompletionFault,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::CompletionFault,
 ) -> CompletionFault {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::CompletionFault as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::CompletionFault as Source;
     match value {
         Source::InvalidStatus { status } => CompletionFault::InvalidStatus { status },
     }
 }
 
 pub(super) fn tx_reset_reason(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::ordinary_tx::TxResetReason,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::ordinary_tx::TxResetReason,
 ) -> TxResetReason {
-    use oer_chips_esp32s31_radio_ieee80211_driver::ordinary_tx::TxResetReason as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::ordinary_tx::TxResetReason as Source;
     match value {
         Source::CompletionInterruptWithoutState => TxResetReason::CompletionInterruptWithoutState,
         Source::TimeoutInterruptWithoutState => TxResetReason::TimeoutInterruptWithoutState,
@@ -328,9 +328,9 @@ pub(super) fn tx_reset_reason(
 }
 
 pub(super) fn crypto_key_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::crypto::CryptoKeyError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::crypto::CryptoKeyError,
 ) -> CryptoKeyError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::crypto::CryptoKeyError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::crypto::CryptoKeyError as Source;
     match value {
         Source::InvalidGroupKeyId => CryptoKeyError::InvalidGroupKeyId,
         Source::InvalidAccessPointAssociationId => CryptoKeyError::InvalidAccessPointAssociationId,
@@ -340,9 +340,9 @@ pub(super) fn crypto_key_error(
 }
 
 pub(super) fn receive_fault(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::rx::control::WifiRxCause,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::rx::control::WifiRxCause,
 ) -> ReceiveFault {
-    use oer_chips_esp32s31_radio_ieee80211_driver::rx::control::WifiRxCause as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::rx::control::WifiRxCause as Source;
     match value {
         Source::StopRequested => ReceiveFault::StopRequested,
         Source::Prepare(v0) => ReceiveFault::Prepare(rx_ring_error(v0)),
@@ -375,9 +375,9 @@ pub(super) fn rx_ring_error(
 }
 
 pub(super) fn rx_frontier_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::rx::frontier::RxFrontierError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::rx::frontier::RxFrontierError,
 ) -> RxFrontierError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::rx::frontier::RxFrontierError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::rx::frontier::RxFrontierError as Source;
     match value {
         Source::AlreadyStarted => RxFrontierError::AlreadyStarted,
         Source::OwnerUnavailable => RxFrontierError::OwnerUnavailable,
@@ -386,9 +386,9 @@ pub(super) fn rx_frontier_error(
 }
 
 pub(super) fn rx_stage_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::rx::pool::RxStageError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::pool::RxStageError,
 ) -> RxStageError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::rx::pool::RxStageError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::pool::RxStageError as Source;
     match value {
         Source::Exhausted => RxStageError::Exhausted,
         Source::Empty => RxStageError::Empty,
@@ -398,9 +398,9 @@ pub(super) fn rx_stage_error(
 }
 
 pub(super) fn retune_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::port::WifiRetuneError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::port::WifiRetuneError,
 ) -> RetuneError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::WifiRetuneError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::WifiRetuneError as Source;
     match value {
         Source::NotStopped(v0) => RetuneError::NotStopped(maintenance_error(v0)),
         Source::Radio(v0) => RetuneError::Radio(radio_failure(v0)),
@@ -677,8 +677,8 @@ pub(super) fn modem_clock_error(
     }
 }
 
-pub(super) fn power_error(value: oer_chips_family_radio_domain::power::PowerError) -> PowerError {
-    let oer_chips_family_radio_domain::power::PowerError {
+pub(super) fn power_error(value: oer_chips_family_radio_power::power::PowerError) -> PowerError {
+    let oer_chips_family_radio_power::power::PowerError {
         checkpoint,
         expected,
         observed,
@@ -691,9 +691,9 @@ pub(super) fn power_error(value: oer_chips_family_radio_domain::power::PowerErro
 }
 
 pub(super) fn power_checkpoint(
-    value: oer_chips_family_radio_domain::power::PowerCheckpoint,
+    value: oer_chips_family_radio_power::power::PowerCheckpoint,
 ) -> PowerCheckpoint {
-    use oer_chips_family_radio_domain::power::PowerCheckpoint as Source;
+    use oer_chips_family_radio_power::power::PowerCheckpoint as Source;
     match value {
         Source::Mpll => PowerCheckpoint::Mpll,
         Source::ResetReleased => PowerCheckpoint::ResetReleased,
@@ -731,9 +731,9 @@ pub(super) fn platform_clock(value: oer_chips_esp32s31_hal::power::PlatformClock
     }
 }
 pub(super) fn rx_block_ack_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::rx::hardware::S31RxBlockAckAgreementError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::hardware::S31RxBlockAckAgreementError,
 ) -> RxBlockAckError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::rx::hardware::S31RxBlockAckAgreementError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::hardware::S31RxBlockAckAgreementError as Source;
     match value {
         Source::HardwareIndex(v) => RxBlockAckError::HardwareIndex(v),
         Source::MulticastPeer => RxBlockAckError::MulticastPeer,
@@ -744,9 +744,9 @@ pub(super) fn rx_block_ack_error(
     }
 }
 pub(super) fn rx_stage_transaction_error(
-    value: oer_chips_esp32s31_radio_ieee80211_driver::mac::rx::pool::RxStageTransactionError,
+    value: oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::pool::RxStageTransactionError,
 ) -> RxStageTransactionError {
-    use oer_chips_esp32s31_radio_ieee80211_driver::mac::rx::pool::RxStageTransactionError as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::pool::RxStageTransactionError as Source;
     match value {
         Source::Stage(v) => RxStageTransactionError::Stage(rx_stage_error(v)),
         Source::Ring(v) => RxStageTransactionError::Ring(rx_ring_error(v)),
@@ -785,7 +785,7 @@ pub(crate) fn still_active(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn lifecycle(
     end: oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd<
-        oer_chips_esp32s31_radio_ieee80211_driver::port::Fault,
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
     >,
 ) -> Option<LifecycleFailure> {
     use oer_protocols_ieee80211_runtime::datapath::ActorFault;
@@ -805,7 +805,7 @@ pub(crate) fn lifecycle(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn restart(
     failure: oer_protocols_ieee80211_runtime::lifecycle::StationFailure<
-        oer_chips_esp32s31_radio_ieee80211_driver::port::Fault,
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
     >,
 ) -> Option<LifecycleFailure> {
     use oer_protocols_ieee80211_runtime::datapath::ActorFault;
@@ -822,9 +822,9 @@ pub(crate) fn restart(
 /// Why the port did not reinstall.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reinstall(
-    refused: oer_chips_esp32s31_radio_ieee80211_driver::port::ReinstallRefused,
+    refused: oer_chips_esp32s31_radio_ieee80211_backend::port::ReinstallRefused,
 ) -> ReinstallCause {
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::ReinstallRefused as Source;
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::ReinstallRefused as Source;
     match refused {
         Source::NotRetired => ReinstallCause::NotRetired,
         Source::SameEpoch => ReinstallCause::SameEpoch,

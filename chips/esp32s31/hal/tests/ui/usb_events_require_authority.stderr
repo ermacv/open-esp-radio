@@ -5,7 +5,7 @@ error[E0061]: this function takes 3 arguments but 2 arguments were supplied
    |                     ^^^^^^^^^^^^^------------------- argument #3 of type `&_` is missing
    |
 note: associated function defined here
-  --> $WORKSPACE/chips/family/peripherals/usb-serial-jtag/src/endpoint.rs
+  --> $WORKSPACE/chips/family/drivers/usb-serial-jtag/src/endpoint.rs
    |
    |     pub fn new(
    |            ^^^
@@ -21,7 +21,7 @@ error[E0061]: this method takes 1 argument but 0 arguments were supplied
    |               ^^^^^^^^^^^^^-- argument #1 of type `&_` is missing
    |
 note: method defined here
-  --> $WORKSPACE/chips/family/peripherals/usb-serial-jtag/src/lib.rs
+  --> $WORKSPACE/chips/family/drivers/usb-serial-jtag/src/lib.rs
    |
    |     fn enable_events(
    |        ^^^^^^^^^^^^^

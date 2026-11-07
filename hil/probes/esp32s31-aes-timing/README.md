@@ -17,7 +17,7 @@ each timed with `mcycle` around the operation:
 | `software-crate` | CCMP's and BIP's RustCrypto calls as the product makes them (`ccm`, `cmac`, key schedule included) |
 | `flag` | The accelerator, polling `STATE` until it reads idle |
 | `interrupt` | The accelerator with `INT_ENA` set, spinning until the handler counts an entry |
-| `driver` | The AES driver's engine (`oer-chips-esp32s31-peripherals-crypto`), which the Wi-Fi station unwraps with in its step: each block waited for on `STATE` within its named settle |
+| `driver` | The AES driver's engine (`oer-chips-esp32s31-drivers-aes`), which the Wi-Fi station unwraps with in its step: each block waited for on `STATE` within its named settle |
 | `dma-flag` | DMA-AES over AXI-DMA channel 0, polling `STATE` for `DONE` and the output descriptor's `OWNER` (`INT_ENA` cleared) |
 | `dma-interrupt` | DMA-AES with `INT_ENA` set, spinning until the handler counts the completion, then the same check |
 

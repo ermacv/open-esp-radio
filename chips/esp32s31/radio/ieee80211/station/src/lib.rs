@@ -41,7 +41,7 @@ pub trait Notifies: 'static {
     type LentRx: oer_protocols_ieee80211_contracts_port::LentRxBuffer + Send + 'static;
     /// How a lent buffer's return tells the driver and the station's stop.
     #[cfg(target_arch = "riscv32")]
-    type Lent: oer_chips_esp32s31_radio_ieee80211_driver::port::LentNotifies;
+    type Lent: oer_chips_esp32s31_radio_ieee80211_backend::port::LentNotifies;
 }
 
 /// The station and its network end on one hart: local wakers throughout.
@@ -52,7 +52,7 @@ impl Notifies for SameHart {
     #[cfg(not(target_arch = "riscv32"))]
     type LentRx = Unlent;
     #[cfg(target_arch = "riscv32")]
-    type Lent = oer_chips_esp32s31_radio_ieee80211_driver::port::SameHart;
+    type Lent = oer_chips_esp32s31_radio_ieee80211_backend::port::SameHart;
 }
 
 /// The network end on another hart: `N` raises the network task's executor
@@ -74,7 +74,7 @@ where
     #[cfg(not(target_arch = "riscv32"))]
     type LentRx = Unlent;
     #[cfg(target_arch = "riscv32")]
-    type Lent = oer_chips_esp32s31_radio_ieee80211_driver::port::NetworkPeers<A>;
+    type Lent = oer_chips_esp32s31_radio_ieee80211_backend::port::NetworkPeers<A>;
 }
 
 /// The channels' notify types of `N`.
@@ -90,7 +90,7 @@ pub const RX_DEPTH: usize = 32;
 pub const TX_DEPTH: usize = 16;
 pub const FRAME_CAPACITY: usize = 1664;
 #[cfg(target_arch = "riscv32")]
-type Caps = oer_chips_esp32s31_radio_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
+type Caps = oer_chips_esp32s31_radio_ieee80211_backend::port::Esp32s31Caps<FRAME_CAPACITY>;
 #[cfg(not(target_arch = "riscv32"))]
 type Caps = ();
 /// The station's exit, as its runner publishes it.
@@ -231,8 +231,8 @@ impl<N: Notifies> StatusReader<'_, N> {
 /// A received buffer the station lends to the network: the S31 port's
 /// receive unit on the chip, whose return tells through `P`.
 #[cfg(target_arch = "riscv32")]
-type LentReceive<P> = oer_chips_esp32s31_radio_ieee80211_driver::port::LentReceive<
-    oer_chips_esp32s31_radio_ieee80211_driver::port::device::StagedReceive<
+type LentReceive<P> = oer_chips_esp32s31_radio_ieee80211_backend::port::LentReceive<
+    oer_chips_esp32s31_radio_ieee80211_backend::port::device::StagedReceive<
         { chip::Q },
         { chip::B },
     >,
@@ -246,13 +246,13 @@ type LentRx<N> = <N as Notifies>::LentRx;
 /// The received buffers the station may lend the network at once: the
 /// bound for the network's packet slots of lent frames.
 #[cfg(target_arch = "riscv32")]
-pub const LENT_RX: usize = oer_chips_esp32s31_radio_ieee80211_driver::port::lent_rx(chip::Q);
+pub const LENT_RX: usize = oer_chips_esp32s31_radio_ieee80211_backend::port::lent_rx(chip::Q);
 
 /// How long a stop must at least allow: a frame a foreign transmitter keeps
 /// off the air may end this late.
 #[cfg(target_arch = "riscv32")]
 pub const STOP_FLOOR: oer_portable_time::Duration =
-    oer_chips_esp32s31_radio_ieee80211_driver::port::COMMAND_BOUND;
+    oer_chips_esp32s31_radio_ieee80211_backend::port::COMMAND_BOUND;
 /// The host build has no receive buffer to lend.
 #[cfg(not(target_arch = "riscv32"))]
 pub enum Unlent {}
@@ -718,7 +718,7 @@ mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod release;
 #[cfg(oer_fault_injection)]
-pub use oer_chips_esp32s31_radio_ieee80211_driver::port::debug::refuse_next_publication;
+pub use oer_chips_esp32s31_radio_ieee80211_backend::port::debug::refuse_next_publication;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 #[cfg(target_arch = "riscv32")]
 #[doc(hidden)]
@@ -730,13 +730,13 @@ pub mod station;
 pub use dma::{DmaError, DmaResources};
 /// One reading of the S31 receive driver's counters.
 #[cfg(target_arch = "riscv32")]
-pub use oer_chips_esp32s31_radio_ieee80211_driver::rx::counters::WifiRxReport;
+pub use oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::WifiRxReport;
 
 /// The receive driver's counters, once the station's receive path is bound:
 /// a trace build's diagnostic reading, never a product value.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 pub(crate) static RX_COUNTERS: oer_portable_memory::OnceValue<
-    &'static oer_chips_esp32s31_radio_ieee80211_driver::rx::counters::WifiRxCounters,
+    &'static oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::WifiRxCounters,
 > = oer_portable_memory::OnceValue::new();
 
 /// The receive driver's counters now; `None` before the station's receive
@@ -749,7 +749,7 @@ pub fn rx_counters() -> Option<WifiRxReport> {
 /// One reading of the MAC's statistics, and its frequency offset.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 pub type MacCounters = (
-    [u32; oer_chips_esp32s31_radio_ieee80211_driver::rx::counters::mac::COUNTS],
+    [u32; oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::mac::COUNTS],
     i32,
 );
 
@@ -757,7 +757,7 @@ pub type MacCounters = (
 /// Only a trace build samples them.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 pub fn mac_counters() -> MacCounters {
-    oer_chips_esp32s31_radio_ieee80211_driver::rx::counters::mac::MAC_COUNTS.read()
+    oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::mac::MAC_COUNTS.read()
 }
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]

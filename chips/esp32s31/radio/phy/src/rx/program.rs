@@ -152,7 +152,7 @@ struct Calibration {
 enum Work {
     Idle,
     Frequency(RfpllFrequencyTransition),
-    Field(oer_chips_family_peripherals_analog::FieldWriteTransition<i2c::Address>),
+    Field(oer_chips_family_drivers_regi2c::FieldWriteTransition<i2c::Address>),
     Calibration(Calibration),
 }
 
@@ -1180,7 +1180,7 @@ impl I2cStep<'_> {
         model
             .advance(completion)
             .map_err(|_| RxError::WrongCompletion)?;
-        if model.action() == oer_chips_family_peripherals_analog::Action::Complete(()) {
+        if model.action() == oer_chips_family_drivers_regi2c::Action::Complete(()) {
             if self.program.cursor.pc == Pc::SharedI2cRestore {
                 self.program.cleanup_dc(AfterDc::Wifi);
             } else {

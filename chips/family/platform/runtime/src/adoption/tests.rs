@@ -86,9 +86,9 @@ fn runtime_is_published_after_driver_arming_image_preparation_and_mapping() {
     assert_eq!(
         log.operations(),
         [
-            Op::Key(2, oer_chips_family_peripherals_watchdog::WRITE_KEY),
+            Op::Key(2, oer_chips_family_drivers_watchdog::WRITE_KEY),
             Op::Feed,
-            Op::Key(2, oer_chips_family_peripherals_watchdog::LOCK)
+            Op::Key(2, oer_chips_family_drivers_watchdog::LOCK)
         ]
     );
 }

@@ -349,7 +349,7 @@ fn tx_cap_lowering_covers_every_nested_operation_class() {
     ));
     assert!(matches!(
         PhyTxCapExternalBinding::lower(PhyTxCapAction::I2c(
-            oer_chips_family_peripherals_analog::Action::Read { address: i2c }
+            oer_chips_family_drivers_regi2c::Action::Read { address: i2c }
         )),
         Ok(PhyTxCapExternalBinding::I2c(_))
     ));
@@ -367,7 +367,7 @@ fn tx_cap_lowering_covers_every_nested_operation_class() {
     ));
     assert!(matches!(
         PhyTxCapExternalBinding::lower(PhyTxCapAction::Search(PhyTxCapSearchAction::I2c(
-            oer_chips_family_peripherals_analog::Action::Write {
+            oer_chips_family_drivers_regi2c::Action::Write {
                 address: i2c,
                 value: 3,
             }

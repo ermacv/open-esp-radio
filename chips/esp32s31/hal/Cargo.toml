@@ -12,24 +12,24 @@ description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 # their code-generation identity.
 bluetooth-engine = []
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
-test-support = ["oer-chips-family-radio-domain/test-support"]
+test-support = ["oer-chips-family-radio-power/test-support"]
 
 [dependencies]
-oer-chips-family-radio-bluetooth = { path = "../../family/radio/bluetooth" }
+oer-chips-family-radio-bluetooth-ports = { path = "../../family/radio/bluetooth/ports" }
 oer-chips-family-radio-phy = { path = "../../family/radio/phy" }
-oer-chips-family-radio-domain = { path = "../../family/radio/domain" }
+oer-chips-family-radio-power = { path = "../../family/radio/power" }
 oer-chips-esp32s31-knowledge = { path = "../knowledge" }
-oer-chips-family-peripherals-efuse = { path = "../../family/peripherals/efuse" }
-oer-chips-family-peripherals-watchdog = { path = "../../family/peripherals/watchdog" }
+oer-chips-family-drivers-efuse = { path = "../../family/drivers/efuse" }
+oer-chips-family-drivers-watchdog = { path = "../../family/drivers/watchdog" }
 oer-chips-family-boot = { path = "../../family/boot" }
-oer-chips-family-peripherals-system-timer = { path = "../../family/peripherals/system-timer" }
-oer-chips-family-peripherals-power = { path = "../../family/peripherals/power" }
+oer-chips-family-drivers-system-timer = { path = "../../family/drivers/system-timer" }
+oer-chips-family-drivers-pmu = { path = "../../family/drivers/pmu" }
 oer-portable-mmio = { path = "../../../portable/mmio" }
 oer-chips-family-platform-interrupt-table = { path = "../../family/platform/interrupt-table" }
 oer-portable-riscv = { path = "../../../portable/riscv" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 pin-project = "1.1.13"
-oer-chips-family-peripherals-analog = { path = "../../family/peripherals/analog" }
+oer-chips-family-drivers-regi2c = { path = "../../family/drivers/regi2c" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-portable-time = { path = "../../../portable/time" }
@@ -38,7 +38,7 @@ oer-chips-family-radio-coex = { path = "../../family/radio/coex" }
 oer-chips-family-radio-ieee802154-values = { path = "../../family/radio/ieee802154/values" }
 oer-chips-family-radio-modem-clock = { path = "../../family/radio/modem-clock" }
 oer-protocols-radio-coex = { path = "../../../protocols/radio/coex" }
-oer-chips-family-peripherals-usb-serial-jtag = { path = "../../family/peripherals/usb-serial-jtag" }
+oer-chips-family-drivers-usb-serial-jtag = { path = "../../family/drivers/usb-serial-jtag" }
 # The HAL implements the family platform contracts and selects its chip.
 oer-chips-family-platform-port = { path = "../../family/platform/port", features = ["esp32s31"] }
 
@@ -46,7 +46,7 @@ oer-chips-family-platform-port = { path = "../../family/platform/port", features
 oer-chips-family-facts = { path = "../../family/facts" }
 
 [dev-dependencies]
-oer-chips-family-radio-domain = { path = "../../family/radio/domain", features = ["test-support"] }
+oer-chips-family-radio-power = { path = "../../family/radio/power", features = ["test-support"] }
 oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
 oer-protocols-radio-regulatory = { path = "../../../protocols/radio/regulatory", features = ["test-support"] }
 critical-section = { version = "1.2.0", features = ["std"] }

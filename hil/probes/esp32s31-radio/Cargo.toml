@@ -17,7 +17,7 @@ oer-tools-probe-macros = { path = "../../../tools/probe/macros" }
 oer-chips-family-radio-coex = { path = "../../../chips/family/radio/coex" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-chips-esp32s31-radio-ieee80211-driver = { path = "../../../chips/esp32s31/radio/ieee80211/driver" }
+oer-chips-esp32s31-radio-ieee80211-backend = { path = "../../../chips/esp32s31/radio/ieee80211/backend" }
 oer-protocols-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
 oer-chips-esp32s31-radio-phy = { path = "../../../chips/esp32s31/radio/phy" }
 

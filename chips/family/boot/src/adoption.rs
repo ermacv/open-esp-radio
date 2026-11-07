@@ -1,7 +1,7 @@
 //! Adoption of an already initialized platform, without cold boot or a
 //! platform-runtime dependency. Isolated verifier sessions use this same API.
 
-use oer_chips_family_peripherals_watchdog::{
+use oer_chips_family_drivers_watchdog::{
     ArmedRtcWatchdog, MainWatchdog, MainWatchdogEnable, MainWatchdogRegisters, MicrosecondTick,
     RtcWatchdog, RtcWatchdogArm, StoppedMainWatchdog, SuperWatchdog, SuperWatchdogRegisters,
 };

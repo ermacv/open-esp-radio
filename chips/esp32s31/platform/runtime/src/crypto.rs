@@ -8,9 +8,9 @@ use oer_portable_embassy_time::EmbassyClock;
 
 /// The accelerator as a synchronous AES-128 engine, its block settles
 /// measured on the executors' clock.
-pub type AesEngine = oer_chips_esp32s31_peripherals_crypto::AesBlocks<AesRegisters, EmbassyClock>;
+pub type AesEngine = oer_chips_esp32s31_drivers_aes::AesBlocks<AesRegisters, EmbassyClock>;
 
 /// Transfer AES by value to its one engine. IRQ55 stays silent.
 pub fn aes_engine(parts: AesParts, silent: Silent<AesInterrupt>) -> AesEngine {
-    oer_chips_esp32s31_peripherals_crypto::AesBlocks::new(parts.into_polled(silent), EmbassyClock)
+    oer_chips_esp32s31_drivers_aes::AesBlocks::new(parts.into_polled(silent), EmbassyClock)
 }

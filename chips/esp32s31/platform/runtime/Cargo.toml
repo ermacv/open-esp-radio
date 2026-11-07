@@ -18,7 +18,7 @@ radio-fault = []
 
 [dependencies]
 oer-portable-diagnostics = { path = "../../../../portable/diagnostics" }
-oer-chips-esp32s31-peripherals-crypto = { path = "../../peripherals/crypto" }
+oer-chips-esp32s31-drivers-aes = { path = "../../drivers/aes" }
 oer-portable-embassy-time = { path = "../../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../../portable/time" }
 oer-chips-family-platform-interrupt-table = { path = "../../../family/platform/interrupt-table" }
@@ -31,7 +31,7 @@ oer-portable-trace = { path = "../../../../portable/trace" }
 # The executor runs on the chip target only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 embedded-io-async = "0.7.0"
-oer-chips-family-peripherals-usb-serial-jtag.workspace = true
+oer-chips-family-drivers-usb-serial-jtag.workspace = true
 oer-portable-embassy-time = { path = "../../../../portable/embassy/time" }
 oer-chips-family-platform-interrupt-table = { path = "../../../family/platform/interrupt-table" }
 oer-chips-family-platform-port = { path = "../../../family/platform/port" }
