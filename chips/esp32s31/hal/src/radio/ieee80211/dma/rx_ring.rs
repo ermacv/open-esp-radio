@@ -249,6 +249,10 @@ pub struct RxArenaWords {
     reserved_landings: AtomicU32,
     reserved_late_landings: AtomicU32,
     walker_on_detached: AtomicU32,
+    /// Descriptors the ring has handed the CPU, as its observed mask says, for
+    /// the model of the DMA engine, which holds no ring.
+    #[cfg(any(test, feature = "test-support"))]
+    host_taken: [AtomicU32; 3],
     /// Live epochs started on this arena. A frozen cursor names the epoch it
     /// was sampled in, so a cursor of an earlier epoch on the same arena,
     /// whose generation count restarted at zero, never authorizes a take or
@@ -271,6 +275,8 @@ impl RxArenaWords {
             reserved_landings: AtomicU32::new(0),
             reserved_late_landings: AtomicU32::new(0),
             walker_on_detached: AtomicU32::new(0),
+            #[cfg(any(test, feature = "test-support"))]
+            host_taken: [const { AtomicU32::new(0) }; 3],
             live_epochs: AtomicU32::new(0),
         }
     }
@@ -433,6 +439,17 @@ const RX_OBSERVED_MASK_CAPACITY: usize = 96;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxObservedMask {
     words: [u32; 3],
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl RxArenaWords {
+    /// Whether the ring has handed the CPU descriptor `index` and not armed it
+    /// again.
+    pub(crate) fn host_taken(&self, index: usize) -> bool {
+        self.host_taken
+            .get(index / 32)
+            .is_some_and(|word| word.load(Ordering::Relaxed) & (1 << (index % 32)) != 0)
+    }
 }
 
 impl RxObservedMask {
@@ -1095,6 +1112,11 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         };
         self.arena.live_epochs.store(live_epoch, Ordering::Relaxed);
         RxDmaArenaState::Live.store(self.arena.lifecycle());
+        // A new epoch holds nothing of the last: a pause waited for its leases.
+        #[cfg(any(test, feature = "test-support"))]
+        for shown in &self.arena.host_taken {
+            shown.store(0, Ordering::Relaxed);
+        }
         Ok(RxRingLive {
             descriptors: self.descriptors,
             table: self.table,
@@ -1755,6 +1777,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 descriptor_address(self.descriptor_table.base(), first_index.get())?;
             self.observed_mask
                 .insert_group::<COUNT>(first_index, descriptor_count);
+            self.publish_taken();
             return Ok(Some(RxCompletedUnit {
                 head_index: first_index.get(),
                 descriptor_count,
@@ -1799,6 +1822,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
             return None;
         }
         self.ring.observed_mask.insert(index);
+        self.ring.publish_taken();
         Some(RxCompletedDescriptor {
             index,
             descriptor_address,
@@ -1809,6 +1833,18 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
 }
 
 impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
+    /// Show the model of the DMA engine what the CPU holds now.
+    #[cfg(any(test, feature = "test-support"))]
+    fn publish_taken(&self) {
+        for (shown, word) in self.arena.host_taken.iter().zip(self.observed_mask.words) {
+            shown.store(word, Ordering::Relaxed);
+        }
+    }
+
+    #[cfg(not(any(test, feature = "test-support")))]
+    #[inline(always)]
+    const fn publish_taken(&self) {}
+
     pub(crate) fn validate_completed_descriptor(&self, index: usize) -> Result<bool, RxRingError> {
         let descriptor = self.descriptors.get(index).ok_or(RxRingError::Count)?;
         let word0 = descriptor.word0();
@@ -2210,6 +2246,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         self.ring
             .observed_mask
             .remove_group::<COUNT>(self.ring.recycle_start, group_size);
+        self.ring.publish_taken();
         self.ring.recycle_start = self.ring.recycle_start.advance(group_size);
         Ok(Some(RxLiveAppend {
             head_index,

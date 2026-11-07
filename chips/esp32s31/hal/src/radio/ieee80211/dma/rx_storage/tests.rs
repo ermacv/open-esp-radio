@@ -1692,6 +1692,53 @@ fn a_landed_unit_writes_its_bytes_under_a_descriptor_it_completes() {
     assert_ne!(read, [9; 4]);
 }
 
+/// OWNER stays set after a completion and NEXT can name any descriptor, so a
+/// landing answers to the ring's own record of what the CPU holds.
+#[test]
+fn a_landing_never_writes_under_a_completed_token() {
+    use crate::radio::ieee80211::dma::rx_dma::model::{RxWalkerLanding, RxWalkerModel};
+    const COUNT: usize = 2;
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
+    let placed = place(storage);
+    let storage = placed.storage();
+    let buffers = storage.buffer_addresses().bits();
+    let base = placed.descriptor_base();
+    let mut mmio = RxWalkerModel::new();
+    mmio.next_descriptor_low = base & ADDRESS_LOW_MASK;
+    let mut live = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner")
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .expect("live epoch");
+    let walker = core::cell::RefCell::new(mmio);
+    let first = base & ADDRESS_LOW_MASK;
+    assert_eq!(
+        storage.land_unit(&walker, &[1, 2, 3, 4]),
+        Ok(RxWalkerLanding::Landed(first))
+    );
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let token = storage
+        .take_completed(&mut live, frozen, 0)
+        .unwrap()
+        .expect("a completed descriptor");
+    let word = storage.descriptors()[0].word0();
+    assert!(word.owner(), "completion leaves OWNER set");
+
+    walker.borrow_mut().next_descriptor_low = first;
+    assert_eq!(
+        storage.land_unit(&walker, &[9, 9, 9, 9]),
+        Err(HostDmaAccessError::HeldByCpu)
+    );
+    assert_eq!(walker.borrow().next_descriptor_low, first, "NEXT stays");
+    assert_eq!(storage.descriptors()[0].word0(), word);
+    drop(token);
+    let mut read = [0; 4];
+    storage.dma_read(&live, buffers[0], &mut read).unwrap();
+    assert_eq!(read, [1, 2, 3, 4], "the bytes stayed");
+}
+
 #[test]
 fn host_dma_port_writes_only_inside_one_ring_buffer() {
     const COUNT: usize = 2;

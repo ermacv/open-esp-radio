@@ -22,6 +22,10 @@ pub enum HostDmaAccessError {
     OutsideBuffers,
     /// The buffer is detached to an upper owner, not in the DMA ring.
     NotInRing,
+    /// The CPU holds this descriptor's completed view: OWNER stays set after
+    /// a completion and NEXT can name any descriptor, so neither says so. A
+    /// landing here would write under a live token.
+    HeldByCpu,
 }
 
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
@@ -47,13 +51,15 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
 
     /// Model the DMA engine landing one whole received unit in the
     /// descriptor `walker`'s NEXT names: the bytes first, then the word that
-    /// completes it, as [`RxWalkerModel::land`] rules. The descriptor stays
-    /// armed in the ring until that word, so this needs no ring. A walker
-    /// that lands nothing writes nothing and says why.
+    /// completes it, as [`RxWalkerModel::land`] rules. This needs no ring: the
+    /// ring shows the arena what the CPU holds, which ties a landing to the
+    /// buffer's owner. A walker that lands nothing writes nothing and says
+    /// why.
     ///
     /// # Errors
     ///
-    /// `bytes` do not fit the armed buffer; nothing is written.
+    /// `bytes` do not fit the armed buffer, or the CPU holds that descriptor
+    /// ([`HostDmaAccessError::HeldByCpu`]); nothing is written.
     pub fn land_unit(
         &self,
         walker: &core::cell::RefCell<RxWalkerModel>,
@@ -64,6 +70,16 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
             .ok_or(HostDmaAccessError::OutsideBuffers)?;
         let length = u32::try_from(bytes.len()).map_err(|_| HostDmaAccessError::OutsideBuffers)?;
         let mut walker = walker.borrow_mut();
+        if let Some(descriptor) = walker.armed_next(table)
+            && self
+                .descriptors
+                .ring()
+                .iter()
+                .position(|armed| core::ptr::eq(armed, descriptor))
+                .is_some_and(|index| self.arena.host_taken(index))
+        {
+            return Err(HostDmaAccessError::HeldByCpu);
+        }
         if let Some(descriptor) = walker.armed_next(table) {
             self.write_published(descriptor.buffer_address(), bytes)?;
         }
