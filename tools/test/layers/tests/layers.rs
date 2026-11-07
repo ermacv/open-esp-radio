@@ -3113,11 +3113,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
         "radio/coex merges into the HAL (#848)",
     ),
     (
-        "chips/esp32s31/radio/ieee80211/driver",
-        "chips/family/staged-runtime",
-        "driver trace through the observer contract (#848)",
-    ),
-    (
         "chips/esp32s31/radio/ieee802154/driver",
         "portable/mmio",
         "IEEE 802.15.4 lifecycle out of the HAL (#848)",

@@ -1558,7 +1558,6 @@ dependencies = [
  "oer-chips-family-coex",
  "oer-chips-family-ieee80211-policy",
  "oer-chips-family-interrupt-table",
- "oer-chips-family-staged-runtime",
  "oer-portable-embassy-net",
  "oer-portable-events",
  "oer-portable-memory",
@@ -1566,6 +1565,7 @@ dependencies = [
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-portable-trace",
+ "oer-portable-trace-recorder",
  "oer-portable-waker",
  "oer-portable-wire",
  "oer-protocols-ieee80211-contracts-port",
@@ -2412,6 +2412,15 @@ dependencies = [
 name = "oer-portable-trace"
 version = "0.1.0"
 dependencies = [
+ "tempfile",
+]
+
+[[package]]
+name = "oer-portable-trace-recorder"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-memory",
+ "oer-portable-trace",
  "tempfile",
 ]
 

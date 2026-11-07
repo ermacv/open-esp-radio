@@ -116,26 +116,26 @@ pub(crate) fn contention(
     ac: WmmAccessCategory,
     backoff: u16,
 ) {
-    if !oer_chips_family_staged_runtime::trace::enabled(Publication::CHANNEL) {
+    if !oer_portable_trace_recorder::enabled(Publication::CHANNEL) {
         return;
     }
     for role in [VifRole::Station, VifRole::AccessPoint] {
         let set = policy.debug_edca(role);
         let wmm = set.wmm();
-        oer_chips_family_staged_runtime::trace::emit(&EdcaTable {
+        oer_portable_trace_recorder::emit(&EdcaTable {
             role,
             count: wmm.parameter_set_count,
             uapsd: wmm.uapsd,
         });
         for category in WmmAccessCategory::ALL {
-            oer_chips_family_staged_runtime::trace::emit(&EdcaRecord {
+            oer_portable_trace_recorder::emit(&EdcaRecord {
                 role,
                 category,
                 parameters: set.access_category(category),
             });
         }
     }
-    oer_chips_family_staged_runtime::trace::emit(&EdcaDraw {
+    oer_portable_trace_recorder::emit(&EdcaDraw {
         role: head,
         category: ac,
         exponent: policy.contention_exponent(LegacyTxQueue::from_access_category(ac)),

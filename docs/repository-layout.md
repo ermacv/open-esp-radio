@@ -41,7 +41,7 @@ tools/test/{layers, ui-cases}/
 tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
     provenance, scenario, scenario-cli}/
 portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort,
-    sync, time, time-virtual, trace, wire}/
+    sync, time, time-virtual, trace, trace-recorder, wire}/
 portable/embassy/{net, time}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
@@ -145,9 +145,7 @@ network contract on the codec.
 - Normal dependencies outside their role:
   `chips/esp32s31/pac` renders the analog-I2C model types of
   `chips/family/analog`; `chips/esp32s31/hal` depends on
-  `protocols/radio/coex`; `chips/esp32s31/radio/ieee80211/driver` depends on
-  `chips/family/staged-runtime` for its trace recorder;
-  `chips/esp32s31/radio/ieee802154/driver` depends on `portable/mmio` for
+  `protocols/radio/coex`; `chips/esp32s31/radio/ieee802154/driver` depends on `portable/mmio` for
   `Placement`.
 - HAL production files that wait or poll are listed with exact counts:
   modules of `radio::bluetooth`, `system::boot`, `radio::ieee80211` and

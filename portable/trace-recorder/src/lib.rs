@@ -1,5 +1,20 @@
-//! Platform-owned reset-retained tracing. The image places the storage and
-//! installs its recorder; this module owns commit/clear and previous-boot policy.
+#![no_std]
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
+
+//! Reset-retained tracing. The image places the storage and installs its
+//! recorder; this crate owns commit/clear and previous-boot policy.
 //! The retained OETR layout is version 1. Retained words use loads/stores only;
 //! recorder counters and the global pointer/mask live in ordinary atomic RAM.
 
@@ -139,6 +154,12 @@ macro_rules! trace_clock {
         }
     };
 }
+
+#[doc(hidden)]
+pub use oer_portable_memory as __memory;
+
+#[cfg(test)]
+extern crate std;
 
 #[cfg(test)]
 mod tests;

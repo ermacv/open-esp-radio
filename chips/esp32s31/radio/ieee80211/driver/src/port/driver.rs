@@ -867,7 +867,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Err(Fault::Core(fault));
         }
         #[cfg(all(oer_trace, oer_debug_control))]
-        oer_chips_family_staged_runtime::trace::emit(&publication);
+        oer_portable_trace_recorder::emit(&publication);
         Ok(())
     }
     /// Put `pending` back at the head of its queue: nothing of it was
@@ -1224,7 +1224,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         ..
                     }) = &self.retained_group
                     {
-                        oer_chips_family_staged_runtime::trace::emit(&trace::GroupRollback {
+                        oer_portable_trace_recorder::emit(&trace::GroupRollback {
                             owners: [key.identity.slot, permission.index()],
                             previous_key_id: key.identity.key_id.get(),
                             attempted_key_id: key_id.get(),

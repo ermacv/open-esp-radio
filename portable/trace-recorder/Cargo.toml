@@ -1,0 +1,19 @@
+[package]
+name = "oer-portable-trace-recorder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The reset-retained trace recorder: its storage layout, commit and clear, global installation and previous-boot policy"
+
+[dependencies]
+oer-portable-memory = { path = "../memory" }
+oer-portable-trace = { path = "../trace" }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
