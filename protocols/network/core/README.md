@@ -21,7 +21,7 @@ before work is asked for: an address past its life is no work until then.
 
 Any type can be a brand. `claim` lets it claim once, giving one pool and the right
 to one core, and this crate holds that record, so no code outside can claim a brand
-twice. An image has room for 64 brands. Blocks are values lent from that pool, and
+twice. An image has room for 8 brands, and `test-support` for a test binary's. Blocks are values lent from that pool, and
 they and every handle carry the brand, invariantly. A brand is a type rather than a
 lifetime, so `'static` tasks and their queues can name a block, and another
 network's value does not compile. A block

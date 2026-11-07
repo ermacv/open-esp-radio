@@ -9,8 +9,13 @@ use core::sync::atomic::{AtomicU32, Ordering};
 /// subtyping between two brand types carries a value from one to the other.
 pub(crate) type Tag<B> = PhantomData<fn(B) -> B>;
 
-/// How many brands one image can claim.
-const BRANDS: usize = 64;
+/// How many brands one image can claim: an image has one or two, and a test
+/// binary claims one per test.
+const BRANDS: usize = if cfg!(any(test, feature = "test-support")) {
+    1024
+} else {
+    8
+};
 
 /// The brands claimed, by mark. This crate holds it, so nothing outside can
 /// make a brand claim twice. An entry is never removed.
