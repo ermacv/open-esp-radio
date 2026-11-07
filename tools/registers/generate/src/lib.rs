@@ -1,7 +1,7 @@
 //! `cargo registers`: the generated outputs of a chip's register model and
 //! the register checks. `generate` renders the thin PAC
 //! (`chips/<chip>/pac/src/generated.rs`) and the DMA-window linker fragment
-//! (`chips/<chip>/layout/linker/dma-window.x`) from the chip root, its block
+//! (`chips/<chip>/platform/layout/linker/dma-window.x`) from the chip root, its block
 //! types, layouts and evidence catalogs and its ownership policy
 //! (`chips/<chip>/registers/`).
 

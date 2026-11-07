@@ -16,7 +16,7 @@
 //! separately linked stage-two runtime there and enters it. The bootstrap,
 //! the stage-two runtime, the shared linker scripts (`chips/family/platform/layout/linker`)
 //! and the host image packer share these definitions; each chip's platform
-//! (`chips/<chip>/layout`) states its address map as a [`Layout`].
+//! (`chips/<chip>/platform/layout`) states its address map as a [`Layout`].
 //!
 //! [`boot`] names the one hart that boots; [`memory`] owns the address map
 //! type; [`stage_two`] the image header and payload checksum that the

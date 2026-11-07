@@ -269,7 +269,7 @@ pub struct MappedRegion {
 }
 
 /// The address map host tools check images against and the chip's layout
-/// crate (`chips/<id>/layout`) generates its `LAYOUT` from.
+/// crate (`chips/<id>/platform/layout`) generates its `LAYOUT` from.
 ///
 /// The chip names its internal SRAM, its flash window, where PSRAM lies, its
 /// retained memory and the attributes of each region; the module names the

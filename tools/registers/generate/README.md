@@ -18,7 +18,7 @@ cargo registers generate --chip esp32s31 --check
 | Output | What it holds |
 | --- | --- |
 | `chips/<chip>/pac/src/generated.rs` | The thin PAC (`chip_render::render`): typed blocks, field accessors, value domains, typed pointers, interrupt sources, instances, ownership parts and partitions, the irreducible policy items, memory layouts and the analog-I2C dictionary |
-| `chips/<chip>/layout/linker/dma-window.x` | The DMA window and the low address bits its pointers keep (`chip_render::dma_window`), which the images' link checks DMA storage against |
+| `chips/<chip>/platform/layout/linker/dma-window.x` | The DMA window and the low address bits its pointers keep (`chip_render::dma_window`), which the images' link checks DMA storage against |
 
 Every output is rendered before any is written; each file is replaced
 atomically. `--check` writes nothing and fails if an output is missing or

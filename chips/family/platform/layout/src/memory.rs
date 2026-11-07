@@ -1,6 +1,6 @@
 //! The address map of a staged boot.
 //!
-//! Each chip's layout crate (`chips/<chip>/layout`) generates its [`Layout`]
+//! Each chip's layout crate (`chips/<chip>/platform/layout`) generates its [`Layout`]
 //! from the chip facts (`oer-chips-family-facts`); sizes describe the module's
 //! fitted memories and the staged-boot contract, not universal chip
 //! capabilities.

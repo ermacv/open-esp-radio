@@ -238,7 +238,7 @@ impl Profile {
     /// The bootstrap package the staged boot builds into every image beside
     /// its runtime.
     pub fn bootstrap_package(&self) -> String {
-        format!("oer-chips-{}-bootstrap", self.facts.id)
+        format!("oer-chips-{}-platform-bootstrap", self.facts.id)
     }
 
     /// The chip's own stack policy (`chips/<id>/facts/stack.toml`), relative

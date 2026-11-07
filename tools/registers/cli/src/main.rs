@@ -16,7 +16,7 @@ enum Command {
         chip: String,
     },
     /// Render the chip's thin PAC (`chips/<chip>/pac/src/generated.rs`) and
-    /// DMA-window linker fragment (`chips/<chip>/layout/linker/dma-window.x`)
+    /// DMA-window linker fragment (`chips/<chip>/platform/layout/linker/dma-window.x`)
     /// from its register model; with `--check`, compare instead of writing.
     Generate {
         #[arg(long)]

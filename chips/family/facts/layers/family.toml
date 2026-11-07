@@ -6,7 +6,7 @@ schema = 2
 # The family whose shared code the chips use (`platform = "family"` packages).
 family = "espressif"
 # The ROM loads the ESP-IDF bootloader, which loads the chip's bootstrap
-# (chips/<id>/bootstrap); the bootstrap stages the runtime into PSRAM.
+# (chips/<id>/platform/bootstrap); the bootstrap stages the runtime into PSRAM.
 boot = "staged"
 
 # Formatting entry points watched by the host reachability report of every

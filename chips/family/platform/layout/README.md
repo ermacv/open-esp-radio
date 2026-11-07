@@ -2,7 +2,7 @@
 
 `oer-chips-family-platform-layout` is the chip-neutral contract of the staged
 boot: the `Layout` type, in which each chip's layout crate
-(`chips/<chip>/layout`) generates its address map from the chip facts
+(`chips/<chip>/platform/layout`) generates its address map from the chip facts
 (`oer-chips-family-facts`), the stage-two image header and checksum, the
 input sections the boot zeroes, and the linker binding. It is a `no_std`
 library without hardware access, shared by the bootstrap, the stage-two

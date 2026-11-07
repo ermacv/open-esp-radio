@@ -10,7 +10,7 @@ staged::panic_handler!(Port);
 
 staged::app_descriptor!(
     "0.1.0",
-    "oer-chips-esp32s31-platform-bootstrap",
+    "oer-esp32s31-bootstrap",
     LAYOUT.mmu_page_bytes
 );
 
