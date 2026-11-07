@@ -840,12 +840,16 @@ fn a_socket_dropped_as_the_service_stops_loses_no_block() {
     let Bench {
         service,
         mut socket,
+        wire,
         stop,
         clock,
-        ..
     } = bench::<Net>();
     let mut events = ();
     let drive = async {
+        arrive(&wire, 1);
+        while socket.received() == 0 {
+            yield_now().await;
+        }
         let block = fill(&mut socket, b"late").await;
         let observer = socket.send(peer(), block).ok().unwrap();
         stop.try_send(()).ok().unwrap();
@@ -855,6 +859,34 @@ fn a_socket_dropped_as_the_service_stops_loses_no_block() {
     let (ended, observer) = run_tasks(clock, service.run(clock, &mut events), drive);
     assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
     assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn a_stop_alone_wakes_an_observer_of_a_command_it_never_saw() {
+    brand!(Net);
+    let Bench {
+        service,
+        mut socket,
+        stop,
+        clock,
+        ..
+    } = bench::<Net>();
+    let mut events = ();
+    let (count, waker) = counter();
+    let drive = async {
+        let block = fill(&mut socket, b"unseen").await;
+        let mut observer = socket.send(peer(), block).ok().unwrap();
+        assert!(
+            pin!(observer.finished())
+                .poll(&mut Context::from_waker(&waker))
+                .is_pending()
+        );
+        stop.try_send(()).ok().unwrap();
+        observer
+    };
+    let (_, observer) = run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(count.0.load(Ordering::SeqCst), 1);
+    assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
 }
 
 #[test]
