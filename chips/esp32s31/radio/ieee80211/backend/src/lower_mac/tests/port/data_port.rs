@@ -25,6 +25,24 @@ type Ticket<'id, Id> = radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2
 type TestBuffer<'id, Id> = Buffer<'id, Id, TestDevice, 512, Draws>;
 type Configure<'id, Id> = ConfigurePermission<'id, Station, radio::Child<radio::Root<Id>, 8>, Tag>;
 
+/// One MPDU's completions up to its delivery, and whether its last
+/// publication carries the Retry bit: an ACK timeout sets it, a collision or a
+/// CTS timeout does not, and a bit once set stays.
+const RETRY_HISTORIES: [(&[(u8, u8)], bool); 12] = [
+    (&[SUCCESS], false),
+    (&[ACK_TIMEOUT, SUCCESS], true),
+    (&[COLLISION, SUCCESS], false),
+    (&[COLLISION_DETACH, SUCCESS], false),
+    (&[CTS_TIMEOUT, SUCCESS], false),
+    (&[COLLISION, CTS_TIMEOUT, SUCCESS], false),
+    (&[ACK_TIMEOUT, COLLISION, SUCCESS], true),
+    (&[ACK_TIMEOUT, COLLISION_DETACH, SUCCESS], true),
+    (&[ACK_TIMEOUT, CTS_TIMEOUT, SUCCESS], true),
+    (&[COLLISION, ACK_TIMEOUT, SUCCESS], true),
+    (&[COLLISION_DETACH, ACK_TIMEOUT, SUCCESS], true),
+    (&[CTS_TIMEOUT, ACK_TIMEOUT, SUCCESS], true),
+];
+
 /// The station's association and its group and pairwise key slots.
 type AssociationParts<'id, Id> = (
     <PortKeys<Id, Station> as KeyTypes<'id>>::Association,

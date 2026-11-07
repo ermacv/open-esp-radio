@@ -44,6 +44,15 @@ impl Timer for TestTimer {
     }
 }
 
+/// The raw completions the model device reports, by `Observed::statuses`.
+const SUCCESS: (u8, u8) = (0, 0);
+const ACK_TIMEOUT: (u8, u8) = (5, 0);
+const CTS_TIMEOUT: (u8, u8) = (2, 0);
+const COLLISION: (u8, u8) = (4, 1);
+const KEY_REFUSED: (u8, u8) = (4, 0xc0);
+/// No completion: the hardware's internal collision detaches the queue.
+const COLLISION_DETACH: (u8, u8) = (u8::MAX, u8::MAX);
+
 #[derive(Default)]
 struct Observed {
     /// The device's registers are held elsewhere: `hardware` refuses.
@@ -383,6 +392,18 @@ impl Device<512> for TestDevice {
         self.observed.borrow_mut().publications = publications;
         self.done.resize(publications, false);
         let next = self.next_completion(publications);
+        if let Some((index, queue)) = next
+            && self.observed.borrow().statuses.get(self.completed) == Some(&COLLISION_DETACH)
+        {
+            self.hardware.collision_pending[usize::from(queue)] = true;
+            self.done[index] = true;
+            self.completed += 1;
+            return Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
+                events: crate::mac::irq::event_mask(
+                    oer_chips_esp32s31_hal::types::MacInterruptEvents::TX_QUEUE_COLLISION,
+                ),
+            })));
+        }
         if let Some((index, queue)) = next
             && self.observed.borrow().timeout_edge
         {

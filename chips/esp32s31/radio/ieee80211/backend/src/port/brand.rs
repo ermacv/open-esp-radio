@@ -44,6 +44,7 @@ impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             pn: self.pn,
             role: self.role,
             published: self.published,
+            retry: self.retry,
         }
     }
 }
@@ -70,6 +71,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             pn: self.pn,
             role: self.role,
             published: self.published,
+            retry: self.retry,
         }
     }
 }

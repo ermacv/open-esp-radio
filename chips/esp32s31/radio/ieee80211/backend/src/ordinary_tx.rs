@@ -302,6 +302,26 @@ pub(crate) fn mark_retry(buffer: &mut [u8], frame_length: usize) -> Result<(), O
     Ok(())
 }
 
+/// The retry machine's decision on the Retry bit: whether an MPDU whose
+/// transmission ended in `status` carries the bit from its next publication
+/// on, because that transmission may have reached a receiver. An ACK timeout
+/// sets it. After a CTS timeout or a collision the MPDU never reached the
+/// receiver: neither sets the bit, and neither clears one an earlier
+/// transmission set. Every other status ends the MPDU, and counts only if the
+/// caller sends the returned `Sent` again: a delivery reached a receiver, a
+/// hardware timeout or a refused key may have.
+///
+/// SOURCE: `libpp[lmac.o]::lmacProcessShortRetryFail` stores Retry only on an
+/// ACK timeout (+0x20a, +0x25c); a collision (+0x17e) and a CTS timeout
+/// (+0x182) skip it. `libpp[lmac.o]::lmacProcessLongRetryFail` skips it on a
+/// collision (+0x144).
+pub(crate) const fn sets_retry_bit(
+    status: oer_protocols_ieee80211_contracts_port::TxStatus,
+) -> bool {
+    use oer_protocols_ieee80211_contracts_port::TxStatus;
+    !matches!(status, TxStatus::CtsTimeout | TxStatus::Collision)
+}
+
 impl From<TxError> for OrdinaryTxError {
     fn from(error: TxError) -> Self {
         Self::Tx(error)
@@ -2002,7 +2022,7 @@ impl FixedRateRetry {
         }
         self.publications = self.publications.saturating_add(1);
         FixedRetryDecision::Retry {
-            set_retry_bit: status == TxStatus::AckTimeout,
+            set_retry_bit: sets_retry_bit(status),
         }
     }
 }

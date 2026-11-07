@@ -330,9 +330,11 @@ pairwise key for an encrypted arena and programs an HT/HE A-MPDU of every
 frame or position 0 alone as a legacy, HT or HE single MPDU. A single MPDU
 runs its retry plan as the driver runs an MPDU's: each completion without
 an ACK, a collision or a protection failure takes a try of the current
-stage, and the frame goes again at the stage's rate with its Retry bit, a
-grown contention window and a new watchdog, until an ACK or the plan's end;
-its end reports every transmission that reached the air. Completion maps
+stage, and the frame goes again at the stage's rate with a grown contention
+window and a new watchdog, until an ACK or the plan's end; its end reports
+every transmission that reached the air. A completion without an ACK sets
+the frame's Retry bit; a collision or a protection failure leaves the bit
+as it is. Completion maps
 a valid BlockAck, an ACK, an ACK or CTS timeout, a collision detach and a
 timeout abort onto `AttemptEnd`; a collision or abort detach keeps every
 buffer. Retention returns the frames not kept in position order, compacts

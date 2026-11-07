@@ -605,6 +605,20 @@ pub enum PublicationEnd {
     Withdrawn,
 }
 
+impl PublicationEnd {
+    /// How the transmission this end closes went; `None` when no
+    /// transmission ended, as behind a gate or past the MSDU's lifetime.
+    pub(crate) const fn status(&self) -> Option<TxStatus> {
+        match self {
+            Self::Expired { .. } | Self::Withdrawn => None,
+            Self::Delivered { .. } => Some(TxStatus::Success),
+            Self::Undelivered(failure) => Some(failure.status()),
+            Self::Collision => Some(TxStatus::Collision),
+            Self::TimedOut => Some(TxStatus::TimedOut),
+        }
+    }
+}
+
 /// One interface's configuration: its role, address, BSSID and the frames
 /// it receives.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1205,8 +1219,8 @@ where
     /// Publish an MPDU whose values and state a caller's types guarantee
     /// ([`MpduValues`] states which), or hold it behind a closed gate: one
     /// call, so no other operation comes between its plan and its
-    /// publication. `retry` marks a transmission of an MPDU the plan sends
-    /// again: its Retry bit is set and its CCMP header kept.
+    /// publication. `retry` sets the MPDU's Retry bit; without it the bit
+    /// stays as an earlier publication left it.
     ///
     /// # Errors
     ///
@@ -2611,7 +2625,7 @@ pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
     /// The backoff selected for this publication, in slots.
     backoff_slots: u16,
     operation: TxOperation,
-    /// A transmission of an MPDU the plan sends again.
+    /// Set the MPDU's Retry bit before this publication.
     retry: bool,
 }
 

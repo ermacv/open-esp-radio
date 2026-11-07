@@ -3,6 +3,7 @@ use super::{
     installation::PortCoreOwner,
     keys::{GroupCommand, Installation, Installed, RawKeyIdentity, Removal},
 };
+use crate::ordinary_tx::sets_retry_bit;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 pub(super) mod arena;
@@ -521,6 +522,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
             use crate::ordinary_tx::OrdinaryTxFailure as Failure;
             let rate = completion.rate;
+            // The decision stays with the MPDU, which outlives this attempt:
+            // its returned `Sent` may be sent again under a plan of its own.
+            if completion.end.status().is_some_and(sets_retry_bit) {
+                pending.operation.execute().mpdu.retry = true;
+            }
             let outcome = match completion.end {
                 PublicationEnd::Expired { msdus } => Some(TxOutcome::Expired { msdus }),
                 PublicationEnd::Withdrawn => Some(TxOutcome::Withdrawn(WithdrawCause::Disabled)),
@@ -832,10 +838,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 backoff_slots,
                 no_ack: mpdu.layout.kind() == MpduKind::IndividualNoAck,
                 operation: pending.coex,
-                // A data or management frame sent again carries the Retry
-                // bit; a BlockAckReq, a control frame, never does (IEEE Std
+                // A data or management frame carries the Retry bit once an
+                // earlier transmission may have reached a receiver; a
+                // BlockAckReq, a control frame, never does (IEEE Std
                 // 802.11-2020, 9.2.4.1.5).
-                retry: mpdu.published && mpdu.layout.kind() != MpduKind::BlockAckRequest,
+                retry: mpdu.retry && mpdu.layout.kind() != MpduKind::BlockAckRequest,
             },
         );
         let values = match values {

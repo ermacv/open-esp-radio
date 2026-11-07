@@ -427,6 +427,162 @@ fn an_unanswered_block_ack_request_is_sent_again_without_a_retry_bit() {
     });
 }
 
+/// The Retry bit of the MPDU `sent` as its last publication left it.
+fn published_retry<Id: radio::SlotIdentity>(sent: &mut TestSent<'_, Id>) -> bool {
+    DecodedHeader::decode(sent.published())
+        .expect("the published header")
+        .control()
+        .retry()
+}
+
+#[test]
+fn an_mpdus_plan_takes_each_status_history_to_its_retry_bit() {
+    for (statuses, retry) in RETRY_HISTORIES {
+        with_access(|fixture, access| {
+            fixture.observed.borrow_mut().statuses = statuses.to_vec();
+            fixture.start();
+            fixture.submit_mpdu(Spec {
+                transmissions: 3,
+                ..Spec::open(93)
+            });
+            let returned = single(fixture.until(access, 1));
+            assert!(returned.outcome.is_delivered(), "{statuses:?}");
+            assert_eq!(fixture.publications(), statuses.len(), "{statuses:?}");
+            let AnyBuffer::Sent(mut sent) = returned.buffer else {
+                panic!("a published MPDU returns Sent");
+            };
+            assert_eq!(published_retry(&mut sent), retry, "{statuses:?}");
+        });
+    }
+}
+
+#[test]
+fn a_retransmission_of_a_returned_mpdu_keeps_its_retry_history() {
+    // Each plan is one submission of the same MPDU: the decision of an
+    // earlier plan reaches the next one through the returned `Sent`, and the
+    // last one is delivered. A delivered or indeterminate frame the caller
+    // sends again goes as a retry: it reached a receiver or may have.
+    let histories: [(&[&[(u8, u8)]], bool); 10] = [
+        (&[&[ACK_TIMEOUT], &[SUCCESS]], true),
+        (&[&[COLLISION], &[SUCCESS]], false),
+        (&[&[COLLISION_DETACH], &[SUCCESS]], false),
+        (&[&[CTS_TIMEOUT], &[SUCCESS]], false),
+        (&[&[COLLISION], &[COLLISION], &[SUCCESS]], false),
+        (&[&[COLLISION, ACK_TIMEOUT], &[SUCCESS]], true),
+        (&[&[ACK_TIMEOUT, COLLISION], &[SUCCESS]], true),
+        (&[&[ACK_TIMEOUT], &[COLLISION], &[SUCCESS]], true),
+        (&[&[SUCCESS], &[SUCCESS]], true),
+        (&[&[KEY_REFUSED], &[SUCCESS]], true),
+    ];
+    for (plans, retry) in histories {
+        with_access(|fixture, access| {
+            fixture.observed.borrow_mut().statuses = plans.concat();
+            fixture.start();
+            let (first, rest) = plans.split_first().expect("a first plan");
+            fixture.submit_mpdu(Spec {
+                transmissions: u8::try_from(first.len()).expect("a short plan"),
+                ..Spec::open(94)
+            });
+            let mut returned = single(fixture.until(access, 1));
+            for plan in rest {
+                let AnyBuffer::Sent(mpdu) = returned.buffer else {
+                    panic!("a published MPDU returns Sent: {plans:?}");
+                };
+                let transmissions = u8::try_from(plan.len()).expect("a short plan");
+                fixture.retransmit(returned.ticket, mpdu, transmissions);
+                returned = single(fixture.until(access, 1));
+            }
+            assert!(returned.outcome.is_delivered(), "{plans:?}");
+            let AnyBuffer::Sent(mut sent) = returned.buffer else {
+                panic!("a published MPDU returns Sent: {plans:?}");
+            };
+            assert_eq!(published_retry(&mut sent), retry, "{plans:?}");
+        });
+    }
+}
+
+#[test]
+fn a_retransmission_after_a_hardware_timeout_carries_the_retry_bit() {
+    // Whether the first publication reached the air is unknown. The TX-timeout
+    // edge ends it within the MSDU's lifetime, which a retransmission keeps.
+    with_access(|fixture, access| {
+        fixture.observed.borrow_mut().timeout_edge = true;
+        fixture.start();
+        fixture.submit_mpdu(Spec::open(95));
+        fixture.turns(2);
+        fixture.advance(crate::ordinary_tx::TX_ABORT_SETTLE);
+        fixture.turns(1);
+        fixture.observed.borrow_mut().timeout_edge = false;
+        let returned = single(fixture.events(access));
+        assert!(
+            matches!(
+                returned.outcome,
+                TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)
+            ),
+            "{:?}",
+            returned.outcome
+        );
+        let AnyBuffer::Sent(mpdu) = returned.buffer else {
+            panic!("a published MPDU returns Sent");
+        };
+        fixture.retransmit(returned.ticket, mpdu, 1);
+        let retried = single(fixture.until(access, 1));
+        assert!(retried.outcome.is_delivered(), "{:?}", retried.outcome);
+        let AnyBuffer::Sent(mut sent) = retried.buffer else {
+            panic!("a retransmission returns Sent");
+        };
+        assert!(published_retry(&mut sent));
+    });
+}
+
+#[test]
+fn a_collided_mpdu_withdrawn_behind_a_gate_goes_again_without_the_retry_bit() {
+    // Its only publication collided and the gate closed meanwhile: the plan
+    // ends withdrawn with a `Sent` MPDU that never reached a receiver.
+    with_access(|fixture, access| {
+        fixture.observed.borrow_mut().statuses = std::vec![COLLISION, SUCCESS];
+        fixture.start();
+        fixture.hold_air(true);
+        fixture.submit_mpdu(Spec {
+            transmissions: 2,
+            ..Spec::open(96)
+        });
+        fixture.turns(2);
+        let gate = fixture.gate.take().expect("gate");
+        let now = fixture.now();
+        assert!(matches!(
+            fixture
+                .port
+                .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox),
+            Ok(CommandProgress::Done)
+        ));
+        fixture.hold_air(false);
+        let mut events = fixture.until(access, 2);
+        let Some(Event::GateClosed(closed)) = events.pop() else {
+            panic!("the gate's terminal");
+        };
+        fixture.gate = Some(fixture.port.open_gate(closed));
+        let Some(Event::Tx(returned)) = events.into_iter().next() else {
+            panic!("the MPDU's terminal");
+        };
+        let returned = *returned;
+        assert_eq!(
+            returned.outcome,
+            TxOutcome::Withdrawn(WithdrawCause::GateClosed)
+        );
+        let AnyBuffer::Sent(mpdu) = returned.buffer else {
+            panic!("a published MPDU returns Sent");
+        };
+        fixture.retransmit(returned.ticket, mpdu, 1);
+        let retried = single(fixture.until(access, 1));
+        assert!(retried.outcome.is_delivered(), "{:?}", retried.outcome);
+        let AnyBuffer::Sent(mut sent) = retried.buffer else {
+            panic!("a retransmission returns Sent");
+        };
+        assert!(!published_retry(&mut sent));
+    });
+}
+
 #[test]
 fn a_block_ack_beside_a_failed_status_delivers_its_request_unmeasured() {
     // The hardware reports the BlockAck's result beside the completion's
