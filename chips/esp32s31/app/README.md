@@ -29,3 +29,9 @@ one) and source evidence. `state = "read"` records a manual code reading, with
 no guarantee of eventual service or absence of deadlock. A layer test checks
 known declaration shapes in its listed directories and validates the evidence
 locations; it does not prove those conditions or bounds.
+
+[`execution.toml`](execution.toml) is the candidate composition model, resolved
+and checked on the host by
+[`tools/image/execution`](../../../tools/image/execution/README.md). Feature
+selection is removed during resolution; runtime conditions remain explicit.
+The firmware continues to use its existing layout and Rust declarations.

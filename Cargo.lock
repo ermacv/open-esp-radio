@@ -3225,6 +3225,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tools-image-execution"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-radio-ieee80211-backend",
+ "oer-chips-family-facts",
+ "oer-portable-mmio",
+ "oer-tools-registers-model",
+ "quote",
+ "serde",
+ "syn 2.0.119",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
 name = "oer-tools-image-large-values"
 version = "0.1.0"
 dependencies = [

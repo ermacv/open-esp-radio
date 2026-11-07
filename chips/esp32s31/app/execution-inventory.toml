@@ -162,174 +162,203 @@ check = ['entry-names-swi', 'route-hart', 'table-rules']
 gap = ['SWI uses are written by hand at the swi-kind rows in [[number-site]]', 'the hart comes from the entry; no fact states which SWI an image gives which hart']
 
 [[number-site]]
+id = "application-declaration"
 site = "chips/esp32s31/app/src/lib.rs"
 anchor = "pub SdkTasks: Executor<Esp32s31, 0>"
 kind = 'swi'
 use = 'executor declaration'
 
 [[number-site]]
+id = "radio-declaration"
 site = "chips/esp32s31/app/src/wifi.rs"
 anchor = "type RadioExecutor = InterruptExecutor<Esp32s31, 2>;"
 kind = 'swi'
 use = 'executor declaration'
 
 [[number-site]]
+id = "hart1-declaration"
 site = "chips/esp32s31/app/src/hart1.rs"
 anchor = "pub(crate) type Hart1Executor = Executor<Esp32s31, 1>;"
 kind = 'swi'
 use = 'executor declaration'
 
 [[number-site]]
+id = "peer-application-alias"
 site = 'chips/esp32s31/app/src/hart1.rs'
 anchor = 'pub(crate) type AppExecutor = Executor<Esp32s31, 0>;'
 kind = 'swi'
 use = 'hart 1 peers'
 
 [[number-site]]
+id = "hart1-tasks"
 site = 'chips/esp32s31/app/src/hart1.rs'
 anchor = 'pub Hart1Tasks: Executor<Esp32s31, 1>'
 kind = 'swi'
 use = 'task set'
 
 [[number-site]]
+id = "radio-tasks"
 site = 'chips/esp32s31/app/src/wifi.rs'
 anchor = 'pub RadioTasks: InterruptExecutor<Esp32s31, 2>'
 kind = 'swi'
 use = 'task set'
 
 [[number-site]]
+id = "pilot-executor"
 site = 'chips/esp32s31/app/src/pilot.rs'
 anchor = 'type Executor = InterruptExecutor<Esp32s31, 2>;'
 kind = 'swi'
 use = 'pilot storage'
 
 [[number-site]]
+id = "application-notify-type"
 site = 'chips/esp32s31/app/src/lib.rs'
 anchor = 'signal::PeerNotify<Executor<Esp32s31, 0>>;'
 kind = 'swi'
 use = 'channel notify'
 
 [[number-site]]
+id = "group-notify-type"
 site = 'chips/esp32s31/app/src/lib.rs'
 anchor = 'signal::PeerNotify<Executor<Esp32s31, 1>>;'
 kind = 'swi'
 use = 'channel notify'
 
 [[number-site]]
+id = "console-endpoint-type"
 site = 'chips/esp32s31/platform/runtime/src/console.rs'
 anchor = 'pub struct Console(Endpoint<Executor<Esp32s31, 0>'
 kind = 'swi'
 use = 'console endpoint'
 
 [[number-site]]
+id = "console-binding-type"
 site = 'chips/esp32s31/platform/runtime/src/console.rs'
 anchor = 'pub struct Binding(Interrupt<Executor<Esp32s31, 0>'
 kind = 'swi'
 use = 'console binding'
 
 [[number-site]]
+id = "radio-timer-init"
 site = 'chips/esp32s31/platform/runtime/src/platform.rs'
 anchor = 'oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _>('
 kind = 'swi'
 use = 'radio timer'
 
 [[number-site]]
+id = "application-timer-bind"
 site = 'chips/esp32s31/platform/runtime/src/platform.rs'
 anchor = 'oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _>('
 kind = 'swi'
 use = 'application timer'
 
 [[number-site]]
+id = "hart1-timer-grant"
 site = 'chips/esp32s31/app/src/hart1.rs'
 anchor = 'oer_chips_family_platform_executor::grant::<Esp32s31, 1, _>('
 kind = 'swi'
 use = 'hart 1 timer'
 
 [[number-site]]
+id = "doorbell-split"
 site = 'chips/esp32s31/app/src/wifi.rs'
 anchor = 'DoorbellLine::<Esp32s31, 3>::split(radio.line3)'
 kind = 'swi'
 use = 'doorbell line'
 
 [[number-site]]
+id = "application-wake-handler"
 site = 'chips/esp32s31/app/src/interrupt_table.in'
 anchor = 'wake_handler::<Esp32s31, 0, FromCpu0Irq>'
 kind = 'swi'
 use = 'wake handler'
 
 [[number-site]]
+id = "hart1-wake-handler"
 site = 'chips/esp32s31/app/src/interrupt_table.in'
 anchor = 'hart1_wake: Hart1WakeToken ='
 kind = 'swi'
 use = 'wake handler'
 
 [[number-site]]
+id = "application-timer-fallback"
 site = 'chips/esp32s31/app/src/lib.rs'
 anchor = 'let ready = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>('
 kind = 'swi'
 use = 'application timer when no radio executor was started'
 
 [[number-site]]
+id = "application-executor-new"
 site = 'chips/esp32s31/app/src/lib.rs'
 anchor = 'let executor = Executor::<Esp32s31, 0>::new(software.line0);'
 kind = 'swi'
 use = 'application executor start'
 
 [[number-site]]
+id = "hart1-executor-run"
 site = 'chips/esp32s31/app/src/hart1.rs'
 anchor = '.run::<Hart1Tasks, _, _, _, 1, _>('
 kind = 'hart'
 use = 'hart argument of Executor::run; its SWI comes from Self'
 
 [[number-site]]
+id = "hart1-alarm-grant"
 site = 'chips/esp32s31/app/src/hart1.rs'
 anchor = 'alarm: AlarmGrant<Esp32s31, 1, Hart1AlarmToken>,'
 kind = 'swi'
 use = 'hart 1 timer grant'
 
 [[number-site]]
+id = "hart1-observer"
 site = 'chips/esp32s31/app/src/hart1.rs'
 anchor = '@observer: super::executor_observer::<2>();'
 kind = 'observer'
 use = 'observer index'
 
 [[number-site]]
+id = "radio-observer"
 site = 'chips/esp32s31/app/src/wifi.rs'
 anchor = '@observer: super::executor_observer::<1>();'
 kind = 'observer'
 use = 'observer index'
 
 [[number-site]]
+id = "application-observer"
 site = 'chips/esp32s31/app/src/lib.rs'
 anchor = '@observer: executor_observer::<0>();'
 kind = 'observer'
 use = 'observer index'
 
 [[number-site]]
+id = "station-executor"
 site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
 anchor = 'pub type DriverExecutor = oer_chips_family_platform_executor::Executor<Esp32s31, 0>;'
 kind = 'swi'
 use = 'the station assumes the application executor'
 
 [[number-site]]
+id = "doorbell-acknowledger"
 site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
 anchor = 'pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);'
 kind = 'swi'
 use = 'doorbell'
 
 [[number-site]]
+id = "doorbell-type"
 site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
 anchor = 'pub struct Bell<E: Entry, R: Entry>(pub Doorbell<Esp32s31, 3, E, DriverExecutor, R>)'
 kind = 'swi'
 use = 'doorbell'
 
 [[number-site]]
+id = "doorbell-handler"
 site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
 anchor = 'Doorbell::<Esp32s31, 3, E, DriverExecutor, R>::HANDLER;'
 kind = 'swi'
 use = 'doorbell'
 
 [[number-site]]
+id = "doorbell-executor"
 site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
 anchor = 'Doorbell::<Esp32s31, 3, E, DriverExecutor, R>::EXECUTOR;'
 kind = 'swi'

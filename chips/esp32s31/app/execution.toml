@@ -1,0 +1,710 @@
+# Candidate schema, checked on the host. The firmware still uses the existing
+# interrupt layout and Rust declarations. See tools/image/execution/README.md.
+schema = 1
+chip = "esp32s31"
+features = ["wifi", "group", "observe", "console", "udp"]
+instrumentation = ["trace", "debug-control", "fault-injection"]
+external = ["hart0-boot", "hart1-boot", "radio-client", "usb-host", "wifi-hardware"]
+
+[[requirement]]
+when = { all = ["observe"] }
+instrumentation = ["trace"]
+
+[[state]]
+name = "radio-started"
+when = { all = ["wifi"] }
+
+[[state]]
+name = "network-stopping"
+requires = ["radio-started"]
+when = { all = ["wifi"] }
+
+[[context]]
+name = "application"
+hart = 0
+level = 0
+kind = "thread"
+
+[[context]]
+name = "app_wake"
+hart = 0
+level = 1
+kind = "handler"
+
+[[context]]
+name = "radio_executor"
+hart = 0
+level = 2
+kind = "interrupt-executor"
+when = { all = ["wifi"] }
+
+[[context]]
+name = "radio"
+hart = 0
+level = 3
+kind = "handler"
+when = { all = ["wifi"] }
+
+[[context]]
+name = "hart1"
+hart = 1
+level = 0
+kind = "thread"
+when = { all = ["group"] }
+
+[[context]]
+name = "hart1_app"
+hart = 1
+level = 1
+kind = "handler"
+when = { all = ["group"] }
+
+[[context]]
+name = "profile"
+hart = 0
+level = 4
+kind = "handler"
+when = { all = ["observe"] }
+
+[[context]]
+name = "profile1"
+hart = 1
+level = 4
+kind = "handler"
+when = { all = ["observe", "group"] }
+
+[[entry]]
+name = "wake"
+context = "app_wake"
+line = 40
+part = "FromCpu0Irq"
+handler = "oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>"
+sources = ["CPU_INTR_FROM_CPU_0"]
+class = "hardware"
+
+[[entry]]
+name = "alarm"
+context = "app_wake"
+line = 41
+part = "SystimerAlarm1"
+handler = "oer_chips_family_platform_executor::alarm_interrupt::<SdkTasks, 1, SystimerAlarm1>"
+sources = ["SYSTIMER_TARGET1"]
+class = "hardware"
+
+[[entry]]
+name = "radio_alarm"
+context = "radio"
+line = 19
+part = "oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0"
+handler = "oer_chips_family_platform_executor::alarm_interrupt::<wifi::RadioTasks, 0, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0>"
+sources = ["SYSTIMER_TARGET0"]
+class = "hardware"
+when = { all = ["wifi"] }
+
+[[entry]]
+name = "phy"
+context = "radio_executor"
+line = 16
+part = "oer_chips_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt"
+handler = "wifi::on_pilot"
+sources = ["TIMERGRP0_T0"]
+class = "exempt-executor-level"
+reason = "SAR/PWDET steps between radio executor rounds"
+when = { all = ["wifi"] }
+
+[[entry]]
+name = "radio"
+context = "radio_executor"
+line = 17
+part = "oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq"
+handler = "oer_chips_family_platform_executor::Round<wifi::RadioTasks>"
+sources = ["CPU_INTR_FROM_CPU_2"]
+class = "executor"
+when = { all = ["wifi"] }
+
+[[entry]]
+name = "wifi"
+context = "radio"
+line = 21
+part = "wifi::WifiPart"
+handler = "wifi::on_wifi"
+sources = ["MODEM_WIFI_MAC", "MODEM_WIFI_PWR", "CPU_INTR_FROM_CPU_3"]
+class = "hardware"
+when = { all = ["wifi"] }
+
+[[entry]]
+name = "console_usb"
+context = "app_wake"
+line = 42
+part = "oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt"
+handler = "console::on_usb"
+sources = ["USB_SERIAL_JTAG"]
+class = "hardware"
+when = { all = ["console"] }
+
+[[entry]]
+name = "sampler"
+context = "profile"
+line = 22
+part = "oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt"
+handler = "observed::on_sampler"
+sources = ["TIMERGRP1_T0"]
+class = "hardware"
+when = { all = ["observe"] }
+
+[[entry]]
+name = "sampler1"
+context = "profile1"
+line = 22
+part = "oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Interrupt"
+handler = "observed::on_sampler1"
+sources = ["TIMERGRP1_T1"]
+class = "hardware"
+when = { all = ["observe", "group"] }
+
+[[entry]]
+name = "hart1_wake"
+context = "hart1_app"
+line = 40
+part = "oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq"
+handler = "oer_chips_family_platform_executor::wake_handler::<Esp32s31, 1, oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>"
+sources = ["CPU_INTR_FROM_CPU_1"]
+class = "hardware"
+when = { all = ["group"] }
+
+[[entry]]
+name = "hart1_alarm"
+context = "hart1_app"
+line = 41
+part = "oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2"
+handler = "oer_chips_family_platform_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>"
+sources = ["SYSTIMER_TARGET2"]
+class = "hardware"
+when = { all = ["group"] }
+
+[[executor]]
+name = "application"
+context = "application"
+entry = "wake"
+swi = 0
+
+[[executor]]
+name = "radio"
+context = "radio_executor"
+entry = "radio"
+swi = 2
+when = { all = ["wifi"] }
+
+[[executor]]
+name = "hart1"
+context = "hart1"
+entry = "hart1_wake"
+swi = 1
+when = { all = ["group"] }
+
+[[software]]
+name = "wifi-doorbell"
+entry = "wifi"
+swi = 3
+when = { all = ["wifi"] }
+
+[[task-set]]
+name = "SdkTasks"
+context = "application"
+observer = 0
+
+[[task-set]]
+name = "RadioTasks"
+context = "radio_executor"
+observer = 1
+when = { all = ["wifi"] }
+
+[[task-set]]
+name = "Hart1Tasks"
+context = "hart1"
+observer = 2
+when = { all = ["group"] }
+
+[[task-root]]
+name = "IP service, group and application on hart 0"
+context = "application"
+members = ["network", "group", "application"]
+when = { none = ["group"] }
+
+[[task-root]]
+name = "application alone on hart 0"
+context = "application"
+members = ["application"]
+when = { all = ["group"] }
+
+[[task-root]]
+name = "hart 1 roots"
+context = "hart1"
+members = ["network", "group"]
+when = { all = ["group"] }
+
+[[task]]
+name = "application"
+context = "application"
+
+[[task]]
+name = "watchdog"
+context = "application"
+
+[[task]]
+name = "station"
+context = "application"
+when = { all = ["wifi"] }
+
+[[task]]
+name = "datapath"
+context = "application"
+when = { all = ["wifi"] }
+
+[[task]]
+name = "radio-actor"
+context = "radio_executor"
+when = { all = ["wifi"] }
+
+[[task]]
+name = "console-endpoint"
+context = "application"
+when = { all = ["console"] }
+
+[[task]]
+name = "network"
+context = "application"
+when = { none = ["group"] }
+
+[[task]]
+name = "network"
+context = "hart1"
+when = { all = ["group"] }
+
+[[task]]
+name = "group"
+context = "application"
+when = { none = ["group"] }
+
+[[task]]
+name = "group"
+context = "hart1"
+when = { all = ["group"] }
+
+[[signal]]
+name = "MAC_SIGNAL"
+target = "application"
+raisers = [{ kind = "handler", entry = "wifi" }]
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[signal]]
+name = "MAC_RX_SIGNAL"
+target = "application"
+raisers = [{ kind = "handler", entry = "wifi" }, { kind = "own-task", executor = "application" }]
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[signal]]
+name = "POWER_SIGNAL"
+target = "application"
+raisers = [{ kind = "handler", entry = "wifi" }]
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[signal]]
+name = "APPLICATION_SIGNAL"
+target = "application"
+raisers = [{ kind = "peer-hart", executor = "hart1" }]
+when = { all = ["group"] }
+
+[[signal]]
+name = "SECOND_SIGNAL"
+target = "hart1"
+raisers = [{ kind = "peer-hart", executor = "application" }]
+when = { all = ["group"] }
+
+[[signal]]
+name = "NETWORK_SIGNAL"
+target = "hart1"
+raisers = [{ kind = "peer-hart", executor = "application" }]
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi", "group"] }
+
+[[signal]]
+name = "ACTOR_SIGNAL"
+target = "application"
+raisers = [{ kind = "peer-hart", executor = "hart1" }, { kind = "own-task", executor = "application" }]
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi", "group"] }
+
+[[signal]]
+name = "pilot reply"
+target = "radio"
+raisers = [{ kind = "executor-level", entry = "phy" }]
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[signal]]
+name = "console"
+target = "application"
+raisers = [{ kind = "handler", entry = "console_usb" }]
+when = { all = ["console"] }
+
+[[peer-notify]]
+name = "APPLICATION"
+signal = "APPLICATION_SIGNAL"
+when = { all = ["group"] }
+
+[[peer-notify]]
+name = "SECOND"
+signal = "SECOND_SIGNAL"
+when = { all = ["group"] }
+
+[[peer-notify]]
+name = "NETWORK"
+signal = "NETWORK_SIGNAL"
+when = { all = ["wifi", "group"] }
+
+[[peer-notify]]
+name = "DATAPATH"
+signal = "ACTOR_SIGNAL"
+when = { all = ["wifi", "group"] }
+
+[[timer]]
+name = "radio timer"
+inventory = "radio timer"
+entry = "radio_alarm"
+target = "radio_executor"
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[timer]]
+name = "application timer, radio started"
+inventory = "application timer, radio started"
+entry = "alarm"
+target = "application"
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[timer]]
+name = "application timer, no radio started"
+inventory = "application timer, no radio started"
+entry = "alarm"
+target = "application"
+active-when = { none = ["radio-started"] }
+
+[[timer]]
+name = "hart 1 timer"
+inventory = "hart 1 timer"
+entry = "hart1_alarm"
+target = "hart1"
+active-when = {  }
+when = { all = ["group"] }
+
+[[timer]]
+name = "SAR/PWDET pilot"
+inventory = "SAR/PWDET pilot"
+entry = "phy"
+target = "radio_executor"
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[timer]]
+name = "PC sampler"
+inventory = "PC sampler"
+entry = "sampler"
+target = "profile"
+active-when = {  }
+when = { all = ["observe"] }
+
+[[timer]]
+name = "PC sampler hart 1"
+inventory = "PC sampler"
+entry = "sampler1"
+target = "profile1"
+when = { all = ["group", "observe"] }
+
+[[hart-start]]
+step = "declared harts"
+hart = 0
+
+[[hart-start]]
+step = "launch"
+hart = 1
+when = { all = ["group"] }
+
+[[hart-start]]
+step = "boot handshake"
+hart = 1
+when = { all = ["group"] }
+
+[[number-use]]
+id = "application-declaration"
+kind = "swi"
+owner = "executor:application"
+
+[[number-use]]
+id = "radio-declaration"
+kind = "swi"
+owner = "executor:radio"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "hart1-declaration"
+kind = "swi"
+owner = "executor:hart1"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "peer-application-alias"
+kind = "swi"
+owner = "executor:application"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "hart1-tasks"
+kind = "swi"
+owner = "executor:hart1"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "radio-tasks"
+kind = "swi"
+owner = "executor:radio"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "pilot-executor"
+kind = "swi"
+owner = "executor:radio"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "application-notify-type"
+kind = "swi"
+owner = "executor:application"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "group-notify-type"
+kind = "swi"
+owner = "executor:hart1"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "console-endpoint-type"
+kind = "swi"
+owner = "executor:application"
+
+[[number-use]]
+id = "console-binding-type"
+kind = "swi"
+owner = "executor:application"
+
+[[number-use]]
+id = "radio-timer-init"
+kind = "swi"
+owner = "executor:radio"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "application-timer-bind"
+kind = "swi"
+owner = "executor:application"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "hart1-timer-grant"
+kind = "swi"
+owner = "executor:hart1"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "doorbell-split"
+kind = "swi"
+owner = "software:wifi-doorbell"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "application-wake-handler"
+kind = "swi"
+owner = "executor:application"
+
+[[number-use]]
+id = "hart1-wake-handler"
+kind = "swi"
+owner = "executor:hart1"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "application-timer-fallback"
+kind = "swi"
+owner = "executor:application"
+
+[[number-use]]
+id = "application-executor-new"
+kind = "swi"
+owner = "executor:application"
+
+[[number-use]]
+id = "hart1-executor-run"
+kind = "hart"
+owner = "executor:hart1"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "hart1-alarm-grant"
+kind = "swi"
+owner = "executor:hart1"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "hart1-observer"
+kind = "observer"
+owner = "task-set:Hart1Tasks"
+when = { all = ["group"] }
+
+[[number-use]]
+id = "radio-observer"
+kind = "observer"
+owner = "task-set:RadioTasks"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "application-observer"
+kind = "observer"
+owner = "task-set:SdkTasks"
+
+[[number-use]]
+id = "station-executor"
+kind = "swi"
+owner = "executor:application"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "doorbell-acknowledger"
+kind = "swi"
+owner = "software:wifi-doorbell"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "doorbell-type"
+kind = "swi"
+owner = "software:wifi-doorbell"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "doorbell-handler"
+kind = "swi"
+owner = "software:wifi-doorbell"
+when = { all = ["wifi"] }
+
+[[number-use]]
+id = "doorbell-executor"
+kind = "swi"
+owner = "software:wifi-doorbell"
+when = { all = ["wifi"] }
+
+[[wait]]
+id = "hart1-boot"
+waiter = ["external:hart0-boot"]
+served-by = ["external:hart1-boot"]
+service = "the launched hart finishes its constructors and publishes BOOTED"
+held = "hart 0 keeps its interrupts disabled while polling"
+bound = { kind = "boot-deadline", detail = "BOOTED_WAIT is 50 ms within BOOTED_BUDGET of 100 ms below the RTC watchdog; refusal records hart1-boot and resets" }
+when = { all = ["group"] }
+
+[[wait]]
+id = "radio-request"
+waiter = ["external:radio-client"]
+served-by = ["task:radio-actor"]
+service = "the executor polls the actor, which drains the request inbox and publishes its answer"
+held = "the request owns the lent membership cell until the answer; dropping a pending request retains custody"
+bound = { kind = "none", detail = "Pending::poll has no timeout; it forwards an answer or abandonment from Awaiting::poll_answer" }
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[wait]]
+id = "sar-sample"
+waiter = ["task:radio-actor"]
+served-by = ["entry:phy"]
+service = "the actor yields its poll, the programmed alarm enters its handler and the reply bundle is published"
+held = "the request bundle carries the PHY transaction to the handler and back"
+bound = { kind = "none", detail = "Client::sample has no timeout around the reply wait; progress requires the alarm and executor" }
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[wait]]
+id = "network-queues"
+waiter = ["task:datapath", "task:network"]
+served-by = ["task:network", "task:datapath"]
+service = "the actor polls eligible transmit input and returned-buffer capacity; the network polls receive data and transmit credits; a published batch flushes its notify"
+held = "queue endpoints and queued frames; unsent owners stay with the caller or actor; a pending readiness wait reserves no queue credit"
+bound = { kind = "none", detail = "queue readiness has no per-operation timeout; the actor polls its other sources and any armed protocol deadline in the same round" }
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[wait]]
+id = "network-lent-return"
+waiter = ["task:datapath"]
+served-by = ["task:network"]
+service = "NetworkCredit::poll_count registers before checking held; lend room needs held below its limit and full return needs held == 0"
+held = "the network owns each lent receive unit until drop; the actor retains the remaining receive ring and staged frames"
+bound = { kind = "none", detail = "normal lend-room and return waits have no local timeout; the retiring-stop wait has its separate deadline below" }
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[wait]]
+id = "network-stop"
+waiter = ["task:datapath"]
+served-by = ["task:network"]
+service = "NetworkStopState publishes stopped/lost then notifies the actor; poll_network_stop also requires all lent units returned; no_network reports absence without a consumer wait"
+held = "the actor keeps its port/arena and outstanding frame custody while stopping or draining"
+bound = { kind = "operation-deadline", detail = "Radio::Stopping and Radio::Draining carry a caller-selected deadline, included in the actor alarm; overdue or lost participants yield StopOutcome::Unconfirmed instead of a confirmed stop" }
+active-when = { all = ["network-stopping"] }
+when = { all = ["wifi"] }
+
+[[wait]]
+id = "application-send"
+waiter = ["task:application", "task:group"]
+served-by = ["task:group", "task:application"]
+service = "the peer consumes queued data and notifies a waiting producer; group selects APPLICATION/SECOND on two harts, otherwise ordinary local wakers"
+held = "the sending future keeps its value and borrows its End until capacity is ready; already queued values stay in the queue"
+bound = { kind = "none", detail = "End::send has no timeout or peer-closed result; if both tasks await send with both queues full, neither operation drains its receive queue" }
+
+[[wait]]
+id = "application-receive"
+waiter = ["task:application", "task:group"]
+served-by = ["task:group", "task:application"]
+service = "register the consumer notify, then test for input; group selects APPLICATION/SECOND on two harts, otherwise ordinary local wakers"
+held = "the pending future borrows its End; it consumes no input or capacity while pending"
+bound = { kind = "none", detail = "End::receive has no timeout or peer-closed result; two peers waiting on empty receive queues need an external sender or caller cancellation" }
+
+[[wait]]
+id = "mac-facts"
+waiter = ["task:datapath"]
+served-by = ["entry:wifi", "external:wifi-hardware"]
+service = "an active port polls device events and RX work; signal polling registers the owning task then takes durable facts; service requires the routed, enabled source and executor polling"
+held = "the actor/port retain installed radio, RX/TX custody and queued work while idle"
+bound = { kind = "conditional-deadlines", detail = "an idle fact wait has no timeout; outstanding port, TX arena, receive and stop work can supply deadlines through Actor::deadline, so missing hardware facts do not imply every active operation waits forever" }
+active-when = { all = ["radio-started"] }
+when = { all = ["wifi"] }
+
+[[wait]]
+id = "console-read"
+waiter = ["task:console-endpoint"]
+served-by = ["entry:console_usb", "external:usb-host"]
+service = "drain existing OUT FIFO bytes first; otherwise poll the signal for OUT_RECEIVED and retry the FIFO; events are enabled when Endpoint::new binds it"
+held = "the read future borrows the caller buffer and the unique endpoint; unused signal facts remain in the endpoint"
+bound = { kind = "none", detail = "no local timeout or disconnect result; it can remain pending without host traffic; a foreign executor returns ForeignContext" }
+when = { all = ["console"] }
+
+[[wait]]
+id = "console-write"
+waiter = ["task:console-endpoint"]
+served-by = ["entry:console_usb", "external:usb-host"]
+service = "send clears old IN_EMPTY facts before handing over a packet; completion needs a later IN_EMPTY and FIFO room; a full final packet sends a zero-length packet too"
+held = "the write future borrows the input and unique endpoint; a handed-over packet remains in the hardware FIFO"
+bound = { kind = "none", detail = "no local timeout or disconnect result; a host that does not read can leave it pending; flush returns immediately because write already waited" }
+when = { all = ["console"] }

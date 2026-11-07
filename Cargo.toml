@@ -47,6 +47,7 @@ members = [
     "hil/images/aes",
     "hil/images/wifi-station",
     "tools/image/build",
+    "tools/image/execution",
     "tools/image/bundle",
     "tools/image/large-values",
     "tools/image/checks",
