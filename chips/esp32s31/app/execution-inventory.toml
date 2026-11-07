@@ -1,0 +1,629 @@
+# What the application entry's execution consists of today: each link with its
+# place, its cfg, the checks that hold it and what nothing checks yet. This is
+# an inventory, not a source: the code decides. `tools/test/layers/tests/
+# execution_inventory.rs` fails when a link in the code has no row here.
+#
+# `check` names:
+#   table-rules         `interrupt_table!` rules at compile time
+#   router-hart         the router binds only its hart's entries
+#   image-table         `tools/image/checks` reads the linked table
+#   entry-names-swi     `executor_context`: the entry's source is the executor's
+#   route-hart          `hart_binding::check`: route and token name one hart
+#   raiser-direction    `Raising::check` on each signal's declared raisers
+#   permit              affine owner, taken once
+#   boot-deadline       a named boot wait under a typed failure
+#   hart-metadata       `tools/image/build` resolves the image's harts
+#   core-start-gate     the image gate on `[core-start]`
+schema = 1
+
+[[interrupt]]
+name = 'wake'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'wake: WakeToken ='
+part = 'FromCpu0Irq'
+class = 'Hardware'
+cfg = ''
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'alarm'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'alarm: AppAlarmToken ='
+part = 'SystimerAlarm1'
+class = 'Hardware'
+cfg = ''
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'radio_alarm'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'radio_alarm: RadioAlarmToken ='
+part = 'SystimerAlarm0'
+class = 'Hardware'
+cfg = 'feature = "wifi"'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'phy'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'phy: PhyToken ='
+part = 'Timg0AlarmInterrupt'
+class = 'Exempt(ExecutorLevel)'
+cfg = 'feature = "wifi"'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'radio'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'radio: RadioToken ='
+part = 'FromCpu2Irq'
+class = 'Executor'
+cfg = 'feature = "wifi"'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'wifi'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'wifi: WifiToken ='
+part = 'wifi::WifiPart'
+class = 'Hardware'
+cfg = 'feature = "wifi"'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'console_usb'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'console_usb: ConsoleToken ='
+part = 'ConsoleInterrupt'
+class = 'Hardware'
+cfg = 'feature = "console"'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'sampler'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'sampler: SamplerToken ='
+part = 'Timg1AlarmInterrupt'
+class = 'Hardware'
+cfg = 'feature = "observe"'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'sampler1'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'sampler1: Sampler1Token ='
+part = 'Timg1Timer1Interrupt'
+class = 'Hardware'
+cfg = 'all(feature = "observe", feature = "group")'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'hart1_wake'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'hart1_wake: Hart1WakeToken ='
+part = 'FromCpu1Irq'
+class = 'Hardware'
+cfg = 'feature = "group"'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[interrupt]]
+name = 'hart1_alarm'
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'hart1_alarm: Hart1AlarmToken ='
+part = 'SystimerAlarm2'
+class = 'Hardware'
+cfg = 'feature = "group"'
+check = ['table-rules', 'router-hart', 'image-table']
+gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
+
+[[executor]]
+name = 'application'
+mode = 'Executor'
+swi = '0'
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = 'pub SdkTasks: Executor<Esp32s31, 0>'
+entry = 'wake'
+cfg = ''
+check = ['entry-names-swi', 'route-hart', 'table-rules']
+gap = ['the SWI number is written by hand at each site in [[swi-site]]', 'the hart comes from the entry; no fact states which SWI an image gives which hart']
+
+[[executor]]
+name = 'radio'
+mode = 'InterruptExecutor'
+swi = '2'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'type RadioExecutor = InterruptExecutor<Esp32s31, 2>;'
+entry = 'radio'
+cfg = 'feature = "wifi"'
+check = ['entry-names-swi', 'route-hart', 'table-rules']
+gap = ['the SWI number is written by hand at each site in [[swi-site]]', 'the hart comes from the entry; no fact states which SWI an image gives which hart']
+
+[[executor]]
+name = 'hart1'
+mode = 'Executor'
+swi = '1'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'pub(crate) type Hart1Executor = Executor<Esp32s31, 1>;'
+entry = 'hart1_wake'
+cfg = 'feature = "group"'
+check = ['entry-names-swi', 'route-hart', 'table-rules']
+gap = ['the SWI number is written by hand at each site in [[swi-site]]', 'the hart comes from the entry; no fact states which SWI an image gives which hart']
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'pub(crate) type AppExecutor = Executor<Esp32s31, 0>;'
+use = 'hart 1 peers'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'pub Hart1Tasks: Executor<Esp32s31, 1>'
+use = 'task set'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'pub RadioTasks: InterruptExecutor<Esp32s31, 2>'
+use = 'task set'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/pilot.rs'
+anchor = 'type Executor = InterruptExecutor<Esp32s31, 2>;'
+use = 'pilot storage'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = 'signal::PeerNotify<Executor<Esp32s31, 0>>;'
+use = 'channel notify'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = 'signal::PeerNotify<Executor<Esp32s31, 1>>;'
+use = 'channel notify'
+
+[[swi-site]]
+site = 'chips/esp32s31/platform/runtime/src/console.rs'
+anchor = 'pub struct Console(Endpoint<Executor<Esp32s31, 0>'
+use = 'console endpoint'
+
+[[swi-site]]
+site = 'chips/esp32s31/platform/runtime/src/console.rs'
+anchor = 'pub struct Binding(Interrupt<Executor<Esp32s31, 0>'
+use = 'console binding'
+
+[[swi-site]]
+site = 'chips/esp32s31/platform/runtime/src/platform.rs'
+anchor = 'oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _>('
+use = 'radio timer'
+
+[[swi-site]]
+site = 'chips/esp32s31/platform/runtime/src/platform.rs'
+anchor = 'oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _>('
+use = 'application timer'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'oer_chips_family_platform_executor::grant::<Esp32s31, 1, _>('
+use = 'hart 1 timer'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'DoorbellLine::<Esp32s31, 3>::split(radio.line3)'
+use = 'doorbell line'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'wake_handler::<Esp32s31, 0, FromCpu0Irq>'
+use = 'wake handler'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/interrupt_table.in'
+anchor = 'hart1_wake: Hart1WakeToken ='
+use = 'wake handler'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = 'let ready = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>('
+use = 'application timer without wifi'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = 'let executor = Executor::<Esp32s31, 0>::new(software.line0);'
+use = 'application executor start'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = '.run::<Hart1Tasks, _, _, _, 1, _>('
+use = 'hart 1 executor start'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'alarm: AlarmGrant<Esp32s31, 1, Hart1AlarmToken>,'
+use = 'hart 1 timer grant'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = '@observer: super::executor_observer::<2>();'
+use = 'observer index'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = '@observer: super::executor_observer::<1>();'
+use = 'observer index'
+
+[[swi-site]]
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = '@observer: executor_observer::<0>();'
+use = 'observer index'
+
+[[swi-site]]
+site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
+anchor = 'pub type DriverExecutor = oer_chips_family_platform_executor::Executor<Esp32s31, 0>;'
+use = 'the station assumes the application executor'
+
+[[swi-site]]
+site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
+anchor = 'pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);'
+use = 'doorbell'
+
+[[swi-site]]
+site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
+anchor = 'pub struct Bell<E: Entry, R: Entry>(pub Doorbell<Esp32s31, 3, E, DriverExecutor, R>)'
+use = 'doorbell'
+
+[[swi-site]]
+site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
+anchor = 'Doorbell::<Esp32s31, 3, E, DriverExecutor, R>::HANDLER;'
+use = 'doorbell'
+
+[[swi-site]]
+site = 'chips/esp32s31/radio/ieee80211/station/src/chip.rs'
+anchor = 'Doorbell::<Esp32s31, 3, E, DriverExecutor, R>::EXECUTOR;'
+use = 'doorbell'
+
+[[task-set]]
+name = 'SdkTasks'
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = 'pub SdkTasks: Executor<Esp32s31, 0> {'
+executor = 'application'
+observer = '0'
+note = 'the image extends this set; the watchdog feed, station and datapath stand here'
+check = ['route-hart']
+gap = ['the set names a SWI, not a context', 'the observer index is written by hand']
+
+[[task-set]]
+name = 'RadioTasks'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'pub RadioTasks: InterruptExecutor<Esp32s31, 2> {'
+executor = 'radio'
+observer = '1'
+note = 'the radio actor alone'
+check = ['route-hart']
+gap = ['the set names a SWI, not a context', 'the observer index is written by hand']
+
+[[task-set]]
+name = 'Hart1Tasks'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'pub Hart1Tasks: Executor<Esp32s31, 1> {'
+executor = 'hart1'
+observer = '2'
+note = 'empty: the group runs as roots'
+check = ['route-hart']
+gap = ['the set names a SWI, not a context', 'the observer index is written by hand']
+
+[[task-root]]
+name = 'IP service, group and application on hart 0'
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = 'oer_chips_family_platform_executor::Root::new(second.as_mut()),'
+executor = 'application'
+cfg = 'not(feature = "group")'
+check = ['route-hart']
+gap = ['the placement of a task group is a feature, not a stated placement']
+
+[[task-root]]
+name = 'application alone on hart 0'
+site = 'chips/esp32s31/app/src/lib.rs'
+anchor = 'let roots = oer_chips_family_platform_executor::Root::new(app.as_mut());'
+executor = 'application'
+cfg = 'feature = "group"'
+check = ['route-hart']
+gap = ['the placement of a task group is a feature, not a stated placement']
+
+[[task-root]]
+name = 'hart 1 roots'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'let roots = (Root::new(net.as_mut()), Root::new(second.as_mut()));'
+executor = 'hart1'
+cfg = 'feature = "group"'
+check = ['route-hart']
+gap = ['the placement of a task group is a feature, not a stated placement']
+
+[[signal]]
+name = 'MAC_SIGNAL'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'static MAC_SIGNAL: IrqSignal'
+raised_by = 'radio-side P3 handler'
+waited_by = 'datapath task'
+raisers = 'FromHandler<WifiToken>'
+cfg = 'feature = "wifi"'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'MAC_RX_SIGNAL'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'static MAC_RX_SIGNAL: IrqSignal'
+raised_by = 'P3 handler, own executor task'
+waited_by = 'datapath task'
+raisers = 'FromHandler<WifiToken>, FromOwnTask'
+cfg = 'feature = "wifi"'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'POWER_SIGNAL'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'static POWER_SIGNAL: IrqSignal'
+raised_by = 'P3 handler'
+waited_by = 'datapath task'
+raisers = 'FromHandler<WifiToken>'
+cfg = 'feature = "wifi"'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'APPLICATION_SIGNAL'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'static APPLICATION_SIGNAL: IrqSignal'
+raised_by = 'hart 1 tasks'
+waited_by = 'hart 0 application'
+raisers = 'FromPeerHart'
+cfg = 'feature = "group"'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'SECOND_SIGNAL'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'static SECOND_SIGNAL: IrqSignal'
+raised_by = 'hart 0 tasks'
+waited_by = 'hart 1 group'
+raisers = 'FromPeerHart'
+cfg = 'feature = "group"'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'NETWORK_SIGNAL'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'static NETWORK_SIGNAL: IrqSignal'
+raised_by = 'hart 0 tasks'
+waited_by = 'hart 1 IP service'
+raisers = 'FromPeerHart'
+cfg = 'all(feature = "wifi", feature = "group")'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'ACTOR_SIGNAL'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'static ACTOR_SIGNAL: IrqSignal'
+raised_by = 'hart 1 tasks, own executor task'
+waited_by = 'hart 0 datapath actor'
+raisers = 'FromPeerHart, FromOwnTask'
+cfg = 'all(feature = "wifi", feature = "group")'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'pilot reply'
+site = 'chips/esp32s31/app/src/pilot.rs'
+anchor = 'reply: IrqSignal::new::<FromExecutorLevel<I>, R>(),'
+raised_by = 'TIMG0 handler at P2'
+waited_by = 'radio actor'
+raisers = 'FromExecutorLevel'
+cfg = 'feature = "wifi"'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'console'
+site = 'chips/family/drivers/usb-serial-jtag/src/interrupt.rs'
+anchor = 'signal: IrqSignal::new::<'
+raised_by = 'console handler'
+waited_by = 'console endpoint task'
+raisers = 'FromHandler<Source>'
+cfg = 'feature = "console"'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[peer-notify]]
+name = 'APPLICATION'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'pub(crate) static APPLICATION: PeerNotify<AppExecutor>'
+signal = 'APPLICATION_SIGNAL'
+cfg = 'feature = "group"'
+check = ['raiser-direction']
+gap = ['no deadline: unlike `PeerClient`, a notify carries no obligation']
+
+[[peer-notify]]
+name = 'SECOND'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'pub(crate) static SECOND: PeerNotify<Hart1Executor>'
+signal = 'SECOND_SIGNAL'
+cfg = 'feature = "group"'
+check = ['raiser-direction']
+gap = ['no deadline: unlike `PeerClient`, a notify carries no obligation']
+
+[[peer-notify]]
+name = 'NETWORK'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'static NETWORK: oer_chips_family_platform_interrupt_table::signal::PeerNotify'
+signal = 'NETWORK_SIGNAL'
+cfg = 'all(feature = "wifi", feature = "group")'
+check = ['raiser-direction']
+gap = ['no deadline: unlike `PeerClient`, a notify carries no obligation']
+
+[[peer-notify]]
+name = 'DATAPATH'
+site = 'chips/esp32s31/app/src/wifi.rs'
+anchor = 'static DATAPATH: oer_chips_family_platform_interrupt_table::signal::PeerNotify'
+signal = 'ACTOR_SIGNAL'
+cfg = 'all(feature = "wifi", feature = "group")'
+check = ['raiser-direction']
+gap = ['no deadline: unlike `PeerClient`, a notify carries no obligation']
+
+# `PeerClient`, `PeerServer` and the liveness `Supervisor` with its `Obligations`
+# are the executor's request channels with deadlines. No production image uses
+# them today: only the probes `esp32s31-boot-smoke` and `esp32s31-peer-overdue`.
+[peer-channels]
+production = 0
+probes = ['hil/probes/esp32s31-boot-smoke', 'hil/probes/esp32s31-peer-overdue']
+supervision = 'peer/obligation.rs seats, peer/liveness.rs Supervisor: a request past its deadline is reported even when no one waits'
+
+
+[[timer]]
+name = 'radio timer'
+site = 'chips/esp32s31/platform/runtime/src/platform.rs'
+anchor = 'oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _>('
+source = 'system timer comparator 0'
+serves = 'radio executor'
+cfg = 'feature = "wifi"'
+check = ['permit', 'table-rules']
+gap = ['which comparator serves which executor is written by hand in the types']
+
+[[timer]]
+name = 'application timer'
+site = 'chips/esp32s31/platform/runtime/src/platform.rs'
+anchor = 'oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _>('
+source = 'system timer comparator 1'
+serves = 'application executor'
+cfg = ''
+check = ['permit', 'table-rules']
+gap = ['which comparator serves which executor is written by hand in the types']
+
+[[timer]]
+name = 'hart 1 timer'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'oer_chips_family_platform_executor::grant::<Esp32s31, 1, _>('
+source = 'system timer comparator 2'
+serves = 'hart 1 executor'
+cfg = 'feature = "group"'
+check = ['permit', 'table-rules']
+gap = ['which comparator serves which executor is written by hand in the types']
+
+[[timer]]
+name = 'SAR/PWDET pilot'
+site = 'chips/esp32s31/app/src/pilot.rs'
+anchor = 'pub fn init<const H: u8>('
+source = 'TIMG0 T0'
+serves = 'radio actor'
+cfg = 'feature = "wifi"'
+check = ['permit', 'table-rules', 'raiser-direction']
+gap = ['no deadline in sar_pilot.rs: a step depends on the alarm firing']
+
+[[timer]]
+name = 'PC sampler'
+site = 'chips/esp32s31/app/src/observed.rs'
+anchor = 'use oer_chips_esp32s31_platform_runtime::sampler::'
+source = 'TIMG1 T0 and T1'
+serves = 'profile entries'
+cfg = 'feature = "observe"'
+check = ['table-rules']
+gap = ['one line number on two harts is a choice nothing states']
+
+[[hart-start]]
+step = 'declared harts'
+site = 'tools/image/build/src/harts.rs'
+anchor = 'const KEY: &str = "harts";'
+cfg = ''
+check = ['hart-metadata']
+gap = ['the `group` feature and the resolved harts are two inputs of one placement']
+
+[[hart-start]]
+step = 'launch'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = 'oer_chips_esp32s31_platform_runtime::secondary::launch_hart1('
+cfg = 'feature = "group"'
+check = ['permit', 'core-start-gate']
+gap = []
+
+[[hart-start]]
+step = 'boot handshake'
+site = 'chips/esp32s31/app/src/hart1.rs'
+anchor = '.poll(BOOTED_WAIT, || BOOTED.load(Ordering::Acquire).then_some(()))'
+cfg = 'feature = "group"'
+check = ['boot-deadline']
+gap = []
+
+[[wait]]
+waiter = 'hart 0 boot'
+served_by = 'hart 1 boot, `BOOTED`'
+condition = 'hart 1 finished `boot1`'
+held = 'hart 0 keeps its interrupts disabled'
+bound = 'BootDeadline BOOTED_BUDGET, then record and reset'
+state = 'read'
+
+[[wait]]
+waiter = 'radio client `Pending`'
+served_by = 'radio actor on P2'
+condition = 'the executor runs and the actor drains its inbox'
+held = 'what the client lent to the request'
+bound = 'none found in `Pending`; a failed actor ends in record and reset'
+state = 'read'
+
+[[wait]]
+waiter = 'radio actor, SAR sample'
+served_by = 'TIMG0 entry on P2, same hart and level'
+condition = 'the alarm fires and its round runs'
+held = 'the PHY transaction moves to the handler'
+bound = 'none in sar_pilot.rs'
+state = 'read'
+
+[[wait]]
+waiter = 'datapath actor, network end'
+served_by = 'each other through NETWORK and DATAPATH'
+condition = 'the peer executor polls its task'
+held = 'lent buffers; channel slots'
+bound = 'not established'
+state = 'unverified'
+
+[[wait]]
+waiter = 'application and group channel'
+served_by = 'each other through APPLICATION and SECOND'
+condition = 'the peer task sends'
+held = 'channel slots'
+bound = 'not established'
+state = 'unverified'
+
+[[wait]]
+waiter = 'datapath actor, MAC facts'
+served_by = 'Wi-Fi handler on P3'
+condition = 'hardware raises the source'
+held = 'RX and TX rings'
+bound = 'not established'
+state = 'unverified'
+
+[[wait]]
+waiter = 'console endpoint'
+served_by = 'USB handler'
+condition = 'hardware raises the source'
+held = 'console buffers'
+bound = 'not established'
+state = 'unverified'
+
+[[wait]]
+waiter = 'peer request in probes'
+served_by = '`PeerServer` on the other hart'
+condition = 'the server task runs'
+held = 'one request slot, one obligation seat'
+bound = 'the post deadline; Supervisor reports it past due'
+state = 'read'

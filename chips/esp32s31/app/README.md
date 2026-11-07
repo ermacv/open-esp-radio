@@ -13,3 +13,8 @@ driver stops/masks the timer and discards stale RAW before binding. Interrupt
 service returns custody through the same P2 signal; neither a task waker nor a
 hardware owner crosses into the handler. Existing retained faults and explicit
 reset policy apply to setup failure and an orphan alarm.
+
+`execution-inventory.toml` lists what the entry's execution consists of today:
+interrupts, executors, task sets, signals, timers, the hart start and the known
+waits, each with its cfg, its checks and what nothing checks yet. A layer test
+holds the list to the code.
