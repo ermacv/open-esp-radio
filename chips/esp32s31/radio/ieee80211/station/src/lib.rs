@@ -707,6 +707,8 @@ struct ActorConnection<'a, N: Notifies, M> {
 mod chip;
 #[cfg(target_arch = "riscv32")]
 mod dma;
+#[cfg(test)]
+mod joined;
 pub mod policy;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod supply;
@@ -854,7 +856,7 @@ mod tests {
     }
     impl oer_protocols_network_port::EthernetFrame for Packet {
         fn view(
-            &self,
+            &mut self,
         ) -> Result<
             oer_protocols_network_port::EthernetFrameView<'_>,
             oer_protocols_network_port::FrameLengthError,

@@ -1082,3 +1082,54 @@ fn a_published_head_keeps_the_leases_behind_it_until_the_release() {
         .unwrap();
     assert_eq!(returned, std::vec![0, 1, 2]);
 }
+
+#[test]
+fn a_model_follows_a_published_chain_to_its_last_descriptor() {
+    use super::super::tx_storage::{CommitTxDma, TxChainUnreadable};
+    let drops = Rc::new(Cell::new(0));
+    let mut owner = retained_owner();
+    owner.begin().unwrap();
+    for (offset, used, mark) in [(8, 40, 0x11), (16, 48, 0x22)] {
+        push_at(
+            &mut owner,
+            TestBacking::new(drops.clone()),
+            written(offset, used),
+            |region| region[offset] = mark,
+        )
+        .unwrap_or_else(|_| panic!("pushed"));
+    }
+    let mut seen = std::vec::Vec::new();
+    let mut publication = owner.publish_retained_chain(2).unwrap();
+    assert_eq!(
+        publication.read_chain(&mut |bytes| seen.push((bytes.len(), bytes[0]))),
+        Ok(())
+    );
+    assert_eq!(seen, [(40, 0x11), (48, 0x22)]);
+
+    // A chain of one ends at its first descriptor, whatever follows it.
+    drop(publication);
+    let mut seen = 0;
+    let mut publication = owner.publish_retained_chain(1).unwrap();
+    assert_eq!(publication.read_chain(&mut |_| seen += 1), Ok(()));
+    assert_eq!(seen, 1);
+
+    // A descriptor the hardware does not own, then a buffer no lease holds.
+    let buffer = publication.retention.backing_identities[0]
+        .unwrap()
+        .dma_region
+        .start();
+    let arena = publication.dma.storage.as_ref().get_ref();
+    let word0 = arena.descriptors[0].word0();
+    arena.descriptors[0].publish_owned(word0.with_tx_owned(false), buffer, None);
+    assert_eq!(
+        publication.read_chain(&mut |_| ()),
+        Err(TxChainUnreadable::NotOwned)
+    );
+    let arena = publication.dma.storage.as_ref().get_ref();
+    arena.descriptors[0].publish_owned(word0, buffer, None);
+    publication.retention.backing_identities[0] = None;
+    assert_eq!(
+        publication.read_chain(&mut |_| ()),
+        Err(TxChainUnreadable::OutsideBuffers)
+    );
+}

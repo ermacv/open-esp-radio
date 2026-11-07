@@ -113,8 +113,9 @@ pub const LIFECYCLE_FRAMES: usize = 4;
 /// group key change.
 pub const PARCELS: usize = 2;
 
-/// The largest message to the actor: larger ones travel as parcels.
-pub const TO_ACTOR_BYTES: usize = 128;
+/// The largest message to the actor, in the 32 words of the chip's 128
+/// bytes: larger ones travel as parcels.
+pub const TO_ACTOR_BYTES: usize = 32 * core::mem::size_of::<usize>();
 
 /// The turns in a row a due port deadline reposts the actor at most.
 pub const DUE_REPOSTS: u8 = 4;
@@ -772,7 +773,8 @@ fn alarm_at<T: Timer>(timer: &T, at: Option<Instant>) -> Option<impl Future<Outp
 #[cfg(test)]
 mod tests;
 
-/// The largest message from the actor: a received frame with its metadata
-/// (the S31 receive buffer and its metadata take up to 128 bytes); owners
-/// larger than a frame's travel in the return queue.
-pub const FROM_ACTOR_BYTES: usize = 128;
+/// The largest message from the actor, in the 32 words of the chip's 128
+/// bytes: a received frame with its metadata (the S31 receive buffer and its
+/// metadata take up to that); owners larger than a frame's travel in the
+/// return queue.
+pub const FROM_ACTOR_BYTES: usize = 32 * core::mem::size_of::<usize>();

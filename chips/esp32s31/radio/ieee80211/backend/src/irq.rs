@@ -204,12 +204,12 @@ where
 
 /// The host tests' stand-in for the binding's proof: no table binds a host
 /// part, and the driver forbids the `unsafe` a table's entry implements.
-#[cfg(test)]
-pub(crate) struct HostActivation;
+#[cfg(any(test, feature = "test-support"))]
+pub struct HostActivation;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl sealed::Sealed for HostActivation {}
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl WifiIrqActivation for HostActivation {
     const CONTEXT: oer_chips_family_platform_interrupt_table::Context =
         oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };

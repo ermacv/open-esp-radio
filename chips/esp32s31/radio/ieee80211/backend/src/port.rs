@@ -19,7 +19,6 @@ use crate::{
 use core::{
     cell::Cell,
     convert::Infallible,
-    future::Future,
     marker::PhantomData,
     pin::Pin,
     sync::atomic::{AtomicBool, Ordering},
@@ -36,7 +35,6 @@ use oer_protocols_radio_port::{BodyLoan, ClockError, LoanedContext, SlotIdentity
 mod atomic_words;
 use atomic_words::KeyActivity;
 mod buffer;
-#[cfg(target_arch = "riscv32")]
 pub mod device;
 mod driver;
 mod engines;
@@ -51,7 +49,6 @@ mod installation;
 pub use installation::{
     BlockAckSlots, Esp32s31Backend, InstallationPools, Resources, StationTokens,
 };
-#[cfg(any(target_arch = "riscv32", test))]
 mod receive;
 #[cfg(all(oer_trace, oer_debug_control))]
 pub mod trace;

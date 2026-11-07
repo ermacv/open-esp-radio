@@ -46,9 +46,10 @@ the DMA window and off an address with zero low DMA address bits
 (`dma-window.x`), so no published address is checked against the window at
 run time; what the walker reports back (NEXT, LAST) is resolved against the
 arena. The arena checks run the same code in both spaces. Test support supplies models of the hardware (the host
-space, the proofs a mock walker reports, and the shared register model of the
-RX walker, [`RxWalkerModel`](rx_dma/model.rs)), never bypasses of these
-checks. A walker stop proof names the arena whose binding it stopped; an RX
+space, the proofs a mock walker reports, the shared register model of the
+RX walker, [`RxWalkerModel`](rx_dma/model.rs), the DMA engine's landing of a
+unit (`RxDmaStorage::land_unit`) and the MAC's reading of a published chain
+(`CommitTxDma::read_chain`)), never bypasses of these checks. A walker stop proof names the arena whose binding it stopped; an RX
 ring halts or rebuilds only on a proof naming its own arena, and a proof for
 another arena poisons the arena until radio reset.
 

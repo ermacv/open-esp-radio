@@ -249,6 +249,15 @@ pub struct RxArenaWords {
     reserved_landings: AtomicU32,
     reserved_late_landings: AtomicU32,
     walker_on_detached: AtomicU32,
+    /// Descriptors the ring has handed the CPU, as its observed mask says, for
+    /// the model of the DMA engine, which holds no ring.
+    #[cfg(any(test, feature = "test-support"))]
+    host_taken: [AtomicU32; 3],
+    /// Whether R's completed frame may be lent to the CPU: set when
+    /// `reserved_frame` hands out a view of R, cleared only where the ring is
+    /// held exclusively, which ends every such view.
+    #[cfg(any(test, feature = "test-support"))]
+    host_reserved_lent: core::sync::atomic::AtomicBool,
     /// Live epochs started on this arena. A frozen cursor names the epoch it
     /// was sampled in, so a cursor of an earlier epoch on the same arena,
     /// whose generation count restarted at zero, never authorizes a take or
@@ -271,6 +280,10 @@ impl RxArenaWords {
             reserved_landings: AtomicU32::new(0),
             reserved_late_landings: AtomicU32::new(0),
             walker_on_detached: AtomicU32::new(0),
+            #[cfg(any(test, feature = "test-support"))]
+            host_taken: [const { AtomicU32::new(0) }; 3],
+            #[cfg(any(test, feature = "test-support"))]
+            host_reserved_lent: core::sync::atomic::AtomicBool::new(false),
             live_epochs: AtomicU32::new(0),
         }
     }
@@ -434,6 +447,101 @@ const RX_OBSERVED_MASK_CAPACITY: usize = 96;
 pub struct RxObservedMask {
     words: [u32; 3],
 }
+
+#[cfg(any(test, feature = "test-support"))]
+impl RxArenaWords {
+    /// Whether the ring has handed the CPU descriptor `index` and not armed it
+    /// again.
+    pub(crate) fn host_taken(&self, index: usize) -> bool {
+        self.host_taken
+            .get(index / 32)
+            .is_some_and(|word| word.load(Ordering::Acquire) & (1 << (index % 32)) != 0)
+    }
+
+    /// Whether a view of R's frame may be alive.
+    pub(crate) fn host_reserved_lent(&self) -> bool {
+        self.host_reserved_lent.load(Ordering::Acquire)
+    }
+
+    /// A view of R's frame leaves for the CPU.
+    pub(crate) fn show_reserved_lent(&self) {
+        self.host_reserved_lent.store(true, Ordering::Release);
+    }
+
+    /// No view of R's frame is alive: the caller holds the ring exclusively
+    /// or has none.
+    fn show_reserved_returned(&self) {
+        self.host_reserved_lent.store(false, Ordering::Release);
+    }
+}
+
+#[cfg(not(any(test, feature = "test-support")))]
+impl RxArenaWords {
+    #[inline(always)]
+    pub(crate) const fn show_reserved_lent(&self) {}
+
+    #[inline(always)]
+    const fn show_reserved_returned(&self) {}
+}
+
+/// The live ring's observed mask behind its one mutator, which also shows the
+/// model of the DMA engine (test support only) what the CPU holds: no change
+/// of the mask can leave that model behind.
+mod taken {
+    use super::{RingIndex, RxArenaWords, RxObservedMask};
+
+    pub(super) struct TakenMask(RxObservedMask);
+
+    impl TakenMask {
+        /// A new epoch's mask: the CPU holds nothing of it.
+        pub(super) fn empty(arena: &RxArenaWords) -> Self {
+            let mask = Self(RxObservedMask::default());
+            mask.publish(arena);
+            mask
+        }
+
+        pub(super) const fn get(&self) -> RxObservedMask {
+            self.0
+        }
+
+        pub(super) fn insert(&mut self, arena: &RxArenaWords, index: usize) {
+            self.0.insert(index);
+            self.publish(arena);
+        }
+
+        pub(super) fn insert_group<const COUNT: usize>(
+            &mut self,
+            arena: &RxArenaWords,
+            start: RingIndex<COUNT>,
+            count: usize,
+        ) {
+            self.0.insert_group::<COUNT>(start, count);
+            self.publish(arena);
+        }
+
+        pub(super) fn remove_group<const COUNT: usize>(
+            &mut self,
+            arena: &RxArenaWords,
+            start: RingIndex<COUNT>,
+            count: usize,
+        ) {
+            self.0.remove_group::<COUNT>(start, count);
+            self.publish(arena);
+        }
+
+        #[cfg(any(test, feature = "test-support"))]
+        fn publish(&self, arena: &RxArenaWords) {
+            for (shown, word) in arena.host_taken.iter().zip(self.0.words) {
+                shown.store(word, core::sync::atomic::Ordering::Release);
+            }
+        }
+
+        #[cfg(not(any(test, feature = "test-support")))]
+        #[inline(always)]
+        const fn publish(&self, _arena: &RxArenaWords) {}
+    }
+}
+use taken::TakenMask;
 
 impl RxObservedMask {
     pub const fn contains(self, index: usize) -> bool {
@@ -752,7 +860,7 @@ pub struct RxRingLive<'a, const COUNT: usize> {
     descriptor_table: RxDescriptorAddresses,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
-    observed_mask: RxObservedMask,
+    observed_mask: TakenMask,
     recycle_start: RingIndex<COUNT>,
     accepted_tail: RingIndex<COUNT>,
     /// Pending tail encoded as `index + 1`; zero means no reload is in flight.
@@ -1095,6 +1203,10 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         };
         self.arena.live_epochs.store(live_epoch, Ordering::Relaxed);
         RxDmaArenaState::Live.store(self.arena.lifecycle());
+        // A new epoch holds nothing of the last: a pause waited for its
+        // leases, and a view of R ended with the borrow of the ring it came
+        // from, which `try_stop` consumed.
+        self.arena.show_reserved_returned();
         Ok(RxRingLive {
             descriptors: self.descriptors,
             table: self.table,
@@ -1102,7 +1214,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             descriptor_table: self.descriptor_table,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
-            observed_mask: RxObservedMask::default(),
+            observed_mask: TakenMask::empty(self.arena),
             recycle_start: self.initial_start,
             accepted_tail: self.accepted_tail,
             pending_tail_plus_one: 0,
@@ -1246,6 +1358,9 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
     /// is a late landing. It is counted and fails closed: the arena needs a
     /// radio reset.
     pub(crate) fn observe_reserved_owned<M: RxDma>(self, mmio: &mut M) -> Result<(), RxRingError> {
+        // A view of R's frame borrows the ring shared; this exclusive loan
+        // proves none is alive.
+        self.ring.arena.show_reserved_returned();
         let reserved = self.ring.table.reserved();
         let word0 = reserved.word0();
         if !self.ring.reserved_left() {
@@ -1294,6 +1409,8 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
     /// interval only if the epoch started at R and no R terminal preceded it.
     /// Buffer writes, including stale rejected writes, do not establish this.
     fn leave_reserved(&mut self) -> Result<bool, RxRingError> {
+        // As in `observe_reserved_owned`: no view of R's frame is alive.
+        self.ring.arena.show_reserved_returned();
         let reserved = self.ring.table.reserved();
         let word0 = reserved.word0();
         let landed = word0.rx_done();
@@ -1320,7 +1437,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         index: usize,
     ) -> Result<WifiRxDmaDescriptorControl, RxRingError> {
         let descriptor = self.descriptors.get(index).ok_or(RxRingError::Count)?;
-        if !self.observed_mask.contains(index) {
+        if !self.observed_mask.get().contains(index) {
             return Err(RxRingError::Corrupt);
         }
         let word0 = descriptor.word0();
@@ -1358,7 +1475,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         next_low != 0
             && descriptor_index::<COUNT>(next_low, self.descriptor_table.base()).is_some_and(
                 |index| {
-                    self.observed_mask.contains(index.get())
+                    self.observed_mask.get().contains(index.get())
                         && self
                             .descriptors
                             .get(index.get())
@@ -1442,7 +1559,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let mut completed = 0;
         while observed + completed < COUNT {
             let index = start_index.advance(completed);
-            if self.observed_mask.contains(index.get()) || !self.rx_done(index) {
+            if self.observed_mask.get().contains(index.get()) || !self.rx_done(index) {
                 break;
             }
             completed += 1;
@@ -1461,7 +1578,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let mut completed = 0;
         while completed < COUNT {
             let index = self.recycle_start.advance(completed);
-            if self.observed_mask.contains(index.get()) || !self.rx_done(index) {
+            if self.observed_mask.get().contains(index.get()) || !self.rx_done(index) {
                 break;
             }
             completed += 1;
@@ -1592,7 +1709,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             let mut completed = 0;
             while completed < descriptor_limit {
                 let index = first_index.advance(completed);
-                if self.observed_mask.contains(index.get()) || !self.rx_done(index) {
+                if self.observed_mask.get().contains(index.get()) || !self.rx_done(index) {
                     break;
                 }
                 completed += 1;
@@ -1607,7 +1724,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         // chain; a following unit belongs to the next finite service epoch.
         for step in 1..descriptor_limit.min(64) {
             let index = first_index.advance(step);
-            if self.observed_mask.contains(index.get()) {
+            if self.observed_mask.get().contains(index.get()) {
                 break;
             }
             if self.rx_done(index) {
@@ -1648,7 +1765,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         // one unit when the first descriptor is non-terminal.
         for step in 1..descriptor_limit.min(64) {
             let index = first_index.advance(step);
-            if self.observed_mask.contains(index.get()) {
+            if self.observed_mask.get().contains(index.get()) {
                 break;
             }
             if self.rx_done(index) {
@@ -1705,7 +1822,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return Ok(None);
         }
         let first_index = self.recycle_start.advance(observed);
-        if self.observed_mask.contains(first_index.get()) {
+        if self.observed_mask.get().contains(first_index.get()) {
             return Ok(None);
         }
         let first_word0 = self.validate_descriptor_image(first_index)?;
@@ -1713,7 +1830,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         if first_word0.rx_done() {
             let descriptor_address =
                 descriptor_address(self.descriptor_table.base(), first_index.get())?;
-            self.observed_mask.insert(first_index.get());
+            self.observed_mask.insert(self.arena, first_index.get());
             return Ok(Some(RxCompletedUnit {
                 head_index: first_index.get(),
                 descriptor_count: 1,
@@ -1727,7 +1844,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let mut total_length = first_length as usize;
         for step in 1..descriptor_limit.min(64) {
             let index = first_index.advance(step);
-            if self.observed_mask.contains(index.get()) {
+            if self.observed_mask.get().contains(index.get()) {
                 return Ok(None);
             }
             let word0 = match self.validate_descriptor_image(index) {
@@ -1754,7 +1871,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             let descriptor_address =
                 descriptor_address(self.descriptor_table.base(), first_index.get())?;
             self.observed_mask
-                .insert_group::<COUNT>(first_index, descriptor_count);
+                .insert_group::<COUNT>(self.arena, first_index, descriptor_count);
             return Ok(Some(RxCompletedUnit {
                 head_index: first_index.get(),
                 descriptor_count,
@@ -1784,7 +1901,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         if index >= COUNT {
             return None;
         }
-        if self.ring.observed_mask.contains(index) {
+        if self.ring.observed_mask.get().contains(index) {
             return None;
         }
         let descriptor = self.ring.descriptors.get(index)?;
@@ -1798,7 +1915,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
             self.ring.require_reset();
             return None;
         }
-        self.ring.observed_mask.insert(index);
+        self.ring.observed_mask.insert(self.ring.arena, index);
         Some(RxCompletedDescriptor {
             index,
             descriptor_address,
@@ -1925,7 +2042,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         let mut completed = 0;
         while completed < MAX_BATCH {
             let index = self.ring.recycle_start.advance(completed);
-            if !self.ring.observed_mask.contains(index.get()) || !self.ring.rx_done(index) {
+            if !self.ring.observed_mask.get().contains(index.get()) || !self.ring.rx_done(index) {
                 break;
             }
             completed += 1;
@@ -2017,6 +2134,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         debug_assert!(
             self.ring
                 .observed_mask
+                .get()
                 .contains_group::<COUNT>(self.ring.recycle_start, descriptor_count)
         );
         self.recycle_completed_group(
@@ -2052,6 +2170,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         if !self
             .ring
             .observed_mask
+            .get()
             .contains_group::<COUNT>(self.ring.recycle_start, requested_group_size)
         {
             return Ok(None);
@@ -2207,9 +2326,11 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         self.ring.cursor_generation = self.ring.cursor_generation.wrapping_add(1);
         self.ring.pending_tail_plus_one = tail_index.get() + 1;
         self.ring.reload_rerung = false;
-        self.ring
-            .observed_mask
-            .remove_group::<COUNT>(self.ring.recycle_start, group_size);
+        self.ring.observed_mask.remove_group::<COUNT>(
+            self.ring.arena,
+            self.ring.recycle_start,
+            group_size,
+        );
         self.ring.recycle_start = self.ring.recycle_start.advance(group_size);
         Ok(Some(RxLiveAppend {
             head_index,
@@ -2222,7 +2343,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
 
 impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     pub const fn observed_mask(&self) -> RxObservedMask {
-        self.observed_mask
+        self.observed_mask.get()
     }
 
     /// Place the ring's descriptor generation.
@@ -2232,12 +2353,12 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }
 
     pub(crate) fn observed_prefix_len(&self) -> usize {
-        observed_prefix_len::<COUNT>(self.observed_mask, self.recycle_start)
+        observed_prefix_len::<COUNT>(self.observed_mask.get(), self.recycle_start)
     }
 
     /// Whether every descriptor in this ring epoch has returned to software.
     pub const fn all_observed(&self) -> bool {
-        self.observed_mask.count_ones() as usize == COUNT
+        self.observed_mask.get().count_ones() as usize == COUNT
     }
 
     pub const fn recycle_start(&self) -> RingIndex<COUNT> {
@@ -2319,7 +2440,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// later RX-success IRQ is guaranteed. Callers use the result only to keep
     /// a cooperative ownership probe alive; it never authorizes rearm.
     pub fn exhausted_terminal_writeback_pending<M: RxDma>(&mut self, mmio: &mut M) -> bool {
-        if self.observed_mask.contains(self.accepted_tail.get()) {
+        if self.observed_mask.get().contains(self.accepted_tail.get()) {
             return false;
         }
         mmio.with_ordered_cursor(|cursor| {

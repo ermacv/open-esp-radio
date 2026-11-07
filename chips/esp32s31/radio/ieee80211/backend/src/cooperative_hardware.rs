@@ -7,8 +7,57 @@
 //! SOURCE: complete `libpp[wdev.o]::wDev_ProcessFiq` handles RX-success
 //! bit `0x4000` before TX-complete bit `0x80`.
 
-use crate::station_tsf::{StationTsfHardware, StationTsfWrite};
-use oer_chips_esp32s31_hal::system::owner::RadioAccess;
+use crate::{
+    mac::{
+        init::{MacRuntimeStartHardware, MacRuntimeStopHardware, MacSnifferHardware},
+        rx::{RxBufferFullCounter, RxDma},
+    },
+    station_tsf::{StationTsfHardware, StationTsfWrite},
+};
+use oer_chips_esp32s31_hal::{
+    radio::ieee80211::{dma::rx_dma::WifiRxDmaEngine, mac::WifiMacHal},
+    system::owner::RadioAccess,
+};
+
+/// The receive session's two views of the one register owner: the MAC, and
+/// the MAC beside the RX walker. Each view borrows the owner for its call.
+/// The chip's owner is [`RadioAccess`].
+pub trait ReceiveRegisters {
+    /// The MAC, as one transaction borrows it.
+    type Mac<'a>: MacRuntimeStartHardware
+        + MacRuntimeStopHardware
+        + MacSnifferHardware
+        + RxBufferFullCounter
+    where
+        Self: 'a;
+    /// The RX descriptor walker.
+    type RxDma: RxDma;
+    fn mac(&mut self) -> Self::Mac<'_>;
+    fn split_rx_dma(&mut self) -> (Self::Mac<'_>, &mut Self::RxDma);
+    /// The low word of the MAC's local clock.
+    fn mac_local_time(&mut self) -> u32;
+    /// Sample the MAC's statistics for a trace build's counters.
+    #[cfg(oer_trace)]
+    fn sample_mac_counts(&mut self, now_us: u32);
+}
+
+impl ReceiveRegisters for RadioAccess {
+    type Mac<'a> = WifiMacHal<'a>;
+    type RxDma = WifiRxDmaEngine;
+    fn mac(&mut self) -> WifiMacHal<'_> {
+        self.wifi_mac_hal()
+    }
+    fn split_rx_dma(&mut self) -> (WifiMacHal<'_>, &mut WifiRxDmaEngine) {
+        RadioAccess::split_rx_dma(self)
+    }
+    fn mac_local_time(&mut self) -> u32 {
+        self.wifi_mac_hal().mac_local_time()
+    }
+    #[cfg(oer_trace)]
+    fn sample_mac_counts(&mut self, now_us: u32) {
+        crate::rx::counters::mac::MAC_COUNTS.sample(&self.wifi_mac_hal(), now_us);
+    }
+}
 
 impl StationTsfHardware for RadioAccess {
     fn station_tsf(&mut self) -> u64 {

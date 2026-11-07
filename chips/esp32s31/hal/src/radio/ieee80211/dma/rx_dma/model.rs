@@ -182,6 +182,20 @@ impl RxWalkerModel {
         self.overflowed = false;
     }
 
+    /// The descriptor [`Self::land`] writes next: enabled, on NEXT, its
+    /// owner bit set. `None` when a landing writes nothing.
+    pub(crate) fn armed_next<'storage>(
+        &self,
+        table: RxWalkerTable<'storage>,
+    ) -> Option<&'storage crate::radio::ieee80211::dma::descriptor::RxDescriptor> {
+        if !self.walker_enabled || self.next_descriptor_low == 0 || self.stopped_on_owner {
+            return None;
+        }
+        table
+            .descriptor_at_low(self.next_descriptor_low)
+            .filter(|descriptor| descriptor.word0().owner())
+    }
+
     /// Play the DMA engine: write one frame of `length` bytes where NEXT
     /// points (`terminal`: its last segment, which sets `RX_DONE` and moves
     /// LAST there) and follow that descriptor's link.
