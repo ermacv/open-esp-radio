@@ -25,14 +25,14 @@
 
 //! A sans-IO network core with one owner (see the crate's README).
 //!
-//! A core's values carry its [`Brand`], a type, so another network's handle
+//! A core's values carry its brand, a type, so another network's handle
 //! does not compile here:
 //!
 //! ```compile_fail,E0308
-//! # use oer_protocols_network_core::{Core, Interface, Pool, brand, claim};
+//! # use oer_protocols_network_core::{Core, Interface, claim};
 //! # use oer_protocols_network_wire::ip::Dscp;
-//! brand!(First);
-//! brand!(Second);
+//! struct First;
+//! struct Second;
 //! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1], interface: Interface) {
 //! let (_, brand) = claim::<First, 64, 1>(a).unwrap();
 //! let mut first: Core<'_, First, 64, 1, 1, 1, 1> = Core::new(brand, interface);
@@ -46,9 +46,9 @@
 //! Nor does another network's block:
 //!
 //! ```compile_fail,E0308
-//! # use oer_protocols_network_core::{brand, claim};
-//! brand!(First);
-//! brand!(Second);
+//! # use oer_protocols_network_core::claim;
+//! struct First;
+//! struct Second;
 //! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
 //! let (mut first, _) = claim::<First, 64, 1>(a).unwrap();
 //! let (mut second, _) = claim::<Second, 64, 1>(b).unwrap();
@@ -57,12 +57,26 @@
 //! # }
 //! ```
 //!
+//! Nor does a block of a brand that is a subtype of another's:
+//!
+//! ```compile_fail,E0308
+//! # use oer_protocols_network_core::claim;
+//! type Wider = for<'a> fn(&'a ());
+//! type Narrower = fn(&'static ());
+//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
+//! let (mut wider, _) = claim::<Wider, 64, 1>(a).unwrap();
+//! let (mut narrower, _) = claim::<Narrower, 64, 1>(b).unwrap();
+//! let block = wider.take().unwrap();
+//! narrower.give(block);
+//! # }
+//! ```
+//!
 //! The same code within one brand compiles:
 //!
 //! ```
-//! # use oer_protocols_network_core::{Core, Interface, brand, claim};
+//! # use oer_protocols_network_core::{Core, Interface, claim};
 //! # use oer_protocols_network_wire::ip::Dscp;
-//! brand!(Net);
+//! struct Net;
 //! # fn f(a: &mut [[u8; 64]; 1], interface: Interface) {
 //! let (mut pool, brand) = claim::<Net, 64, 1>(a).unwrap();
 //! let mut core: Core<'_, Net, 64, 1, 1, 1, 1> = Core::new(brand, interface);
@@ -76,9 +90,9 @@
 //! A brand is a type, so tasks and their queues can name a block:
 //!
 //! ```
-//! # use oer_protocols_network_core::{Block, brand, claim};
+//! # use oer_protocols_network_core::{Block, claim};
 //! # use std::sync::Mutex;
-//! brand!(Net);
+//! struct Net;
 //! type Lane = Mutex<Option<Block<'static, Net, 64>>>;
 //! static TO_NETWORK: Lane = Mutex::new(None);
 //! static BACK: Lane = Mutex::new(None);
@@ -119,7 +133,9 @@ mod machine;
 mod neighbor;
 mod owner;
 
-pub use block::{Block, BlockTooShort, Brand, Claimed, CoreBrand, Pool, claim};
+pub use block::{
+    Block, BlockTooShort, BrandRefusal, ClaimRefused, Claimed, CoreBrand, Pool, claim,
+};
 pub use interface::{Interface, InterfaceError};
 pub use machine::{
     Class, CommandId, CommandState, Core, Datagram, Demand, Grant, NetEvent, OpenRefused, Outcome,

@@ -1,33 +1,70 @@
 //! Blocks of stack memory, moved by value, and the brand of one core.
 
+use core::any::TypeId;
+use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
+use core::sync::atomic::{AtomicU32, Ordering};
 
-/// Who a value belongs to: a type no other network shares.
-pub(crate) type Tag<B> = PhantomData<fn() -> B>;
+/// Who a value belongs to: a type no other network shares. Invariant, so no
+/// subtyping between two brand types carries a value from one to the other.
+pub(crate) type Tag<B> = PhantomData<fn(B) -> B>;
 
-/// A network's identity, a type the [`brand!`](crate::brand) macro makes. A
-/// type, not a lifetime: a block or a handle crosses `'static` tasks and
-/// queues, which can name it, and another network's value does not compile.
-pub trait Brand: Sized + 'static {
-    /// Take this brand's one claim; whether it was still free.
-    fn claim_once() -> bool;
+/// How many brands one image can claim.
+const BRANDS: usize = 64;
+
+/// The brands claimed, by mark. This crate holds it, so nothing outside can
+/// make a brand claim twice. An entry is never removed.
+static CLAIMED: [AtomicU32; BRANDS] = [const { AtomicU32::new(0) }; BRANDS];
+
+/// FNV-1a over 32 bits, for a type's mark.
+struct MarkHasher(u32);
+
+impl Hasher for MarkHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = (self.0 ^ u32::from(*byte)).wrapping_mul(0x0100_0193);
+        }
+    }
+
+    fn finish(&self) -> u64 {
+        u64::from(self.0)
+    }
 }
 
-/// Make the brand type `$name`, whose claim holds once per image.
-#[macro_export]
-macro_rules! brand {
-    ($visibility:vis $name:ident) => {
-        #[derive(Debug, Eq, PartialEq)]
-        $visibility struct $name;
+/// The mark of type `B`, never the empty entry's zero.
+fn mark_of<B: 'static>() -> u32 {
+    let mut hasher = MarkHasher(0x811c_9dc5);
+    TypeId::of::<B>().hash(&mut hasher);
+    hasher.0.max(1)
+}
 
-        impl $crate::Brand for $name {
-            fn claim_once() -> bool {
-                static CLAIMED: core::sync::atomic::AtomicBool =
-                    core::sync::atomic::AtomicBool::new(false);
-                !CLAIMED.swap(true, core::sync::atomic::Ordering::AcqRel)
-            }
+/// Why a brand was not claimed; both are final.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BrandRefusal {
+    /// This brand was claimed before.
+    Claimed,
+    /// The image holds as many brands as it can.
+    NoPlace,
+}
+
+/// A claim refused, with the memory back.
+#[derive(Debug)]
+pub struct ClaimRefused<'m, const SIZE: usize, const BLOCKS: usize> {
+    pub reason: BrandRefusal,
+    pub storage: &'m mut [[u8; SIZE]; BLOCKS],
+}
+
+/// Enter `mark`. All claims scan in one order and an entry stays, so a mark
+/// entered is met before any empty entry.
+fn enter(table: &[AtomicU32], mark: u32) -> Result<(), BrandRefusal> {
+    for entry in table {
+        match entry.compare_exchange(0, mark, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => return Ok(()),
+            Err(found) if found == mark => return Err(BrandRefusal::Claimed),
+            Err(_) => {}
         }
-    };
+    }
+    Err(BrandRefusal::NoPlace)
 }
 
 /// The right to make a core of brand `B`: one at a time, as a core retired
@@ -43,15 +80,19 @@ pub struct CoreBrand<B> {
 pub type Claimed<'m, B, const SIZE: usize, const BLOCKS: usize> =
     (Pool<'m, B, SIZE, BLOCKS>, CoreBrand<B>);
 
-/// Give `storage` to brand `B`.
+/// Give `storage` to brand `B`, any type: a type is a network's identity, and
+/// a type rather than a lifetime, so `'static` tasks and queues can name its
+/// blocks. This crate lets each type claim once, and only `claim` and a retired
+/// core make a [`CoreBrand`], so one brand has one pool and one core at a time.
 ///
 /// # Errors
-/// `B` was claimed before; a final refusal, with `storage` back.
-pub fn claim<'m, B: Brand, const SIZE: usize, const BLOCKS: usize>(
+/// [`ClaimRefused`], final. Marks are 32 bits, so two types could share one:
+/// the later one is then refused, and the two never mix.
+pub fn claim<'m, B: 'static, const SIZE: usize, const BLOCKS: usize>(
     storage: &'m mut [[u8; SIZE]; BLOCKS],
-) -> Result<Claimed<'m, B, SIZE, BLOCKS>, &'m mut [[u8; SIZE]; BLOCKS]> {
-    if !B::claim_once() {
-        return Err(storage);
+) -> Result<Claimed<'m, B, SIZE, BLOCKS>, ClaimRefused<'m, SIZE, BLOCKS>> {
+    if let Err(reason) = enter(&CLAIMED, mark_of::<B>()) {
+        return Err(ClaimRefused { reason, storage });
     }
     Ok((
         Pool::new(storage),
@@ -140,7 +181,7 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
 
     /// Take a block back.
     pub fn give(&mut self, block: Block<'m, B, SIZE>) {
-        // This pool made the block, so the others out leave it room.
+        // A brand has one pool, which made this block and has its place.
         let _fits = self.free.push(block);
     }
 
@@ -153,5 +194,40 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
     /// which an application returns by [`Self::give`] whenever it does.
     pub fn outstanding(&self) -> usize {
         BLOCKS.saturating_sub(self.free.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::sync::atomic::AtomicU32;
+
+    use super::{BrandRefusal, enter, mark_of};
+
+    const MARKS: [u32; 2] = [7, 9];
+
+    #[test]
+    fn a_mark_enters_once() {
+        let table = [const { AtomicU32::new(0) }; 2];
+        assert_eq!(enter(&table, MARKS[0]), Ok(()));
+        assert_eq!(enter(&table, MARKS[1]), Ok(()));
+        assert_eq!(enter(&table, MARKS[0]), Err(BrandRefusal::Claimed));
+        assert_eq!(enter(&table, MARKS[1]), Err(BrandRefusal::Claimed));
+    }
+
+    #[test]
+    fn a_full_table_refuses_a_new_mark_and_still_knows_its_own() {
+        let table = [const { AtomicU32::new(0) }; 1];
+        assert_eq!(enter(&table, MARKS[0]), Ok(()));
+        assert_eq!(enter(&table, MARKS[1]), Err(BrandRefusal::NoPlace));
+        assert_eq!(enter(&table, MARKS[0]), Err(BrandRefusal::Claimed));
+    }
+
+    #[test]
+    fn two_types_have_two_marks_and_a_type_keeps_its_own() {
+        struct First;
+        struct Second;
+        assert_ne!(mark_of::<First>(), mark_of::<Second>());
+        assert_eq!(mark_of::<First>(), mark_of::<First>());
+        assert_ne!(mark_of::<First>(), 0);
     }
 }
