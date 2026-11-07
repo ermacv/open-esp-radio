@@ -10,6 +10,7 @@
     clippy::indexing_slicing
 )]
 //! ESP32-S31 station composition. Installation owners stay in its runners.
+pub mod coex;
 mod credentials;
 pub mod failure;
 pub mod observation;

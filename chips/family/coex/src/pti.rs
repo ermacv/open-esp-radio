@@ -6,9 +6,6 @@
 //! protocol programs its own MAC priority fields from the values read here.
 //! A priority is a request to the hardware arbiter, never a grant.
 
-use crate::operation::ieee802154_event;
-use oer_protocols_ieee802154_port::RadioOperation;
-
 /// Number of coexistence events, event zero included.
 pub const COEX_EVENT_COUNT: usize = 49;
 
@@ -136,7 +133,9 @@ event_indices! {
     Event48 = 48,
 }
 
-pub(crate) mod ieee802154_events {
+/// The table events whose priority IEEE 802.15.4 reads
+/// (`coex_ieee802154_pti_get`).
+pub mod ieee802154_events {
     use super::{CoexEventId, EventIndex};
 
     pub const IDLE: CoexEventId = CoexEventId(EventIndex::Event44);
@@ -206,12 +205,6 @@ impl CoexPtiTable {
 
     pub fn set(&mut self, event: CoexEventId, pti: CoexPti) {
         *event.entry_mut(&mut self.0) = pti.value();
-    }
-
-    /// The priority of an IEEE 802.15.4 operation, from the event its row
-    /// names ([`ieee802154_event`]).
-    pub const fn ieee802154_pti(&self, operation: RadioOperation) -> CoexPti {
-        self.pti(ieee802154_event(operation))
     }
 
     pub const fn as_bytes(&self) -> &[u8; COEX_EVENT_COUNT] {

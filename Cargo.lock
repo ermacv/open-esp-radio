@@ -1740,8 +1740,6 @@ dependencies = [
 name = "oer-chips-family-coex"
 version = "0.1.0"
 dependencies = [
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee802154-port",
  "oer-protocols-radio-coex",
 ]
 
