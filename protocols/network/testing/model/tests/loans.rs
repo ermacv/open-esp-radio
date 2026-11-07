@@ -6,7 +6,7 @@
 //! Each scenario has a control without credits, where the same load has to go
 //! wrong: a model that cannot fail proves nothing.
 
-use oer_protocols_network_core::{Loan, Loans, NotLent};
+use oer_protocols_network_core::{Core, Interface, Loan, Loans, NotLent, claim};
 
 const SLOW: usize = 0;
 const FAST: usize = 1;
@@ -42,30 +42,52 @@ struct Counts {
     highest_slow: usize,
 }
 
-struct Radio {
+/// The brand of this file's networks: the accounting belongs to a core.
+macro_rules! network {
+    ($policy:expr) => {{
+        struct Net;
+        Radio::new(core_of::<Net>(), $policy)
+    }};
+}
+
+type TestCore<B> = Core<'static, B, 64, 2, 1, 1, 1>;
+
+fn core_of<B: 'static>() -> &'static mut TestCore<B> {
+    let memory = Box::leak(Box::new([[0; 64]; 1]));
+    let (_, brand) = claim::<B, 64, 1>(memory).unwrap();
+    let interface = Interface::new([2; 6], [192, 0, 2, 1], 24, None, 1500).unwrap();
+    Box::leak(Box::new(Core::new(brand, interface)))
+}
+
+struct Radio<B: 'static> {
     free: usize,
     ring: Vec<Traffic>,
-    loans: Loans<2>,
-    held_slow: Vec<Option<Loan>>,
-    held_fast: Vec<Option<Loan>>,
+    core: &'static mut TestCore<B>,
+    held_slow: Vec<Option<Loan<B>>>,
+    held_fast: Vec<Option<Loan<B>>>,
     policy: Policy,
     counts: Counts,
 }
 
-impl Radio {
-    fn new(policy: Policy) -> Self {
-        let mut loans = Loans::new(BUFFERS, RESERVE).unwrap();
+impl<B: 'static> Radio<B> {
+    fn new(core: &'static mut TestCore<B>, policy: Policy) -> Self {
+        let loans = core.loans();
+        loans.pool(BUFFERS, RESERVE).unwrap();
         loans.grant(SLOW, CREDIT).unwrap();
         loans.grant(FAST, CREDIT).unwrap();
         Self {
             free: BUFFERS,
             ring: Vec::new(),
-            loans,
+            core,
             held_slow: Vec::new(),
             held_fast: Vec::new(),
             policy,
             counts: Counts::default(),
         }
+    }
+
+    fn loans(&mut self) -> &mut Loans<B, 2> {
+        self.core.loans()
     }
 
     fn arrive(&mut self, traffic: Traffic) {
@@ -93,7 +115,7 @@ impl Radio {
 
     fn deliver(&mut self, socket: usize) {
         let lent = match self.policy {
-            Policy::Credits => self.loans.lend(socket).map(Some),
+            Policy::Credits => self.loans().lend(socket).map(Some),
             Policy::NoLimit => Ok(None),
         };
         match lent {
@@ -113,10 +135,10 @@ impl Radio {
     }
 
     fn fast_reads_all(&mut self) {
-        for loan in self.held_fast.drain(..) {
+        while !self.held_fast.is_empty() {
             self.free += 1;
-            if let Some(loan) = loan {
-                self.loans.give_back(loan);
+            if let Some(loan) = self.held_fast.remove(0) {
+                self.loans().give_back(loan);
             }
         }
     }
@@ -125,7 +147,7 @@ impl Radio {
         if !self.held_slow.is_empty() {
             self.free += 1;
             if let Some(loan) = self.held_slow.remove(0) {
-                self.loans.give_back(loan);
+                self.loans().give_back(loan);
             }
         }
     }
@@ -135,7 +157,7 @@ impl Radio {
 /// that reads one frame in `slow_every` steps, or never at zero. The burst
 /// starts one frame later each step, or a fixed order would decide who finds
 /// the pool empty.
-fn run(policy: Policy, slow_every: usize, budget: usize) -> Radio {
+fn run<B: 'static>(mut radio: Radio<B>, slow_every: usize, budget: usize) -> Radio<B> {
     let burst = [
         Traffic::Socket(SLOW),
         Traffic::Socket(FAST),
@@ -143,7 +165,6 @@ fn run(policy: Policy, slow_every: usize, budget: usize) -> Radio {
         Traffic::Socket(SLOW),
         Traffic::Socket(FAST),
     ];
-    let mut radio = Radio::new(policy);
     for step in 1..=2000 {
         for at in 0..burst.len() {
             radio.arrive(burst[(step + at) % burst.len()]);
@@ -159,7 +180,7 @@ fn run(policy: Policy, slow_every: usize, budget: usize) -> Radio {
 
 #[test]
 fn a_consumer_that_never_reads_costs_others_no_buffer() {
-    let radio = run(Policy::Credits, 0, 8);
+    let radio = run(network!(Policy::Credits), 0, 8);
     assert_eq!(radio.counts.lost_fast, 0);
     assert_eq!(radio.counts.lost_control, 0);
     assert_eq!(radio.counts.dropped_fast, 0);
@@ -173,7 +194,7 @@ fn a_consumer_that_never_reads_costs_others_no_buffer() {
 
 #[test]
 fn a_slow_reader_costs_others_no_buffer_either() {
-    let radio = run(Policy::Credits, 10, 8);
+    let radio = run(network!(Policy::Credits), 10, 8);
     assert_eq!(radio.counts.lost_fast, 0);
     assert_eq!(radio.counts.lost_control, 0);
     assert_eq!(radio.counts.dropped_fast, 0);
@@ -182,7 +203,7 @@ fn a_slow_reader_costs_others_no_buffer_either() {
 
 #[test]
 fn with_no_credit_the_same_consumer_takes_everyones_buffers() {
-    let radio = run(Policy::NoLimit, 0, 8);
+    let radio = run(network!(Policy::NoLimit), 0, 8);
     assert!(radio.counts.lost_fast > 0);
     assert!(radio.counts.lost_control > 0);
     assert_eq!(radio.free, 0);
@@ -192,14 +213,13 @@ fn with_no_credit_the_same_consumer_takes_everyones_buffers() {
 /// frames of every class with all consumers fast, and this names that limit.
 #[test]
 fn a_credit_does_not_bound_the_work() {
-    let radio = run(Policy::Credits, 1, 4);
+    let radio = run(network!(Policy::Credits), 1, 4);
     assert!(radio.counts.lost_control > 0);
     assert!(radio.counts.lost_fast > 0);
 }
 
 /// One frame in the slow socket's hands, for ever.
-fn holding() -> Radio {
-    let mut radio = Radio::new(Policy::Credits);
+fn holding<B: 'static>(mut radio: Radio<B>) -> Radio<B> {
     radio.arrive(Traffic::Socket(SLOW));
     radio.turn(1);
     assert_eq!(radio.held_slow.len(), 1);
@@ -208,36 +228,39 @@ fn holding() -> Radio {
 
 #[test]
 fn a_stop_is_not_held_up_by_a_buffer_held_for_ever() {
-    let mut radio = holding();
-    radio.loans.stop();
-    assert_eq!(radio.loans.lend(FAST), Err(NotLent::Stopping));
-    assert_eq!(radio.loans.outstanding(), 1, "the stop itself is done");
-    assert!(!radio.loans.released(), "and the pool is not free to reuse");
+    let mut radio = holding(network!(Policy::Credits));
+    radio.loans().stop();
+    assert_eq!(radio.loans().lend(FAST).err(), Some(NotLent::Stopping));
+    assert_eq!(radio.loans().outstanding(), 1, "the stop itself is done");
+    assert!(
+        !radio.loans().released(),
+        "and the pool is not free to reuse"
+    );
 }
 
 #[test]
 fn a_held_buffer_stays_its_holders_and_frees_the_pool_when_it_returns() {
-    let mut radio = holding();
+    let mut radio = holding(network!(Policy::Credits));
     let before = radio.free;
-    radio.loans.stop();
+    radio.loans().stop();
     for _ in 0..1000 {
-        assert!(!radio.loans.released(), "no expiry frees it");
+        assert!(!radio.loans().released(), "no expiry frees it");
         assert_eq!(radio.free, before);
     }
     radio.slow_reads_one();
-    assert!(radio.loans.released());
+    assert!(radio.loans().released());
     assert_eq!(radio.free, BUFFERS);
 }
 
 #[test]
 fn a_new_installation_counts_what_the_old_one_still_holds() {
-    let mut radio = holding();
-    radio.loans.stop();
-    radio.loans.reinstall();
+    let mut radio = holding(network!(Policy::Credits));
+    radio.loans().stop();
+    radio.loans().reinstall();
     let room = BUFFERS - RESERVE - 1;
-    assert!(radio.loans.grant(FAST, room + 1).is_err());
-    radio.loans.grant(FAST, room).unwrap();
+    assert!(radio.loans().grant(FAST, room + 1).is_err());
+    radio.loans().grant(FAST, room).unwrap();
     radio.slow_reads_one();
-    assert!(radio.loans.outstanding() == 0);
-    radio.loans.grant(FAST, room + 1).unwrap();
+    assert_eq!(radio.loans().outstanding(), 0);
+    radio.loans().grant(FAST, room + 1).unwrap();
 }
