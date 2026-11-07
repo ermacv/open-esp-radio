@@ -3034,8 +3034,7 @@ fn reserved_snapshot<const COUNT: usize>(
 /// The vendor cold path keeps these operations separate:
 /// `wDev_AppendRxBlocks` publishes the first descriptor base, while the later
 /// `chip_enable` path calls `hal_mac_rx_enable`. Keeping this as a distinct
-/// operation preserves that ordering and gives the base register time to
-/// settle while the caller completes channel/MAC setup.
+/// operation preserves that ordering.
 fn enable_receive_inner<M: RxDma>(
     mmio: &mut M,
     binding: &RxDmaBinding<'_>,

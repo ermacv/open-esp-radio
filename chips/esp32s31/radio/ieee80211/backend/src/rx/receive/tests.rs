@@ -27,7 +27,9 @@ use crate::mac::{
 };
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::{
     descriptor::{DESCRIPTOR_BYTES, rx_landed_word},
-    rx_dma::model::{RxWalkerJournal, RxWalkerModel, RxWalkerOperation, SharedRxWalker},
+    rx_dma::model::{
+        RxWalkerJournal, RxWalkerModel, RxWalkerOperation, RxWalkerStart, SharedRxWalker,
+    },
     rx_ring::RxDmaArenaState,
     rx_storage::RxDmaStorage,
     space::HostDma,
@@ -573,10 +575,25 @@ fn cold_start_needs_no_wait_and_opens_the_mac_on_a_live_walker() {
 }
 
 #[test]
-fn cold_start_never_opens_mac_when_walker_enable_is_unconfirmed() {
+fn cold_start_never_opens_mac_when_walker_enable_is_refused() {
     let mut harness = harness();
-    // The enable does not take, so no live-ring proof is returned.
-    harness.host.walker.borrow_mut().refuse_start = true;
+    // Before the first poll, which now carries the whole start: the enable
+    // does not take and the walker reads stopped, so the ring comes back
+    // honestly stopped, without a live-ring proof.
+    harness.host.walker.borrow_mut().start = RxWalkerStart::Refused;
+    harness.settle();
+    assert!(!harness.host.mac_started.get());
+    assert!(!harness.host.walker.borrow().walker_enabled);
+    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::Prepared);
+    assert!(!harness.host.take_log().contains(&Event::RuntimeResume));
+}
+
+#[test]
+fn cold_start_quarantines_and_never_opens_mac_when_the_walker_owns_without_proof() {
+    let mut harness = harness();
+    // Before the first poll: the enable takes but returns no proof, so the
+    // hardware may own the ring.
+    harness.host.walker.borrow_mut().start = RxWalkerStart::Unconfirmed;
     harness.settle();
     assert!(!harness.host.mac_started.get());
     assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
