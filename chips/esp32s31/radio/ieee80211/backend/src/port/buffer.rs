@@ -147,6 +147,10 @@ pub struct Mpdu<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observat
     pub(super) pn: Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber>,
     pub(super) role: VifRole,
     pub(super) published: bool,
+    /// Whether its next publication carries the Retry bit: once decided by
+    /// [`sets_retry_bit`](crate::ordinary_tx::sets_retry_bit), for the rest
+    /// of the MPDU's life, across every `Sent` and retransmission.
+    pub(super) retry: bool,
 }
 /// A view cannot move, replace or renew the admitted MPDU.
 pub struct MpduExecution<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
@@ -297,6 +301,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         pn,
                         role: R::ROLE,
                         published: false,
+                        retry: false,
                     },
                     plan,
                     loan,

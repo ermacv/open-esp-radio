@@ -937,7 +937,8 @@ pub enum TxSource<B, N, F, O, Key, Plan> {
         /// The role's TX protection; the encoded Protected bit is derived from it.
         protection: TxProtection<NumberedKey<Key>>,
     },
-    /// The same published MPDU again: keep its SN and PN, set Retry.
+    /// The same published MPDU again: keep its SN and PN; it carries Retry
+    /// once an earlier transmission may have reached a receiver.
     Retransmission {
         /// The returned MPDU owns its description, payload and body.
         mpdu: N,
@@ -1008,7 +1009,8 @@ pub trait TxBufferPool<'id, C: TxBufferClass>: PortTypes<'id> {
     /// header, payload, checked description and external body. A protected
     /// MPDU also retains its PN and original key-install identity.
     /// A withdrawal returns Fresh only if never published; otherwise Sent.
-    /// Retransmission preserves SN, PN and payload and sets Retry.
+    /// Retransmission preserves SN, PN and payload; it carries Retry once an
+    /// earlier transmission may have reached a receiver.
     /// Only renewal releases the old MPDU for a different frame.
     type Sent;
 
@@ -1211,10 +1213,10 @@ pub struct RetryStage<R> {
 /// The retry plan of an individual frame: its stages in order, as the
 /// rate table mac80211 hands its drivers.
 /// The backend transmits the head of its queue by the plan before the next
-/// attempt of that queue, keeps the frame's sequence number and sets the
-/// Retry bit of each retransmission; an exhausted plan ends the attempt
-/// unacknowledged. A backend whose hardware retries carries the plan out
-/// there.
+/// attempt of that queue and keeps the frame's sequence number. A transmission
+/// without an ACK sets the Retry bit, which stays; a CTS timeout or a collision
+/// sets nothing. An exhausted plan ends the attempt unacknowledged. A backend
+/// whose hardware retries carries the plan out there.
 #[derive(Debug)]
 pub struct RetryPlan<R> {
     /// The first stage: a plan always has one.

@@ -41,7 +41,7 @@ use crate::mac::tx::{
     TxPhyRate,
     ampdu::{AmpduIntakeRefused, HtAmpduHardware, HtAmpduTxCompletion, HtAmpduTxError},
 };
-use crate::ordinary_tx::{TX_ABORT_SETTLE, WifiTxEntropy, WifiTxPowerProfile};
+use crate::ordinary_tx::{TX_ABORT_SETTLE, WifiTxEntropy, WifiTxPowerProfile, sets_retry_bit};
 use crate::tx::WifiTxWake;
 use core::{convert::Infallible, marker::PhantomData, num::NonZeroU16};
 use oer_chips_esp32s31_hal::system::memory::dma_static::PlacedBacking;
@@ -120,8 +120,9 @@ struct OnAir<'core, Path: PoolPath> {
 /// A published single MPDU's retry plan, run as the core runs an MPDU's
 /// (`port::driver` `collect`): each completion without an ACK, a
 /// collision or a protection failure takes one try of the current stage,
-/// and the frame goes again at the stage's rate, with its Retry bit, until
-/// an ACK or the plan's end.
+/// and the frame goes again at the stage's rate until an ACK or the plan's
+/// end. A completion without an ACK sets its Retry bit; a collision or a
+/// protection failure leaves the bit as it is ([`sets_retry_bit`]).
 #[derive(Clone, Copy)]
 struct SingleRetry {
     plan: RetryPlan<PhyRate>,
@@ -140,6 +141,8 @@ enum Retried {
     Again {
         rate: PhyRate,
         protection: Protection,
+        /// The retry machine's decision on the completion.
+        set_retry_bit: bool,
     },
     /// The plan ended: the arena's end.
     End(AttemptEnd<BlockAckAnswer, Infallible>),
@@ -168,7 +171,7 @@ impl SingleRetry {
             self.transmissions = self.transmissions.checked_add(1).ok_or(ArenaFault::State)?;
             self.air_rate = Some(rate);
         }
-        match end {
+        let failure = match end {
             AttemptEnd::Acked { response, .. } => {
                 let air = self.air().ok_or(ArenaFault::State)?;
                 return Ok(Retried::End(AttemptEnd::Acked { air, response }));
@@ -177,10 +180,10 @@ impl SingleRetry {
             AttemptEnd::Aborted | AttemptEnd::Answered { .. } | AttemptEnd::AirDenied { .. } => {
                 return Ok(Retried::End(end));
             }
-            AttemptEnd::NoResponse(_)
-            | AttemptEnd::ProtectionFailure(_)
-            | AttemptEnd::Collision(_) => {}
-        }
+            AttemptEnd::NoResponse(_) => TxStatus::AckTimeout,
+            AttemptEnd::ProtectionFailure(_) => TxStatus::CtsTimeout,
+            AttemptEnd::Collision(_) => TxStatus::Collision,
+        };
         self.stage_tries = self.stage_tries.checked_add(1).ok_or(ArenaFault::State)?;
         let current = self
             .plan
@@ -195,6 +198,7 @@ impl SingleRetry {
             return Ok(Retried::Again {
                 rate: next.rate,
                 protection: next.protection,
+                set_retry_bit: sets_retry_bit(failure),
             });
         }
         let air = self.air();
@@ -1046,7 +1050,11 @@ where
         {
             None => end,
             Some(Ok(Retried::End(end))) => end,
-            Some(Ok(Retried::Again { rate, protection })) => {
+            Some(Ok(Retried::Again {
+                rate,
+                protection,
+                set_retry_bit,
+            })) => {
                 let sent = republish_single(
                     chain,
                     &mut *self.core,
@@ -1054,6 +1062,7 @@ where
                     &mut *self.observations,
                     rate,
                     protection,
+                    set_retry_bit,
                     now,
                 );
                 return match sent {
@@ -1161,8 +1170,9 @@ where
 
 /// Send the published single MPDU of `chain` again at `rate` under
 /// `protection`, as the core sends an MPDU again: every frame stays, position
-/// 0 gains its Retry bit, the queue's contention window grows and a new
-/// backoff is drawn; the arena stays on the air with a new watchdog.
+/// 0 gains its Retry bit under `set_retry_bit` and otherwise keeps its header,
+/// the queue's contention window grows and a new backoff is drawn; the arena
+/// stays on the air with a new watchdog.
 #[allow(
     clippy::too_many_arguments,
     reason = "the parts one retransmission borrows"
@@ -1188,6 +1198,7 @@ fn republish_single<
     observations: &mut O,
     rate: PhyRate,
     protection: Protection,
+    set_retry_bit: bool,
     now: Instant,
 ) -> Result<(), ArenaFault>
 where
@@ -1211,7 +1222,7 @@ where
     let mut left = false;
     chain
         .owner
-        .retain_frames(cookie, keep.bits(), 1, |memory| {
+        .retain_frames(cookie, keep.bits(), u64::from(set_retry_bit), |memory| {
             left = true;
             let _quarantined = core::mem::ManuallyDrop::new(memory);
         })?;

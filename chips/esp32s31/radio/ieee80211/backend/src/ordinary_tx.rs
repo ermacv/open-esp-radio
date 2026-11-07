@@ -302,6 +302,31 @@ pub(crate) fn mark_retry(buffer: &mut [u8], frame_length: usize) -> Result<(), O
     Ok(())
 }
 
+/// The retry machine's decision on the Retry bit: whether an MPDU whose
+/// transmission ended in `status` carries the bit from its next publication
+/// on. The bit marks a Data or Management frame that is a retransmission of
+/// an earlier frame (IEEE Std 802.11, the Retry subfield of the Frame Control
+/// field), so it is set once an earlier transmission could have reached the
+/// air, and a status that rules that out leaves the bit as it was:
+///
+/// - an ACK timeout: the frame went out;
+/// - a delivery: it reached a receiver (only a caller that sends the
+///   returned `Sent` again reads this);
+/// - a hardware timeout or a refused key: the end is indeterminate, and no
+///   evidence shows the frame did not reach the air, so it may have. A
+///   receiver discards a repeat it already accepted only when the repeat
+///   carries Retry and matches the sequence number it cached; without the
+///   bit a frame it did receive would be taken a second time;
+/// - a CTS timeout or a collision: the status handling treats the frame as
+///   not sent, and neither sets the bit. What each such S31 status means on
+///   the air is not confirmed.
+pub(crate) const fn sets_retry_bit(
+    status: oer_protocols_ieee80211_contracts_port::TxStatus,
+) -> bool {
+    use oer_protocols_ieee80211_contracts_port::TxStatus;
+    !matches!(status, TxStatus::CtsTimeout | TxStatus::Collision)
+}
+
 impl From<TxError> for OrdinaryTxError {
     fn from(error: TxError) -> Self {
         Self::Tx(error)
@@ -2002,7 +2027,7 @@ impl FixedRateRetry {
         }
         self.publications = self.publications.saturating_add(1);
         FixedRetryDecision::Retry {
-            set_retry_bit: status == TxStatus::AckTimeout,
+            set_retry_bit: sets_retry_bit(status),
         }
     }
 }

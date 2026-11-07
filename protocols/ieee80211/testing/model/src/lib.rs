@@ -477,6 +477,9 @@ pub struct ModelSent<'id, B: ModelComposition, C: ModelClass> {
     key: Option<RawKeyIdentity>,
     body: Option<ModelBodyOf<B>>,
     packet_number: Option<u64>,
+    /// An earlier transmission could have reached the air: a retransmission
+    /// carries the Retry bit.
+    retry: bool,
 }
 
 impl<'id, C: ModelClass, B: ModelComposition> ModelSent<'id, B, C> {
@@ -522,6 +525,22 @@ impl<B: ModelComposition> core::fmt::Debug for ModelAnyBuffer<'_, B> {
 }
 
 impl<B: ModelComposition> ModelAnyBuffer<'_, B> {
+    /// A published MPDU's transmission could have reached the air.
+    fn owe_retry(&mut self) {
+        match self {
+            Self::SmallSent(mpdu) => mpdu.retry = true,
+            Self::LargeSent(mpdu) => mpdu.retry = true,
+            Self::Small(_) | Self::Large(_) => {}
+        }
+    }
+    /// Whether a retransmission of this published MPDU carries Retry.
+    fn retry_owed(&self) -> bool {
+        match self {
+            Self::SmallSent(mpdu) => mpdu.retry,
+            Self::LargeSent(mpdu) => mpdu.retry,
+            Self::Small(_) | Self::Large(_) => false,
+        }
+    }
     fn retry(&mut self) {
         match self {
             Self::Small(buffer) => buffer.memory.retry(),
@@ -673,6 +692,8 @@ pub struct ModelMpdu<'id, B: ModelComposition> {
     // consuming the terminal moves both into the returned Sent owner.
     body: Option<ModelBodyOf<B>>,
     published: Option<PublishedMpdu>,
+    /// A transmission of it could have reached the air; its `Sent` keeps it.
+    retry: bool,
     packet_number: Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber>,
 }
 
@@ -743,6 +764,7 @@ impl<'id, B: ModelComposition> TxMpdu for ModelMpdu<'id, B> {
             response,
             body,
             published,
+            retry,
             packet_number: _,
         } = self;
         match (buffer, published) {
@@ -762,6 +784,7 @@ impl<'id, B: ModelComposition> TxMpdu for ModelMpdu<'id, B> {
                     key,
                     body,
                     packet_number,
+                    retry,
                 }),
                 None,
             ),
@@ -781,10 +804,18 @@ impl<'id, B: ModelComposition> TxMpdu for ModelMpdu<'id, B> {
                     key,
                     body,
                     packet_number,
+                    retry,
                 }),
                 None,
             ),
-            (buffer, _) => (buffer, body),
+            // A retransmission's `Sent` keeps its own decision and gains this
+            // one's.
+            (mut buffer, _) => {
+                if retry {
+                    buffer.owe_retry();
+                }
+                (buffer, body)
+            }
         }
     }
 }
@@ -856,17 +887,17 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
     }
 
     fn from_sent(
-        mut buffer: ModelAnyBuffer<'id, B>,
+        buffer: ModelAnyBuffer<'id, B>,
         layout: MpduLayout,
         response: ResponsePolicy,
     ) -> Self {
-        buffer.retry();
         Self {
             buffer,
             layout,
             response,
             body: None,
             published: None,
+            retry: false,
             packet_number: None,
         }
     }
@@ -1452,9 +1483,14 @@ pub enum AirAnswer {
     /// as an S31 BlockAck accepted with a failed hardware status does.
     BlockAckUnmeasured(u64),
     NoResponse,
+    /// The protection exchange drew no CTS: the data frame did not go out.
+    CtsTimeout,
     Collision,
     /// Coexistence denied the air before the PPDU went out.
     AirDenied,
+    /// The hardware refused the frame's key: a single MPDU's end is
+    /// indeterminate, a data arena's publication is aborted.
+    KeyRefused,
     /// The hardware timed out: a single MPDU's end is indeterminate, a
     /// data arena's publication is aborted.
     HardwareTimeout,
@@ -2069,6 +2105,8 @@ impl ModelAir {
             (_, AirAnswer::Collision) => Ok(SingleAnswer::Collision),
             (_, AirAnswer::AirDenied) => Ok(SingleAnswer::AirDenied),
             (_, AirAnswer::HardwareTimeout) => Ok(SingleAnswer::HardwareTimeout),
+            (_, AirAnswer::CtsTimeout) => Ok(SingleAnswer::CtsTimeout),
+            (_, AirAnswer::KeyRefused) => Ok(SingleAnswer::KeyRefused),
             (ResponsePolicy::NoResponseExpected, AirAnswer::NoResponse) => {
                 Ok(SingleAnswer::Unsolicited)
             }
@@ -2106,9 +2144,11 @@ enum SingleAnswer {
     BlockAck(BlockAckReport),
     /// The solicited response did not come.
     Unanswered,
+    CtsTimeout,
     Collision,
     AirDenied,
     HardwareTimeout,
+    KeyRefused,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2675,11 +2715,22 @@ impl<'id, B: ModelComposition> Published<'id, B> {
             mut plan,
             answer: result,
         } = self;
+        let unknown = matches!(
+            result,
+            SingleAnswer::HardwareTimeout | SingleAnswer::KeyRefused
+        );
         let (outcome, last) = single_outcome(result, plan.last, plan.rate, cause);
         plan.last = last;
+        // A transmission went out, or an indeterminate end (a hardware timeout,
+        // a refused key) leaves it possible.
+        if last.is_some() || unknown {
+            plan.prepared.operation.execute().mpdu.retry = true;
+        }
         if matches!(
             outcome,
-            TxOutcome::Ended(SingleEnd::AckTimeout(_) | SingleEnd::ContentionLimit(_))
+            TxOutcome::Ended(
+                SingleEnd::AckTimeout(_) | SingleEnd::CtsTimeout(_) | SingleEnd::ContentionLimit(_)
+            )
         ) && let Some(rate) = plan.remaining.pop_front()
         {
             plan.rate = rate;
@@ -2721,6 +2772,12 @@ fn single_outcome(
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
             last,
         ),
+        (SingleAnswer::KeyRefused, _) => (
+            TxOutcome::Indeterminate(IndeterminateCause::KeyRefused),
+            last,
+        ),
+        (SingleAnswer::CtsTimeout, Some(cause)) => (TxOutcome::Withdrawn(cause), last),
+        (SingleAnswer::CtsTimeout, None) => (TxOutcome::Ended(SingleEnd::CtsTimeout(before)), last),
         (SingleAnswer::AirDenied | SingleAnswer::Collision, Some(cause)) => {
             (TxOutcome::Withdrawn(cause), last)
         }
@@ -2812,7 +2869,9 @@ fn publish_single<'id, B: ModelComposition>(
         held.poison();
         return None;
     }
-    if plan.last.is_some() {
+    // Retry once an earlier transmission could have reached the air: in this
+    // plan, or before it, as the `Sent` this retransmission came from holds.
+    if plan.last.is_some() || plan.prepared.operation.payload().buffer.retry_owed() {
         plan.prepared.operation.execute().retry();
     }
     let frame = match plan.prepared.operation.payload().on_air(
@@ -2829,8 +2888,9 @@ fn publish_single<'id, B: ModelComposition>(
             return None;
         }
     };
-    // A denied PPDU never reached the air the journal records.
-    if !matches!(answer, SingleAnswer::AirDenied) {
+    // A denied PPDU or a data frame behind a missing CTS never reached the
+    // air the journal records.
+    if !matches!(answer, SingleAnswer::AirDenied | SingleAnswer::CtsTimeout) {
         held.air.sent.record(frame);
     }
     Some(Publication {
@@ -3136,6 +3196,7 @@ fn prepare_model<
                     response,
                     body,
                     published: None,
+                    retry: false,
                     packet_number,
                 },
                 plan,

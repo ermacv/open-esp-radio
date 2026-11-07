@@ -542,6 +542,86 @@ fn a_single_mpdu_waits_while_an_arena_holds_its_access_category() {
 }
 
 #[test]
+fn a_single_arena_takes_each_status_history_to_its_frames_retry_bit() {
+    for (statuses, retry) in RETRY_HISTORIES {
+        with_fixture(|fixture| {
+            fixture.start();
+            fixture.observed.borrow_mut().statuses = statuses.to_vec();
+            let [first, _second] = fixture.arenas();
+            fixture.fill(&first, &[10, 11], plain);
+            fixture.publish_single(first, 3);
+            let done = fixture.arena_end();
+            assert!(
+                matches!(done.end(), AttemptEnd::Acked { .. }),
+                "{statuses:?}"
+            );
+            assert_eq!(
+                fixture.observed.borrow().publications,
+                statuses.len(),
+                "{statuses:?}"
+            );
+            let mut returned = Returned::default();
+            let _first = fixture
+                .port
+                .arena()
+                .release(done, returned.take())
+                .expect("released");
+            assert_eq!(
+                returned.0,
+                [(10, retry), (11, false)],
+                "only the frame the plan sent changes: {statuses:?}"
+            );
+        });
+    }
+}
+
+#[test]
+fn a_retained_single_arena_keeps_its_retry_history_into_its_next_publication() {
+    // A plan that ran out leaves the frame in the arena, and its settlement
+    // decides for the next publication, which then delivers it.
+    let histories: [(&[(u8, u8)], bool); 6] = [
+        (&[ACK_TIMEOUT], true),
+        (&[COLLISION], false),
+        (&[CTS_TIMEOUT], false),
+        (&[COLLISION, ACK_TIMEOUT], true),
+        (&[ACK_TIMEOUT, COLLISION], true),
+        (&[ACK_TIMEOUT, CTS_TIMEOUT], true),
+    ];
+    for (statuses, retry) in histories {
+        with_fixture(|fixture| {
+            fixture.start();
+            let mut all = statuses.to_vec();
+            all.push(SUCCESS);
+            fixture.observed.borrow_mut().statuses = all;
+            let [first, _second] = fixture.arenas();
+            fixture.fill(&first, &[10], plain);
+            let transmissions = u8::try_from(statuses.len()).expect("a short plan");
+            fixture.publish_single(first, transmissions);
+            let done = fixture.arena_end();
+            let mask = FrameMask::from_bits(0b1).expect("mask");
+            let first = fixture
+                .port
+                .arena()
+                .retain(done, mask, drop)
+                .unwrap_or_else(|_| panic!("retained"));
+            fixture.publish_single(first, 1);
+            let done = fixture.arena_end();
+            assert!(
+                matches!(done.end(), AttemptEnd::Acked { .. }),
+                "{statuses:?}"
+            );
+            let mut returned = Returned::default();
+            let _first = fixture
+                .port
+                .arena()
+                .release(done, returned.take())
+                .expect("released");
+            assert_eq!(returned.0, [(10, retry)], "{statuses:?}");
+        });
+    }
+}
+
+#[test]
 fn a_single_arena_runs_its_retry_plan_until_an_ack_and_returns_its_frame_retried() {
     with_fixture(|fixture| {
         fixture.start();

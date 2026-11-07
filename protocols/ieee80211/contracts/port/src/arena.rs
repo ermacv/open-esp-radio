@@ -262,8 +262,10 @@ impl Arena {
 pub enum ArenaFormat<'p, K> {
     /// One MPDU that solicits an ACK: the frame at position 0, sent by the
     /// retry plan as the backend sends any single MPDU (`RetryPlan`): it
-    /// keeps the frame's sequence number, sets the Retry bit of each
-    /// retransmission and ends at the first ACK or when the plan runs out.
+    /// keeps the frame's sequence number, sets the Retry bit after a
+    /// transmission without an ACK, leaves the bit as it is after a CTS
+    /// timeout or a collision, and ends at the first ACK or when the plan
+    /// runs out.
     /// The arena's other frames stay unsent in it, and its completion
     /// reports every frame it holds and the plan's transmissions.
     Single(RetryPlan<PortRate<'p, K>>),
