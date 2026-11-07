@@ -1391,6 +1391,7 @@ dependencies = [
  "embassy-futures",
  "embassy-net",
  "embassy-time",
+ "heapless",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-runtime",
@@ -1412,7 +1413,10 @@ dependencies = [
  "oer-portable-waker",
  "oer-protocols-ieee80211-core-security-cipher",
  "oer-protocols-ieee80211-runtime",
+ "oer-protocols-network-core",
  "oer-protocols-network-port",
+ "oer-protocols-network-runtime",
+ "oer-protocols-network-wire",
  "static_cell",
  "xarxa",
 ]
@@ -1975,6 +1979,22 @@ dependencies = [
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
  "postcard",
+ "static_cell",
+]
+
+[[package]]
+name = "oer-hil-images-wifi-network"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "heapless",
+ "oer",
+ "oer-hil-agent",
+ "oer-hil-services-load",
+ "oer-hil-services-wifi-station",
+ "oer-portable-trace",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
  "static_cell",
 ]
 

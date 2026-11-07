@@ -24,6 +24,9 @@ pub const NETWORK_BUFFERS: usize = TX_BUFFERS - PORT_BUFFERS as usize;
 /// Where a frame starts in a pool buffer: behind the radio's metadata,
 /// where the data machine reads its Ethernet header.
 const ETHERNET_AT: usize = TX_METADATA_SIZE + MSDU_ETHERNET_OFFSET;
+/// Where a frame's first octet lies in a 32-bit word: a copy into a transmit
+/// buffer from memory of the same offset moves whole words.
+pub const FRAME_WORD_OFFSET: usize = ETHERNET_AT % 4;
 const _: () = {
     // The longest MPDU, its CCMP MIC and FCS fit a pool buffer.
     if TX_METADATA_SIZE

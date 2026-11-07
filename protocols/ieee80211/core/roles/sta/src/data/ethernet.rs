@@ -86,7 +86,7 @@ impl EthernetFrame {
 
 impl oer_protocols_network_port::EthernetFrame for EthernetFrame {
     fn view(
-        &self,
+        &mut self,
     ) -> Result<
         oer_protocols_network_port::EthernetFrameView<'_>,
         oer_protocols_network_port::FrameLengthError,

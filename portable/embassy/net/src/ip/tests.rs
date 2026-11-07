@@ -69,7 +69,7 @@ impl oer_protocols_network_port::ReceivedFrame for Frame {
     }
 }
 impl EthernetFrame for Frame {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         match self {
             Self::Plain => Ok(EthernetFrameView {
                 destination: [2; 6],
@@ -211,7 +211,7 @@ impl NetDevice for IpPort {
     }
     fn read_copied<R>(
         &mut self,
-        copied: Frame,
+        mut copied: Frame,
         read: impl FnOnce(EthernetFrameView<'_>) -> R,
     ) -> Result<R, FrameLengthError> {
         copied.view().map(read)

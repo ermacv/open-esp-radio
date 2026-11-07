@@ -635,11 +635,11 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
     ) -> Result<R, oer_protocols_network_port::FrameLengthError> {
         // Rare (an A-MSDU, or a buffer the backend kept): the copy leaves
         // its queue by value.
-        let copy = self
+        let mut copy = self
             .copied
             .try_receive()
             .ok_or(oer_protocols_network_port::FrameLengthError::MissingCopy)?;
-        oer_protocols_network_port::EthernetFrame::view(&copy).map(read)
+        oer_protocols_network_port::EthernetFrame::view(&mut copy).map(read)
     }
 }
 
@@ -704,7 +704,7 @@ impl<P: oer_protocols_network_port::EthernetFrame, S: TxSupply<P>, const TX: usi
     fn flush(&mut self) {
         self.transmit.flush();
     }
-    fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
+    fn try_transmit(&mut self, mut frame: P) -> Result<(), TransmitRefused<P>> {
         let checked = if self.link.snapshot().state == LinkState::Down {
             Err(TransmitError::LinkDown)
         } else if self.transmit.free_capacity() == 0 {

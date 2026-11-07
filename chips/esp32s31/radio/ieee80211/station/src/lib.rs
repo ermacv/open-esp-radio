@@ -712,7 +712,8 @@ pub mod policy;
 mod supply;
 #[cfg(target_arch = "riscv32")]
 pub use supply::{
-    NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, TxMemory, TxPublishRefused, TxPublisher, TxSlot,
+    FRAME_WORD_OFFSET, NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, TxMemory, TxPublishRefused,
+    TxPublisher, TxSlot,
 };
 mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]

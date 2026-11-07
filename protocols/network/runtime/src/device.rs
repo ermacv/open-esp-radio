@@ -97,12 +97,14 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
     ) -> Result<(), PortRefusal> {
-        if !self.buffers.available() {
-            self.waiting = Waiting::Buffer;
-            return Err(PortRefusal::NoRoom);
-        }
+        // The queue first: asking it is where a device takes back what it
+        // finished, which may be the buffer asked for next.
         if !self.transmit.has_room() {
             self.waiting = Waiting::Room;
+            return Err(PortRefusal::NoRoom);
+        }
+        if !self.buffers.available() {
+            self.waiting = Waiting::Buffer;
             return Err(PortRefusal::NoRoom);
         }
         let frame = match self.buffers.write(length, fill) {

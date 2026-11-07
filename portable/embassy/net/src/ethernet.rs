@@ -8,7 +8,7 @@ use oer_protocols_network_port::{
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 
 impl EthernetFrame for OwnedNetworkTxFrame {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         let (header, payload) =
             EthernetHeader::parse(self.ethernet()).map_err(|_| FrameLengthError::TooShort)?;
         Ok(EthernetFrameView {

@@ -184,7 +184,7 @@ struct Bound<
     commands: [Option<CommandId<B>>; CREDITS],
     closing: Option<CommandId<B>>,
     /// A reservation waits for a free block.
-    reserving: bool,
+    reserving: usize,
     /// A received datagram waits for room in the lane.
     blocked: bool,
     /// What this socket's reserved blocks count toward.
@@ -361,7 +361,7 @@ impl<
             socket: Some(id),
             commands: [const { None }; CREDITS],
             closing: None,
-            reserving: false,
+            reserving: 0,
             blocked: false,
             abandoned: false,
         });
@@ -460,7 +460,7 @@ impl<
             return false;
         };
         let waiter = self.bound.iter().flatten().any(|socket| {
-            socket.reserving
+            socket.reserving != 0
                 && socket.group != source
                 && pool.held(socket.group) < most
                 && pool.may_take(socket.group)
@@ -499,7 +499,7 @@ impl<
             };
             moved = true;
             match request {
-                Request::Reserve => bound.reserving = true,
+                Request::Reserve => bound.reserving = bound.reserving.saturating_add(1),
                 Request::Release(block) => self.owner.pool().give(block),
                 Request::Send { tag, remote, block } => {
                     let Some(socket) = &bound.socket else {
@@ -547,7 +547,7 @@ impl<
                 .filter_map(|offset| {
                     let index = first.wrapping_add(offset).checked_rem(SOCKETS)?;
                     let socket = bound.get(index)?.as_ref()?;
-                    (socket.reserving && pool.may_take(socket.group)).then_some((
+                    (socket.reserving != 0 && pool.may_take(socket.group)).then_some((
                         pool.held(socket.group),
                         offset,
                         index,
@@ -697,8 +697,8 @@ impl<
 impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const CREDITS: usize>
     Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>
 {
-    /// Tell the socket. Its answer lane holds all it can be owed: one
-    /// reservation at a time, a close, and a stop.
+    /// Tell the socket. Its answer lane holds all it can be owed: the
+    /// reservations it may ask ahead, a close, and a stop.
     fn answer(&mut self, answer: Answer<'a, 'm, B, SIZE, DEPTH>) {
         let _room_is_proven = self.end.answers.try_send(answer);
     }
@@ -708,7 +708,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         let Some(block) = pool.take_as(self.group) else {
             return false;
         };
-        self.reserving = false;
+        self.reserving = self.reserving.saturating_sub(1);
         self.answer(Answer::Reserved(block));
         true
     }
@@ -741,7 +741,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             self.closing = owner.close(socket).ok();
         }
         inbound.drain(owner.pool());
-        self.reserving = false;
+        self.reserving = 0;
         self.blocked = false;
         self.abandoned = true;
     }

@@ -15,19 +15,51 @@ pub struct Checksum {
     odd: Option<u8>,
 }
 
+/// The octets one 32-bit sum takes: 2^15 words of at most 2^16 - 1 fit it.
+const WORDS_AT_ONCE: usize = 1 << 16;
+
 impl Checksum {
     pub const fn new() -> Self {
         Self { sum: 0, odd: None }
     }
 
-    /// Add the next octets of the sequence.
+    /// Add the next octets of the sequence. This runs on every octet of every
+    /// datagram, so whole words go through one 32-bit sum, flushed before it
+    /// could wrap.
     #[must_use]
     pub fn with(mut self, bytes: &[u8]) -> Self {
-        for byte in bytes {
-            match self.odd.take() {
-                Some(high) => self.add_word(high, *byte),
-                None => self.odd = Some(*byte),
+        let mut rest = bytes;
+        if let Some(high) = self.odd.take() {
+            let Some((low, after)) = rest.split_first() else {
+                self.odd = Some(high);
+                return self;
+            };
+            self.add_word(high, *low);
+            rest = after;
+        }
+        while !rest.is_empty() {
+            let (part, after) = rest.split_at_checked(WORDS_AT_ONCE).unwrap_or((rest, &[]));
+            rest = after;
+            let mut words = part;
+            // In the machine's byte order, which RFC 1071, 2 (B) lets a sum
+            // run in: one swap at the end instead of one per word.
+            let mut sum: u32 = 0;
+            while let Some(([a, b, c, d, e, f, g, h], next)) = words.split_first_chunk::<8>() {
+                sum = sum
+                    .wrapping_add(u32::from(u16::from_ne_bytes([*a, *b])))
+                    .wrapping_add(u32::from(u16::from_ne_bytes([*c, *d])))
+                    .wrapping_add(u32::from(u16::from_ne_bytes([*e, *f])))
+                    .wrapping_add(u32::from(u16::from_ne_bytes([*g, *h])));
+                words = next;
             }
+            while let Some(([high, low], next)) = words.split_first_chunk::<2>() {
+                sum = sum.wrapping_add(u32::from(u16::from_ne_bytes([*high, *low])));
+                words = next;
+            }
+            let sum = (sum & 0xFFFF).wrapping_add(sum >> 16);
+            let sum = (sum & 0xFFFF).wrapping_add(sum >> 16);
+            self.sum = self.sum.wrapping_add(u64::from(u16::from_be(sum as u16)));
+            self.odd = words.first().copied();
         }
         self
     }
@@ -91,6 +123,10 @@ pub const fn ipv4_pseudo_header(
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
+    use std::{vec, vec::Vec};
+
     use super::*;
     use crate::transport::PROTOCOL_UDP;
 
@@ -100,6 +136,55 @@ mod tests {
     #[test]
     fn the_rfc_example_gives_the_complement_of_its_sum() {
         assert_eq!(Checksum::new().with(&EXAMPLE).finish(), !0xDDF2);
+    }
+
+    /// RFC 1071's sum, one word at a time.
+    fn reference(bytes: &[u8]) -> u16 {
+        let mut sum: u64 = bytes
+            .chunks(2)
+            .map(|pair| match *pair {
+                [high, low] => u64::from(u16::from_be_bytes([high, low])),
+                [high] => u64::from(high) << 8,
+                _ => 0,
+            })
+            .sum();
+        while sum > 0xFFFF {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+        !(sum as u16)
+    }
+
+    fn octets(length: usize) -> Vec<u8> {
+        (0..length).map(|at| (at * 31 + (at >> 8)) as u8).collect()
+    }
+
+    #[test]
+    fn any_length_sums_as_the_rfc_does() {
+        for length in (0..80).chain([1471, 1472, 1473, 1500]) {
+            let bytes = octets(length);
+            assert_eq!(Checksum::new().with(&bytes).finish(), reference(&bytes));
+        }
+    }
+
+    #[test]
+    fn a_sequence_longer_than_one_sum_loses_no_carry() {
+        for length in [65_535, 65_536, 65_537, 200_001] {
+            let bytes = vec![0xFF; length];
+            assert_eq!(Checksum::new().with(&bytes).finish(), reference(&bytes));
+        }
+    }
+
+    #[test]
+    fn parts_of_any_length_meet_on_an_odd_octet() {
+        let bytes = octets(301);
+        for first in 0..bytes.len() {
+            for second in [0, 1, 2, 3, 33] {
+                let (head, rest) = bytes.split_at(first);
+                let (middle, tail) = rest.split_at(second.min(rest.len()));
+                let sum = Checksum::new().with(head).with(middle).with(tail);
+                assert_eq!(sum.finish(), reference(&bytes), "at {first} and {second}");
+            }
+        }
     }
 
     #[test]

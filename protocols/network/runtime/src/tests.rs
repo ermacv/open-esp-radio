@@ -29,8 +29,8 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Direct, EndCause, Ended, MemoryPolicy, Observer, Refusal, ReturnLane, ReturnRefusal, Returner,
-    Sent, Service, Socket, SocketClosed, SocketLanes, StopLane,
+    Direct, EndCause, Ended, MemoryPolicy, Observer, RESERVE_AHEAD, Refusal, ReturnLane,
+    ReturnRefusal, Returner, Sent, Service, Socket, SocketClosed, SocketLanes, StopLane,
 };
 
 /// A brand of the test's own.
@@ -2295,6 +2295,129 @@ fn a_frame_the_port_rejects_for_good_ends_and_the_service_goes_on() {
     });
     assert_eq!(sent, Sent::Ended(Outcome::Rejected));
     assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn a_block_asked_without_waiting_comes_on_a_later_call() {
+    brand!(Net);
+    let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, _| {
+        assert!(socket.try_reserve().unwrap().is_none(), "asked, not there");
+        assert!(socket.try_reserve().unwrap().is_none(), "asked once");
+        let block = loop {
+            if let Some(block) = socket.try_reserve().unwrap() {
+                break block;
+            }
+            yield_now().await;
+        };
+        socket.release(block).ok().unwrap();
+    });
+    returned(&mut ended, &mut socket);
+}
+
+#[test]
+fn a_socket_asked_to_hold_blocks_ahead_has_them_without_a_turn() {
+    brand!(Net);
+    let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, _| {
+        socket.reserve_ahead(3);
+        let first = socket.reserve().await.unwrap();
+        settle().await;
+        assert!(socket.try_reserve().unwrap().is_some_and(|block| {
+            socket.release(block).ok().unwrap();
+            true
+        }));
+        let second = socket.try_reserve().unwrap().unwrap();
+        socket.release(first).ok().unwrap();
+        socket.release(second).ok().unwrap();
+        settle().await;
+    });
+    returned(&mut ended, &mut socket);
+}
+
+#[test]
+fn blocks_held_ahead_come_home_when_the_service_stops() {
+    brand!(Net);
+    let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, _| {
+        socket.reserve_ahead(RESERVE_AHEAD);
+        let block = socket.reserve().await.unwrap();
+        settle().await;
+        socket.release(block).ok().unwrap();
+    });
+    returned(&mut ended, &mut socket);
+}
+
+#[test]
+fn a_dropped_socket_gives_back_the_blocks_it_held_ahead() {
+    brand!(Net);
+    let bench = bench::<Net>();
+    let (mut ended, socket, ()) = run(bench, async |socket, _| {
+        socket.reserve_ahead(4);
+        let block = socket.reserve().await.unwrap();
+        settle().await;
+        socket.release(block).ok().unwrap();
+    });
+    drop(socket);
+    let late = ended.sockets.first_mut().unwrap().as_mut().unwrap();
+    assert!(late.collect(&mut ended.retired.pool));
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn a_socket_cannot_ask_ahead_past_the_lane_of_answers() {
+    brand!(Net);
+    let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, _| {
+        socket.reserve_ahead(usize::MAX);
+        let block = socket.reserve().await.unwrap();
+        settle().await;
+        let mut held = 0;
+        while let Some(block) = socket.try_reserve().unwrap() {
+            socket.release(block).ok().unwrap();
+            held += 1;
+            settle().await;
+            if held == RESERVE_AHEAD * 4 {
+                break;
+            }
+        }
+        socket.release(block).ok().unwrap();
+        settle().await;
+    });
+    returned(&mut ended, &mut socket);
+}
+
+#[test]
+fn a_reservation_asked_without_waiting_ends_with_its_service() {
+    brand!(Net);
+    let bench = bench::<Net>();
+    let (ended, mut socket, ()) = run(bench, async |_, _| {});
+    assert_eq!(
+        socket.try_reserve().map(|block| block.is_some()),
+        Err(SocketClosed)
+    );
+    assert!(socket.try_receive().is_none());
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn a_datagram_is_taken_without_waiting_once_it_is_here() {
+    brand!(Net);
+    let (mut ended, mut socket, octets) = run(bench::<Net>(), async |socket, wire| {
+        assert!(socket.try_receive().is_none(), "nothing here yet");
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.incoming.push_back(udp_frame(5000, b"here"));
+            wire.wake();
+        }
+        let datagram = loop {
+            if let Some(datagram) = socket.try_receive() {
+                break datagram;
+            }
+            yield_now().await;
+        };
+        let octets = datagram.block.octets().to_vec();
+        socket.release(datagram.block).ok().unwrap();
+        octets
+    });
+    assert_eq!(octets, b"here");
+    returned(&mut ended, &mut socket);
 }
 
 #[test]

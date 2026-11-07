@@ -32,7 +32,7 @@ impl<P: oer_protocols_network_port::EthernetFrame> TxSupply<P> for Supply {
     fn available(&self) -> bool {
         self.free() != 0
     }
-    fn write(&mut self, frame: P) -> Result<Vec<u8>, TxRefused<P>> {
+    fn write(&mut self, mut frame: P) -> Result<Vec<u8>, TxRefused<P>> {
         let Some(mut memory) = self.0.borrow_mut().pop() else {
             return Err(TxRefused::Kept(TransmitRefused {
                 frame,
@@ -79,7 +79,7 @@ impl Drop for Frame {
     }
 }
 impl oer_protocols_network_port::EthernetFrame for Frame {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
             destination: [2; 6],
             source: [4; 6],
@@ -328,7 +328,7 @@ struct Marked {
     payload: Vec<u8>,
 }
 impl oer_protocols_network_port::EthernetFrame for Marked {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
             destination: [2; 6],
             source: [4; 6],

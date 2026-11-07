@@ -114,7 +114,7 @@ impl NetDevice for Device {
 struct Written(Vec<u8>);
 
 impl EthernetFrame for Written {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
             destination: FIELDS,
             source: FIELDS,

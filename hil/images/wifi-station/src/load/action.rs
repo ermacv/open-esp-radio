@@ -149,6 +149,7 @@ mod tests {
             transmit,
             profile: None,
             tune: [0; 4],
+            address: None,
         }
     }
 
@@ -190,6 +191,7 @@ mod tests {
             let sampled = Start {
                 profile: Some(Profile { period_us }),
                 tune: [0; 4],
+                address: None,
                 ..start(None)
             };
             assert_eq!(
@@ -226,6 +228,7 @@ mod tests {
                     period_us: MIN_SAMPLE_PERIOD_US - 1,
                 }),
                 tune: [0; 4],
+                address: None,
                 ..start(None)
             },
             Start {
@@ -233,6 +236,7 @@ mod tests {
                     period_us: MAX_SAMPLE_PERIOD_US + 1,
                 }),
                 tune: [0; 4],
+                address: None,
                 ..start(None)
             },
         ]);

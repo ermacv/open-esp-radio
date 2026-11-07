@@ -21,6 +21,13 @@ group = []
 observe = ["oer-chips-family-app/observe"]
 ## UDP sockets on the IP stack, each queueing up to 16 received datagrams.
 udp = ["embassy-net/udp", "dep:xarxa"]
+## The network core in place of the IP service, for an image to compare them.
+network = [
+    "dep:oer-protocols-network-core",
+    "dep:oer-protocols-network-runtime",
+    "dep:oer-protocols-network-wire",
+    "dep:heapless",
+]
 
 [dependencies]
 oer-chips-family-app = { path = "../../family/app" }
@@ -30,7 +37,11 @@ oer-chips-family-app = { path = "../../family/app" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-embassy-net = { path = "../../../portable/embassy/net" }
 oer-portable-memory = { path = "../../../portable/memory" }
+heapless = { version = "0.9.3", default-features = false, optional = true }
+oer-protocols-network-core = { path = "../../../protocols/network/core", optional = true }
 oer-protocols-network-port = { path = "../../../protocols/network/port" }
+oer-protocols-network-runtime = { path = "../../../protocols/network/runtime", optional = true }
+oer-protocols-network-wire = { path = "../../../protocols/network/wire", optional = true }
 oer-portable-waker = { path = "../../../portable/waker" }
 static_cell.workspace = true
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }

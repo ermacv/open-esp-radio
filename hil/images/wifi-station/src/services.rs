@@ -65,6 +65,11 @@ mod tests {
                 period_us: u32::MAX,
             }),
             tune: [u32::MAX; oer_hil_services_load::TUNE_KNOBS],
+            address: Some(oer_hil_services_load::StaticAddress {
+                address: [255; 4],
+                prefix: 32,
+                gateway: [255; 4],
+            }),
         };
         let mut buffer = [0; 256];
         for encoded in [
