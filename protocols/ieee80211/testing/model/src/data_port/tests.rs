@@ -5,6 +5,7 @@ use super::*;
 use alloc::sync::Arc;
 use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use oer_protocols_ieee80211_contracts_port::Tid;
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, Attempt, ChannelWidth, ClassFrame, HeaderSpec, LowerMacTerminal, MpduLength,
     MpduProtection, Protection, RetryPlan, RetryStage, SizedFrame, StationReceive, SupportedPower,
@@ -427,47 +428,7 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     }
     fn publish_held_arena(&mut self) -> bool {
         self.air.hold_completion(CATEGORY, true);
-        let now = self.clock.now();
-        let mut arena = self.port.arena();
-        if self.arenas.is_empty() {
-            let Some(rights) = arena.arenas() else {
-                return false;
-            };
-            self.arenas.extend(rights);
-        }
-        let Some(right) = self.arenas.pop() else {
-            return false;
-        };
-        let memory: ModelNetworkMemory = Box::new([0; ModelLarge::CAPACITY]);
-        if arena
-            .intake(&right, memory, |region| {
-                let header = [
-                    0x08, 0x01, 0, 0, 2, 0, 0, 0, 0, 9, 2, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 9,
-                ];
-                region.get_mut(..header.len())?.copy_from_slice(&header);
-                region.get_mut(header.len()..28)?.fill(0);
-                Some(28)
-            })
-            .is_err()
-        {
-            return false;
-        }
-        let Some(rate) = arena.rate(PhyRate::Legacy(LegacyRate::Ofdm6M)) else {
-            return false;
-        };
-        let publication = ArenaPublication {
-            arena: right,
-            format: ArenaFormat::Single(RetryPlan::new(RetryStage {
-                rate,
-                transmissions: NonZeroU8::MIN,
-                protection: Protection::None,
-            })),
-            access_category: CATEGORY,
-            protection: Protection::None,
-            encryption: MpduProtection::Open,
-            power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-        };
-        arena.publish(publication, now).is_ok()
+        self.publish_arena()
     }
     fn release_arena(&mut self) {
         self.air.hold_completion(CATEGORY, false);
@@ -592,6 +553,66 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
             _ => panic!("the harness submits small buffers"),
         };
         Some(cases::StationSent { end, retry })
+    }
+}
+
+impl Harness<'_> {
+    /// Publish a single 28-octet MPDU of the first free arena at 6 Mb/s.
+    fn publish_arena(&mut self) -> bool {
+        self.publish_arena_as(Protection::None)
+    }
+
+    /// [`Self::publish_arena`] under `protection`.
+    fn publish_arena_as(&mut self, protection: Protection) -> bool {
+        let now = self.clock.now();
+        let mut arena = self.port.arena();
+        if self.arenas.is_empty() {
+            let Some(rights) = arena.arenas() else {
+                return false;
+            };
+            self.arenas.extend(rights);
+        }
+        let Some(right) = self.arenas.pop() else {
+            return false;
+        };
+        let memory: ModelNetworkMemory = Box::new([0; ModelLarge::CAPACITY]);
+        if arena
+            .intake(&right, memory, |region| {
+                let header = [
+                    0x08, 0x01, 0, 0, 2, 0, 0, 0, 0, 9, 2, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 9,
+                ];
+                region.get_mut(..header.len())?.copy_from_slice(&header);
+                region.get_mut(header.len()..28)?.fill(0);
+                Some(28)
+            })
+            .is_err()
+        {
+            return false;
+        }
+        let Some(rate) = arena.rate(PhyRate::Legacy(LegacyRate::Ofdm6M)) else {
+            return false;
+        };
+        let publication = ArenaPublication {
+            arena: right,
+            format: ArenaFormat::Single(RetryPlan::new(RetryStage {
+                rate,
+                transmissions: NonZeroU8::MIN,
+                protection: Protection::None,
+            })),
+            access_category: CATEGORY,
+            protection,
+            encryption: MpduProtection::Open,
+            power: SupportedPower::new(TxPower::Calibrated).unwrap(),
+        };
+        arena.publish(publication, now).is_ok()
+    }
+
+    /// The air's next event, with the clock's owner's notice.
+    fn advance_air(&mut self) -> Instant {
+        let at = self.air.next_air_event().unwrap();
+        self.clock.advance_to(at);
+        self.air.clock_advanced();
+        at
     }
 }
 
@@ -740,6 +761,278 @@ fn a_receive_pull_takes_one_unit_within_the_callers_room() {
             harness.port.receive(1, now).unwrap(),
             RxPull::Empty
         ));
+    });
+}
+
+/// A quiet timed air with these receive limits and 32-subframe arenas.
+fn timed(ring: usize, held: usize, lent: usize) -> AirConfig {
+    AirConfig {
+        seed: 1,
+        timing: AirTiming::HT_2_4_GHZ,
+        arena_frames: 32,
+        rx_limits: ModelRxLimits { ring, held, lent },
+        busy: None,
+        peer: None,
+    }
+}
+
+/// An access point whose first frame contends from the air's first instant.
+fn saturated_peer() -> AirPeer {
+    AirPeer::best_effort(
+        Box::new(|_| alloc::vec![0; 100]),
+        ModelRxMeta::new(channel(), -40, -90),
+        PhyRate::Legacy(LegacyRate::Ofdm54M),
+        Offered::Saturated,
+        PeerWindow::Agreed,
+        Tid::new(0).unwrap(),
+    )
+}
+
+/// The time on air of a 28-octet MPDU and its FCS at 6 Mb/s with its ACK.
+const TIMED_EXCHANGE_MICROS: u64 = {
+    // 16 + 256 + 6 bits at 24 a symbol: 12 symbols, 48 us, then 26 us of
+    // preamble and signal extension; SIFS; 14 octets at 24 Mb/s, 34 us.
+    48 + 26 + 10 + 34
+};
+
+#[test]
+fn a_publication_on_a_timed_air_ends_with_its_exchange_and_not_before() {
+    with_harness(|harness| {
+        harness.air.set_air_time(timed(8, 8, 8)).unwrap();
+        harness.start();
+        let start = harness.clock.now();
+        assert!(harness.publish_arena());
+        let waker = harness.waker();
+        let quiet = harness.port.poll_facts(&mut Context::from_waker(&waker));
+        assert!(quiet.tx.is_none(), "nothing to serve before the air's end");
+        assert!(harness.service().is_none());
+        let onto_the_channel = harness.advance_air();
+        assert_eq!(onto_the_channel, start);
+        assert!(harness.service().is_none());
+        let end = harness.advance_air();
+        assert_eq!(
+            end.saturating_duration_since(start).as_micros(),
+            TIMED_EXCHANGE_MICROS
+        );
+        let facts = harness.port.poll_facts(&mut Context::from_waker(&waker));
+        assert_ne!(facts.tx.unwrap().bits(), 0, "the air's end is a completion");
+        let done = harness.service().unwrap();
+        assert!(matches!(
+            done.end(),
+            oer_protocols_ieee80211_contracts_port::arena::AttemptEnd::Acked { .. }
+        ));
+        harness.settle_arena(done);
+        assert_eq!(harness.air.air_report().unwrap().station.exchanges, 1);
+        assert_eq!(harness.air.air_report().unwrap().station.subframes, 1);
+    });
+}
+
+#[test]
+fn a_publications_protection_and_encryption_take_their_time_on_the_air() {
+    with_harness(|harness| {
+        harness.air.set_air_time(timed(8, 8, 8)).unwrap();
+        harness.start();
+        let start = harness.clock.now();
+        assert!(harness.publish_arena_as(Protection::RtsCts {
+            rate: LegacyRate::Ofdm24M,
+        }));
+        harness.advance_air();
+        let end = harness.advance_air();
+        assert_eq!(
+            end.saturating_duration_since(start).as_micros(),
+            TIMED_EXCHANGE_MICROS + 34 + 10 + 34 + 10
+        );
+    });
+}
+
+#[test]
+fn a_collision_on_a_timed_air_ends_the_publication_unanswered() {
+    with_harness(|harness| {
+        let config = AirConfig {
+            peer: Some(saturated_peer()),
+            ..timed(8, 8, 8)
+        };
+        harness.air.set_air_time(config).unwrap();
+        harness.start();
+        assert!(harness.publish_arena());
+        harness.advance_air();
+        harness.advance_air();
+        let done = harness.service().unwrap();
+        assert!(matches!(
+            done.end(),
+            oer_protocols_ieee80211_contracts_port::arena::AttemptEnd::NoResponse(_)
+        ));
+        assert_eq!(harness.air.air_report().unwrap().station.collisions, 1);
+        harness.settle_arena(done);
+    });
+}
+
+#[test]
+fn an_answer_that_ends_the_attempt_before_the_air_takes_no_time() {
+    with_harness(|harness| {
+        harness.air.set_air_time(timed(8, 8, 8)).unwrap();
+        harness.start();
+        harness.air.answer(AirAnswer::AirDenied);
+        assert!(harness.publish_arena());
+        assert_eq!(harness.air.next_air_event(), None);
+        let done = harness.service().unwrap();
+        harness.settle_arena(done);
+    });
+}
+
+#[test]
+fn a_single_mpdu_on_a_timed_air_waits_for_its_exchange() {
+    with_harness(|harness| {
+        harness.air.set_air_time(timed(8, 8, 8)).unwrap();
+        harness.start();
+        let attempt = harness.mpdu().unwrap();
+        let (now, _) = harness.now_wake();
+        assert!(harness.port.submit(attempt, now, &mut harness.sink).is_ok());
+        assert!(harness.service().is_none());
+        assert!(harness.sink.terminals.is_empty());
+        let start = harness.advance_air();
+        assert!(harness.air.next_air_event().is_some());
+        harness.service();
+        assert!(harness.sink.terminals.is_empty(), "still on the air");
+        let end = harness.advance_air();
+        assert!(end > start);
+        harness.service();
+        assert_eq!(harness.take_completed(), 1);
+    });
+}
+
+#[test]
+fn a_single_mpdu_that_collides_takes_the_next_transmission_of_its_plan() {
+    with_harness(|harness| {
+        let config = AirConfig {
+            peer: Some(saturated_peer()),
+            ..timed(8, 8, 8)
+        };
+        harness.air.set_air_time(config).unwrap();
+        harness.start();
+        let attempt = harness.mpdu().unwrap();
+        let (now, _) = harness.now_wake();
+        assert!(harness.port.submit(attempt, now, &mut harness.sink).is_ok());
+        harness.service();
+        harness.advance_air();
+        harness.advance_air();
+        harness.service();
+        let report = harness.air.air_report().unwrap();
+        assert_eq!(report.station.collisions, 1);
+        assert_eq!(harness.take_completed(), 0, "its plan has one more");
+        for _ in 0..1000 {
+            harness.advance_air();
+            harness.service();
+            if !harness.sink.terminals.is_empty() {
+                break;
+            }
+        }
+        assert_eq!(harness.take_completed(), 1);
+        assert_eq!(harness.air.air_report().unwrap().station.exchanges, 2);
+    });
+}
+
+#[test]
+fn a_stop_ends_an_exchange_the_air_still_owes() {
+    with_harness(|harness| {
+        harness.air.set_air_time(timed(8, 8, 8)).unwrap();
+        harness.start();
+        assert!(harness.publish_arena());
+        harness.advance_air();
+        let (now, waker) = harness.now_wake();
+        let mut cx = Context::from_waker(&waker);
+        assert!(harness.port.poll_stop(&mut cx, now).is_pending());
+        let done = harness.service().unwrap();
+        assert!(matches!(
+            done.end(),
+            oer_protocols_ieee80211_contracts_port::arena::AttemptEnd::Aborted
+        ));
+        harness.settle_arena(done);
+        assert!(matches!(
+            harness.port.poll_stop(&mut cx, now),
+            Poll::Ready(Ok(()))
+        ));
+    });
+}
+
+#[test]
+fn a_timed_air_sets_the_arenas_subframes() {
+    with_harness(|harness| {
+        let mut arena = harness.port.arena();
+        assert_eq!(usize::from(arena.capacity()), MODEL_ARENA_FRAMES);
+        drop(arena);
+        harness.air.set_air_time(timed(8, 8, 8)).unwrap();
+        arena = harness.port.arena();
+        assert_eq!(arena.capacity(), 32);
+        assert_eq!(arena.ampdu_capabilities().max_subframes, 32);
+    });
+}
+
+#[test]
+fn the_receive_limits_bind_each_at_its_own_place() {
+    with_harness(|harness| {
+        harness.air.set_air_time(timed(2, 3, 1)).unwrap();
+        harness.start();
+        // The caller's units stop at `held`, whatever the ring holds.
+        harness.deliver(5);
+        let now = harness.clock.now();
+        let mut units = Vec::new();
+        while let RxPull::Unit { frame, .. } = harness.port.receive(u8::MAX, now).unwrap() {
+            units.push(frame);
+        }
+        assert_eq!(units.len(), 3);
+        // The network's units stop at `lent`, whatever the caller holds.
+        let first = units.pop().unwrap();
+        let lent = harness.port.lend(first).ok().unwrap();
+        assert!(!harness.port.lend_room());
+        let refused = harness.port.lend(units.pop().unwrap()).err().unwrap();
+        assert_eq!(refused.reason, LendRefusal::Capacity);
+        harness.port.recycle(refused.buffer);
+        harness.port.recycle(units.pop().unwrap());
+        drop(lent);
+        assert!(harness.port.lend_room());
+        harness.recycle_received();
+    });
+}
+
+#[test]
+fn the_ring_limit_refuses_a_landing_frame_only() {
+    with_harness(|harness| {
+        let peer = AirPeer::best_effort(
+            Box::new(|sequence| {
+                let mut frame = alloc::vec![0_u8; 28];
+                frame[..2].copy_from_slice(&[0x08, 0x01]);
+                frame[22..24].copy_from_slice(&sequence.sequence_control().to_le_bytes());
+                frame
+            }),
+            ModelRxMeta::new(channel(), -40, -90),
+            PhyRate::Ht(
+                oer_protocols_ieee80211_wire::phy::HtRate::new(
+                    oer_protocols_ieee80211_wire::phy::HtMcs::new(7).unwrap(),
+                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                    false,
+                )
+                .unwrap(),
+            ),
+            Offered::Saturated,
+            PeerWindow::Assumed(4),
+            Tid::new(0).unwrap(),
+        );
+        harness
+            .air
+            .set_air_time(AirConfig {
+                peer: Some(peer),
+                ..timed(2, 8, 8)
+            })
+            .unwrap();
+        harness.start();
+        while harness.air.air_report().unwrap().ring_drops < 2 {
+            harness.advance_air();
+        }
+        let report = harness.air.air_report().unwrap();
+        assert_eq!(report.landed, 2);
+        assert_eq!(harness.air.pending_rx(), 2);
+        harness.recycle_received();
     });
 }
 

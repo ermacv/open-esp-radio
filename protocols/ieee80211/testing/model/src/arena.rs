@@ -20,8 +20,9 @@
 //! every later operation fails and every memory stays where it is.
 
 use super::{
-    AirAnswer, AirFrame, MODEL_ACK_SNR_DB, ModelAir, ModelAirDenied, ModelBlockAckEvidence,
-    ModelComposition, ModelFault, ModelHeld, ModelNetworkMemory, PreparedKey, RawKeyIdentity,
+    AirAnswer, AirFrame, AirResponse, AirTicket, AirTimeError, MODEL_ACK_SNR_DB, ModelAir,
+    ModelAirDenied, ModelBlockAckEvidence, ModelComposition, ModelFault, ModelHeld,
+    ModelNetworkMemory, PreparedKey, RawKeyIdentity, air_time::FCS_OCTETS, ampdu_psdu_octets,
     values::Record,
 };
 use alloc::{collections::VecDeque, vec::Vec};
@@ -35,18 +36,26 @@ use oer_protocols_ieee80211_contracts_port::{
     Air, AmpduCapabilities, BlockAckReport, Channel, ChannelWidth, Ieee80211Capabilities,
     MpduProtection, MpduStartSpacing, PhyRate, PortArena, Protection, TxPower, VifRole,
 };
-use oer_protocols_ieee80211_wire::ccmp::{CCMP_HEADER_LEN, CcmpPacketNumber};
+use oer_protocols_ieee80211_wire::ccmp::{CCMP_HEADER_LEN, CCMP_MIC_LEN, CcmpPacketNumber};
 use oer_protocols_ieee80211_wire::frame::{
     FrameControlFields, MacHeader, sequence_control, set_retry_bit,
 };
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
-/// Slots of each model arena: the model's A-MPDU subframe limit.
+/// The frames a model arena holds, unless a timed air asks for more: the
+/// model's A-MPDU subframe limit.
 pub const MODEL_ARENA_FRAMES: usize = super::MODEL_AMPDU_SUBFRAMES;
+
+/// The slots of each model arena: the most any air asks for.
+const SLOTS: usize = ARENA_FRAMES as usize;
 
 /// How long a model publication waits for its answer before it is aborted.
 pub const MODEL_ARENA_TIMEOUT: Duration = Duration::from_millis(10);
+
+/// How long a publication on a timed air may wait for its channel: past any
+/// exchange of the inputs a scenario uses, a medium that stopped.
+pub const MODEL_TIMED_ARENA_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// The air's answer to one model publication.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,6 +123,8 @@ enum State {
         aggregate: bool,
         rate: PhyRate,
         access_category: WmmAccessCategory,
+        /// Its exchange on a timed air.
+        air: Option<AirTicket>,
     },
     /// The publication ended; `aggregate` when it was an A-MPDU, which sent
     /// every frame, else only position 0 went.
@@ -123,8 +134,8 @@ enum State {
 }
 
 struct Slots {
-    memory: [Option<ModelNetworkMemory>; MODEL_ARENA_FRAMES],
-    lengths: [u16; MODEL_ARENA_FRAMES],
+    memory: [Option<ModelNetworkMemory>; SLOTS],
+    lengths: [u16; SLOTS],
     len: u8,
     state: State,
     /// The right the backend holds while the arena is published.
@@ -135,7 +146,7 @@ impl Slots {
     fn new() -> Self {
         Self {
             memory: core::array::from_fn(|_| None),
-            lengths: [0; MODEL_ARENA_FRAMES],
+            lengths: [0; SLOTS],
             len: 0,
             state: State::Idle,
             held: None,
@@ -273,6 +284,7 @@ impl ModelArenas {
         arena: ArenaId,
         mut memory: ModelNetworkMemory,
         write: impl FnOnce(&mut [u8]) -> Option<u16>,
+        capacity: u8,
     ) -> Result<(), (ModelNetworkMemory, IntakeRefused)> {
         if self.fault.is_some() {
             return Err((memory, IntakeRefused::Quarantined));
@@ -284,7 +296,7 @@ impl ModelArenas {
             return Err((memory, IntakeRefused::Busy));
         }
         let position = usize::from(slots.len);
-        if position >= MODEL_ARENA_FRAMES {
+        if slots.len >= capacity {
             return Err((memory, IntakeRefused::Full));
         }
         let Some(length) = write(memory.as_mut_slice()) else {
@@ -359,6 +371,7 @@ impl ModelArenas {
         &mut self,
         publication: ArenaPublication<'_, K>,
         now: Instant,
+        air: Option<AirTicket>,
     ) {
         let id = publication.arena.id();
         let aggregate = match publication.format {
@@ -382,13 +395,26 @@ impl ModelArenas {
         });
         if let Some(slots) = self.arenas.get_mut(id.index()) {
             slots.state = State::OnAir {
-                deadline: now.saturating_add(MODEL_ARENA_TIMEOUT),
+                deadline: now.saturating_add(if air.is_some() {
+                    MODEL_TIMED_ARENA_TIMEOUT
+                } else {
+                    MODEL_ARENA_TIMEOUT
+                }),
                 aggregate: aggregate.is_some(),
                 rate,
                 access_category: publication.access_category,
+                air,
             };
             slots.held = Some(publication.arena);
         }
+    }
+
+    /// The exchange of the arena on the air, on a timed air.
+    pub(crate) fn on_air_ticket(&self) -> Option<AirTicket> {
+        self.arenas.iter().find_map(|slots| match slots.state {
+            State::OnAir { air, .. } => air,
+            State::Idle | State::Completed { .. } => None,
+        })
     }
 
     /// The access category and deadline of the arena on the air.
@@ -405,9 +431,13 @@ impl ModelArenas {
 
     /// Replace the next answer by an abort: the hardware timed out.
     fn abort(&mut self) {
+        self.replace_answer(ModelArenaAnswer::Aborted);
+    }
+
+    fn replace_answer(&mut self, replaced: ModelArenaAnswer) {
         match self.answers.front_mut() {
-            Some(answer) => *answer = ModelArenaAnswer::Aborted,
-            None => self.answers.push_back(ModelArenaAnswer::Aborted),
+            Some(answer) => *answer = replaced,
+            None => self.answers.push_back(replaced),
         }
     }
 
@@ -621,7 +651,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, S: BorrowMut<ModelArenas>> PortArena
     }
 
     fn ampdu_capabilities(&self) -> AmpduCapabilities {
-        crate::data_port::model_ampdu_capabilities()
+        crate::data_port::model_ampdu_capabilities(ModelArenas::CAPACITY)
     }
 }
 
@@ -649,7 +679,9 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, S: BorrowMut<ModelArenas>> TxArena<'
         memory: ModelNetworkMemory,
         write: impl FnOnce(&mut [u8]) -> Option<u16>,
     ) -> Result<(), (ModelNetworkMemory, IntakeRefused)> {
-        self.state.borrow_mut().push(arena.id(), memory, write)
+        self.state
+            .borrow_mut()
+            .push(arena.id(), memory, write, ModelArenas::CAPACITY)
     }
 
     fn len(&self, arena: ArenaId) -> u8 {
@@ -682,7 +714,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, S: BorrowMut<ModelArenas>> TxArena<'
                 reason,
             });
         }
-        state.start(publication, now);
+        state.start(publication, now, None);
         Ok(())
     }
 
@@ -735,14 +767,21 @@ impl StationArenas {
         self.arenas.on_air()
     }
 
+    /// The exchange of the arena on the air, on a timed air.
+    pub(crate) fn on_air_ticket(&self) -> Option<AirTicket> {
+        self.arenas.on_air_ticket()
+    }
+
     /// Serve the arena on the air at `now`: its completion once its answer
     /// is due, at once when `abort` (the hardware timed out or the model
-    /// drains). The access category of the publication comes back with it.
+    /// drains), unanswered when `collided` on a timed air. The access
+    /// category of the publication comes back with it.
     pub(crate) fn serve<C: Ieee80211Capabilities>(
         &mut self,
         now: Instant,
         held_result: impl Fn(WmmAccessCategory) -> bool,
         abort: bool,
+        collided: bool,
     ) -> Result<Option<(super::ModelArenaCompleted, WmmAccessCategory)>, ModelArenaFault> {
         let Some((access_category, deadline)) = self.arenas.on_air_queue() else {
             return Ok(None);
@@ -753,6 +792,8 @@ impl StationArenas {
         }
         if abort || (held_result(access_category) && overdue) {
             self.arenas.abort();
+        } else if collided {
+            self.arenas.replace_answer(ModelArenaAnswer::NoResponse);
         }
         let done = ModelArena::<C, &mut ModelArenas>::over(&mut self.arenas).service((), now)?;
         Ok(done.map(|done| (done, access_category)))
@@ -853,6 +894,57 @@ impl<'a, C, B: ModelComposition> ModelDataArena<'a, '_, '_, C, B> {
     }
 }
 
+impl<C: Ieee80211Capabilities, B: ModelComposition> ModelDataArena<'_, '_, '_, C, B> {
+    /// The exchange of `publication` on a timed air, the frames with their
+    /// FCS and MIC. An answer that ends the attempt before the air takes
+    /// no time.
+    fn exchange(
+        held: &ModelHeld<'static, B>,
+        state: &StationArenas,
+        publication: &ArenaPublication<'_, C>,
+        answer: ModelArenaAnswer,
+    ) -> Result<Option<AirTicket>, AirTimeError> {
+        let response = match answer {
+            ModelArenaAnswer::Ack => AirResponse::Ack,
+            ModelArenaAnswer::BlockAck(_) | ModelArenaAnswer::BlockAckUnmeasured(_) => {
+                AirResponse::BlockAck
+            }
+            ModelArenaAnswer::NoResponse => AirResponse::None,
+            _ => return Ok(None),
+        };
+        let id = publication.arena.id();
+        let rate = publication.format.rate();
+        let expansion = FCS_OCTETS.saturating_add(match publication.encryption {
+            MpduProtection::Open => 0,
+            MpduProtection::Ccmp => CCMP_MIC_LEN as u32,
+        });
+        let octets = |frame: &[u8]| {
+            u32::try_from(frame.len())
+                .unwrap_or(u32::MAX)
+                .saturating_add(expansion)
+        };
+        let (psdu_octets, subframes) = match publication.format {
+            ArenaFormat::Single(_) => (state.arenas.sent(id, true).next().map_or(0, octets), 1),
+            ArenaFormat::Aggregate { spacing, .. } => (
+                ampdu_psdu_octets(
+                    state.arenas.sent(id, false).map(octets),
+                    rate,
+                    spacing.get(),
+                )?,
+                state.arenas.len(id),
+            ),
+        };
+        held.air.request_air(
+            rate,
+            psdu_octets,
+            publication.protection,
+            response,
+            publication.access_category,
+            subframes,
+        )
+    }
+}
+
 /// The CCMP packet number of a protected MPDU's CCMP header.
 fn packet_number(frame: &[u8]) -> Option<u64> {
     let header = MacHeader::decode(frame)?.header_len();
@@ -878,7 +970,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
     }
 
     fn capacity(&self) -> u8 {
-        ModelArenas::CAPACITY
+        self.held.air.arena_frames.get()
     }
 
     fn push(
@@ -887,8 +979,9 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
         memory: ModelNetworkMemory,
         write: impl FnOnce(&mut [u8]) -> Option<u16>,
     ) -> Result<(), (ModelNetworkMemory, IntakeRefused)> {
+        let capacity = self.capacity();
         match self.state() {
-            Ok(state) => state.arenas.push(arena.id(), memory, write),
+            Ok(state) => state.arenas.push(arena.id(), memory, write, capacity),
             Err(ModelFault) => Err((memory, IntakeRefused::Quarantined)),
         }
     }
@@ -969,6 +1062,17 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
             held.poison();
             return Err(PublishError::Fault(ModelFault));
         };
+        let air = match Self::exchange(held, state, &publication, answer) {
+            Ok(air) => air,
+            Err(fault) => {
+                held.air.air_fault.set(Some(fault));
+                held.poison();
+                return Err(PublishError::FaultBeforeTaking {
+                    publication,
+                    fault: ModelFault,
+                });
+            }
+        };
         // A denied PPDU never reached the air the journal records.
         if answer != ModelArenaAnswer::AirDenied {
             let mut sent = Vec::new();
@@ -1001,7 +1105,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
             *place = Some(PreparedKey::new(key));
         }
         state.arenas.answer(answer);
-        state.arenas.start(publication, now);
+        state.arenas.start(publication, now, air);
         Ok(())
     }
 
