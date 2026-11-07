@@ -2242,6 +2242,26 @@ fn a_close_at_the_end_of_all_keeps_what_was_accepted_and_refuses_the_rest() {
 }
 
 #[test]
+fn a_receive_loan_stays_owed_across_a_retired_service() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+    let (mut pool, brand) = claim::<Net, SIZE, BLOCKS>(memory).unwrap();
+    pool.loans().pool(2, 0).unwrap();
+    pool.loans().grant(0, 1).unwrap();
+    let held = pool.loans().lend(0).unwrap();
+    let wire = WirePort::default();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let (mut ended, _, ()) = run(bench_on(owner, wire, Direct), async |_, _| {});
+    let loans = ended.retired.pool.loans();
+    assert_eq!(loans.outstanding(), 1);
+    assert!(loans.grant(0, 2).is_err());
+    loans.give_back(held);
+    assert!(loans.released());
+    loans.grant(0, 2).unwrap();
+}
+
+#[test]
 fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
     brand!(Net);
     let (ended, _, _) = run(bench::<Net>(), async |socket, _| {
