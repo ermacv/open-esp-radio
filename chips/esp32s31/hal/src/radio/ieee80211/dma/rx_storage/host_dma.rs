@@ -22,9 +22,11 @@ pub enum HostDmaAccessError {
     OutsideBuffers,
     /// The buffer is detached to an upper owner, not in the DMA ring.
     NotInRing,
-    /// The CPU holds this buffer through a completed view. OWNER stays set
-    /// after a completion and a descriptor can name any buffer, so neither
-    /// says so: the check goes by the buffer's own binding.
+    /// The CPU may hold a view of this buffer: a ring buffer whose
+    /// descriptor the ring handed out, or R's buffer while its frame may be
+    /// lent. OWNER stays set after a completion and a descriptor can name
+    /// any buffer, so no descriptor word says so: the check goes by the
+    /// ring's own record and the buffer's binding.
     HeldByCpu,
 }
 
@@ -35,8 +37,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
     ///
     /// The range must lie inside one buffer's `STORAGE_SIZE` bytes, which
     /// include the leading recycle guard; anything else is refused and
-    /// nothing is written. `ring` is this arena's live ring: borrowing it
-    /// shared proves that no completed-descriptor view of a buffer exists.
+    /// nothing is written. `ring` is this arena's live ring. A buffer the CPU
+    /// may hold a view of is refused ([`HostDmaAccessError::HeldByCpu`]).
     pub fn dma_write(
         &self,
         ring: &RxRingLive<'_, COUNT>,
@@ -71,18 +73,16 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         let length = u32::try_from(bytes.len()).map_err(|_| HostDmaAccessError::OutsideBuffers)?;
         let mut walker = walker.borrow_mut();
         if let Some(descriptor) = walker.armed_next(table) {
-            let address = descriptor.buffer_address();
-            if self.held_by_cpu(address, bytes.len())? {
-                return Err(HostDmaAccessError::HeldByCpu);
-            }
-            self.write_published(address, bytes)?;
+            self.write_published(descriptor.buffer_address(), bytes)?;
         }
         Ok(walker.land(table, length, true))
     }
 
-    /// Whether a completed view holds the buffer at `address`. The address
-    /// comes from a descriptor, which can name any buffer, so what counts is
-    /// the buffer written, against each taken descriptor's own binding.
+    /// Whether a CPU view of the buffer at `address` can be alive. The
+    /// address comes from a descriptor, which can name any buffer, so what
+    /// counts is the buffer written: a ring buffer against each taken
+    /// descriptor's own binding, R's buffer against the record of its lent
+    /// frame.
     fn held_by_cpu(&self, address: u32, len: usize) -> Result<bool, HostDmaAccessError> {
         let (buffer, _) = self.published_range(address, len)?;
         let Some(written) = self
@@ -90,8 +90,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
             .iter()
             .position(|bound| core::ptr::eq(bound, buffer))
         else {
-            // R's buffer: no view of it leaves the ring.
-            return Ok(false);
+            // R's buffer: `reserved_frame` lends it, and only an exclusive
+            // ring loan, which ends that view, returns it.
+            return Ok(self.arena.host_reserved_lent());
         };
         Ok((0..COUNT).any(|descriptor| {
             self.arena.host_taken(descriptor)
@@ -99,22 +100,30 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         }))
     }
 
-    /// Write `bytes` at `address` of a buffer in the ring: a caller has
-    /// checked that the ring holds no view of it.
+    /// Write `bytes` at `address` of a buffer in the ring, unless a CPU view
+    /// of it can be alive. Every write of the modelled engine passes here.
     #[allow(
         unsafe_code,
         reason = "the modelled DMA engine writes a buffer the ring published"
     )]
     fn write_published(&self, address: u32, bytes: &[u8]) -> Result<(), HostDmaAccessError> {
+        if self.held_by_cpu(address, bytes.len())? {
+            return Err(HostDmaAccessError::HeldByCpu);
+        }
         let (buffer, offset) = self.published_range(address, bytes.len())?;
         // SAFETY: `published_range` bounded `offset + bytes.len()` by this
         // buffer's `STORAGE_SIZE` bytes, which live in its `UnsafeCell`, and
-        // refused a detached buffer. CPU views of an attached buffer exist
-        // only inside completed-descriptor tokens: `dma_write`'s shared ring
-        // borrow excludes those, whose tokens borrow the ring mutably, and
-        // `land_unit` writes only under a descriptor that is armed and not
-        // completed, of which no token exists. Both run on the thread of
-        // their `!Sync` proof.
+        // refused a buffer that is not attached, so no detached owner holds
+        // it. A CPU view of an attached buffer comes only from the ring: a
+        // completed descriptor or unit, whose descriptors the ring's mask
+        // records and shows the arena on every change until a recycle
+        // republishes them, or R's frame, which `reserved_frame` records as
+        // lent before handing it out and which only an exclusive ring loan
+        // (ending that view) clears. `held_by_cpu` refused the buffer when
+        // either record names it, mapping descriptors to buffers by the
+        // trusted binding, never by descriptor words. A view that only copies
+        // out ends inside its call, and the arena is used on the thread of
+        // its `!Sync` ring, so no view is alive across this write.
         unsafe {
             buffer
                 .0

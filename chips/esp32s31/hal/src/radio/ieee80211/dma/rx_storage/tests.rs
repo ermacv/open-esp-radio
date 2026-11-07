@@ -1763,6 +1763,262 @@ fn landing_under_a_token(rotation: usize) {
     assert_eq!(read, [1, 2, 3, 4], "the bytes stayed");
 }
 
+/// A live ring on the model walker, its walker shared with `land_unit`.
+fn walked_live<const COUNT: usize>() -> (
+    &'static RxDmaStorage<COUNT, 16, 16, HostDma>,
+    [u32; COUNT],
+    u32,
+    core::cell::RefCell<crate::radio::ieee80211::dma::rx_dma::model::RxWalkerModel>,
+    RxRingLive<'static, COUNT>,
+) {
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
+    let placed = place(storage);
+    let storage = placed.storage();
+    let buffers = storage.buffer_addresses().bits();
+    let base = placed.descriptor_base();
+    let mut mmio = crate::radio::ieee80211::dma::rx_dma::model::RxWalkerModel::new();
+    mmio.next_descriptor_low = base & ADDRESS_LOW_MASK;
+    let live = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner")
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .expect("live epoch");
+    (
+        storage,
+        *buffers,
+        base,
+        core::cell::RefCell::new(mmio),
+        live,
+    )
+}
+
+/// Point the walker's next free descriptor at `buffer`, as corrupt words
+/// would.
+fn aim_free_descriptor(
+    table: crate::radio::ieee80211::dma::rx_dma::RxWalkerTable<'_>,
+    walker: &core::cell::RefCell<crate::radio::ieee80211::dma::rx_dma::model::RxWalkerModel>,
+    buffer: u32,
+) {
+    let free = table
+        .descriptor_at_low(walker.borrow().next_descriptor_low)
+        .expect("the walker names a ring descriptor");
+    free.inject_corrupt_words(free.word0(), buffer, free.next_address());
+}
+
+/// A single-descriptor unit is the CPU's from its take: a landing under it is
+/// refused, and the buffer it detaches keeps the bytes that completed it.
+#[test]
+fn a_landing_never_writes_under_a_taken_single_unit() {
+    use crate::radio::ieee80211::dma::rx_dma::model::RxWalkerLanding;
+    let (storage, buffers, base, walker, mut live) = walked_live::<2>();
+    let table = storage.walker_table().unwrap();
+    assert_eq!(
+        storage.land_unit(&walker, &[1, 2, 3, 4]),
+        Ok(RxWalkerLanding::Landed(base & ADDRESS_LOW_MASK))
+    );
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, frozen)
+        .unwrap()
+        .expect("a completed unit");
+    assert_eq!(unit.descriptor_count(), 1);
+
+    aim_free_descriptor(table, &walker, buffers[0]);
+    assert_eq!(
+        storage.land_unit(&walker, &[9, 9, 9, 9]),
+        Err(HostDmaAccessError::HeldByCpu)
+    );
+    let detached = unit
+        .detach_single(&mut *walker.borrow_mut())
+        .expect("the unit detaches");
+    let pool = oer_portable_memory::ExternalRxHandoffPool::<16, 1>::new();
+    let radio = pool
+        .try_claim_radio(detached.into_buffer(), 0)
+        .map_err(drop)
+        .expect("a handoff slot");
+    assert_eq!(radio.frame(), [1, 2, 3, 4], "the detached bytes stayed");
+}
+
+/// Every descriptor of a chained unit is the CPU's from its take.
+#[test]
+fn a_landing_never_writes_under_a_taken_chain() {
+    let (storage, buffers, _, walker, mut live) = walked_live::<4>();
+    let table = storage.walker_table().unwrap();
+    storage.dma_write(&live, buffers[0], &[1, 2, 3, 4]).unwrap();
+    walker.borrow_mut().land(table, 4, false);
+    storage.land_unit(&walker, &[5, 6, 7, 8]).unwrap();
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, frozen)
+        .unwrap()
+        .expect("a completed unit");
+    assert_eq!(unit.descriptor_count(), 2);
+    for held in [buffers[0], buffers[1]] {
+        aim_free_descriptor(table, &walker, held);
+        assert_eq!(
+            storage.land_unit(&walker, &[9, 9, 9, 9]),
+            Err(HostDmaAccessError::HeldByCpu)
+        );
+    }
+    drop(unit);
+    let mut read = [0; 4];
+    storage.dma_read(&live, buffers[0], &mut read).unwrap();
+    assert_eq!(read, [1, 2, 3, 4], "the bytes stayed");
+    storage.dma_read(&live, buffers[1], &mut read).unwrap();
+    assert_eq!(read, [5, 6, 7, 8], "the bytes stayed");
+}
+
+/// A recycle gives the descriptor's buffer back to the engine.
+#[test]
+fn a_recycled_buffer_is_written_again() {
+    let (storage, buffers, _, walker, mut live) = walked_live::<4>();
+    storage.land_unit(&walker, &[1, 2, 3, 4]).unwrap();
+    // A later terminal releases the preceding descriptor's link for recycle.
+    storage.land_unit(&walker, &[5, 6, 7, 8]).unwrap();
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, frozen)
+        .unwrap()
+        .expect("a completed unit");
+    assert_eq!(unit.head_index(), 0);
+    assert!(unit.recycle(&mut *walker.borrow_mut()).unwrap().is_some());
+    assert_eq!(storage.dma_write(&live, buffers[0], &[9; 4]), Ok(()));
+}
+
+/// A descriptor still taken when its epoch stops is the engine's in the
+/// next: a pause waited for its leases.
+#[test]
+fn a_descriptor_taken_in_the_last_epoch_is_written_in_the_next() {
+    let (storage, buffers, _, mut walker, mut live) = walked_live::<4>();
+    storage.land_unit(&walker, &[1, 2, 3, 4]).unwrap();
+    let frozen = live.freeze_cursor(walker.get_mut()).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some(),
+        "a completed descriptor"
+    );
+    assert!(live.observed_mask().contains(0));
+    let halted = live
+        .try_stop(walker.get_mut())
+        .map_err(|(_, error)| error)
+        .unwrap();
+    let stopped = storage
+        .prepare_halted(halted, walker.get_mut())
+        .map_err(|(_, error)| error)
+        .unwrap();
+    let live = stopped
+        .try_start(walker.get_mut())
+        .map_err(|(_, error)| error)
+        .unwrap();
+    assert_eq!(storage.dma_write(&live, buffers[0], &[9; 4]), Ok(()));
+}
+
+/// A frame in R lent to the CPU, and a free descriptor aimed at R's buffer.
+fn a_lent_frame_in_r() -> (
+    Walked<4>,
+    u32,
+    core::cell::RefCell<crate::radio::ieee80211::dma::rx_dma::model::RxWalkerModel>,
+) {
+    let mut ring = Walked::<4>::start();
+    assert!(ring.land(4, true));
+    let reserved = ring.storage.reserved_descriptor().buffer_address();
+    let walker = core::cell::RefCell::new(core::mem::take(&mut ring.walker));
+    aim_free_descriptor(ring.storage.walker_table().unwrap(), &walker, reserved);
+    (ring, reserved, walker)
+}
+
+/// R's frame is lent by `reserved_frame`, not by any descriptor word: no
+/// landing writes under the view, whatever descriptor names R's buffer.
+#[test]
+fn a_landing_never_writes_under_the_frame_lent_from_r() {
+    let (mut ring, reserved, walker) = a_lent_frame_in_r();
+    let frame = ring.storage.reserved_frame(&ring.live).unwrap().unwrap();
+    let next = walker.borrow().next_descriptor_low;
+    assert_eq!(
+        ring.storage.land_unit(&walker, &[9, 9, 9, 9]),
+        Err(HostDmaAccessError::HeldByCpu)
+    );
+    assert_eq!(walker.borrow().next_descriptor_low, next, "NEXT stays");
+    assert_eq!(frame.bytes(), [0xa5; 4], "the lent bytes stayed");
+
+    // An exclusive ring loan ends every view of R: R is written again.
+    ring.walker = walker.into_inner();
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    assert_eq!(
+        ring.storage.dma_write(&ring.live, reserved, &[9; 4]),
+        Ok(())
+    );
+}
+
+/// `dma_write` borrows the ring shared, as the view of R does: the record of
+/// the lent frame, not the borrow, refuses it.
+#[test]
+fn a_write_never_lands_under_the_frame_lent_from_r() {
+    let (ring, reserved, _) = a_lent_frame_in_r();
+    let frame = ring.storage.reserved_frame(&ring.live).unwrap().unwrap();
+    assert_eq!(
+        ring.storage.dma_write(&ring.live, reserved, &[9; 4]),
+        Err(HostDmaAccessError::HeldByCpu)
+    );
+    assert_eq!(frame.bytes(), [0xa5; 4], "the lent bytes stayed");
+}
+
+/// The first ring take holds the ring exclusively and leaves R: a late
+/// landing in R is written, for `observe_reserved` to fail closed on.
+#[test]
+fn a_late_landing_in_r_is_written_once_the_ring_left_r() {
+    let mut ring = Walked::<4>::start();
+    assert!(ring.land(4, true));
+    assert!(ring.storage.reserved_frame(&ring.live).unwrap().is_some());
+    assert!(ring.land(4, true));
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
+    assert!(
+        ring.storage
+            .take_completed(&mut ring.live, frozen, 0)
+            .unwrap()
+            .is_some(),
+        "the first ring take"
+    );
+    assert!(ring.live.reserved_left());
+    let reserved = ring.storage.reserved_descriptor().buffer_address();
+    assert_eq!(
+        ring.storage.dma_write(&ring.live, reserved, &[9; 4]),
+        Ok(())
+    );
+}
+
+/// A new epoch holds nothing of the last: neither a taken descriptor nor a
+/// frame of R refuses its landings.
+#[test]
+fn a_new_epoch_holds_nothing_of_the_last() {
+    let mut ring = Walked::<4>::start();
+    assert!(ring.land(4, true));
+    assert!(ring.storage.reserved_frame(&ring.live).unwrap().is_some());
+    let reserved_low = ring.reserved_address() & ADDRESS_LOW_MASK;
+    let halted = ring
+        .live
+        .try_stop(&mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    let stopped = ring
+        .storage
+        .prepare_halted(halted, &mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    ring.walker.next_descriptor_low = reserved_low;
+    ring.live = stopped
+        .try_start(&mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    assert!(ring.land(4, true), "R takes the next epoch's landing");
+}
+
 #[test]
 fn host_dma_port_writes_only_inside_one_ring_buffer() {
     const COUNT: usize = 2;

@@ -337,7 +337,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             return Ok(None);
         }
         // `RX_DONE` ends DMA's use of R, and nothing rearms R while the ring
-        // borrow lives; the range is within the buffer by `get`.
+        // borrow lives; the range is within the buffer by `get`. The model
+        // of the DMA engine is shown the view first: no word of R's
+        // descriptor tells it.
+        self.arena.show_reserved_lent();
         Ok(self
             .reserved_buffer
             .completed()
