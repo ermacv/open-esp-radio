@@ -11,7 +11,7 @@ use std::task::{Context, Waker};
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeCandidate;
 use oer_protocols_ieee80211_runtime::egress::{Exchange, PeerAir, RadioNotice};
-use oer_protocols_network_port::{FramePort, FrameSource, Ready, SlotTooShort};
+use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Ready, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 use oer_protocols_network_wire::ip::Ipv4Header;
@@ -419,10 +419,17 @@ impl FramePort for Medium {
 impl FrameSource for Medium {
     type Notice = RadioNotice<u32, PeerKey>;
 
-    fn take_frame(&mut self, read: impl FnOnce(&[u8])) -> bool {
+    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
         let frame = self.0.borrow_mut().received.pop_front();
         frame.is_some_and(|frame| {
-            read(&frame);
+            if let Ok((header, payload)) = EthernetHeader::parse(&frame) {
+                read(EthernetFrameView {
+                    destination: header.destination,
+                    source: header.source,
+                    ether_type: header.ether_type.value(),
+                    payload,
+                });
+            }
             true
         })
     }

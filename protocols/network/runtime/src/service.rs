@@ -615,6 +615,9 @@ impl<
                 break;
             }
         }
+        if moved {
+            self.owner.flush();
+        }
         moved
     }
 

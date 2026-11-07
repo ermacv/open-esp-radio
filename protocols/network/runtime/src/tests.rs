@@ -19,7 +19,9 @@ use oer_protocols_network_core::{
     Block, Eviction, Group, Interface, NetworkOwner, OpenRefused, Outcome, Remote, SendRefusal,
     claim,
 };
-use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource, SlotTooShort};
+use oer_protocols_network_port::{
+    Candidate, Egress, EthernetFrameView, FramePort, FrameSource, SlotTooShort,
+};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
@@ -111,11 +113,17 @@ impl FrameSource for WirePort {
         self.0.borrow_mut().ended.pop_front()
     }
 
-    fn take_frame(&mut self, read: impl FnOnce(&[u8])) -> bool {
+    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
         let frame = self.0.borrow_mut().incoming.pop_front();
         match frame {
             Some(frame) => {
-                read(&frame);
+                let (header, payload) = EthernetHeader::parse(&frame).unwrap();
+                read(EthernetFrameView {
+                    destination: header.destination,
+                    source: header.source,
+                    ether_type: header.ether_type.value(),
+                    payload,
+                });
                 true
             }
             None => false,

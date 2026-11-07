@@ -7,7 +7,7 @@ use core::marker::PhantomData;
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
-use oer_protocols_network_port::{Candidate, Class, Ready, SlotTooShort};
+use oer_protocols_network_port::{Candidate, Class, EthernetFrameView, Ready, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{self, EtherType, EthernetHeader};
@@ -732,15 +732,33 @@ impl<
             report(events, || NetEvent::Malformed);
             return;
         };
-        if header.destination != self.interface.hardware()
-            && header.destination != BROADCAST_HARDWARE
+        let view = EthernetFrameView {
+            destination: header.destination,
+            source: header.source,
+            ether_type: header.ether_type.value(),
+            payload,
+        };
+        self.input_view(now, view, pool, events);
+    }
+
+    /// As [`Self::input`], for a frame whose fields a port read apart from its
+    /// payload.
+    pub fn input_view<const BLOCKS: usize>(
+        &mut self,
+        now: Instant,
+        frame: EthernetFrameView<'_>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+        events: &mut impl EventSink<NetEvent>,
+    ) {
+        if frame.destination != self.interface.hardware() && frame.destination != BROADCAST_HARDWARE
         {
             return;
         }
-        if header.ether_type == EtherType::ARP {
-            self.input_arp(now, payload, events);
-        } else if header.ether_type == EtherType::IPV4 {
-            self.input_ipv4(payload, pool, events);
+        let ether_type = EtherType::new(frame.ether_type);
+        if ether_type == EtherType::ARP {
+            self.input_arp(now, frame.payload, events);
+        } else if ether_type == EtherType::IPV4 {
+            self.input_ipv4(frame.payload, pool, events);
         }
     }
 

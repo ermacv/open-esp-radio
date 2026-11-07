@@ -164,7 +164,12 @@ impl<
         let core = &mut self.core;
         let pool = &mut self.pool;
         self.port
-            .take_frame(|frame| core.input(now, frame, pool, events))
+            .take_frame(|frame| core.input_view(now, frame, pool, events))
+    }
+
+    /// End a burst of publications.
+    pub fn flush(&mut self) {
+        self.port.flush();
     }
 
     /// The port's next notice, for the egress policy.
