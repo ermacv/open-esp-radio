@@ -33,10 +33,10 @@ pub(crate) enum Attempt {
     Lost,
 }
 
-/// The blocks a run's end can find in its hands: one reserved, one received
-/// and one waiting for the lane.
-const PARKED: usize = 3;
-type Parked = RefCell<Vec<NetworkBlock, PARKED>>;
+/// Blocks no run could give back. A full lane can keep refusing across runs, so
+/// no one run's end bounds them; the pool does, as a block is affine and this
+/// has room for all of it.
+type Parked = RefCell<Vec<NetworkBlock, { wifi::BLOCKS }>>;
 
 /// Give `block` back, or park it for the next run: a full lane or a stop
 /// refuses it, and a run's end has no time to wait.
@@ -44,7 +44,7 @@ fn home(socket: &mut Socket, parked: &Parked, block: NetworkBlock) {
     if let Err(Refused { block, .. }) = socket.release(block)
         && let Ok(mut parked) = parked.try_borrow_mut()
     {
-        // Three places for at most three blocks.
+        // Room for every block there is.
         let _kept = parked.push(block);
     }
 }

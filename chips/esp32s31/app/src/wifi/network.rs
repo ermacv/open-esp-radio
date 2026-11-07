@@ -41,7 +41,7 @@ pub const BLOCK: usize = 1472;
 /// The Ethernet MTU.
 const MTU: u16 = 1500;
 /// Blocks of the network's memory, for all sockets and both directions.
-const BLOCKS: usize = 64;
+pub const BLOCKS: usize = 64;
 /// Commands a socket has running.
 const CREDITS: usize = 32;
 /// Datagrams a socket's queue holds in the core, and in its lane.

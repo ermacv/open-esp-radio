@@ -38,6 +38,7 @@ pub enum LoadError {
 pub mod wifi {
     pub struct Brand;
     pub const SOCKETS: usize = 2;
+    pub const BLOCKS: usize = 64;
     pub const RESERVE_AHEAD: usize = oer_protocols_network_runtime::RESERVE_AHEAD;
     pub type Socket =
         oer_protocols_network_runtime::Socket<'static, 'static, Brand, 1472, 32, 32, 32>;
