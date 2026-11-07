@@ -19,8 +19,7 @@ use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, RadioNotice};
 use oer_protocols_network_core::{Block, Interface, NetworkOwner, Outcome, Remote, claim};
 use oer_protocols_network_port::{Egress, FrameSource};
 use oer_protocols_network_runtime::{
-    Direct, EndCause, Ended, MemoryPolicy, Observer, Sent, Service, Share, Socket, SocketLanes,
-    StopLane,
+    Direct, EndCause, Ended, MemoryPolicy, Observer, Sent, Service, Socket, SocketLanes, StopLane,
 };
 use oer_protocols_network_testing_model::{Medium, PeerKey, PeerSpec, Spent};
 use oer_protocols_network_wire::ip::Dscp;
@@ -121,7 +120,8 @@ fn interface() -> Interface {
 struct Flow {
     port: u16,
     to: [u8; 4],
-    share: Share,
+    /// Flows of one number share a group of this limit.
+    group: (u8, usize),
     /// When it starts.
     after: u64,
 }
@@ -325,10 +325,20 @@ impl Scenario<'_> {
         let ended = Rc::new(RefCell::new(None));
         let marks = RefCell::new(Vec::new());
         let mut tasks: Vec<Task<'_>> = Vec::new();
+        let mut groups = BTreeMap::new();
         for flow in flows {
             let storage = Box::leak(Box::new(SocketLanes::new()));
+            let (number, limit) = flow.group;
+            let group = match groups.get(&number) {
+                Some(group) => *group,
+                None => {
+                    let group = service.group(limit).unwrap();
+                    groups.insert(number, group);
+                    group
+                }
+            };
             let socket = service
-                .bind(flow.port, Dscp::default(), flow.share, storage)
+                .bind(flow.port, Dscp::default(), group, storage)
                 .ok()
                 .unwrap();
             tasks.push(Box::pin(flood(socket, *flow, &left, &evicted, clock)));
@@ -394,7 +404,7 @@ fn flows(to: &[(u16, PeerSpec)]) -> Vec<Flow> {
         .map(|(group, (port, peer))| Flow {
             port: *port,
             to: peer.address,
-            share: Share::unlimited(group),
+            group: (group, usize::MAX),
             after: 0,
         })
         .collect()
@@ -562,7 +572,7 @@ fn to_a_sleeper(peers: &[PeerSpec; 2], limit: usize) -> [Flow; 3] {
     let flow = |port, peer: PeerSpec, group, limit, after| Flow {
         port,
         to: peer.address,
-        share: Share { group, limit },
+        group: (group, limit),
         after,
     };
     [

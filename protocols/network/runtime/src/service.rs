@@ -1,6 +1,5 @@
 //! The task that owns the core.
 
-use core::cell::Cell;
 use core::convert::Infallible;
 use core::future::poll_fn;
 use core::pin::pin;
@@ -12,8 +11,8 @@ use oer_portable_events::EventSink;
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, Eviction, NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired,
-    SocketId, Unsent,
+    CommandId, CommandState, Eviction, Group, GroupsFull, NetEvent, NetworkOwner, OpenRefused,
+    Outcome, Pool, Retired, SocketId, Unsent,
 };
 use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
@@ -63,29 +62,6 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
 
 /// The lane that stops a service: whoever holds its sender asks once.
 pub type StopLane = WakingSpscQueue<(), 1>;
-
-/// What a socket's blocks count toward: a group's limit bounds all its sockets
-/// together, and pins no blocks for it, as what it does not use stays shared.
-/// Every block given to a socket counts until it comes back: reserved, in the
-/// application's hands, queued or received.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Share {
-    pub group: u8,
-    /// The most blocks the group holds; a socket past it waits for its own
-    /// group's blocks, however many are free.
-    pub limit: usize,
-}
-
-impl Share {
-    /// A group of its own with no limit.
-    #[must_use]
-    pub const fn unlimited(group: u8) -> Self {
-        Self {
-            group,
-            limit: usize::MAX,
-        }
-    }
-}
 
 /// What a service does when memory runs out.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166,11 +142,8 @@ struct Bound<
     reserving: bool,
     /// A received datagram waits for room in the lane.
     blocked: bool,
-    share: Share,
-    /// The core's flow of this socket.
-    flow: u8,
-    /// Blocks given to this socket and not back.
-    held: Cell<usize>,
+    /// What this socket's reserved blocks count toward.
+    group: Group<B>,
     /// The socket was dropped and its lanes are drained.
     abandoned: bool,
 }
@@ -247,6 +220,14 @@ impl<
         }
     }
 
+    /// A new group of at most `limit` blocks.
+    ///
+    /// # Errors
+    /// [`GroupsFull`].
+    pub fn group(&mut self, limit: usize) -> Result<Group<B>, GroupsFull> {
+        self.owner.pool().group(limit)
+    }
+
     /// Open a socket on `port`, and give the application its end: a socket
     /// exists only once its service holds the other. A refusal changes nothing.
     ///
@@ -257,7 +238,7 @@ impl<
         &mut self,
         port: u16,
         dscp: Dscp,
-        share: Share,
+        group: Group<B>,
         storage: &'a mut SocketLanes<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>,
     ) -> Result<
         Socket<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>,
@@ -269,16 +250,14 @@ impl<
                 storage,
             });
         };
-        let id = match self.owner.open(port, dscp) {
+        let id = match self.owner.open_in(port, dscp, group) {
             Ok(id) => id,
             Err(reason) => return Err(BindRefused { reason, storage }),
         };
         let (socket, end) = lanes(storage);
         *place = Some(Bound {
             end,
-            flow: id.flow(),
-            share,
-            held: Cell::new(0),
+            group,
             socket: Some(id),
             commands: [const { None }; CREDITS],
             closing: None,
@@ -334,8 +313,10 @@ impl<
             }
             moved = true;
         }
+        let mut told_all = false;
         for _ in 0..TURN_FRAMES {
             let Some(notice) = self.owner.take_notice() else {
+                told_all = true;
                 break;
             };
             moved = true;
@@ -345,7 +326,13 @@ impl<
                 return true;
             }
         }
-        moved |= self.publish(now);
+        // A policy chooses knowing all the port has said: a later notice may
+        // free what the choice needs. So publishing waits for the next turn.
+        if told_all {
+            moved |= self.publish(now);
+        } else {
+            moved = true;
+        }
         for bound in self.bound.iter_mut().flatten() {
             moved |= bound.hand_back(&mut self.owner);
         }
@@ -353,36 +340,32 @@ impl<
         moved
     }
 
-    /// What `group`'s sockets hold.
-    fn held_by(&self, group: u8) -> usize {
-        self.bound
-            .iter()
-            .flatten()
-            .filter(|bound| bound.share.group == group)
-            .fold(0, |held, bound| held.saturating_add(bound.held.get()))
-    }
-
     /// With none free and a socket waiting, evict the oldest queued datagram
-    /// old enough, of the group holding the most and more than the waiter's.
+    /// old enough, counted to the group holding the most, and more than the
+    /// waiter's.
     fn relieve(&mut self, now: Instant) -> bool {
         self.pressure_at = None;
         let Some(after) = self.memory.evict_after else {
             return false;
         };
-        if self.owner.pool().free() != 0 {
+        let pool = self.owner.pool();
+        if pool.free() != 0 {
             return false;
         }
+        let pool = &*pool;
         let bound = self.bound.iter().flatten();
         let source = bound
             .clone()
-            .map(|socket| (self.held_by(socket.share.group), socket.share.group))
+            .map(|socket| (pool.held(socket.group), socket.group))
             .max_by_key(|(held, _)| *held);
         let Some((most, source)) = source else {
             return false;
         };
         let waiter = bound.clone().any(|socket| {
-            let held = self.held_by(socket.share.group);
-            socket.reserving && socket.share.group != source && held < most.min(socket.share.limit)
+            socket.reserving
+                && socket.group != source
+                && pool.held(socket.group) < most
+                && pool.may_take(socket.group)
         });
         if !waiter {
             return false;
@@ -390,11 +373,7 @@ impl<
         let oldest = self
             .owner
             .queued()
-            .filter(|queued| {
-                bound
-                    .clone()
-                    .any(|socket| socket.flow == queued.flow && socket.share.group == source)
-            })
+            .filter(|queued| queued.group == source)
             .min_by_key(|queued| queued.since);
         let Some(oldest) = oldest else {
             return false;
@@ -423,10 +402,7 @@ impl<
             moved = true;
             match request {
                 Request::Reserve => bound.reserving = true,
-                Request::Release(block) => {
-                    bound.block_back();
-                    self.owner.pool().give(block);
-                }
+                Request::Release(block) => self.owner.pool().give(block),
                 Request::Send { tag, remote, block } => {
                     let Some(socket) = &bound.socket else {
                         self.owner.pool().give(block);
@@ -466,12 +442,18 @@ impl<
         let first = self.next_block;
         let mut gave = false;
         while self.owner.pool().free() != 0 {
+            let pool = self.owner.pool();
+            let pool = &*pool;
+            let bound = &self.bound;
             let next = (0..SOCKETS)
                 .filter_map(|offset| {
                     let index = first.wrapping_add(offset).checked_rem(SOCKETS)?;
-                    let bound = self.bound.get(index)?.as_ref()?;
-                    let held = self.held_by(bound.share.group);
-                    (bound.reserving && held < bound.share.limit).then_some((held, offset, index))
+                    let socket = bound.get(index)?.as_ref()?;
+                    (socket.reserving && pool.may_take(socket.group)).then_some((
+                        pool.held(socket.group),
+                        offset,
+                        index,
+                    ))
                 })
                 .min();
             let Some((_, _, index)) = next else {
@@ -605,23 +587,16 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
 
     /// Answer a reservation, if a block is free.
     fn reserve<const BLOCKS: usize>(&mut self, pool: &mut Pool<'m, B, SIZE, BLOCKS>) -> bool {
-        let Some(block) = pool.take() else {
+        let Some(block) = pool.take_as(self.group) else {
             return false;
         };
         self.reserving = false;
-        self.held.set(self.held.get().saturating_add(1));
         self.answer(Answer::Reserved(block));
         true
     }
 
-    /// A block given to this socket came back.
-    fn block_back(&self) {
-        self.held.set(self.held.get().saturating_sub(1));
-    }
-
-    /// The command of `tag` ended, and its block has gone back.
+    /// The command of `tag` ended.
     fn ended(&self, tag: u8, sent: Sent) {
-        self.block_back();
         if let Some(place) = self.end.places.get(usize::from(tag)) {
             place.end(sent, self.end.credits, tag);
         }
@@ -648,7 +623,6 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             self.closing = owner.close(socket).ok();
         }
         inbound.drain(owner.pool());
-        self.held.set(0);
         self.reserving = false;
         self.blocked = false;
         self.abandoned = true;
@@ -703,7 +677,6 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
                     return moved;
                 };
                 permit.send(datagram);
-                self.held.set(self.held.get().saturating_add(1));
                 moved = true;
             }
             self.blocked = true;

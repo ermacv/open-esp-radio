@@ -39,17 +39,19 @@ account. No await falls between a choice and its answer from the port, so a
 cancelled `run` leaves no reservation unanswered. A policy that cannot go on ends the
 service with `EndCause::Egress`, and `Ended` returns the policy with its account.
 
-Memory is shared and has two guards. A `Share` puts a socket in a group whose limit
-bounds all its sockets together, counting every block given to them, in an
-application's hands too, and pins no block for it. When no block is free and a socket
-under its limit waits, `MemoryPolicy` may evict: the oldest queued datagram past
-`evict_after`, of the group holding the most and more than the waiter's. It ends
-`Outcome::Evicted`, and only datagrams the port has not taken can be evicted, never
-an application's blocks. This is pressure, not a deadline: nothing is evicted while
-none waits, and a block moved from one socket to another counts where it was given.
+Memory is shared and has two guards. A block counts toward the `Group` of the pool it
+was taken for until the pool has it back, so moving it between sockets, or dropping
+the socket that handed it over, changes nothing: the charge is on the block, in the
+pool, for reservations and received data alike. A group has one limit, set where it
+is made, which pins no block. When no block is free and a socket under its limit
+waits, `MemoryPolicy` may evict: the oldest queued datagram past `evict_after` that
+counts toward the group holding the most, and more than the waiter's. It ends
+`Outcome::Evicted`, and only datagrams the port has not taken can be evicted, never an
+application's blocks. This is pressure, not a deadline: nothing is evicted while none
+waits. A block a received datagram cannot have is dropped, and counted as an event.
 
-A turn takes commands, received frames and the port's completions, then chooses
-work and publishes it, then hands results and datagrams back. Each part is bounded, so no lane and no
+A turn takes commands, received frames and the port's notices, then, once it has
+read them all, chooses work and publishes it, then hands results and datagrams back. Each part is bounded, so no lane and no
 port starves the others, and sockets waiting for blocks take turns.
 
 `Service::run` ends at the first look after a stop, or at once when the port
