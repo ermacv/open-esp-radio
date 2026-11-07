@@ -97,10 +97,18 @@ impl<B, const SOCKETS: usize> Loans<B, SOCKETS> {
     /// radio's ring and what needs no loan live on those.
     ///
     /// # Errors
-    /// [`LoansRefused::Reserve`]; what was set stays.
-    pub const fn pool(&mut self, buffers: usize, reserve: usize) -> Result<(), LoansRefused> {
+    /// [`LoansRefused::Reserve`], or [`LoansRefused::Pool`] when what is
+    /// claimed already would not fit; what was set stays.
+    pub fn pool(&mut self, buffers: usize, reserve: usize) -> Result<(), LoansRefused> {
         if reserve > buffers {
             return Err(LoansRefused::Reserve);
+        }
+        let claimed = (0..SOCKETS).fold(self.old, |sum, socket| {
+            sum.saturating_add(self.claimed(socket))
+        });
+        let room = buffers.saturating_sub(reserve);
+        if claimed > room {
+            return Err(LoansRefused::Pool { room });
         }
         self.buffers = buffers;
         self.reserve = reserve;
@@ -131,15 +139,11 @@ impl<B, const SOCKETS: usize> Loans<B, SOCKETS> {
             });
         let taken = others.saturating_add(self.reserve).saturating_add(self.old);
         let room = self.buffers.saturating_sub(taken);
-        // A credit that only falls keeps the pool's account as it was.
-        let current = self.credits.get(socket).copied();
-        let current = current.ok_or(LoansRefused::Socket)?;
-        if credit > room && credit > current {
+        let place = self.credits.get_mut(socket).ok_or(LoansRefused::Socket)?;
+        if credit > room {
             return Err(LoansRefused::Pool { room });
         }
-        if let Some(place) = self.credits.get_mut(socket) {
-            *place = credit;
-        }
+        *place = credit;
         Ok(())
     }
 
@@ -275,11 +279,16 @@ mod tests {
     }
 
     #[test]
-    fn a_lowered_credit_is_never_refused() {
-        let mut loans = loans::<1>(2, 0);
-        loans.grant(0, 2).unwrap();
-        loans.pool(1, 1).unwrap();
+    fn a_pool_too_small_for_what_is_claimed_is_refused() {
+        let mut loans = loans::<1>(4, 0);
+        loans.grant(0, 3).unwrap();
+        assert_eq!(loans.pool(4, 2), Err(LoansRefused::Pool { room: 2 }));
         loans.grant(0, 1).unwrap();
+        let held = loans.lend(0).unwrap();
+        loans.grant(0, 0).unwrap();
+        assert_eq!(loans.pool(1, 1), Err(LoansRefused::Pool { room: 0 }));
+        loans.give_back(held);
+        loans.pool(1, 1).unwrap();
     }
 
     #[test]
