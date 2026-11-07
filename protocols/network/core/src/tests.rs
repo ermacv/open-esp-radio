@@ -1234,6 +1234,19 @@ fn a_group_counts_a_block_until_the_pool_has_it_back() {
 }
 
 #[test]
+fn the_heaviest_group_is_found_with_no_socket_in_it() {
+    brand!(Net);
+    let (mut pool, _) = claimed::<Net>();
+    assert!(pool.heaviest().is_none(), "nothing is out");
+    let first = pool.group(usize::MAX).unwrap();
+    let second = pool.group(usize::MAX).unwrap();
+    let _one = pool.take_as(first).unwrap();
+    let _two = pool.take_as(second).unwrap();
+    let _three = pool.take_as(second).unwrap();
+    assert_eq!(pool.heaviest(), Some((second, 2)));
+}
+
+#[test]
 fn a_pool_keeps_as_many_groups_as_it_can() {
     brand!(Net);
     let (mut pool, _) = claimed::<Net>();

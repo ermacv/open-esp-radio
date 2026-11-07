@@ -301,6 +301,18 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
             .is_some_and(|account| account.held < account.limit)
     }
 
+    /// The group holding the most blocks, wherever they are, with their count.
+    pub fn heaviest(&self) -> Option<(Group<B>, usize)> {
+        let (index, held) = (0_u8..)
+            .zip(self.groups.iter().map(|account| account.held))
+            .max_by_key(|(_, held)| *held)?;
+        let group = Group {
+            index,
+            brand: PhantomData,
+        };
+        (held != 0).then_some((group, held))
+    }
+
     /// Blocks out of the pool that count toward `group`.
     pub fn held(&self, group: Group<B>) -> usize {
         self.account(group).map_or(0, |account| account.held)

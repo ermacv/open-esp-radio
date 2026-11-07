@@ -1,10 +1,10 @@
-//! The application entry's execution inventory stays complete: every link
-//! the code declares has a row, and every row names text the code holds.
+//! Every declaration shape below in the scanned directories has an inventory
+//! row, and every row names text the code holds.
 //!
 //! This holds the list to the code, not the links to their guarantees: a row's
-//! `check`, `gap` and `wait` state what a reader found, and no test here proves
-//! them. A declaration outside [`SCANNED`], or of a shape `DECLARATIONS` does
-//! not name, goes unseen.
+//! `check`, `gap` and `wait` state what a reader found. Wait evidence names
+//! source locations, not a proof of the recorded service or bound. A declaration
+//! outside [`SCANNED`], or of a shape `DECLARATIONS` does not name, goes unseen.
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -23,9 +23,9 @@ const SCANNED: &[&str] = &[
 const DECLARATIONS: &[(&str, &str)] = &[
     ("IrqSignal::new::<", "signal"),
     ("PeerNotify::new(", "peer-notify"),
-    ("Esp32s31, ", "executor swi-site task-set timer"),
-    ("executor_observer::<", "swi-site"),
-    (".run::<", "swi-site"),
+    ("Esp32s31, ", "number-site"),
+    ("executor_observer::<", "number-site"),
+    (".run::<", "number-site"),
     // No production image holds a deadline-bearing peer channel yet: the first
     // one has to add its table here.
     ("PeerClient<", "no-production-peer-channel"),
@@ -86,13 +86,45 @@ fn declares(line: &str, declaration: &str) -> bool {
     })
 }
 
+fn source_line(row: &toml::Value) -> String {
+    let site = text(row, "site");
+    let anchor = text(row, "anchor");
+    assert!(!anchor.is_empty(), "empty anchor in {site}");
+    let source = std::fs::read_to_string(root().join(&site)).unwrap();
+    assert_eq!(
+        source.lines().filter(|line| line.contains(&anchor)).count(),
+        1,
+        "`{anchor}` in {site}"
+    );
+    source
+        .lines()
+        .find(|line| line.contains(&anchor))
+        .unwrap()
+        .to_owned()
+}
+
+// These are the three known uses of a handwritten number in this inventory.
+// The const argument of Executor::run is the hart, even when its value happens
+// to equal that executor's SWI. This remains a spelling check, not type inference.
+fn number_kind(anchor: &str) -> Option<&'static str> {
+    if anchor.contains("executor_observer::<") {
+        Some("observer")
+    } else if anchor.contains(".run::<") {
+        Some("hart")
+    } else if declares(anchor, "Esp32s31, ") {
+        Some("swi")
+    } else {
+        None
+    }
+}
+
 #[test]
 fn every_row_names_text_of_its_file() {
     let inventory = inventory();
     for table in [
         "interrupt",
         "executor",
-        "swi-site",
+        "number-site",
         "task-set",
         "task-root",
         "signal",
@@ -103,14 +135,42 @@ fn every_row_names_text_of_its_file() {
         let listed = rows(&inventory, table);
         assert!(!listed.is_empty(), "{table}");
         for row in listed {
-            let site = text(row, "site");
-            let anchor = text(row, "anchor");
-            let source = std::fs::read_to_string(root().join(&site)).unwrap();
-            assert_eq!(
-                source.lines().filter(|line| line.contains(&anchor)).count(),
-                1,
-                "`{anchor}` in {site}"
-            );
+            let _ = source_line(row);
+        }
+    }
+}
+
+#[test]
+fn every_number_site_records_its_kind_without_duplicates() {
+    let inventory = inventory();
+    let mut seen = BTreeSet::new();
+    for row in rows(&inventory, "number-site") {
+        let site = text(row, "site");
+        let anchor = text(row, "anchor");
+        let kind = text(row, "kind");
+        let line = source_line(row);
+        assert_eq!(number_kind(&line), Some(kind.as_str()), "{site}: {anchor}");
+        assert!(seen.insert((site, line)), "duplicate number site");
+    }
+}
+
+#[test]
+fn every_wait_names_its_scope_and_source_evidence() {
+    let inventory = inventory();
+    let mut ids = BTreeSet::new();
+    assert!(!rows(&inventory, "wait").is_empty());
+    for row in rows(&inventory, "wait") {
+        let id = text(row, "id");
+        assert!(ids.insert(id.clone()), "duplicate wait: {id}");
+        for field in ["waiter", "served_by", "condition", "held", "bound"] {
+            assert!(!text(row, field).is_empty(), "{id}: {field}");
+        }
+        let _cfg = text(row, "cfg");
+        assert!(matches!(text(row, "state").as_str(), "read" | "unverified"));
+        let evidence = row["evidence"].as_array().unwrap();
+        assert!(!evidence.is_empty(), "{id}: no evidence");
+        for site in evidence {
+            let _ = source_line(site);
         }
     }
 }

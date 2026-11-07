@@ -16,5 +16,16 @@ reset policy apply to setup failure and an orphan alarm.
 
 `execution-inventory.toml` lists what the entry's execution consists of today:
 interrupts, executors, task sets, signals, timers, the hart start and the known
-waits, each with its cfg, its checks and what nothing checks yet. A layer test
-holds the list to the code.
+waits. It records cfgs, source locations, existing checks and gaps. The 29
+`number-site` rows distinguish 25 SWI uses, three observer indices and one
+hart argument; the executor declarations are included in that count. Timer
+installation distinguishes starting a radio executor from the fallback path,
+which can also be taken with the `wifi` feature enabled.
+
+The twelve known waits separate queue readiness, lent-buffer returns, network
+stop, application/group send and receive, MAC facts and USB read and write.
+Each names its conditions, retained owners, local bound (including absence of
+one) and source evidence. `state = "read"` records a manual code reading, with
+no guarantee of eventual service or absence of deadlock. A layer test checks
+known declaration shapes in its listed directories and validates the evidence
+locations; it does not prove those conditions or bounds.
