@@ -158,9 +158,9 @@ const PEER_PORT: u16 = 7;
 
 /// Passes of a case before it counts as spinning.
 const PASSES: usize = 100_000;
-/// What a poll of a task costs, in microseconds of the model's time: an
-/// input. Time passes while a core works, and a settle the port leaves to its
-/// reposts ends only so.
+/// What a poll of a task costs, in microseconds of the model's time, where a
+/// case asks for a cost: an input, and no case's progress may rest on it. By
+/// default a poll takes no time, so only armed timers move the clock.
 const POLL_MICROS: u64 = 2;
 /// Units lent to a network that has not run, and more than its turn takes.
 const LENT_UNREAD: usize = 1;
@@ -699,6 +699,10 @@ struct Bench<'b, 's, T: 'static> {
     faulted: bool,
     /// Terminals of the lifecycle's commands.
     configured: u32,
+    /// What a poll costs of the model's time.
+    poll_micros: u64,
+    /// From asking the radio to start until it had.
+    start_took: Duration,
 }
 
 fn channel() -> WifiChannel {
@@ -782,6 +786,11 @@ async fn serve_network<T: 'static>(
 /// Run `test` on a joined stack with its link up. `T` names its network: a
 /// type claims one.
 fn joined<T: 'static>(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's, T>)) {
+    joined_at::<T>(0, test);
+}
+
+/// [`joined`], each poll costing `poll_micros` of the model's time.
+fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's, T>)) {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Clocked::new();
         let reader = clock.clock.clone();
@@ -1052,9 +1061,13 @@ fn joined<T: 'static>(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's, T>)) {
             stopped: None,
             faulted: false,
             configured: 0,
+            poll_micros,
+            start_took: Duration::from_micros(0),
         };
+        let asked = bench.clock.now();
         bench.send(ToActor::Start(supported()));
         bench.until("the radio starts", |bench| bench.started);
+        bench.start_took = bench.clock.now().saturating_duration_since(asked);
         bench.send(ToActor::Port(PortCommand::Configure {
             permission: station_commands.configure.with_context(()),
             receive: StationReceive::Bss {
@@ -1076,7 +1089,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
             let actor = self.actor.run();
             let service = !self.network_paused && self.service.run();
             if actor || service {
-                self.clock.pass(POLL_MICROS);
+                self.clock.pass(self.poll_micros);
             }
             self.lifecycle();
             let air = self.serve_air();
@@ -1451,41 +1464,61 @@ fn datagram_of(mpdu: &[u8]) -> Vec<u8> {
     payload.to_vec()
 }
 
+fn one_datagram_out<T: 'static>(bench: &mut Bench<'_, '_, T>) {
+    let start = bench.work();
+    let home = bench.buffers_home();
+    assert_eq!(home, NETWORK_BUFFERS);
+
+    let observer = bench.send_datagram(b"out through the ring");
+    let sent = bench.result(observer);
+    assert_eq!(sent, Sent::Ended(Outcome::Accepted));
+    bench.until("the PPDU ended", |bench| {
+        !bench.mpdus(EtherType::IPV4.value()).is_empty() && !bench.atoms.on_air(2)
+    });
+
+    // The neighbor's question went first, on the same path.
+    assert_eq!(bench.mpdus(EtherType::ARP.value()).len(), 1);
+    let datagrams = bench.mpdus(EtherType::IPV4.value());
+    assert_eq!(datagrams.len(), 1);
+    assert_eq!(datagram_of(&datagrams[0]), b"out through the ring");
+    assert!(
+        bench
+            .seen
+            .iter()
+            .all(|frame| frame.format == AirFormat::Legacy)
+    );
+
+    // The completion brought every buffer back to the network.
+    bench.settle();
+    assert_eq!(bench.buffers_home(), NETWORK_BUFFERS);
+    assert_eq!(bench.atoms.rule_breaks(), []);
+    let end = bench.work();
+    end.report("tx", &start);
+    assert!(end.actor_polls > start.actor_polls);
+    assert_eq!(end.moved.tx_frames - start.moved.tx_frames, 2);
+}
+
 #[test]
 fn a_datagram_leaves_as_a_psdu_the_air_reads_and_ends_with_its_completion() {
     struct Network;
+    joined::<Network>(|bench| one_datagram_out(bench));
+}
+
+/// The cost of a poll is an input of a cost scenario: it changes no outcome.
+#[test]
+fn a_poll_that_costs_time_changes_no_outcome() {
+    struct Network;
+    joined_at::<Network>(POLL_MICROS, |bench| one_datagram_out(bench));
+}
+
+/// A start ends on the timers it arms: no poll moves the clock, and nothing
+/// but those timers wakes it past the walker's settle.
+#[test]
+fn the_radio_starts_on_its_own_timer_when_polls_take_no_time() {
+    struct Network;
     joined::<Network>(|bench| {
-        let start = bench.work();
-        let home = bench.buffers_home();
-        assert_eq!(home, NETWORK_BUFFERS);
-
-        let observer = bench.send_datagram(b"out through the ring");
-        let sent = bench.result(observer);
-        assert_eq!(sent, Sent::Ended(Outcome::Accepted));
-        bench.until("the PPDU ended", |bench| {
-            !bench.mpdus(EtherType::IPV4.value()).is_empty() && !bench.atoms.on_air(2)
-        });
-
-        // The neighbor's question went first, on the same path.
-        assert_eq!(bench.mpdus(EtherType::ARP.value()).len(), 1);
-        let datagrams = bench.mpdus(EtherType::IPV4.value());
-        assert_eq!(datagrams.len(), 1);
-        assert_eq!(datagram_of(&datagrams[0]), b"out through the ring");
-        assert!(
-            bench
-                .seen
-                .iter()
-                .all(|frame| frame.format == AirFormat::Legacy)
-        );
-
-        // The completion brought every buffer back to the network.
-        bench.settle();
-        assert_eq!(bench.buffers_home(), NETWORK_BUFFERS);
-        assert_eq!(bench.atoms.rule_breaks(), []);
-        let end = bench.work();
-        end.report("tx", &start);
-        assert!(end.actor_polls > start.actor_polls);
-        assert_eq!(end.moved.tx_frames - start.moved.tx_frames, 2);
+        assert_eq!(bench.poll_micros, 0);
+        assert!(bench.start_took >= Duration::from_micros(5));
     });
 }
 
