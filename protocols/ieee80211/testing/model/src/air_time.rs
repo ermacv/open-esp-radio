@@ -1117,7 +1117,11 @@ impl Medium {
         let retries: Vec<SequenceNumber> = peer.unacked.iter().copied().collect();
         let mut retries = retries.into_iter();
         let mut frames: Vec<(SequenceNumber, Vec<u8>, u32)> = Vec::new();
-        let limit = usize::from(peer.config.max_subframes).min(usize::from(window));
+        let limit = if aggregates {
+            usize::from(peer.config.max_subframes).min(usize::from(window))
+        } else {
+            1
+        };
         let bound = loop {
             if frames.len() >= limit {
                 break if usize::from(window) <= usize::from(peer.config.max_subframes) {

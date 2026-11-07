@@ -788,6 +788,25 @@ fn without_a_window_the_access_point_sends_single_mpdus_acknowledged_one_by_one(
 }
 
 #[test]
+fn a_rate_without_aggregates_sends_single_mpdus_whatever_the_window() {
+    let world = roomy();
+    let mut air_peer = peer(PeerWindow::Assumed(16), Offered::Saturated);
+    air_peer.rate = PhyRate::Legacy(LegacyRate::Ofdm54M);
+    let mut medium = medium(1, Some(air_peer));
+    medium.advance(50_000, &world).unwrap();
+    let report = medium.report();
+    assert!(report.peer.exchanges > 2);
+    assert_eq!(report.peer.exchanges, report.peer.subframes);
+    let [first, ..] = medium.spans() else {
+        panic!("an exchange");
+    };
+    let ppdu = PhyRate::Legacy(LegacyRate::Ofdm54M)
+        .max_ppdu_duration_micros(STAND_MPDU)
+        .unwrap();
+    assert_eq!(first.end_micros - first.start_micros, u64::from(ppdu + 44));
+}
+
+#[test]
 fn the_applied_agreement_is_what_the_access_point_reads_at_each_aggregate() {
     let world = roomy();
     let mut medium = medium(1, Some(peer(PeerWindow::Agreed, Offered::Saturated)));
