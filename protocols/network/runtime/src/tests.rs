@@ -314,6 +314,16 @@ fn run_tasks<T, U>(
     panic!("{POLLS} passes without an end: a task spins");
 }
 
+/// A service's task: drive it, then hand every owner on.
+async fn serve<B>(
+    mut service: TestService<B>,
+    clock: &VirtualClock,
+    events: &mut (),
+) -> TestEnded<B> {
+    let _cause = service.run(clock, events).await;
+    service.retire()
+}
+
 /// Run `client` beside the service until it ends, then stop the service.
 fn run<B: 'static, R>(
     bench: Bench<B>,
@@ -332,7 +342,7 @@ fn run<B: 'static, R>(
         stop.try_send(()).ok().unwrap();
         result
     };
-    let (ended, result) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let (ended, result) = run_tasks(clock, serve(service, clock, &mut events), drive);
     (ended, socket, result)
 }
 
@@ -354,7 +364,7 @@ fn run_owning<B: 'static, R>(
         stop.try_send(()).ok().unwrap();
         result
     };
-    run_tasks(clock, service.run(clock, &mut events), drive)
+    run_tasks(clock, serve(service, clock, &mut events), drive)
 }
 
 async fn fill<B>(socket: &mut TestSocket<B>, data: &[u8]) -> Block<'static, B, SIZE> {
@@ -741,7 +751,7 @@ fn a_datagram_written_as_the_service_stops_ends_retired_and_its_block_returns() 
         stop.try_send(()).ok().unwrap();
         socket.send(peer(), block).ok().unwrap()
     };
-    let (mut ended, observer) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let (mut ended, observer) = run_tasks(clock, serve(service, clock, &mut events), drive);
     assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
     assert_eq!(ended.retired.pool.outstanding(), 1);
     returned(&mut ended, &mut socket);
@@ -859,7 +869,7 @@ fn a_socket_dropped_as_the_service_stops_loses_no_block() {
         drop(socket);
         observer
     };
-    let (ended, observer) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let (ended, observer) = run_tasks(clock, serve(service, clock, &mut events), drive);
     assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
     assert_eq!(ended.retired.pool.outstanding(), 0);
 }
@@ -887,7 +897,7 @@ fn a_stop_alone_wakes_an_observer_of_a_command_it_never_saw() {
         stop.try_send(()).ok().unwrap();
         observer
     };
-    let (_, observer) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let (_, observer) = run_tasks(clock, serve(service, clock, &mut events), drive);
     assert_eq!(count.0.load(Ordering::SeqCst), 1);
     assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
 }
@@ -965,10 +975,10 @@ fn a_refused_bind_changes_nothing_and_the_storage_serves_again() {
         stop.try_send(()).ok().unwrap();
         results
     };
-    let (ended, results) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let (cause, results) = run_tasks(clock, service.run(clock, &mut events), drive);
     let accepted = Sent::Ended(Outcome::Accepted);
     assert_eq!(results, (accepted, accepted));
-    assert_eq!(ended.cause, EndCause::Stopped);
+    assert_eq!(cause, EndCause::Stopped);
 }
 
 #[test]
@@ -1024,53 +1034,177 @@ fn a_waiting_receive_hears_its_service_end() {
     ));
 }
 
+/// Take `count` blocks from a service driven by hand.
+fn blocks_by_hand<B: 'static, R: Future>(
+    socket: &mut TestSocket<B>,
+    run: &mut core::pin::Pin<&mut R>,
+    count: usize,
+) -> Vec<Block<'static, B, SIZE>> {
+    let cx = &mut Context::from_waker(Waker::noop());
+    let mut blocks = Vec::new();
+    for _ in 0..count {
+        let mut reserve = pin!(socket.reserve());
+        blocks.push(loop {
+            if let Poll::Ready(block) = reserve.as_mut().poll(cx) {
+                break block.unwrap();
+            }
+            assert!(run.as_mut().poll(cx).is_pending());
+        });
+    }
+    blocks
+}
+
 #[test]
-fn a_cancelled_service_task_ends_an_observer_and_a_full_lane_wait() {
+fn a_cancelled_run_leaves_every_owner_with_its_service() {
     brand!(Net);
     let Bench {
-        service,
+        mut service,
         mut socket,
         wire,
         clock,
         ..
     } = bench::<Net>();
     let mut events = ();
-    let mut run = Box::pin(service.run(clock, &mut events));
-    let mut blocks = Vec::new();
-    let cx_client = &mut Context::from_waker(Waker::noop());
-    for _ in 0..BLOCKS {
-        let mut reserve = pin!(socket.reserve());
-        blocks.push(loop {
-            if let Poll::Ready(block) = reserve.as_mut().poll(cx_client) {
-                break block.unwrap();
-            }
-            assert!(run.as_mut().poll(cx_client).is_pending());
-        });
-    }
+    let (count, waker) = counter();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let (known, mut unseen) = {
+        let mut run = pin!(service.run(clock, &mut events));
+        let mut blocks = blocks_by_hand(&mut socket, &mut run, 2);
+        let mut known = socket.send(peer(), blocks.pop().unwrap()).ok().unwrap();
+        let mut finished = false;
+        while !finished {
+            assert!(run.as_mut().poll(cx).is_pending());
+            finished = pin!(known.finished()).poll(cx).is_ready();
+        }
+        let unseen = socket.send(peer(), blocks.pop().unwrap()).ok().unwrap();
+        (known, unseen)
+    };
+    assert!(
+        pin!(unseen.finished())
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending()
+    );
+    assert_eq!(
+        count.0.load(Ordering::SeqCst),
+        0,
+        "a cancelled run ends nothing"
+    );
+    assert!(!socket.closed());
+    let mut ended = service.retire();
+    assert_eq!(count.0.load(Ordering::SeqCst), 1, "its retirement does");
+    assert_eq!(ended.cause, EndCause::Stopped);
+    assert_eq!(known.take().ok(), Some(Sent::Ended(Outcome::Accepted)));
+    assert_eq!(unseen.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+    returned(&mut ended, &mut socket);
+    assert_eq!(datagrams(&wire.0.borrow()).len(), 1);
+    let retired = ended.retired;
+    let owner = NetworkOwner::new(
+        retired.brand,
+        Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap(),
+        retired.pool,
+        retired.port,
+    );
+    let (_, _, sent) = run(bench_on(owner, wire), async |socket, _| {
+        send_one(socket, b"next").await
+    });
+    assert_eq!(sent, Sent::Ended(Outcome::Accepted));
+}
+
+#[test]
+fn a_cancelled_run_may_start_again() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        mut socket,
+        stop,
+        clock,
+        ..
+    } = bench::<Net>();
+    let mut events = ();
+    let observer = {
+        let mut run = pin!(service.run(clock, &mut events));
+        let mut blocks = blocks_by_hand(&mut socket, &mut run, 1);
+        socket.send(peer(), blocks.pop().unwrap()).ok().unwrap()
+    };
+    let drive = async {
+        let sent = result_of(observer).await;
+        stop.try_send(()).ok().unwrap();
+        sent
+    };
+    let (cause, sent) = run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(cause, EndCause::Stopped);
+    assert_eq!(sent, Sent::Ended(Outcome::Accepted));
+}
+
+#[test]
+fn a_run_that_ended_serves_no_more() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        mut socket,
+        wire,
+        stop,
+        clock,
+    } = bench::<Net>();
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let block = {
+        let mut run = pin!(service.run(clock, &mut events));
+        blocks_by_hand(&mut socket, &mut run, 1).pop().unwrap()
+    };
+    stop.try_send(()).ok().unwrap();
+    let ended = pin!(service.run(clock, &mut events)).poll(cx);
+    assert_eq!(ended, Poll::Ready(EndCause::Stopped));
+    let observer = socket.send(peer(), block).ok().unwrap();
+    let again = pin!(service.run(clock, &mut events)).poll(cx);
+    assert_eq!(again, Poll::Ready(EndCause::Stopped));
+    assert!(wire.0.borrow().sent.is_empty());
+    let mut ended = service.retire();
+    assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+    returned(&mut ended, &mut socket);
+}
+
+fn a_service_end_ends_a_full_lane_wait<B: 'static>(end: impl FnOnce(TestService<B>)) {
+    let Bench {
+        mut service,
+        mut socket,
+        wire,
+        clock,
+        ..
+    } = bench::<B>();
+    let mut events = ();
+    let mut blocks = {
+        let mut run = pin!(service.run(clock, &mut events));
+        blocks_by_hand(&mut socket, &mut run, BLOCKS)
+    };
     wire.0.borrow_mut().full = true;
-    let mut observer = socket.send(peer(), blocks.pop().unwrap()).ok().unwrap();
+    let first = socket.send(peer(), blocks.pop().unwrap()).ok().unwrap();
     let second = socket.send(peer(), blocks.pop().unwrap()).ok().unwrap();
     socket.release(blocks.pop().unwrap()).ok().unwrap();
     socket.release(blocks.pop().unwrap()).ok().unwrap();
-    assert!(pin!(socket.reserve()).poll(cx_client).is_pending());
-    let (observed, observer_waker) = counter();
-    assert!(
-        pin!(observer.finished())
-            .poll(&mut Context::from_waker(&observer_waker))
-            .is_pending()
-    );
+    let cx = &mut Context::from_waker(Waker::noop());
+    assert!(pin!(socket.reserve()).poll(cx).is_pending());
     let (roomy, room_waker) = counter();
     let room_cx = &mut Context::from_waker(&room_waker);
-    {
-        let mut room = pin!(socket.room());
-        assert!(room.as_mut().poll(room_cx).is_pending());
-        drop(run);
-        assert!(roomy.0.load(Ordering::SeqCst) >= 1, "the end wakes room");
-        assert_eq!(room.as_mut().poll(room_cx), Poll::Ready(Err(SocketClosed)));
-    }
-    assert_eq!(observed.0.load(Ordering::SeqCst), 1);
-    assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+    let mut room = pin!(socket.room());
+    assert!(room.as_mut().poll(room_cx).is_pending());
+    end(service);
+    assert!(roomy.0.load(Ordering::SeqCst) >= 1, "the end wakes room");
+    assert_eq!(room.as_mut().poll(room_cx), Poll::Ready(Err(SocketClosed)));
+    assert_eq!(first.take().ok(), Some(Sent::Ended(Outcome::Retired)));
     assert_eq!(second.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+}
+
+#[test]
+fn a_retirement_ends_a_full_lane_wait() {
+    brand!(Net);
+    a_service_end_ends_a_full_lane_wait::<Net>(|service| drop(service.retire()));
+}
+
+#[test]
+fn a_dropped_service_ends_a_full_lane_wait() {
+    brand!(Net);
+    a_service_end_ends_a_full_lane_wait::<Net>(drop);
 }
 
 #[test]

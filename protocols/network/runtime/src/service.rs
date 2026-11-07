@@ -31,7 +31,7 @@ pub type StopLane = WakingSpscQueue<(), 1>;
 /// Why a service ended.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EndCause {
-    /// A stop was asked.
+    /// A stop was asked, or the service's owner retired it.
     Stopped,
     /// The port said it took a frame it never filled, so what it does is not
     /// known. The command that met this ends `Outcome::Unknown`, the others
@@ -106,6 +106,8 @@ pub struct Service<
     owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
     bound: [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>>; SOCKETS],
     stop: WakingSpscReceiver<'a, (), 1>,
+    /// Why [`Self::run`] ended; it serves no more once this is set.
+    ended: Option<EndCause>,
 }
 
 impl<
@@ -123,8 +125,11 @@ impl<
     P: FramePort + FrameSource,
 > Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P>
 {
-    /// Own `owner`. Dropping a service drops its pool, so no block has an
-    /// owner left; its sockets end and their observers read `Retired`.
+    /// Own `owner`. A service keeps its owners until [`Self::retire`] hands
+    /// them on, so a cancelled [`Self::run`] loses none. Dropping a service
+    /// instead is the end of the whole network: its port, pool and brand go,
+    /// blocks in its lanes stay there unreachable and their memory is not
+    /// reused, and waiting sockets and observers end.
     pub const fn new(
         owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
         stop: WakingSpscReceiver<'a, (), 1>,
@@ -133,6 +138,7 @@ impl<
             owner,
             bound: [const { None }; SOCKETS],
             stop,
+            ended: None,
         }
     }
 
@@ -174,22 +180,28 @@ impl<
         Ok(socket)
     }
 
-    /// Serve until a stop is asked or the port is at fault, and return why,
-    /// with what the core hands on.
+    /// Serve until a stop is asked or the port is at fault, and return why:
+    /// [`Self::retire`] then ends the sockets and hands every owner on. This
+    /// only drives the service, so cancelling it leaves all as a wait left it:
+    /// `run` may start again, or the owner may retire. Once this ended, it
+    /// serves no more.
     pub async fn run<T: Timer>(
-        mut self,
+        &mut self,
         clock: &T,
         events: &mut impl EventSink<NetEvent>,
-    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P> {
+    ) -> EndCause {
         loop {
+            if let Some(cause) = self.ended {
+                return cause;
+            }
             if self.stop.try_receive().is_some() {
-                return self.retire(EndCause::Stopped);
+                self.ended = Some(EndCause::Stopped);
+                continue;
             }
             let moved = self.turn(clock.now(), events);
             if self.owner.port_broken() {
-                return self.retire(EndCause::PortContract);
-            }
-            if moved {
+                self.ended = Some(EndCause::PortContract);
+            } else if moved {
                 yield_now().await;
             } else {
                 self.wait(clock).await;
@@ -286,7 +298,9 @@ impl<
     /// Wait for anything to do: the port, a lane, a stop or a time wakes this.
     async fn wait<T: Timer>(&mut self, clock: &T) {
         let deadline = self.owner.poll_deadline();
-        let Self { owner, bound, stop } = self;
+        let Self {
+            owner, bound, stop, ..
+        } = self;
         let mut registered = false;
         let ready = poll_fn(|cx| {
             // Any wake ends the wait: the turn looks at everything anyway.
@@ -313,11 +327,11 @@ impl<
     }
 
     /// End: nothing more is published, every known result goes to its place,
-    /// and each socket gets the request lane, with what the service never saw.
-    fn retire(
-        self,
-        cause: EndCause,
-    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P> {
+    /// each socket gets the request lane, with what the service never saw, and
+    /// every owner comes back. Its owner calls this after [`Self::run`] ended
+    /// or was cancelled.
+    pub fn retire(self) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P> {
+        let cause = self.ended.unwrap_or(EndCause::Stopped);
         let mut retired = self.owner.retire();
         let sockets = self
             .bound

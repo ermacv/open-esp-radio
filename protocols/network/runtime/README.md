@@ -2,7 +2,7 @@
 
 The task that owns a network core, and the sockets applications hold. It binds
 no executor: time comes from `oer-portable-time`, and a composition declares the
-task that polls `Service::run`.
+task that polls `Service::run` and then calls `Service::retire`.
 
 One task owns the core. A socket talks to it through queues, and blocks travel
 through them by value. A socket's lanes are its own, so one socket waits for no
@@ -10,9 +10,13 @@ other's room.
 
 `Service::bind` opens a socket in the core and gives the application its end, so a
 socket exists only once its service holds the other end. A refused bind changes
-nothing and returns the storage. Dropping a service unrun, or cancelling its task,
-drops its pool, so no block has an owner left, and waiting sockets and observers
-end: `SocketClosed` and `Outcome::Retired`.
+nothing and returns the storage.
+
+`run` only drives the service, which keeps every owner, so cancelling it loses
+nothing: `run` may start again, or the owner calls `retire`. Dropping a `Service`
+is another matter: it is the end of the whole network. Port, pool and brand go, and
+waiting sockets and observers end with `SocketClosed` and `Outcome::Retired`. Blocks
+in the lanes then stay there, unreachable, and their memory is not reused.
 
 `Socket::send` writes the command into its lane, and that is the acceptance
 point: before it a `Refused` with the block, after it one result. Nothing that
@@ -34,9 +38,9 @@ then hands results and datagrams back. Each part is bounded, so no lane and no
 port starves the others.
 
 `Service::run` ends at the first look after a stop, or at once when the port
-contradicts itself, and returns `Ended`: the cause, the core's `Retired` and a
-`LateSocket` per socket. Nothing is published from then on. Every result the
-service knows goes to its place, the request lane goes to its socket, and only then
+contradicts itself, and returns the cause. Nothing is published from then on.
+`Service::retire` returns `Ended`: the cause, the core's `Retired` and a
+`LateSocket` per socket. Every result the service knows goes to its place, the request lane goes to its socket, and only then
 does `stopped` show: what still waits there the service never saw, so those
 observers read `Outcome::Retired`, and `Socket::reclaim` gives back their blocks
 and all else in the lanes, for the pool's holder. So an end waits for no
