@@ -2828,6 +2828,7 @@ dependencies = [
  "oer-portable-events",
  "oer-portable-time",
  "oer-portable-wire",
+ "oer-protocols-network-port",
  "oer-protocols-network-wire",
 ]
 
@@ -2848,6 +2849,7 @@ dependencies = [
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-protocols-network-core",
+ "oer-protocols-network-port",
  "oer-protocols-network-wire",
 ]
 

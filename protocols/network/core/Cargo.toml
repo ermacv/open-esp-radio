@@ -13,6 +13,7 @@ heapless = "0.9.3"
 oer-portable-events = { path = "../../../portable/events" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-portable-wire = { path = "../../../portable/wire" }
+oer-protocols-network-port = { path = "../port" }
 oer-protocols-network-wire = { path = "../wire" }
 
 [dev-dependencies]

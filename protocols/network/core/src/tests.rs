@@ -12,10 +12,10 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Block, BrandRefusal, Class, CommandState, CoreBrand, FramePort, Interface, InterfaceError,
-    NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal, SlotTooShort, Unsent,
-    claim,
+    Block, BrandRefusal, Class, CommandState, CoreBrand, Interface, InterfaceError, NetEvent,
+    NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal, Unsent, claim,
 };
+use oer_protocols_network_port::{FramePort, SlotTooShort};
 
 const SIZE: usize = 1536;
 const BLOCKS: usize = 8;

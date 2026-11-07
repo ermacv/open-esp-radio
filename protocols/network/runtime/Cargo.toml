@@ -14,6 +14,7 @@ oer-portable-events = { path = "../../../portable/events" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-protocols-network-core = { path = "../core" }
+oer-protocols-network-port = { path = "../port" }
 oer-protocols-network-wire = { path = "../wire" }
 
 [dev-dependencies]

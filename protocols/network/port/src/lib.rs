@@ -19,10 +19,13 @@
 //! stack, queue implementation, allocator, Wi-Fi type or execution context.
 
 mod device;
+mod frame;
 pub use device::{
     EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot, NetDevice,
     NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused, TxStorage,
 };
+
+pub use frame::{FramePort, FrameSource, SlotTooShort};
 
 /// Opaque identity of one logical network endpoint sharing a physical radio.
 ///
