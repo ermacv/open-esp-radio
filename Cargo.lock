@@ -2471,6 +2471,9 @@ dependencies = [
 [[package]]
 name = "oer-portable-wire"
 version = "0.1.0"
+dependencies = [
+ "bytemuck",
+]
 
 [[package]]
 name = "oer-protocols-bluetooth-hci"

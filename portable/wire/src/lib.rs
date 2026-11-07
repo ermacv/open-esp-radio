@@ -320,6 +320,14 @@ pub mod __private {
     }
 }
 
+/// `bytes` as what lies before its first aligned `u32`, the `u32`s in the
+/// machine's byte order, and what follows them. A reader that takes whole
+/// words on a target without unaligned access needs no byte loads this way.
+#[must_use]
+pub fn aligned_words(bytes: &[u8]) -> (&[u8], &[u32], &[u8]) {
+    bytemuck::pod_align_to(bytes)
+}
+
 #[cfg(test)]
 mod tests;
 

@@ -15,8 +15,11 @@ pub struct Checksum {
     odd: Option<u8>,
 }
 
-/// The octets one 32-bit sum takes: 2^15 words of at most 2^16 - 1 fit it.
-const WORDS_AT_ONCE: usize = 1 << 16;
+/// One's complement addition of 32-bit words: a carry comes back in.
+const fn add_carrying(sum: u32, word: u32) -> u32 {
+    let (added, carried) = sum.overflowing_add(word);
+    added.wrapping_add(carried as u32)
+}
 
 impl Checksum {
     pub const fn new() -> Self {
@@ -24,44 +27,52 @@ impl Checksum {
     }
 
     /// Add the next octets of the sequence. This runs on every octet of every
-    /// datagram, so whole words go through one 32-bit sum, flushed before it
-    /// could wrap.
+    /// datagram, so what lies aligned goes as whole words, RFC 1071, 2 (B).
     #[must_use]
     pub fn with(mut self, bytes: &[u8]) -> Self {
-        let mut rest = bytes;
-        if let Some(high) = self.odd.take() {
-            let Some((low, after)) = rest.split_first() else {
-                self.odd = Some(high);
-                return self;
-            };
-            self.add_word(high, *low);
-            rest = after;
-        }
-        while !rest.is_empty() {
-            let (part, after) = rest.split_at_checked(WORDS_AT_ONCE).unwrap_or((rest, &[]));
-            rest = after;
-            let mut words = part;
-            // In the machine's byte order, which RFC 1071, 2 (B) lets a sum
-            // run in: one swap at the end instead of one per word.
-            let mut sum: u32 = 0;
-            while let Some(([a, b, c, d, e, f, g, h], next)) = words.split_first_chunk::<8>() {
-                sum = sum
-                    .wrapping_add(u32::from(u16::from_ne_bytes([*a, *b])))
-                    .wrapping_add(u32::from(u16::from_ne_bytes([*c, *d])))
-                    .wrapping_add(u32::from(u16::from_ne_bytes([*e, *f])))
-                    .wrapping_add(u32::from(u16::from_ne_bytes([*g, *h])));
-                words = next;
-            }
-            while let Some(([high, low], next)) = words.split_first_chunk::<2>() {
-                sum = sum.wrapping_add(u32::from(u16::from_ne_bytes([*high, *low])));
-                words = next;
-            }
-            let sum = (sum & 0xFFFF).wrapping_add(sum >> 16);
-            let sum = (sum & 0xFFFF).wrapping_add(sum >> 16);
-            self.sum = self.sum.wrapping_add(u64::from(u16::from_be(sum as u16)));
-            self.odd = words.first().copied();
-        }
+        let (head, words, tail) = oer_portable_wire::aligned_words(bytes);
+        self.octets(head);
+        self.words(words);
+        self.octets(tail);
         self
+    }
+
+    fn octets(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            match self.odd.take() {
+                Some(high) => self.add_word(high, *byte),
+                None => self.odd = Some(*byte),
+            }
+        }
+    }
+
+    /// Sum words in the machine's order, four running sums so a load and a
+    /// carry stay apart. An octet waiting for its pair leaves the words one
+    /// octet off the sequence's own: the sum is that of swapped words, and it
+    /// meets the waiting octet at the end, as the sum commutes.
+    fn words(&mut self, words: &[u32]) {
+        let (mut first, mut second, mut third, mut fourth) = (0, 0, 0, 0);
+        let mut rest = words;
+        while let Some(([a, b, c, d], next)) = rest.split_first_chunk::<4>() {
+            first = add_carrying(first, *a);
+            second = add_carrying(second, *b);
+            third = add_carrying(third, *c);
+            fourth = add_carrying(fourth, *d);
+            rest = next;
+        }
+        let mut sum = add_carrying(add_carrying(first, second), add_carrying(third, fourth));
+        for word in rest {
+            sum = add_carrying(sum, *word);
+        }
+        let folded = (sum & 0xFFFF).wrapping_add(sum >> 16);
+        let folded = (folded & 0xFFFF).wrapping_add(folded >> 16) as u16;
+        let ordered = u16::from_be(folded);
+        let word = if self.odd.is_some() {
+            ordered.swap_bytes()
+        } else {
+            ordered
+        };
+        self.sum = self.sum.wrapping_add(u64::from(word));
     }
 
     fn add_word(&mut self, high: u8, low: u8) {
@@ -163,6 +174,52 @@ mod tests {
         for length in (0..80).chain([1471, 1472, 1473, 1500]) {
             let bytes = octets(length);
             assert_eq!(Checksum::new().with(&bytes).finish(), reference(&bytes));
+        }
+    }
+
+    #[test]
+    fn a_sequence_at_any_alignment_sums_as_the_rfc_does() {
+        let bytes = octets(64);
+        for start in 0..8 {
+            for end in start..bytes.len() {
+                let part = &bytes[start..end];
+                assert_eq!(Checksum::new().with(part).finish(), reference(part));
+            }
+        }
+    }
+
+    #[test]
+    fn parts_at_any_alignment_meet_on_an_odd_octet() {
+        let bytes = octets(96);
+        for first in 0..17 {
+            for second in first..40 {
+                let (head, rest) = bytes.split_at(first);
+                let (middle, tail) = rest.split_at(second - first);
+                let sum = Checksum::new().with(head).with(middle).with(tail);
+                assert_eq!(sum.finish(), reference(&bytes), "at {first} and {second}");
+            }
+        }
+    }
+
+    #[test]
+    fn empty_parts_change_nothing() {
+        let bytes = octets(9);
+        let (head, tail) = bytes.split_at(3);
+        let sum = Checksum::new()
+            .with(&[])
+            .with(head)
+            .with(&[])
+            .with(tail)
+            .with(&[]);
+        assert_eq!(sum.finish(), reference(&bytes));
+    }
+
+    #[test]
+    fn words_of_all_ones_carry_at_every_alignment() {
+        let bytes = vec![0xFF; 4096];
+        for start in 0..8 {
+            let part = &bytes[start..];
+            assert_eq!(Checksum::new().with(part).finish(), reference(part));
         }
     }
 

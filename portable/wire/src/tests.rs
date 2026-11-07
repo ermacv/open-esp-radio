@@ -1,5 +1,9 @@
 #![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 
+extern crate std;
+
+use std::vec::Vec;
+
 use crate::{Error, Reader, Writer};
 
 crate::bitfield! {
@@ -357,4 +361,31 @@ fn const_fields_skip_whole_octets_and_preserve_surrounding_data() {
     let mut big = expected;
     big.reverse();
     assert_eq!(BIG.to_bytes(), big);
+}
+
+#[test]
+fn aligned_words_keep_every_octet_in_order() {
+    let storage = [0x0403_0201_u32, 0x0807_0605, 0x0C0B_0A09, 0x100F_0E0D];
+    let bytes: &[u8] = bytemuck::cast_slice(&storage);
+    for start in 0..bytes.len() {
+        for end in start..=bytes.len() {
+            let part = &bytes[start..end];
+            let (head, words, tail) = crate::aligned_words(part);
+            assert!(head.len() < 4 && tail.len() < 4);
+            assert_eq!(head.len() + words.len() * 4 + tail.len(), part.len());
+            let rebuilt: Vec<u8> = head
+                .iter()
+                .copied()
+                .chain(words.iter().flat_map(|word| word.to_ne_bytes()))
+                .chain(tail.iter().copied())
+                .collect();
+            assert_eq!(rebuilt, part);
+        }
+    }
+}
+
+#[test]
+fn aligned_words_of_nothing_are_nothing() {
+    let (head, words, tail) = crate::aligned_words(&[]);
+    assert!(head.is_empty() && words.is_empty() && tail.is_empty());
 }

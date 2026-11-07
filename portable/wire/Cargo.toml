@@ -7,5 +7,8 @@ license.workspace = true
 repository.workspace = true
 description = "Checked fixed-width wire fields and bounded byte cursors"
 
+[dependencies]
+bytemuck = { version = "1.25.2", default-features = false }
+
 [lints]
 workspace = true
