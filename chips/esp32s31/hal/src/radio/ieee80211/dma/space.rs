@@ -15,13 +15,23 @@
 #[cfg(any(not(target_arch = "riscv32"), test, feature = "test-support"))]
 pub const HOST_ARENA_BASE: u32 = crate::layouts::DMA_WINDOW.start + 0x1000;
 
-mod sealed {
+pub(crate) mod sealed {
     pub trait Sealed {}
+
+    /// A space whose arenas may be shared across threads. Under test support
+    /// [`HostDma`](super::HostDma) is not one: its model of the DMA engine
+    /// writes an arena's buffers, which is sound only on the one thread that
+    /// holds every reference to that arena.
+    pub trait SharedArena {}
 }
 
 impl sealed::Sealed for ChipDma {}
+impl sealed::SharedArena for ChipDma {}
 #[cfg(any(not(target_arch = "riscv32"), test, feature = "test-support"))]
 impl sealed::Sealed for HostDma {}
+// Without test support a host arena has no modelled DMA writer.
+#[cfg(all(not(target_arch = "riscv32"), not(any(test, feature = "test-support"))))]
+impl sealed::SharedArena for HostDma {}
 
 /// How an arena's fields are addressed by DMA. Sealed so a safe caller cannot
 /// substitute an unrelated allocation's DMA address.
@@ -55,6 +65,7 @@ impl DmaSpace for ChipDma {
 /// identities and never dereference their DMA representation.
 pub(crate) enum NativeDma {}
 impl sealed::Sealed for NativeDma {}
+impl sealed::SharedArena for NativeDma {}
 impl DmaSpace for NativeDma {
     fn address<A: ?Sized, F: ?Sized>(_: &A, field: *const F) -> Option<u32> {
         #[cfg(target_arch = "riscv32")]

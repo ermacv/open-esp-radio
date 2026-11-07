@@ -455,23 +455,23 @@ impl RxArenaWords {
     pub(crate) fn host_taken(&self, index: usize) -> bool {
         self.host_taken
             .get(index / 32)
-            .is_some_and(|word| word.load(Ordering::Relaxed) & (1 << (index % 32)) != 0)
+            .is_some_and(|word| word.load(Ordering::Acquire) & (1 << (index % 32)) != 0)
     }
 
     /// Whether a view of R's frame may be alive.
     pub(crate) fn host_reserved_lent(&self) -> bool {
-        self.host_reserved_lent.load(Ordering::Relaxed)
+        self.host_reserved_lent.load(Ordering::Acquire)
     }
 
     /// A view of R's frame leaves for the CPU.
     pub(crate) fn show_reserved_lent(&self) {
-        self.host_reserved_lent.store(true, Ordering::Relaxed);
+        self.host_reserved_lent.store(true, Ordering::Release);
     }
 
     /// No view of R's frame is alive: the caller holds the ring exclusively
     /// or has none.
     fn show_reserved_returned(&self) {
-        self.host_reserved_lent.store(false, Ordering::Relaxed);
+        self.host_reserved_lent.store(false, Ordering::Release);
     }
 }
 
@@ -532,7 +532,7 @@ mod taken {
         #[cfg(any(test, feature = "test-support"))]
         fn publish(&self, arena: &RxArenaWords) {
             for (shown, word) in arena.host_taken.iter().zip(self.0.words) {
-                shown.store(word, core::sync::atomic::Ordering::Relaxed);
+                shown.store(word, core::sync::atomic::Ordering::Release);
             }
         }
 

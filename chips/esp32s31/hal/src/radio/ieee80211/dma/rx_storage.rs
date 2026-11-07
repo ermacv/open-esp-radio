@@ -335,9 +335,14 @@ pub struct RxDmaStorage<
 #[allow(unsafe_code, reason = "atomic bindings serialize cross-core ownership")]
 // SAFETY: descriptors, buffers and bindings change only through their
 // atomic ownership bindings and lifecycle state, which serialize every
-// cross-core access.
-unsafe impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
-    Sync for RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
+// cross-core access. A `HostDma` arena under test support is excluded
+// (`SharedArena`): its modelled DMA writers are serialized by one thread.
+unsafe impl<
+    const COUNT: usize,
+    const BUFFER_SIZE: usize,
+    const STORAGE_SIZE: usize,
+    S: DmaSpace + super::space::sealed::SharedArena,
+> Sync for RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
 }
 

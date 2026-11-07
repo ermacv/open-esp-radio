@@ -114,16 +114,20 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         // SAFETY: `published_range` bounded `offset + bytes.len()` by this
         // buffer's `STORAGE_SIZE` bytes, which live in its `UnsafeCell`, and
         // refused a buffer that is not attached, so no detached owner holds
-        // it. A CPU view of an attached buffer comes only from the ring: a
-        // completed descriptor or unit, whose descriptors the ring's mask
-        // records and shows the arena on every change until a recycle
-        // republishes them, or R's frame, which `reserved_frame` records as
-        // lent before handing it out and which only an exclusive ring loan
-        // (ending that view) clears. `held_by_cpu` refused the buffer when
-        // either record names it, mapping descriptors to buffers by the
-        // trusted binding, never by descriptor words. A view that only copies
-        // out ends inside its call, and the arena is used on the thread of
-        // its `!Sync` ring, so no view is alive across this write.
+        // it. A test-support `HostDma` arena is not `Sync` (`SharedArena`),
+        // so every reference to it stays on one thread: this write runs
+        // after or before, never during, any other access made through the
+        // arena, including another modelled write and the creation of every
+        // CPU view. A view that outlives its call comes only from the ring:
+        // a completed descriptor or unit, whose descriptors the ring's mask
+        // records until a recycle republishes them, or R's frame, which
+        // `reserved_frame` records as lent before handing it out and only an
+        // exclusive ring loan, which ends that view, clears. Both records
+        // are published with release and read here with acquire, so a view
+        // that ended on another thread ended before a record that lets this
+        // write pass. `held_by_cpu` refused the buffer while either record
+        // names it, mapping descriptors to buffers by the trusted binding,
+        // never by descriptor words: no reference to these bytes is alive.
         unsafe {
             buffer
                 .0
@@ -151,9 +155,12 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
             return Err(HostDmaAccessError::ForeignRing);
         }
         let (buffer, offset) = self.published_range(address, output.len())?;
-        // SAFETY: as in `write_published`: the range lies inside this
-        // buffer's `UnsafeCell`, and no CPU writer of it can run while `ring`
-        // is borrowed shared.
+        // SAFETY: `published_range` bounded the range by this buffer's
+        // `UnsafeCell` and refused a buffer that is not attached. The writers
+        // of an attached buffer are the modelled engine, which the arena's
+        // one thread (`SharedArena`, as in `write_published`) runs before or
+        // after this read, and `cpu_owned_mut`, which borrows the storage
+        // mutably and so cannot coexist with `&self`. CPU views only read.
         unsafe {
             buffer
                 .0
