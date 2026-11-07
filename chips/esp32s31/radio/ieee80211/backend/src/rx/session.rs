@@ -130,7 +130,6 @@ where
     pub async fn start(
         &mut self,
         registers: &mut impl ReceiveRegisters,
-        timer: &impl Timer,
         doorbell: &impl RadioDoorbell,
     ) -> Result<(), WifiRxCause> {
         let (mut mac, dma) = registers.split_rx_dma();
@@ -139,7 +138,6 @@ where
             .map_err(WifiRxCause::Start)?;
         activate_promiscuous_receive(&mut mac);
         self.requests.activate(&self.bound, doorbell);
-        super::storage::walker_enable_settle(timer).await;
         self.frontier
             .start_prepared(dma)
             .map_err(WifiRxCause::Start)?;
@@ -288,43 +286,21 @@ where
     pub(crate) fn port_start(
         &mut self,
         registers: &mut impl ReceiveRegisters,
-        timer: &impl Timer,
         doorbell: &impl RadioDoorbell,
     ) -> Poll<Result<(), WifiRxCause>> {
-        use super::storage::ESP32S31_RX_WALKER_ENABLE_SETTLE_US;
         if self.frontier.phase() == super::frontier::RxFrontierPhase::Live {
             return Poll::Ready(Ok(()));
         }
-        let deadline = match self.port_settle {
-            Some(deadline) => deadline,
-            None => {
-                let (mut mac, dma) = registers.split_rx_dma();
-                self.frontier
-                    .prepare_with_storage(dma, self.rx)
-                    .map_err(WifiRxCause::Start)?;
-                activate_promiscuous_receive(&mut mac);
-                self.requests.activate(&self.bound, doorbell);
-                let deadline = timer
-                    .now()
-                    .checked_add(oer_portable_time::Duration::from_micros(u64::from(
-                        ESP32S31_RX_WALKER_ENABLE_SETTLE_US,
-                    )))
-                    .ok_or(WifiRxCause::Start(
-                        super::frontier::RxFrontierError::OwnerUnavailable,
-                    ))?;
-                self.port_settle = Some(deadline);
-                deadline
-            }
-        };
-        if timer.now() < deadline {
-            return Poll::Pending;
-        }
         let (mut mac, dma) = registers.split_rx_dma();
+        self.frontier
+            .prepare_with_storage(dma, self.rx)
+            .map_err(WifiRxCause::Start)?;
+        activate_promiscuous_receive(&mut mac);
+        self.requests.activate(&self.bound, doorbell);
         self.frontier
             .start_prepared(dma)
             .map_err(WifiRxCause::Start)?;
         mac.start_mac_runtime(self.frontier.live_mut().map_err(WifiRxCause::Start)?);
-        self.port_settle = None;
         Poll::Ready(Ok(()))
     }
 

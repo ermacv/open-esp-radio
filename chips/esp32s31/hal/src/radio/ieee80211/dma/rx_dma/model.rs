@@ -104,6 +104,8 @@ pub struct RxWalkerModel {
     reload_resumes_in_place: bool,
     /// A stop request leaves the walker running and reads back as enabled.
     pub refuse_stop: bool,
+    /// An enable does not take: no live proof comes back.
+    pub refuse_start: bool,
     log: [RxWalkerOperation; RX_WALKER_LOG_CAPACITY],
     logged: usize,
     overflowed: bool,
@@ -133,6 +135,7 @@ impl RxWalkerModel {
             stopped_on_owner: false,
             reload_resumes_in_place: false,
             refuse_stop: false,
+            refuse_start: false,
             log: [RxWalkerOperation::Fence; RX_WALKER_LOG_CAPACITY],
             logged: 0,
             overflowed: false,
@@ -376,7 +379,7 @@ impl RxDma for RxWalkerModel {
         enabled: impl for<'confirmation> FnOnce(RxDmaWalkerEnabled<'confirmation>) -> R,
     ) -> Option<R> {
         self.record(RxWalkerOperation::Enable);
-        if self.walker_enabled {
+        if self.walker_enabled || self.refuse_start {
             return None;
         }
         self.start_walker();

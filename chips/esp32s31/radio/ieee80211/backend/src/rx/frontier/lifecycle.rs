@@ -1,4 +1,4 @@
-use crate::rx::storage::{ReceiveDmaStorage, walker_enable_settle};
+use crate::rx::storage::ReceiveDmaStorage;
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::{rx_storage::PlacedRxDma, space::DmaSpace};
 
 use crate::mac::rx::{
@@ -80,8 +80,7 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
         }
     }
 
-    /// Publish an already prepared ring after the role owner has satisfied
-    /// its executor-specific settle edge.
+    /// Publish an already prepared ring.
     pub fn start_prepared<M: RxDma>(&mut self, hardware: &mut M) -> Result<(), RxFrontierError> {
         let state = core::mem::replace(&mut self.state, RxFrontierState::Vacant);
         let RxFrontierState::Prepared(prepared) = state else {
@@ -121,7 +120,6 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     /// Start RX using the production DMA storage bound to this ring.
     pub async fn start_with_storage<M, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,
-        timer: &impl oer_portable_time::Timer,
         hardware: &mut M,
         storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<(), RxFrontierError>
@@ -146,7 +144,6 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
                 return Err(RxFrontierError::OwnerUnavailable);
             }
         };
-        walker_enable_settle(timer).await;
         match prepared.try_start(hardware) {
             Ok(live) => {
                 self.state = RxFrontierState::Live(live);
@@ -325,7 +322,6 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     #[allow(clippy::result_large_err)]
     pub async fn try_into_live_with_storage<M, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         mut self,
-        timer: &impl oer_portable_time::Timer,
         hardware: &mut M,
         storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<
@@ -341,7 +337,7 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
                 Err(error) => Err(RxFrontierIntoLiveFailure { owner: self, error }),
             };
         }
-        if let Err(error) = self.start_with_storage(timer, hardware, storage).await {
+        if let Err(error) = self.start_with_storage(hardware, storage).await {
             return Err(RxFrontierIntoLiveFailure { owner: self, error });
         }
         match self.take_live() {

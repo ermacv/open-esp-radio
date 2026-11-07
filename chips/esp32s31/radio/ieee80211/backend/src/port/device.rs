@@ -493,7 +493,7 @@ where
             session.reattach();
         }
         session
-            .port_start(&mut active.registers, &self.timer, &self.doorbell)
+            .port_start(&mut active.registers, &self.doorbell)
             .map(|r| r.map_err(Fault::Receive))
     }
     fn poll_stop(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>> {

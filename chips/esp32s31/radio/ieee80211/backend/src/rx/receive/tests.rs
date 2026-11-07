@@ -554,16 +554,10 @@ impl<X: SignalExecutor> Harness<X> {
 }
 
 #[test]
-fn cold_start_clocks_the_prepared_core_but_holds_rx_until_walker_is_live() {
+fn cold_start_needs_no_wait_and_opens_the_mac_on_a_live_walker() {
     let mut harness = harness();
     harness.poll_once();
-    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::Prepared);
-    assert!(!harness.host.walker.borrow().walker_enabled);
-    assert!(!harness.host.mac_started.get());
     assert!(harness.host.core_prepared.get());
-    assert!(!harness.host.take_log().contains(&Event::RuntimeResume));
-
-    harness.settle();
     assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::Live);
     assert!(harness.host.mac_started.get());
     assert_eq!(
@@ -574,17 +568,15 @@ fn cold_start_clocks_the_prepared_core_but_holds_rx_until_walker_is_live() {
             .operation_count(RxWalkerOperation::Enable),
         1
     );
-    assert_eq!(harness.host.take_log(), [Event::RuntimeResume]);
+    assert_eq!(harness.host.take_log().last(), Some(&Event::RuntimeResume));
     assert!(harness.stop.try_exit().is_none());
 }
 
 #[test]
 fn cold_start_never_opens_mac_when_walker_enable_is_unconfirmed() {
     let mut harness = harness();
-    harness.poll_once();
-    // The walker no longer agrees with the stopped capability: the enable
-    // model refuses a second enable, so no live-ring proof is returned.
-    harness.host.walker.borrow_mut().walker_enabled = true;
+    // The enable does not take, so no live-ring proof is returned.
+    harness.host.walker.borrow_mut().refuse_start = true;
     harness.settle();
     assert!(!harness.host.mac_started.get());
     assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
