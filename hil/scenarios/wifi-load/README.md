@@ -50,6 +50,9 @@ directions within the window, and `instructions_per_datagram`. Every
 instruction of the hart counts, its interrupts, the network's and the load
 server's own work and the executor's among them: per datagram is a share of
 the window, not a path's length. A sampled run counts its sampler too.
+`cycles` run through `wfi` at the core clock and `instructions` stand still
+there, so the idle baseline's rate is the executor's wakes alone; with a
+debugger attached the executor does not wait in `wfi`, and its spin counts.
 
 `rx` holds the window's differences of the receive path, counted only by
 a trace build (zeros otherwise). `driver` is the S31 receive driver's
