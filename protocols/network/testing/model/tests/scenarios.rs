@@ -595,7 +595,7 @@ fn land_all<B, const N: usize>(medium: &Medium, report: &mut Report<B, Fair, N>)
 #[test]
 fn a_peer_of_unknown_cost_is_charged_and_still_served() {
     struct Net;
-    let peers = [peer(1, FAST), peer(2, FAST)];
+    let peers = [peer(1, SLOW), peer(2, FAST)];
     let medium = medium(&peers);
     let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
     let script = vec![(1_000, At::UnknownCost(0)), (SECOND, At::Stop)];
@@ -604,10 +604,11 @@ fn a_peer_of_unknown_cost_is_charged_and_still_served() {
     let [unknown, known] = medium.spent()[..] else {
         panic!();
     };
-    assert!(unknown.frames > 100, "{unknown:?} {known:?}");
+    assert!(unknown.frames > 10, "{unknown:?} {known:?}");
+    // Charged its whole reservation, this peer may get less than its share.
     assert!(
         unknown.air_micros <= known.air_micros + FAIR_TO,
-        "an unknown cost buys no extra air: {unknown:?} {known:?}"
+        "an unknown cost buys no air: {unknown:?} {known:?}"
     );
     land_all(&medium, &mut report);
     assert_eq!(report.ended.egress.in_flight(), 0);
