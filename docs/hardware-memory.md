@@ -302,6 +302,28 @@ through its queue's descriptor or an aggregate chain. A buffer lent from outside
 placed storage has no source yet; it returns as a loan type, checked once where
 the loan is made, with the first such buffer.
 
+## Where each DMA concern lives
+
+Wi-Fi DMA splits by what each part answers:
+
+| Concern | Question | Home |
+| --- | --- | --- |
+| Format | Which bits mean what | Register model and PAC (`layouts/`) |
+| Memory | Where it lies and how long it stays | `oer-portable-memory`; the chip's window in `hal::system::memory` |
+| Ownership | Who may touch this descriptor now | HAL `radio::ieee80211::dma`: ring and storage |
+| Engine | Which registers start and steer the walker | HAL `radio::ieee80211::dma::rx_dma` and `registers` |
+| Driver | What to do with a frame or a buffer | `radio/ieee80211/backend` |
+
+The ring and its storage stay in the HAL: safe code there, such as `commit`,
+`validate_live_ring` and the ring's cursor, is what proves that hardware
+released a buffer, so it stays with the owner of the block's registers. The
+`oer-portable-memory` contracts `PreparedTxDma` and `HardwareOwnedTxDma` state
+that obligation and leave it to that owner. An RX buffer stays beside the ring
+for the same reason: reading it needs the ring's proof.
+
+REGDMA is a different block: it saves and restores registers around sleep. It
+carries no frames.
+
 ## Bluetooth controller memory
 
 `oer_chips_esp32s31_hal::radio::bluetooth::engine` retains the component codecs and
