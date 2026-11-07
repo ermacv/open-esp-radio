@@ -2,76 +2,75 @@
 
 use core::marker::PhantomData;
 
-/// Who a value belongs to: an invariant lifetime no other [`scope`] shares.
-pub(crate) type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
+/// Who a value belongs to: a type no other network shares.
+pub(crate) type Tag<B> = PhantomData<fn() -> B>;
 
-/// The right to make a core of a [`scope`]: one at a time, as a core retired
+/// A network's identity, a type the [`brand!`](crate::brand) macro makes. A
+/// type, not a lifetime: a block or a handle crosses `'static` tasks and
+/// queues, which can name it, and another network's value does not compile.
+pub trait Brand: Sized + 'static {
+    /// Take this brand's one claim; whether it was still free.
+    fn claim_once() -> bool;
+}
+
+/// Make the brand type `$name`, whose claim holds once per image.
+#[macro_export]
+macro_rules! brand {
+    ($visibility:vis $name:ident) => {
+        #[derive(Debug, Eq, PartialEq)]
+        $visibility struct $name;
+
+        impl $crate::Brand for $name {
+            fn claim_once() -> bool {
+                static CLAIMED: core::sync::atomic::AtomicBool =
+                    core::sync::atomic::AtomicBool::new(false);
+                !CLAIMED.swap(true, core::sync::atomic::Ordering::AcqRel)
+            }
+        }
+    };
+}
+
+/// The right to make a core of brand `B`: one at a time, as a core retired
 /// gives it back. It carries the last serial given, so a later core gives none
 /// of the old ones again and an old handle stays stale.
 #[derive(Debug)]
-pub struct CoreBrand<'id> {
-    pub(crate) brand: Brand<'id>,
+pub struct CoreBrand<B> {
+    pub(crate) brand: Tag<B>,
     pub(crate) serial: u64,
 }
 
-/// Give `storage` a pool and one core's brand. Everything of this scope, its
-/// pool, core, blocks, sockets and commands, carries one lifetime no other
-/// scope has, so a value of another core or pool does not compile here.
-pub fn scope<const SIZE: usize, const BLOCKS: usize, R>(
-    storage: &mut [[u8; SIZE]; BLOCKS],
-    run: impl for<'id> FnOnce(Pool<'id, SIZE, BLOCKS>, CoreBrand<'id>) -> R,
-) -> R {
-    run(
-        Pool::new(storage),
-        CoreBrand {
-            brand: PhantomData,
-            serial: 0,
-        },
-    )
-}
+/// What a brand's claim gives: its one pool and the right to its core.
+pub type Claimed<'m, B, const SIZE: usize, const BLOCKS: usize> =
+    (Pool<'m, B, SIZE, BLOCKS>, CoreBrand<B>);
 
-/// [`scope`] for a task: `run` awaits, and its future may hold the pool and
-/// the core across its awaits. With `storage` placed for good, the future is
-/// `'static`, as an executor's task needs:
+/// Give `storage` to brand `B`.
 ///
-/// ```
-/// # use oer_protocols_network_core::{Core, Interface, scope_async};
-/// async fn service(storage: &'static mut [[u8; 64]; 2], interface: Interface) {
-///     scope_async(storage, async move |pool, brand| {
-///         let core: Core<'_, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-///         core::future::ready(()).await;
-///         drop((core, pool));
-///     })
-///     .await;
-/// }
-/// fn task<F: Future<Output = ()> + 'static>(_: F) {}
-/// # fn f(storage: &'static mut [[u8; 64]; 2], interface: Interface) {
-/// task(service(storage, interface));
-/// # }
-/// ```
-pub async fn scope_async<const SIZE: usize, const BLOCKS: usize, R>(
-    storage: &mut [[u8; SIZE]; BLOCKS],
-    run: impl for<'id> AsyncFnOnce(Pool<'id, SIZE, BLOCKS>, CoreBrand<'id>) -> R,
-) -> R {
-    run(
+/// # Errors
+/// `B` was claimed before; a final refusal, with `storage` back.
+pub fn claim<'m, B: Brand, const SIZE: usize, const BLOCKS: usize>(
+    storage: &'m mut [[u8; SIZE]; BLOCKS],
+) -> Result<Claimed<'m, B, SIZE, BLOCKS>, &'m mut [[u8; SIZE]; BLOCKS]> {
+    if !B::claim_once() {
+        return Err(storage);
+    }
+    Ok((
         Pool::new(storage),
         CoreBrand {
             brand: PhantomData,
             serial: 0,
         },
-    )
-    .await
+    ))
 }
 
 /// One block of stack memory and the octets it holds.
 #[derive(Debug)]
-pub struct Block<'id, const SIZE: usize> {
-    bytes: &'id mut [u8; SIZE],
+pub struct Block<'m, B, const SIZE: usize> {
+    bytes: &'m mut [u8; SIZE],
     length: usize,
-    brand: Brand<'id>,
+    brand: Tag<B>,
 }
 
-impl<const SIZE: usize> Block<'_, SIZE> {
+impl<B, const SIZE: usize> Block<'_, B, SIZE> {
     /// The whole block, to fill.
     pub fn space(&mut self) -> &mut [u8; SIZE] {
         self.bytes
@@ -111,15 +110,15 @@ impl<const SIZE: usize> Block<'_, SIZE> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BlockTooShort;
 
-/// The free blocks of one [`scope`]'s storage. Only its own blocks fit its
-/// brand, and it holds room for all of them, so a block always has its place.
+/// The free blocks of brand `B`'s storage. Only its own blocks fit the brand,
+/// and it holds room for all of them, so a block always has its place.
 #[derive(Debug)]
-pub struct Pool<'id, const SIZE: usize, const BLOCKS: usize> {
-    free: heapless::Vec<Block<'id, SIZE>, BLOCKS>,
+pub struct Pool<'m, B, const SIZE: usize, const BLOCKS: usize> {
+    free: heapless::Vec<Block<'m, B, SIZE>, BLOCKS>,
 }
 
-impl<'id, const SIZE: usize, const BLOCKS: usize> Pool<'id, SIZE, BLOCKS> {
-    fn new(storage: &'id mut [[u8; SIZE]; BLOCKS]) -> Self {
+impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
+    fn new(storage: &'m mut [[u8; SIZE]; BLOCKS]) -> Self {
         let mut free = heapless::Vec::new();
         for bytes in storage {
             // BLOCKS blocks fit a capacity of BLOCKS.
@@ -133,14 +132,14 @@ impl<'id, const SIZE: usize, const BLOCKS: usize> Pool<'id, SIZE, BLOCKS> {
     }
 
     /// A free block, emptied.
-    pub fn take(&mut self) -> Option<Block<'id, SIZE>> {
+    pub fn take(&mut self) -> Option<Block<'m, B, SIZE>> {
         let mut block = self.free.pop()?;
         block.length = 0;
         Some(block)
     }
 
     /// Take a block back.
-    pub fn give(&mut self, block: Block<'id, SIZE>) {
+    pub fn give(&mut self, block: Block<'m, B, SIZE>) {
         // This pool made the block, so the others out leave it room.
         let _fits = self.free.push(block);
     }

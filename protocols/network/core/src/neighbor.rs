@@ -123,6 +123,18 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
+    /// Forget requests no datagram needs any more. An entry is asked for only
+    /// while one does, so a refused port holds no entry for a closed socket.
+    pub(crate) fn forget_unneeded(&mut self, needed: impl Fn([u8; 4]) -> bool) {
+        for entry in &mut self.entries {
+            if let Entry::Asking { address, .. } = *entry
+                && !needed(address)
+            {
+                *entry = Entry::Free;
+            }
+        }
+    }
+
     /// Ask again for `address` if its entry expired; whether it did.
     pub(crate) fn reask(&mut self, now: Instant, address: [u8; 4], serial: u64) -> bool {
         for entry in &mut self.entries {

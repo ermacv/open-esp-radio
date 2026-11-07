@@ -12,8 +12,9 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Block, Class, CommandState, FramePort, Interface, InterfaceError, NetEvent, NetworkOwner,
-    OpenRefused, Outcome, Pool, Remote, SendRefusal, SlotTooShort, Unsent, scope,
+    Block, Brand, Class, CommandState, CoreBrand, FramePort, Interface, InterfaceError, NetEvent,
+    NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal, SlotTooShort, Unsent, brand,
+    claim,
 };
 
 const SIZE: usize = 1536;
@@ -25,8 +26,9 @@ const OUR_IP: [u8; 4] = [192, 0, 2, 1];
 const PEER_IP: [u8; 4] = [192, 0, 2, 2];
 const GATEWAY: [u8; 4] = [192, 0, 2, 254];
 
-type Stack<'id> = NetworkOwner<'id, SIZE, 2, 2, 2, 2, BLOCKS, Port>;
-type Blocks<'id> = Pool<'id, SIZE, BLOCKS>;
+type Stack<B> = NetworkOwner<'static, B, SIZE, 2, 2, 2, 2, BLOCKS, Port>;
+type Small<B> = NetworkOwner<'static, B, SIZE, 1, 1, 1, 2, BLOCKS, Port>;
+type Blocks<B> = Pool<'static, B, SIZE, BLOCKS>;
 
 #[derive(Default)]
 struct Dropped(Vec<NetEvent>);
@@ -87,34 +89,54 @@ fn best_effort() -> Dscp {
     Dscp::default()
 }
 
-/// A world of one owner on `interface`.
-fn world_on(interface: Interface, test: impl for<'id> FnOnce(&mut Stack<'id>)) {
-    let mut memory = std::boxed::Box::new([[0; SIZE]; BLOCKS]);
-    scope(&mut memory, |pool, brand| {
-        test(&mut NetworkOwner::new(
-            brand,
-            interface,
-            pool,
-            Port::default(),
-        ));
-    });
+/// The pool and the core's right of brand `B`, over storage of its own.
+fn claimed<B: Brand>() -> (Blocks<B>, CoreBrand<B>) {
+    let memory = std::boxed::Box::leak(std::boxed::Box::new([[0; SIZE]; BLOCKS]));
+    claim(memory).unwrap()
+}
+
+/// A world of one owner of brand `B` on `interface`.
+fn run<B: Brand>(interface: Interface, test: impl FnOnce(&mut Stack<B>)) {
+    let (pool, brand) = claimed::<B>();
+    test(&mut NetworkOwner::new(
+        brand,
+        interface,
+        pool,
+        Port::default(),
+    ));
 }
 
 /// A world of one socket, one place, one receive slot and two neighbors.
-fn small(test: impl for<'id> FnOnce(&mut NetworkOwner<'id, SIZE, 1, 1, 1, 2, BLOCKS, Port>)) {
-    let mut memory = std::boxed::Box::new([[0; SIZE]; BLOCKS]);
-    scope(&mut memory, |pool, brand| {
-        test(&mut NetworkOwner::new(
-            brand,
-            interface(OUR_IP, 24, None),
-            pool,
-            Port::default(),
-        ));
-    });
+fn run_small<B: Brand>(test: impl FnOnce(&mut Small<B>)) {
+    let (pool, brand) = claimed::<B>();
+    test(&mut NetworkOwner::new(
+        brand,
+        interface(OUR_IP, 24, None),
+        pool,
+        Port::default(),
+    ));
 }
 
-fn world(test: impl for<'id> FnOnce(&mut Stack<'id>)) {
-    world_on(interface(OUR_IP, 24, Some(GATEWAY)), test);
+/// Each use has a brand of its own, as a brand claims once.
+macro_rules! world {
+    ($test:expr) => {{
+        brand!(Net);
+        run::<Net>(interface(OUR_IP, 24, Some(GATEWAY)), $test);
+    }};
+}
+
+macro_rules! world_on {
+    ($interface:expr, $test:expr) => {{
+        brand!(Net);
+        run::<Net>($interface, $test);
+    }};
+}
+
+macro_rules! small {
+    ($test:expr) => {{
+        brand!(Net);
+        run_small::<Net>($test);
+    }};
 }
 
 fn peer() -> Remote {
@@ -198,34 +220,34 @@ fn udp_frame(source_port: u16, destination_port: u16, data: &[u8]) -> Vec<u8> {
     frame
 }
 
-fn filled<'id>(pool: &mut Blocks<'id>, data: &[u8]) -> Block<'id, SIZE> {
+fn filled<B>(pool: &mut Blocks<B>, data: &[u8]) -> Block<'static, B, SIZE> {
     let mut block = pool.take().unwrap();
     block.fill(data).unwrap();
     block
 }
 
 /// Send the next ready work.
-fn send_next(stack: &mut Stack<'_>, now: Instant) -> Result<(), Unsent<&'static str>> {
+fn send_next<B>(stack: &mut Stack<B>, now: Instant) -> Result<(), Unsent<&'static str>> {
     let demand = stack.poll_demand(now).unwrap();
     stack.transmit(now, demand.grant())
 }
 
 /// Learn the peer through its own request for us.
-fn knows_peer(stack: &mut Stack<'_>) {
+fn knows_peer<B>(stack: &mut Stack<B>) {
     let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
     stack.input(at(0), &request, &mut ());
     send_next(stack, at(0)).unwrap();
     stack.port_mut().sent.clear();
 }
 
-fn finished(state: CommandState<'_>) -> Outcome {
+fn finished<B: core::fmt::Debug>(state: CommandState<B>) -> Outcome {
     match state {
         CommandState::Finished(outcome) => outcome,
         other => panic!("{other:?}"),
     }
 }
 
-fn running<'id>(state: CommandState<'id>) -> crate::CommandId<'id> {
+fn running<B: core::fmt::Debug>(state: CommandState<B>) -> crate::CommandId<B> {
     match state {
         CommandState::Running(command) => command,
         other => panic!("{other:?}"),
@@ -250,7 +272,7 @@ fn an_interface_refuses_what_cannot_be() {
 
 #[test]
 fn a_datagram_to_an_unknown_neighbor_holds_a_block_and_no_port_room() {
-    world(|stack| {
+    world!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"hello");
         let _command = stack.send(at(0), &socket, peer(), block).unwrap();
@@ -269,7 +291,7 @@ fn a_datagram_to_an_unknown_neighbor_holds_a_block_and_no_port_room() {
 
 #[test]
 fn a_reply_releases_the_datagram_and_its_frame_is_whole() {
-    world(|stack| {
+    world!(|stack| {
         let dscp = Dscp::new(46).unwrap();
         let socket = stack.open(5000, dscp).unwrap();
         let block = filled(stack.pool(), b"hello");
@@ -307,7 +329,7 @@ fn a_reply_releases_the_datagram_and_its_frame_is_whole() {
 
 #[test]
 fn a_datagram_beyond_the_network_goes_through_the_gateway() {
-    world(|stack| {
+    world!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"far");
         let far = Remote {
@@ -326,7 +348,7 @@ fn a_datagram_beyond_the_network_goes_through_the_gateway() {
 
 #[test]
 fn no_route_refuses_and_returns_the_block() {
-    world_on(interface(OUR_IP, 24, None), |stack| {
+    world_on!(interface(OUR_IP, 24, None), |stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"far");
         let far = Remote {
@@ -341,7 +363,7 @@ fn no_route_refuses_and_returns_the_block() {
 
 #[test]
 fn a_refused_frame_moves_nothing_and_its_outcome_waits_for_acceptance() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"hello");
@@ -362,7 +384,7 @@ fn a_refused_frame_moves_nothing_and_its_outcome_waits_for_acceptance() {
 
 #[test]
 fn an_accepted_frame_is_never_offered_again() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"once");
@@ -373,28 +395,33 @@ fn an_accepted_frame_is_never_offered_again() {
     });
 }
 
+fn contradicted<B: core::fmt::Debug>(stack: &mut Stack<B>, lazy: bool, careless: bool) {
+    knows_peer(stack);
+    let socket = stack.open(5000, best_effort()).unwrap();
+    let block = filled(stack.pool(), b"x");
+    let command = stack.send(at(1), &socket, peer(), block).unwrap();
+    stack.port_mut().lazy = lazy;
+    stack.port_mut().careless = careless;
+    stack.port_mut().room = Some(10);
+    assert_eq!(send_next(stack, at(1)), Err(Unsent::PortContract));
+    assert_eq!(finished(stack.take_result(command)), Outcome::Unknown);
+    assert!(stack.poll_demand(at(1)).is_none(), "not sent again");
+    assert_eq!(stack.pool().free(), BLOCKS);
+}
+
 #[test]
-fn a_port_that_contradicts_itself_ends_the_work_and_repeats_nothing() {
-    for (lazy, careless) in [(true, false), (false, true)] {
-        world(|stack| {
-            knows_peer(stack);
-            let socket = stack.open(5000, best_effort()).unwrap();
-            let block = filled(stack.pool(), b"x");
-            let command = stack.send(at(1), &socket, peer(), block).unwrap();
-            stack.port_mut().lazy = lazy;
-            stack.port_mut().careless = careless;
-            stack.port_mut().room = Some(10);
-            assert_eq!(send_next(stack, at(1)), Err(Unsent::PortContract));
-            assert_eq!(finished(stack.take_result(command)), Outcome::Unknown);
-            assert!(stack.poll_demand(at(1)).is_none(), "not sent again");
-            assert_eq!(stack.pool().free(), BLOCKS);
-        });
-    }
+fn a_port_that_says_yes_without_writing_ends_the_work_unrepeated() {
+    world!(|stack| contradicted(stack, true, false));
+}
+
+#[test]
+fn a_port_that_says_yes_after_a_failed_write_ends_the_work_unrepeated() {
+    world!(|stack| contradicted(stack, false, true));
 }
 
 #[test]
 fn room_that_is_too_short_sends_nothing() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"hello");
@@ -407,7 +434,7 @@ fn room_that_is_too_short_sends_nothing() {
 
 #[test]
 fn a_grant_of_a_reply_cannot_answer_a_later_asker() {
-    world(|stack| {
+    world!(|stack| {
         let first = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
         stack.input(at(0), &first, &mut ());
         let stale = stack.poll_demand(at(0)).unwrap().grant();
@@ -422,7 +449,7 @@ fn a_grant_of_a_reply_cannot_answer_a_later_asker() {
 
 #[test]
 fn a_grant_stays_stale_however_often_its_place_is_used() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"first");
@@ -447,7 +474,7 @@ fn a_grant_stays_stale_however_often_its_place_is_used() {
 
 #[test]
 fn a_changed_neighbor_reaches_a_datagram_that_waits() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
@@ -464,7 +491,7 @@ fn a_changed_neighbor_reaches_a_datagram_that_waits() {
 
 #[test]
 fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
@@ -492,7 +519,7 @@ fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
 
 #[test]
 fn every_ready_piece_of_work_is_listed_with_who_it_is_for() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let first = stack.open(5000, Dscp::new(46).unwrap()).unwrap();
         let second = stack.open(5001, best_effort()).unwrap();
@@ -510,7 +537,7 @@ fn every_ready_piece_of_work_is_listed_with_who_it_is_for() {
 
 #[test]
 fn a_dropped_observer_keeps_a_running_commands_place() {
-    small(|stack| {
+    small!(|stack| {
         let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
         stack.input(at(0), &request, &mut ());
         let demand = stack.poll_demand(at(0)).unwrap();
@@ -533,7 +560,7 @@ fn a_dropped_observer_keeps_a_running_commands_place() {
 
 #[test]
 fn a_close_has_its_own_place_when_every_command_place_is_taken() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"one");
@@ -550,7 +577,7 @@ fn a_close_has_its_own_place_when_every_command_place_is_taken() {
 
 #[test]
 fn a_reused_socket_waits_for_the_old_ones_results() {
-    small(|stack| {
+    small!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = stack.pool().take().unwrap();
         let old = stack.send(at(0), &socket, peer(), block).unwrap();
@@ -572,7 +599,7 @@ fn a_reused_socket_waits_for_the_old_ones_results() {
 /// outside, and no datagram asks another's neighbor away.
 #[test]
 fn a_datagram_never_asks_anothers_neighbor_away() {
-    world(|stack| {
+    world!(|stack| {
         let hops = [[192, 0, 2, 2], [192, 0, 2, 3], [192, 0, 2, 4]];
         let first = stack.open(5000, best_effort()).unwrap();
         let second = stack.open(5001, best_effort()).unwrap();
@@ -610,7 +637,7 @@ fn a_datagram_never_asks_anothers_neighbor_away() {
 
 #[test]
 fn a_grant_of_a_request_cannot_serve_a_later_resolution() {
-    world(|stack| {
+    world!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
         let first = stack.send(at(0), &socket, peer(), block).unwrap();
@@ -632,7 +659,7 @@ fn a_grant_of_a_request_cannot_serve_a_later_resolution() {
 
 #[test]
 fn a_grant_chosen_for_one_address_does_not_go_to_another() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
@@ -648,7 +675,7 @@ fn a_grant_chosen_for_one_address_does_not_go_to_another() {
 
 #[test]
 fn a_neighbor_expiring_under_a_datagram_names_its_time() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
@@ -663,7 +690,7 @@ fn a_neighbor_expiring_under_a_datagram_names_its_time() {
 
 #[test]
 fn every_reply_owed_is_listed_and_any_can_be_chosen() {
-    world(|stack| {
+    world!(|stack| {
         let first = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
         let second = arp_frame(Operation::Request, (MOVED, [192, 0, 2, 3]), OUR_IP);
         stack.input(at(0), &first, &mut ());
@@ -677,41 +704,95 @@ fn every_reply_owed_is_listed_and_any_can_be_chosen() {
 }
 
 #[test]
-fn a_retired_core_returns_its_blocks_and_the_next_finds_old_handles_gone() {
-    let mut memory = std::boxed::Box::new([[0; SIZE]; BLOCKS]);
-    scope(&mut memory, |pool, brand| {
-        let mut stack: Stack<'_> =
-            NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
-        let socket = stack.open(5000, best_effort()).unwrap();
-        let block = filled(stack.pool(), b"waits");
-        let command = stack.send(at(0), &socket, peer(), block).unwrap();
-        stack.input(at(0), &udp_frame(7, 5000, b"unread"), &mut ());
-        let held = stack.pool().take().unwrap();
-        let stale = stack.demands(at(0)).next().unwrap().grant();
-        let (mut pool, brand, port) = stack.retire();
-        assert_eq!(pool.outstanding(), 1, "the application's block stays out");
-        pool.give(held);
-        assert_eq!(pool.outstanding(), 0);
-        let mut next: Stack<'_> = NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, port);
-        assert_eq!(next.take_result(command), CommandState::Gone);
-        assert_eq!(next.receive(&socket).err(), Some(crate::StaleSocket));
-        assert_eq!(next.transmit(at(0), stale), Err(Unsent::Stale));
-        let reused = next.open(5000, best_effort()).unwrap();
-        assert_ne!(reused, socket);
-    });
+fn a_brand_claims_once() {
+    brand!(Once);
+    let _first = claimed::<Once>();
+    let memory = std::boxed::Box::leak(std::boxed::Box::new([[0; SIZE]; BLOCKS]));
+    assert!(claim::<Once, SIZE, BLOCKS>(memory).is_err());
 }
 
 #[test]
-fn a_scope_of_a_task_holds_its_core_across_an_await() {
+fn a_retired_core_returns_its_blocks_and_the_next_finds_old_handles_gone() {
+    brand!(Net);
+    let (pool, brand) = claimed::<Net>();
+    let local = interface(OUR_IP, 24, None);
+    let mut stack: Stack<Net> = NetworkOwner::new(brand, local, pool, Port::default());
+    let socket = stack.open(5000, best_effort()).unwrap();
+    let block = filled(stack.pool(), b"waits");
+    let command = stack.send(at(0), &socket, peer(), block).unwrap();
+    stack.input(at(0), &udp_frame(7, 5000, b"unread"), &mut ());
+    let held = stack.pool().take().unwrap();
+    let stale = stack.demands(at(0)).next().unwrap().grant();
+    let mut retired = stack.retire();
+    assert_eq!(retired.pool.outstanding(), 1, "the application's block");
+    assert_eq!(retired.results.received_dropped, 1);
+    retired.pool.give(held);
+    assert_eq!(retired.pool.outstanding(), 0);
+    let mut next: Stack<Net> = NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
+    assert_eq!(next.take_result(command), CommandState::Gone);
+    assert_eq!(next.receive(&socket).err(), Some(crate::StaleSocket));
+    assert_eq!(next.transmit(at(0), stale), Err(Unsent::Stale));
+    let reused = next.open(5000, best_effort()).unwrap();
+    assert_ne!(reused, socket);
+}
+
+#[test]
+fn a_confirmed_result_outlives_its_core_unread() {
+    brand!(Net);
+    let (pool, brand) = claimed::<Net>();
+    let local = interface(OUR_IP, 24, Some(GATEWAY));
+    let mut stack: NetworkOwner<'static, Net, SIZE, 3, 2, 2, 2, BLOCKS, Port> =
+        NetworkOwner::new(brand, local, pool, Port::default());
+    let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
+    stack.input(at(0), &request, &mut ());
+    let demand = stack.poll_demand(at(0)).unwrap();
+    stack.transmit(at(0), demand.grant()).unwrap();
+    let first = stack.open(5000, best_effort()).unwrap();
+    let block = filled(stack.pool(), b"one");
+    let read = stack.send(at(1), &first, peer(), block).unwrap();
+    let block = filled(stack.pool(), b"two");
+    let unread = stack.send(at(1), &first, peer(), block).unwrap();
+    for _ in 0..2 {
+        let demand = stack.poll_demand(at(1)).unwrap();
+        stack.transmit(at(1), demand.grant()).unwrap();
+    }
+    assert_eq!(finished(stack.take_result(read)), Outcome::Accepted);
+    let second = stack.open(5001, best_effort()).unwrap();
+    let block = filled(stack.pool(), b"cancelled");
+    let cancelled = stack.send(at(1), &second, peer(), block).unwrap();
+    let close = stack.close(second).unwrap();
+    let block = filled(stack.pool(), b"running");
+    let running = stack.send(at(1), &first, peer(), block).unwrap();
+    let third = stack.open(5002, best_effort()).unwrap();
+    let block = filled(stack.pool(), b"unobserved");
+    let unobserved = stack.send(at(1), &third, peer(), block).unwrap();
+    stack.drop_observer(unobserved);
+    let mut retired = stack.retire();
+    assert_eq!(retired.pool.free(), BLOCKS);
+    assert_eq!(retired.results.unread(), 4);
+    let results = &mut retired.results;
+    assert_eq!(finished(results.take(unread)), Outcome::Accepted);
+    assert_eq!(finished(results.take(cancelled)), Outcome::Closed);
+    assert_eq!(finished(results.take(close)), Outcome::SocketClosed);
+    assert_eq!(finished(results.take(running)), Outcome::Retired);
+    assert_eq!(results.unread(), 0);
+}
+
+#[test]
+fn a_network_task_holds_its_core_across_an_await() {
     use core::task::{Context, Poll, Waker};
-    let mut memory = std::boxed::Box::new([[0; SIZE]; BLOCKS]);
-    let run = crate::scope_async(&mut memory, async move |pool, brand| {
-        let mut stack: Stack<'_> =
-            NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
+    brand!(Net);
+    async fn service(pool: Blocks<Net>, brand: CoreBrand<Net>, interface: Interface) -> bool {
+        let mut stack: Stack<Net> = NetworkOwner::new(brand, interface, pool, Port::default());
         let socket = stack.open(5000, best_effort()).unwrap();
         embassy_futures::yield_now().await;
         stack.close(socket).is_ok()
-    });
+    }
+    fn task<F: Future + 'static>(future: F) -> F {
+        future
+    }
+    let (pool, brand) = claimed::<Net>();
+    let run = task(service(pool, brand, interface(OUR_IP, 24, None)));
     let mut run = core::pin::pin!(run);
     let mut cx = Context::from_waker(Waker::noop());
     assert_eq!(run.as_mut().poll(&mut cx), Poll::Pending);
@@ -719,8 +800,57 @@ fn a_scope_of_a_task_holds_its_core_across_an_await() {
 }
 
 #[test]
+fn a_closed_socket_leaves_no_neighbor_asked_for() {
+    world!(|stack| {
+        stack.port_mut().full = true;
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"x");
+        let gone = stack.send(at(0), &socket, peer(), block).unwrap();
+        assert!(send_next(stack, at(0)).is_err());
+        let close = stack.close(socket).unwrap();
+        assert_eq!(finished(stack.take_result(gone)), Outcome::Closed);
+        assert_eq!(finished(stack.take_result(close)), Outcome::SocketClosed);
+        assert!(
+            stack.poll_demand(at(0)).is_none(),
+            "nobody needs the answer"
+        );
+        let socket = stack.open(5000, best_effort()).unwrap();
+        for last in [3, 4] {
+            let block = filled(stack.pool(), b"y");
+            let remote = Remote {
+                address: [192, 0, 2, last],
+                port: 7,
+            };
+            assert!(stack.send(at(0), &socket, remote, block).is_ok());
+        }
+    });
+}
+
+#[test]
+fn a_port_that_contradicted_itself_publishes_nothing_more() {
+    brand!(Net);
+    let (pool, brand) = claimed::<Net>();
+    let local = interface(OUR_IP, 24, None);
+    let mut stack: Stack<Net> = NetworkOwner::new(brand, local, pool, Port::default());
+    let socket = stack.open(5000, best_effort()).unwrap();
+    let block = filled(stack.pool(), b"x");
+    let _command = stack.send(at(0), &socket, peer(), block).unwrap();
+    stack.port_mut().lazy = true;
+    assert_eq!(send_next(&mut stack, at(0)), Err(Unsent::PortContract));
+    assert!(stack.port_broken());
+    stack.port_mut().lazy = false;
+    let now = stack.poll_deadline().unwrap();
+    stack.tick(now);
+    assert_eq!(send_next(&mut stack, now), Err(Unsent::PortContract));
+    assert!(stack.port().sent.is_empty(), "no later ARP request");
+    let retired = stack.retire();
+    let next: Stack<Net> = NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
+    assert!(!next.port_broken());
+}
+
+#[test]
 fn a_neighbor_that_never_answers_ends_its_datagrams_after_its_requests() {
-    world(|stack| {
+    world!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"lost");
         let mut command = stack.send(at(0), &socket, peer(), block).unwrap();
@@ -742,7 +872,7 @@ fn a_neighbor_that_never_answers_ends_its_datagrams_after_its_requests() {
 
 #[test]
 fn a_request_refused_by_the_port_counts_for_nothing() {
-    world(|stack| {
+    world!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
         let _command = stack.send(at(0), &socket, peer(), block).unwrap();
@@ -759,7 +889,7 @@ fn a_request_refused_by_the_port_counts_for_nothing() {
 
 #[test]
 fn an_arp_request_for_us_is_answered_and_control_goes_before_data() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
@@ -781,7 +911,7 @@ fn an_arp_request_for_us_is_answered_and_control_goes_before_data() {
 
 #[test]
 fn replies_past_their_bound_are_dropped_and_counted() {
-    world(|stack| {
+    world!(|stack| {
         let mut dropped = Dropped::default();
         let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
         for _ in 0..3 {
@@ -793,7 +923,7 @@ fn replies_past_their_bound_are_dropped_and_counted() {
 
 #[test]
 fn an_arp_packet_for_another_makes_no_entry() {
-    world(|stack| {
+    world!(|stack| {
         let other = arp_frame(Operation::Request, (PEER, PEER_IP), [192, 0, 2, 9]);
         stack.input(at(0), &other, &mut ());
         assert!(stack.poll_demand(at(0)).is_none());
@@ -806,7 +936,7 @@ fn an_arp_packet_for_another_makes_no_entry() {
 
 #[test]
 fn a_datagram_reaches_its_socket_and_its_block_is_the_applications() {
-    world(|stack| {
+    world!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         stack.input(at(0), &udp_frame(7, 5000, b"payload"), &mut ());
         let received = stack.receive(&socket).unwrap().unwrap();
@@ -820,7 +950,7 @@ fn a_datagram_reaches_its_socket_and_its_block_is_the_applications() {
 
 #[test]
 fn received_datagrams_are_refused_with_a_counted_reason() {
-    world(|stack| {
+    world!(|stack| {
         let mut dropped = Dropped::default();
         let socket = stack.open(5000, best_effort()).unwrap();
         stack.input(at(0), &udp_frame(7, 6000, b"x"), &mut dropped);
@@ -845,7 +975,7 @@ fn received_datagrams_are_refused_with_a_counted_reason() {
 
 #[test]
 fn a_broken_ipv4_header_is_counted_not_delivered() {
-    world(|stack| {
+    world!(|stack| {
         let mut dropped = Dropped::default();
         let socket = stack.open(5000, best_effort()).unwrap();
         let mut frame = udp_frame(7, 5000, b"x");
@@ -858,7 +988,7 @@ fn a_broken_ipv4_header_is_counted_not_delivered() {
 
 #[test]
 fn a_fragment_is_counted_not_delivered() {
-    world(|stack| {
+    world!(|stack| {
         let mut dropped = Dropped::default();
         let socket = stack.open(5000, best_effort()).unwrap();
         let mut frame = udp_frame(7, 5000, b"x");
@@ -875,7 +1005,7 @@ fn a_fragment_is_counted_not_delivered() {
 
 #[test]
 fn no_block_drops_a_received_datagram_and_counts_it() {
-    world(|stack| {
+    world!(|stack| {
         let mut dropped = Dropped::default();
         let _socket = stack.open(5000, best_effort()).unwrap();
         let mut held = Vec::new();
@@ -892,7 +1022,7 @@ fn no_block_drops_a_received_datagram_and_counts_it() {
 
 #[test]
 fn a_frame_cut_at_any_length_is_handled() {
-    world(|stack| {
+    world!(|stack| {
         let _socket = stack.open(5000, best_effort()).unwrap();
         let udp = udp_frame(7, 5000, b"payload");
         let arp = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
@@ -906,7 +1036,7 @@ fn a_frame_cut_at_any_length_is_handled() {
 
 #[test]
 fn a_frame_for_another_station_is_ignored() {
-    world(|stack| {
+    world!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let mut frame = udp_frame(7, 5000, b"x");
         frame[5] = 9;
@@ -917,7 +1047,7 @@ fn a_frame_for_another_station_is_ignored() {
 
 #[test]
 fn a_host_prefix_has_no_broadcast_of_its_own() {
-    world_on(interface(PEER_IP, 31, None), |stack| {
+    world_on!(interface(PEER_IP, 31, None), |stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
         let other = Remote {
@@ -931,7 +1061,7 @@ fn a_host_prefix_has_no_broadcast_of_its_own() {
 
 #[test]
 fn sockets_take_turns() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let first = stack.open(5000, best_effort()).unwrap();
         let second = stack.open(5001, best_effort()).unwrap();
@@ -958,7 +1088,7 @@ fn sockets_take_turns() {
 
 #[test]
 fn a_port_in_use_and_a_full_table_refuse_to_open() {
-    world(|stack| {
+    world!(|stack| {
         let _first = stack.open(5000, best_effort()).unwrap();
         assert_eq!(
             stack.open(5000, best_effort()).err(),
@@ -974,7 +1104,7 @@ fn a_port_in_use_and_a_full_table_refuse_to_open() {
 
 #[test]
 fn a_time_past_a_neighbors_life_asks_again() {
-    world(|stack| {
+    world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");

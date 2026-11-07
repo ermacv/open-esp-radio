@@ -8,7 +8,7 @@ use crate::block::{Block, CoreBrand, Pool};
 use crate::interface::Interface;
 use crate::machine::{
     CommandId, CommandState, Core, Datagram, Demand, Grant, NetEvent, OpenRefused, Remote,
-    SendRefused, SlotTooShort, SocketId, StaleSocket,
+    RetiredResults, SendRefused, SlotTooShort, SocketId, StaleSocket,
 };
 
 /// A frame's way out.
@@ -28,6 +28,24 @@ pub trait FramePort {
     ) -> Result<(), Self::Refusal>;
 }
 
+/// What a retired core hands on, each to its own owner.
+#[derive(Debug)]
+pub struct Retired<
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const BLOCKS: usize,
+    P,
+> {
+    /// Its results, whenever their observers come.
+    pub results: RetiredResults<B, SOCKETS, CREDITS>,
+    pub pool: Pool<'m, B, SIZE, BLOCKS>,
+    pub brand: CoreBrand<B>,
+    pub port: P,
+}
+
 /// Why a grant sent nothing the core knows of.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Unsent<R> {
@@ -40,7 +58,9 @@ pub enum Unsent<R> {
     /// The port said `Ok` though the frame was not written, which breaks
     /// [`FramePort::publish`]. What reached it is not known, so the work
     /// ended and is not repeated: a datagram's outcome is
-    /// [`Outcome::Unknown`](crate::Outcome::Unknown).
+    /// [`Outcome::Unknown`](crate::Outcome::Unknown). Every later `transmit`
+    /// answers this too, for ARP as well, until the owner retires the core
+    /// and takes the port back.
     PortContract,
 }
 
@@ -49,7 +69,8 @@ pub enum Unsent<R> {
 /// core's commitment, so no frame leaves unknown to the core.
 #[derive(Debug)]
 pub struct NetworkOwner<
-    'id,
+    'm,
+    B,
     const SIZE: usize,
     const SOCKETS: usize,
     const CREDITS: usize,
@@ -58,13 +79,17 @@ pub struct NetworkOwner<
     const BLOCKS: usize,
     P,
 > {
-    core: Core<'id, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS>,
-    pool: Pool<'id, SIZE, BLOCKS>,
+    core: Core<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS>,
+    pool: Pool<'m, B, SIZE, BLOCKS>,
     port: P,
+    /// The port contradicted itself: nothing is published until it is
+    /// replaced, by a retirement.
+    broken: bool,
 }
 
 impl<
-    'id,
+    'm,
+    B,
     const SIZE: usize,
     const SOCKETS: usize,
     const CREDITS: usize,
@@ -72,18 +97,19 @@ impl<
     const NEIGHBORS: usize,
     const BLOCKS: usize,
     P: FramePort,
-> NetworkOwner<'id, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>
+> NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>
 {
     pub const fn new(
-        brand: CoreBrand<'id>,
+        brand: CoreBrand<B>,
         interface: Interface,
-        pool: Pool<'id, SIZE, BLOCKS>,
+        pool: Pool<'m, B, SIZE, BLOCKS>,
         port: P,
     ) -> Self {
         Self {
             core: Core::new(brand, interface),
             pool,
             port,
+            broken: false,
         }
     }
 
@@ -92,7 +118,10 @@ impl<
     ///
     /// # Errors
     /// [`Unsent`].
-    pub fn transmit(&mut self, now: Instant, grant: Grant<'id>) -> Result<(), Unsent<P::Refusal>> {
+    pub fn transmit(&mut self, now: Instant, grant: Grant<B>) -> Result<(), Unsent<P::Refusal>> {
+        if self.broken {
+            return Err(Unsent::PortContract);
+        }
         let frame = self.core.frame(now, &grant).ok_or(Unsent::Stale)?;
         let mut written = false;
         self.port
@@ -106,6 +135,7 @@ impl<
         if written {
             Ok(())
         } else {
+            self.broken = true;
             Err(Unsent::PortContract)
         }
     }
@@ -121,12 +151,12 @@ impl<
     }
 
     /// See [`Core::demands`].
-    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<'id>> + '_ {
+    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<B>> + '_ {
         self.core.demands(now)
     }
 
     /// See [`Core::poll_demand`].
-    pub fn poll_demand(&mut self, now: Instant) -> Option<Demand<'id>> {
+    pub fn poll_demand(&mut self, now: Instant) -> Option<Demand<B>> {
         self.core.poll_demand(now)
     }
 
@@ -139,7 +169,7 @@ impl<
     ///
     /// # Errors
     /// [`OpenRefused`].
-    pub fn open(&mut self, port: u16, dscp: Dscp) -> Result<SocketId<'id>, OpenRefused> {
+    pub fn open(&mut self, port: u16, dscp: Dscp) -> Result<SocketId<B>, OpenRefused> {
         self.core.open(port, dscp)
     }
 
@@ -150,10 +180,10 @@ impl<
     pub fn send(
         &mut self,
         now: Instant,
-        socket: &SocketId<'id>,
+        socket: &SocketId<B>,
         remote: Remote,
-        block: Block<'id, SIZE>,
-    ) -> Result<CommandId<'id>, SendRefused<'id, SIZE>> {
+        block: Block<'m, B, SIZE>,
+    ) -> Result<CommandId<B>, SendRefused<'m, B, SIZE>> {
         self.core.send(now, socket, remote, block)
     }
 
@@ -163,8 +193,8 @@ impl<
     /// [`StaleSocket`].
     pub fn receive(
         &mut self,
-        socket: &SocketId<'id>,
-    ) -> Result<Option<Datagram<'id, SIZE>>, StaleSocket> {
+        socket: &SocketId<B>,
+    ) -> Result<Option<Datagram<'m, B, SIZE>>, StaleSocket> {
         self.core.receive(socket)
     }
 
@@ -172,22 +202,22 @@ impl<
     ///
     /// # Errors
     /// [`StaleSocket`].
-    pub fn close(&mut self, socket: SocketId<'id>) -> Result<CommandId<'id>, StaleSocket> {
+    pub fn close(&mut self, socket: SocketId<B>) -> Result<CommandId<B>, StaleSocket> {
         self.core.close(socket, &mut self.pool)
     }
 
     /// See [`Core::take_result`].
-    pub fn take_result(&mut self, command: CommandId<'id>) -> CommandState<'id> {
+    pub fn take_result(&mut self, command: CommandId<B>) -> CommandState<B> {
         self.core.take_result(command)
     }
 
     /// See [`Core::drop_observer`].
-    pub fn drop_observer(&mut self, command: CommandId<'id>) {
+    pub fn drop_observer(&mut self, command: CommandId<B>) {
         self.core.drop_observer(command);
     }
 
     /// The pool, for blocks to fill and blocks to give back.
-    pub const fn pool(&mut self) -> &mut Pool<'id, SIZE, BLOCKS> {
+    pub const fn pool(&mut self) -> &mut Pool<'m, B, SIZE, BLOCKS> {
         &mut self.pool
     }
 
@@ -196,16 +226,27 @@ impl<
         &self.port
     }
 
-    /// End the core. Its blocks return to the pool, which comes back with the
-    /// next core's brand and the port. See [`Core::retire`].
-    pub fn retire(self) -> (Pool<'id, SIZE, BLOCKS>, CoreBrand<'id>, P) {
+    /// Whether the port contradicted itself, which stops publishing.
+    pub const fn port_broken(&self) -> bool {
+        self.broken
+    }
+
+    /// End the core: results, pool, the next core's brand and the port all
+    /// come back. See [`Core::retire`].
+    pub fn retire(self) -> Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P> {
         let Self {
             core,
             mut pool,
             port,
+            ..
         } = self;
-        let brand = core.retire(&mut pool);
-        (pool, brand, port)
+        let (results, brand) = core.retire(&mut pool);
+        Retired {
+            results,
+            pool,
+            brand,
+            port,
+        }
     }
 
     #[cfg(test)]

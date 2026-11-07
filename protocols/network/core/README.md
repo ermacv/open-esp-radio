@@ -14,14 +14,16 @@ accept it, and commits the answer in one call. No frame leaves unknown to the
 core, and the core has no state for work at the port. A datagram's outcome means
 accepted by the port, not delivered: until then its block stays with the core,
 and a refusal moves nothing. A port that contradicts itself ends the work with
-`Outcome::Unknown`, which is not repeated.
+`Outcome::Unknown`, not repeated, and stops all publishing until the core retires.
 
 `tick` comes first at every time `poll_deadline` names and at any later `now`
 before work is asked for: an address past its life is no work until then.
 
-`scope`, or `scope_async` for a task, gives a pool and a core a brand of their own. Blocks are values lent
-from that pool, and handles and blocks of another scope do not compile, so a
-block always has its place. A socket has `CREDITS` command places and a place of its own for its
+`brand!` makes a type that `claim` takes once, giving one pool and the right to
+one core. Blocks are values lent from that pool, and they and every handle carry
+the brand. A brand is a type rather than a lifetime, so `'static` tasks and their
+queues can name a block, and another network's value does not compile. A block
+always has its place in its pool. A socket has `CREDITS` command places and a place of its own for its
 close. A place frees when its command finished and its result was read or its
 observer dropped; a dropped observer alone frees nothing, so a late end never
 reaches a later command.
@@ -34,7 +36,10 @@ waits, and a grant chosen for the old address goes stale. A neighbor that expire
 is asked again, and one that does not answer ends the datagram with
 `Outcome::Unreachable`.
 
-`retire` ends a core: its blocks return to the pool and the brand comes back for
-the next core. Blocks applications hold stay out (`Pool::outstanding`) and can
-return later; old handles find `CommandState::Gone`, as serials go on across
-cores.
+`retire` ends a core and hands on what it held, each to its own owner: blocks to
+the pool, the brand to the next core, the port back, and every unread result to
+`RetiredResults`, so a confirmed result does not depend on having been read in
+time. A datagram still running ends `Outcome::Retired`. Blocks applications hold
+stay out (`Pool::outstanding`) and can return later. Serials go on across cores,
+so an old handle finds `CommandState::Gone` at the next core and its result in
+`RetiredResults`.
