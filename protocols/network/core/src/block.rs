@@ -1,5 +1,6 @@
 //! Blocks of stack memory, moved by value, and the brand of one core.
 
+use crate::loans::Loans;
 use core::any::TypeId;
 use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
@@ -224,6 +225,9 @@ pub struct Pool<'m, B, const SIZE: usize, const BLOCKS: usize> {
     free: heapless::Vec<Block<'m, B, SIZE>, BLOCKS>,
     /// By group, the shared one first.
     groups: heapless::Vec<Account, GROUPS>,
+    /// What receive loans hold of the driver's buffers. It stays here because
+    /// loans outlive a core, as a pool does.
+    loans: Loans<B, GROUPS>,
 }
 
 impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
@@ -249,7 +253,17 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
                 panic!("a pool has its shared group");
             }
         };
-        Self { free, groups }
+        Self {
+            free,
+            groups,
+            loans: Loans::new(),
+        }
+    }
+
+    /// The one account of this network's receive loans. A socket is numbered
+    /// here below [`GROUPS`].
+    pub const fn loans(&mut self) -> &mut Loans<B, GROUPS> {
+        &mut self.loans
     }
 
     /// A new group of at most `limit` blocks. A group has one limit, here.

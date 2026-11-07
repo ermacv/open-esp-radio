@@ -11,18 +11,18 @@
 //! says what is still out. Its memory stays with its holder until it comes
 //! back, and no expiry frees it.
 //!
-//! A core holds the one [`Loans`] of its brand, so another network's loan does
-//! not compile here:
+//! A brand's pool holds its one [`Loans`], from its claim on, across every core
+//! that holds the pool. So a core's retirement loses no debt: it begins the next
+//! installation, and an old loan pays only what is owed for it. Another network's
+//! loan does not compile here:
 //!
 //! ```compile_fail,E0308
-//! # use oer_protocols_network_core::{Core, Interface, Loan, claim};
+//! # use oer_protocols_network_core::claim;
 //! struct First;
 //! struct Second;
-//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1], interface: Interface) {
-//! let (_, brand) = claim::<First, 64, 1>(a).unwrap();
-//! let mut first: Core<'_, First, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-//! let (_, brand) = claim::<Second, 64, 1>(b).unwrap();
-//! let mut second: Core<'_, Second, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
+//! let (mut first, _) = claim::<First, 64, 1>(a).unwrap();
+//! let (mut second, _) = claim::<Second, 64, 1>(b).unwrap();
 //! let loan = second.loans().lend(0).unwrap();
 //! first.loans().give_back(loan);
 //! # }
@@ -56,7 +56,7 @@ pub enum NotLent {
 
 /// The right to one lent buffer. It is not `Copy`, so a buffer comes back once,
 /// and it carries its network's brand, so it comes back to the [`Loans`] that
-/// gave it: a core holds the one of its brand.
+/// gave it: a pool holds the one of its brand.
 #[derive(Debug)]
 pub struct Loan<B> {
     socket: usize,

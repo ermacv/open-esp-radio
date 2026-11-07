@@ -4,7 +4,6 @@
 
 use core::marker::PhantomData;
 
-use crate::loans::Loans;
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
@@ -402,8 +401,6 @@ pub struct Core<
     /// asks again.
     replies: heapless::Vec<Reply, NEIGHBORS>,
     sockets: [Socket<'m, B, SIZE, CREDITS, RECEIVED>; SOCKETS],
-    /// The one account of this network's receive loans.
-    loans: Loans<B, SOCKETS>,
     /// Where the next look for a datagram starts, so sockets take turns.
     cursor: usize,
     identification: u16,
@@ -432,17 +429,11 @@ impl<
     };
 
     /// The core of `brand`.
-    /// The account of this network's receive loans.
-    pub const fn loans(&mut self) -> &mut Loans<B, SOCKETS> {
-        &mut self.loans
-    }
-
     pub const fn new(brand: CoreBrand<B>, interface: Interface) -> Self {
         const { Self::FITS };
         Self {
             interface,
             neighbors: Neighbors::new(),
-            loans: Loans::new(),
             replies: heapless::Vec::new(),
             sockets: [const { Socket::new() }; SOCKETS],
             cursor: 0,
@@ -1195,6 +1186,8 @@ impl<
         self,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> (RetiredResults<B, SOCKETS, CREDITS>, CoreBrand<B>) {
+        // Loans outlive a core: what is out stays owed, to this pool.
+        pool.loans().reinstall();
         let Self {
             sockets,
             serial,

@@ -12,9 +12,9 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Block, BrandRefusal, CommandState, CoreBrand, Eviction, GROUPS, Group, GroupsFull, Interface,
-    InterfaceError, NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal,
-    Unsent, claim,
+    Block, BrandRefusal, CommandState, Core, CoreBrand, Eviction, GROUPS, Group, GroupsFull,
+    Interface, InterfaceError, LoansRefused, NetEvent, NetworkOwner, NotLent, OpenRefused, Outcome,
+    Pool, Remote, SendRefusal, Unsent, claim,
 };
 use oer_protocols_network_port::{Class, FramePort, SlotTooShort};
 
@@ -1432,4 +1432,55 @@ fn a_block_counts_toward_its_group_through_every_move() {
     walk_blocks::<First>(1);
     walk_blocks::<Second>(2);
     walk_blocks::<Third>(3);
+}
+
+/// A core with a pool of one driver buffer, lent to `socket` 0.
+fn lending<B: 'static>() -> (Blocks<B>, CoreBrand<B>) {
+    let (mut pool, brand) = claimed::<B>();
+    pool.loans().pool(1, 0).unwrap();
+    pool.loans().grant(0, 1).unwrap();
+    (pool, brand)
+}
+
+type LoanCore<B> = Core<'static, B, SIZE, 1, 1, 1, 1>;
+
+fn next_core<B: 'static>(mut pool: Blocks<B>, brand: CoreBrand<B>) -> (Blocks<B>, CoreBrand<B>) {
+    let core: LoanCore<B> = Core::new(brand, interface(OUR_IP, 24, None));
+    let (_results, brand) = core.retire(&mut pool);
+    (pool, brand)
+}
+
+#[test]
+fn a_loan_stays_owed_across_a_core() {
+    brand!(Net);
+    let (mut pool, brand) = lending::<Net>();
+    let held = pool.loans().lend(0).unwrap();
+    let (mut pool, _brand) = next_core(pool, brand);
+    assert_eq!(pool.loans().outstanding(), 1);
+    assert_eq!(
+        pool.loans().grant(0, 1),
+        Err(LoansRefused::Pool { room: 0 }),
+        "the old loan still takes its buffer"
+    );
+    pool.loans().give_back(held);
+    assert!(pool.loans().released());
+    pool.loans().grant(0, 1).unwrap();
+}
+
+#[test]
+fn an_old_loan_pays_nothing_of_a_new_one() {
+    brand!(Net);
+    let (mut pool, brand) = lending::<Net>();
+    pool.loans().pool(2, 0).unwrap();
+    pool.loans().grant(0, 2).unwrap();
+    let old = pool.loans().lend(0).unwrap();
+    let (mut pool, _brand) = next_core(pool, brand);
+    pool.loans().grant(0, 1).unwrap();
+    let new = pool.loans().lend(0).unwrap();
+    pool.loans().give_back(old);
+    assert_eq!(pool.loans().outstanding(), 1, "the new loan is still out");
+    assert!(!pool.loans().released());
+    assert_eq!(pool.loans().lend(0).err(), Some(NotLent::NoCredit));
+    pool.loans().give_back(new);
+    assert!(pool.loans().released());
 }

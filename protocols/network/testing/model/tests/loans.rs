@@ -1,12 +1,13 @@
 //! Receive loans over a radio with a finite pool, before the service lends:
 //! a slow consumer deprives neither others nor control traffic of buffers, and
 //! a full stop handles a buffer held for ever. The pool, the arrivals and the
-//! work per turn are this file's; [`Loans`] is the production accounting.
+//! work per turn are this file's; [`Loans`] is the production accounting, in
+//! its production owner.
 //!
 //! Each scenario has a control without credits, where the same load has to go
 //! wrong: a model that cannot fail proves nothing.
 
-use oer_protocols_network_core::{Core, Interface, Loan, Loans, NotLent, claim};
+use oer_protocols_network_core::{GROUPS, Loan, Loans, NotLent, Pool, claim};
 
 const SLOW: usize = 0;
 const FAST: usize = 1;
@@ -46,23 +47,21 @@ struct Counts {
 macro_rules! network {
     ($policy:expr) => {{
         struct Net;
-        Radio::new(core_of::<Net>(), $policy)
+        Radio::new(pool_of::<Net>(), $policy)
     }};
 }
 
-type TestCore<B> = Core<'static, B, 64, 2, 1, 1, 1>;
+type TestPool<B> = Pool<'static, B, 64, 1>;
 
-fn core_of<B: 'static>() -> &'static mut TestCore<B> {
+fn pool_of<B: 'static>() -> TestPool<B> {
     let memory = Box::leak(Box::new([[0; 64]; 1]));
-    let (_, brand) = claim::<B, 64, 1>(memory).unwrap();
-    let interface = Interface::new([2; 6], [192, 0, 2, 1], 24, None, 1500).unwrap();
-    Box::leak(Box::new(Core::new(brand, interface)))
+    claim::<B, 64, 1>(memory).unwrap().0
 }
 
 struct Radio<B: 'static> {
     free: usize,
     ring: Vec<Traffic>,
-    core: &'static mut TestCore<B>,
+    pool: TestPool<B>,
     held_slow: Vec<Option<Loan<B>>>,
     held_fast: Vec<Option<Loan<B>>>,
     policy: Policy,
@@ -70,15 +69,15 @@ struct Radio<B: 'static> {
 }
 
 impl<B: 'static> Radio<B> {
-    fn new(core: &'static mut TestCore<B>, policy: Policy) -> Self {
-        let loans = core.loans();
+    fn new(mut pool: TestPool<B>, policy: Policy) -> Self {
+        let loans = pool.loans();
         loans.pool(BUFFERS, RESERVE).unwrap();
         loans.grant(SLOW, CREDIT).unwrap();
         loans.grant(FAST, CREDIT).unwrap();
         Self {
             free: BUFFERS,
             ring: Vec::new(),
-            core,
+            pool,
             held_slow: Vec::new(),
             held_fast: Vec::new(),
             policy,
@@ -86,8 +85,8 @@ impl<B: 'static> Radio<B> {
         }
     }
 
-    fn loans(&mut self) -> &mut Loans<B, 2> {
-        self.core.loans()
+    fn loans(&mut self) -> &mut Loans<B, GROUPS> {
+        self.pool.loans()
     }
 
     fn arrive(&mut self, traffic: Traffic) {
