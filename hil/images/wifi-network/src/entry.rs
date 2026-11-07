@@ -87,8 +87,9 @@ fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted
     let load = load::serve::LOAD.group(&mut boot)?;
     let relay = load::relay::RELAY.group(&mut boot)?;
     let tally = load::serve::TALLY.try_take().ok_or(Error::Storage)?;
+    let turns = udp::TURNS.try_take().ok_or(Error::Storage)?;
     let part = observe::Part::claim("load")?;
-    Ok(boot.run(move || sockets(net, load, relay, hart1, tally, part)))
+    Ok(boot.run(move || sockets(net, load, relay, hart1, tally, turns, part)))
 }
 
 /// The load server, which never ends.
@@ -98,9 +99,11 @@ async fn sockets(
     relay: load::relay::Client,
     hart1: observe::Hart1,
     tally: load::serve::RunTally,
+    turns: &'static mut udp::Turns,
     part: observe::Part,
 ) -> AppResult {
     let net = udp::Network::new(net);
+    net.keep_turns(turns);
     let mut server = pin!(load::serve::serve(&net, load, relay, hart1, tally));
     match part.polled(server.as_mut()).await {}
 }

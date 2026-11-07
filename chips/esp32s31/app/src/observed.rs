@@ -515,6 +515,10 @@ pub(crate) struct NetworkSink(crate::observe::network::TurnTally);
 
 #[cfg(feature = "network")]
 impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent> for NetworkSink {
+    // Out of the service's turn: inlined, the counting grows the turn past
+    // its inlining into `run`, and its tail merging there joined two waker
+    // calls whose scope the image's stack proof then cannot name.
+    #[inline(never)]
     fn event(&mut self, event: oer_protocols_network_runtime::ServiceEvent) {
         use crate::observe::network::{Publish, Request};
         use oer_protocols_network_runtime::{PublishEnd, RequestKind, ServiceEvent};

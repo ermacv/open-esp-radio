@@ -543,7 +543,7 @@ impl<
                 Request::Send { tag, remote, block } => {
                     let Some(socket) = &bound.socket else {
                         self.owner.pool().give(block);
-                        bound.ended(tag, Sent::Ended(Outcome::Closed));
+                        bound.unsent(tag, Sent::Ended(Outcome::Closed));
                         continue;
                     };
                     match self.owner.send(now, socket, remote, block) {
@@ -554,7 +554,7 @@ impl<
                         }
                         Err(refused) => {
                             self.owner.pool().give(refused.block);
-                            bound.ended(tag, Sent::Refused(refused.reason));
+                            bound.unsent(tag, Sent::Refused(refused.reason));
                         }
                     }
                 }
@@ -562,7 +562,7 @@ impl<
                     if let Some(socket) = bound.socket.take() {
                         match self.owner.close(socket) {
                             Ok(close) => bound.closing = Some(close),
-                            Err(_) => bound.answer(Answer::Closed),
+                            Err(_) => bound.closed(),
                         }
                     }
                 }
@@ -764,6 +764,26 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         true
     }
 
+    /// The socket's close ended.
+    ///
+    /// Out of line, as [`Self::unsent`]: inlined into a turn, its wake and
+    /// another ending's were merged into one call whose debug scope no
+    /// longer names the waker method the image's stack proof needs.
+    #[cold]
+    #[inline(never)]
+    fn closed(&mut self) {
+        self.answer(Answer::Closed);
+    }
+
+    /// A datagram of `tag` the core never took ended with `sent`.
+    ///
+    /// Out of line, as [`Self::closed`].
+    #[cold]
+    #[inline(never)]
+    fn unsent(&self, tag: u8, sent: Sent) {
+        self.ended(tag, sent);
+    }
+
     /// The command of `tag` ended.
     fn ended(&self, tag: u8, sent: Sent) {
         if let Some(place) = self.end.places.get(usize::from(tag)) {
@@ -835,7 +855,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
                 CommandState::Running(close) => self.closing = Some(close),
                 CommandState::Finished(_) | CommandState::Gone => {
                     moved = true;
-                    self.answer(Answer::Closed);
+                    self.closed();
                 }
             }
         }

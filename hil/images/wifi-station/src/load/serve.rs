@@ -26,9 +26,8 @@ use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
     Collected, Counters, CountersCollected, Hart1Collected, Hart1Window, Link, LinkCollected, Load,
-    LoadError, Mac, MacCollected, NetworkCollected, NetworkTurns, PartsCollected, Positions,
-    PositionsCollected, Report, Request, SamplesCollected, Sent, Start, Started, Tracking,
-    TrackingCollected, Transmit,
+    LoadError, Mac, MacCollected, NetworkCollected, PartsCollected, Positions, PositionsCollected,
+    Report, Request, SamplesCollected, Sent, Start, Started, Tracking, TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
@@ -148,7 +147,7 @@ pub(crate) async fn serve(
             Action::Cpu => Answer::Cpu(cpu_load().await),
             Action::Kept(kind) => match &kept {
                 Some((_, ended)) => {
-                    kept_answer(ended, kind, identity, &mut hart0, &mut hart1).await
+                    kept_answer(ended, kind, identity, net, &mut hart0, &mut hart1).await
                 }
                 None => decided_answer(Decided::UnknownRun(kind)),
             },
@@ -162,6 +161,7 @@ async fn kept_answer(
     ended: &Ended,
     kind: Kept,
     identity: RequestIdentity,
+    net: &Network,
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
 ) -> Answer {
@@ -176,7 +176,9 @@ async fn kept_answer(
         Kept::Positions => Answer::Positions(PositionsCollected::Report(ended.positions)),
         Kept::Hart1 => Answer::Hart1(Hart1Collected::Report(ended.hart1)),
         Kept::Tracking => Answer::Tracking(TrackingCollected::Report(ended.tracking)),
-        Kept::Network => Answer::Network(NetworkCollected::Report(ended.network)),
+        // The kept run's window, which the network holds until the next one
+        // closes.
+        Kept::Network => Answer::Network(NetworkCollected::Report(udp::network_window(net))),
         Kept::Samples { from, hart } => match ended.sampled.get(usize::from(hart)) {
             // Hart 0's samples are in the boot hart's buffer: its relay
             // answers with the page.
@@ -280,7 +282,6 @@ struct Ends {
     positions: Positions,
     hart1: Hart1Window,
     tracking: Tracking,
-    network: NetworkTurns,
     sampled: Sampled,
 }
 
@@ -299,7 +300,6 @@ struct Ended {
     positions: Positions,
     hart1: Hart1Window,
     tracking: Tracking,
-    network: NetworkTurns,
     sampled: Sampled,
 }
 
@@ -379,7 +379,6 @@ async fn run(
         positions: ends.positions,
         hart1: ends.hart1,
         tracking: ends.tracking,
-        network: ends.network,
         sampled: ends.sampled,
     }
 }
@@ -435,7 +434,7 @@ async fn measure(
     let cpu_start = cpu_load().await;
     let (parts_start, tracking_start) = readings(true).await;
     let counters_start = snapshot(hart0, true, net).await;
-    let network_start = udp::network_turns(net);
+    udp::open_turns(net);
     let hart1_start = report::hart_count(hart1.counters());
     let start_us = now_us();
     window.start_us.set(Some(start_us));
@@ -461,7 +460,7 @@ async fn measure(
     let cpu_end = cpu_load().await;
     let (parts_end, tracking_end) = readings(false).await;
     let counters_end = snapshot(hart0, false, net).await;
-    let network_end = udp::network_turns(net);
+    udp::close_turns(net);
     let sampled = match sampling {
         Some(Ok(())) => Some(relay::stop_sampler(hart0).await),
         other => other,
@@ -492,7 +491,6 @@ async fn measure(
             end: hart1_end,
         },
         tracking: report::tracking(&tracking_start, &tracking_end),
-        network: NetworkTurns::window(&network_start, &network_end),
         sampled: [sampled, sampled1],
     }
 }
