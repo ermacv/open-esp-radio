@@ -6,7 +6,7 @@
 //! - **Bring-up.** Prepare the ring, open promiscuous receive, install the
 //!   interrupt line (which clears a stale request), ask the radio handler to
 //!   activate the interrupt epoch (the binding's proof), start the walker
-//!   after its settle, start the prepared MAC with that live ring's DMA proof.
+//!   and start the prepared MAC with that live ring's DMA proof.
 //! - **Receive.** Wait for an interrupt fact or the stop request, then run
 //!   [`service`] until the frontier drained and every buffer the sink
 //!   released in the pass has had one more pass to be rearmed; only then ask
@@ -292,7 +292,7 @@ where
     receiver.requests.activate(bound, receiver.doorbell);
 
     let cause = match frontier
-        .start_with_storage(receiver.timer, receiver.rx_dma, receiver.rx)
+        .start_with_storage(receiver.rx_dma, receiver.rx)
         .await
     {
         Err(error) => WifiRxCause::Start(error),
@@ -603,8 +603,8 @@ where
             self.counters.timed_continuation();
             match self.timer.deadline_after(CONTINUATION_WAIT) {
                 Ok(deadline) => self.timer.wait_until(deadline).await,
-                // As the walker settle: a wait past the timer's range never
-                // ends, so the pass is never rerun early.
+                // A wait past the timer's range never ends, so the pass is
+                // never rerun early.
                 Err(oer_portable_time::TimeOverflow) => pending().await,
             }
         }

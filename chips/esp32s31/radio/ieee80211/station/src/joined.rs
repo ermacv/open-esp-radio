@@ -1511,14 +1511,14 @@ fn a_poll_that_costs_time_changes_no_outcome() {
     joined_at::<Network>(POLL_MICROS, |bench| one_datagram_out(bench));
 }
 
-/// A start ends on the timers it arms: no poll moves the clock, and nothing
-/// but those timers wakes it past the walker's settle.
+/// A start needs no time of its own: no poll moves the clock, and it waits on
+/// no timer.
 #[test]
-fn the_radio_starts_on_its_own_timer_when_polls_take_no_time() {
+fn the_radio_starts_when_polls_take_no_time() {
     struct Network;
     joined::<Network>(|bench| {
         assert_eq!(bench.poll_micros, 0);
-        assert!(bench.start_took >= Duration::from_micros(5));
+        assert_eq!(bench.start_took, Duration::from_micros(0));
     });
 }
 
