@@ -5,10 +5,13 @@ use core::marker::PhantomData;
 /// Who a value belongs to: an invariant lifetime no other [`scope`] shares.
 pub(crate) type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
 
-/// The right to make the one core of a [`scope`].
+/// The right to make a core of a [`scope`]: one at a time, as a core retired
+/// gives it back. It carries the last serial given, so a later core gives none
+/// of the old ones again and an old handle stays stale.
 #[derive(Debug)]
 pub struct CoreBrand<'id> {
     pub(crate) brand: Brand<'id>,
+    pub(crate) serial: u64,
 }
 
 /// Give `storage` a pool and one core's brand. Everything of this scope, its
@@ -18,7 +21,46 @@ pub fn scope<const SIZE: usize, const BLOCKS: usize, R>(
     storage: &mut [[u8; SIZE]; BLOCKS],
     run: impl for<'id> FnOnce(Pool<'id, SIZE, BLOCKS>, CoreBrand<'id>) -> R,
 ) -> R {
-    run(Pool::new(storage), CoreBrand { brand: PhantomData })
+    run(
+        Pool::new(storage),
+        CoreBrand {
+            brand: PhantomData,
+            serial: 0,
+        },
+    )
+}
+
+/// [`scope`] for a task: `run` awaits, and its future may hold the pool and
+/// the core across its awaits. With `storage` placed for good, the future is
+/// `'static`, as an executor's task needs:
+///
+/// ```
+/// # use oer_protocols_network_core::{Core, Interface, scope_async};
+/// async fn service(storage: &'static mut [[u8; 64]; 2], interface: Interface) {
+///     scope_async(storage, async move |pool, brand| {
+///         let core: Core<'_, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+///         core::future::ready(()).await;
+///         drop((core, pool));
+///     })
+///     .await;
+/// }
+/// fn task<F: Future<Output = ()> + 'static>(_: F) {}
+/// # fn f(storage: &'static mut [[u8; 64]; 2], interface: Interface) {
+/// task(service(storage, interface));
+/// # }
+/// ```
+pub async fn scope_async<const SIZE: usize, const BLOCKS: usize, R>(
+    storage: &mut [[u8; SIZE]; BLOCKS],
+    run: impl for<'id> AsyncFnOnce(Pool<'id, SIZE, BLOCKS>, CoreBrand<'id>) -> R,
+) -> R {
+    run(
+        Pool::new(storage),
+        CoreBrand {
+            brand: PhantomData,
+            serial: 0,
+        },
+    )
+    .await
 }
 
 /// One block of stack memory and the octets it holds.
@@ -106,5 +148,11 @@ impl<'id, const SIZE: usize, const BLOCKS: usize> Pool<'id, SIZE, BLOCKS> {
     /// How many blocks are free.
     pub fn free(&self) -> usize {
         self.free.len()
+    }
+
+    /// How many blocks are out: a retired core's outstanding obligations,
+    /// which an application returns by [`Self::give`] whenever it does.
+    pub fn outstanding(&self) -> usize {
+        BLOCKS.saturating_sub(self.free.len())
     }
 }

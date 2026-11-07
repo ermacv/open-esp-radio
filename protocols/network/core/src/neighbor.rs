@@ -16,6 +16,8 @@ pub(crate) enum Entry {
     Free,
     Asking {
         address: [u8; 4],
+        /// This resolution's: a grant names it and no later one.
+        serial: u64,
         requests: u8,
         next: Instant,
         /// A request is owed to the port.
@@ -33,7 +35,7 @@ pub(crate) enum Entry {
 pub(crate) enum Lookup {
     Known,
     Asking,
-    /// Every entry is being asked for, so this one cannot be.
+    /// Every entry holds a neighbor a datagram needs, so this one cannot be.
     Full,
 }
 
@@ -63,8 +65,16 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// Find `address`, or begin asking for it: in its own expired entry, a
-    /// free one, or the one that expires first.
-    pub(crate) fn resolve(&mut self, now: Instant, address: [u8; 4]) -> Lookup {
+    /// free one, or the known one that expires first among those `needed`
+    /// says no datagram holds. An accepted datagram's neighbor is never
+    /// evicted, so one datagram never asks another's neighbor away.
+    pub(crate) fn resolve(
+        &mut self,
+        now: Instant,
+        address: [u8; 4],
+        serial: u64,
+        needed: impl Fn([u8; 4]) -> bool,
+    ) -> Lookup {
         let mut oldest: Option<(usize, Instant)> = None;
         let mut free = None;
         let mut own = None;
@@ -81,7 +91,7 @@ impl<const N: usize> Neighbors<N> {
                         }
                         own = Some(index);
                     }
-                    if oldest.is_none_or(|(_, at)| expires < at) {
+                    if !needed(known) && oldest.is_none_or(|(_, at)| expires < at) {
                         oldest = Some((index, expires));
                     }
                 }
@@ -99,13 +109,36 @@ impl<const N: usize> Neighbors<N> {
         else {
             return Lookup::Full;
         };
-        *entry = Entry::Asking {
+        *entry = Self::asking(now, address, serial);
+        Lookup::Asking
+    }
+
+    const fn asking(now: Instant, address: [u8; 4], serial: u64) -> Entry {
+        Entry::Asking {
             address,
+            serial,
             requests: 0,
             next: now,
             owed: true,
-        };
-        Lookup::Asking
+        }
+    }
+
+    /// Ask again for `address` if its entry expired; whether it did.
+    pub(crate) fn reask(&mut self, now: Instant, address: [u8; 4], serial: u64) -> bool {
+        for entry in &mut self.entries {
+            if let Entry::Known {
+                address: known,
+                expires,
+                ..
+            } = *entry
+                && known == address
+                && now >= expires
+            {
+                *entry = Self::asking(now, address, serial);
+                return true;
+            }
+        }
+        false
     }
 
     /// Note `address` at `hardware`. An entry is made only when `make`: RFC
@@ -132,17 +165,20 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
-    /// The requests owed, by their entries.
-    pub(crate) fn owed_requests(&self) -> impl Iterator<Item = (u8, [u8; 4])> + '_ {
+    /// The requests owed: each entry with its address and resolution.
+    pub(crate) fn owed_requests(&self) -> impl Iterator<Item = (u8, [u8; 4], u64)> + '_ {
         self.entries
             .iter()
             .enumerate()
             .filter_map(|(index, entry)| match *entry {
                 Entry::Asking {
                     address,
+                    serial,
                     owed: true,
                     ..
-                } => u8::try_from(index).ok().map(|index| (index, address)),
+                } => u8::try_from(index)
+                    .ok()
+                    .map(|index| (index, address, serial)),
                 _ => None,
             })
     }
@@ -170,6 +206,7 @@ impl<const N: usize> Neighbors<N> {
                 requests,
                 next,
                 owed,
+                ..
             } = entry
                 && !*owed
                 && now >= *next
@@ -184,14 +221,18 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
-    /// When the next request or end falls due.
-    pub(crate) fn deadline(&self) -> Option<Instant> {
+    /// When the next request, end, or expiry of a neighbor `needed` falls
+    /// due.
+    pub(crate) fn deadline(&self, needed: impl Fn([u8; 4]) -> bool) -> Option<Instant> {
         self.entries
             .iter()
             .filter_map(|entry| match *entry {
                 Entry::Asking {
                     next, owed: false, ..
                 } => Some(next),
+                Entry::Known {
+                    address, expires, ..
+                } if needed(address) => Some(expires),
                 _ => None,
             })
             .min()

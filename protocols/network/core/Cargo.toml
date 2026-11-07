@@ -15,5 +15,8 @@ oer-portable-time = { path = "../../../portable/time" }
 oer-portable-wire = { path = "../../../portable/wire" }
 oer-protocols-network-wire = { path = "../wire" }
 
+[dev-dependencies]
+embassy-futures = "0.1.2"
+
 [lints]
 workspace = true
