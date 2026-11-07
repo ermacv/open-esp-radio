@@ -8,6 +8,12 @@ One task owns the core. A socket talks to it through queues, and blocks travel
 through them by value. A socket's lanes are its own, so one socket waits for no
 other's room.
 
+`Service::bind` opens a socket in the core and gives the application its end, so a
+socket exists only once its service holds the other end. A refused bind changes
+nothing and returns the storage. Dropping a service unrun, or cancelling its task,
+drops its pool, so no block has an owner left, and waiting sockets and observers
+end: `SocketClosed` and `Outcome::Retired`.
+
 `Socket::send` writes the command into its lane, and that is the acceptance
 point: before it a `Refused` with the block, after it one result. Nothing that
 takes a block is async, so a cancelled wait never loses one: `credit` and `room`
@@ -30,8 +36,8 @@ port starves the others.
 `Service::run` ends at the first look after a stop, or at once when the port
 contradicts itself, and returns `Ended`: the cause, the core's `Retired` and a
 `LateSocket` per socket. Nothing is published from then on. Every result the
-service knows goes to its place, and only then does `stopped` show. The request
-lane goes to its socket: what still waits there the service never saw, so those
+service knows goes to its place, the request lane goes to its socket, and only then
+does `stopped` show: what still waits there the service never saw, so those
 observers read `Outcome::Retired`, and `Socket::reclaim` gives back their blocks
 and all else in the lanes, for the pool's holder. So an end waits for no
 application, and a late application loses no result.

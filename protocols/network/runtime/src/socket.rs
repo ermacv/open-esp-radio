@@ -4,7 +4,7 @@ use core::future::poll_fn;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::task::Poll;
 
-use embassy_futures::select::select;
+use embassy_futures::select::{select, select3};
 use oer_portable_memory::{AtomicWaker, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_protocols_network_core::{Block, Datagram, Outcome, Pool, Remote, SendRefusal};
 
@@ -130,10 +130,34 @@ impl Credits {
         self.waker.wake();
     }
 
-    /// Everything the service wrote is in the places: tell who waits.
-    pub(crate) fn stop(&self) {
-        self.stopped.store(true, Ordering::Release);
-        self.waker.wake();
+    /// Wait until the service has ended.
+    async fn stopped(&self) {
+        poll_fn(|cx| {
+            self.waker.register(cx.waker());
+            if self.stopped.load(Ordering::Acquire) {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
+    }
+}
+
+/// Says the service ended, however it does: at its end, dropped before it
+/// ran, or with its task cancelled. Everything the service wrote comes first.
+pub(crate) struct Ending<'a, const CREDITS: usize> {
+    credits: &'a Credits,
+    places: &'a [Place; CREDITS],
+}
+
+impl<const CREDITS: usize> Drop for Ending<'_, CREDITS> {
+    fn drop(&mut self) {
+        self.credits.stopped.store(true, Ordering::Release);
+        self.credits.waker.wake();
+        for place in self.places {
+            place.wake();
+        }
     }
 }
 
@@ -205,7 +229,7 @@ impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, const CRED
 }
 
 /// A socket's lanes in two ends.
-pub type Lanes<
+pub(crate) type Lanes<
     'a,
     'm,
     B,
@@ -218,8 +242,9 @@ pub type Lanes<
     ServiceEnd<'a, 'm, B, SIZE, DEPTH, RECEIVED, CREDITS>,
 );
 
-/// Split `storage` into the application's socket and the service's end.
-pub fn lanes<
+/// Split `storage` into the application's socket and the service's end. Only
+/// a service binding a socket does this, so no socket exists before its service.
+pub(crate) fn lanes<
     'a,
     'm,
     B,
@@ -271,6 +296,7 @@ pub fn lanes<
             abandon: abandon_receiver,
             credits,
             places,
+            ending: Ending { credits, places },
         },
     )
 }
@@ -291,7 +317,7 @@ const fn tag_bit(tag: u8) -> u32 {
 }
 
 /// The service's end of one socket's lanes.
-pub struct ServiceEnd<
+pub(crate) struct ServiceEnd<
     'a,
     'm,
     B,
@@ -306,6 +332,7 @@ pub struct ServiceEnd<
     pub(crate) abandon: WakingSpscReceiver<'a, Inbound<'a, 'm, B, SIZE, DEPTH, RECEIVED>, 1>,
     pub(crate) credits: &'a Credits,
     pub(crate) places: &'a [Place; CREDITS],
+    pub(crate) ending: Ending<'a, CREDITS>,
 }
 
 /// The right to a datagram's one result, which needs no socket. Reading
@@ -372,7 +399,7 @@ impl Drop for Observer<'_> {
 
 /// What a socket receives on, and the blocks in it: a dropped socket's last
 /// message hands all this over, so every block keeps an owner.
-pub struct Inbound<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize> {
+pub(crate) struct Inbound<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize> {
     answers: WakingSpscReceiver<'a, Answer<'a, 'm, B, SIZE, DEPTH>, ANSWERS>,
     datagrams: WakingSpscReceiver<'a, Datagram<'m, B, SIZE>, RECEIVED>,
     reserved: Option<Block<'m, B, SIZE>>,
@@ -503,12 +530,16 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
                 }
             }
         }
+        // After the lane: a service's last answer comes before this word.
+        if self.credits.stopped.load(Ordering::Acquire) {
+            self.closed = true;
+        }
     }
 
-    /// Wait for the service's next word.
+    /// Wait for the service's next word, or its end.
     async fn answered(&mut self) {
         if let Some(inbound) = &mut self.inbound {
-            inbound.answers.ready().await;
+            let _either = select(inbound.answers.ready(), self.credits.stopped()).await;
         }
     }
 
@@ -526,17 +557,21 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     pub async fn room(&mut self) -> Result<(), SocketClosed> {
         loop {
             self.take_answers();
-            let Some(inbound) = self
-                .inbound
-                .as_mut()
-                .filter(|lanes| lanes.stopped.is_none())
-            else {
+            let Some(inbound) = &mut self.inbound else {
                 return Err(SocketClosed);
             };
+            if self.credits.stopped.load(Ordering::Acquire) {
+                return Err(SocketClosed);
+            }
             if self.requests.free_capacity() != 0 {
                 return Ok(());
             }
-            let _either = select(self.requests.ready(), inbound.answers.ready()).await;
+            let _any = select3(
+                self.requests.ready(),
+                inbound.answers.ready(),
+                self.credits.stopped(),
+            )
+            .await;
         }
     }
 
@@ -651,7 +686,12 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
             if self.closed {
                 return Err(SocketClosed);
             }
-            let _either = select(inbound.datagrams.ready(), inbound.answers.ready()).await;
+            let _any = select3(
+                inbound.datagrams.ready(),
+                inbound.answers.ready(),
+                self.credits.stopped(),
+            )
+            .await;
         }
     }
 
@@ -661,11 +701,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     /// [`Refused`].
     pub fn release(&mut self, block: Block<'m, B, SIZE>) -> Result<(), Refused<'m, B, SIZE>> {
         self.take_answers();
-        let stopped = self
-            .inbound
-            .as_ref()
-            .is_none_or(|lanes| lanes.stopped.is_some());
-        if stopped {
+        if self.credits.stopped.load(Ordering::Acquire) {
             return Err(Refused {
                 reason: Refusal::Closed,
                 block,
