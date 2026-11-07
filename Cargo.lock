@@ -2815,6 +2815,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-protocols-network-runtime"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-portable-events",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-network-core",
+ "oer-protocols-network-wire",
+]
+
+[[package]]
 name = "oer-protocols-network-wire"
 version = "0.1.0"
 dependencies = [

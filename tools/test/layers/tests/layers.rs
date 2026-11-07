@@ -4184,7 +4184,7 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
 
 /// Every network package and the workspace packages it may take, normal or
 /// build: the codec stands on `oer-portable-wire` alone and the contract on the codec.
-const NETWORK_LAYERS: [(&str, &[&str]); 3] = [
+const NETWORK_LAYERS: [(&str, &[&str]); 4] = [
     ("protocols/network/wire", &["oer-portable-wire"]),
     ("protocols/network/port", &["oer-protocols-network-wire"]),
     (
@@ -4193,6 +4193,16 @@ const NETWORK_LAYERS: [(&str, &[&str]); 3] = [
             "oer-portable-events",
             "oer-portable-time",
             "oer-portable-wire",
+            "oer-protocols-network-wire",
+        ],
+    ),
+    (
+        "protocols/network/runtime",
+        &[
+            "oer-portable-events",
+            "oer-portable-memory",
+            "oer-portable-time",
+            "oer-protocols-network-core",
             "oer-protocols-network-wire",
         ],
     ),

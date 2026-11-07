@@ -1,5 +1,7 @@
 //! The one owner of a core, its pool and its port.
 
+use core::task::Context;
+
 use oer_portable_events::EventSink;
 use oer_portable_time::Instant;
 use oer_protocols_network_wire::ip::Dscp;
@@ -26,6 +28,16 @@ pub trait FramePort {
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
     ) -> Result<(), Self::Refusal>;
+}
+
+/// Frames coming in, and the wakes of a port.
+pub trait FrameSource {
+    /// Show the next received frame to `read`; whether there was one.
+    fn take_frame(&mut self, read: impl FnOnce(&[u8])) -> bool;
+
+    /// Make `cx` the one a received frame or room to publish wakes, at once
+    /// if either came since the last look.
+    fn register(&mut self, cx: &mut Context<'_>);
 }
 
 /// What a retired core hands on, each to its own owner.
@@ -163,6 +175,25 @@ impl<
     /// Take one received frame; see [`Core::input`].
     pub fn input(&mut self, now: Instant, frame: &[u8], events: &mut impl EventSink<NetEvent>) {
         self.core.input(now, frame, &mut self.pool, events);
+    }
+
+    /// Take one frame from the port, if one waits; whether one did.
+    pub fn take_frame(&mut self, now: Instant, events: &mut impl EventSink<NetEvent>) -> bool
+    where
+        P: FrameSource,
+    {
+        let core = &mut self.core;
+        let pool = &mut self.pool;
+        self.port
+            .take_frame(|frame| core.input(now, frame, pool, events))
+    }
+
+    /// Make `cx` the one the port wakes.
+    pub fn register_port(&mut self, cx: &mut Context<'_>)
+    where
+        P: FrameSource,
+    {
+        self.port.register(cx);
     }
 
     /// See [`Core::open`].
