@@ -104,13 +104,18 @@ impl<
     ///
     /// # Errors
     /// [`Unsent`].
-    pub fn transmit(&mut self, now: Instant, grant: Grant<B>) -> Result<(), Unsent<P::Refusal>> {
+    pub fn transmit(
+        &mut self,
+        now: Instant,
+        grant: Grant<B>,
+    ) -> Result<P::Ticket, Unsent<P::Refusal>> {
         if self.broken {
             return Err(Unsent::PortContract);
         }
         let frame = self.core.frame(now, &grant).ok_or(Unsent::Stale)?;
         let mut written = false;
-        self.port
+        let ticket = self
+            .port
             .publish(frame.length(), |slot| {
                 let result = frame.write(slot);
                 written = result.is_ok();
@@ -119,7 +124,7 @@ impl<
             .map_err(Unsent::Port)?;
         self.core.commit(now, grant, written, &mut self.pool);
         if written {
-            Ok(())
+            Ok(ticket)
         } else {
             self.broken = true;
             Err(Unsent::PortContract)
@@ -137,12 +142,12 @@ impl<
     }
 
     /// See [`Core::demands`].
-    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<B>> + '_ {
+    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<B>> + Clone + '_ {
         self.core.demands(now)
     }
 
     /// See [`Core::poll_demand`].
-    pub fn poll_demand(&mut self, now: Instant) -> Option<Demand<B>> {
+    pub fn poll_demand(&self, now: Instant) -> Option<Demand<B>> {
         self.core.poll_demand(now)
     }
 
@@ -160,6 +165,14 @@ impl<
         let pool = &mut self.pool;
         self.port
             .take_frame(|frame| core.input(now, frame, pool, events))
+    }
+
+    /// The port's next ended frame, for the egress policy.
+    pub fn take_completion(&mut self) -> Option<P::Completion>
+    where
+        P: FrameSource,
+    {
+        self.port.take_completion()
     }
 
     /// Make `cx` the one the port wakes.

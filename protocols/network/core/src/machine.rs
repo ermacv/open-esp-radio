@@ -7,7 +7,7 @@ use core::marker::PhantomData;
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
-use oer_protocols_network_port::SlotTooShort;
+use oer_protocols_network_port::{Candidate, Class, Ready, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{self, EtherType, EthernetHeader};
@@ -36,13 +36,6 @@ pub struct Remote {
     pub port: u16,
 }
 
-/// How work is served.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Class {
-    Control,
-    Data,
-}
-
 /// One piece of work. A serial never comes back, so a grant names this work
 /// and no later work in its place.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -67,17 +60,16 @@ enum Work {
 /// to choose it.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Demand<B> {
-    pub class: Class,
-    /// The frame's length: what a slot must hold.
-    pub length: usize,
-    /// The next hop's station address, whose budget this work spends.
-    pub peer: [u8; 6],
-    /// The socket that wants it; control work has none.
-    pub flow: Option<u8>,
-    /// Its priority.
-    pub dscp: Dscp,
+    /// What a scheduler may know of it.
+    pub ready: Ready,
     work: Work,
     brand: Tag<B>,
+}
+
+impl<B> Candidate for Demand<B> {
+    fn ready(&self) -> &Ready {
+        &self.ready
+    }
 }
 
 impl<B> Demand<B> {
@@ -812,14 +804,16 @@ impl<
     /// Every piece of work ready now, with no frame built: control first,
     /// then datagrams from the socket whose turn it is. A scheduler chooses
     /// among these; a direct interface takes [`Self::poll_demand`].
-    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<B>> + '_ {
+    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<B>> + Clone + '_ {
         let brand = self.brand;
         let replies = self.replies.iter().map(move |reply| Demand {
-            class: Class::Control,
-            length: ARP_FRAME,
-            peer: reply.hardware,
-            flow: None,
-            dscp: BEST_EFFORT,
+            ready: Ready {
+                class: Class::Control,
+                length: ARP_FRAME,
+                peer: reply.hardware,
+                flow: None,
+                dscp: BEST_EFFORT,
+            },
             work: Work::Reply {
                 serial: reply.serial,
             },
@@ -829,11 +823,13 @@ impl<
             .neighbors
             .owed_requests()
             .map(move |(neighbor, _, serial)| Demand {
-                class: Class::Control,
-                length: ARP_FRAME,
-                peer: BROADCAST_HARDWARE,
-                flow: None,
-                dscp: BEST_EFFORT,
+                ready: Ready {
+                    class: Class::Control,
+                    length: ARP_FRAME,
+                    peer: BROADCAST_HARDWARE,
+                    flow: None,
+                    dscp: BEST_EFFORT,
+                },
                 work: Work::Request { neighbor, serial },
                 brand,
             });
@@ -868,11 +864,13 @@ impl<
             None => BROADCAST_HARDWARE,
         };
         Some(Demand {
-            class: Class::Data,
-            length: HEADERS.saturating_add(sending.block.octets().len()),
-            peer,
-            flow: u8::try_from(index).ok(),
-            dscp: socket.dscp,
+            ready: Ready {
+                class: Class::Data,
+                length: HEADERS.saturating_add(sending.block.octets().len()),
+                peer,
+                flow: u8::try_from(index).ok(),
+                dscp: socket.dscp,
+            },
             work: Work::Datagram {
                 socket: u8::try_from(index).ok()?,
                 place: u8::try_from(number).ok()?,
@@ -885,12 +883,8 @@ impl<
 
     /// The next ready work, and the next socket's turn. A direct interface
     /// grants this at once; a port's refusal leaves it ready.
-    pub fn poll_demand(&mut self, now: Instant) -> Option<Demand<B>> {
-        let demand = self.demands(now).next()?;
-        if let Work::Datagram { socket, .. } = demand.work {
-            self.cursor = usize::from(socket).wrapping_add(1);
-        }
-        Some(demand)
+    pub fn poll_demand(&self, now: Instant) -> Option<Demand<B>> {
+        self.demands(now).next()
     }
 
     /// The granted work as a frame, while it still is that work: another
@@ -1050,6 +1044,7 @@ impl<
             }
             Work::Request { neighbor, .. } => self.neighbors.request_accepted(neighbor, now),
             Work::Datagram { socket, place, .. } => {
+                self.cursor = usize::from(socket).wrapping_add(1);
                 self.identification = self.identification.wrapping_add(1);
                 if let Some(entry) = self
                     .sockets

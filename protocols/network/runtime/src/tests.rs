@@ -18,7 +18,7 @@ use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
     Block, Interface, NetworkOwner, OpenRefused, Outcome, Remote, SendRefusal, claim,
 };
-use oer_protocols_network_port::{FramePort, FrameSource, SlotTooShort};
+use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
@@ -26,7 +26,8 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    EndCause, Ended, Observer, Refusal, Sent, Service, Socket, SocketClosed, SocketLanes, StopLane,
+    Direct, EndCause, Ended, Observer, Refusal, Sent, Service, Socket, SocketClosed, SocketLanes,
+    StopLane,
 };
 
 /// A brand of the test's own.
@@ -58,6 +59,10 @@ struct Wire {
     answers: bool,
     /// The port says it took a frame it never filled.
     contradicts: bool,
+    /// Tickets given.
+    tickets: u32,
+    /// Ended frames, by ticket.
+    ended: VecDeque<u32>,
     waker: Option<Waker>,
 }
 
@@ -74,29 +79,37 @@ struct WirePort(Rc<RefCell<Wire>>);
 
 impl FramePort for WirePort {
     type Refusal = ();
+    type Ticket = u32;
 
     fn publish(
         &mut self,
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<(), ()> {
+    ) -> Result<u32, ()> {
         let mut wire = self.0.borrow_mut();
         if wire.full {
             return Err(());
         }
         if wire.contradicts {
-            return Ok(());
+            return Ok(0);
         }
         let mut frame = std::vec![0; length];
         fill(&mut frame).map_err(|_| ())?;
         let reply = wire.answers.then(|| answer_of(&frame)).flatten();
         wire.sent.push(frame);
         wire.incoming.extend(reply);
-        Ok(())
+        wire.tickets += 1;
+        Ok(wire.tickets)
     }
 }
 
 impl FrameSource for WirePort {
+    type Completion = u32;
+
+    fn take_completion(&mut self) -> Option<u32> {
+        self.0.borrow_mut().ended.pop_front()
+    }
+
     fn take_frame(&mut self, read: impl FnOnce(&[u8])) -> bool {
         let frame = self.0.borrow_mut().incoming.pop_front();
         match frame {
@@ -217,13 +230,39 @@ fn datagrams(wire: &Wire) -> Vec<Vec<u8>> {
 }
 
 type TestSocket<B> = Socket<'static, 'static, B, SIZE, DEPTH, RECEIVED, CREDITS>;
-type TestService<B> =
-    Service<'static, 'static, B, SIZE, 1, CREDITS, RECEIVED, 2, BLOCKS, DEPTH, RECEIVED, WirePort>;
-type TestEnded<B> = Ended<'static, 'static, B, SIZE, 1, CREDITS, BLOCKS, DEPTH, RECEIVED, WirePort>;
+type TestService<B, E = Direct> = Service<
+    'static,
+    'static,
+    B,
+    SIZE,
+    1,
+    CREDITS,
+    RECEIVED,
+    2,
+    BLOCKS,
+    DEPTH,
+    RECEIVED,
+    WirePort,
+    E,
+>;
+type TestEnded<B, E = Direct> = Ended<
+    'static,
+    'static,
+    B,
+    SIZE,
+    1,
+    CREDITS,
+    BLOCKS,
+    DEPTH,
+    RECEIVED,
+    WirePort,
+    E,
+    <E as Egress<u32, u32>>::Fault,
+>;
 
 /// A stack of brand `B`, its one socket, and the test's handles.
-struct Bench<B: 'static> {
-    service: TestService<B>,
+struct Bench<B: 'static, E: Egress<u32, u32> = Direct> {
+    service: TestService<B, E>,
     socket: TestSocket<B>,
     wire: WirePort,
     stop: WakingSpscSender<'static, (), 1>,
@@ -231,27 +270,30 @@ struct Bench<B: 'static> {
 }
 
 fn bench<B: 'static>() -> Bench<B> {
+    bench_with(Direct)
+}
+
+fn bench_with<B: 'static, E: Egress<u32, u32>>(egress: E) -> Bench<B, E> {
     let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
     wire.0.borrow_mut().answers = true;
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
-    bench_on(
-        NetworkOwner::new(brand, interface, pool, wire.clone()),
-        wire,
-    )
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    bench_on(owner, wire, egress)
 }
 
 fn storage<B>() -> &'static mut SocketLanes<'static, 'static, B, SIZE, DEPTH, RECEIVED, CREDITS> {
     Box::leak(Box::new(SocketLanes::new()))
 }
 
-fn bench_on<B: 'static>(
+fn bench_on<B: 'static, E: Egress<u32, u32>>(
     owner: NetworkOwner<'static, B, SIZE, 1, CREDITS, RECEIVED, 2, BLOCKS, WirePort>,
     wire: WirePort,
-) -> Bench<B> {
+    egress: E,
+) -> Bench<B, E> {
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, stopping);
+    let mut service = Service::new(owner, egress, stopping);
     let socket = service
         .bind(5000, Dscp::default(), storage::<B>())
         .ok()
@@ -315,20 +357,20 @@ fn run_tasks<T, U>(
 }
 
 /// A service's task: drive it, then hand every owner on.
-async fn serve<B>(
-    mut service: TestService<B>,
+async fn serve<B, E: Egress<u32, u32>>(
+    mut service: TestService<B, E>,
     clock: &VirtualClock,
     events: &mut (),
-) -> TestEnded<B> {
+) -> TestEnded<B, E> {
     let _cause = service.run(clock, events).await;
     service.retire()
 }
 
 /// Run `client` beside the service until it ends, then stop the service.
-fn run<B: 'static, R>(
-    bench: Bench<B>,
+fn run<B: 'static, E: Egress<u32, u32>, R>(
+    bench: Bench<B, E>,
     client: impl AsyncFnOnce(&mut TestSocket<B>, &WirePort) -> R,
-) -> (TestEnded<B>, TestSocket<B>, R) {
+) -> (TestEnded<B, E>, TestSocket<B>, R) {
     let Bench {
         service,
         mut socket,
@@ -409,7 +451,7 @@ async fn send_one<B>(socket: &mut TestSocket<B>, data: &[u8]) -> Sent {
 }
 
 /// Every block the service did not see again comes back from the socket.
-fn returned<B>(ended: &mut TestEnded<B>, socket: &mut TestSocket<B>) {
+fn returned<B, E: Egress<u32, u32>>(ended: &mut TestEnded<B, E>, socket: &mut TestSocket<B>) {
     while let Some(block) = socket.reclaim() {
         ended.retired.pool.give(block);
     }
@@ -952,7 +994,7 @@ fn a_refused_bind_changes_nothing_and_the_storage_serves_again() {
     let owner: NetworkOwner<'static, Net, SIZE, 2, CREDITS, RECEIVED, 2, BLOCKS, WirePort> =
         NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, stopping);
+    let mut service = Service::new(owner, Direct, stopping);
     let dscp = Dscp::default();
     let mut first = service.bind(5000, dscp, storage::<Net>()).ok().unwrap();
     let refused = service.bind(5000, dscp, storage::<Net>()).err().unwrap();
@@ -1104,7 +1146,7 @@ fn a_cancelled_run_leaves_every_owner_with_its_service() {
         retired.pool,
         retired.port,
     );
-    let (_, _, sent) = run(bench_on(owner, wire), async |socket, _| {
+    let (_, _, sent) = run(bench_on(owner, wire, Direct), async |socket, _| {
         send_one(socket, b"next").await
     });
     assert_eq!(sent, Sent::Ended(Outcome::Accepted));
@@ -1221,12 +1263,241 @@ fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
         retired.pool,
         retired.port,
     );
-    let (_, _, sent) = run(bench_on(owner, wire.clone()), async |socket, _| {
+    let (_, _, sent) = run(bench_on(owner, wire.clone(), Direct), async |socket, _| {
         send_one(socket, b"second").await
     });
     assert_eq!(sent, Sent::Ended(Outcome::Accepted));
     assert_eq!(
         datagrams(&wire.0.borrow()),
         [b"first".to_vec(), b"second".to_vec()]
+    );
+}
+
+/// What a policy under test saw and did.
+#[derive(Debug, Default)]
+struct Account {
+    /// Nothing may go.
+    shut: bool,
+    /// Choose the last ready work, not the first.
+    last: bool,
+    /// `choose` cannot go on.
+    fails: bool,
+    /// `accepted` cannot go on.
+    fails_late: bool,
+    /// Reservations not yet answered.
+    open: usize,
+    accepted: Vec<u32>,
+    refused: usize,
+    unknown: usize,
+    completed: Vec<u32>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct Policy(Rc<RefCell<Account>>);
+
+impl Egress<u32, u32> for Policy {
+    type Reservation = ();
+    type Fault = &'static str;
+
+    fn choose<C: Candidate>(
+        &mut self,
+        mut ready: impl Iterator<Item = C> + Clone,
+    ) -> Result<Option<(C, ())>, &'static str> {
+        let mut account = self.0.borrow_mut();
+        if account.fails && ready.clone().next().is_some() {
+            return Err("choose");
+        }
+        if account.shut {
+            return Ok(None);
+        }
+        let work = if account.last {
+            ready.last()
+        } else {
+            ready.next()
+        };
+        account.open += usize::from(work.is_some());
+        Ok(work.map(|work| (work, ())))
+    }
+
+    fn accepted(&mut self, (): (), ticket: u32) -> Result<(), &'static str> {
+        let mut account = self.0.borrow_mut();
+        account.open -= 1;
+        account.accepted.push(ticket);
+        if account.fails_late {
+            Err("accepted")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn refused(&mut self, (): ()) -> Result<(), &'static str> {
+        let mut account = self.0.borrow_mut();
+        account.open -= 1;
+        account.refused += 1;
+        Ok(())
+    }
+
+    fn unknown(&mut self, (): ()) -> Result<(), &'static str> {
+        let mut account = self.0.borrow_mut();
+        account.open -= 1;
+        account.unknown += 1;
+        Ok(())
+    }
+
+    fn completed(&mut self, ticket: u32) -> Result<(), &'static str> {
+        self.0.borrow_mut().completed.push(ticket);
+        Ok(())
+    }
+}
+
+#[test]
+fn a_policy_chooses_among_all_ready_work() {
+    brand!(Net);
+    let policy = Policy::default();
+    let bench = bench_with::<Net, _>(policy.clone());
+    run(bench, async |socket, wire| {
+        assert_eq!(
+            send_one(socket, b"resolved").await,
+            Sent::Ended(Outcome::Accepted)
+        );
+        {
+            let mut account = policy.0.borrow_mut();
+            account.shut = true;
+            account.last = true;
+        }
+        let first = send(socket, b"first").await;
+        let second = send(socket, b"second").await;
+        settle().await;
+        policy.0.borrow_mut().shut = false;
+        wire.0.borrow_mut().wake();
+        result_of(first).await;
+        result_of(second).await;
+        assert_eq!(
+            datagrams(&wire.0.borrow())[1..],
+            [b"second".to_vec(), b"first".to_vec()]
+        );
+    });
+}
+
+#[test]
+fn a_refused_frame_answers_its_reservation_and_stays_ready() {
+    brand!(Net);
+    let policy = Policy::default();
+    let bench = bench_with::<Net, _>(policy.clone());
+    run(bench, async |socket, wire| {
+        open_port(wire, true);
+        let observer = send(socket, b"late").await;
+        settle().await;
+        assert!(policy.0.borrow().refused >= 1);
+        assert!(policy.0.borrow().accepted.is_empty());
+        open_port(wire, false);
+        assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
+    });
+    assert_eq!(policy.0.borrow().open, 0);
+}
+
+#[test]
+fn a_completion_alone_reaches_the_policy() {
+    brand!(Net);
+    let policy = Policy::default();
+    let bench = bench_with::<Net, _>(policy.clone());
+    run(bench, async |socket, wire| {
+        send_one(socket, b"sent").await;
+        settle().await;
+        let ticket = *policy.0.borrow().accepted.last().unwrap();
+        assert!(policy.0.borrow().completed.is_empty());
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.ended.push_back(ticket);
+            wire.wake();
+        }
+        settle().await;
+        assert_eq!(policy.0.borrow().completed, [ticket]);
+    });
+}
+
+#[test]
+fn a_frame_of_unknown_end_is_not_a_refusal() {
+    brand!(Net);
+    let policy = Policy::default();
+    let bench = bench_with::<Net, _>(policy.clone());
+    let (ended, _, ()) = run(bench, async |socket, wire| {
+        send_one(socket, b"resolved").await;
+        wire.0.borrow_mut().contradicts = true;
+        let observer = send(socket, b"unknown").await;
+        assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Unknown));
+        settle().await;
+    });
+    assert_eq!(ended.cause, EndCause::PortContract);
+    let account = policy.0.borrow();
+    assert_eq!((account.unknown, account.refused, account.open), (1, 0, 0));
+}
+
+#[test]
+fn a_policy_that_cannot_choose_ends_the_service_with_its_fault() {
+    brand!(Net);
+    let policy = Policy::default();
+    let bench = bench_with::<Net, _>(policy.clone());
+    let (mut ended, mut socket, observer) = run(bench, async |socket, _| {
+        policy.0.borrow_mut().fails = true;
+        let observer = send(socket, b"never").await;
+        while !socket.closed() {
+            yield_now().await;
+        }
+        observer
+    });
+    assert_eq!(ended.cause, EndCause::Egress);
+    assert_eq!(ended.fault, Some("choose"));
+    assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+    assert!(ended.egress.0.borrow().accepted.is_empty());
+    returned(&mut ended, &mut socket);
+}
+
+#[test]
+fn a_fault_in_an_answer_ends_the_service_with_its_result_kept() {
+    brand!(Net);
+    let policy = Policy::default();
+    let bench = bench_with::<Net, _>(policy.clone());
+    let (ended, _, sent) = run(bench, async |socket, _| {
+        policy.0.borrow_mut().fails_late = true;
+        let observer = send(socket, b"went").await;
+        while !socket.closed() {
+            yield_now().await;
+        }
+        result_of(observer).await
+    });
+    assert_eq!(ended.cause, EndCause::Egress);
+    assert_eq!(ended.fault, Some("accepted"));
+    // The ARP request was what the port took: the datagram never went.
+    assert_eq!(sent, Sent::Ended(Outcome::Retired));
+}
+
+#[test]
+fn a_cancelled_run_keeps_the_policy_with_its_account() {
+    brand!(Net);
+    let policy = Policy::default();
+    let Bench {
+        mut service,
+        mut socket,
+        clock,
+        ..
+    } = bench_with::<Net, _>(policy.clone());
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    {
+        let mut run = pin!(service.run(clock, &mut events));
+        let mut blocks = blocks_by_hand(&mut socket, &mut run, 1);
+        let mut observer = socket.send(peer(), blocks.pop().unwrap()).ok().unwrap();
+        while pin!(observer.finished()).poll(cx).is_pending() {
+            assert!(run.as_mut().poll(cx).is_pending());
+        }
+    }
+    let ended = service.retire();
+    let account = ended.egress.0.borrow();
+    assert_eq!(account.open, 0);
+    assert_eq!(
+        account.accepted.len(),
+        2,
+        "the ARP request and the datagram"
     );
 }
