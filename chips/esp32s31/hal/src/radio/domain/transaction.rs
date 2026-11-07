@@ -320,7 +320,7 @@ impl PhyTransaction {
 
 struct ReturnPayload<B: PlatformClockBackend, T> {
     power: CommonRadioPower<B>,
-    btbb: oer_chips_family_radio_domain::domain::BtbbMembership,
+    btbb: oer_chips_family_radio_power::domain::BtbbMembership,
     clocks: ModemClocks,
     modem_platform_clocks: ModemPlatformClocks<B>,
     bluetooth_low_power_clock: Option<PlatformClockGuard<B>>,

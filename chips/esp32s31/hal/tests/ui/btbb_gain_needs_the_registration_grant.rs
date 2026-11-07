@@ -25,7 +25,7 @@ pub fn copied(grant: &PhyRegistrationGrant) -> PhyRegistrationGrant {
 // A gain is not minted outside the domain.
 #[cfg(ui_reject)]
 pub fn forged(
-    gain: oer_chips_family_radio_domain::domain::Gain<oer_chips_esp32s31_hal::system::owner::PhyRegistrationEpoch>,
+    gain: oer_chips_family_radio_power::domain::Gain<oer_chips_esp32s31_hal::system::owner::PhyRegistrationEpoch>,
 ) -> BtbbGain {
     BtbbGain(gain) // ui-error: E0423
 }

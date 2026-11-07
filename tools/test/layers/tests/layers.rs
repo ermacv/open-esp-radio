@@ -28,9 +28,9 @@ fn the_name_follows_the_path() {
             "oer-protocols-ieee80211-core-roles-sta",
         ),
         (
-            "chips/esp32s31/radio/ieee80211/driver",
+            "chips/esp32s31/radio/ieee80211/backend",
             false,
-            "oer-chips-esp32s31-radio-ieee80211-driver",
+            "oer-chips-esp32s31-radio-ieee80211-backend",
         ),
         (
             "hil/probes/esp32s31-boot-smoke",
@@ -150,7 +150,7 @@ fn the_boundary_is_named_by_package_or_domain() {
         assert!(below_the_boundary(package), "{package}");
     }
     for package in [
-        "chips/esp32s31/radio/bluetooth/driver",
+        "chips/esp32s31/radio/bluetooth/backend",
         "chips/esp32s31/radio/phy",
         "portable/trace",
         "portable/embassy/net",
@@ -168,19 +168,19 @@ fn the_boundary_is_named_by_package_or_domain() {
 
 // The metadata-derived Espressif value/algorithm crates in docs/architecture.md.
 const ESPRESSIF_SANS_IO: &[&str] = &[
-    "chips/family/peripherals/analog",
+    "chips/family/drivers/regi2c",
     "chips/family/boot",
     "chips/family/radio/coex",
-    "chips/family/peripherals/efuse",
+    "chips/family/drivers/efuse",
     "chips/family/facts",
     "chips/family/radio/ieee80211/policy",
     "chips/family/radio/ieee802154/engine",
     "chips/family/radio/ieee802154/values",
     "chips/family/radio/modem-clock",
-    "chips/family/radio/domain",
+    "chips/family/radio/power",
     "chips/family/radio/phy",
-    "chips/family/radio/bluetooth",
-    "chips/family/peripherals/system-timer",
+    "chips/family/radio/bluetooth/ports",
+    "chips/family/drivers/system-timer",
 ];
 
 fn sans_io(package: &str) -> bool {
@@ -723,7 +723,7 @@ fn hal_and_knowledge_do_not_reach_the_ieee802154_engine_or_driver() {
 fn ieee802154_execution(name: &str) -> bool {
     matches!(
         name,
-        "oer-chips-family-radio-ieee802154-engine" | "oer-chips-esp32s31-radio-ieee802154-driver"
+        "oer-chips-family-radio-ieee802154-engine" | "oer-chips-esp32s31-radio-ieee802154-backend"
     )
 }
 
@@ -940,34 +940,28 @@ enum Role {
 /// `protocols/hil/` or `hil/` (but `hil/probes/`), or a `hil` leaf, is listed here.
 const ROLES: &[(&str, Role)] = &[
     ("chips/family/facts", Role::Facts),
-    ("chips/family/peripherals/efuse", Role::Facts),
+    ("chips/family/drivers/efuse", Role::Facts),
     ("chips/family/radio/ieee802154/values", Role::Facts),
     ("chips/esp32s31/knowledge", Role::Facts),
     ("chips/esp32s31/pac", Role::Pac),
     ("chips/esp32s31/hal", Role::Hal),
-    ("chips/family/peripherals/analog", Role::HardwareDriver),
+    ("chips/family/drivers/regi2c", Role::HardwareDriver),
     ("chips/family/boot", Role::HardwareDriver),
     ("chips/family/radio/coex", Role::HardwareDriver),
     ("chips/family/radio/ieee802154/engine", Role::HardwareDriver),
     ("chips/family/radio/modem-clock", Role::HardwareDriver),
-    ("chips/family/radio/domain", Role::HardwareDriver),
+    ("chips/family/radio/power", Role::HardwareDriver),
     ("chips/family/radio/phy", Role::HardwareDriver),
-    ("chips/family/radio/bluetooth", Role::HardwareDriver),
-    (
-        "chips/family/peripherals/usb-serial-jtag",
-        Role::HardwareDriver,
-    ),
-    ("chips/family/peripherals/watchdog", Role::HardwareDriver),
-    (
-        "chips/family/peripherals/system-timer",
-        Role::HardwareDriver,
-    ),
-    ("chips/family/peripherals/power", Role::HardwareDriver),
+    ("chips/family/radio/bluetooth/ports", Role::HardwareDriver),
+    ("chips/family/drivers/usb-serial-jtag", Role::HardwareDriver),
+    ("chips/family/drivers/watchdog", Role::HardwareDriver),
+    ("chips/family/drivers/system-timer", Role::HardwareDriver),
+    ("chips/family/drivers/pmu", Role::HardwareDriver),
     ("chips/esp32s31/radio/phy", Role::HardwareDriver),
-    ("chips/esp32s31/peripherals/crypto", Role::HardwareDriver),
-    ("chips/esp32s31/radio/bluetooth/driver", Role::ChipAdapter),
-    ("chips/esp32s31/radio/ieee80211/driver", Role::ChipAdapter),
-    ("chips/esp32s31/radio/ieee802154/driver", Role::ChipAdapter),
+    ("chips/esp32s31/drivers/aes", Role::HardwareDriver),
+    ("chips/esp32s31/radio/bluetooth/backend", Role::ChipAdapter),
+    ("chips/esp32s31/radio/ieee80211/backend", Role::ChipAdapter),
+    ("chips/esp32s31/radio/ieee802154/backend", Role::ChipAdapter),
     // docs/repository-layout.md: "Wi-Fi upper-MAC and the family policy
     // select each attempt's rate and protection" places this family policy
     // above the backend with the cores.
@@ -1370,7 +1364,7 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
             Some(Role::CoreSidePolicy),
         ),
         (
-            "chips/esp32s31/radio/ieee80211/driver",
+            "chips/esp32s31/radio/ieee80211/backend",
             Some(Role::ChipAdapter),
         ),
         ("chips/esp32s31/radio/system", Some(Role::Service)),
@@ -1466,7 +1460,7 @@ build-core = "1"
 #[test]
 fn bluetooth_backend_core_edges_have_no_exemption() {
     let graph = BTreeMap::from([(
-        "oer-chips-esp32s31-radio-bluetooth-driver".into(),
+        "oer-chips-esp32s31-radio-bluetooth-backend".into(),
         BTreeSet::from([
             "oer-protocols-bluetooth-le-ll".into(),
             "oer-protocols-bluetooth-hci".into(),
@@ -1493,10 +1487,10 @@ fn bluetooth_backend_core_edges_have_no_exemption() {
         ),
     ]);
     assert_eq!(
-        backend_core_paths(&graph, &roles, "oer-chips-esp32s31-radio-bluetooth-driver"),
+        backend_core_paths(&graph, &roles, "oer-chips-esp32s31-radio-bluetooth-backend"),
         [
-            "oer-chips-esp32s31-radio-bluetooth-driver -> oer-protocols-bluetooth-hci",
-            "oer-chips-esp32s31-radio-bluetooth-driver -> oer-protocols-bluetooth-le-ll",
+            "oer-chips-esp32s31-radio-bluetooth-backend -> oer-protocols-bluetooth-hci",
+            "oer-chips-esp32s31-radio-bluetooth-backend -> oer-protocols-bluetooth-le-ll",
         ]
     );
 }
@@ -2703,7 +2697,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("protocols/bluetooth/le/model", true),
         ("portable/cooperate", true),
         ("portable/embassy/net", true),
-        ("chips/esp32s31/radio/bluetooth/driver", true),
+        ("chips/esp32s31/radio/bluetooth/backend", true),
         ("hil/probes/esp32s31-radio-root", true),
         ("tools/lab/fixture-helpers", true),
     ] {
@@ -2978,8 +2972,8 @@ fn the_edge_rules_see_optional_target_and_aliased_dependencies_and_judge_by_path
     };
     let members = [
         member(
-            "chips/family/peripherals/analog",
-            "oer-chips-family-peripherals-analog",
+            "chips/family/drivers/regi2c",
+            "oer-chips-family-drivers-regi2c",
             false,
             &[],
         ),
@@ -3143,13 +3137,13 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
         "radio/coex merges into the HAL (#848)",
     ),
     (
-        "chips/esp32s31/radio/ieee802154/driver",
+        "chips/esp32s31/radio/ieee802154/backend",
         "portable/mmio",
         "IEEE 802.15.4 lifecycle out of the HAL (#848)",
     ),
     (
         "chips/esp32s31/pac",
-        "chips/family/peripherals/analog",
+        "chips/family/drivers/regi2c",
         "analog-I2C model types out of the family driver (#848)",
     ),
 ];
@@ -3189,11 +3183,7 @@ fn facts_pac_and_platform_contracts_stand_on_values_alone() {
             (Role::SharedVocabulary, "protocols/radio/regulatory", true),
             (Role::Portable, "portable/memory", true),
             (Role::Hal, "chips/esp32s31/hal", false),
-            (
-                Role::HardwareDriver,
-                "chips/family/peripherals/analog",
-                false,
-            ),
+            (Role::HardwareDriver, "chips/family/drivers/regi2c", false),
             (PROTOCOL_PORT, "protocols/ieee802154/port", false),
         ],
     );
@@ -3202,11 +3192,7 @@ fn facts_pac_and_platform_contracts_stand_on_values_alone() {
         &[
             (Role::HardwareAccess, "portable/mmio", true),
             (Role::Facts, "chips/esp32s31/knowledge", true),
-            (
-                Role::HardwareDriver,
-                "chips/family/peripherals/analog",
-                false,
-            ),
+            (Role::HardwareDriver, "chips/family/drivers/regi2c", false),
             (Role::Hal, "chips/esp32s31/hal", false),
         ],
     );
@@ -3232,7 +3218,7 @@ fn the_hal_implements_family_ports_and_runs_no_chip_driver_or_protocol() {
             (Role::HardwareDriver, "chips/esp32s31/radio/phy", false),
             (
                 Role::ChipAdapter,
-                "chips/esp32s31/radio/ieee80211/driver",
+                "chips/esp32s31/radio/ieee80211/backend",
                 false,
             ),
             (Role::Service, "chips/esp32s31/radio/system", false),
@@ -3247,11 +3233,7 @@ fn the_hal_implements_family_ports_and_runs_no_chip_driver_or_protocol() {
 fn drivers_and_adapters_stand_on_the_hal_and_the_port_never_above_it() {
     let below = [
         (Role::Hal, "chips/esp32s31/hal", true),
-        (
-            Role::HardwareDriver,
-            "chips/family/peripherals/analog",
-            true,
-        ),
+        (Role::HardwareDriver, "chips/family/drivers/regi2c", true),
         (
             Role::PlatformContract,
             "chips/family/platform/interrupt-table",
@@ -3308,12 +3290,12 @@ fn drivers_and_adapters_stand_on_the_hal_and_the_port_never_above_it() {
     assert!(role_allows(
         Role::ChipAdapter,
         Role::ChipAdapter,
-        "chips/esp32s31/radio/ieee80211/driver"
+        "chips/esp32s31/radio/ieee80211/backend"
     ));
     assert!(!role_allows(
         Role::Service,
         Role::ChipAdapter,
-        "chips/esp32s31/radio/ieee80211/driver"
+        "chips/esp32s31/radio/ieee80211/backend"
     ));
 }
 
@@ -3336,7 +3318,7 @@ fn core_side_policy_stays_with_the_cores_and_the_platform_reaches_no_chip_hal() 
             (Role::Hal, "chips/esp32s31/hal", false),
             (
                 Role::ChipAdapter,
-                "chips/esp32s31/radio/ieee80211/driver",
+                "chips/esp32s31/radio/ieee80211/backend",
                 false,
             ),
             (PROTOCOL_PORT, "protocols/ieee80211/contracts/port", false),
@@ -3354,7 +3336,7 @@ fn only_a_composition_and_a_facade_assemble_runtimes_and_backends() {
                 (PROTOCOL_CORE, "protocols/ieee80211/core/roles/sta", true),
                 (
                     Role::ChipAdapter,
-                    "chips/esp32s31/radio/ieee80211/driver",
+                    "chips/esp32s31/radio/ieee80211/backend",
                     true,
                 ),
                 (Role::Service, "chips/esp32s31/radio/system", true),
@@ -3430,7 +3412,7 @@ fn an_observation_contract_names_values_and_no_owner() {
             (Role::Hal, "chips/esp32s31/hal", false),
             (
                 Role::ChipAdapter,
-                "chips/esp32s31/radio/ieee80211/driver",
+                "chips/esp32s31/radio/ieee80211/backend",
                 false,
             ),
             (Role::Platform, "chips/family/platform/runtime", false),
@@ -3457,7 +3439,7 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (PROTOCOL_WIRE, "protocols/ieee80211/wire", false),
             (
                 Role::ChipAdapter,
-                "chips/esp32s31/radio/ieee80211/driver",
+                "chips/esp32s31/radio/ieee80211/backend",
                 false,
             ),
             (Role::HardwareAccess, "portable/mmio", false),
@@ -3493,7 +3475,7 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (Role::Hal, "chips/esp32s31/hal", false),
             (
                 Role::ChipAdapter,
-                "chips/esp32s31/radio/ieee80211/driver",
+                "chips/esp32s31/radio/ieee80211/backend",
                 false,
             ),
         ],
@@ -3522,7 +3504,7 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (Role::HardwareDriver, "chips/esp32s31/radio/phy", false),
             (
                 Role::ChipAdapter,
-                "chips/esp32s31/radio/ieee80211/driver",
+                "chips/esp32s31/radio/ieee80211/backend",
                 false,
             ),
             (Role::Service, "chips/esp32s31/radio/system", false),
@@ -3692,7 +3674,7 @@ pac = { package = "oer-chips-esp32s31-pac", version = "1" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 phy = { package = "oer-chips-esp32s31-radio-phy", version = "1", optional = true }
 [dev-dependencies]
-adapter = { package = "oer-chips-esp32s31-radio-ieee80211-driver", version = "1" }
+adapter = { package = "oer-chips-esp32s31-radio-ieee80211-backend", version = "1" }
 "#,
             ),
             ..member("chips/esp32s31/hal", "oer-chips-esp32s31-hal", false, &[])
@@ -3705,8 +3687,8 @@ adapter = { package = "oer-chips-esp32s31-radio-ieee80211-driver", version = "1"
             &[],
         ),
         member(
-            "chips/esp32s31/radio/ieee80211/driver",
-            "oer-chips-esp32s31-radio-ieee80211-driver",
+            "chips/esp32s31/radio/ieee80211/backend",
+            "oer-chips-esp32s31-radio-ieee80211-backend",
             false,
             &[
                 "oer-protocols-ieee80211-runtime",
@@ -3725,7 +3707,7 @@ adapter = { package = "oer-chips-esp32s31-radio-ieee80211-driver", version = "1"
             false,
             &[
                 "oer-protocols-ieee80211-runtime",
-                "oer-chips-esp32s31-radio-ieee80211-driver",
+                "oer-chips-esp32s31-radio-ieee80211-backend",
             ],
         ),
         member(
@@ -3752,7 +3734,7 @@ adapter = { package = "oer-chips-esp32s31-radio-ieee80211-driver", version = "1"
         BTreeSet::from([
             edge("chips/esp32s31/hal", "chips/esp32s31/radio/phy"),
             edge(
-                "chips/esp32s31/radio/ieee80211/driver",
+                "chips/esp32s31/radio/ieee80211/backend",
                 "protocols/ieee80211/runtime"
             ),
             edge("hil/images/aes", "chips/esp32s31/hal"),

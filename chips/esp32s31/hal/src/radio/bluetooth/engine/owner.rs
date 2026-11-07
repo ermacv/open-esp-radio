@@ -1,6 +1,6 @@
 //! Register operations and absorbing terminal custody of the whole arena.
 
-use oer_chips_family_radio_bluetooth::port::OutputTaskPort;
+use oer_chips_family_radio_bluetooth_ports::port::OutputTaskPort;
 
 use super::{ControllerMemory, Engine, scheduler};
 use crate::radio::bluetooth::{self, ControllerHalBorrow};

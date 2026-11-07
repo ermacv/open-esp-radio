@@ -9,9 +9,9 @@ publish = false
 description = "Espressif bootstrap sequences over a chip's typed register traits: named boot waits under one deadline below the armed RTC watchdog, the CPU clock profile, cache publication and fetch suspension, the MMU and the boot's watchdogs, each failure a typed boot failure"
 
 [dependencies]
-oer-chips-family-peripherals-analog = { path = "../peripherals/analog" }
+oer-chips-family-drivers-regi2c = { path = "../drivers/regi2c" }
 oer-portable-time = { path = "../../../portable/time" }
-oer-chips-family-peripherals-watchdog = { path = "../peripherals/watchdog" }
+oer-chips-family-drivers-watchdog = { path = "../drivers/watchdog" }
 oer-chips-family-platform-layout.workspace = true
 
 [dev-dependencies]

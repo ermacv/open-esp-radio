@@ -599,7 +599,7 @@ fn complete_wifi_i2c_child(
             crate::tracking::i2c::PhyWifiI2cTrackingAction::MaskedWrite(action) => {
                 let binding = child.lower_external().unwrap();
                 let completion = match action {
-                    oer_chips_family_peripherals_analog::Action::Read { address } => {
+                    oer_chips_family_drivers_regi2c::Action::Read { address } => {
                         assert!(matches!(
                             binding.action(),
                             crate::calibration::cold::PhyColdI2cAction::StartRead {
@@ -607,13 +607,13 @@ fn complete_wifi_i2c_child(
                             } if bound_address == address
                         ));
                         crate::tracking::i2c::PhyWifiI2cTrackingCompletion::MaskedWrite(
-                            oer_chips_family_peripherals_analog::Completion::Read {
+                            oer_chips_family_drivers_regi2c::Completion::Read {
                                 address,
                                 value: 0xa0,
                             },
                         )
                     }
-                    oer_chips_family_peripherals_analog::Action::Write { address, value } => {
+                    oer_chips_family_drivers_regi2c::Action::Write { address, value } => {
                         assert!(matches!(
                             binding.action(),
                             crate::calibration::cold::PhyColdI2cAction::StartWrite {
@@ -622,10 +622,10 @@ fn complete_wifi_i2c_child(
                             } if bound_address == address && bound_value == value
                         ));
                         crate::tracking::i2c::PhyWifiI2cTrackingCompletion::MaskedWrite(
-                            oer_chips_family_peripherals_analog::Completion::Written { address },
+                            oer_chips_family_drivers_regi2c::Completion::Written { address },
                         )
                     }
-                    oer_chips_family_peripherals_analog::Action::Complete(()) => unreachable!(),
+                    oer_chips_family_drivers_regi2c::Action::Complete(()) => unreachable!(),
                 };
                 child.advance(completion).unwrap();
             }

@@ -31,7 +31,7 @@ oer-chips-family-facts = { path = "../../facts" }
 tempfile = "=3.27.0"
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
-oer-chips-family-peripherals-watchdog = { path = "../../peripherals/watchdog" }
+oer-chips-family-drivers-watchdog = { path = "../../drivers/watchdog" }
 
 [lints]
 workspace = true

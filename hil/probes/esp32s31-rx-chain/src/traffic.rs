@@ -8,7 +8,7 @@ use oer_chips_esp32s31_hal::{
     },
     system::owner::{MacInterruptRegisters, RadioAccess},
 };
-use oer_chips_esp32s31_radio_ieee80211_driver::rx::receive::RELOAD_SETTLE_LIMIT;
+use oer_chips_esp32s31_radio_ieee80211_backend::rx::receive::RELOAD_SETTLE_LIMIT;
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::zeroed::ZeroedStatic;
 use oer_portable_time::{Clock, Duration, settle::Settle};

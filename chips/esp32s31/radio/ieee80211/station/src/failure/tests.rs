@@ -1,7 +1,7 @@
 use super::*;
 #[test]
 fn completion_status_and_receive_credit_observations_survive_the_boundary() {
-    use oer_chips_esp32s31_radio_ieee80211_driver::{
+    use oer_chips_esp32s31_radio_ieee80211_backend::{
         lower_mac::LowerMacFault as Core,
         mac::rx::pool::RxStageTransactionError as Stage,
         mac::tx::{CompletionFault as Completion, TxError as Mac},
@@ -105,7 +105,7 @@ fn a_release_into_a_poisoned_domain_or_with_an_active_mac_is_not_a_stop() {
 }
 #[test]
 fn a_port_fault_keeps_its_whole_path_under_the_lifecycle_failure() {
-    use oer_chips_esp32s31_radio_ieee80211_driver::{
+    use oer_chips_esp32s31_radio_ieee80211_backend::{
         lower_mac::arena::ArenaFault as Arena, mac::tx::ampdu::HtAmpduTxError as Chain, port::Fault,
     };
     let failure = LifecycleFailure::Port(super::convert::backend_fault(Fault::Arena(
@@ -130,7 +130,7 @@ fn a_port_fault_keeps_its_whole_path_under_the_lifecycle_failure() {
 }
 #[test]
 fn a_named_driver_fault_keeps_its_queue_and_operation_across_the_boundary() {
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::{CoreOp, Fault};
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::{CoreOp, Fault};
     assert_eq!(
         super::convert::backend_fault(Fault::DuplicateCompletion { queue: 2 }),
         BackendFault::DuplicateCompletion { queue: 2 }
@@ -177,7 +177,7 @@ fn a_lifecycle_failure_names_its_cause_and_keeps_its_observations() {
 #[test]
 fn a_refused_start_keeps_the_retune_cause_in_its_path() {
     use oer_chips_esp32s31_radio_client::Failure;
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::{Fault, WifiRetuneError};
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::{Fault, WifiRetuneError};
     use oer_portable_diagnostics::DiagPath;
     use oer_protocols_ieee80211_contracts_port::StartRefused;
     let refused = super::convert::start_refused(StartRefused::Retune(Fault::Retune(
@@ -206,7 +206,7 @@ fn a_refused_start_keeps_the_retune_cause_in_its_path() {
 }
 #[test]
 fn a_publication_fault_keeps_its_queue_and_step_across_the_boundary() {
-    use oer_chips_esp32s31_radio_ieee80211_driver::port::{Fault, PublishStep as Step};
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::{Fault, PublishStep as Step};
     assert_eq!(
         super::convert::backend_fault(Fault::Publish {
             queue: 2,

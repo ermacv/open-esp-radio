@@ -118,16 +118,16 @@ struct FakeConfigurationI2c {
     observed: core::cell::RefCell<std::vec::Vec<Address>>,
 }
 
-impl oer_chips_family_peripherals_analog::AnalogRegisterBus for FakeConfigurationI2c {
+impl oer_chips_family_drivers_regi2c::AnalogRegisterBus for FakeConfigurationI2c {
     type Address = Address;
 
     fn try_start_read(
         &mut self,
         address: Address,
-    ) -> Result<(), oer_chips_family_peripherals_analog::BusRefusal> {
+    ) -> Result<(), oer_chips_family_drivers_regi2c::BusRefusal> {
         if self.busy_starts != 0 {
             self.busy_starts -= 1;
-            return Err(oer_chips_family_peripherals_analog::BusRefusal::Busy);
+            return Err(oer_chips_family_drivers_regi2c::BusRefusal::Busy);
         }
         self.accepted_commands += 1;
         self.started.set(Some(address));
@@ -138,10 +138,10 @@ impl oer_chips_family_peripherals_analog::AnalogRegisterBus for FakeConfiguratio
         &mut self,
         address: Address,
         _value: u8,
-    ) -> Result<(), oer_chips_family_peripherals_analog::BusRefusal> {
+    ) -> Result<(), oer_chips_family_drivers_regi2c::BusRefusal> {
         if self.busy_starts != 0 {
             self.busy_starts -= 1;
-            return Err(oer_chips_family_peripherals_analog::BusRefusal::Busy);
+            return Err(oer_chips_family_drivers_regi2c::BusRefusal::Busy);
         }
         self.accepted_commands += 1;
         self.started.set(Some(address));
@@ -151,26 +151,26 @@ impl oer_chips_family_peripherals_analog::AnalogRegisterBus for FakeConfiguratio
     fn try_finish_read(
         &self,
         address: Address,
-    ) -> Result<u8, oer_chips_family_peripherals_analog::BusRefusal> {
+    ) -> Result<u8, oer_chips_family_drivers_regi2c::BusRefusal> {
         assert_eq!(self.started.get(), Some(address));
         self.observed.borrow_mut().push(address);
         if self.pending_observations == 0 {
             Ok(0xa0)
         } else {
-            Err(oer_chips_family_peripherals_analog::BusRefusal::Busy)
+            Err(oer_chips_family_drivers_regi2c::BusRefusal::Busy)
         }
     }
 
     fn try_finish_write(
         &self,
         address: Address,
-    ) -> Result<(), oer_chips_family_peripherals_analog::BusRefusal> {
+    ) -> Result<(), oer_chips_family_drivers_regi2c::BusRefusal> {
         assert_eq!(self.started.get(), Some(address));
         self.observed.borrow_mut().push(address);
         if self.pending_observations == 0 {
             Ok(())
         } else {
-            Err(oer_chips_family_peripherals_analog::BusRefusal::Busy)
+            Err(oer_chips_family_drivers_regi2c::BusRefusal::Busy)
         }
     }
 }

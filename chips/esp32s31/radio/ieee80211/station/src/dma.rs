@@ -4,8 +4,8 @@ use oer_chips_esp32s31_hal::{
     radio::ieee80211::dma::{tx_ampdu_storage::AmpduDmaStorage, tx_storage::TxDmaStorage},
     system::memory::dma_static::Placed,
 };
-use oer_chips_esp32s31_radio_ieee80211_driver::port::{TX_AMPDU_SUBFRAMES, TX_BUFFERS};
-use oer_chips_esp32s31_radio_ieee80211_driver::rx::arena::WifiRxStatic;
+use oer_chips_esp32s31_radio_ieee80211_backend::port::{TX_AMPDU_SUBFRAMES, TX_BUFFERS};
+use oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxStatic;
 use oer_portable_memory::PinnedDmaTxPool;
 type Rx = WifiRxStatic<N, B, S, Q, DriverExecutor>;
 /// Every buffer an MPDU or a subframe is written into.

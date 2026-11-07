@@ -1,11 +1,11 @@
 //! Finite retained-wake analog-I2C host sequencing.
-use oer_chips_family_peripherals_analog::model::Host;
+use oer_chips_family_drivers_regi2c::model::Host;
 
 /// One finite failure while publishing current-vendor retained-wake analog
 /// initialization through both PHY-I²C hosts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyI2cInitializationStageTwoError<W = core::convert::Infallible> {
-    Transition(oer_chips_family_peripherals_analog::TransitionError),
+    Transition(oer_chips_family_drivers_regi2c::TransitionError),
     BusyAtStart {
         host: Host,
     },
@@ -31,7 +31,7 @@ pub async fn configure_initialization_stage_two<P: PhyI2cParallelAccess, W>(
     maximum_observations: u32,
     mut wait: impl AsyncFnMut() -> Result<(), W>,
 ) -> Result<(), PhyI2cInitializationStageTwoError<W>> {
-    use oer_chips_family_peripherals_analog::{ParallelAction, ParallelHost, ParallelTransition};
+    use oer_chips_family_drivers_regi2c::{ParallelAction, ParallelHost, ParallelTransition};
     let host = |host| match host {
         ParallelHost::First => Host::Host0,
         ParallelHost::Second => Host::Host1,

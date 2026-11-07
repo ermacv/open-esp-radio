@@ -11,7 +11,7 @@ use oer_chips_esp32s31_hal::peripherals::watchdog::{
 use oer_chips_esp32s31_hal::system::platform::Port;
 use oer_chips_esp32s31_hal::system::root::Root;
 use oer_chips_family_platform_executor::Executor;
-use oer_chips_family_peripherals_power::sleep::{self, Outcome, SleepClocks, SleepError, SleepRequest, Slept};
+use oer_chips_family_drivers_pmu::sleep::{self, Outcome, SleepClocks, SleepError, SleepRequest, Slept};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock as _, Duration, Timer as _};
 

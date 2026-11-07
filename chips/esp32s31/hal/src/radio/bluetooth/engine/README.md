@@ -32,5 +32,5 @@ Successful retirement requires stopped, empty scheduler state and idle workers.
 Only checked Controller reset returns the complete arena zeroed in place.
 Failure retains the partitions and storage in quarantine until reset; there is
 no partial extraction or automatic restoration. The
-[driver](../../../../../radio/bluetooth/driver/README.md) owns orchestration and the
+[driver](../../../../../radio/bluetooth/backend/README.md) owns orchestration and the
 port runner.

@@ -13,7 +13,7 @@ oer-chips-esp32s31-platform-layout.workspace = true
 oer-chips-family-platform-bootstrap = { path = "../../../family/platform/bootstrap" }
 oer-chips-esp32s31-hal = { path = "../../hal" }
 oer-chips-family-boot = { path = "../../../family/boot" }
-oer-chips-family-peripherals-system-timer = { path = "../../../family/peripherals/system-timer" }
+oer-chips-family-drivers-system-timer = { path = "../../../family/drivers/system-timer" }
 oer-portable-time = { path = "../../../../portable/time" }
 static_cell.workspace = true
 

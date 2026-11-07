@@ -51,10 +51,10 @@ impl PhyRegistrationGrant {
 /// One word holds the last issued epoch in its low 31 bits and whether that
 /// epoch is current in its top bit.
 #[derive(Debug)]
-pub(crate) struct PhyRegistration(oer_chips_family_radio_domain::epoch::Registration);
+pub(crate) struct PhyRegistration(oer_chips_family_radio_power::epoch::Registration);
 impl PhyRegistration {
     pub(crate) const fn new() -> Self {
-        Self(oer_chips_family_radio_domain::epoch::Registration::new())
+        Self(oer_chips_family_radio_power::epoch::Registration::new())
     }
     pub(crate) fn begin(&mut self) -> PhyRegistrationEpoch {
         PhyRegistrationEpoch(self.0.begin())

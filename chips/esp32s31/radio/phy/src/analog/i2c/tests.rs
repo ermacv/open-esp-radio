@@ -642,31 +642,31 @@ fn masked_i2c_write_owns_read_transform_and_write_edges() {
     let mut transition = crate::analog::i2c::field_write(field, 3);
     assert_eq!(
         transition.action(),
-        oer_chips_family_peripherals_analog::Action::Read { address }
+        oer_chips_family_drivers_regi2c::Action::Read { address }
     );
     assert_eq!(
-        transition.advance(oer_chips_family_peripherals_analog::Completion::Written { address }),
-        Err(oer_chips_family_peripherals_analog::TransitionError::WrongCompletion)
+        transition.advance(oer_chips_family_drivers_regi2c::Completion::Written { address }),
+        Err(oer_chips_family_drivers_regi2c::TransitionError::WrongCompletion)
     );
     transition
-        .advance(oer_chips_family_peripherals_analog::Completion::Read {
+        .advance(oer_chips_family_drivers_regi2c::Completion::Read {
             address,
             value: 0x0f,
         })
         .unwrap();
     assert_eq!(
         transition.action(),
-        oer_chips_family_peripherals_analog::Action::Write {
+        oer_chips_family_drivers_regi2c::Action::Write {
             address,
             value: 0x03,
         }
     );
     transition
-        .advance(oer_chips_family_peripherals_analog::Completion::Written { address })
+        .advance(oer_chips_family_drivers_regi2c::Completion::Written { address })
         .unwrap();
     assert_eq!(
         transition.action(),
-        oer_chips_family_peripherals_analog::Action::Complete(())
+        oer_chips_family_drivers_regi2c::Action::Complete(())
     );
 }
 

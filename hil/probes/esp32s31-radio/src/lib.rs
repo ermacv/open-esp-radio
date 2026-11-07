@@ -13,7 +13,7 @@
 //! API alone: [`open_probe_session_init`] takes the reset root once and the
 //! later entries borrow the session's owners ([`session`]).
 
-use oer_chips_esp32s31_radio_ieee80211_driver::mac::ap_tsf::AccessPointTsf;
+use oer_chips_esp32s31_radio_ieee80211_backend::mac::ap_tsf::AccessPointTsf;
 use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
 
 mod calibration_leaves;
@@ -206,7 +206,7 @@ oer_tools_probe_macros::probe! {
     /// cold transaction published the interface addresses.
     pub fn open_wifi_sta_ap_trace_disable_all_role_receive(_policy: u32) -> u32 {
         session::with(|session| {
-            oer_chips_esp32s31_radio_ieee80211_driver::mac::sta_ap_registers::disable_all_role_receive_registers(
+            oer_chips_esp32s31_radio_ieee80211_backend::mac::sta_ap_registers::disable_all_role_receive_registers(
                 &mut session.wifi.wifi_mac_hal(),
             );
             1

@@ -1,7 +1,7 @@
 //! The owned S31 console binding. Images select its interrupt entries.
 use crate::Esp32s31;
 use oer_chips_esp32s31_hal::{peripherals::usb_serial_jtag as hw, system::platform::Port};
-use oer_chips_family_peripherals_usb_serial_jtag::{Endpoint, Interrupt};
+use oer_chips_family_drivers_usb_serial_jtag::{Endpoint, Interrupt};
 use oer_chips_family_platform_executor::Executor;
 use oer_chips_family_platform_interrupt_table::{Controller, Entry, InterruptSource, Router};
 
@@ -56,7 +56,7 @@ impl Binding {
     }
 }
 impl embedded_io_async::ErrorType for Console {
-    type Error = oer_chips_family_peripherals_usb_serial_jtag::Error;
+    type Error = oer_chips_family_drivers_usb_serial_jtag::Error;
 }
 impl embedded_io_async::Read for Console {
     async fn read(&mut self, bytes: &mut [u8]) -> Result<usize, Self::Error> {

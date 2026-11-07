@@ -1,0 +1,14 @@
+[package]
+name = "oer-chips-family-radio-bluetooth-ports"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "BLE engine register ports and phase values, independent of chip ownership"
+
+[dependencies]
+oer-portable-time = { path = "../../../../../portable/time" }
+
+[lints]
+workspace = true

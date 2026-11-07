@@ -1,6 +1,6 @@
 use super::*;
 use core::cell::{Cell, RefCell};
-use oer_chips_family_peripherals_analog::model::Route;
+use oer_chips_family_drivers_regi2c::model::Route;
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use std::vec::Vec;

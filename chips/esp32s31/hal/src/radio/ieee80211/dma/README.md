@@ -91,8 +91,8 @@ the release hands each lease back to its caller in push order. Safe
 `forget` of an aggregate owner followed by destruction of its local retention
 arena leaks the allocations; neither destructor is needed to keep DMA memory
 alive. The arena itself is never referenced by a DMA descriptor.
-[`TxSlot`](../../../../../radio/ieee80211/driver/src/mac/tx.rs) adds the active queue and generation cookie;
-[`OrdinaryTxOwner`](../../../../../radio/ieee80211/driver/src/ordinary_tx.rs) retains retry and deadline state.
+[`TxSlot`](../../../../../radio/ieee80211/backend/src/mac/tx.rs) adds the active queue and generation cookie;
+[`OrdinaryTxOwner`](../../../../../radio/ieee80211/backend/src/ordinary_tx.rs) retains retry and deadline state.
 
 | State | Permitted operation | Memory ownership |
 | --- | --- | --- |
@@ -134,6 +134,6 @@ compiled vendor comparison and do not establish physical DMA quiescence or
 memory-ordering sufficiency on silicon.
 
 The [storage tests](tx_storage/tests.rs) exercise publication authority and
-quarantine. The [MAC ownership tests](../../../../../radio/ieee80211/driver/tests/cases/tx_ownership.rs) exercise
+quarantine. The [MAC ownership tests](../../../../../radio/ieee80211/backend/tests/cases/tx_ownership.rs) exercise
 repeated generations, retained payload, stale release and failed detach. These
 are host models with explicit completion/detach inputs.

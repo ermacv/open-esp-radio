@@ -89,7 +89,7 @@ impl ControllerTimeLatch {
     }
 }
 
-use oer_chips_family_radio_bluetooth::port::ControllerTimeRegisters;
+use oer_chips_family_radio_bluetooth_ports::port::ControllerTimeRegisters;
 
 fn execute_latch_publication(
     ownership: &mut ControllerTimeLatch,

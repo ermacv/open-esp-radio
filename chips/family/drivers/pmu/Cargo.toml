@@ -1,0 +1,12 @@
+[package]
+name = "oer-chips-family-drivers-pmu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Espressif PMU light sleep over a chip's typed register traits: one sleep of the HP system until an LP-timer target, its wake or reject outcome and causes, each failure typed"
+
+[lints]
+workspace = true

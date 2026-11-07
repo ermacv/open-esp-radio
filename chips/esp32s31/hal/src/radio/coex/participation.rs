@@ -106,7 +106,7 @@ pub struct ExternalCoexistence {
 
 /// The radios that enabled coexistence (`coex_core_enable`).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct CoexParticipants(oer_chips_family_radio_domain::membership::Participants);
+pub(crate) struct CoexParticipants(oer_chips_family_radio_power::membership::Participants);
 
 impl CoexParticipants {
     pub(crate) const fn count(self) -> u32 {

@@ -835,7 +835,7 @@ pub enum PhyTxCapSearchAction {
         attenuation: u8,
         enabled: bool,
     },
-    I2c(oer_chips_family_peripherals_analog::Action<crate::analog::i2c::Address, ()>),
+    I2c(oer_chips_family_drivers_regi2c::Action<crate::analog::i2c::Address, ()>),
     ToneSar(PhyToneSarAction),
     Complete(PhyTxCapSearchOutcome),
     Failed(PhyTxCapSearchFailure),
@@ -848,7 +848,7 @@ pub enum PhyTxCapSearchCompletion {
         attenuation: u8,
         enabled: bool,
     },
-    I2c(oer_chips_family_peripherals_analog::Completion<crate::analog::i2c::Address>),
+    I2c(oer_chips_family_drivers_regi2c::Completion<crate::analog::i2c::Address>),
     ToneSar(PhyToneSarCompletion),
 }
 
@@ -862,12 +862,10 @@ pub enum PhyTxCapSearchTransitionError {
 enum TxCapSearchStep {
     ConfigureTone,
     WriteCandidate(
-        oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>,
+        oer_chips_family_drivers_regi2c::FieldWriteTransition<crate::analog::i2c::Address>,
     ),
     Measure(PhyToneSarTransition),
-    WriteBest(
-        oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>,
-    ),
+    WriteBest(oer_chips_family_drivers_regi2c::FieldWriteTransition<crate::analog::i2c::Address>),
     StopTone,
     Complete(PhyTxCapSearchOutcome),
     Failed(PhyTxCapSearchFailure),
@@ -889,7 +887,7 @@ const fn tx_cap_max(bank: TxCapBank) -> TxCapCandidate {
 type TxCapCandidate = Ordinal<16>;
 
 type TxCapWrite =
-    oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>;
+    oer_chips_family_drivers_regi2c::FieldWriteTransition<crate::analog::i2c::Address>;
 
 /// Every value's write of one bank.
 const fn tx_cap_writes(bank: u8) -> [TxCapWrite; 16] {
@@ -984,7 +982,7 @@ impl PhyTxCapSearchTransition {
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
                 self.step = if transition.action()
-                    == oer_chips_family_peripherals_analog::Action::Complete(())
+                    == oer_chips_family_drivers_regi2c::Action::Complete(())
                 {
                     TxCapSearchStep::Measure(PhyToneSarTransition::new_nonzero(PhyToneSarRequest {
                         measurement: self
@@ -1038,8 +1036,7 @@ impl PhyTxCapSearchTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
-                if transition.action() == oer_chips_family_peripherals_analog::Action::Complete(())
-                {
+                if transition.action() == oer_chips_family_drivers_regi2c::Action::Complete(()) {
                     if let Some(bank) = self.bank.next() {
                         self.bank = bank;
                         self.candidate = tx_cap_max(bank);
@@ -1105,7 +1102,7 @@ pub enum PhyTxCapFailure {
 pub enum PhyTxCapAction {
     Environment(PhyTxCalibrationEnvironmentAction),
     Rfpll(RfpllFrequencyAction),
-    I2c(oer_chips_family_peripherals_analog::Action<crate::analog::i2c::Address, ()>),
+    I2c(oer_chips_family_drivers_regi2c::Action<crate::analog::i2c::Address, ()>),
     Attenuation(PhyPowerAttenuationAction),
     Search(PhyTxCapSearchAction),
     Complete(PhyTxCapOutcome),
@@ -1116,7 +1113,7 @@ pub enum PhyTxCapAction {
 pub enum PhyTxCapCompletion {
     Environment(PhyTxCalibrationEnvironmentCompletion),
     Rfpll(RfpllFrequencyCompletion),
-    I2c(oer_chips_family_peripherals_analog::Completion<crate::analog::i2c::Address>),
+    I2c(oer_chips_family_drivers_regi2c::Completion<crate::analog::i2c::Address>),
     Attenuation(PhyPowerAttenuationCompletion),
     Search(PhyTxCapSearchCompletion),
 }
@@ -1137,8 +1134,8 @@ enum TxCapTerminal {
 enum TxCapStep {
     Enter(PhyTxCalibrationEnvironmentTransition),
     Rfpll(RfpllFrequencyTransition),
-    SetLow(oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>),
-    SetHigh(oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>),
+    SetLow(oer_chips_family_drivers_regi2c::FieldWriteTransition<crate::analog::i2c::Address>),
+    SetHigh(oer_chips_family_drivers_regi2c::FieldWriteTransition<crate::analog::i2c::Address>),
     Attenuation(PhyPowerAttenuationTransition),
     Search(PhyTxCapSearchTransition),
     Exit {
@@ -1255,7 +1252,7 @@ impl PhyTxCapTransition {
                     .advance(completion)
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
                 self.step = if transition.action()
-                    == oer_chips_family_peripherals_analog::Action::Complete(())
+                    == oer_chips_family_drivers_regi2c::Action::Complete(())
                 {
                     TxCapStep::SetHigh(
                         const {
@@ -1273,8 +1270,7 @@ impl PhyTxCapTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
-                if transition.action() == oer_chips_family_peripherals_analog::Action::Complete(())
-                {
+                if transition.action() == oer_chips_family_drivers_regi2c::Action::Complete(()) {
                     self.step = if self.channel == Ordinal::FIRST {
                         TxCapStep::Attenuation(PhyPowerAttenuationTransition::new(
                             PhyPowerAttenuationRequest {

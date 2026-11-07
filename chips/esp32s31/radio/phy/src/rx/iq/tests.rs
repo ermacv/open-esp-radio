@@ -146,20 +146,20 @@ fn loopback_completion(action: PhyTxIqLoopbackAction) -> PhyTxIqLoopbackCompleti
     use crate::analog::i2c;
 
     match action {
-        PhyTxIqLoopbackAction::I2c(oer_chips_family_peripherals_analog::Action::Read {
-            address,
-        }) => {
-            PhyTxIqLoopbackCompletion::I2c(oer_chips_family_peripherals_analog::Completion::Read {
+        PhyTxIqLoopbackAction::I2c(oer_chips_family_drivers_regi2c::Action::Read { address }) => {
+            PhyTxIqLoopbackCompletion::I2c(oer_chips_family_drivers_regi2c::Completion::Read {
                 address,
                 value: 0,
             })
         }
-        PhyTxIqLoopbackAction::I2c(oer_chips_family_peripherals_analog::Action::Write {
+        PhyTxIqLoopbackAction::I2c(oer_chips_family_drivers_regi2c::Action::Write {
             address,
             ..
-        }) => PhyTxIqLoopbackCompletion::I2c(
-            oer_chips_family_peripherals_analog::Completion::Written { address },
-        ),
+        }) => {
+            PhyTxIqLoopbackCompletion::I2c(oer_chips_family_drivers_regi2c::Completion::Written {
+                address,
+            })
+        }
         PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
             PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
         }

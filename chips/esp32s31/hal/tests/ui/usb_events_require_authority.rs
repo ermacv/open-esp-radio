@@ -1,6 +1,6 @@
 #![no_std]
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::{ConsoleEndpoint, ConsoleInterrupt};
-use oer_chips_family_peripherals_usb_serial_jtag::{Endpoint, EndpointRegisters};
+use oer_chips_family_drivers_usb_serial_jtag::{Endpoint, EndpointRegisters};
 use oer_chips_family_platform_interrupt_table::signal::{IrqSignal, SignalExecutor};
 use oer_chips_family_platform_interrupt_table::{Bound, EventAuthority, Silent};
 

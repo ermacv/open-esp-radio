@@ -15,7 +15,7 @@ oer-portable-crypto = { path = "../../../portable/crypto" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-chips-esp32s31-peripherals-crypto = { path = "../../../chips/esp32s31/peripherals/crypto" }
+oer-chips-esp32s31-drivers-aes = { path = "../../../chips/esp32s31/drivers/aes" }
 oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/runtime" }
 oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform/runtime" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }

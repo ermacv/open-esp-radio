@@ -4,7 +4,7 @@
 //! payload, in place; the radio publishes that same buffer.
 /// A pool buffer's octets.
 const TX: usize = crate::FRAME_CAPACITY;
-use oer_chips_esp32s31_radio_ieee80211_driver::{
+use oer_chips_esp32s31_radio_ieee80211_backend::{
     mac::tx::TxBacking,
     ordinary_tx::{TX_CCMP_MIC_SIZE, TX_FCS_SIZE, TX_METADATA_SIZE},
     port::{TX_BUFFERS, TxPool},

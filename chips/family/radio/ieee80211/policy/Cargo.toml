@@ -17,7 +17,7 @@ oer-portable-time = { path = "../../../../../portable/time" }
 
 [dev-dependencies]
 oer-portable-wire = { path = "../../../../../portable/wire" }
-oer-chips-esp32s31-radio-ieee80211-driver = { path = "../../../../esp32s31/radio/ieee80211/driver", features = ["test-support"] }
+oer-chips-esp32s31-radio-ieee80211-backend = { path = "../../../../esp32s31/radio/ieee80211/backend", features = ["test-support"] }
 oer-tools-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
 
 [lints]

@@ -1,7 +1,7 @@
 //! The eFuse controller's factory identity: the read words of the factory
 //! MAC, which the controller mirrors after reset.
 
-pub use oer_chips_family_peripherals_efuse::{FactoryMac, Interface, MacAddress};
+pub use oer_chips_family_drivers_efuse::{FactoryMac, Interface, MacAddress};
 use oer_portable_mmio::{Fixed, Placement};
 
 use oer_chips_esp32s31_pac::{efuse::Efuse, instances, ownership::EfusePeripherals};

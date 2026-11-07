@@ -161,20 +161,20 @@ fn environment_completion(
 
 fn loopback_completion(action: PhyTxIqLoopbackAction) -> PhyTxIqLoopbackCompletion {
     match action {
-        PhyTxIqLoopbackAction::I2c(oer_chips_family_peripherals_analog::Action::Read {
-            address,
-        }) => {
-            PhyTxIqLoopbackCompletion::I2c(oer_chips_family_peripherals_analog::Completion::Read {
+        PhyTxIqLoopbackAction::I2c(oer_chips_family_drivers_regi2c::Action::Read { address }) => {
+            PhyTxIqLoopbackCompletion::I2c(oer_chips_family_drivers_regi2c::Completion::Read {
                 address,
                 value: 0,
             })
         }
-        PhyTxIqLoopbackAction::I2c(oer_chips_family_peripherals_analog::Action::Write {
+        PhyTxIqLoopbackAction::I2c(oer_chips_family_drivers_regi2c::Action::Write {
             address,
             ..
-        }) => PhyTxIqLoopbackCompletion::I2c(
-            oer_chips_family_peripherals_analog::Completion::Written { address },
-        ),
+        }) => {
+            PhyTxIqLoopbackCompletion::I2c(oer_chips_family_drivers_regi2c::Completion::Written {
+                address,
+            })
+        }
         PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
             PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
         }
@@ -585,7 +585,7 @@ fn external_lowering_covers_every_txiq_operation_layer() {
     ));
     assert!(matches!(
         PhyTxIqCalibrationExternalBinding::lower(PhyTxIqCalibrationAction::Loopback(
-            PhyTxIqLoopbackAction::I2c(oer_chips_family_peripherals_analog::Action::Read {
+            PhyTxIqLoopbackAction::I2c(oer_chips_family_drivers_regi2c::Action::Read {
                 address: analog_i2c::bbtop::tx_iq_loopback_enable::TX_IQ_LOOPBACK_ENABLE.address(),
             })
         )),

@@ -19,7 +19,7 @@ use crate::systimer::ComparatorWriter;
 /// and its one waker vtable. Only [`bind!`](crate::bind) implements it.
 pub trait Binding: Sized + 'static {
     /// The chip HAL's implementation of the platform contracts.
-    type Port: ExecutorPlatform<Counter: oer_chips_family_peripherals_system_timer::CounterLatch>
+    type Port: ExecutorPlatform<Counter: oer_chips_family_drivers_system_timer::CounterLatch>
         + Platform;
     /// The binding's one storage of the port's owned blocks.
     fn storage() -> &'static Storage<Self::Port>;

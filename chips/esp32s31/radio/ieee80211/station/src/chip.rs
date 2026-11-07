@@ -1,6 +1,6 @@
 use crate::{Caps, Channels, Control, Network, ServiceConnection, radio, station as service};
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
-use oer_chips_esp32s31_radio_ieee80211_driver::irq::{
+use oer_chips_esp32s31_radio_ieee80211_backend::irq::{
     DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line,
 };
 use oer_chips_family_platform_executor::{Doorbell, DoorbellAcknowledger};
@@ -28,13 +28,13 @@ pub const S: usize = B;
 /// hardware, for the bursts a masked ring takes behind its wait.
 pub const Q: usize = 32;
 const _: () = {
-    if crate::RX_DEPTH < 2 * oer_chips_esp32s31_radio_ieee80211_driver::port::RX_HELD {
+    if crate::RX_DEPTH < 2 * oer_chips_esp32s31_radio_ieee80211_backend::port::RX_HELD {
         panic!("the network queue holds two receive windows");
     }
     if Q >= N {
         panic!("the receive ring keeps descriptors armed beside the staged units");
     }
-    if oer_chips_esp32s31_radio_ieee80211_driver::port::lent_rx(Q) == 0 {
+    if oer_chips_esp32s31_radio_ieee80211_backend::port::lent_rx(Q) == 0 {
         panic!("the staged units leave the network none beside the station's");
     }
 };
@@ -111,7 +111,7 @@ pub enum InitializationError {
 /// negotiation timing and inactivity are this composition's policy too.
 const TX_BLOCK_ACK: oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy =
     oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy {
-        window: oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::ampdu::TX_BLOCK_ACK_MAX_WINDOW,
+        window: oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::ampdu::TX_BLOCK_ACK_MAX_WINDOW,
         negotiation_timeout: Duration::from_secs(1),
         retry: oer_protocols_ieee80211_core_upper_mac::block_ack::TxBlockAckRetry {
             attempts: 3,
@@ -172,9 +172,9 @@ impl InterruptTypes for Interrupts {
     }
     fn service(&self, part: &mut Self::Part) -> Result<bool, u32> {
         service_wifi_line(&self.line, part).map_err(
-            |oer_chips_esp32s31_radio_ieee80211_driver::mac::irq::Fault::FatalAssertion { raw }| {
-                raw
-            },
+            |oer_chips_esp32s31_radio_ieee80211_backend::mac::irq::Fault::FatalAssertion {
+                 raw,
+             }| { raw },
         )
     }
 }
@@ -440,7 +440,7 @@ pub struct Storage<W: Binding> {
     /// The transmit pool, pinned once: the port holds its first buffers,
     /// the network the rest ([`crate::NetworkTx`]).
     pub(crate) pool:
-        static_cell::StaticCell<oer_chips_esp32s31_radio_ieee80211_driver::port::TxPool<TX>>,
+        static_cell::StaticCell<oer_chips_esp32s31_radio_ieee80211_backend::port::TxPool<TX>>,
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) actor: radio::ActorStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
@@ -459,7 +459,7 @@ where
         Self {
             channels: Channels::across_harts(network, actor),
             driver: radio::DriverStorage::new(
-                oer_chips_esp32s31_radio_ieee80211_driver::port::NetworkPeers { returned: actor },
+                oer_chips_esp32s31_radio_ieee80211_backend::port::NetworkPeers { returned: actor },
             ),
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
@@ -472,7 +472,7 @@ impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
         Self {
             channels: Channels::new(),
             driver: radio::DriverStorage::new(
-                oer_chips_esp32s31_radio_ieee80211_driver::port::SameHart::new(),
+                oer_chips_esp32s31_radio_ieee80211_backend::port::SameHart::new(),
             ),
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
@@ -606,7 +606,7 @@ pub fn station<W: Binding>(
     let pool = storage
         .pool
         .try_init(
-            oer_chips_esp32s31_radio_ieee80211_driver::port::TxPool::pin(pool)
+            oer_chips_esp32s31_radio_ieee80211_backend::port::TxPool::pin(pool)
                 .unwrap_or_else(|_| W::fail(InitializationError::Tx)),
         )
         .unwrap_or_else(|| W::fail(InitializationError::Storage));
