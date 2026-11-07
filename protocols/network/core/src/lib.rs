@@ -138,8 +138,8 @@ pub use block::{
 };
 pub use interface::{Interface, InterfaceError};
 pub use machine::{
-    CommandId, CommandState, Core, Datagram, Demand, Grant, NetEvent, OpenRefused, Outcome, Remote,
-    RetiredResults, SendRefusal, SendRefused, SocketId, StaleSocket,
+    CommandId, CommandState, Core, Datagram, Demand, Eviction, Grant, NetEvent, OpenRefused,
+    Outcome, Queued, Remote, RetiredResults, SendRefusal, SendRefused, SocketId, StaleSocket,
 };
 pub use owner::{NetworkOwner, Retired, Unsent};
 

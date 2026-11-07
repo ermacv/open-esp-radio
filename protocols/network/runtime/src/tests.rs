@@ -16,7 +16,7 @@ use embassy_futures::yield_now;
 use oer_portable_memory::WakingSpscSender;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, Interface, NetworkOwner, OpenRefused, Outcome, Remote, SendRefusal, claim,
+    Block, Eviction, Interface, NetworkOwner, OpenRefused, Outcome, Remote, SendRefusal, claim,
 };
 use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
@@ -26,8 +26,8 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Direct, EndCause, Ended, Observer, Refusal, Sent, Service, Socket, SocketClosed, SocketLanes,
-    StopLane,
+    Direct, EndCause, Ended, MemoryPolicy, Observer, Refusal, Sent, Service, Share, Socket,
+    SocketClosed, SocketLanes, StopLane,
 };
 
 /// A brand of the test's own.
@@ -293,9 +293,9 @@ fn bench_on<B: 'static, E: Egress<u32, u32>>(
     egress: E,
 ) -> Bench<B, E> {
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, egress, stopping);
+    let mut service = Service::new(owner, egress, MemoryPolicy::KEEP, stopping);
     let socket = service
-        .bind(5000, Dscp::default(), storage::<B>())
+        .bind(5000, Dscp::default(), Share::unlimited(0), storage::<B>())
         .ok()
         .unwrap();
     Bench {
@@ -994,13 +994,25 @@ fn a_refused_bind_changes_nothing_and_the_storage_serves_again() {
     let owner: NetworkOwner<'static, Net, SIZE, 2, CREDITS, RECEIVED, 2, BLOCKS, WirePort> =
         NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, Direct, stopping);
+    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
     let dscp = Dscp::default();
-    let mut first = service.bind(5000, dscp, storage::<Net>()).ok().unwrap();
-    let refused = service.bind(5000, dscp, storage::<Net>()).err().unwrap();
+    let mut first = service
+        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .ok()
+        .unwrap();
+    let refused = service
+        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .err()
+        .unwrap();
     assert_eq!(refused.reason, OpenRefused::PortInUse);
-    let mut second = service.bind(5001, dscp, refused.storage).ok().unwrap();
-    let full = service.bind(5002, dscp, storage::<Net>()).err().unwrap();
+    let mut second = service
+        .bind(5001, dscp, Share::unlimited(0), refused.storage)
+        .ok()
+        .unwrap();
+    let full = service
+        .bind(5002, dscp, Share::unlimited(0), storage::<Net>())
+        .err()
+        .unwrap();
     assert_eq!(full.reason, OpenRefused::NoSocket);
     let clock = Box::leak(Box::new(VirtualClock::new()));
     let mut events = ();
@@ -1258,10 +1270,16 @@ fn sockets_waiting_for_blocks_take_turns() {
     let owner: NetworkOwner<'static, Net, SIZE, 2, CREDITS, RECEIVED, 2, 1, WirePort> =
         NetworkOwner::new(brand, interface, pool, WirePort::default());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, Direct, stopping);
+    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
     let dscp = Dscp::default();
-    let mut first = service.bind(5000, dscp, storage::<Net>()).ok().unwrap();
-    let mut second = service.bind(5001, dscp, storage::<Net>()).ok().unwrap();
+    let mut first = service
+        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .ok()
+        .unwrap();
+    let mut second = service
+        .bind(5001, dscp, Share::unlimited(0), storage::<Net>())
+        .ok()
+        .unwrap();
     let clock = Box::leak(Box::new(VirtualClock::new()));
     let mut events = ();
     let cx = &mut Context::from_waker(Waker::noop());
@@ -1293,11 +1311,20 @@ fn three_sockets_waiting_for_two_blocks_all_take_turns() {
     let owner: NetworkOwner<'static, Net, SIZE, 3, CREDITS, RECEIVED, 2, 2, WirePort> =
         NetworkOwner::new(brand, interface, pool, WirePort::default());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, Direct, stopping);
+    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
     let dscp = Dscp::default();
-    let mut first = service.bind(5000, dscp, storage::<Net>()).ok().unwrap();
-    let mut second = service.bind(5001, dscp, storage::<Net>()).ok().unwrap();
-    let mut third = service.bind(5002, dscp, storage::<Net>()).ok().unwrap();
+    let mut first = service
+        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .ok()
+        .unwrap();
+    let mut second = service
+        .bind(5001, dscp, Share::unlimited(0), storage::<Net>())
+        .ok()
+        .unwrap();
+    let mut third = service
+        .bind(5002, dscp, Share::unlimited(0), storage::<Net>())
+        .ok()
+        .unwrap();
     let clock = Box::leak(Box::new(VirtualClock::new()));
     let mut events = ();
     let cx = &mut Context::from_waker(Waker::noop());
@@ -1325,6 +1352,174 @@ fn three_sockets_waiting_for_two_blocks_all_take_turns() {
     };
     let (cause, ()) = run_tasks(clock, service.run(clock, &mut events), drive);
     assert_eq!(cause, EndCause::Stopped);
+}
+
+/// Two sockets, the second's group limited to `limit` and the pool to `BLOCKS`.
+fn pair<B: 'static>(
+    limit: usize,
+    memory: MemoryPolicy,
+) -> (
+    Service<
+        'static,
+        'static,
+        B,
+        SIZE,
+        2,
+        CREDITS,
+        RECEIVED,
+        2,
+        2,
+        DEPTH,
+        RECEIVED,
+        WirePort,
+        Direct,
+    >,
+    [TestSocket<B>; 2],
+    WirePort,
+    WakingSpscSender<'static, (), 1>,
+) {
+    let storage_of_blocks = Box::leak(Box::new([[0; SIZE]; 2]));
+    let (pool, brand) = claim::<B, SIZE, 2>(storage_of_blocks).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let wire = WirePort::default();
+    wire.0.borrow_mut().answers = true;
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service = Service::new(owner, Direct, memory, stopping);
+    let dscp = Dscp::default();
+    let first = service
+        .bind(5000, dscp, Share::unlimited(0), storage::<B>())
+        .ok()
+        .unwrap();
+    let share = Share { group: 1, limit };
+    let second = service
+        .bind(5001, dscp, share, storage::<B>())
+        .ok()
+        .unwrap();
+    (service, [first, second], wire, stop)
+}
+
+#[test]
+fn a_group_past_its_limit_waits_with_blocks_free() {
+    brand!(Net);
+    let (mut service, [_first, mut second], _, stop) = pair::<Net>(1, MemoryPolicy::KEEP);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let held = second.reserve().await.unwrap();
+        assert!(pin!(second.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(
+            pin!(second.reserve()).poll(cx).is_pending(),
+            "one is free, and its limit is one"
+        );
+        second.release(held).ok().unwrap();
+        let again = second.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        again
+    };
+    let (_, block) = run_tasks(clock, service.run(clock, &mut events), drive);
+    drop(block);
+}
+
+#[test]
+fn blocks_an_application_holds_are_never_evicted() {
+    brand!(Net);
+    let evict = MemoryPolicy {
+        evict_after: Some(oer_portable_time::Duration::from_micros(1)),
+    };
+    let (mut service, [mut first, mut second], _, stop) = pair::<Net>(usize::MAX, evict);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let held = [
+            first.reserve().await.unwrap(),
+            first.reserve().await.unwrap(),
+        ];
+        assert!(pin!(second.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(
+            clock
+                .advance(oer_portable_time::Duration::from_secs(5))
+                .is_ok()
+        );
+        settle().await;
+        assert!(
+            pin!(second.reserve()).poll(cx).is_pending(),
+            "the block stays"
+        );
+        stop.try_send(()).ok().unwrap();
+        held
+    };
+    let _ = run_tasks(clock, service.run(clock, &mut events), drive);
+}
+
+#[test]
+fn a_received_datagram_counts_toward_its_group() {
+    brand!(Net);
+    let (mut service, [_first, mut second], wire, stop) = pair::<Net>(1, MemoryPolicy::KEEP);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.incoming.push_back(udp_frame(5001, b"held"));
+            wire.wake();
+        }
+        let datagram = second.receive().await.unwrap();
+        assert!(pin!(second.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(
+            pin!(second.reserve()).poll(cx).is_pending(),
+            "the one it may hold is the one it received"
+        );
+        second.release(datagram.block).ok().unwrap();
+        let block = second.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        block
+    };
+    let (_, block) = run_tasks(clock, service.run(clock, &mut events), drive);
+    drop(block);
+}
+
+#[test]
+fn pressure_takes_the_oldest_and_leaves_the_younger() {
+    brand!(Net);
+    let evict = MemoryPolicy {
+        evict_after: Some(oer_portable_time::Duration::from_secs(1)),
+    };
+    let (mut service, [mut first, mut second], wire, stop) = pair::<Net>(usize::MAX, evict);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        wire.0.borrow_mut().full = true;
+        let older = first.reserve().await.unwrap();
+        let older = first.send(peer(), older).ok().unwrap();
+        settle().await;
+        clock
+            .advance(oer_portable_time::Duration::from_millis(600))
+            .unwrap();
+        let younger = first.reserve().await.unwrap();
+        let younger = first.send(peer(), younger).ok().unwrap();
+        settle().await;
+        assert!(pin!(second.reserve()).poll(cx).is_pending());
+        settle().await;
+        // The older is 0.7 s old, so the policy waits; time alone wakes it.
+        let block = second.reserve().await.unwrap();
+        assert_eq!(
+            older.take().ok(),
+            Some(Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure)))
+        );
+        let younger = younger.take().err().expect("the younger stays");
+        stop.try_send(()).ok().unwrap();
+        (block, younger)
+    };
+    let (_, (block, _younger)) = run_tasks(clock, service.run(clock, &mut events), drive);
+    drop(block);
 }
 
 #[test]

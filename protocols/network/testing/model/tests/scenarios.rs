@@ -1,6 +1,7 @@
 //! The real sockets, service, core and policy on one shared medium.
 
 use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, VecDeque};
 use std::future::Future;
 use std::num::NonZeroU32;
 use std::pin::Pin;
@@ -11,14 +12,15 @@ use std::task::{Context, Wake, Waker};
 
 use embassy_futures::select::select;
 use oer_portable_memory::WakingSpscSender;
-use oer_portable_time::{Clock, Instant, Timer};
+use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
 use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, RadioNotice};
-use oer_protocols_network_core::{Block, Interface, NetworkOwner, Remote, claim};
+use oer_protocols_network_core::{Block, Interface, NetworkOwner, Outcome, Remote, claim};
 use oer_protocols_network_port::{Egress, FrameSource};
 use oer_protocols_network_runtime::{
-    Direct, EndCause, Ended, Service, Socket, SocketLanes, StopLane,
+    Direct, EndCause, Ended, MemoryPolicy, Observer, Sent, Service, Share, Socket, SocketLanes,
+    StopLane,
 };
 use oer_protocols_network_testing_model::{Medium, PeerKey, PeerSpec, Spent};
 use oer_protocols_network_wire::ip::Dscp;
@@ -119,6 +121,9 @@ fn interface() -> Interface {
 struct Flow {
     port: u16,
     to: [u8; 4],
+    share: Share,
+    /// When it starts.
+    after: u64,
 }
 
 /// Something that happens at a time.
@@ -198,26 +203,50 @@ fn run_tasks(
     panic!("{PASSES} passes without an end: a task spins");
 }
 
-/// Send to `flow` for as long as the socket lasts, and return all blocks left.
-async fn flood<B>(mut socket: Sock<B>, flow: Flow, left: &RefCell<Vec<Block<'static, B, SIZE>>>) {
+/// Send to `flow` for as long as the socket lasts, count what was evicted, and
+/// return all blocks left.
+async fn flood<B>(
+    mut socket: Sock<B>,
+    flow: Flow,
+    left: &RefCell<Vec<Block<'static, B, SIZE>>>,
+    evicted: &RefCell<BTreeMap<u16, u64>>,
+    clock: &VirtualClock,
+) {
+    let start = clock.now().as_micros() + flow.after;
+    clock.wait_until(Instant::from_micros(start)).await;
     let remote = Remote {
         address: flow.to,
         port: 7,
     };
+    let tally = |sent: Sent| {
+        if matches!(sent, Sent::Ended(Outcome::Evicted(_))) {
+            *evicted.borrow_mut().entry(flow.port).or_default() += 1;
+        }
+    };
+    let mut pending: VecDeque<Observer<'static>> = VecDeque::new();
     while let Ok(mut block) = socket.reserve().await {
         block.fill(&[0; PAYLOAD]).unwrap();
+        if pending.len() == CREDITS
+            && let Some(mut oldest) = pending.pop_front()
+        {
+            oldest.finished().await;
+            tally(oldest.take().unwrap());
+        }
         if socket.credit().await.is_err() {
             left.borrow_mut().push(block);
             break;
         }
         match socket.send(remote, block) {
-            // No one reads this result: the credit frees when the frame goes.
-            Ok(observer) => drop(observer),
+            Ok(observer) => pending.push_back(observer),
             Err(refused) => {
                 left.borrow_mut().push(refused.block);
                 break;
             }
         }
+    }
+    while let Some(mut observer) = pending.pop_front() {
+        observer.finished().await;
+        tally(observer.take().unwrap());
     }
     while !socket.closed() {
         embassy_futures::yield_now().await;
@@ -230,6 +259,8 @@ async fn flood<B>(mut socket: Sock<B>, flow: Flow, left: &RefCell<Vec<Block<'sta
 struct Report<B: 'static, E: Egress<u32, Notice>, const N: usize> {
     ended: Run<B, E, N>,
     marks: Vec<Vec<Spent>>,
+    /// Datagrams evicted, by the flow's port.
+    evicted: BTreeMap<u16, u64>,
     /// Every datagram a client still held is back in the pool.
     outstanding: usize,
 }
@@ -241,6 +272,7 @@ struct Scenario<'s> {
     script: Vec<(u64, At)>,
     /// Cancel `run` at this time, and retire.
     cancel_at: Option<u64>,
+    memory: MemoryPolicy,
 }
 
 fn clock() -> &'static VirtualClock {
@@ -254,6 +286,7 @@ fn scenario<'s>(medium: &'s Medium, flows: &'s [Flow], script: Vec<(u64, At)>) -
         flows,
         script,
         cancel_at: None,
+        memory: MemoryPolicy::KEEP,
     }
 }
 
@@ -269,6 +302,7 @@ impl Scenario<'_> {
             flows,
             script,
             cancel_at,
+            memory,
         } = self;
         let (stop, stopping): (Stopper, _) = Box::leak(Box::new(StopLane::new())).split();
         let mut service: Service<
@@ -285,18 +319,19 @@ impl Scenario<'_> {
             LANE,
             Medium,
             E,
-        > = Service::new(owner, egress, stopping);
+        > = Service::new(owner, egress, memory, stopping);
         let left = RefCell::new(Vec::new());
+        let evicted = RefCell::new(BTreeMap::new());
         let ended = Rc::new(RefCell::new(None));
         let marks = RefCell::new(Vec::new());
         let mut tasks: Vec<Task<'_>> = Vec::new();
         for flow in flows {
             let storage = Box::leak(Box::new(SocketLanes::new()));
             let socket = service
-                .bind(flow.port, Dscp::default(), storage)
+                .bind(flow.port, Dscp::default(), flow.share, storage)
                 .ok()
                 .unwrap();
-            tasks.push(Box::pin(flood(socket, *flow, &left)));
+            tasks.push(Box::pin(flood(socket, *flow, &left, &evicted, clock)));
         }
         let keep = ended.clone();
         tasks.push(Box::pin(async move {
@@ -343,6 +378,7 @@ impl Scenario<'_> {
         Report {
             ended,
             marks: marks.take(),
+            evicted: evicted.take(),
             outstanding,
         }
     }
@@ -353,10 +389,13 @@ fn airs(spent: &[Spent]) -> Vec<u64> {
 }
 
 fn flows(to: &[(u16, PeerSpec)]) -> Vec<Flow> {
-    to.iter()
-        .map(|(port, peer)| Flow {
+    (0_u8..)
+        .zip(to)
+        .map(|(group, (port, peer))| Flow {
             port: *port,
             to: peer.address,
+            share: Share::unlimited(group),
+            after: 0,
         })
         .collect()
 }
@@ -517,23 +556,117 @@ fn an_exhausted_pool_starves_no_flow() {
     assert_eq!(report.outstanding, 0);
 }
 
-/// A limit, not a promise: nothing evicts a datagram waiting for a peer that
-/// sleeps, so flows to it can hold every block until it wakes. Nothing is lost.
-#[test]
-fn flows_to_a_sleeper_hold_the_whole_pool_until_it_wakes() {
-    struct Net;
-    let peers = [peer(1, FAST), peer(2, FAST)];
-    let medium = medium(&peers);
-    let flows = flows(&[(5000, peers[0]), (5001, peers[0]), (5002, peers[1])]);
-    let script = vec![
+/// Two flows to the first peer in one group, and to the other peer a flow that
+/// starts only after those filled the pool, while that peer sleeps.
+fn to_a_sleeper(peers: &[PeerSpec; 2], limit: usize) -> [Flow; 3] {
+    let flow = |port, peer: PeerSpec, group, limit, after| Flow {
+        port,
+        to: peer.address,
+        share: Share { group, limit },
+        after,
+    };
+    [
+        flow(5000, peers[0], 0, limit, 0),
+        flow(5001, peers[0], 0, limit, 0),
+        flow(5002, peers[1], 1, usize::MAX, 50_000),
+    ]
+}
+
+/// The peer asleep for a second, and two marks around it, and a second after.
+fn a_second_asleep() -> Vec<(u64, At)> {
+    vec![
         (1_000, At::Sleep(0, true)),
         (100_000, At::Mark),
         (SECOND, At::Mark),
         (SECOND, At::Sleep(0, false)),
         (2 * SECOND, At::Mark),
         (2 * SECOND, At::Stop),
-    ];
-    let report = scenario(&medium, &flows, script)
+    ]
+}
+
+#[test]
+fn a_limit_keeps_a_sleepers_flows_to_their_share_of_the_pool() {
+    struct Net;
+    let peers = [peer(1, FAST), peer(2, FAST)];
+    let medium = medium(&peers);
+    let flows = to_a_sleeper(&peers, CREDITS);
+    let report = scenario(&medium, &flows, a_second_asleep())
+        .run(owner::<Net, { 2 * CREDITS }>(&medium), fair(&medium));
+    let [start, end, after] = &report.marks[..] else {
+        panic!();
+    };
+    assert!(
+        end[1].since(start[1]).frames > 100,
+        "the awake peer went on"
+    );
+    assert!(
+        after[0].since(end[0]).frames > 100,
+        "and so did the sleeper"
+    );
+    assert!(report.evicted.is_empty(), "{:?}", report.evicted);
+    assert_eq!(report.outstanding, 0);
+}
+
+#[test]
+fn pressure_evicts_the_oldest_of_whoever_holds_most() {
+    struct Net;
+    let peers = [peer(1, FAST), peer(2, FAST)];
+    let medium = medium(&peers);
+    let flows = to_a_sleeper(&peers, usize::MAX);
+    let mut run = scenario(&medium, &flows, a_second_asleep());
+    run.memory = MemoryPolicy {
+        evict_after: Some(Duration::from_millis(50)),
+    };
+    let report = run.run(owner::<Net, { 2 * CREDITS }>(&medium), fair(&medium));
+    let [start, end, after] = &report.marks[..] else {
+        panic!();
+    };
+    assert!(
+        end[1].since(start[1]).frames > 100,
+        "the awake peer went on"
+    );
+    assert!(
+        after[0].since(end[0]).frames > 100,
+        "and so did the sleeper"
+    );
+    let of_sleeper: u64 = [5000, 5001]
+        .iter()
+        .filter_map(|port| report.evicted.get(port))
+        .sum();
+    assert!(of_sleeper > 0, "{:?}", report.evicted);
+    assert_eq!(
+        report.evicted.get(&5002),
+        None,
+        "the awake peer loses nothing"
+    );
+    assert_eq!(report.outstanding, 0);
+}
+
+#[test]
+fn an_exhausted_pool_evicts_nothing_while_all_can_move() {
+    struct Net;
+    let peers = [peer(1, FAST), peer(2, FAST)];
+    let medium = medium(&peers);
+    let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
+    let mut run = scenario(&medium, &flows, vec![(SECOND, At::Stop)]);
+    run.memory = MemoryPolicy {
+        evict_after: Some(Duration::from_millis(50)),
+    };
+    let report = run.run(owner::<Net, 2>(&medium), fair(&medium));
+    assert!(report.evicted.is_empty(), "{:?}", report.evicted);
+    let air = airs(&medium.spent());
+    assert!(air[0].abs_diff(air[1]) <= FAIR_TO, "{air:?}");
+}
+
+/// With neither limit nor eviction, flows to a peer that sleeps keep every block
+/// they took until it wakes. Nothing is lost.
+#[test]
+fn with_neither_guard_flows_to_a_sleeper_hold_the_pool_until_it_wakes() {
+    struct Net;
+    let peers = [peer(1, FAST), peer(2, FAST)];
+    let medium = medium(&peers);
+    let flows = to_a_sleeper(&peers, usize::MAX);
+    let report = scenario(&medium, &flows, a_second_asleep())
         .run(owner::<Net, { 2 * CREDITS }>(&medium), fair(&medium));
     let [start, end, after] = &report.marks[..] else {
         panic!();
@@ -543,6 +676,22 @@ fn flows_to_a_sleeper_hold_the_whole_pool_until_it_wakes() {
         after[1].since(end[1]).frames > 100,
         "and goes on: {after:?}"
     );
+    assert_eq!(report.outstanding, 0);
+}
+
+#[test]
+fn a_group_holding_little_goes_first_when_blocks_are_scarce() {
+    struct Net;
+    let peers = [peer(1, FAST), peer(2, FAST)];
+    let medium = medium(&peers);
+    let list = flows(&[(5000, peers[0]), (5001, peers[0]), (5002, peers[1])]);
+    let script = a_second_asleep();
+    let report =
+        scenario(&medium, &list, script).run(owner::<Net, { 2 * CREDITS }>(&medium), fair(&medium));
+    let [start, end, _] = &report.marks[..] else {
+        panic!();
+    };
+    assert!(end[1].since(start[1]).frames > 100, "{end:?}");
     assert_eq!(report.outstanding, 0);
 }
 
@@ -689,6 +838,7 @@ fn a_cancelled_run_hands_every_owner_to_the_next_service() {
         flows: &flow_list,
         script: Vec::new(),
         cancel_at: Some(SECOND),
+        memory: MemoryPolicy::KEEP,
     };
     let report = first.run(owner::<Net, BLOCKS>(&medium), fair(&medium));
     assert_eq!(report.ended.cause, EndCause::Stopped);
@@ -708,6 +858,7 @@ fn a_cancelled_run_hands_every_owner_to_the_next_service() {
         flows: &flow_list,
         script: vec![(SECOND, At::Stop)],
         cancel_at: None,
+        memory: MemoryPolicy::KEEP,
     };
     let mut report = second.run(owner, egress);
     assert_eq!(

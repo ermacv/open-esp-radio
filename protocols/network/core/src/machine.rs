@@ -128,6 +128,26 @@ pub struct SocketId<B> {
     brand: Tag<B>,
 }
 
+impl<B> SocketId<B> {
+    /// The flow this socket's work carries.
+    pub const fn flow(&self) -> u8 {
+        self.index
+    }
+}
+
+/// A datagram accepted and not yet taken by the port, which only this can
+/// evict. What the port took, an application's blocks and a socket's received
+/// data are never here.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Queued<B> {
+    pub flow: u8,
+    /// When it was accepted.
+    pub since: Instant,
+    place: u8,
+    serial: u64,
+    brand: Tag<B>,
+}
+
 /// A running command's right to its one result.
 #[derive(Debug, Eq, PartialEq)]
 pub struct CommandId<B> {
@@ -153,6 +173,15 @@ pub enum Outcome {
     Unknown,
     /// The core retired before the port accepted it.
     Retired,
+    /// The stack took it back before the port accepted it.
+    Evicted(Eviction),
+}
+
+/// Why accepted work was taken back.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Eviction {
+    /// Others wait for memory that this was holding.
+    MemoryPressure,
 }
 
 /// What became of a command.
@@ -237,6 +266,7 @@ pub enum NetEvent {
 struct Sending<'m, B, const SIZE: usize> {
     remote: Remote,
     block: Block<'m, B, SIZE>,
+    since: Instant,
     /// The neighbor it goes through; broadcast has none. Its station address
     /// is read when the frame is built, so a change reaches a waiting datagram.
     hop: Option<[u8; 4]>,
@@ -509,7 +539,12 @@ impl<
         };
         place.observed = true;
         place.serial = serial;
-        place.run = Run::Sending(Sending { remote, block, hop });
+        place.run = Run::Sending(Sending {
+            remote,
+            block,
+            since: now,
+            hop,
+        });
         Ok(CommandId {
             socket: socket.index,
             place: number,
@@ -534,6 +569,56 @@ impl<
         } else {
             CommandState::Running(command)
         }
+    }
+
+    /// Every datagram [`Self::evict`] can take back.
+    pub fn queued(&self) -> impl Iterator<Item = Queued<B>> + '_ {
+        let brand = self.brand;
+        (0_u8..)
+            .zip(self.sockets.iter())
+            .flat_map(move |(flow, socket)| {
+                (0_u8..)
+                    .zip(socket.places.iter())
+                    .filter_map(move |(place, entry)| match &entry.run {
+                        Run::Sending(sending) => Some(Queued {
+                            flow,
+                            since: sending.since,
+                            place,
+                            serial: entry.serial,
+                            brand,
+                        }),
+                        _ => None,
+                    })
+            })
+    }
+
+    /// Take `queued` back: its block returns to `pool`, and its command ends
+    /// [`Outcome::Evicted`]. Whether it was still queued.
+    pub fn evict<const BLOCKS: usize>(
+        &mut self,
+        queued: Queued<B>,
+        eviction: Eviction,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) -> bool {
+        let Some(place) = self
+            .sockets
+            .get_mut(usize::from(queued.flow))
+            .and_then(|socket| socket.places.get_mut(usize::from(queued.place)))
+            .filter(|place| place.serial == queued.serial)
+        else {
+            return false;
+        };
+        if !matches!(place.run, Run::Sending(_)) {
+            return false;
+        }
+        if let Run::Sending(sending) = core::mem::replace(&mut place.run, Run::Free) {
+            pool.give(sending.block);
+        }
+        place.finish(Outcome::Evicted(eviction));
+        let sockets = &self.sockets;
+        self.neighbors
+            .forget_unneeded(|address| sockets.iter().any(|socket| socket.needs(address)));
+        true
     }
 
     /// Nobody will read this command's result. A finished command's place

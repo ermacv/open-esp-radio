@@ -6,7 +6,7 @@ use core::task::Poll;
 
 use embassy_futures::select::{select, select3};
 use oer_portable_memory::{AtomicWaker, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
-use oer_protocols_network_core::{Block, Datagram, Outcome, Pool, Remote, SendRefusal};
+use oer_protocols_network_core::{Block, Datagram, Eviction, Outcome, Pool, Remote, SendRefusal};
 
 /// The answers a socket can be owed at once: a block, a close and a stop.
 const ANSWERS: usize = 3;
@@ -47,7 +47,7 @@ pub enum Sent {
 }
 
 /// Every [`Sent`], at the word [`word_of`] gives it, less [`FIRST_RESULT`].
-const RESULTS: [Sent; 11] = [
+const RESULTS: [Sent; 12] = [
     Sent::Refused(SendRefusal::Stale),
     Sent::Refused(SendRefusal::NoPlace),
     Sent::Refused(SendRefusal::TooLong),
@@ -59,6 +59,7 @@ const RESULTS: [Sent; 11] = [
     Sent::Ended(Outcome::SocketClosed),
     Sent::Ended(Outcome::Unknown),
     Sent::Ended(Outcome::Retired),
+    Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure)),
 ];
 
 /// A place's command runs, and its observer may wait.
@@ -82,6 +83,7 @@ const fn word_of(sent: Sent) -> u32 {
         Sent::Ended(Outcome::SocketClosed) => 10,
         Sent::Ended(Outcome::Unknown) => 11,
         Sent::Ended(Outcome::Retired) => 12,
+        Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure)) => 13,
     }
 }
 
