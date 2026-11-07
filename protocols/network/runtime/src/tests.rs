@@ -1164,16 +1164,14 @@ fn a_run_that_ended_serves_no_more() {
     returned(&mut ended, &mut socket);
 }
 
-#[test]
-fn a_retirement_ends_a_full_lane_wait() {
-    brand!(Net);
+fn a_service_end_ends_a_full_lane_wait<B: 'static>(end: impl FnOnce(TestService<B>)) {
     let Bench {
         mut service,
         mut socket,
         wire,
         clock,
         ..
-    } = bench::<Net>();
+    } = bench::<B>();
     let mut events = ();
     let mut blocks = {
         let mut run = pin!(service.run(clock, &mut events));
@@ -1190,12 +1188,23 @@ fn a_retirement_ends_a_full_lane_wait() {
     let room_cx = &mut Context::from_waker(&room_waker);
     let mut room = pin!(socket.room());
     assert!(room.as_mut().poll(room_cx).is_pending());
-    let ended = service.retire();
+    end(service);
     assert!(roomy.0.load(Ordering::SeqCst) >= 1, "the end wakes room");
     assert_eq!(room.as_mut().poll(room_cx), Poll::Ready(Err(SocketClosed)));
     assert_eq!(first.take().ok(), Some(Sent::Ended(Outcome::Retired)));
     assert_eq!(second.take().ok(), Some(Sent::Ended(Outcome::Retired)));
-    drop(ended);
+}
+
+#[test]
+fn a_retirement_ends_a_full_lane_wait() {
+    brand!(Net);
+    a_service_end_ends_a_full_lane_wait::<Net>(|service| drop(service.retire()));
+}
+
+#[test]
+fn a_dropped_service_ends_a_full_lane_wait() {
+    brand!(Net);
+    a_service_end_ends_a_full_lane_wait::<Net>(drop);
 }
 
 #[test]
