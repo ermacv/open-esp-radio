@@ -106,7 +106,7 @@ jobs:
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))
-              | select(.manifest_path | test("/chips/(esp32s31/(board|bootstrap)|family/staged-(runtime|bootstrap))/") | not) | "-p " + .name')
+              | select(.manifest_path | test("/chips/(esp32s31/platform/(board|bootstrap)|family/platform/(runtime|bootstrap))/") | not) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # Firmware chip APIs are checked separately from host packages.
@@ -118,7 +118,7 @@ jobs:
           # with their cfgs, as `cargo fw` builds it.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/platform/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/examples/|/hil/images/|/chips/(esp32s31/platform/(board|bootstrap)|family/platform/(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
@@ -154,7 +154,7 @@ jobs:
           # The clippy step checks the instrumented images, with their cfgs.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/platform/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/examples/|/hil/images/|/chips/(esp32s31/platform/(board|bootstrap)|family/platform/(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }

@@ -1209,7 +1209,7 @@ impl RxProgram {
             measurement: cal.minimum_request.measurement,
             shared_radio: cal.request.shared_radio,
             radio_stage: cal.request.stage == PhyRxDcCalibrationStage::Radio,
-            fine_code: self.cursor.fine,
+            fine_code: self.cursor.fine.map(dc::FinePosition::get),
             high_level: self.cursor.high,
             frequency_code: self.health_frequency,
         })
