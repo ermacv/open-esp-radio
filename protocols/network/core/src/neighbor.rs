@@ -31,7 +31,7 @@ pub(crate) enum Entry {
 /// What is known of an address.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Lookup {
-    Known([u8; 6]),
+    Known,
     Asking,
     /// Every entry is being asked for, so this one cannot be.
     Full,
@@ -50,20 +50,36 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
-    /// Find `address`, or begin asking for it, in a free or the oldest known
-    /// entry.
+    /// Where `address` is, while that is known.
+    pub(crate) fn hardware(&self, now: Instant, address: [u8; 4]) -> Option<[u8; 6]> {
+        self.entries.iter().find_map(|entry| match *entry {
+            Entry::Known {
+                address: known,
+                hardware,
+                expires,
+            } if known == address && now < expires => Some(hardware),
+            _ => None,
+        })
+    }
+
+    /// Find `address`, or begin asking for it: in its own expired entry, a
+    /// free one, or the one that expires first.
     pub(crate) fn resolve(&mut self, now: Instant, address: [u8; 4]) -> Lookup {
         let mut oldest: Option<(usize, Instant)> = None;
         let mut free = None;
+        let mut own = None;
         for (index, entry) in self.entries.iter().enumerate() {
             match *entry {
                 Entry::Known {
                     address: known,
-                    hardware,
                     expires,
+                    ..
                 } => {
-                    if known == address && now < expires {
-                        return Lookup::Known(hardware);
+                    if known == address {
+                        if now < expires {
+                            return Lookup::Known;
+                        }
+                        own = Some(index);
                     }
                     if oldest.is_none_or(|(_, at)| expires < at) {
                         oldest = Some((index, expires));
@@ -76,7 +92,8 @@ impl<const N: usize> Neighbors<N> {
                 Entry::Free => free = free.or(Some(index)),
             }
         }
-        let Some(entry) = free
+        let Some(entry) = own
+            .or(free)
             .or(oldest.map(|(index, _)| index))
             .and_then(|index| self.entries.get_mut(index))
         else {
@@ -93,14 +110,7 @@ impl<const N: usize> Neighbors<N> {
 
     /// Note `address` at `hardware`. An entry is made only when `make`: RFC
     /// 826 merges what it knows, and adds only when the packet was for us.
-    /// Whether an entry was being asked for.
-    pub(crate) fn learn(
-        &mut self,
-        now: Instant,
-        address: [u8; 4],
-        hardware: [u8; 6],
-        make: bool,
-    ) -> bool {
+    pub(crate) fn learn(&mut self, now: Instant, address: [u8; 4], hardware: [u8; 6], make: bool) {
         let known = Entry::Known {
             address,
             hardware,
@@ -108,13 +118,11 @@ impl<const N: usize> Neighbors<N> {
         };
         for entry in &mut self.entries {
             match *entry {
-                Entry::Asking { address: asked, .. } if asked == address => {
+                Entry::Asking { address: held, .. } | Entry::Known { address: held, .. }
+                    if held == address =>
+                {
                     *entry = known;
-                    return true;
-                }
-                Entry::Known { address: held, .. } if held == address => {
-                    *entry = known;
-                    return false;
+                    return;
                 }
                 _ => {}
             }
@@ -122,15 +130,14 @@ impl<const N: usize> Neighbors<N> {
         if make && let Some(entry) = self.entries.iter_mut().find(|entry| **entry == Entry::Free) {
             *entry = known;
         }
-        false
     }
 
-    /// The request owed next, by its entry.
-    pub(crate) fn owed_request(&self) -> Option<(u8, [u8; 4])> {
+    /// The requests owed, by their entries.
+    pub(crate) fn owed_requests(&self) -> impl Iterator<Item = (u8, [u8; 4])> + '_ {
         self.entries
             .iter()
             .enumerate()
-            .find_map(|(index, entry)| match *entry {
+            .filter_map(|(index, entry)| match *entry {
                 Entry::Asking {
                     address,
                     owed: true,
