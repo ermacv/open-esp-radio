@@ -11,11 +11,11 @@
 //! entries borrow the session's Wi-Fi owner.
 
 use oer_chips_esp32s31_hal::{
-    domain::{CommonPower, RadioDomain, WifiClient},
-    ieee80211::client::{WifiClocksOn, WifiCold},
-    owner::RadioAccess,
     power::ChipClocks,
-    root::Root,
+    radio::domain::{CommonPower, RadioDomain, WifiClient},
+    radio::ieee80211::client::{WifiClocksOn, WifiCold},
+    system::owner::RadioAccess,
+    system::root::Root,
 };
 use oer_portable_memory::ClaimCell;
 
@@ -46,7 +46,7 @@ fn start_session() -> u32 {
     #[cfg(target_arch = "riscv32")]
     let identity = phy_identity();
     #[cfg(not(target_arch = "riscv32"))]
-    let identity = oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test();
+    let identity = oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity::for_host_test();
     let clocks = runtime.clocks;
     let (mut radio, partitions) = match runtime.radio.split::<ChipClocks, _>((), identity) {
         Ok(split) => split,
@@ -158,24 +158,25 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
 }
 #[cfg(target_arch = "riscv32")]
 static PHY_FAULT: oer_portable_memory::OnceValue<
-    oer_chips_esp32s31_hal::domain::transaction::Fault,
+    oer_chips_esp32s31_hal::radio::domain::transaction::Fault,
 > = oer_portable_memory::OnceValue::new();
 #[cfg(target_arch = "riscv32")]
-fn report_phy_fault(fault: oer_chips_esp32s31_hal::domain::transaction::Fault) -> ! {
+fn report_phy_fault(fault: oer_chips_esp32s31_hal::radio::domain::transaction::Fault) -> ! {
     let _first = PHY_FAULT.set(fault);
     probe_halt()
 }
 #[cfg(target_arch = "riscv32")]
 oer_chips_esp32s31_hal::phy_fault_reporter!(report_phy_fault);
 #[cfg(target_arch = "riscv32")]
-static PHY_SEAT: oer_chips_esp32s31_hal::domain::transaction::TransactionSeat =
-    oer_chips_esp32s31_hal::domain::transaction::TransactionSeat::new();
+static PHY_SEAT: oer_chips_esp32s31_hal::radio::domain::transaction::TransactionSeat =
+    oer_chips_esp32s31_hal::radio::domain::transaction::TransactionSeat::new();
 #[cfg(target_arch = "riscv32")]
-fn phy_identity() -> oer_chips_esp32s31_hal::domain::transaction::PhyIdentity {
+fn phy_identity() -> oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity {
     match PHY_SEAT.claim() {
         Some(identity) => identity,
-        None => report_phy_fault(oer_chips_esp32s31_hal::domain::transaction::Fault {
-            reason: oer_chips_esp32s31_hal::domain::transaction::FaultReason::IdentityClaimed,
+        None => report_phy_fault(oer_chips_esp32s31_hal::radio::domain::transaction::Fault {
+            reason:
+                oer_chips_esp32s31_hal::radio::domain::transaction::FaultReason::IdentityClaimed,
             registration: None,
         }),
     }

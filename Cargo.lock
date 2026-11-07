@@ -1392,9 +1392,9 @@ dependencies = [
  "embassy-net",
  "embassy-time",
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-wifi",
+ "oer-chips-esp32s31-radio-ieee80211-station",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-app",
  "oer-chips-family-boot",
  "oer-chips-family-executor",
@@ -1416,30 +1416,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-esp32s31-bluetooth-driver"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "critical-section",
- "embassy-futures",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-phy",
- "oer-chips-esp32s31-radio-client",
- "oer-chips-family-bluetooth-engine",
- "oer-chips-family-interrupt-table",
- "oer-portable-memory",
- "oer-portable-sync",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-portable-waker",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-bluetooth-le-wire",
- "oer-protocols-radio-port",
- "oer-tools-test-ui-cases",
- "tempfile",
-]
-
-[[package]]
 name = "oer-chips-esp32s31-board"
 version = "0.1.0"
 dependencies = [
@@ -1449,50 +1425,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-esp32s31-boot"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-family-boot",
- "oer-chips-family-facts",
- "oer-chips-family-staged-bootstrap",
- "oer-portable-time",
-]
-
-[[package]]
 name = "oer-chips-esp32s31-bootstrap"
 version = "0.1.0"
 dependencies = [
- "oer-chips-esp32s31-boot",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-layout",
  "oer-chips-family-boot",
  "oer-chips-family-facts",
  "oer-chips-family-staged-bootstrap",
- "static_cell",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-compose"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "embedded-io-async",
- "oer-chips-esp32s31-crypto",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-phy",
- "oer-chips-family-boot",
- "oer-chips-family-executor",
- "oer-chips-family-interrupt-table",
- "oer-chips-family-platform-port",
- "oer-chips-family-staged-runtime",
- "oer-chips-family-usb-serial-jtag",
- "oer-portable-diagnostics",
- "oer-portable-embassy-time",
- "oer-portable-memory",
- "oer-portable-riscv",
  "oer-portable-time",
- "oer-portable-trace",
  "static_cell",
 ]
 
@@ -1545,14 +1486,75 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-esp32s31-ieee80211-driver"
+name = "oer-chips-esp32s31-knowledge"
+version = "0.1.0"
+
+[[package]]
+name = "oer-chips-esp32s31-layout"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-family-facts",
+ "oer-chips-family-staged-layout",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-pac"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "oer-chips-family-analog",
+ "oer-portable-memory",
+ "oer-portable-mmio",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-radio-bluetooth-driver"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "critical-section",
+ "embassy-futures",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-phy",
+ "oer-chips-family-bluetooth-engine",
+ "oer-chips-family-interrupt-table",
+ "oer-portable-memory",
+ "oer-portable-sync",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-waker",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-bluetooth-le-wire",
+ "oer-protocols-radio-port",
+ "oer-tools-test-ui-cases",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-radio-client"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-radio-phy",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-regulatory",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-radio-ieee80211-driver"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "heapless",
  "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-phy",
  "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-coex",
  "oer-chips-family-ieee80211-policy",
  "oer-chips-family-interrupt-table",
@@ -1581,120 +1583,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-esp32s31-ieee802154-driver"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-knowledge",
- "oer-chips-family-coex",
- "oer-chips-family-ieee802154-engine",
- "oer-chips-family-ieee802154-mac-values",
- "oer-chips-family-interrupt-table",
- "oer-portable-mmio",
- "oer-protocols-ieee802154-port",
- "oer-protocols-radio-regulatory",
- "oer-tools-test-ui-cases",
- "tempfile",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-instrumentation"
-version = "0.1.0"
-dependencies = [
- "postcard-schema",
- "serde",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-knowledge"
-version = "0.1.0"
-
-[[package]]
-name = "oer-chips-esp32s31-layout"
-version = "0.1.0"
-dependencies = [
- "oer-chips-family-facts",
- "oer-chips-family-staged-layout",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-pac"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oer-chips-family-analog",
- "oer-portable-memory",
- "oer-portable-mmio",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-phy"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-family-analog",
- "oer-chips-family-ieee802154-engine",
- "oer-chips-family-interrupt-table",
- "oer-chips-family-phy",
- "oer-portable-cooperate",
- "oer-portable-diagnostics",
- "oer-portable-memory",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "pin-project-lite",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-radio-client"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-phy",
- "oer-portable-diagnostics",
- "oer-portable-memory",
- "oer-portable-time",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-wire",
- "oer-protocols-radio-regulatory",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-radio-system"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-phy",
- "oer-chips-esp32s31-radio-client",
- "oer-chips-family-coex",
- "oer-portable-cooperate",
- "oer-portable-diagnostics",
- "oer-portable-memory",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-portable-trace",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-wire",
- "oer-protocols-radio-regulatory",
- "pin-project-lite",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-wifi"
+name = "oer-chips-esp32s31-radio-ieee80211-station"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embassy-futures",
  "heapless",
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-ieee80211-driver",
- "oer-chips-esp32s31-phy",
  "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-ieee80211-driver",
+ "oer-chips-esp32s31-radio-phy",
  "oer-chips-esp32s31-radio-system",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-coex",
  "oer-chips-family-executor",
  "oer-chips-family-ieee80211-policy",
@@ -1720,6 +1621,86 @@ dependencies = [
  "oer-protocols-radio-regulatory",
  "static_cell",
  "zeroize",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-radio-ieee802154-driver"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-knowledge",
+ "oer-chips-family-coex",
+ "oer-chips-family-ieee802154-engine",
+ "oer-chips-family-ieee802154-mac-values",
+ "oer-chips-family-interrupt-table",
+ "oer-portable-mmio",
+ "oer-protocols-ieee802154-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-radio-phy"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-hal",
+ "oer-chips-family-analog",
+ "oer-chips-family-ieee802154-engine",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-phy",
+ "oer-portable-cooperate",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-radio-system"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-phy",
+ "oer-chips-family-coex",
+ "oer-portable-cooperate",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-trace",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-regulatory",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-runtime"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "embedded-io-async",
+ "oer-chips-esp32s31-crypto",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-radio-phy",
+ "oer-chips-family-boot",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-staged-runtime",
+ "oer-chips-family-usb-serial-jtag",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-portable-trace",
+ "static_cell",
 ]
 
 [[package]]
@@ -1807,7 +1788,7 @@ dependencies = [
 name = "oer-chips-family-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
- "oer-chips-esp32s31-ieee80211-driver",
+ "oer-chips-esp32s31-radio-ieee80211-driver",
  "oer-portable-time",
  "oer-portable-wire",
  "oer-protocols-ieee80211-contracts-port",
@@ -1964,7 +1945,7 @@ version = "0.1.0"
 dependencies = [
  "embassy-futures",
  "oer",
- "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-staged-runtime",
  "oer-portable-diagnostics",
  "oer-portable-memory",
@@ -2014,10 +1995,10 @@ dependencies = [
  "ccm",
  "cmac",
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-crypto",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-layout",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-executor",
  "oer-chips-family-interrupt-table",
  "oer-chips-family-staged-runtime",
@@ -2034,9 +2015,9 @@ name = "oer-hil-probes-esp32s31-boot-smoke"
 version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-layout",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-executor",
  "oer-chips-family-interrupt-table",
  "oer-chips-family-staged-runtime",
@@ -2062,9 +2043,9 @@ name = "oer-hil-probes-esp32s31-light-sleep"
 version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-layout",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-executor",
  "oer-chips-family-interrupt-table",
  "oer-chips-family-platform-port",
@@ -2082,9 +2063,9 @@ name = "oer-hil-probes-esp32s31-mcycle"
 version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-layout",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-executor",
  "oer-chips-family-interrupt-table",
  "oer-chips-family-platform-port",
@@ -2100,9 +2081,9 @@ name = "oer-hil-probes-esp32s31-peer-overdue"
 version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-layout",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-executor",
  "oer-chips-family-interrupt-table",
  "oer-chips-family-staged-runtime",
@@ -2117,11 +2098,11 @@ name = "oer-hil-probes-esp32s31-radio"
 version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-ieee80211-driver",
  "oer-chips-esp32s31-layout",
- "oer-chips-esp32s31-phy",
+ "oer-chips-esp32s31-radio-ieee80211-driver",
+ "oer-chips-esp32s31-radio-phy",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-boot",
  "oer-chips-family-coex",
  "oer-chips-family-executor",
@@ -2147,9 +2128,9 @@ name = "oer-hil-probes-esp32s31-radio-root"
 version = "0.1.0"
 dependencies = [
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-layout",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-executor",
  "oer-chips-family-staged-runtime",
  "oer-portable-diagnostics",
@@ -2176,13 +2157,13 @@ dependencies = [
  "embedded-io-async",
  "heapless",
  "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-ieee80211-driver",
  "oer-chips-esp32s31-layout",
- "oer-chips-esp32s31-phy",
  "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-ieee80211-driver",
+ "oer-chips-esp32s31-radio-phy",
  "oer-chips-esp32s31-radio-system",
+ "oer-chips-esp32s31-runtime",
  "oer-chips-family-executor",
  "oer-chips-family-interrupt-table",
  "oer-chips-family-staged-runtime",

@@ -1,6 +1,6 @@
 use oer_chips_esp32s31_hal::{
-    cores::Released,
-    platform::{Hart1Controller, Hart1Grant, InterruptController, InterruptGrant},
+    system::cores::Released,
+    system::platform::{Hart1Controller, Hart1Grant, InterruptController, InterruptGrant},
 };
 use oer_chips_family_interrupt_table::Router;
 

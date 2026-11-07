@@ -17,7 +17,7 @@
 //! zeroed sections and the shared linker scripts) is
 //! `oer-chips-family-staged-layout`. This crate's build generates the board's
 //! [`LAYOUT`] from the chip facts (`oer-chips-family-facts`: its layers from the
-//! ISA to the board, `chips/esp32s31/platform/`) and the chip's stack policy,
+//! ISA to the board, `chips/esp32s31/facts/`) and the chip's stack policy,
 //! for the bootstrap, the board, and the build scripts of every image; each
 //! value's `SOURCE:` is in those files. With the `build` feature, [`build`]
 //! links a binary with the shared scripts and this chip's ROM script

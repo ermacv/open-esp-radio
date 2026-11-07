@@ -2,7 +2,7 @@
 //! through `oer_portable_trace::observe!` to the observer the image gives the backend.
 //! Without `cfg(oer_trace)` no tick builds one.
 
-use oer_chips_esp32s31_phy::tracking::PhyParamTrackingOutcome;
+use oer_chips_esp32s31_radio_phy::tracking::PhyParamTrackingOutcome;
 
 /// What one periodic tracking tick did.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -192,7 +192,7 @@ mod tests {
 
     #[test]
     fn the_branches_are_the_outcome_s_committed_children() {
-        use oer_chips_esp32s31_phy::tracking::{
+        use oer_chips_esp32s31_radio_phy::tracking::{
             CalibrationProgress, PhyParamTrackRequest, TxPowerProgress,
         };
         let outcome = PhyParamTrackingOutcome {

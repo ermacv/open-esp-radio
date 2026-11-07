@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::ieee802154::{
+use oer_chips_esp32s31_hal::radio::ieee802154::{
     mac::{Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner,
         Ieee802154InterruptSetupOwner, Ieee802154StartupPort, Ieee802154TaskOwner},
     polled::Ieee802154MacOwners,

@@ -407,7 +407,7 @@ packet-pool owners without adopting detached DMA storage. Preserve the proof
 at the smallest operation; a safe state machine in a crate below the boundary
 remains safe.
 
-`oer_chips_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
+`oer_chips_esp32s31_hal::radio::bluetooth::engine` owns the controller-SRAM protocol.
 One `Engine` owns the register token and the complete `Placed<BluetoothArena>`;
 its private components retain graph bindings. The codecs
 and scheduler lists encode the addresses the controller follows: `DmaRef`
@@ -670,7 +670,7 @@ RAW/ST, request/reply lengths and invalid-delay values. Numeric foreign-reunion
 identities are observations only, without ownership or dereference authority.
 The HAL declares the direct `link_fn!` binding and exports
 `phy_fault_reporter!` to define that exact signature. Staged images bind it
-to `oer-chips-esp32s31-compose`'s `phy_fault::reset`, which calls
+to `oer-chips-esp32s31-runtime`'s `phy_fault::reset`, which calls
 `fatal::reset_recording`. Its common-format record preserves the source
 payload and is cleared only after successful next-boot output.
 Isolated comparison probes supply their own reporter through the same HAL
@@ -1088,7 +1088,7 @@ The Wi-Fi source120 fatal-assertion path keeps the full sampled RAW as
 an opaque diagnostic. It quarantines both interrupt banks before returning a
 named `irq::Fault` to the image. The image retains the preempted DMA owners and
 the handler's register owners through the chip composition's
-(`oer-chips-esp32s31-compose`) never-returning shared `wifi_fault::reset`, which
+(`oer-chips-esp32s31-runtime`) never-returning shared `wifi_fault::reset`, which
 calls the runtime's `fatal::reset_recording`,
 writes a twelve-byte record through the existing safe retained-cell API, and
 reports it at the next boot. The `wifi-fault` feature selects the one record

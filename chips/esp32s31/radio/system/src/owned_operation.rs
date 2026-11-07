@@ -1,6 +1,6 @@
 //! Poll an owned PHY operation into retained output storage, then return custody.
 use core::{future::Future, mem::MaybeUninit, pin::Pin};
-use oer_chips_esp32s31_hal::{domain::RadioDomain, power::PlatformClockBackend};
+use oer_chips_esp32s31_hal::{power::PlatformClockBackend, radio::domain::RadioDomain};
 use oer_portable_memory::Placed;
 
 #[inline(always)]
@@ -43,8 +43,8 @@ mod tests {
         task::{Context, Poll, Waker},
     };
     use oer_chips_esp32s31_hal::{
-        domain::transaction::{Fault, FaultReason, Operation, TransactionSeat},
-        root::RadioHardware,
+        radio::domain::transaction::{Fault, FaultReason, Operation, TransactionSeat},
+        system::root::RadioHardware,
     };
     use std::{
         boxed::Box,

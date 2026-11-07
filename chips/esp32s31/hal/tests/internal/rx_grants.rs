@@ -1,4 +1,4 @@
-use crate::ieee80211::dma::{
+use crate::radio::ieee80211::dma::{
     rx_dma::RxDma,
     rx_ring::{with_bound_buffers, RecycleGrant, Rearm, RxRingLive, RxRingHalted, RxRingError},
     rx_storage::{RxDmaBuffer, RxDmaStorage, buffers::BoundBuffers},
@@ -118,10 +118,10 @@ fn affine(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>, mmio:
 
 // Const proofs keep grants and scoped hot-path receivers pointer/index sized.
 const _: () = assert!(core::mem::size_of::<RecycleGrant<'static, 'static>>() == core::mem::size_of::<usize>());
-const _: () = assert!(core::mem::size_of::<crate::ieee80211::dma::rx_ring::ScopedRing<'static, &mut RxRingLive<'static, 4>>>() == core::mem::size_of::<&mut RxRingLive<'static, 4>>());
+const _: () = assert!(core::mem::size_of::<crate::radio::ieee80211::dma::rx_ring::ScopedRing<'static, &mut RxRingLive<'static, 4>>>() == core::mem::size_of::<&mut RxRingLive<'static, 4>>());
 fn read_authority<'id, 'loan, 'storage: 'loan>(
-    ring: crate::ieee80211::dma::rx_ring::ScopedRing<'id, crate::ieee80211::dma::rx_storage::buffers::CompletedRead<'loan>>,
-    buffers: crate::ieee80211::dma::rx_ring::ScopedBuffers<'id, &'storage RxDmaStorage<4, 16, 16>>,
+    ring: crate::radio::ieee80211::dma::rx_ring::ScopedRing<'id, crate::radio::ieee80211::dma::rx_storage::buffers::CompletedRead<'loan>>,
+    buffers: crate::radio::ieee80211::dma::rx_ring::ScopedBuffers<'id, &'storage RxDmaStorage<4, 16, 16>>,
 ) {
     #[cfg(read_rearm)]
     let _ = buffers.prepare_for_recycle(ring.read_grant());

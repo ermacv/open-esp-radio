@@ -1,0 +1,1776 @@
+//! Rust-owned TX-DC calibration through the power detector.
+//!
+//! The pinned esp-phy-lib supplies the 562-byte root
+//! `phy_txdc_cal_pwdet_init` and its 948-byte search child
+//! `phy_txdc_cal_pwdet_new`. Runtime Wi-Fi and BT/154 use the cleanup-enabled
+//! form; vendor diagnostic branches are omitted.
+//! The semantic model exposes every delay, SAR observation and PBus force as
+//! an externally completed action. The production target executes the same
+//! finite graph inside an owned PHY transaction. PBus work stays direct;
+//! each SAR/PWDET conversion transfers hardware custody to the P2 timer
+//! handler and returns before the search advances.
+
+use crate::ordinal::Ordinal;
+use crate::{
+    analog::pbus::PhyPbusForceTest,
+    tx::calibration::{
+        PhyToneSarAction, PhyToneSarCompletion, PhyToneSarFailure, PhyToneSarRequest,
+        PhyToneSarTransition,
+    },
+};
+
+const COMPONENT_COUNT: u8 = 2;
+const SCAN_DIRECTION_COUNT: u8 = 2;
+const SCAN_POINT_LIMIT: u8 = 50;
+const PRECHECK_LIMIT: u8 = 2;
+const MEASUREMENT_CAPACITY: usize = 100;
+#[cfg(target_arch = "riscv32")]
+const DIRECT_OPERATION_LIMIT: u32 = 100_000;
+const DEFAULT_DCO: [u16; 4] = [0x100; 4];
+const TX_BB_GAIN: [u16; 3] = [0, 0x80, 0x100];
+
+type Row = Ordinal<{ TX_BB_GAIN.len() }>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetSearchRequest {
+    pub identity: u8,
+    pub initial: [u16; 4],
+    pub clear_tone_after_ready: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetSearchOutcome {
+    pub identity: u8,
+    pub dco: [u16; 4],
+    pub measurements: u8,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetSearchAction {
+    ForcePbus(PhyPbusForceTest),
+    DelayMicros {
+        identity: u8,
+        component: u8,
+        measurement: u8,
+        micros: u32,
+    },
+    ToneSar(PhyToneSarAction),
+    Complete(PhyTxDcPwdetSearchOutcome),
+    Failed(PhyTxDcPwdetSearchFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetSearchCompletion {
+    PbusCompleted(PhyPbusForceTest),
+    PbusTimedOut(PhyPbusForceTest),
+    DelayElapsed {
+        identity: u8,
+        component: u8,
+        measurement: u8,
+        micros: u32,
+    },
+    ToneSar(PhyToneSarCompletion),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetSearchFailure {
+    PbusTimedOut(PhyPbusForceTest),
+    ToneSar(PhyToneSarFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetSearchTransitionError {
+    WrongCompletion,
+    AlreadyComplete,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MeasurementKind {
+    PrecheckPositive,
+    PrecheckNegative,
+    Scan,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SearchStep {
+    ProgramDco {
+        transaction: u8,
+        kind: MeasurementKind,
+    },
+    Delay(MeasurementKind),
+    Measure {
+        kind: MeasurementKind,
+        transition: PhyToneSarTransition,
+    },
+    CommitDco {
+        transaction: u8,
+    },
+    Complete,
+    Failed(PhyTxDcPwdetSearchFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetSearchTransition {
+    request: PhyTxDcPwdetSearchRequest,
+    step: SearchStep,
+    working: [u16; 4],
+    component: u8,
+    precheck: u8,
+    positive_step: u8,
+    negative_step: u8,
+    direction: u8,
+    scan_offset: u8,
+    boundary: u8,
+    minimum: u16,
+    samples: [u16; MEASUREMENT_CAPACITY],
+    sample_count: u8,
+    total_measurements: u8,
+    positive_sample: u16,
+}
+
+impl PhyTxDcPwdetSearchTransition {
+    pub const fn new(request: PhyTxDcPwdetSearchRequest) -> Self {
+        let mut working = request.initial;
+        working[2] = working[2].wrapping_add(10);
+        Self {
+            request,
+            step: SearchStep::ProgramDco {
+                transaction: 0,
+                kind: MeasurementKind::PrecheckPositive,
+            },
+            working,
+            component: 0,
+            precheck: 0,
+            positive_step: 10,
+            negative_step: 10,
+            direction: 0,
+            scan_offset: 0,
+            boundary: 0,
+            minimum: u16::MAX,
+            samples: [0; MEASUREMENT_CAPACITY],
+            sample_count: 0,
+            total_measurements: 0,
+            positive_sample: 0,
+        }
+    }
+
+    /// Execute the archive's search with owned PHY custody. Each SAR
+    /// conversion runs on the timer handler; the search waits only for return.
+    /// PBus writes and the search settle stay direct; the semantic transition
+    /// remains available for host verification.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) async fn execute_target_direct(
+        &mut self,
+        clock: &impl oer_portable_time::Timer,
+        physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
+        mut settle: impl FnMut(
+            crate::executor::wait::tx::Scope,
+            u32,
+        ) -> Result<(), crate::target_executor::PhyTargetPortError>,
+        mut observe_wait: impl FnMut(u64, u16, bool),
+    ) -> Result<
+        Result<PhyTxDcPwdetSearchOutcome, PhyTxDcPwdetSearchFailure>,
+        crate::target_executor::PhyTargetPortError,
+    > {
+        use crate::{
+            executor::wait::tx::Scope,
+            target_executor::{PhyTargetPortError, force_pbus_direct},
+        };
+
+        for _ in 0..DIRECT_OPERATION_LIMIT {
+            match self.step {
+                SearchStep::ProgramDco { transaction, kind } => {
+                    let command = self.dco_transaction(transaction);
+                    if !force_pbus_direct(clock, physical.hardware(), command) {
+                        return Ok(Err(PhyTxDcPwdetSearchFailure::PbusTimedOut(command)));
+                    }
+                    self.step = if transaction == 3 {
+                        SearchStep::Delay(kind)
+                    } else {
+                        SearchStep::ProgramDco {
+                            transaction: transaction + 1,
+                            kind,
+                        }
+                    };
+                }
+                SearchStep::Delay(kind) => {
+                    settle(Scope::Search, 10)?;
+                    let measurement = self
+                        .request
+                        .identity
+                        .wrapping_mul(64)
+                        .wrapping_add(self.total_measurements);
+                    let mut sum = 0_u32;
+                    for sample in 0..2_u8 {
+                        let sampled =
+                            match physical.sample(self.request.clear_tone_after_ready).await {
+                                Ok(sampled) => sampled,
+                                Err(crate::sar_pilot::Error::NotReady(readiness)) => {
+                                    observe_wait(
+                                        readiness.elapsed_micros,
+                                        readiness.observations,
+                                        false,
+                                    );
+                                    return Ok(Err(PhyTxDcPwdetSearchFailure::ToneSar(
+                                        PhyToneSarFailure::ReadyDeadlineExceeded {
+                                            measurement,
+                                            sample,
+                                        },
+                                    )));
+                                }
+                                Err(crate::sar_pilot::Error::DeadlineOverflow) => {
+                                    return Err(PhyTargetPortError::DeadlineOverflow);
+                                }
+                            };
+                        sum = sum.wrapping_add(u32::from(sampled.value));
+                        observe_wait(
+                            sampled.readiness.elapsed_micros,
+                            sampled.readiness.observations,
+                            true,
+                        );
+                    }
+                    let measured = (sum / 2) as u16;
+                    self.total_measurements = self.total_measurements.wrapping_add(1);
+                    match kind {
+                        MeasurementKind::PrecheckPositive => {
+                            self.positive_sample = measured;
+                            self.set_component_delta(-(self.negative_step as i16));
+                            self.program(MeasurementKind::PrecheckNegative);
+                        }
+                        MeasurementKind::PrecheckNegative => self.after_precheck(measured),
+                        MeasurementKind::Scan => self.scan_sample(measured),
+                    }
+                }
+                SearchStep::CommitDco { transaction } => {
+                    let command = self.dco_transaction(transaction);
+                    if !force_pbus_direct(clock, physical.hardware(), command) {
+                        return Ok(Err(PhyTxDcPwdetSearchFailure::PbusTimedOut(command)));
+                    }
+                    self.step = if transaction == 3 {
+                        SearchStep::Complete
+                    } else {
+                        SearchStep::CommitDco {
+                            transaction: transaction + 1,
+                        }
+                    };
+                }
+                SearchStep::Complete => {
+                    return Ok(Ok(PhyTxDcPwdetSearchOutcome {
+                        identity: self.request.identity,
+                        dco: self.working,
+                        measurements: self.total_measurements,
+                    }));
+                }
+                SearchStep::Failed(failure) => return Ok(Err(failure)),
+                SearchStep::Measure { .. } => return Err(PhyTargetPortError::UnexpectedBinding),
+            }
+        }
+        Err(PhyTargetPortError::RfOperationLimit)
+    }
+
+    /// This component's place in a DCO word: its last two entries.
+    fn component_of(&self, word: [u16; 4]) -> u16 {
+        let [_, _, first, second] = word;
+        if self.component == 0 { first } else { second }
+    }
+
+    fn set_component(&mut self, value: u16) {
+        let [_, _, first, second] = &mut self.working;
+        *(if self.component == 0 { first } else { second }) = value;
+    }
+
+    const fn dco_transaction(&self, transaction: u8) -> PhyPbusForceTest {
+        match transaction {
+            0 => PhyPbusForceTest::new(2, 1, self.working[0]),
+            1 => PhyPbusForceTest::new(3, 1, self.working[1]),
+            2 => PhyPbusForceTest::new(2, 2, self.working[2]),
+            _ => PhyPbusForceTest::new(3, 2, self.working[3]),
+        }
+    }
+
+    fn tone_sar(&self) -> PhyToneSarTransition {
+        PhyToneSarTransition::new(PhyToneSarRequest {
+            measurement: self
+                .request
+                .identity
+                .wrapping_mul(64)
+                .wrapping_add(self.total_measurements),
+            samples: 2,
+            clear_tone_after_ready: self.request.clear_tone_after_ready,
+        })
+        .expect("two samples are nonzero")
+    }
+
+    fn set_component_delta(&mut self, delta: i16) {
+        let value = self.component_of(self.request.initial);
+        self.set_component(value.wrapping_add(delta as u16));
+    }
+
+    fn program(&mut self, kind: MeasurementKind) {
+        self.step = SearchStep::ProgramDco {
+            transaction: 0,
+            kind,
+        };
+    }
+
+    fn begin_scan(&mut self) {
+        self.direction = 0;
+        self.scan_offset = 0;
+        self.boundary = 0;
+        self.minimum = u16::MAX;
+        self.sample_count = 0;
+        self.set_component_delta(self.positive_step as i16);
+        self.program(MeasurementKind::Scan);
+    }
+
+    fn after_precheck(&mut self, negative_sample: u16) {
+        if negative_sample.wrapping_add(15) < self.positive_sample {
+            self.positive_step = self.positive_step.wrapping_sub(5);
+        } else if negative_sample > self.positive_sample.wrapping_add(15) {
+            self.negative_step = self.negative_step.wrapping_sub(5);
+        } else {
+            self.begin_scan();
+            return;
+        }
+        self.precheck += 1;
+        if self.precheck == PRECHECK_LIMIT {
+            self.begin_scan();
+        } else {
+            self.set_component_delta(self.positive_step as i16);
+            self.program(MeasurementKind::PrecheckPositive);
+        }
+    }
+
+    fn scan_sample(&mut self, sample: u16) {
+        const {
+            if 2 * SCAN_POINT_LIMIT as usize > MEASUREMENT_CAPACITY {
+                panic!("the samples of both directions fit their array");
+            }
+        }
+        if let Some(place) = self.samples.get_mut(usize::from(self.sample_count)) {
+            *place = sample;
+        }
+        self.sample_count = self.sample_count.saturating_add(1);
+        if sample < self.minimum {
+            self.minimum = sample;
+        }
+        let keep_scanning = (self.scan_offset < 6 || sample <= self.minimum.wrapping_add(30))
+            && self.scan_offset + 1 != SCAN_POINT_LIMIT;
+        if keep_scanning {
+            self.scan_offset += 1;
+            let delta = if self.direction == 0 {
+                self.positive_step as i16 + self.scan_offset as i16
+            } else {
+                -(self.negative_step as i16 + self.scan_offset as i16)
+            };
+            self.set_component_delta(delta);
+            self.program(MeasurementKind::Scan);
+        } else if self.direction + 1 != SCAN_DIRECTION_COUNT {
+            self.boundary = self.scan_offset;
+            self.direction = 1;
+            self.scan_offset = 0;
+            self.minimum = u16::MAX;
+            self.set_component_delta(-(self.negative_step as i16));
+            self.program(MeasurementKind::Scan);
+        } else {
+            self.finish_component();
+        }
+    }
+
+    fn finish_component(&mut self) {
+        let count = usize::from(self.sample_count).min(MEASUREMENT_CAPACITY);
+        let boundary = self.boundary as usize;
+        let samples = self.samples.get_mut(..count).unwrap_or_default();
+        for index in 0..count {
+            let neighbour = if index == 0 || index == boundary + 1 {
+                samples.get(index + 1).copied()
+            } else {
+                index
+                    .checked_sub(1)
+                    .and_then(|before| samples.get(before).copied())
+            };
+            let head = index == 0 || index == boundary + 1;
+            if let (Some(neighbour), Some(place)) = (neighbour, samples.get_mut(index))
+                && (if head {
+                    neighbour < *place
+                } else {
+                    *place < neighbour
+                })
+            {
+                *place = neighbour;
+            }
+        }
+
+        let first = self.samples[0];
+        let first_negative = self
+            .samples
+            .get(..count)
+            .and_then(|samples| samples.get(boundary + 1).or(samples.last()))
+            .copied()
+            .unwrap_or(first);
+        let threshold = first.abs_diff(first_negative).max(20);
+        let minimum = first.min(first_negative);
+        let base = self.component_of(self.request.initial) as i16;
+        let mut upper = base.wrapping_add(self.positive_step as i16);
+        let low_bound = base.wrapping_sub(self.negative_step as i16);
+        let mut lower = low_bound;
+        for (index, sample) in self.samples.iter().take(count).enumerate() {
+            if *sample <= minimum.wrapping_add(threshold) {
+                let mut candidate = base
+                    .wrapping_add(boundary as i16)
+                    .wrapping_add(1)
+                    .wrapping_sub(self.negative_step as i16)
+                    .wrapping_sub(index as i16);
+                if index <= boundary {
+                    upper = base
+                        .wrapping_add(self.positive_step as i16)
+                        .wrapping_add(index as i16);
+                    candidate = low_bound;
+                }
+                lower = candidate;
+            }
+        }
+        let result = upper.wrapping_add(lower).wrapping_add(1) / 2;
+        self.set_component(result as u16);
+
+        self.component += 1;
+        if self.component == COMPONENT_COUNT {
+            self.step = SearchStep::CommitDco { transaction: 0 };
+        } else {
+            // Scan state is reset by `begin_scan` before its first use.
+            self.precheck = 0;
+            self.positive_step = 10;
+            self.negative_step = 10;
+            self.set_component_delta(10);
+            self.program(MeasurementKind::PrecheckPositive);
+        }
+    }
+
+    pub const fn action(&self) -> PhyTxDcPwdetSearchAction {
+        match self.step {
+            SearchStep::ProgramDco { transaction, .. } => {
+                PhyTxDcPwdetSearchAction::ForcePbus(self.dco_transaction(transaction))
+            }
+            SearchStep::Delay(_) => PhyTxDcPwdetSearchAction::DelayMicros {
+                identity: self.request.identity,
+                component: self.component,
+                measurement: self.total_measurements,
+                micros: 10,
+            },
+            SearchStep::Measure { transition, .. } => {
+                PhyTxDcPwdetSearchAction::ToneSar(transition.action())
+            }
+            SearchStep::CommitDco { transaction } => {
+                PhyTxDcPwdetSearchAction::ForcePbus(self.dco_transaction(transaction))
+            }
+            SearchStep::Complete => PhyTxDcPwdetSearchAction::Complete(PhyTxDcPwdetSearchOutcome {
+                identity: self.request.identity,
+                dco: self.working,
+                measurements: self.total_measurements,
+            }),
+            SearchStep::Failed(failure) => PhyTxDcPwdetSearchAction::Failed(failure),
+        }
+    }
+
+    pub const fn failure(&self) -> Option<PhyTxDcPwdetSearchFailure> {
+        match self.step {
+            SearchStep::Failed(failure) => Some(failure),
+            _ => None,
+        }
+    }
+
+    pub fn advance(
+        &mut self,
+        completion: PhyTxDcPwdetSearchCompletion,
+    ) -> Result<(), PhyTxDcPwdetSearchTransitionError> {
+        match (self.step, completion) {
+            (
+                SearchStep::ProgramDco { transaction, kind },
+                PhyTxDcPwdetSearchCompletion::PbusCompleted(completed),
+            ) if completed == self.dco_transaction(transaction) => {
+                self.step = if transaction == 3 {
+                    SearchStep::Delay(kind)
+                } else {
+                    SearchStep::ProgramDco {
+                        transaction: transaction + 1,
+                        kind,
+                    }
+                };
+            }
+            (
+                SearchStep::ProgramDco { transaction, .. },
+                PhyTxDcPwdetSearchCompletion::PbusTimedOut(completed),
+            ) if completed == self.dco_transaction(transaction) => {
+                self.step = SearchStep::Failed(PhyTxDcPwdetSearchFailure::PbusTimedOut(completed));
+            }
+            (
+                SearchStep::CommitDco { transaction },
+                PhyTxDcPwdetSearchCompletion::PbusCompleted(completed),
+            ) if completed == self.dco_transaction(transaction) => {
+                self.step = if transaction == 3 {
+                    SearchStep::Complete
+                } else {
+                    SearchStep::CommitDco {
+                        transaction: transaction + 1,
+                    }
+                };
+            }
+            (
+                SearchStep::CommitDco { transaction },
+                PhyTxDcPwdetSearchCompletion::PbusTimedOut(completed),
+            ) if completed == self.dco_transaction(transaction) => {
+                self.step = SearchStep::Failed(PhyTxDcPwdetSearchFailure::PbusTimedOut(completed));
+            }
+            (
+                SearchStep::Delay(kind),
+                PhyTxDcPwdetSearchCompletion::DelayElapsed {
+                    identity,
+                    component,
+                    measurement,
+                    micros: 10,
+                },
+            ) if identity == self.request.identity
+                && component == self.component
+                && measurement == self.total_measurements =>
+            {
+                self.step = SearchStep::Measure {
+                    kind,
+                    transition: self.tone_sar(),
+                };
+            }
+            (
+                SearchStep::Measure {
+                    kind,
+                    mut transition,
+                },
+                PhyTxDcPwdetSearchCompletion::ToneSar(completion),
+            ) => {
+                transition
+                    .advance(completion)
+                    .map_err(|_| PhyTxDcPwdetSearchTransitionError::WrongCompletion)?;
+                match transition.action() {
+                    PhyToneSarAction::Complete(outcome) => {
+                        self.total_measurements = self.total_measurements.wrapping_add(1);
+                        match kind {
+                            MeasurementKind::PrecheckPositive => {
+                                self.positive_sample = outcome.sample;
+                                self.set_component_delta(-(self.negative_step as i16));
+                                self.program(MeasurementKind::PrecheckNegative);
+                            }
+                            MeasurementKind::PrecheckNegative => {
+                                self.after_precheck(outcome.sample);
+                            }
+                            MeasurementKind::Scan => self.scan_sample(outcome.sample),
+                        }
+                    }
+                    PhyToneSarAction::Failed(failure) => {
+                        self.step = SearchStep::Failed(PhyTxDcPwdetSearchFailure::ToneSar(failure));
+                    }
+                    _ => self.step = SearchStep::Measure { kind, transition },
+                }
+            }
+            (SearchStep::Complete | SearchStep::Failed(_), _) => {
+                return Err(PhyTxDcPwdetSearchTransitionError::AlreadyComplete);
+            }
+            _ => return Err(PhyTxDcPwdetSearchTransitionError::WrongCompletion),
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetParameters {
+    pub dco: [[u16; 4]; 3],
+    pub clear_tone_after_ready: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetOutcome {
+    pub dco: [[u16; 4]; 3],
+    pub total_measurements: u16,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetFailure {
+    PbusTimedOut(PhyPbusForceTest),
+    Search(PhyTxDcPwdetSearchFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetDelayPhase {
+    InitialTone,
+    WorkMode,
+    WorkModePulse,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetAction {
+    PrepareRegisters,
+    ConfigureTxClock {
+        enabled: bool,
+    },
+    ConfigurePowerDetector,
+    ConfigurePbusDebugMode,
+    ReadPbus {
+        selector: u8,
+        path: u8,
+    },
+    ForcePbus(PhyPbusForceTest),
+    ConfigureTone {
+        enabled: bool,
+        selector: u16,
+        attenuation: u8,
+    },
+    DelayMicros {
+        phase: PhyTxDcPwdetDelayPhase,
+        micros: u32,
+    },
+    ConfigureSarCalibration,
+    Search(PhyTxDcPwdetSearchAction),
+    ConfigurePbusWorkMode,
+    ConfigurePbusWorkModePulse,
+    ClearPbusWorkModePulse,
+    RestoreRegisters,
+    Complete(PhyTxDcPwdetOutcome),
+    Failed(PhyTxDcPwdetFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetCompletion {
+    RegistersPrepared,
+    TxClockConfigured {
+        enabled: bool,
+    },
+    PowerDetectorConfigured,
+    PbusDebugModeConfigured,
+    PbusRead {
+        selector: u8,
+        path: u8,
+        value: u16,
+    },
+    PbusCompleted(PhyPbusForceTest),
+    PbusTimedOut(PhyPbusForceTest),
+    ToneConfigured {
+        enabled: bool,
+        selector: u16,
+        attenuation: u8,
+    },
+    DelayElapsed {
+        phase: PhyTxDcPwdetDelayPhase,
+        micros: u32,
+    },
+    SarCalibrationConfigured,
+    Search(PhyTxDcPwdetSearchCompletion),
+    PbusWorkModeConfigured {
+        settle_required: bool,
+    },
+    PbusWorkModePulseConfigured,
+    PbusWorkModePulseCleared,
+    RegistersRestored,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetTransitionError {
+    WrongCompletion,
+    AlreadyComplete,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RootTerminal {
+    Complete,
+    Failed(PhyTxDcPwdetFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "the allocation-free calibration root retains one bounded search transition"
+)]
+enum RootStep {
+    Prepare,
+    ClockOn,
+    PowerDetector,
+    Debug,
+    TxOff { index: u8 },
+    RxOff { index: u8 },
+    ToneOn,
+    InitialDelay,
+    TxOn { index: u8 },
+    BluetoothReadForcedPath { tx_path_value: u8 },
+    BluetoothForcePath { value: u16, tx_path_value: u8 },
+    BluetoothForceTxPath { tx_path_value: u8 },
+    Sar,
+    ForceTxPath,
+    Gain,
+    Search(PhyTxDcPwdetSearchTransition),
+    CleanupDco { index: u8, terminal: RootTerminal },
+    CleanupTxOff { index: u8, terminal: RootTerminal },
+    ToneOff(RootTerminal),
+    WorkMode(RootTerminal),
+    WorkModeDelay(RootTerminal),
+    WorkModePulse(RootTerminal),
+    WorkModePulseDelay(RootTerminal),
+    WorkModePulseClear(RootTerminal),
+    ClockOff(RootTerminal),
+    Restore(RootTerminal),
+    Complete,
+    Failed(PhyTxDcPwdetFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetTransition {
+    parameters: PhyTxDcPwdetParameters,
+    mode: PhyTxDcPwdetMode,
+    step: RootStep,
+    dco: [[u16; 4]; TX_BB_GAIN.len()],
+    row: Row,
+    total_measurements: u16,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxDcPwdetMode {
+    Wifi,
+    Bluetooth { tx_path_value: u8 },
+}
+
+const fn tx_off(index: u8) -> PhyPbusForceTest {
+    match index {
+        0 => PhyPbusForceTest::new(4, 1, 0),
+        1 => PhyPbusForceTest::new(5, 1, 0),
+        2 => PhyPbusForceTest::new(1, 1, 0),
+        3 => PhyPbusForceTest::new(1, 2, 0),
+        _ => PhyPbusForceTest::new(0, 1, 0),
+    }
+}
+
+const fn rx_off(index: u8) -> PhyPbusForceTest {
+    match index {
+        0 => PhyPbusForceTest::new(0, 1, 0),
+        1 => PhyPbusForceTest::new(1, 1, 0),
+        _ => PhyPbusForceTest::new(1, 2, 0),
+    }
+}
+
+const fn tx_on(index: u8) -> PhyPbusForceTest {
+    match index {
+        0 => PhyPbusForceTest::new(0, 1, 0x80),
+        1 => PhyPbusForceTest::new(0, 2, 0),
+        2 => PhyPbusForceTest::new(4, 2, 0),
+        3 => PhyPbusForceTest::new(1, 1, 0x7c),
+        4 => PhyPbusForceTest::new(2, 1, 0x100),
+        5 => PhyPbusForceTest::new(3, 1, 0x100),
+        6 => PhyPbusForceTest::new(2, 2, 0x100),
+        7 => PhyPbusForceTest::new(3, 2, 0x100),
+        8 => PhyPbusForceTest::new(1, 2, 0),
+        9 => PhyPbusForceTest::new(4, 1, 0x0b),
+        // Complete ROM phy_pbus_xpd_tx_on(15, 0) ends with selector 5.
+        // This precedes SAR setup and the per-row gain selection.
+        _ => PhyPbusForceTest::new(5, 1, 0x1cf),
+    }
+}
+
+const fn default_dco(index: u8) -> PhyPbusForceTest {
+    match index {
+        0 => PhyPbusForceTest::new(2, 1, DEFAULT_DCO[0]),
+        1 => PhyPbusForceTest::new(3, 1, DEFAULT_DCO[1]),
+        2 => PhyPbusForceTest::new(2, 2, DEFAULT_DCO[2]),
+        _ => PhyPbusForceTest::new(3, 2, DEFAULT_DCO[3]),
+    }
+}
+
+impl PhyTxDcPwdetTransition {
+    pub const fn new(parameters: PhyTxDcPwdetParameters) -> Self {
+        Self::new_with_mode(parameters, PhyTxDcPwdetMode::Wifi)
+    }
+
+    /// Build the Bluetooth use of archive `phy_txdc_cal_pwdet_init(1, 0, 1)`.
+    ///
+    /// The common search remains shared, while the Bluetooth-only PBus read
+    /// and TX-path force stay explicit in the action graph.
+    pub const fn new_bluetooth(parameters: PhyTxDcPwdetParameters, tx_path_value: u8) -> Self {
+        Self::new_with_mode(parameters, PhyTxDcPwdetMode::Bluetooth { tx_path_value })
+    }
+
+    const fn new_with_mode(parameters: PhyTxDcPwdetParameters, mode: PhyTxDcPwdetMode) -> Self {
+        Self {
+            parameters,
+            mode,
+            step: RootStep::Prepare,
+            dco: parameters.dco,
+            row: Ordinal::FIRST,
+            total_measurements: 0,
+        }
+    }
+
+    fn cleanup(&mut self, terminal: RootTerminal) {
+        self.step = RootStep::CleanupDco { index: 0, terminal };
+    }
+
+    fn fail(&mut self, failure: PhyTxDcPwdetFailure) {
+        self.cleanup(RootTerminal::Failed(failure));
+    }
+
+    const fn outcome(&self) -> PhyTxDcPwdetOutcome {
+        PhyTxDcPwdetOutcome {
+            dco: self.dco,
+            total_measurements: self.total_measurements,
+        }
+    }
+
+    /// Execute current `phy_txdc_cal_pwdet_init` as one admitted RF transaction.
+    /// Each SAR conversion moves physical custody through the timer service.
+    /// The semantic transition is retained for host verification; other direct
+    /// hardware edges do not materialize per-edge action/completion values.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) async fn execute_target_direct(
+        &mut self,
+        clock: &impl oer_portable_time::Timer,
+        physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
+        mut settle: impl FnMut(
+            crate::executor::wait::tx::Scope,
+            u32,
+        ) -> Result<(), crate::target_executor::PhyTargetPortError>,
+        mut observe_wait: impl FnMut(u64, u16, bool),
+    ) -> Result<(), crate::target_executor::PhyTargetPortError> {
+        use crate::target_executor::{PhyTargetPortError, force_pbus_direct};
+
+        if self.step != RootStep::Prepare {
+            return Err(PhyTargetPortError::UnexpectedBinding);
+        }
+        oer_chips_esp32s31_hal::radio::phy::power_detector::prepare_txdc_calibration(
+            physical.hardware(),
+        )
+        .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
+
+        oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(physical.hardware(), true);
+        oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(physical.hardware());
+        oer_chips_family_phy::pbus::configure_debug_mode(
+            &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware()),
+        );
+
+        let mut terminal = RootTerminal::Complete;
+        for index in 0..5 {
+            let transaction = tx_off(index);
+            if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
+                break;
+            }
+        }
+        if terminal == RootTerminal::Complete {
+            for index in 0..3 {
+                let transaction = rx_off(index);
+                if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                    terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
+                    break;
+                }
+            }
+        }
+        if terminal == RootTerminal::Complete {
+            crate::hardware::configure_phy_calibration_tone_wide(
+                physical.hardware(),
+                true,
+                0x200,
+                0x78,
+            );
+            settle(crate::executor::wait::tx::Scope::Root, 1)?;
+            for index in 0..11 {
+                let transaction = tx_on(index);
+                if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                    terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
+                    break;
+                }
+            }
+        }
+        if terminal == RootTerminal::Complete
+            && let PhyTxDcPwdetMode::Bluetooth { tx_path_value } = self.mode
+        {
+            let value = require_pbus_result(oer_chips_esp32s31_hal::radio::phy::pbus::read_result(
+                physical.hardware(),
+                1,
+                1,
+            ))
+            .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
+            for transaction in [
+                PhyPbusForceTest::new(1, 1, value | 2),
+                PhyPbusForceTest::new(4, 2, u16::from(tx_path_value) << 3),
+            ] {
+                if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                    terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
+                    break;
+                }
+            }
+        }
+        if terminal == RootTerminal::Complete {
+            oer_chips_esp32s31_hal::radio::phy::power_detector::configure_txdc_sar(
+                physical.hardware(),
+            );
+            let mut next_row = Some(Row::FIRST);
+            while let Some(row) = next_row {
+                next_row = row.next();
+                for transaction in [
+                    PhyPbusForceTest::new(5, 1, if row.next().is_none() { 0x1e7 } else { 0x1ef }),
+                    PhyPbusForceTest::new(1, 2, row.at(&TX_BB_GAIN)),
+                ] {
+                    if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                        terminal =
+                            RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
+                        break;
+                    }
+                }
+                if terminal != RootTerminal::Complete {
+                    break;
+                }
+                let mut search = PhyTxDcPwdetSearchTransition::new(PhyTxDcPwdetSearchRequest {
+                    identity: row.get(),
+                    initial: row.at(&self.dco),
+                    clear_tone_after_ready: self.parameters.clear_tone_after_ready,
+                });
+                match search
+                    .execute_target_direct(clock, physical, &mut settle, &mut observe_wait)
+                    .await?
+                {
+                    Ok(outcome) => {
+                        *row.slot(&mut self.dco) = outcome.dco;
+                        self.total_measurements = self
+                            .total_measurements
+                            .wrapping_add(u16::from(outcome.measurements));
+                    }
+                    Err(failure) => {
+                        terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::Search(failure));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // The archive cleanup is unconditional after every typed PBus/search
+        // failure. Its PBus writes are best effort, but the register restore
+        // remains a hard epoch invariant.
+        for index in 0..4 {
+            let _ = force_pbus_direct(clock, physical.hardware(), default_dco(index));
+        }
+        for index in 0..5 {
+            let _ = force_pbus_direct(clock, physical.hardware(), tx_off(index));
+        }
+        crate::hardware::configure_phy_calibration_tone_wide(
+            physical.hardware(),
+            false,
+            0x80,
+            0x78,
+        );
+        if oer_chips_family_phy::pbus::configure_work_mode(
+            &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware()),
+        ) {
+            settle(crate::executor::wait::tx::Scope::Root, 1)?;
+            oer_chips_esp32s31_hal::radio::phy::agc::configure_pbus_work_mode_pulse(
+                physical.hardware(),
+            );
+            settle(crate::executor::wait::tx::Scope::Root, 2)?;
+            oer_chips_esp32s31_hal::radio::phy::agc::clear_pbus_work_mode_pulse(
+                physical.hardware(),
+            );
+        }
+        oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(physical.hardware(), false);
+        oer_chips_esp32s31_hal::radio::phy::power_detector::restore_txdc_calibration(
+            physical.hardware(),
+        )
+        .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
+        self.step = match terminal {
+            RootTerminal::Complete => RootStep::Complete,
+            RootTerminal::Failed(failure) => RootStep::Failed(failure),
+        };
+        Ok(())
+    }
+
+    pub const fn action(&self) -> PhyTxDcPwdetAction {
+        match self.step {
+            RootStep::Prepare => PhyTxDcPwdetAction::PrepareRegisters,
+            RootStep::ClockOn => PhyTxDcPwdetAction::ConfigureTxClock { enabled: true },
+            RootStep::PowerDetector => PhyTxDcPwdetAction::ConfigurePowerDetector,
+            RootStep::Debug => PhyTxDcPwdetAction::ConfigurePbusDebugMode,
+            RootStep::BluetoothReadForcedPath { .. } => PhyTxDcPwdetAction::ReadPbus {
+                selector: 1,
+                path: 1,
+            },
+            RootStep::BluetoothForcePath { value, .. } => {
+                PhyTxDcPwdetAction::ForcePbus(PhyPbusForceTest::new(1, 1, value | 2))
+            }
+            RootStep::BluetoothForceTxPath { tx_path_value } => PhyTxDcPwdetAction::ForcePbus(
+                PhyPbusForceTest::new(4, 2, (tx_path_value as u16) << 3),
+            ),
+            RootStep::TxOff { index } | RootStep::CleanupTxOff { index, .. } => {
+                PhyTxDcPwdetAction::ForcePbus(tx_off(index))
+            }
+            RootStep::RxOff { index } => PhyTxDcPwdetAction::ForcePbus(rx_off(index)),
+            RootStep::ToneOn => PhyTxDcPwdetAction::ConfigureTone {
+                enabled: true,
+                selector: 0x200,
+                attenuation: 0x78,
+            },
+            RootStep::InitialDelay => PhyTxDcPwdetAction::DelayMicros {
+                phase: PhyTxDcPwdetDelayPhase::InitialTone,
+                micros: 1,
+            },
+            RootStep::TxOn { index } => PhyTxDcPwdetAction::ForcePbus(tx_on(index)),
+            RootStep::Sar => PhyTxDcPwdetAction::ConfigureSarCalibration,
+            RootStep::ForceTxPath => PhyTxDcPwdetAction::ForcePbus(PhyPbusForceTest::new(
+                5,
+                1,
+                if self.row.next().is_none() {
+                    0x1e7
+                } else {
+                    0x1ef
+                },
+            )),
+            RootStep::Gain => {
+                PhyTxDcPwdetAction::ForcePbus(PhyPbusForceTest::new(1, 2, self.row.at(&TX_BB_GAIN)))
+            }
+            RootStep::Search(ref transition) => PhyTxDcPwdetAction::Search(transition.action()),
+            RootStep::CleanupDco { index, .. } => PhyTxDcPwdetAction::ForcePbus(default_dco(index)),
+            RootStep::ToneOff(_) => PhyTxDcPwdetAction::ConfigureTone {
+                enabled: false,
+                selector: 0x80,
+                attenuation: 0x78,
+            },
+            RootStep::WorkMode(_) => PhyTxDcPwdetAction::ConfigurePbusWorkMode,
+            RootStep::WorkModeDelay(_) => PhyTxDcPwdetAction::DelayMicros {
+                phase: PhyTxDcPwdetDelayPhase::WorkMode,
+                micros: 1,
+            },
+            RootStep::WorkModePulse(_) => PhyTxDcPwdetAction::ConfigurePbusWorkModePulse,
+            RootStep::WorkModePulseDelay(_) => {
+                // SOURCE: complete rev0 ROM
+                // `esp32s31_rev0_rom.elf::phy_pbus_force_mode(0)`
+                // holds the second work-mode pulse for two microseconds. This
+                // cleanup is reached by archive `phy_txdc_cal_pwdet_init`.
+                PhyTxDcPwdetAction::DelayMicros {
+                    phase: PhyTxDcPwdetDelayPhase::WorkModePulse,
+                    micros: 2,
+                }
+            }
+            RootStep::WorkModePulseClear(_) => PhyTxDcPwdetAction::ClearPbusWorkModePulse,
+            RootStep::ClockOff(_) => PhyTxDcPwdetAction::ConfigureTxClock { enabled: false },
+            RootStep::Restore(_) => PhyTxDcPwdetAction::RestoreRegisters,
+            RootStep::Complete => PhyTxDcPwdetAction::Complete(self.outcome()),
+            RootStep::Failed(failure) => PhyTxDcPwdetAction::Failed(failure),
+        }
+    }
+
+    fn pbus_completion(
+        &mut self,
+        completed: PhyPbusForceTest,
+        timed_out: bool,
+    ) -> Result<(), PhyTxDcPwdetTransitionError> {
+        let (expected, next) = match self.step {
+            RootStep::TxOff { index } => (
+                tx_off(index),
+                if index == 4 {
+                    RootStep::RxOff { index: 0 }
+                } else {
+                    RootStep::TxOff { index: index + 1 }
+                },
+            ),
+            RootStep::RxOff { index } => (
+                rx_off(index),
+                if index == 2 {
+                    RootStep::ToneOn
+                } else {
+                    RootStep::RxOff { index: index + 1 }
+                },
+            ),
+            RootStep::TxOn { index } => (
+                tx_on(index),
+                if index == 10 {
+                    match self.mode {
+                        PhyTxDcPwdetMode::Wifi => RootStep::Sar,
+                        PhyTxDcPwdetMode::Bluetooth { tx_path_value } => {
+                            RootStep::BluetoothReadForcedPath { tx_path_value }
+                        }
+                    }
+                } else {
+                    RootStep::TxOn { index: index + 1 }
+                },
+            ),
+            RootStep::BluetoothForcePath {
+                value,
+                tx_path_value,
+            } => (
+                PhyPbusForceTest::new(1, 1, value | 2),
+                RootStep::BluetoothForceTxPath { tx_path_value },
+            ),
+            RootStep::BluetoothForceTxPath { tx_path_value } => (
+                PhyPbusForceTest::new(4, 2, u16::from(tx_path_value) << 3),
+                RootStep::Sar,
+            ),
+            RootStep::ForceTxPath => (
+                PhyPbusForceTest::new(
+                    5,
+                    1,
+                    if self.row.next().is_none() {
+                        0x1e7
+                    } else {
+                        0x1ef
+                    },
+                ),
+                RootStep::Gain,
+            ),
+            RootStep::Gain => (
+                PhyPbusForceTest::new(1, 2, self.row.at(&TX_BB_GAIN)),
+                RootStep::Search(PhyTxDcPwdetSearchTransition::new(
+                    PhyTxDcPwdetSearchRequest {
+                        identity: self.row.get(),
+                        initial: self.row.at(&self.dco),
+                        clear_tone_after_ready: self.parameters.clear_tone_after_ready,
+                    },
+                )),
+            ),
+            RootStep::CleanupDco { index, terminal } => (
+                default_dco(index),
+                if index == 3 {
+                    RootStep::CleanupTxOff { index: 0, terminal }
+                } else {
+                    RootStep::CleanupDco {
+                        index: index + 1,
+                        terminal,
+                    }
+                },
+            ),
+            RootStep::CleanupTxOff { index, terminal } => (
+                tx_off(index),
+                if index == 4 {
+                    RootStep::ToneOff(terminal)
+                } else {
+                    RootStep::CleanupTxOff {
+                        index: index + 1,
+                        terminal,
+                    }
+                },
+            ),
+            _ => return Err(PhyTxDcPwdetTransitionError::WrongCompletion),
+        };
+        if completed != expected {
+            return Err(PhyTxDcPwdetTransitionError::WrongCompletion);
+        }
+        if timed_out {
+            match self.step {
+                RootStep::CleanupDco { .. } | RootStep::CleanupTxOff { .. } => {
+                    // Cleanup is best effort, but retains a previously
+                    // selected terminal outcome.
+                    self.step = next;
+                }
+                _ => self.fail(PhyTxDcPwdetFailure::PbusTimedOut(completed)),
+            }
+        } else {
+            self.step = next;
+        }
+        Ok(())
+    }
+
+    pub fn advance(
+        &mut self,
+        completion: PhyTxDcPwdetCompletion,
+    ) -> Result<(), PhyTxDcPwdetTransitionError> {
+        match (&mut self.step, completion) {
+            (RootStep::Prepare, PhyTxDcPwdetCompletion::RegistersPrepared) => {
+                self.step = RootStep::ClockOn;
+            }
+            (RootStep::ClockOn, PhyTxDcPwdetCompletion::TxClockConfigured { enabled: true }) => {
+                self.step = RootStep::PowerDetector
+            }
+            (RootStep::PowerDetector, PhyTxDcPwdetCompletion::PowerDetectorConfigured) => {
+                self.step = RootStep::Debug;
+            }
+            (RootStep::Debug, PhyTxDcPwdetCompletion::PbusDebugModeConfigured) => {
+                self.step = RootStep::TxOff { index: 0 };
+            }
+            (
+                RootStep::ToneOn,
+                PhyTxDcPwdetCompletion::ToneConfigured {
+                    enabled: true,
+                    selector: 0x200,
+                    attenuation: 0x78,
+                },
+            ) => self.step = RootStep::InitialDelay,
+            (
+                RootStep::InitialDelay,
+                PhyTxDcPwdetCompletion::DelayElapsed {
+                    phase: PhyTxDcPwdetDelayPhase::InitialTone,
+                    micros: 1,
+                },
+            ) => self.step = RootStep::TxOn { index: 0 },
+            (RootStep::Sar, PhyTxDcPwdetCompletion::SarCalibrationConfigured) => {
+                self.step = RootStep::ForceTxPath;
+            }
+            (
+                RootStep::BluetoothReadForcedPath { tx_path_value },
+                PhyTxDcPwdetCompletion::PbusRead {
+                    selector: 1,
+                    path: 1,
+                    value,
+                },
+            ) => {
+                self.step = RootStep::BluetoothForcePath {
+                    value,
+                    tx_path_value: *tx_path_value,
+                }
+            }
+            (RootStep::Search(transition), PhyTxDcPwdetCompletion::Search(completion)) => {
+                transition
+                    .advance(completion)
+                    .map_err(|_| PhyTxDcPwdetTransitionError::WrongCompletion)?;
+                if let Some(failure) = transition.failure() {
+                    self.fail(PhyTxDcPwdetFailure::Search(failure));
+                } else if let PhyTxDcPwdetSearchAction::Complete(outcome) = transition.action() {
+                    *self.row.slot(&mut self.dco) = outcome.dco;
+                    self.total_measurements = self
+                        .total_measurements
+                        .wrapping_add(u16::from(outcome.measurements));
+                    match self.row.next() {
+                        None => self.cleanup(RootTerminal::Complete),
+                        Some(row) => {
+                            self.row = row;
+                            self.step = RootStep::ForceTxPath;
+                        }
+                    }
+                }
+            }
+            (
+                RootStep::ToneOff(terminal),
+                PhyTxDcPwdetCompletion::ToneConfigured {
+                    enabled: false,
+                    selector: 0x80,
+                    attenuation: 0x78,
+                },
+            ) => self.step = RootStep::WorkMode(*terminal),
+            (
+                RootStep::WorkMode(terminal),
+                PhyTxDcPwdetCompletion::PbusWorkModeConfigured {
+                    settle_required: false,
+                },
+            ) => self.step = RootStep::ClockOff(*terminal),
+            (
+                RootStep::WorkMode(terminal),
+                PhyTxDcPwdetCompletion::PbusWorkModeConfigured {
+                    settle_required: true,
+                },
+            ) => self.step = RootStep::WorkModeDelay(*terminal),
+            (
+                RootStep::WorkModeDelay(terminal),
+                PhyTxDcPwdetCompletion::DelayElapsed {
+                    phase: PhyTxDcPwdetDelayPhase::WorkMode,
+                    micros: 1,
+                },
+            ) => self.step = RootStep::WorkModePulse(*terminal),
+            (
+                RootStep::WorkModePulse(terminal),
+                PhyTxDcPwdetCompletion::PbusWorkModePulseConfigured,
+            ) => self.step = RootStep::WorkModePulseDelay(*terminal),
+            (
+                RootStep::WorkModePulseDelay(terminal),
+                PhyTxDcPwdetCompletion::DelayElapsed {
+                    phase: PhyTxDcPwdetDelayPhase::WorkModePulse,
+                    micros: 2,
+                },
+            ) => self.step = RootStep::WorkModePulseClear(*terminal),
+            (
+                RootStep::WorkModePulseClear(terminal),
+                PhyTxDcPwdetCompletion::PbusWorkModePulseCleared,
+            ) => self.step = RootStep::ClockOff(*terminal),
+            (
+                RootStep::ClockOff(terminal),
+                PhyTxDcPwdetCompletion::TxClockConfigured { enabled: false },
+            ) => self.step = RootStep::Restore(*terminal),
+            (RootStep::Restore(terminal), PhyTxDcPwdetCompletion::RegistersRestored) => {
+                self.step = match *terminal {
+                    RootTerminal::Complete => RootStep::Complete,
+                    RootTerminal::Failed(failure) => RootStep::Failed(failure),
+                };
+            }
+            (
+                RootStep::TxOff { .. }
+                | RootStep::RxOff { .. }
+                | RootStep::TxOn { .. }
+                | RootStep::BluetoothForcePath { .. }
+                | RootStep::BluetoothForceTxPath { .. }
+                | RootStep::ForceTxPath
+                | RootStep::Gain
+                | RootStep::CleanupDco { .. }
+                | RootStep::CleanupTxOff { .. },
+                PhyTxDcPwdetCompletion::PbusCompleted(transaction),
+            ) => return self.pbus_completion(transaction, false),
+            (
+                RootStep::TxOff { .. }
+                | RootStep::RxOff { .. }
+                | RootStep::TxOn { .. }
+                | RootStep::BluetoothForcePath { .. }
+                | RootStep::BluetoothForceTxPath { .. }
+                | RootStep::ForceTxPath
+                | RootStep::Gain
+                | RootStep::CleanupDco { .. }
+                | RootStep::CleanupTxOff { .. },
+                PhyTxDcPwdetCompletion::PbusTimedOut(transaction),
+            ) => return self.pbus_completion(transaction, true),
+            (RootStep::Complete | RootStep::Failed(_), _) => {
+                return Err(PhyTxDcPwdetTransitionError::AlreadyComplete);
+            }
+            _ => return Err(PhyTxDcPwdetTransitionError::WrongCompletion),
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetBindingError {
+    NotDirectMmio,
+}
+
+/// A TX-DC hardware binding invariant was violated by target execution.
+///
+/// This is not a model completion: the outer target runner must poison the
+/// unique hardware epoch instead of advancing or attempting ordinary cleanup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetHardwareInvariant {
+    /// A second calibration reached prepare before the first restored state.
+    RestoreAlreadyPending,
+    /// Cleanup reached restore without a successful prepare operation.
+    RestoreNotPending,
+    /// The transition requested a PBus selector/path without a result window.
+    UnsupportedPbusRead,
+}
+
+#[cfg(any(target_arch = "riscv32", test))]
+fn require_pbus_result(result: Option<u16>) -> Result<u16, PhyTxDcPwdetHardwareInvariant> {
+    result.ok_or(PhyTxDcPwdetHardwareInvariant::UnsupportedPbusRead)
+}
+
+/// The actions this binding admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PhyTxDcPwdetMmioAction {
+    PrepareRegisters,
+    ConfigureTxClock {
+        enabled: bool,
+    },
+    ConfigurePowerDetector,
+    ConfigurePbusDebugMode,
+    ReadPbus {
+        selector: u8,
+        path: u8,
+    },
+    ConfigureTone {
+        enabled: bool,
+        selector: u16,
+        attenuation: u8,
+    },
+    ConfigureSarCalibration,
+    ConfigurePbusWorkMode,
+    ConfigurePbusWorkModePulse,
+    ClearPbusWorkModePulse,
+    RestoreRegisters,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetMmioBinding {
+    action: PhyTxDcPwdetMmioAction,
+}
+
+impl PhyTxDcPwdetMmioBinding {
+    pub fn new(action: PhyTxDcPwdetAction) -> Result<Self, PhyTxDcPwdetBindingError> {
+        let action = match action {
+            PhyTxDcPwdetAction::PrepareRegisters => PhyTxDcPwdetMmioAction::PrepareRegisters,
+            PhyTxDcPwdetAction::ConfigureTxClock { enabled } => {
+                PhyTxDcPwdetMmioAction::ConfigureTxClock { enabled }
+            }
+            PhyTxDcPwdetAction::ConfigurePowerDetector => {
+                PhyTxDcPwdetMmioAction::ConfigurePowerDetector
+            }
+            PhyTxDcPwdetAction::ConfigurePbusDebugMode => {
+                PhyTxDcPwdetMmioAction::ConfigurePbusDebugMode
+            }
+            PhyTxDcPwdetAction::ReadPbus { selector, path } => {
+                PhyTxDcPwdetMmioAction::ReadPbus { selector, path }
+            }
+            PhyTxDcPwdetAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            } => PhyTxDcPwdetMmioAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            },
+            PhyTxDcPwdetAction::ConfigureSarCalibration => {
+                PhyTxDcPwdetMmioAction::ConfigureSarCalibration
+            }
+            PhyTxDcPwdetAction::ConfigurePbusWorkMode => {
+                PhyTxDcPwdetMmioAction::ConfigurePbusWorkMode
+            }
+            PhyTxDcPwdetAction::ConfigurePbusWorkModePulse => {
+                PhyTxDcPwdetMmioAction::ConfigurePbusWorkModePulse
+            }
+            PhyTxDcPwdetAction::ClearPbusWorkModePulse => {
+                PhyTxDcPwdetMmioAction::ClearPbusWorkModePulse
+            }
+            PhyTxDcPwdetAction::RestoreRegisters => PhyTxDcPwdetMmioAction::RestoreRegisters,
+            _ => return Err(PhyTxDcPwdetBindingError::NotDirectMmio),
+        };
+        Ok(Self { action })
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    pub fn execute_target(
+        self,
+        registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyContext,
+    ) -> Result<PhyTxDcPwdetCompletion, PhyTxDcPwdetHardwareInvariant> {
+        match self.action {
+            PhyTxDcPwdetMmioAction::PrepareRegisters => {
+                oer_chips_esp32s31_hal::radio::phy::power_detector::prepare_txdc_calibration(
+                    registers,
+                )
+                .map_err(|_| PhyTxDcPwdetHardwareInvariant::RestoreAlreadyPending)?;
+                Ok(PhyTxDcPwdetCompletion::RegistersPrepared)
+            }
+            PhyTxDcPwdetMmioAction::ConfigureTxClock { enabled } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, enabled);
+                Ok(PhyTxDcPwdetCompletion::TxClockConfigured { enabled })
+            }
+            PhyTxDcPwdetMmioAction::ConfigurePowerDetector => {
+                oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(registers);
+                Ok(PhyTxDcPwdetCompletion::PowerDetectorConfigured)
+            }
+            PhyTxDcPwdetMmioAction::ConfigurePbusDebugMode => {
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
+                );
+                Ok(PhyTxDcPwdetCompletion::PbusDebugModeConfigured)
+            }
+            PhyTxDcPwdetMmioAction::ReadPbus { selector, path } => {
+                let value =
+                    require_pbus_result(oer_chips_esp32s31_hal::radio::phy::pbus::read_result(
+                        registers, selector, path,
+                    ))?;
+                Ok(PhyTxDcPwdetCompletion::PbusRead {
+                    selector,
+                    path,
+                    value,
+                })
+            }
+            PhyTxDcPwdetMmioAction::ConfigureTone {
+                enabled,
+                selector,
+                attenuation,
+            } => {
+                crate::hardware::configure_phy_calibration_tone_wide(
+                    registers,
+                    enabled,
+                    selector,
+                    attenuation,
+                );
+                Ok(PhyTxDcPwdetCompletion::ToneConfigured {
+                    enabled,
+                    selector,
+                    attenuation,
+                })
+            }
+            PhyTxDcPwdetMmioAction::ConfigureSarCalibration => {
+                oer_chips_esp32s31_hal::radio::phy::power_detector::configure_txdc_sar(registers);
+                Ok(PhyTxDcPwdetCompletion::SarCalibrationConfigured)
+            }
+            PhyTxDcPwdetMmioAction::ConfigurePbusWorkMode => {
+                Ok(PhyTxDcPwdetCompletion::PbusWorkModeConfigured {
+                    settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                        &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
+                    ),
+                })
+            }
+            PhyTxDcPwdetMmioAction::ConfigurePbusWorkModePulse => {
+                oer_chips_esp32s31_hal::radio::phy::agc::configure_pbus_work_mode_pulse(registers);
+                Ok(PhyTxDcPwdetCompletion::PbusWorkModePulseConfigured)
+            }
+            PhyTxDcPwdetMmioAction::ClearPbusWorkModePulse => {
+                oer_chips_esp32s31_hal::radio::phy::agc::clear_pbus_work_mode_pulse(registers);
+                Ok(PhyTxDcPwdetCompletion::PbusWorkModePulseCleared)
+            }
+            PhyTxDcPwdetMmioAction::RestoreRegisters => {
+                oer_chips_esp32s31_hal::radio::phy::power_detector::restore_txdc_calibration(
+                    registers,
+                )
+                .map_err(|_| PhyTxDcPwdetHardwareInvariant::RestoreNotPending)?;
+                Ok(PhyTxDcPwdetCompletion::RegistersRestored)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetExternalBindingError {
+    UnsupportedAction,
+    Pbus(crate::analog::pbus::PhyPbusHardwareBindingError),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetSearchPbusBinding {
+    transaction: PhyPbusForceTest,
+    hardware: crate::analog::pbus::PhyPbusHardwareBinding,
+}
+
+impl PhyTxDcPwdetSearchPbusBinding {
+    pub fn new(action: PhyTxDcPwdetSearchAction) -> Result<Self, PhyTxDcPwdetExternalBindingError> {
+        let PhyTxDcPwdetSearchAction::ForcePbus(transaction) = action else {
+            return Err(PhyTxDcPwdetExternalBindingError::UnsupportedAction);
+        };
+        Ok(Self {
+            transaction,
+            hardware: crate::analog::pbus::PhyPbusHardwareBinding::new(transaction),
+        })
+    }
+
+    #[cfg(test)]
+    pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
+        self.hardware.action()
+    }
+
+    #[cfg(test)]
+    pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
+        self.hardware.started()
+    }
+
+    #[cfg(test)]
+    pub fn observe_completed(
+        &mut self,
+        completed: bool,
+    ) -> Result<
+        crate::analog::pbus::PhyPbusHardwareObservation,
+        crate::analog::pbus::PhyPbusHardwareBindingError,
+    > {
+        self.hardware.observe_completed(completed)
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    pub fn start_target(
+        &mut self,
+        registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
+    ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
+        self.hardware.start_target(registers)
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    pub fn observe_target_edge(
+        &mut self,
+        registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
+    ) -> Result<
+        crate::analog::pbus::PhyPbusHardwareObservation,
+        crate::analog::pbus::PhyPbusHardwareBindingError,
+    > {
+        self.hardware.observe_target_edge(registers)
+    }
+
+    pub fn into_completion(
+        self,
+    ) -> Result<PhyTxDcPwdetSearchCompletion, PhyTxDcPwdetExternalBindingError> {
+        self.hardware
+            .into_transaction()
+            .map(PhyTxDcPwdetSearchCompletion::PbusCompleted)
+            .map_err(PhyTxDcPwdetExternalBindingError::Pbus)
+    }
+
+    pub const fn into_timeout_completion(self) -> PhyTxDcPwdetSearchCompletion {
+        PhyTxDcPwdetSearchCompletion::PbusTimedOut(self.transaction)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetSearchTimerBinding {
+    identity: u8,
+    component: u8,
+    measurement: u8,
+    micros: u32,
+}
+
+impl PhyTxDcPwdetSearchTimerBinding {
+    pub fn new(action: PhyTxDcPwdetSearchAction) -> Result<Self, PhyTxDcPwdetExternalBindingError> {
+        match action {
+            PhyTxDcPwdetSearchAction::DelayMicros {
+                identity,
+                component,
+                measurement,
+                micros,
+            } => Ok(Self {
+                identity,
+                component,
+                measurement,
+                micros,
+            }),
+            _ => Err(PhyTxDcPwdetExternalBindingError::UnsupportedAction),
+        }
+    }
+
+    pub const fn micros(&self) -> u32 {
+        self.micros
+    }
+
+    pub const fn into_completion(self) -> PhyTxDcPwdetSearchCompletion {
+        PhyTxDcPwdetSearchCompletion::DelayElapsed {
+            identity: self.identity,
+            component: self.component,
+            measurement: self.measurement,
+            micros: self.micros,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetSearchExternalBinding {
+    Pbus(PhyTxDcPwdetSearchPbusBinding),
+    Timer(PhyTxDcPwdetSearchTimerBinding),
+    ToneSar(crate::tx::calibration::PhyToneSarExternalBinding),
+}
+
+impl PhyTxDcPwdetSearchExternalBinding {
+    pub fn lower(
+        action: PhyTxDcPwdetSearchAction,
+    ) -> Result<Self, PhyTxDcPwdetExternalBindingError> {
+        match action {
+            PhyTxDcPwdetSearchAction::ForcePbus(_) => {
+                PhyTxDcPwdetSearchPbusBinding::new(action).map(Self::Pbus)
+            }
+            PhyTxDcPwdetSearchAction::DelayMicros { .. } => {
+                PhyTxDcPwdetSearchTimerBinding::new(action).map(Self::Timer)
+            }
+            PhyTxDcPwdetSearchAction::ToneSar(action) => {
+                crate::tx::calibration::PhyToneSarExternalBinding::lower(action)
+                    .map(Self::ToneSar)
+                    .map_err(|_| PhyTxDcPwdetExternalBindingError::UnsupportedAction)
+            }
+            PhyTxDcPwdetSearchAction::Complete(_) | PhyTxDcPwdetSearchAction::Failed(_) => {
+                Err(PhyTxDcPwdetExternalBindingError::UnsupportedAction)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetPbusBinding {
+    transaction: PhyPbusForceTest,
+    hardware: crate::analog::pbus::PhyPbusHardwareBinding,
+}
+
+impl PhyTxDcPwdetPbusBinding {
+    pub fn new(action: PhyTxDcPwdetAction) -> Result<Self, PhyTxDcPwdetExternalBindingError> {
+        let PhyTxDcPwdetAction::ForcePbus(transaction) = action else {
+            return Err(PhyTxDcPwdetExternalBindingError::UnsupportedAction);
+        };
+        Ok(Self {
+            transaction,
+            hardware: crate::analog::pbus::PhyPbusHardwareBinding::new(transaction),
+        })
+    }
+
+    #[cfg(test)]
+    pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
+        self.hardware.action()
+    }
+
+    #[cfg(test)]
+    pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
+        self.hardware.started()
+    }
+
+    #[cfg(test)]
+    pub fn observe_completed(
+        &mut self,
+        completed: bool,
+    ) -> Result<
+        crate::analog::pbus::PhyPbusHardwareObservation,
+        crate::analog::pbus::PhyPbusHardwareBindingError,
+    > {
+        self.hardware.observe_completed(completed)
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    pub fn start_target(
+        &mut self,
+        registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
+    ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
+        self.hardware.start_target(registers)
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    pub fn observe_target_edge(
+        &mut self,
+        registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
+    ) -> Result<
+        crate::analog::pbus::PhyPbusHardwareObservation,
+        crate::analog::pbus::PhyPbusHardwareBindingError,
+    > {
+        self.hardware.observe_target_edge(registers)
+    }
+
+    pub fn into_completion(
+        self,
+    ) -> Result<PhyTxDcPwdetCompletion, PhyTxDcPwdetExternalBindingError> {
+        self.hardware
+            .into_transaction()
+            .map(PhyTxDcPwdetCompletion::PbusCompleted)
+            .map_err(PhyTxDcPwdetExternalBindingError::Pbus)
+    }
+
+    pub const fn into_timeout_completion(self) -> PhyTxDcPwdetCompletion {
+        PhyTxDcPwdetCompletion::PbusTimedOut(self.transaction)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct PhyTxDcPwdetTimerBinding {
+    phase: PhyTxDcPwdetDelayPhase,
+    micros: u32,
+}
+
+impl PhyTxDcPwdetTimerBinding {
+    pub fn new(action: PhyTxDcPwdetAction) -> Result<Self, PhyTxDcPwdetExternalBindingError> {
+        match action {
+            PhyTxDcPwdetAction::DelayMicros { phase, micros } => Ok(Self { phase, micros }),
+            _ => Err(PhyTxDcPwdetExternalBindingError::UnsupportedAction),
+        }
+    }
+
+    pub const fn micros(&self) -> u32 {
+        self.micros
+    }
+
+    pub const fn into_completion(self) -> PhyTxDcPwdetCompletion {
+        PhyTxDcPwdetCompletion::DelayElapsed {
+            phase: self.phase,
+            micros: self.micros,
+        }
+    }
+}
+
+/// Exhaustive lowering of every non-terminal `phy_txdc_cal_pwdet_init` action.
+#[derive(Debug, Eq, PartialEq)]
+pub enum PhyTxDcPwdetExternalBinding {
+    Mmio(PhyTxDcPwdetMmioBinding),
+    Pbus(PhyTxDcPwdetPbusBinding),
+    Timer(PhyTxDcPwdetTimerBinding),
+    Search(PhyTxDcPwdetSearchExternalBinding),
+}
+
+impl PhyTxDcPwdetExternalBinding {
+    pub fn lower(action: PhyTxDcPwdetAction) -> Result<Self, PhyTxDcPwdetExternalBindingError> {
+        if let Ok(binding) = PhyTxDcPwdetMmioBinding::new(action) {
+            return Ok(Self::Mmio(binding));
+        }
+        if let Ok(binding) = PhyTxDcPwdetPbusBinding::new(action) {
+            return Ok(Self::Pbus(binding));
+        }
+        if let Ok(binding) = PhyTxDcPwdetTimerBinding::new(action) {
+            return Ok(Self::Timer(binding));
+        }
+        if let PhyTxDcPwdetAction::Search(action) = action {
+            return PhyTxDcPwdetSearchExternalBinding::lower(action).map(Self::Search);
+        }
+        Err(PhyTxDcPwdetExternalBindingError::UnsupportedAction)
+    }
+}
+
+#[cfg(test)]
+mod tests;

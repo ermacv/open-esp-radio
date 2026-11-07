@@ -3,9 +3,9 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use oer_portable_crypto::{Aes128Key, KeyData, KeyUnwrapRequest, KeyUnwrapResponse};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_board as board;
-use oer_chips_esp32s31_compose::Esp32s31;
-use oer_chips_esp32s31_compose::crypto::AesEngine;
-use oer_chips_esp32s31_hal::cores::Cores;
+use oer_chips_esp32s31_runtime::Esp32s31;
+use oer_chips_esp32s31_runtime::crypto::AesEngine;
+use oer_chips_esp32s31_hal::system::cores::Cores;
 use oer_chips_esp32s31_hal::peripherals::aes::{AesInterrupt, AesParts};
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag;
 use oer_chips_esp32s31_hal::peripherals::watchdog::{
@@ -15,8 +15,8 @@ use oer_chips_esp32s31_hal::peripherals::{
     software_interrupt::{FromCpu0Irq, FromCpu1Irq},
     system_timer::{SystimerAlarm0, SystimerAlarm1},
 };
-use oer_chips_esp32s31_hal::platform::Port;
-use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_esp32s31_hal::system::platform::Port;
+use oer_chips_esp32s31_hal::system::root::Root;
 use oer_chips_family_executor::peer::liveness::{self, Beat, Period, Responder, Supervisor};
 use oer_chips_family_executor::peer::{Obligations, PeerClient, PeerError, PeerServer, PostError};
 use oer_chips_family_executor::{AlarmGrant, Executor, InterruptExecutor};
@@ -212,14 +212,14 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
         ),
         _psram,
         mut adopted,
-    ) = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
+    ) = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_runtime::Esp32s31, _, _>(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
         board::BootstrapPsram,
-        oer_chips_esp32s31_compose::phy_fault::report_previous,
+        oer_chips_esp32s31_runtime::phy_fault::report_previous,
         |hardware| {
-            let reset_causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+            let reset_causes = oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
             // The executor is not running yet: the early writer waits for room
             // within its budget and counts what it drops.
             // Every frame of this boot, the runtime's report of a previous
@@ -295,7 +295,7 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     let Ok(Some(mut cores)) = Cores::take() else {
         fail(oer_portable_diagnostics::name!("cores-taken"; 32));
     };
-    let hart1 = oer_chips_esp32s31_compose::secondary::launch_hart1(
+    let hart1 = oer_chips_esp32s31_runtime::secondary::launch_hart1(
         &mut cores,
         hart1,
         reset_causes,
@@ -375,7 +375,7 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! {
     let Ok(silent) = router.silent::<AesInterrupt>() else {
         fail(oer_portable_diagnostics::name!("hart1-aes-silent"; 32));
     };
-    let engine = oer_chips_esp32s31_compose::crypto::aes_engine(aes, silent);
+    let engine = oer_chips_esp32s31_runtime::crypto::aes_engine(aes, silent);
     let spawner = executor
         .start::<Hart1Tasks, _, _, 1, _>(hart, router, token, irq, ())
         .unwrap_or_else(|failure| failure.reset());

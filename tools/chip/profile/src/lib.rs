@@ -2,7 +2,7 @@
 //! (`oer-chips-family-facts`), and the stack policy of their image families
 //! ([`policy`]).
 //!
-//! Every supported chip has `chips/<id>/platform/chip.toml`, its chip layer:
+//! Every supported chip has `chips/<id>/facts/chip.toml`, its chip layer:
 //! it extends the ISA of its harts and its family, and its module and board
 //! extend it. A [`Profile`] is the resolved facts of the chip's board and the
 //! image registry its chip layer holds (`[packages]`, `[[probe]]`).
@@ -22,11 +22,11 @@ use std::{
 use oer_chips_family_facts::{Facts, Source};
 use serde::{Deserialize, Serialize};
 
-/// The root of the chip packages, whose `<id>/platform` directories hold
+/// The root of the chip packages, whose `<id>/facts` directories hold
 /// each chip's platform data.
 const CHIPS: &str = "chips";
 
-/// The platform data directory of chip `id` (`chips/<id>/platform`),
+/// The platform data directory of chip `id` (`chips/<id>/facts`),
 /// relative to the root: its layers, stack policy, partitions and ROM
 /// function summaries.
 pub fn platform_dir(id: &str) -> PathBuf {
@@ -241,7 +241,7 @@ impl Profile {
         format!("oer-chips-{}-bootstrap", self.facts.id)
     }
 
-    /// The chip's own stack policy (`chips/<id>/platform/stack.toml`), relative
+    /// The chip's own stack policy (`chips/<id>/facts/stack.toml`), relative
     /// to the root: the move limit and reserves of every image of the chip.
     pub fn stack_policy(&self) -> PathBuf {
         platform_dir(&self.facts.id).join("stack.toml")
@@ -298,8 +298,8 @@ mod tests {
             .iter()
             .copied()
             .chain([(
-                "chips/esp32s31/platform/partitions/applications.csv",
-                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+                "chips/esp32s31/facts/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/facts/partitions/applications.csv"),
             )])
         {
             let path = root.join(path);
@@ -368,7 +368,7 @@ mod tests {
                 .and_then(|rule| rule.bytes))
         };
         assert_eq!(bytes().unwrap(), Some(0x3_0000));
-        let policy = root.join("chips/esp32s31/platform/stack.toml");
+        let policy = root.join("chips/esp32s31/facts/stack.toml");
         let text = std::fs::read_to_string(&policy).unwrap();
         let key = "default_task_stack_bytes = { 0 = 0x30000, 1 = 0 }";
         assert!(text.contains(key));
@@ -390,14 +390,14 @@ mod tests {
         Profile::load_with_inputs(root, "esp32s31", &mut inputs).unwrap();
         let read: Vec<PathBuf> = inputs.into_digests().into_keys().collect();
         let mut expected: Vec<PathBuf> = [
-            "chips/family/platform/isa/rv32imafc.toml",
-            "chips/family/platform/family.toml",
-            "chips/esp32s31/platform/chip.toml",
-            "chips/esp32s31/platform/rom-rev0.toml",
-            "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",
-            "chips/esp32s31/platform/boards/esp32-s31-function-coreboard-1.toml",
+            "chips/family/facts/layers/isa/rv32imafc.toml",
+            "chips/family/facts/layers/family.toml",
+            "chips/esp32s31/facts/chip.toml",
+            "chips/esp32s31/facts/rom-rev0.toml",
+            "chips/esp32s31/facts/modules/esp32-s31-wroom.toml",
+            "chips/esp32s31/facts/boards/esp32-s31-function-coreboard-1.toml",
             // The chip's stack policy sizes the default task stack.
-            "chips/esp32s31/platform/stack.toml",
+            "chips/esp32s31/facts/stack.toml",
         ]
         .iter()
         .map(|path| root.join(path))
@@ -423,7 +423,7 @@ mod tests {
     #[test]
     fn a_guard_contract_rejects_missing_extra_and_invalid_harts_or_sizes() {
         let repository = repository();
-        let path = repository.path().join("chips/esp32s31/platform/chip.toml");
+        let path = repository.path().join("chips/esp32s31/facts/chip.toml");
         let source = std::fs::read_to_string(&path).unwrap();
         for guards in [
             "1024", // The old common value is no longer a contract.
@@ -451,7 +451,7 @@ mod tests {
     #[test]
     fn a_registry_key_outside_the_registry_is_refused() {
         let repository = repository();
-        let path = repository.path().join("chips/esp32s31/platform/chip.toml");
+        let path = repository.path().join("chips/esp32s31/facts/chip.toml");
         let source = std::fs::read_to_string(&path).unwrap();
         std::fs::write(
             &path,

@@ -1,7 +1,7 @@
 #![no_std]
 use oer_chips_esp32s31_hal::{
-    domain::RadioDomain,
-    ieee80211::client::{ClockPoisoned, StoppedInstallation},
+    radio::domain::RadioDomain,
+    radio::ieee80211::client::{ClockPoisoned, StoppedInstallation},
 };
 pub fn retain<B: oer_chips_esp32s31_hal::power::PlatformClockBackend, T>(
     stopped: StoppedInstallation,

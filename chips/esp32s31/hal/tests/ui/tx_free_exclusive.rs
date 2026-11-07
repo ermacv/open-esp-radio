@@ -1,6 +1,6 @@
 #![no_std]
-use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::{PinnedTxDmaStorage, TxDmaAccess};
-use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
+use oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_storage::{PinnedTxDmaStorage, TxDmaAccess};
+use oer_chips_esp32s31_hal::system::memory::dma_static::PlacedBacking;
 
 pub fn encode<L: PlacedBacking>(owner: &mut PinnedTxDmaStorage<L>) {
     if let TxDmaAccess::Free(mut free) = owner.access() {

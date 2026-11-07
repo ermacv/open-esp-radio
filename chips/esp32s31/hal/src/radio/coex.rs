@@ -1,0 +1,365 @@
+//! Shared coexistence mechanism owned by the radio domain.
+//!
+//! The radio domain keeps the coexistence priority table ([`CoexPtiTable`])
+//! and lends the timer bank ([`CoexPolicyTimerBank`]). Both are
+//! mechanism: which event requests which timer, and when, is the coexistence
+//! driver's policy, and every protocol programs its own MAC PTI registers from
+//! the values read here. A timer write or a PTI value does not report RF
+//! admission or grant revocation; the hardware arbitrates by priority and
+//! gives the CPU no grant acknowledgement.
+//!
+//! Timer 5 is not lent: the domain programs it for the PHY grant-protect
+//! request (`RadioDomain::acquire_phy_grant_protect`).
+//!
+//! [`CoexDomainPorts`] binds the family policy of `oer-chips-family-coex` to
+//! one radio domain: it lends the timer bank and the clock port to
+//! `CoexCore` as its `CoexTimerHardware` and `CoexClockHardware` ports.
+
+use crate::radio::modem::{
+    CoexTimerBankRegisters, CoexTimerRegister, CoexistenceLowPowerClockObservation,
+    values::{CoexTimerClientValue, CoexTimerPtiValue},
+};
+
+/// The event priority table every Espressif chip
+/// shares; the domain keeps one table as shared state.
+pub use oer_chips_family_coex::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable};
+
+mod clock;
+pub mod external;
+pub(crate) mod participation;
+mod ports;
+pub mod timer_bank;
+
+pub use clock::timer_clock;
+pub use ports::{CoexDomainClock, CoexDomainPorts, CoexDomainTimer, TimerClockError};
+
+/// Why the PHY grant-protect request cannot change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyGrantProtectError {
+    /// The request is already programmed; the vendor event has no nesting.
+    AlreadyProtected,
+    /// No request is programmed.
+    NotProtected,
+    /// The client or the priority is outside its register domain.
+    Domain,
+}
+
+/// The vendor PHY grant-protect event.
+pub(crate) const PHY_GRANT_PROTECT_EVENT: CoexEventId = match CoexEventId::new(48) {
+    Some(event) => event,
+    None => unreachable!(),
+};
+
+/// The PHY grant-protect request of one radio owner.
+///
+/// This is the pinned archive's `phy_acquire_grant_protect` /
+/// `phy_release_grant_protect` pair: `coex_core_request(2, 48, 0, 0)` and
+/// `coex_core_release(2, 48)` on timer 5. The owner keeps one flag, so the
+/// request is serialized as the vendor event has no nesting. It is a priority
+/// request to the hardware arbiter, never a grant acknowledgement: it does not
+/// prove that any other radio stopped.
+pub struct PhyGrantProtect<'owner> {
+    timers: CoexTimerBankRegisters<'owner>,
+    pti: CoexPti,
+    protected: &'owner mut bool,
+}
+
+impl<'owner> PhyGrantProtect<'owner> {
+    pub(crate) fn new(
+        timers: CoexTimerBankRegisters<'owner>,
+        pti: CoexPti,
+        protected: &'owner mut bool,
+    ) -> Self {
+        Self {
+            timers,
+            pti,
+            protected,
+        }
+    }
+
+    /// Program the request: timer 5 receives the request-kind client field,
+    /// the event-48 priority and zero primary and secondary targets, then is
+    /// enabled.
+    ///
+    /// Zero timing arguments convert to zero tick images for every clock
+    /// selection, so no clock sample is taken.
+    ///
+    /// # Errors
+    ///
+    /// The request is already programmed; nothing is written.
+    pub fn acquire(&mut self) -> Result<(), PhyGrantProtectError> {
+        if *self.protected {
+            return Err(PhyGrantProtectError::AlreadyProtected);
+        }
+        let (Some(client), Some(pti)) = (
+            CoexTimerClientValue::new(
+                oer_chips_esp32s31_pac::coex::configuration::Parameter1::PhyGrantProtect.bits(),
+            ),
+            CoexTimerPtiValue::new(u32::from(self.pti.value())),
+        ) else {
+            return Err(PhyGrantProtectError::Domain);
+        };
+        let timer = CoexTimerRegister::Timer5;
+        self.timers.configure(timer, client, pti);
+        self.timers.set_primary_target(timer, 0);
+        self.timers.set_secondary_target(timer, 0);
+        self.timers.enable(timer);
+        *self.protected = true;
+        Ok(())
+    }
+
+    /// Withdraw the request by disabling timer 5.
+    ///
+    /// # Errors
+    ///
+    /// No request is programmed; nothing is written.
+    pub fn release(&mut self) -> Result<(), PhyGrantProtectError> {
+        if !*self.protected {
+            return Err(PhyGrantProtectError::NotProtected);
+        }
+        self.timers.disable(CoexTimerRegister::Timer5);
+        *self.protected = false;
+        Ok(())
+    }
+
+    /// Whether the request is programmed.
+    pub fn is_protected(&self) -> bool {
+        *self.protected
+    }
+}
+
+/// One coexistence timer the coexistence policy may program.
+///
+/// Timer 5 is not among them: the domain reserves it for the PHY
+/// grant-protect request (vendor event 48), so no policy request can
+/// withdraw or overwrite that protection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum CoexPolicyTimer {
+    Timer0 = 0,
+    Timer1 = 1,
+    Timer2 = 2,
+    Timer3 = 3,
+    Timer4 = 4,
+}
+
+impl CoexPolicyTimer {
+    pub const ALL: [Self; 5] = [
+        Self::Timer0,
+        Self::Timer1,
+        Self::Timer2,
+        Self::Timer3,
+        Self::Timer4,
+    ];
+
+    /// A policy timer, or `None` for the reserved timer or beyond the bank.
+    pub const fn new(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Timer0),
+            1 => Some(Self::Timer1),
+            2 => Some(Self::Timer2),
+            3 => Some(Self::Timer3),
+            4 => Some(Self::Timer4),
+            _ => None,
+        }
+    }
+
+    pub const fn value(self) -> u8 {
+        self as u8
+    }
+
+    const fn register(self) -> CoexTimerRegister {
+        match self {
+            Self::Timer0 => CoexTimerRegister::Timer0,
+            Self::Timer1 => CoexTimerRegister::Timer1,
+            Self::Timer2 => CoexTimerRegister::Timer2,
+            Self::Timer3 => CoexTimerRegister::Timer3,
+            Self::Timer4 => CoexTimerRegister::Timer4,
+        }
+    }
+}
+
+/// Borrowed authority over the policy timers of the coexistence bank.
+///
+/// Every method is one finite register transaction. A write does not report
+/// RF admission or grant revocation.
+pub struct CoexPolicyTimerBank<
+    'registers,
+    P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<
+        { oer_chips_esp32s31_pac::instances::coex::BASE },
+    >,
+> {
+    registers: CoexTimerBankRegisters<'registers, P>,
+    pti: &'registers CoexPtiTable,
+}
+
+impl<'registers, P: oer_portable_mmio::Placement> CoexPolicyTimerBank<'registers, P> {
+    pub(crate) fn new(
+        registers: CoexTimerBankRegisters<'registers, P>,
+        pti: &'registers CoexPtiTable,
+    ) -> Self {
+        Self { registers, pti }
+    }
+
+    /// The domain's current priority; the domain cannot change it during this loan.
+    pub fn pti(&self, event: CoexEventId) -> CoexPti {
+        self.pti.pti(event)
+    }
+
+    /// Publish the client and PTI request fields of one timer.
+    pub fn configure(
+        &mut self,
+        timer: CoexPolicyTimer,
+        client: CoexTimerClientValue,
+        pti: CoexTimerPtiValue,
+    ) {
+        self.registers.configure(timer.register(), client, pti);
+    }
+
+    /// Publish one already converted primary target tick image.
+    pub fn set_primary_target(&mut self, timer: CoexPolicyTimer, tick_image: u32) {
+        self.registers
+            .set_primary_target(timer.register(), tick_image);
+    }
+
+    /// Publish one already converted secondary target tick image.
+    pub fn set_secondary_target(&mut self, timer: CoexPolicyTimer, tick_image: u32) {
+        self.registers
+            .set_secondary_target(timer.register(), tick_image);
+    }
+
+    pub fn enable(&mut self, timer: CoexPolicyTimer) {
+        self.registers.enable(timer.register());
+    }
+
+    pub fn disable(&mut self, timer: CoexPolicyTimer) {
+        self.registers.disable(timer.register());
+    }
+
+    pub fn force(&mut self, timer: CoexPolicyTimer) {
+        self.registers.force(timer.register());
+    }
+
+    pub fn unforce(&mut self, timer: CoexPolicyTimer) {
+        self.registers.unforce(timer.register());
+    }
+}
+
+/// Exclusive clock configuration and fresh observations, disjoint from the policy timers.
+pub struct CoexClockPort<
+    'registers,
+    P: crate::radio::phy::registers::RadioPlacement = crate::radio::phy::registers::ChipPlacement,
+> {
+    registers: &'registers mut crate::radio::phy::RadioPhyRegisters<P>,
+}
+
+impl<'registers, P: crate::radio::phy::registers::RadioPlacement> CoexClockPort<'registers, P> {
+    pub(crate) fn new(registers: &'registers mut crate::radio::phy::RadioPhyRegisters<P>) -> Self {
+        Self { registers }
+    }
+
+    /// Select the clock the coexistence timers count.
+    pub fn configure_timer_clock(
+        &mut self,
+        source: crate::types::CoexTimerClockSource,
+        divider_minus_one: crate::types::CoexTimerClockDividerMinusOne,
+    ) {
+        self.registers
+            .configure_coexistence_timer_clock(source, divider_minus_one);
+    }
+
+    /// Read the clock selection afresh on every call; an unreviewed encoding is absent.
+    pub fn sample_low_power_clock(&mut self) -> Option<CoexistenceLowPowerClockObservation> {
+        self.registers.sample_coexistence_low_power_clock()
+    }
+}
+
+pub use crate::radio::modem::{ExternalCoexRole, ExternalCoexWires};
+
+/// An external priority level (`esp_coex_pti_level_t`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExternalCoexLevel {
+    Mid,
+    High,
+}
+
+impl ExternalCoexLevel {
+    /// The priority `ic_set_extern_coex` publishes for this level.
+    const fn priority(self) -> crate::radio::modem::ExternalCoexPriority {
+        match self {
+            Self::Mid => {
+                const {
+                    crate::radio::modem::ExternalCoexPriority::new(0x8)
+                        .expect("the reviewed priority fits four bits")
+                }
+            }
+            Self::High => {
+                const {
+                    crate::radio::modem::ExternalCoexPriority::new(0xc)
+                        .expect("the reviewed priority fits four bits")
+                }
+            }
+        }
+    }
+}
+
+/// The priority `ic_set_extern_coex` publishes first, whatever the levels.
+const EXTERNAL_COEX_BASE_PRIORITY: crate::radio::modem::ExternalCoexPriority =
+    crate::radio::modem::ExternalCoexPriority::new(0x3)
+        .expect("the reviewed priority fits four bits");
+
+/// External coexistence, as ESP-IDF's `esp_enable_extern_coex_gpio_pin`
+/// configures it after routing the signals.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExternalCoexConfig {
+    pub role: ExternalCoexRole,
+    pub wires: ExternalCoexWires,
+    /// Grant delay in microseconds; the hardware holds 0 to 15.
+    pub grant_delay_us: u8,
+    /// Whether the external grant is valid high.
+    pub validate_high: bool,
+    /// The two levels `esp_coex_external_set` receives last; ESP-IDF passes
+    /// `MID` and `HIGH`.
+    pub levels: [ExternalCoexLevel; 2],
+}
+
+impl ExternalCoexConfig {
+    /// ESP-IDF's defaults for `role` and `wires`: no grant delay, valid high,
+    /// and the `MID`, `HIGH` levels.
+    pub const fn vendor(role: ExternalCoexRole, wires: ExternalCoexWires) -> Self {
+        Self {
+            role,
+            wires,
+            grant_delay_us: 0,
+            validate_high: true,
+            levels: [ExternalCoexLevel::Mid, ExternalCoexLevel::High],
+        }
+    }
+
+    /// The delay the hardware field holds, or `None` above 15 µs.
+    pub(crate) fn grant_delay(self) -> Option<crate::radio::modem::values::ExternalCoexGrantDelay> {
+        crate::radio::modem::values::ExternalCoexGrantDelay::new(u32::from(self.grant_delay_us))
+    }
+
+    pub(crate) fn priorities(self) -> [crate::radio::modem::ExternalCoexPriority; 3] {
+        [
+            EXTERNAL_COEX_BASE_PRIORITY,
+            self.levels[0].priority(),
+            self.levels[1].priority(),
+        ]
+    }
+}
+
+/// Why external coexistence cannot change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExternalCoexError {
+    /// External coexistence already runs.
+    AlreadyActive,
+    /// The grant delay exceeds the 15 µs the hardware field holds.
+    GrantDelayOutOfRange,
+    /// The coexistence module clock could not change.
+    Clock(crate::radio::domain::ModemClockError),
+}
+
+#[cfg(test)]
+mod tests;

@@ -345,7 +345,7 @@ fn sram_inventory_reads_placement_symbols_sections_and_the_boundary_source() {
     // Stage two owns the whole internal SRAM: everything unplaced is free.
     assert_eq!(sram.free(), u64::from(region.length()) - 0x520);
     assert!(sram.ranges.iter().any(|range| range.name == ".text"));
-    assert!(sram.source.contains("chips/esp32s31/platform/chip.toml"));
+    assert!(sram.source.contains("chips/esp32s31/facts/chip.toml"));
     assert!(sram.source.contains("[rom] sram"));
 }
 

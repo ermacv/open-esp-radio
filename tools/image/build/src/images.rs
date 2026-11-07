@@ -194,7 +194,7 @@ mod tests {
                 assert_eq!(spec.output, output(directory.path(), image));
                 assert_eq!(
                     spec.stack_policy,
-                    Path::new("chips/esp32s31/platform/stack.toml")
+                    Path::new("chips/esp32s31/facts/stack.toml")
                 );
                 assert!(spec.runtime_environment.is_empty());
                 let gates = spec.checks.unwrap();

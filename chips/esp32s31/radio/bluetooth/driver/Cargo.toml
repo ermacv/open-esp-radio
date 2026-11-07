@@ -1,0 +1,45 @@
+[package]
+name = "oer-chips-esp32s31-radio-bluetooth-driver"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE PHY, interrupts and scheduler primitives"
+
+[dependencies]
+oer-chips-family-bluetooth-engine = { path = "../../../../family/bluetooth-engine" }
+oer-protocols-bluetooth-le-wire = { path = "../../../../../protocols/bluetooth/le/wire" }
+oer-protocols-bluetooth-le-port = { path = "../../../../../protocols/bluetooth/le/port" }
+oer-protocols-radio-port = { path = "../../../../../protocols/radio/port" }
+oer-portable-memory = { path = "../../../../../portable/memory" }
+oer-portable-sync = { path = "../../../../../portable/sync" }
+oer-chips-esp32s31-radio-client = { path = "../../client", features = ["bluetooth"] }
+embassy-futures = "0.1.2"
+oer-chips-esp32s31-hal = { path = "../../../hal", features = ["bluetooth-engine"] }
+oer-chips-esp32s31-radio-phy = { path = "../../phy" }
+oer-portable-time = { path = "../../../../../portable/time" }
+oer-chips-family-interrupt-table = { path = "../../../../family/interrupt-table" }
+
+[dev-dependencies]
+oer-protocols-radio-port = { path = "../../../../../protocols/radio/port", features = ["test-support"] }
+oer-portable-time-virtual = { path = "../../../../../portable/time-virtual" }
+oer-portable-waker = { path = "../../../../../portable/waker" }
+bytemuck = { version = "1.25.2", default-features = false }
+oer-tools-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
+oer-chips-esp32s31-hal = { path = "../../../hal", features = ["test-support"] }
+
+# Host tests need the std implementation; chip doctests build without it.
+[target.'cfg(not(target_os = "none"))'.dev-dependencies]
+tempfile = "=3.27.0"
+oer-chips-family-interrupt-table = { path = "../../../../family/interrupt-table", features = ["host-signal"] }
+critical-section = { version = "1.2.0", features = ["std"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+

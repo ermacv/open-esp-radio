@@ -10,12 +10,12 @@ tools load.
 
 | Layer | File | Holds |
 | --- | --- | --- |
-| ISA | `chips/family/platform/isa/<isa>.toml` | the ISA of the harts and its bare-metal Rust target |
-| family | `chips/family/platform/family.toml` | the boot flow, the CLIC's lines and levels, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract (MMU page, image headers, probe page), the reachability report's observed functions |
-| chip | `chips/<id>/platform/chip.toml` | the chip's properties, flash map, address map (internal SRAM, flash window, retained memory) with each region's attributes, what the boot chain keeps and requires (`[boot-chain]`), harts, core start, reset cause; still the image registry (`[hil]`, `[packages]`, `[[probe]]`) |
-| ROM | `chips/<id>/platform/rom-<revision>.toml` | the mask ROM of one chip revision: its pinned ELF, symbol script, sourced entry points (`[[rom.functions]]`), function summaries, forbidden code and what it uses of the internal SRAM (`[rom] sram`) |
-| module | `chips/<id>/platform/modules/<module>.toml` | the module that carries the chip: its flash and PSRAM |
-| board | `chips/<id>/platform/boards/<board>.toml` | the board that carries the module |
+| ISA | `chips/family/facts/layers/isa/<isa>.toml` | the ISA of the harts and its bare-metal Rust target |
+| family | `chips/family/facts/layers/family.toml` | the boot flow, the CLIC's lines and levels, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract (MMU page, image headers, probe page), the reachability report's observed functions |
+| chip | `chips/<id>/facts/chip.toml` | the chip's properties, flash map, address map (internal SRAM, flash window, retained memory) with each region's attributes, what the boot chain keeps and requires (`[boot-chain]`), harts, core start, reset cause; the vendor comparison's probe list (`[[probe]]`) |
+| ROM | `chips/<id>/facts/rom-<revision>.toml` | the mask ROM of one chip revision: its pinned ELF, symbol script, sourced entry points (`[[rom.functions]]`), function summaries, forbidden code and what it uses of the internal SRAM (`[rom] sram`) |
+| module | `chips/<id>/facts/modules/<module>.toml` | the module that carries the chip: its flash and PSRAM |
+| board | `chips/<id>/facts/boards/<board>.toml` | the board that carries the module |
 
 A chip resolves from its board (at most one per chip until images name
 theirs), down through its module, the ROM of the module's chip revision and
@@ -82,7 +82,7 @@ reported by the image checks.
 register code or a property of the board. Its supported value is `xtal`;
 `rc-fast` is refused because no RC_FAST power/readiness policy is supported.
 `generate::lp_fast_source` requires this key and renders a typed constant for
-`oer-chips-esp32s31-boot`, using the HAL port's named source type. Encodings remain solely in the register model.
+`oer-chips-esp32s31-bootstrap`, using the HAL port's named source type. Encodings remain solely in the register model.
 
 `generate` turns the facts into the sources a person writing them could get
 wrong, each a pure function of the facts; build scripts call it, and nothing
@@ -90,7 +90,7 @@ it writes is in git:
 
 - `tracked_layout`: a chip's `LAYOUT` (`oer-chips-family-staged-layout`), from
   its facts and its stack policy's `default_task_stack_bytes`
-  (`chips/<id>/platform/stack.toml`), which its layout crate's build writes
+  (`chips/<id>/facts/stack.toml`), which its layout crate's build writes
   and every `--defsym` of the linker scripts comes from;
 - `Vectors`: the staged runtime's typed Rust vector-table rows and opaque
   entry-address declarations, every hart's assembly line entries

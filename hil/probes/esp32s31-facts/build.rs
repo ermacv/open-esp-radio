@@ -7,12 +7,12 @@ fn fact<'a>(value: &'a toml::Value, path: &[&str]) -> Result<&'a toml::Value, &'
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").ok_or("manifest")?);
     let root = dir.join("../../..");
-    let profile = root.join("chips/esp32s31/platform/chip.toml");
+    let profile = root.join("chips/esp32s31/facts/chip.toml");
     let clic = root.join("chips/esp32s31/registers/types/clic.toml");
     let profile: toml::Value = toml::from_str(&std::fs::read_to_string(&profile)?)?;
     let clic: toml::Value = toml::from_str(&std::fs::read_to_string(&clic)?)?;
     let family: toml::Value = toml::from_str(&std::fs::read_to_string(
-        root.join("chips/family/platform/family.toml"),
+        root.join("chips/family/facts/layers/family.toml"),
     )?)?;
     let number = |v: &toml::Value| v.as_integer().ok_or("integer fact");
     let base = number(fact(&profile, &["memory", "internal-sram", "origin"])?)?;
@@ -88,8 +88,8 @@ SECTIONS {{
         println!("cargo:rerun-if-changed={}", dir.join(file).display());
     }
     for file in [
-        "chips/esp32s31/platform/chip.toml",
-        "chips/family/platform/family.toml",
+        "chips/esp32s31/facts/chip.toml",
+        "chips/family/facts/layers/family.toml",
         "chips/esp32s31/registers/types/clic.toml",
     ] {
         println!("cargo:rerun-if-changed={}", root.join(file).display());

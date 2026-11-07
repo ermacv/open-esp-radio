@@ -4,9 +4,9 @@
 //! module is the only public path used by HAL consumers.  No peripheral owner,
 //! register block, raw accessor, or generic MMIO capability is re-exported.
 
-pub use crate::bluetooth::BluetoothMemoryListSelector;
+pub use crate::radio::bluetooth::BluetoothMemoryListSelector;
 /// The Wi-Fi MAC value types of the HAL's register operations.
-pub use crate::ieee80211::registers::{
+pub use crate::radio::ieee80211::registers::{
     ExtraSoftApRxBlockAckEntrySnapshot, MAC_TX_POWER_RATE_COUNT, MacApReceivePolicySnapshot,
     MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot, MacDelaySlot,
     MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig, MacHe20PeerError,
@@ -34,24 +34,24 @@ pub use crate::ieee80211::registers::{
     StaTbttSchedule, TxBlockAckPayload,
 };
 
-pub use crate::phy::restore::{
+pub use crate::radio::phy::restore::{
     BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRestoreError,
     RxDcoControlPrepareError, RxDcoControlRestoreError, TxDcPwdetLifecycleError,
     TxDcPwdetPrepareError, TxDcPwdetRestoreError, TxIqToneControlPrepareError,
     TxIqToneControlRestoreError,
 };
 
-pub use crate::ieee80211::registers::WifiRxCsiControlMask;
-pub use crate::ieee80211::station_wake::StaTbttScheduleError;
+pub use crate::radio::ieee80211::registers::WifiRxCsiControlMask;
+pub use crate::radio::ieee80211::station_wake::StaTbttScheduleError;
 
-pub use crate::modem::values::{
+pub use crate::radio::modem::values::{
     CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
     CoexTimerPtiValue, ForcedRxGain, PhyForcedPowerIndex,
 };
-pub use crate::modem::{
+pub use crate::radio::modem::{
     CoexTimerRegister, CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
 };
-pub use crate::phy::{
+pub use crate::radio::phy::{
     i2c::PhyAdcRate,
     memory::{PbusMemoryGroupBoundary, PhyGainMemoryEntry, PhyMemoryError},
 };

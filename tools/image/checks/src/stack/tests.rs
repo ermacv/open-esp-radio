@@ -514,7 +514,7 @@ fn bootstrap_exports_a_rom_summary_the_runtime_does_not_apply_and_its_coverage_r
         &[("stack_bottom", 0, 0), ("stack_top", 0x100, 0)],
     );
     let chip = tempfile::tempdir().unwrap();
-    let layer = chip.path().join("chips/esp32s31/platform/chip.toml");
+    let layer = chip.path().join("chips/esp32s31/facts/chip.toml");
     std::fs::create_dir_all(layer.parent().unwrap()).unwrap();
     std::fs::write(
         &layer,
@@ -1172,8 +1172,8 @@ fn the_repository_policies_load() {
         .copied()
         .chain([
             (
-                "chips/esp32s31/platform/stack.toml",
-                include_str!("../../../../../chips/esp32s31/platform/stack.toml"),
+                "chips/esp32s31/facts/stack.toml",
+                include_str!("../../../../../chips/esp32s31/facts/stack.toml"),
             ),
             (
                 "chips/family/staged-layout/stack-coverage.toml",
@@ -1290,9 +1290,9 @@ minimum_free_bytes = 16
     fn a_linked_starter_with_core_one_unused_fails() {
         let (_directory, policy) = policy_with(POLICY, "");
         for name in [
-            "oer_chips_esp32s31_hal::cores::Cores::start_hart1::<closure>",
-            "<oer_chips_esp32s31_hal::cores::Cores>::start_hart1",
-            "oer_chips_esp32s31_hal::cores::Cores::start_hart1",
+            "oer_chips_esp32s31_hal::system::cores::Cores::start_hart1::<closure>",
+            "<oer_chips_esp32s31_hal::system::cores::Cores>::start_hart1",
+            "oer_chips_esp32s31_hal::system::cores::Cores::start_hart1",
         ] {
             let image = image(
                 &with(Some(starter(name))),
@@ -1310,7 +1310,9 @@ minimum_free_bytes = 16
         }
         // A function that only resembles a starter is none.
         let image = image(
-            &with(Some(starter("oer_chips_esp32s31_hal::cores::Cores::park"))),
+            &with(Some(starter(
+                "oer_chips_esp32s31_hal::system::cores::Cores::park",
+            ))),
             &[("boot_stack", 0, 1024), BOOT_ONLY],
         );
         cores::audit_runtime(&image, &policy, &chip()).unwrap();
@@ -1363,7 +1365,7 @@ minimum_free_bytes = 16
             let (_directory, policy) = policy_with(&USED.replace("ROOT", root), ASM_REVIEW);
             let image = image(
                 &with(Some(starter(
-                    "oer_chips_esp32s31_hal::cores::Cores::start_hart1",
+                    "oer_chips_esp32s31_hal::system::cores::Cores::start_hart1",
                 ))),
                 &[
                     ("boot_stack", 0, 1024),

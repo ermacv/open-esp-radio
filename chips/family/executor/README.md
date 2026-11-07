@@ -55,7 +55,7 @@ names no chip: its code is generic over a chip binding `B: Binding`, whose
 IDs, pending and debugger reads, the software lines, the counter, the
 comparators and the fatal path; the hart geometry is the port's. Rust has no
 generic statics, so the chip's composition crate declares the binding once
-with `bind!(Esp32s31, Port)` (`chips/esp32s31/compose`): the `Storage` of the
+with `bind!(Esp32s31, Port)` (`chips/esp32s31/runtime`): the `Storage` of the
 port's published lines, counter latch and comparator writer, the one
 `static` waker vtable. The image declares its time driver with `time_driver!`,
 which exports the Embassy time driver's `_embassy_time_now` and

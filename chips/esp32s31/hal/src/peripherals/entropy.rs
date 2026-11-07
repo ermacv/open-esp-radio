@@ -20,7 +20,7 @@ pub type RngClockPlacement = Fixed<{ instances::lp_periclkrst::BASE }>;
 
 /// The true random number generator's output and status, and its clock
 /// and reset word, which stage two only reads: the bootstrap enabled the
-/// generator ([`crate::boot::Soc`]).
+/// generator ([`crate::system::boot::Soc`]).
 #[must_use = "dropping a register owner permanently loses its register authority"]
 pub struct EntropyRegisters<P: Placement = TrngPlacement, Q: Placement = RngClockPlacement> {
     trng: Trng<P>,

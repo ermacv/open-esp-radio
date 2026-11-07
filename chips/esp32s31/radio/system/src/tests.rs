@@ -8,14 +8,13 @@ use embassy_futures::{
     select::{Either, select},
     yield_now,
 };
-use oer_chips_esp32s31_hal::ieee80211::init::{
+use oer_chips_esp32s31_hal::radio::ieee80211::init::{
     MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
 use oer_chips_esp32s31_hal::{
-    ieee80211::client::{WifiClocked, WifiCold},
-    root::RadioHardware,
+    radio::ieee80211::client::{WifiClocked, WifiCold},
+    system::root::RadioHardware,
 };
-use oer_chips_esp32s31_phy::{PhyCalibrationPath, PhyState};
 use oer_chips_esp32s31_radio_client::{
     ClientCells, Leaving, PhyFault, RcSlow, RegistrationFault, RequestKind, claim_for_host_test,
     wifi::{
@@ -23,6 +22,7 @@ use oer_chips_esp32s31_radio_client::{
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
+use oer_chips_esp32s31_radio_phy::{PhyCalibrationPath, PhyState};
 use oer_portable_time::{Clock as _, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
@@ -42,7 +42,7 @@ const TICK_CAUSE: PoisonCause = PoisonCause::Tracking(PhyFault::EdgeTimedOut);
 
 pub(super) const fn wifi_poison(request: RequestKind, cause: PoisonCause) -> Poison {
     Poison::request(
-        oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
+        oer_chips_esp32s31_hal::radio::domain::RadioClient::Wifi,
         request,
         cause,
     )
@@ -96,7 +96,7 @@ struct Script {
     /// The next join answers this.
     enter_answers: Option<Failure>,
     /// The PHY refuses the next join with this.
-    phy_refuses_enter: Option<oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError>,
+    phy_refuses_enter: Option<oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError>,
     poison_track: bool,
     /// The next track answers this.
     track_answers: Option<Failure>,
@@ -295,7 +295,7 @@ fn cold() -> WifiCold {
     let (_domain, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     WifiCold::from_partition(partitions.wifi)
@@ -369,9 +369,9 @@ const REGISTRATION: PhyPreparation = PhyPreparation::Registered {
     calibration_path: PhyCalibrationPath::FullUncached,
     micros: 10,
     #[cfg(oer_trace)]
-    outcome: oer_chips_esp32s31_phy::PhyRegisterOutcome {
+    outcome: oer_chips_esp32s31_radio_phy::PhyRegisterOutcome {
         rf_calibration: None,
-        ready_waits: oer_chips_esp32s31_phy::ReadyWaitDiagnostics {
+        ready_waits: oer_chips_esp32s31_radio_phy::ReadyWaitDiagnostics {
             tx_dc_max_not_ready_samples: 0,
             pwdet_sar_max_not_ready_samples: 0,
         },
@@ -741,9 +741,9 @@ fn a_failed_tracking_tick_ends_the_run_and_a_later_request_names_it() {
 fn a_tracking_deadline_the_clock_cannot_hold_ends_the_run_before_any_tick() {
     let clock = clock();
     let overflow = PoisonCause::TrackingRefused(
-        oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
-            oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
-                class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
+        oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError::Time(
+            oer_chips_esp32s31_radio_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                class: oer_chips_esp32s31_radio_phy::state::client::PhyPllTrackClass::Wifi,
             },
         ),
     );
@@ -803,9 +803,9 @@ fn a_tracking_fault_names_its_stage_and_cause_and_classifies_it() {
     let overflow = TrackingFault {
         stage: TrackingStage::Deadline,
         cause: PoisonCause::TrackingRefused(
-            oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
-                oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
-                    class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
+            oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError::Time(
+                oer_chips_esp32s31_radio_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                    class: oer_chips_esp32s31_radio_phy::state::client::PhyPllTrackClass::Wifi,
                 },
             ),
         ),
@@ -871,9 +871,9 @@ fn a_recoverable_close_keeps_rf_open_in_the_same_epoch() {
 
 #[test]
 fn a_phy_refusal_stays_named_when_closing_the_rf_poisons_the_domain() {
-    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError;
     let refusal =
-        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::radio::domain::RadioClient::Wifi);
     let model = model(Script {
         phy_refuses_enter: Some(refusal),
         close_poisons: Some(PoisonCause::Controller),
@@ -903,9 +903,9 @@ fn a_phy_refusal_stays_named_when_closing_the_rf_poisons_the_domain() {
 
 #[test]
 fn a_backends_composite_failure_poisons_the_domain_and_keeps_its_refusal() {
-    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError;
     let refusal =
-        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::radio::domain::RadioClient::Wifi);
     let poison = Poison {
         origin: PoisonOrigin::Prepare,
         cause: PoisonCause::Controller,
@@ -946,9 +946,9 @@ fn a_backends_composite_failure_poisons_the_domain_and_keeps_its_refusal() {
 
 #[test]
 fn a_composite_failure_of_a_track_poisons_the_domain() {
-    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError;
     let refusal =
-        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::radio::domain::RadioClient::Wifi);
     let answer = Failure::PoisonedAfterRefusal {
         refusal,
         poison: TRACK_POISON,
@@ -980,9 +980,9 @@ fn a_composite_failure_of_a_track_poisons_the_domain() {
 
 #[test]
 fn a_composite_failure_answers_the_kept_poison_with_its_own_refusal() {
-    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError;
     let refusal =
-        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::radio::domain::RadioClient::Wifi);
     let first = Poison {
         origin: PoisonOrigin::Prepare,
         cause: PoisonCause::Controller,
@@ -1008,9 +1008,9 @@ fn a_composite_failure_answers_the_kept_poison_with_its_own_refusal() {
 
 #[test]
 fn a_phy_refusal_stays_a_refusal_when_the_rf_closes() {
-    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError;
     let refusal =
-        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::radio::domain::RadioClient::Wifi);
     let model = model(Script {
         phy_refuses_enter: Some(refusal),
         ..Script::default()
@@ -1218,9 +1218,9 @@ fn no_tracking_deadline_waits_only_for_a_posted_request() {
 
 #[test]
 fn a_join_the_phy_refused_names_the_refusal_after_either_rollback() {
-    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError;
     let refusal =
-        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::domain::RadioClient::Wifi);
+        ConcurrentPhyError::ClientPhase(oer_chips_esp32s31_hal::radio::domain::RadioClient::Wifi);
     assert_eq!(
         crate::phy_refused_join(refusal, true),
         Failure::PhyRefused(refusal)

@@ -16,7 +16,7 @@ oer-portable-memory = { path = "../../portable/memory" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer = { path = "../../oer", features = ["console"] }
 oer-portable-diagnostics = { path = "../../portable/diagnostics" }
-oer-chips-esp32s31-compose = { path = "../../chips/esp32s31/compose" }
+oer-chips-esp32s31-runtime = { path = "../../chips/esp32s31/runtime" }
 oer-chips-family-staged-runtime = { path = "../../chips/family/staged-runtime" }
 oer-protocols-hil-agent = { path = "../../protocols/hil/agent", default-features = false }
 oer-protocols-hil-protocol = { workspace = true, features = ["async-io"] }

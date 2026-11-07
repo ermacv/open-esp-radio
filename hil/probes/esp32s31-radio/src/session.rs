@@ -8,13 +8,13 @@
 //! register again.
 
 use oer_chips_esp32s31_hal::{
-    domain::{CommonPower, RadioDomain, WifiClient},
-    ieee80211::client::{WifiClocksOn, WifiCold},
-    owner::RadioAccess,
     power::ChipClocks,
-    root::Root,
+    radio::domain::{CommonPower, RadioDomain, WifiClient},
+    radio::ieee80211::client::{WifiClocksOn, WifiCold},
+    system::owner::RadioAccess,
+    system::root::Root,
 };
-use oer_chips_esp32s31_phy::concurrent::ConcurrentPhy;
+use oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhy;
 use oer_portable_memory::ClaimCell;
 
 /// The owners the session's entries borrow.
@@ -22,7 +22,7 @@ pub(crate) struct Session {
     pub(crate) calibrated: bool,
     /// The shared radio domain.
     pub(crate) radio: Option<RadioDomain<ChipClocks, ConcurrentPhy>>,
-    radio_fault: oer_chips_esp32s31_hal::domain::transaction::FaultHandle,
+    radio_fault: oer_chips_esp32s31_hal::radio::domain::transaction::FaultHandle,
     /// The running Wi-Fi register owner.
     pub(crate) wifi: RadioAccess,
     /// Wi-Fi's common power, held for the session.
@@ -63,8 +63,10 @@ static REGISTRATION_FUTURE: static_cell::ConstStaticCell<
 
 /// Start the session: [`STARTED`] or why it did not.
 pub(crate) fn init(
-    identity: impl FnOnce() -> oer_chips_esp32s31_hal::domain::transaction::PhyIdentity,
-    report: impl FnOnce(oer_chips_esp32s31_hal::domain::transaction::Fault) -> core::convert::Infallible,
+    identity: impl FnOnce() -> oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity,
+    report: impl FnOnce(
+        oer_chips_esp32s31_hal::radio::domain::transaction::Fault,
+    ) -> core::convert::Infallible,
 ) -> u32 {
     let Some(root) = Root::take() else {
         return ROOT_TAKEN;
@@ -92,7 +94,7 @@ pub(crate) fn init(
 
 fn powered(
     mut radio: RadioDomain<ChipClocks, ConcurrentPhy>,
-    wifi: oer_chips_esp32s31_hal::root::WifiPartition,
+    wifi: oer_chips_esp32s31_hal::system::root::WifiPartition,
     clocks: ChipClocks,
 ) -> Result<Session, u32> {
     let Ok((powered, power)) = WifiCold::from_partition(wifi).power_up(&mut radio, &clocks) else {
@@ -121,14 +123,16 @@ fn powered(
     reason = "the staged companion calls this shared session path"
 )]
 pub(crate) async fn calibrated(
-    hardware: oer_chips_esp32s31_hal::root::RadioHardware,
+    hardware: oer_chips_esp32s31_hal::system::root::RadioHardware,
     clocks: ChipClocks,
-    identity: oer_chips_esp32s31_phy::PhyCalibrationIdentity,
+    identity: oer_chips_esp32s31_radio_phy::PhyCalibrationIdentity,
     timer: &impl oer_portable_cooperate::CooperativeTimer,
-    transaction_identity: oer_chips_esp32s31_hal::domain::transaction::PhyIdentity,
-    report: impl FnOnce(oer_chips_esp32s31_hal::domain::transaction::Fault) -> core::convert::Infallible,
+    transaction_identity: oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity,
+    report: impl FnOnce(
+        oer_chips_esp32s31_hal::radio::domain::transaction::Fault,
+    ) -> core::convert::Infallible,
 ) -> u32 {
-    use oer_chips_esp32s31_phy::{
+    use oer_chips_esp32s31_radio_phy::{
         NoopPhyTargetObserver, PhyRegisterConfig, RomShortDelay, register_concurrent_phy,
     };
     let (radio, partitions) = hardware
@@ -169,7 +173,7 @@ pub(crate) async fn calibrated(
 #[cfg(target_arch = "riscv32")]
 impl Session {
     pub(crate) fn measurement_clocks(&mut self, enabled: bool) -> bool {
-        use oer_chips_esp32s31_hal::domain::PhyClockModule;
+        use oer_chips_esp32s31_hal::radio::domain::PhyClockModule;
         let radio = self.radio_fault.require_owner(self.radio.as_mut());
         if enabled {
             radio
@@ -202,11 +206,13 @@ impl Session {
     }
     pub(crate) fn phy<R>(
         &mut self,
-        operation: impl FnOnce(&mut oer_chips_esp32s31_hal::domain::transaction::PhyHardware) -> R,
+        operation: impl FnOnce(
+            &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardware,
+        ) -> R,
     ) -> R {
         let radio = self.radio_fault.require_owner(self.radio.take());
         let mut transaction =
-            radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Maintain);
+            radio.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Maintain);
         let result = operation(transaction.hardware_mut());
         self.radio = Some(transaction.reunite());
         result

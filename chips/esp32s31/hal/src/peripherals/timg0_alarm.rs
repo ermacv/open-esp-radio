@@ -7,7 +7,7 @@
 //! The SAR/PWDET pilot and the host composition fixture select P2
 //! `Exempt(ExecutorLevel)` and a lower line ID than FROM_CPU2. Its arbitration
 //! interpretation follows the family CLIC contract:
-//! SOURCE: chips/family/platform/family.toml [interrupts], RISC-V CLIC
+//! SOURCE: chips/family/facts/layers/family.toml [interrupts], RISC-V CLIC
 //! specification 3f8ee744, "Specifying Interrupt Priority"; ESP-IDF 4d80c1b2
 //! components/soc/esp32s31/include/soc/clic_reg.h (NLBITS/INT_INFO geometry).
 //! SOURCE for same-level priority/ID arbitration: ESP32-C5 TRM v1.1,

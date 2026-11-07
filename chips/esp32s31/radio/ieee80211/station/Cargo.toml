@@ -1,0 +1,60 @@
+[package]
+name = "oer-chips-esp32s31-radio-ieee80211-station"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish.workspace = true
+description = "ESP32-S31 station facade over the portable runtime and S31 backend"
+
+[dependencies]
+embassy-futures = "0.1.2"
+zeroize = { version = "1.8.1", default-features = false }
+oer-portable-sync = { path = "../../../../../portable/sync" }
+oer-portable-diagnostics = { path = "../../../../../portable/diagnostics" }
+heapless = { version = "0.9.3", features = ["zeroize"] }
+static_cell.workspace = true
+bytemuck = { version = "1.25.2", features = ["derive"] }
+oer-protocols-ieee80211-core-security-rsn = { path = "../../../../../protocols/ieee80211/core/security/rsn" }
+oer-protocols-network-port = { path = "../../../../../protocols/network/port" }
+oer-protocols-ieee80211-runtime = { path = "../../../../../protocols/ieee80211/runtime", features = ["placement"] }
+oer-protocols-ieee80211-core-roles-sta = { path = "../../../../../protocols/ieee80211/core/roles/sta" }
+oer-protocols-ieee80211-wire = { path = "../../../../../protocols/ieee80211/wire" }
+oer-protocols-ieee80211-core-upper-mac = { path = "../../../../../protocols/ieee80211/core/upper-mac" }
+oer-protocols-ieee80211-contracts-port = { path = "../../../../../protocols/ieee80211/contracts/port" }
+oer-protocols-radio-port = { path = "../../../../../protocols/radio/port" }
+oer-protocols-ieee80211-core-arbiter = { path = "../../../../../protocols/ieee80211/core/arbiter" }
+oer-chips-family-ieee80211-policy = { path = "../../../../family/ieee80211-policy" }
+oer-chips-family-coex = { path = "../../../../family/coex" }
+oer-protocols-radio-regulatory = { path = "../../../../../protocols/radio/regulatory" }
+oer-portable-time = { path = "../../../../../portable/time" }
+oer-portable-trace = { path = "../../../../../portable/trace" }
+oer-portable-events = { path = "../../../../../portable/events" }
+oer-portable-memory = { path = "../../../../../portable/memory" }
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-chips-family-radio = { path = "../../../../family/radio" }
+oer-chips-esp32s31-hal = { path = "../../../hal" }
+oer-chips-esp32s31-board = { path = "../../../board" }
+oer-chips-esp32s31-runtime = { path = "../../../runtime", features = ["wifi-fault", "radio-fault"] }
+oer-chips-esp32s31-radio-phy = { path = "../../phy" }
+oer-chips-esp32s31-radio-client = { path = "../../client" }
+oer-chips-esp32s31-radio-system = { path = "../../system" }
+oer-chips-esp32s31-radio-ieee80211-driver = { path = "../driver" }
+oer-chips-family-executor = { path = "../../../../family/executor", features = ["installations"] }
+oer-chips-family-interrupt-table = { path = "../../../../family/interrupt-table" }
+oer-portable-embassy-time = { path = "../../../../../portable/embassy/time" }
+
+[dev-dependencies]
+oer-chips-family-radio = { path = "../../../../family/radio" }
+oer-chips-esp32s31-hal = { path = "../../../hal", features = ["test-support"] }
+oer-chips-esp32s31-radio-phy = { path = "../../phy" }
+oer-chips-esp32s31-radio-client = { path = "../../client" }
+oer-chips-esp32s31-radio-ieee80211-driver = { path = "../driver" }
+
+oer-portable-memory = { path = "../../../../../portable/memory", features = ["host-context"] }
+oer-portable-time-virtual = { path = "../../../../../portable/time-virtual" }
+
+[lints]
+workspace = true

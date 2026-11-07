@@ -103,7 +103,7 @@ impl<B, O> TimeDriver<B, O> {
 /// ```ignore
 /// /// The ESP32-S31's executor binding.
 /// pub struct Esp32s31 { _private: () }
-/// oer_chips_family_executor::bind!(Esp32s31, oer_chips_esp32s31_hal::platform::Port);
+/// oer_chips_family_executor::bind!(Esp32s31, oer_chips_esp32s31_hal::system::platform::Port);
 /// ```
 #[macro_export]
 macro_rules! bind {

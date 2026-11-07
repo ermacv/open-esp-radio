@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::{root::Root, peripherals::aes::AesParts};
+use oer_chips_esp32s31_hal::{system::root::Root, peripherals::aes::AesParts};
 
 pub fn aes(root: Root) -> Result<AesParts, oer_chips_family_boot::adoption::InitError> {
     let runtime = oer_chips_family_boot::adoption::initialize(root.into_runtime())?.hardware;

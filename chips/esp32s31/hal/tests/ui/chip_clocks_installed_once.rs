@@ -1,6 +1,6 @@
 #![no_std]
 
-use oer_chips_esp32s31_hal::{power::ChipClocks, root::Root};
+use oer_chips_esp32s31_hal::{power::ChipClocks, system::root::Root};
 
 pub fn install(root: Root) -> Result<ChipClocks, oer_chips_family_boot::adoption::InitError> {
     let clocks = oer_chips_family_boot::adoption::initialize(root.into_runtime())?.hardware.clocks;

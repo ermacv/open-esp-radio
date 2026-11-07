@@ -5,7 +5,7 @@ error[E0061]: this method takes 2 arguments but 1 argument was supplied
    |               ^^^^^^^ ---- argument #1 of type `&PhyRegistrationGrant` is missing
    |
 note: method defined here
-  --> src/domain.rs
+  --> src/radio/domain.rs
    |
    |     pub fn publish(
    |            ^^^^^^^
@@ -35,7 +35,7 @@ error[E0423]: cannot initialize a tuple struct which contains private fields
    |     ^^^^^^^^
    |
 note: constructor is not visible here due to private fields
-  --> src/domain.rs
+  --> src/radio/domain.rs
    |
    | pub struct BtbbGain(oer_chips_family_radio::domain::Gain<PhyRegistrationEpoch>);
    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private field

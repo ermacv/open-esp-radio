@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::bluetooth::engine::{
+use oer_chips_esp32s31_hal::radio::bluetooth::engine::{
     ArenaMemory, Engine, SchedulerRoleInstance,
     scheduler::interrupt::SchedulerDoorbell,
 };

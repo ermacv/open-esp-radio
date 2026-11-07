@@ -13,7 +13,7 @@ note: required because it appears within the type `PhantomData<*const ()>`
    | pub struct PhantomData<T: PointeeSized>;
    |            ^^^^^^^^^^^
 note: required because it appears within the type `Fatal<'_>`
-  --> src/cores.rs
+  --> src/system/cores.rs
    |
    | pub struct Fatal<'a> {
    |            ^^^^^
@@ -38,7 +38,7 @@ note: required because it appears within the type `PhantomData<*const ()>`
    | pub struct PhantomData<T: PointeeSized>;
    |            ^^^^^^^^^^^
 note: required because it appears within the type `StopTheWorld<'_>`
-  --> src/cores.rs
+  --> src/system/cores.rs
    |
    | pub struct StopTheWorld<'a> {
    |            ^^^^^^^^^^^^

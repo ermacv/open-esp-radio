@@ -9,14 +9,14 @@ oer_tools_probe_macros::probe! {
     pub fn open_phy_calibration_leaf(profile: u32, a: u32, b: u32, c: u32) -> u32 {
         crate::session::with(|session| session.phy(|phy| {
             match profile {
-                0 => oer_chips_esp32s31_hal::phy::baseband::restore_tx_gain_compensation(phy),
-                1 => oer_chips_esp32s31_hal::phy::baseband::configure_forced_digital_gain(
+                0 => oer_chips_esp32s31_hal::radio::phy::baseband::restore_tx_gain_compensation(phy),
+                1 => oer_chips_esp32s31_hal::radio::phy::baseband::configure_forced_digital_gain(
                     phy,
                     a & 1 != 0,
                     b as i8,
                     c as i8,
                 ),
-                3 => oer_chips_esp32s31_hal::phy::agc::update_post_initialization(phy),
+                3 => oer_chips_esp32s31_hal::radio::phy::agc::update_post_initialization(phy),
                 _ => return 0x10003,
             }
             0

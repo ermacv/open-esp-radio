@@ -17,8 +17,8 @@ pub(crate) fn exception(
     claim: &Claim<'_>,
     frame: &TrapFrame,
     _: Result<
-        &oer_chips_esp32s31_hal::cores::StopTheWorld<'_>,
-        oer_chips_esp32s31_hal::cores::StopError,
+        &oer_chips_esp32s31_hal::system::cores::StopTheWorld<'_>,
+        oer_chips_esp32s31_hal::system::cores::StopError,
     >,
 ) {
     record(claim, 1, frame.mcause, frame.mepc, frame.mtval, frame.ra);
@@ -28,8 +28,8 @@ pub(crate) fn panic(
     claim: &Claim<'_>,
     _: &runtime::panic::PanicDetails<'_>,
     _: Result<
-        &oer_chips_esp32s31_hal::cores::StopTheWorld<'_>,
-        oer_chips_esp32s31_hal::cores::StopError,
+        &oer_chips_esp32s31_hal::system::cores::StopTheWorld<'_>,
+        oer_chips_esp32s31_hal::system::cores::StopError,
     >,
 ) {
     let registers = runtime::trap::TrapRegisters::read();
@@ -121,5 +121,5 @@ pub(crate) fn report_previous() {
         .ok_or(())
     });
     drop(fault);
-    runtime::fatal_halt::<oer_chips_esp32s31_hal::platform::Port>(|_, _| {});
+    runtime::fatal_halt::<oer_chips_esp32s31_hal::system::platform::Port>(|_, _| {});
 }

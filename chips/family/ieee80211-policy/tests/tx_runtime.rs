@@ -1,4 +1,4 @@
-use oer_chips_esp32s31_ieee80211_driver::mac::{
+use oer_chips_esp32s31_radio_ieee80211_driver::mac::{
     edca::*,
     portable::legacy_from_phy_rate,
     tx::{runtime::*, *},
@@ -100,8 +100,8 @@ fn negotiated_txop_is_bounded_and_medium_ownership_stays_unsupported() {
 
 #[test]
 fn ordinary_he_retries_walk_the_dot11ax_record() {
-    use oer_chips_esp32s31_ieee80211_driver::mac::rx::HeGuardIntervalAndLtf;
-    use oer_chips_esp32s31_ieee80211_driver::mac::tx::{HeMcs, HeRate};
+    use oer_chips_esp32s31_radio_ieee80211_driver::mac::rx::HeGuardIntervalAndLtf;
+    use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::{HeMcs, HeRate};
     let counters = |failures| RetryCounters {
         mpdu: failures,
         short: 0,

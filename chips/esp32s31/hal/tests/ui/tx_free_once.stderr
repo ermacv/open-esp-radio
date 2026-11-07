@@ -10,7 +10,7 @@ error[E0382]: use of moved value: `free`
   |             ^^^^ value used here after move
   |
 note: `TxDmaFree::<'owner, L>::reserve` takes ownership of the receiver `self`, which moves `free`
- --> src/ieee80211/dma/tx_storage.rs
+ --> src/radio/ieee80211/dma/tx_storage.rs
   |
   |         self,
   |         ^^^^

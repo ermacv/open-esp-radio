@@ -45,12 +45,12 @@
 use core::future::poll_fn;
 
 use embassy_futures::select::{Either, select};
-use oer_chips_esp32s31_phy::executor::boundary::Boundary;
 use oer_chips_esp32s31_radio_client::{
     ActorEnd, Client, ClientInbox, DomainHealth, Doorbell, Failed, Failure, Joined, Leaving, Left,
     LpClock, LpSource, MemberMint, PhyPreparation, Poison, PoisonCause, PoisonOrigin, Request,
     RfEpoch, TrackedMember, wifi::Wifi,
 };
+use oer_chips_esp32s31_radio_phy::executor::boundary::Boundary;
 
 /// A hardware transaction failed after it started: the PHY domain is
 /// poisoned by this cause.
@@ -84,10 +84,10 @@ impl TrackingFault {
     /// software invariant; every other failed or timed-out PHY step is an
     /// unexpected hardware observation without an impossibility proof.
     pub const fn class(&self) -> oer_portable_diagnostics::fault::Class {
-        use oer_chips_esp32s31_phy::{
+        use oer_chips_esp32s31_radio_client::{CalibrationTrackingFault, PhyFault};
+        use oer_chips_esp32s31_radio_phy::{
             concurrent::ConcurrentPhyError, state::client::PhyTrackTimeError,
         };
-        use oer_chips_esp32s31_radio_client::{CalibrationTrackingFault, PhyFault};
         use oer_portable_diagnostics::fault::Class;
         const fn step(fault: PhyFault) -> Class {
             match fault {
@@ -447,14 +447,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSys
 /// rollback finished: the refusal stays named either way.
 #[cfg(any(target_arch = "riscv32", test))]
 const fn phy_refused_join(
-    refusal: oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError,
+    refusal: oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError,
     rolled_back: bool,
 ) -> Failure {
     if rolled_back {
         Failure::PhyRefused(refusal)
     } else {
         Failure::Poisoned(Poison::request(
-            oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
+            oer_chips_esp32s31_hal::radio::domain::RadioClient::Wifi,
             oer_chips_esp32s31_radio_client::RequestKind::Join,
             PoisonCause::RollbackAfterRefusal(refusal),
         ))

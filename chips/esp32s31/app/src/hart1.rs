@@ -17,13 +17,13 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use oer_chips_esp32s31_hal::{
-    cores::{Cores, LaunchPermit},
     peripherals::{
         reset_cause::ResetCauses,
         software_interrupt::{FromCpu1, FromCpu1Irq},
         system_timer::SystimerAlarm2,
     },
-    platform::{Hart1Grant, Port},
+    system::cores::{Cores, LaunchPermit},
+    system::platform::{Hart1Grant, Port},
 };
 use oer_chips_family_boot::wait::{BootBudget, BootDeadline, BootWait};
 use oer_chips_family_executor::{AlarmGrant, Executor, Root, TimeDriverReady};
@@ -138,7 +138,7 @@ pub(crate) fn launch(
     let Ok(Some(mut cores)) = Cores::take() else {
         fail(oer_portable_diagnostics::name!("hart1-cores"; 32));
     };
-    let running = oer_chips_esp32s31_compose::secondary::launch_hart1(
+    let running = oer_chips_esp32s31_runtime::secondary::launch_hart1(
         &mut cores,
         launch.permit,
         launch.causes,

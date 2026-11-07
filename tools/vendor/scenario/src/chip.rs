@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 /// One chip's scenario configuration.
 pub struct Chip {
-    /// Chip identifier, as `chips/<id>/platform/chip.toml` names it.
+    /// Chip identifier, as `chips/<id>/facts/chip.toml` names it.
     pub name: &'static str,
     /// Its text, compiled into the scenario binary.
     pub manifest_text: &'static str,

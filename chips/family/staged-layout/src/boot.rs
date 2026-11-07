@@ -6,7 +6,7 @@
 //! its own generated entry (`handoff::SecondaryEntry`), which the runtime's
 //! launch writes to its boot word.
 //!
-//! SOURCE: chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment.
+//! SOURCE: chips/esp32s31/facts/README.md#secondary-hart-launch-and-containment.
 
 /// The bootstrap's admitted boot hart. Every facts-generated layout const-checks
 /// this value against its boot-hart fact; a disagreement fails compilation.

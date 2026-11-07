@@ -1,13 +1,13 @@
 #![no_std]
 use oer_chips_esp32s31_hal::{
-    cores::SecondaryEntry,
-    platform::{core_control::CoreControlRegisters, SecondaryHart},
+    system::cores::SecondaryEntry,
+    system::platform::{core_control::CoreControlRegisters, SecondaryHart},
 };
 
 pub fn hold(registers: &mut CoreControlRegisters, secondary: SecondaryHart) {
     registers.hold(secondary);
     #[cfg(ui_reject)]
-    registers.hold(oer_chips_esp32s31_hal::platform::BOOT_HART); // ui-error: E0308
+    registers.hold(oer_chips_esp32s31_hal::system::platform::BOOT_HART); // ui-error: E0308
 }
 
 #[allow(unsafe_code)]

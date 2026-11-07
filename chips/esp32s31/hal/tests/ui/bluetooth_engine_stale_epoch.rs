@@ -1,6 +1,6 @@
 #![no_std]
 // ui-requires: bluetooth-engine
-use oer_chips_esp32s31_hal::bluetooth::engine::*;
+use oer_chips_esp32s31_hal::radio::bluetooth::engine::*;
 
 pub fn release<'pool, 'old, 'next>(
     old: &mut Engine<ArenaMemory<'pool, 'old, 0, 1, 2, 1, 4, 4, 8>>,

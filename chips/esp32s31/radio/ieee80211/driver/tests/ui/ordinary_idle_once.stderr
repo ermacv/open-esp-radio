@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `idle`
+  --> tests/ui/ordinary_idle_once.rs:17:13
+   |
+ 8 |     mut idle: OrdinaryTxIdle<'_, '_, P, E, T, 64>,
+   |     -------- move occurs because `idle` has type `OrdinaryTxIdle<'_, '_, P, E, T, 64>`, which does not implement the `Copy` trait
+...
+15 |     let _ = idle.start_single_attempt(hardware, plan, oer_chips_esp32s31_radio_ieee80211_driver::ordinary_tx::SingleAttempt::new(oer...
+   |             ---- value moved here
+16 |     #[cfg(all())]
+17 |     let _ = idle.start_single_attempt(hardware, plan, oer_chips_esp32s31_radio_ieee80211_driver::ordinary_tx::SingleAttempt::new(oer...
+   |             ^^^^ value used here after move

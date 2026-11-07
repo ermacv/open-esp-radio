@@ -578,8 +578,8 @@ pub(crate) fn repository() -> tempfile::TempDir {
                 include_str!("../../../../chips/esp32s31/vendor/facts/provenance.toml"),
             ),
             (
-                "chips/esp32s31/platform/partitions/applications.csv",
-                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+                "chips/esp32s31/facts/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/facts/partitions/applications.csv"),
             ),
             (
                 "tools/analysis/cli/tests/riscv_conformance/inputs.toml",

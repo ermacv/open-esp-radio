@@ -2,13 +2,13 @@
 //! system.
 
 use oer_chips_esp32s31_hal::{
-    ieee80211::init::{
+    radio::ieee80211::init::{
         MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacDelayEntropy, MacSlowClockCalibration,
         MacSlowClockCalibrationSource, MacTxPowerSource,
     },
     types::MacTxPowerPair,
 };
-use oer_chips_esp32s31_phy::PhyTxTargetPowerProfile;
+use oer_chips_esp32s31_radio_phy::PhyTxTargetPowerProfile;
 
 /// The MAC cold start's queries, in `MacColdCoexPti::query` order.
 pub(crate) const MAC_COEX_EVENTS: [MacCoexEvent; 4] = [

@@ -1,6 +1,6 @@
 #![no_std]
-use oer_chips_esp32s31_hal::memory::dma_static::PlacedTxLease;
-use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{RetainedAmpduDma, WrittenBuffer};
+use oer_chips_esp32s31_hal::system::memory::dma_static::PlacedTxLease;
+use oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_ampdu_storage::{RetainedAmpduDma, WrittenBuffer};
 use oer_portable_memory::PinnedDmaTxRadioLease;
 
 // An aggregate publishes a retained backing's address without a check, so

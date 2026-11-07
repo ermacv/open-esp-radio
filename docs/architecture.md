@@ -42,7 +42,7 @@ image                boot (chosen peripherals and services), application tasks
                      executors and service tasks, record and reset on the
                      image's behalf
   service / facade   radio system (one owner of the shared RF front-end),
-                     protocol facades, the chip's composition (`compose`)
+                     protocol facades, the chip's composition (`runtime`)
   chip adapters      ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 backends
   drivers            block and subsystem operations: PHY (calibration,
                      tracking, channel, TX power; Rust port of libphy), boot
@@ -59,7 +59,7 @@ image                boot (chosen peripherals and services), application tasks
 
 The family's `oer-chips-family-boot::drivers` holds LP-fast, brownout,
 secondary containment and release, access-filter and TRNG startup operations
-over register ports implemented by the HAL's owned boot parts. `oer-chips-esp32s31-boot` supplies
+over register ports implemented by the HAL's owned boot parts. `oer-chips-esp32s31-bootstrap` supplies
 S31 profiles, including the generated LP-fast source. This chip binding sits
 above HAL and family drivers so neither HAL nor chip knowledge chooses or
 executes those policies. The family staged-bootstrap cold-start runner owns
@@ -172,7 +172,7 @@ refuses it with a typed error. A protocol's synchronous software primitive
 lives in its `cipher`. The chip composition chooses the engine as a static type.
 The S31 Typical AES engine lives in `chips/esp32s31/crypto`, over the HAL's
 `peripherals::aes` atoms and exclusive crypto clock/reset word. The shared
-`compose::crypto` selects it and supplies it to the Wi-Fi facade in
+`runtime::crypto` selects it and supplies it to the Wi-Fi facade in
 `Resources`. The image's composition places the AES owner on a hart: the
 boot hart takes it from `Hardware` (Wi-Fi images), or an image that
 launches hart 1 moves `AesParts` into hart 1's launch parts and builds the
@@ -214,7 +214,7 @@ installation, retains each through its refusal or terminal, and restores it
 before delivering the lossless concrete callback. A duplicate in-flight kind
 has its own typed admission refusal. The lifecycle runs the station and
 arbiter cores and commands the actor in messages; the actor alone calls the
-generic data port. The chip facade `oer-chips-esp32s31-wifi` assembles the S31 backend,
+generic data port. The chip facade `oer-chips-esp32s31-radio-ieee80211-station` assembles the S31 backend,
 arbiter, station and runtime as `station(resources, config) -> (Control,
 network end, network stopper, Runners { datapath, station })`. The station runs its EAPOL-Key data unwrap, its
 AES-CMAC EAPOL-Key MIC and its protected-management CCMP and BIP
@@ -300,7 +300,6 @@ existing local entries.
 | `oer-chips-family-radio` | `chips/family/radio` |
 | `oer-chips-family-phy` | `chips/family/phy` |
 | `oer-chips-family-bluetooth-engine` | `chips/family/bluetooth-engine` |
-| `oer-chips-esp32s31-instrumentation` | `chips/esp32s31/instrumentation` |
 
 The console `oer-chips-family-usb-serial-jtag` depends transitively on mmio
 through `oer-chips-family-interrupt-table`, which owns platform interrupt
@@ -331,7 +330,7 @@ and the bootstrap's named `Monotonic::start_initial_latch_check` check.
 The core driver likewise owns status, confirmation, peer-stop and reset
 preparation; HAL keeps ownership, fatal election/quarantine and the final
 system-reset trigger.
-`oer-chips-esp32s31-compose` is the chip's side of an image's platform: the
+`oer-chips-esp32s31-runtime` is the chip's side of an image's platform: the
 executor's binding `Esp32s31`, which images name in every executor type
 (`Executor<Esp32s31, 0>`), and the PHY transaction and Wi-Fi fault records,
 which need both the HAL's types and the runtime's retained memory and fatal
@@ -518,7 +517,7 @@ run its own executor.
   admission, and parent futures can chain immediately ready children.
   Neither the complete PHY poll nor the executor round has a universal
   1 ms cutoff. CPU admission does not admit an RF maintenance window
-  ([PHY execution](../chips/esp32s31/phy/README.md#runtime-sequence-and-timing)).
+  ([PHY execution](../chips/esp32s31/radio/phy/README.md#runtime-sequence-and-timing)).
 - A lower-priority task wakes a higher-priority one only through
   `oer_portable_sync::PriorityWaker` ([notifications](execution-wakes.md)).
 - Each interrupt table entry binds one interrupt part, whose type names its
@@ -927,7 +926,7 @@ The current mechanisms have narrower guarantees than the policy:
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
   Every S31 image on the staged runtime, the SDK's included, binds one
-  exception hook (`oer-chips-esp32s31-compose::exception`). It repeats none of the
+  exception hook (`oer-chips-esp32s31-runtime::exception`). It repeats none of the
   frame's registers: after the stop it samples the trapping hart's pending
   sources and, for an interrupt of a line without a handler, the routes to
   that line and its state, recording whether the stop held, and copies the
@@ -1004,7 +1003,7 @@ defines the scan's scope and limits.
   slots, polled by direct calls, with one waker vtable, the binding's, whose
   data names the executor and task.
 - **Hart topology.** ESP32-S31's `[interrupts] harts` in
-  `chips/esp32s31/platform/chip.toml` is the sole HP-hart cardinality;
+  `chips/esp32s31/facts/chip.toml` is the sole HP-hart cardinality;
   `boot-hart` is required and names primary initialization. Facts derive the
   host core count, vector geometry and the PAC's checked `Hart`,
   `SecondaryHart` and `HARTS`; the platform port renders the same identities
@@ -1019,7 +1018,7 @@ defines the scan's scope and limits.
   launch permit (hart 1's route bank, the ROM wake-stub word and the cache-bus
   observer); `Cores::start_secondary` consumes it to release a declared hart
   into its generated entry during boot, before any executor
-  ([secondary launch](../chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment)).
+  ([secondary launch](../chips/esp32s31/facts/README.md#secondary-hart-launch-and-containment)).
   An architectural ID outside this list is `InvalidHart { raw }`, never a
   different hart. The fatal path records the full raw ID, quarantines free
   control owners and requests reset; it never takes a lent or held owner.
@@ -1125,7 +1124,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   timers and polls the actor. A failed tick, or a tracking deadline the
   clock cannot hold, ends the actor's run with a `TrackingFault`: the actor
   keeps every owner, and the image records the fault's class and variant
-  path (`oer-chips-esp32s31-compose::radio_fault`) and resets. The direct
+  path (`oer-chips-esp32s31-runtime::radio_fault`) and resets. The direct
   maintenance TXDC/PWDET path submits
   each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
   performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
@@ -1331,7 +1330,7 @@ its model and conformance case.
   production has no enabled CTE interrupt consumer. These sequential reads
   neither prove producer shutdown nor name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`, driver
-  `chips/esp32s31/ieee802154/driver`). The S31 driver implements the family
+  `chips/esp32s31/radio/ieee802154/driver`). The S31 driver implements the family
   engine's LL contract over HAL's owned polling transactions and retains the
   engine with its placed DMA storage through detach/rebind. The family owner's
   borrowed `service` returns `Fault` with the complete source observation and
@@ -1476,9 +1475,7 @@ unconfirmed request or a cancellation); the program exits 0, 1 or 2.
 
 Domain message codecs live beside their owners; a message's key hashes its
 path and schema, and the host checks the keys the image announces before
-any case. Radio observation values live in
-`chips/esp32s31/instrumentation`. These host-safe contracts contain no
-hardware implementation.
+any case.
 
 
 ## Topic pages

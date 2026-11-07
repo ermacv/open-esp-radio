@@ -1,6 +1,6 @@
 use oer_chips_esp32s31_hal::{
     peripherals::{software_interrupt::FromCpu2Irq, timg0_alarm::Timg0AlarmInterrupt},
-    platform::interrupt_controller::facts::LINES,
+    system::platform::interrupt_controller::facts::LINES,
 };
 use oer_chips_esp32s31_pac::Interrupt;
 use oer_chips_family_interrupt_table::{Class, Entry, ExecutorHandler};
@@ -14,7 +14,7 @@ impl ExecutorHandler<FromCpu2Irq> for OnExecutor {
 }
 
 // A test composition only: no production handler, cells, actor or vectors.
-// SOURCE: chips/family/platform/family.toml [interrupts], CLIC spec
+// SOURCE: chips/family/facts/layers/family.toml [interrupts], CLIC spec
 // 3f8ee744 "Specifying Interrupt Priority"; ESP-IDF 4d59230d
 // components/soc/esp32s31/include/soc/clic_reg.h (NLBITS/INT_INFO geometry).
 // SOURCE for arbitration: ESP32-C5 TRM v1.1,

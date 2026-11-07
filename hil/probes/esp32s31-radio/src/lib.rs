@@ -13,7 +13,7 @@
 //! API alone: [`open_probe_session_init`] takes the reset root once and the
 //! later entries borrow the session's owners ([`session`]).
 
-use oer_chips_esp32s31_ieee80211_driver::mac::ap_tsf::AccessPointTsf;
+use oer_chips_esp32s31_radio_ieee80211_driver::mac::ap_tsf::AccessPointTsf;
 use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
 
 mod calibration_leaves;
@@ -206,7 +206,7 @@ oer_tools_probe_macros::probe! {
     /// cold transaction published the interface addresses.
     pub fn open_wifi_sta_ap_trace_disable_all_role_receive(_policy: u32) -> u32 {
         session::with(|session| {
-            oer_chips_esp32s31_ieee80211_driver::mac::sta_ap_registers::disable_all_role_receive_registers(
+            oer_chips_esp32s31_radio_ieee80211_driver::mac::sta_ap_registers::disable_all_role_receive_registers(
                 &mut session.wifi.wifi_mac_hal(),
             );
             1
@@ -350,7 +350,7 @@ oer_tools_probe_macros::probe! {
 oer_tools_probe_macros::probe! {
     pub fn open_phy_trace_dis_hw_set_freq() {
         let _ = session::with(|session| session.phy(|phy| {
-            oer_chips_esp32s31_hal::phy::frequency::set_hardware_control(phy, false)
+            oer_chips_esp32s31_hal::radio::phy::frequency::set_hardware_control(phy, false)
         }));
         ets_delay_us(2);
         // Keep the delay as a non-tail edge so the executor sees the named
@@ -364,7 +364,7 @@ oer_tools_probe_macros::probe! {
     /// bytes on the session's shared PHY. Encoding and all MMIO remain in the
     /// production HAL/PAC.
     pub fn open_phy_trace_command_memory(parameters: &[u8; 6]) {
-        let inputs = oer_chips_esp32s31_hal::phy::i2c::PhyI2cCommandMemoryInputs::new(
+        let inputs = oer_chips_esp32s31_hal::radio::phy::i2c::PhyI2cCommandMemoryInputs::new(
             parameters[0],
             parameters[1],
             parameters[2],
@@ -373,7 +373,7 @@ oer_tools_probe_macros::probe! {
             parameters[5],
         );
         let _ = session::with(|session| session.phy(|phy| {
-            oer_chips_esp32s31_hal::phy::i2c::configure_command_memory(phy, inputs)
+            oer_chips_esp32s31_hal::radio::phy::i2c::configure_command_memory(phy, inputs)
         }));
     }
 }
@@ -409,24 +409,25 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
 }
 #[cfg(target_arch = "riscv32")]
 static PHY_FAULT: oer_portable_memory::OnceValue<
-    oer_chips_esp32s31_hal::domain::transaction::Fault,
+    oer_chips_esp32s31_hal::radio::domain::transaction::Fault,
 > = oer_portable_memory::OnceValue::new();
 #[cfg(target_arch = "riscv32")]
-fn report_phy_fault(fault: oer_chips_esp32s31_hal::domain::transaction::Fault) -> ! {
+fn report_phy_fault(fault: oer_chips_esp32s31_hal::radio::domain::transaction::Fault) -> ! {
     let _first = PHY_FAULT.set(fault);
     probe_halt()
 }
 #[cfg(target_arch = "riscv32")]
 oer_chips_esp32s31_hal::phy_fault_reporter!(report_phy_fault);
 #[cfg(target_arch = "riscv32")]
-static PHY_SEAT: oer_chips_esp32s31_hal::domain::transaction::TransactionSeat =
-    oer_chips_esp32s31_hal::domain::transaction::TransactionSeat::new();
+static PHY_SEAT: oer_chips_esp32s31_hal::radio::domain::transaction::TransactionSeat =
+    oer_chips_esp32s31_hal::radio::domain::transaction::TransactionSeat::new();
 #[cfg(target_arch = "riscv32")]
-fn phy_identity() -> oer_chips_esp32s31_hal::domain::transaction::PhyIdentity {
+fn phy_identity() -> oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity {
     match PHY_SEAT.claim() {
         Some(identity) => identity,
-        None => report_phy_fault(oer_chips_esp32s31_hal::domain::transaction::Fault {
-            reason: oer_chips_esp32s31_hal::domain::transaction::FaultReason::IdentityClaimed,
+        None => report_phy_fault(oer_chips_esp32s31_hal::radio::domain::transaction::Fault {
+            reason:
+                oer_chips_esp32s31_hal::radio::domain::transaction::FaultReason::IdentityClaimed,
             registration: None,
         }),
     }

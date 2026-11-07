@@ -1,0 +1,661 @@
+use super::*;
+use crate::datapath::DatapathRxProgress;
+use crate::mac::{
+    rx::pool::{RxDmaDeferredStageUnitOutcome, RxStagePool, RxStageTransactionError},
+    rx::{PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxDma, RxRingError, RxRingLive},
+};
+use oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_storage::RxDmaStorage;
+use oer_portable_time::settle::Settle;
+
+/// Maximum units in the existing masked RX poll epoch.
+const BUDGET_UNITS: usize = 32;
+
+/// Execute one finite physical completion/staging transaction immediately.
+///
+/// No owner is moved out of the caller. The helper is inlined into the
+/// adapter's existing hot-text wrapper and introduces no scheduling edge.
+/// An invalid credit reserve returns [`RxStageTransactionError::InvalidCreditReserve`]
+/// before any hardware access or ownership change. A valid policy is sampled
+/// once and remains fixed for this transaction, including capacity refreshes.
+#[inline(always)]
+#[allow(clippy::too_many_arguments)]
+pub fn service<
+    'storage,
+    'pool,
+    H,
+    C,
+    E,
+    P,
+    O,
+    const COUNT: usize,
+    const STAGE_CAPACITY: usize,
+    const STAGE_SLOTS: usize,
+    const DMA_BUFFER_SIZE: usize,
+    const DMA_STORAGE_SIZE: usize,
+    S: oer_chips_esp32s31_hal::radio::ieee80211::dma::space::DmaSpace,
+    K: oer_portable_time::Clock + ?Sized,
+>(
+    ring: &mut RxRingLive<'storage, COUNT>,
+    storage: &'static RxDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
+    pool: &'pool RxStagePool<STAGE_SLOTS, STAGE_CAPACITY>,
+    publisher: &E,
+    admission: &P,
+    counters: Counters<'_>,
+    hardware: &mut H,
+    buffer_full: &mut C,
+    reload_settle: Settle<'_, K>,
+    mut hooks: O,
+) -> Result<DatapathRxProgress, RxStageTransactionError>
+where
+    H: RxDma,
+    C: RxBufferFullCounter,
+    E: Publisher<'pool, STAGE_CAPACITY, STAGE_SLOTS>,
+    P: Admission,
+    O: Hooks,
+{
+    // Reject an impossible policy before sampling hardware or changing any
+    // descriptor, lease, publisher or counter. Capacity never chooses policy.
+    let credits = admission.credit_policy().validate(STAGE_SLOTS, E::DEPTH)?;
+    let reserved = credits.critical_reserved_credits();
+    let hardware_buffer_full_before = if hooks.observing() {
+        buffer_full.buffer_full_count()
+    } else {
+        None
+    };
+    if O::SAMPLE_ENTRY_REMAINING {
+        hooks.entry_remaining(ring.accepted_list_remaining_from_next(hardware.next_descriptor()));
+    }
+    let mut recycled_descriptors = 0_usize;
+    // Upper ownership returns the exact original DMA allocations.
+    // Rearm only the longest ordered released prefix before freezing
+    // this service's completion frontier; at most 32 such leases can
+    // exist, so ring96 retains 64 descriptors in the radio ownership
+    // domain. They are not necessarily armed while a delayed masked
+    // epoch accumulates completions; accepted-list pressure records
+    // that separate hardware condition.
+    let mut released_append = None;
+    for _ in 0..2 {
+        released_append = storage
+            .recycle_released_prefix::<BUDGET_UNITS, _>(ring, hardware)
+            .map_err(RxStageTransactionError::Ring)?;
+        if released_append.is_some() || !ring.completion_release_probe_pending() {
+            break;
+        }
+        // `RX_DONE` may precede the cursor edge which releases its
+        // link word. The vendor worker refreshes that cursor without
+        // returning to its scheduler; retain the same two bounded
+        // observations here instead of manufacturing an executor
+        // round trip.
+    }
+    if let Some(append) = released_append {
+        recycled_descriptors = append.descriptor_count;
+        if let Err(error) = ring.complete_pending_reload(hardware, reload_settle) {
+            if O::LOG_ERRORS {
+                hooks.log_busy("entry-reload", error, 0, 0, 0, 0);
+            }
+            return Err(RxStageTransactionError::Ring(error));
+        }
+    }
+    // Freeze the completion frontier before any descriptor is rearmed.
+    // A saturated producer can therefore only create a later epoch; it
+    // cannot make this service call unbounded by refilling the ring.
+    let mut frozen_cursor = ring
+        .freeze_cursor(hardware)
+        .map_err(RxStageTransactionError::Ring)?;
+    // The reserved descriptor, after the freeze: a frame the epoch's cold
+    // publication let land in it completed before any ring unit this pass
+    // takes, so its copy goes first. R is rearmed only once the copy is
+    // published; a landing after the walker reached the ring fails closed.
+    let Some(reserved_bytes) = stage_reserved(ring, storage, pool, publisher, admission, reserved)?
+    else {
+        return Ok(DatapathRxProgress::StageCapacityBlocked);
+    };
+    storage
+        .observe_reserved(ring, hardware)
+        .map_err(RxStageTransactionError::Ring)?;
+    let mut deferred_recycle_pending = false;
+    // A discard which followed a detached valid frame could not be
+    // appended in the earlier service transaction without recycling
+    // that still-owned prefix. Once returned frames above have moved
+    // the recycle frontier, bind each ring-owned discard to this fresh
+    // LAST generation before publishing it. This mirrors the vendor's
+    // one-unit discard/append transaction and remains bounded by the
+    // same per-service descriptor budget.
+    let mut deferred_recycled = 0_usize;
+    while deferred_recycled < BUDGET_UNITS {
+        let Some(recycle) = storage
+            .claim_deferred_recycle(ring, frozen_cursor)
+            .map_err(RxStageTransactionError::Ring)?
+        else {
+            break;
+        };
+        let descriptor_count = recycle.descriptor_count();
+        if deferred_recycled.saturating_add(descriptor_count) > BUDGET_UNITS {
+            deferred_recycle_pending = true;
+            break;
+        }
+        let append = match recycle.append(hardware) {
+            Ok(append) => append,
+            Err(RxRingError::ReloadPending) => {
+                deferred_recycle_pending = true;
+                break;
+            }
+            Err(error) => return Err(RxStageTransactionError::Ring(error)),
+        };
+        recycled_descriptors = recycled_descriptors.saturating_add(append.descriptor_count);
+        deferred_recycled = deferred_recycled.saturating_add(append.descriptor_count);
+        if let Err(error) = ring.complete_pending_reload(hardware, reload_settle) {
+            if O::LOG_ERRORS {
+                hooks.log_busy("deferred-discard-reload", error, 0, 0, 0, 0);
+            }
+            return Err(RxStageTransactionError::Ring(error));
+        }
+        frozen_cursor = ring
+            .freeze_cursor(hardware)
+            .map_err(RxStageTransactionError::Ring)?;
+    }
+    let frontier_snapshot = storage
+        .completed_unit_frontier_through_cursor(ring, frozen_cursor)
+        .map_err(RxStageTransactionError::Ring)?;
+    let frontier = frontier_snapshot.unit_count;
+    let pool_credits = pool.available_slots();
+    let queue_credits = publisher.free_capacity();
+    let mut current_pool_credits = pool_credits;
+    let mut current_queue_credits = queue_credits;
+    let mut minimum_pool_credits = pool_credits;
+    let mut minimum_queue_credits = queue_credits;
+    // The radio producer is the only owner which can consume either
+    // credit domain. Upper tasks can only return credits while this
+    // finite service transaction runs, so the local values are safe
+    // lower bounds. Refresh only at the reserve boundary instead of
+    // rescanning all 32 stage slots for every completed frame.
+    let service_budget = frontier.min(BUDGET_UNITS);
+    let mut admitted = 0_usize;
+    let mut admitted_descriptors = 0_usize;
+    let mut staged_bytes = 0_usize;
+    let mut staged_units = 0_usize;
+    let mut discarded_units = 0_usize;
+    let mut overload_discarded = 0_usize;
+    let mut overload_recycled_descriptors = 0_usize;
+    let mut critical_reserve_admitted = 0_usize;
+    let mut critical_admission_blocked = false;
+    let mut stage_capacity_blocked = false;
+    let mut remaining_descriptors = frontier_snapshot.descriptor_count;
+
+    hooks.phase(Phase::Frontier);
+    for _ in 0..service_budget {
+        hooks.phase(Phase::Admission);
+        if current_pool_credits <= reserved || current_queue_credits <= reserved {
+            current_pool_credits = pool.available_slots();
+            current_queue_credits = publisher.free_capacity();
+        }
+        minimum_pool_credits = minimum_pool_credits.min(current_pool_credits);
+        minimum_queue_credits = minimum_queue_credits.min(current_queue_credits);
+        let current_credits = current_pool_credits.min(current_queue_credits);
+        let ordinary_credit_available = current_credits > reserved;
+        // A free ordinary credit makes ownership transfer
+        // unconditional: policy can still reject the detached unit by
+        // length, but no classification result can leave it at the
+        // hardware frontier. In that common case `take_completed_unit`
+        // bounds the unit by the frozen cursor's LAST itself, so do not
+        // rediscover the first unit before taking it.
+        //
+        // At the reserve boundary we must classify before transfer
+        // because PreserveForCapacity deliberately leaves ownership in
+        // DMA. Keep the explicit first-unit proof only on that slow
+        // path.
+        let preflight = if ordinary_credit_available {
+            None
+        } else {
+            let unit_frontier = storage
+                .first_completed_unit_frontier_through_cursor(ring, frozen_cursor)
+                .map_err(RxStageTransactionError::Ring)?;
+            if unit_frontier.unit_count != 1
+                || unit_frontier.descriptor_count == 0
+                || unit_frontier.descriptor_count > remaining_descriptors
+            {
+                return Err(RxStageTransactionError::Ring(RxRingError::Corrupt));
+            }
+            let unit_head_index = storage
+                .completion_frontier_head(ring)
+                .map_err(RxStageTransactionError::Ring)?
+                .ok_or(RxStageTransactionError::Ring(RxRingError::Corrupt))?;
+            let unit_observation = CompletedUnit {
+                head_index: unit_head_index,
+                descriptor_count: unit_frontier.descriptor_count,
+                payload_length: storage
+                    .descriptors()
+                    .get(unit_head_index)
+                    .map(|descriptor| usize::from(descriptor.word0().length()))
+                    .unwrap_or(0),
+            };
+            let maximum_payload_length = admission
+                .maximum_payload_length(unit_observation, STAGE_CAPACITY)
+                .min(STAGE_CAPACITY);
+            Some((unit_observation, maximum_payload_length))
+        };
+        let length_discard = preflight.is_some_and(|(unit, maximum)| {
+            unit.payload_length == 0 || unit.payload_length > maximum
+        });
+        let (unavailable, unavailable_preview) =
+            if !length_discard && let Some((unit_observation, _)) = preflight {
+                // Classification only affects overload admission. An
+                // ordinary unit with a free bulk credit is staged
+                // regardless of its frame-control or VIF route, so do
+                // not repeat a frozen-cursor proof and header copy on
+                // every successful hot-path transaction.
+                let mut header = [0_u8; 24];
+                let preview = if storage
+                    .copy_first_completed_unit_bytes_through_cursor(
+                        ring,
+                        frozen_cursor,
+                        PUBLIC_HEADER_SIZE,
+                        &mut header,
+                    )
+                    .map_err(RxStageTransactionError::Ring)?
+                {
+                    publisher.preview(unit_observation, header)
+                } else {
+                    publisher.unclassified_preview(unit_observation)
+                };
+                (
+                    Some(admission.unavailable_disposition(preview)),
+                    Some(preview),
+                )
+            } else {
+                (None, None)
+            };
+        let stage_with_reserved_credit =
+            matches!(unavailable, Some(Unavailable::PreserveForCriticalAdmission))
+                && current_credits != 0;
+        if matches!(unavailable, Some(Unavailable::PreserveForCapacity)) {
+            stage_capacity_blocked = true;
+            admission.observe(Observation::BulkAdmissionBlocked(
+                unavailable_preview.expect("unavailable bulk unit has a preview"),
+            ));
+            break;
+        }
+        if matches!(unavailable, Some(Unavailable::PreserveForCriticalAdmission))
+            && !stage_with_reserved_credit
+        {
+            critical_admission_blocked = true;
+            admission.observe(Observation::CriticalAdmissionBlocked(
+                unavailable_preview.expect("unavailable critical unit has a preview"),
+            ));
+            break;
+        }
+        let overload_drop = matches!(unavailable, Some(Unavailable::DiscardAndRecycle));
+        if overload_drop && staged_units != 0 {
+            // Give the fused turn's post-DMA consumer a chance to return
+            // the owners just published by this call. Filling our own
+            // staging window does not establish sustained backpressure.
+            // The untouched tail remains DMA-owned. If the next turn
+            // starts blocked, normal discard/recycle still reaches critical
+            // traffic instead of creating a receive/transmit progress cycle.
+            stage_capacity_blocked = true;
+            admission.observe(Observation::BulkAdmissionBlocked(
+                unavailable_preview.expect("overload admission has a preview"),
+            ));
+            break;
+        }
+
+        hooks.phase(Phase::StageTake);
+        // The take is bounded by the frozen LAST inclusive: the walker no
+        // longer writes any descriptor of the unit it returns.
+        let unit = storage
+            .take_completed_unit(ring, frozen_cursor)
+            .map_err(RxStageTransactionError::Ring)?
+            .ok_or(RxStageTransactionError::Ring(RxRingError::Corrupt))?;
+        let unit_descriptor_count = unit.descriptor_count();
+        let unit_observation = CompletedUnit {
+            head_index: unit.head_index(),
+            descriptor_count: unit_descriptor_count,
+            payload_length: unit.total_length(),
+        };
+        let maximum_payload_length = preflight
+            .map(|(_, maximum_payload_length)| maximum_payload_length)
+            .unwrap_or_else(|| {
+                admission
+                    .maximum_payload_length(unit_observation, STAGE_CAPACITY)
+                    .min(STAGE_CAPACITY)
+            });
+        // A chain longer than one descriptor's length field has no staged
+        // word: received air input, dropped like any chain but named apart.
+        // The tail of a frame that began in the reserved descriptor is a
+        // chain too: its head was never copied.
+        let recoverable_discard = if unit.metadata().staged_word0().is_none() {
+            Some(Discard::Oversized)
+        } else if unit_descriptor_count != 1 || unit.metadata().continues_reserved_landing() {
+            Some(Discard::Chained)
+        } else if unit_observation.payload_length == 0 {
+            Some(Discard::Empty)
+        } else if unit_observation.payload_length > maximum_payload_length {
+            Some(Discard::TooLong)
+        } else {
+            None
+        };
+        remaining_descriptors = remaining_descriptors
+            .checked_sub(unit_descriptor_count)
+            .ok_or(RxStageTransactionError::Ring(RxRingError::Corrupt))?;
+        admitted = admitted.saturating_add(1);
+        admitted_descriptors = admitted_descriptors.saturating_add(unit_descriptor_count);
+
+        let (frame, recycle) = if overload_drop {
+            let recycle = unit.retain_discard();
+            let descriptor_replenished = recycle.is_some();
+            deferred_recycle_pending |= !descriptor_replenished;
+            discarded_units = discarded_units.saturating_add(1);
+            overload_discarded = overload_discarded.saturating_add(1);
+            if descriptor_replenished {
+                overload_recycled_descriptors =
+                    overload_recycled_descriptors.saturating_add(unit_descriptor_count);
+            }
+            if hooks.observing() {
+                hooks.stage_discarded(Discard::OverloadBulk);
+            }
+            if let Some(preview) = unavailable_preview {
+                admission.observe(Observation::OverloadDiscardedAndRecycled(preview));
+            }
+            (None, recycle)
+        } else if let Some(discard) = recoverable_discard {
+            let recycle = unit.retain_discard();
+            let descriptor_replenished = recycle.is_some();
+            deferred_recycle_pending |= !descriptor_replenished;
+            discarded_units = discarded_units.saturating_add(1);
+            if hooks.observing() {
+                hooks.stage_discarded(discard);
+            }
+            admission.observe(Observation::DiscardRetained {
+                unit: unit_observation,
+                reason: discard,
+            });
+            (None, recycle)
+        } else {
+            if stage_with_reserved_credit {
+                critical_reserve_admitted = critical_reserve_admitted.saturating_add(1);
+                if let Some(preview) = unavailable_preview {
+                    admission.observe(Observation::CriticalReserveAdmitted(preview));
+                }
+            }
+            hooks.phase(Phase::StagePool);
+            let stage =
+                pool.stage_dma_unit_deferred_bounded(unit, maximum_payload_length, hardware);
+            if O::LOG_ERRORS
+                && let Err(error) = &stage
+            {
+                hooks.log_busy(
+                    "detach",
+                    match error {
+                        RxStageTransactionError::Ring(error) => *error,
+                        RxStageTransactionError::Stage(_)
+                        | RxStageTransactionError::InvalidCreditReserve { .. } => {
+                            RxRingError::Corrupt
+                        }
+                    },
+                    unit_observation.head_index,
+                    unit_descriptor_count,
+                    storage.detached_buffer_count(),
+                    storage.released_buffer_count(),
+                );
+            }
+            match stage? {
+                RxDmaDeferredStageUnitOutcome::Staged(frame) => (Some(frame), None),
+                RxDmaDeferredStageUnitOutcome::Discarded(_) => {
+                    return Err(RxStageTransactionError::Ring(RxRingError::Corrupt));
+                }
+            }
+        };
+
+        let descriptor_replenished = recycle.is_some();
+        if let Some(recycle) = recycle {
+            hooks.phase(Phase::Recycle);
+            let append = match recycle.append(hardware) {
+                Ok(append) => append,
+                Err(error) => {
+                    if O::LOG_ERRORS {
+                        hooks.log_recycle_refused(
+                            unit_descriptor_count,
+                            ring.recycle_start().get(),
+                            ring.accepted_tail().get(),
+                            ring.observed_mask().count_ones(),
+                            frozen_cursor.last_descriptor_low(),
+                            frozen_cursor.next_descriptor_low(),
+                            ring.reload_pending(),
+                            hardware.reload_pending(),
+                        );
+                    }
+                    return Err(RxStageTransactionError::Ring(error));
+                }
+            };
+            if append.descriptor_count != unit_descriptor_count {
+                return Err(RxStageTransactionError::Ring(RxRingError::Corrupt));
+            }
+            recycled_descriptors = recycled_descriptors.saturating_add(unit_descriptor_count);
+            // The vendor append path does not yield between its reload
+            // doorbell and the NEXT/LAST sample that settles it. Preserve
+            // that transaction boundary so a later completion cannot
+            // replace the cursor observation used to settle this
+            // append.
+            let reload_started = hooks.now_micros();
+            hooks.phase(Phase::Reload);
+            if let Err(error) = ring.complete_pending_reload(hardware, reload_settle) {
+                if O::LOG_ERRORS {
+                    hooks.log_busy("discard-reload", error, 0, 0, 0, 0);
+                }
+                return Err(RxStageTransactionError::Ring(error));
+            }
+            hooks.reload_completed(reload_started);
+        }
+        hooks.phase(Phase::Publish);
+        if let Some(frame) = frame {
+            staged_units = staged_units.saturating_add(1);
+            staged_bytes = staged_bytes.saturating_add(frame.length());
+            // Rejection returns the same lease; preserve its immediate drop
+            // at this error mapping before returning the existing Corrupt fault.
+            publisher
+                .try_send(frame)
+                .map_err(|_| RxStageTransactionError::Ring(RxRingError::Corrupt))?;
+            admission.observe(Observation::Staged(unit_observation));
+            current_pool_credits = current_pool_credits.saturating_sub(1);
+            current_queue_credits = current_queue_credits.saturating_sub(1);
+        }
+        minimum_pool_credits = minimum_pool_credits.min(current_pool_credits);
+        minimum_queue_credits = minimum_queue_credits.min(current_queue_credits);
+
+        // Immediate discard append changes the descriptor generation.
+        // Valid packets remain in the original frozen generation
+        // until the complete detached prefix is refilled below.
+        if descriptor_replenished {
+            frozen_cursor = ring
+                .freeze_cursor(hardware)
+                .map_err(RxStageTransactionError::Ring)?;
+        }
+        hooks.phase(Phase::Frontier);
+    }
+
+    hooks.phase(Phase::Tail);
+    let reserved_unit = u64::from(reserved_bytes != 0);
+    *counters.descriptors = counters
+        .descriptors
+        .saturating_add(u64::try_from(admitted_descriptors).unwrap_or(u64::MAX))
+        .saturating_add(reserved_unit);
+    *counters.units = counters
+        .units
+        .saturating_add(u64::try_from(admitted).unwrap_or(u64::MAX))
+        .saturating_add(reserved_unit);
+    *counters.bytes = counters
+        .bytes
+        .saturating_add(u64::try_from(staged_bytes).unwrap_or(u64::MAX))
+        .saturating_add(u64::try_from(reserved_bytes).unwrap_or(u64::MAX));
+
+    // Every append changes descriptor generation. Retain one
+    // cooperative post-append confirmation before the moderated IRQ
+    // source is unmasked; a completion can consume the republished
+    // unit while the current RX-success edge is still owned here.
+    let completed_frontier_remaining = storage
+        .completed_unit_frontier_through_cursor(ring, frozen_cursor)
+        .map_err(RxStageTransactionError::Ring)?
+        .unit_count
+        != 0;
+    let recycled_probe_pending = hooks.recycled_probe_pending(recycled_descriptors);
+    // The terminal cursor can precede the final descriptor writeback,
+    // and that writeback has no guaranteed fresh RX-success edge.
+    // Retain a cooperative pass until the exhausted finite list has
+    // been staged and republished.
+    let exhausted_writeback_pending = ring.exhausted_terminal_writeback_pending(hardware);
+
+    hooks.probe_reasons(
+        recycled_descriptors != 0,
+        completed_frontier_remaining,
+        exhausted_writeback_pending,
+    );
+
+    let budget_exhausted = frontier > BUDGET_UNITS;
+
+    // Keep the two samples on opposite sides of the complete bounded
+    // transaction. Diagnostics can then distinguish saturation while
+    // the owner was elsewhere from saturation caused during staging
+    // and descriptor republication. With only the entry sample the
+    // counter increment was incorrectly paired with the following
+    // service context.
+    let hardware_buffer_full_after = if hooks.observing() {
+        buffer_full.buffer_full_count()
+    } else {
+        None
+    };
+
+    if hooks.observing() {
+        hooks.service_completed(ServiceObservation {
+            frontier,
+            pool_credits,
+            queue_credits,
+            completed_units: admitted,
+            completed_descriptors: admitted_descriptors,
+            admitted,
+            staged_units,
+            staged_bytes,
+            discarded_units,
+            recycled_descriptors,
+            overload_discarded,
+            overload_recycled_descriptors,
+            critical_reserve_admitted,
+            stage_capacity_blocked,
+            critical_admission_blocked,
+            minimum_pool_credits,
+            minimum_queue_credits,
+            micros: hooks.elapsed_service_micros(),
+            hardware_buffer_full_before,
+            hardware_buffer_full_after,
+        });
+    }
+
+    hooks.finish(admitted);
+
+    Ok(if stage_capacity_blocked || critical_admission_blocked {
+        DatapathRxProgress::StageCapacityBlocked
+    } else if budget_exhausted {
+        DatapathRxProgress::BudgetExhausted
+    } else if completed_frontier_remaining || exhausted_writeback_pending {
+        DatapathRxProgress::ProbePending
+    } else if recycled_probe_pending || deferred_recycle_pending {
+        DatapathRxProgress::RecycledAppendPending
+    } else if overload_discarded != 0 {
+        DatapathRxProgress::UpperLayerBlockedButDroppable
+    } else {
+        DatapathRxProgress::Drained
+    })
+}
+
+/// Publish a copy of the frame in R, if there is one, under the admission a
+/// ring unit gets, and answer its bytes, zero without one or when admission
+/// drops it: [`RxDmaStorage::observe_reserved`] then counts and drops it. `None`
+/// leaves it there for a later pass: nothing can take its place in the order,
+/// because R is not rearmed and this pass takes no ring unit.
+#[inline(always)]
+fn stage_reserved<
+    'pool,
+    E: Publisher<'pool, STAGE_CAPACITY, STAGE_SLOTS>,
+    P: Admission,
+    const COUNT: usize,
+    const STAGE_CAPACITY: usize,
+    const STAGE_SLOTS: usize,
+    const DMA_BUFFER_SIZE: usize,
+    const DMA_STORAGE_SIZE: usize,
+    S: oer_chips_esp32s31_hal::radio::ieee80211::dma::space::DmaSpace,
+>(
+    ring: &RxRingLive<'_, COUNT>,
+    storage: &'static RxDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
+    pool: &'pool RxStagePool<STAGE_SLOTS, STAGE_CAPACITY>,
+    publisher: &E,
+    admission: &P,
+    reserved: usize,
+) -> Result<Option<usize>, RxStageTransactionError> {
+    let Some(frame) = storage
+        .reserved_frame(ring)
+        .map_err(RxStageTransactionError::Ring)?
+    else {
+        return Ok(Some(0));
+    };
+    let bytes = frame.bytes();
+    // R is no ring descriptor: its head index is past the ring.
+    let unit = CompletedUnit {
+        head_index: COUNT,
+        descriptor_count: 1,
+        payload_length: bytes.len(),
+    };
+    let maximum = admission
+        .maximum_payload_length(unit, STAGE_CAPACITY)
+        .min(STAGE_CAPACITY);
+    if bytes.len() > maximum {
+        admission.observe(Observation::DiscardRetained {
+            unit,
+            reason: Discard::TooLong,
+        });
+        return Ok(Some(0));
+    }
+    let credits = pool.available_slots().min(publisher.free_capacity());
+    if credits <= reserved {
+        let header = bytes
+            .get(PUBLIC_HEADER_SIZE..)
+            .and_then(|mpdu| mpdu.first_chunk::<24>());
+        let preview = match header {
+            Some(header) => publisher.preview(unit, *header),
+            None => publisher.unclassified_preview(unit),
+        };
+        match admission.unavailable_disposition(preview) {
+            Unavailable::PreserveForCapacity => {
+                admission.observe(Observation::BulkAdmissionBlocked(preview));
+                return Ok(None);
+            }
+            Unavailable::PreserveForCriticalAdmission if credits == 0 => {
+                admission.observe(Observation::CriticalAdmissionBlocked(preview));
+                return Ok(None);
+            }
+            Unavailable::PreserveForCriticalAdmission => {
+                admission.observe(Observation::CriticalReserveAdmitted(preview));
+            }
+            Unavailable::DiscardAndRecycle => {
+                admission.observe(Observation::OverloadDiscardedAndRecycled(preview));
+                return Ok(Some(0));
+            }
+        }
+    }
+    let Some(copy) = storage
+        .claim_reserved_copy(&frame)
+        .map_err(RxStageTransactionError::Ring)?
+    else {
+        return Ok(None);
+    };
+    let mut staged = pool.stage_detached_unit(copy, STAGE_CAPACITY)?;
+    for (to, from) in staged.storage_mut().iter_mut().zip(bytes) {
+        *to = *from;
+    }
+    if publisher.try_send(staged).is_err() {
+        return Ok(None);
+    }
+    admission.observe(Observation::Staged(unit));
+    Ok(Some(bytes.len()))
+}
+
+#[cfg(test)]
+mod tests;

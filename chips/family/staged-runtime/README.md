@@ -132,7 +132,7 @@ frame and CRLF are written. Output refusal retains diagnostic bytes. A new boot'
 first terminal may replace an unreported older record. Retention is best effort;
 checksums are not a power-loss or `ResetRtc` retention guarantee.
 
-Chip composition owns PHY and Wi-Fi fault records (`oer-chips-esp32s31-compose`).
+Chip composition owns PHY and Wi-Fi fault records (`oer-chips-esp32s31-runtime`).
 The runtime's generic `fatal::reset_recording` performs their final reset;
 protocol cores do not acquire that policy. The
 [bootstrap](../staged-bootstrap/README.md) owns cold initialization and

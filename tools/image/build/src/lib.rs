@@ -189,7 +189,7 @@ pub fn profile(root: &Path, chip: &str) -> Result<oer_tools_chip_profile::Profil
     let profile = oer_tools_chip_profile::Profile::load(root, chip)?;
     if profile.facts.flash.is_none() {
         return Err(
-            format!("platform/{chip}/chip.toml names no [flash] map for its images").into(),
+            format!("chips/{chip}/facts/chip.toml names no [flash] map for its images").into(),
         );
     }
     Ok(profile)

@@ -1,6 +1,6 @@
 //! Retry-rate admission at the comparison probe's descriptor boundary.
 
-use oer_chips_esp32s31_ieee80211_driver::mac::{
+use oer_chips_esp32s31_radio_ieee80211_driver::mac::{
     portable::UnsupportedTxRate,
     tx::{HtChannelWidth, TxPhyRate},
 };

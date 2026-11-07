@@ -117,7 +117,7 @@ impl Sram {
         Self {
             region,
             source: format!(
-                "chips/{}/platform/chip.toml [memory] internal-sram, the ROM's reserves of [rom] sram included: stage two calls no ROM function",
+                "chips/{}/facts/chip.toml [memory] internal-sram, the ROM's reserves of [rom] sram included: stage two calls no ROM function",
                 profile.facts.id
             ),
             ranges,

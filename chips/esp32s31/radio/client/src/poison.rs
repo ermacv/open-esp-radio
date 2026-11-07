@@ -6,8 +6,8 @@
 //! itself. The causes use only types the host builds; the backend lowers the
 //! PHY's target errors into [`PhyFault`].
 
-use oer_chips_esp32s31_hal::domain::{CommonRadioPowerError, ModemClockError, RadioClient};
-use oer_chips_esp32s31_phy::{
+use oer_chips_esp32s31_hal::radio::domain::{CommonRadioPowerError, ModemClockError, RadioClient};
+use oer_chips_esp32s31_radio_phy::{
     PhyRegisterBindingError, PhyRegisterStage, concurrent::ConcurrentPhyError,
 };
 

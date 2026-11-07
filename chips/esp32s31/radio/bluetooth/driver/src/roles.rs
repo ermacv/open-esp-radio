@@ -1,0 +1,227 @@
+//! Role value builders and list selection. None borrows controller layouts.
+
+mod dtm_event_image;
+mod legacy_advertising_event_image;
+pub use dtm_event_image::{
+    DtmReceiverEventPhase, DtmRole, DtmSchedulerItemEventType, DtmSchedulerReceiverPhy,
+    DtmSchedulerTransmitterPhy,
+};
+pub use legacy_advertising_event_image::LegacyAdvertisingPrimaryChannelPlan;
+
+use oer_chips_esp32s31_hal::radio::bluetooth::engine::scheduler::SchedulerRawWindow;
+use oer_chips_esp32s31_hal::radio::bluetooth::{BluetoothSchedulerHardwareListIndex, engine::*};
+
+/// The current hardware engine joins all supported roles on list zero.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Role {
+    DirectTestMode,
+    LegacyAdvertising,
+    ConnectableAdvertising,
+    LegacyScanning,
+    PeripheralConnection,
+}
+
+impl Role {
+    pub const fn list(self) -> BluetoothSchedulerHardwareListIndex {
+        match self {
+            Self::DirectTestMode
+            | Self::LegacyAdvertising
+            | Self::ConnectableAdvertising
+            | Self::LegacyScanning
+            | Self::PeripheralConnection => BluetoothSchedulerHardwareListIndex::ZERO,
+        }
+    }
+}
+
+/// Event phase selects receiver wait policy and recurring item power.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DtmEventPhase {
+    Initial,
+    Recurring,
+}
+
+/// Configuration of the standalone Controller's DTM link-state reset.
+/// SOURCE: pinned `libble_app.a[controller_1.o]` data symbol
+/// `sym_controller_jqcSm1kAtUzAMoyGlaKq`, byte +0x2b = 3, copied as 72 bytes by
+/// `r_sym_controller_2IrfuGZXubzdQy56qp1S`. The DTM reset body reads that byte
+/// and installs its six-bit selection. This is a software profile value;
+/// physical encoding remains in HAL.
+pub const STANDALONE_DTM_CONFIGURATION: u8 = 3;
+
+/// An owned recipe, rather than a CPU view of a controller-owned descriptor.
+#[derive(Clone, Copy, Debug)]
+pub struct DtmImageBuilder {
+    role: DtmRole,
+    event: DtmSchedulerItemEventType,
+    phase: DtmEventPhase,
+    power: LeTxPower,
+    configuration: u8,
+    frequency: DtmSchedulerFrequency,
+    window: SchedulerRawWindow,
+    sequence_start: u32,
+}
+
+impl DtmImageBuilder {
+    pub const fn transmitter(
+        phase: DtmEventPhase,
+        phy: DtmSchedulerTransmitterPhy,
+        power: LeTxPower,
+        configuration: u8,
+        frequency: DtmSchedulerFrequency,
+        window: SchedulerRawWindow,
+        sequence_start: u32,
+    ) -> Self {
+        Self {
+            role: DtmRole::Transmitter,
+            event: DtmSchedulerItemEventType::Transmitter(phy),
+            phase,
+            power,
+            configuration,
+            frequency,
+            window,
+            sequence_start,
+        }
+    }
+
+    pub const fn receiver(
+        phase: DtmEventPhase,
+        phy: DtmSchedulerReceiverPhy,
+        power: LeTxPower,
+        configuration: u8,
+        frequency: DtmSchedulerFrequency,
+        window: SchedulerRawWindow,
+        sequence_start: u32,
+    ) -> Self {
+        let receiver_phase = match phase {
+            DtmEventPhase::Initial => DtmReceiverEventPhase::Initial,
+            DtmEventPhase::Recurring => DtmReceiverEventPhase::Recurring,
+        };
+        Self {
+            role: DtmRole::Receiver,
+            event: DtmSchedulerItemEventType::Receiver {
+                phy,
+                phase: receiver_phase,
+            },
+            phase,
+            power,
+            configuration,
+            frequency,
+            window,
+            sequence_start,
+        }
+    }
+
+    /// HAL supplies a detached value seed and retains the graph. Its commit
+    /// separately verifies every bound pointer before changing live memory.
+    pub fn build(self, seed: DtmPositionalEventSeed) -> DtmPositionalEventWords {
+        let words = seed.words();
+        // SOURCE: pinned dtm_4.o's recurring C15 body calls the same
+        // 7gOG link-state reset as the initial path. Hardware consumes the
+        // ready/profile fields; retain the current private links while
+        // restoring the event policy before every publication.
+        let link_state = words.link_state().apply_reset(
+            Some(seed.tx_header_head_projection()),
+            Some(seed.rx_header_tail_projection()),
+            self.power,
+            self.configuration,
+            self.role == DtmRole::Receiver,
+        );
+        let item = words
+            .scheduler_item()
+            .apply_event(
+                self.frequency,
+                self.event.configuration(),
+                self.window.start(),
+                self.window.end(),
+            )
+            .apply_sequence_start(self.sequence_start);
+        let item = match self.phase {
+            DtmEventPhase::Initial => item,
+            DtmEventPhase::Recurring => item.apply_recurring_power(link_state),
+        };
+        DtmPositionalEventWords::new(link_state, item)
+    }
+
+    pub fn prepare<'pool, 'epoch, const N: usize>(
+        self,
+        pool: &mut DtmPool<'pool, 'epoch, N>,
+        lease: &SchedulerRoleInstance<'pool, 'epoch>,
+    ) -> Result<(), DtmPrepareError> {
+        pool.prepare_event(lease, |seed| Ok(self.build(seed)))
+    }
+}
+
+pub struct ConnectableAdvertisingImageBuilder<'pdu> {
+    pub packets: LegacyConnectableAdvertisingMemoryInput<'pdu>,
+    pub power: LeTxPower,
+    pub channels: LegacyAdvertisingPrimaryChannelPlan,
+    pub start: u32,
+    pub item_duration: u32,
+    pub sequence_lead: u32,
+    pub coexistence: AdvertisingCoexistencePriorities,
+}
+
+impl ConnectableAdvertisingImageBuilder<'_> {
+    pub fn prepare<
+        'pool,
+        'epoch,
+        const A: usize,
+        const C: usize,
+        const N: usize,
+        const R: usize,
+        const O: usize,
+        const Q: usize,
+    >(
+        self,
+        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, 1, R, O, Q>>,
+        lease: &SchedulerRoleInstance<'pool, 'epoch>,
+    ) -> Result<LegacyAdvertisingEvent, EnginePrepareError<LegacyConnectableAdvertisingError>> {
+        engine.prepare_connectable_advertising(lease, self.packets, self.power, ROLE_PRIORITY)?;
+        engine
+            .connectable_advertising()
+            .map_err(|_| EnginePrepareError::Quarantined)?
+            .prepare_event(
+                lease,
+                &self
+                    .channels
+                    .image(self.start, self.item_duration, self.sequence_lead),
+                self.coexistence,
+            )
+            .map_err(EnginePrepareError::Role)
+    }
+}
+
+pub struct PeripheralConnectionImageBuilder {
+    pub identity: PeripheralConnectionIdentity,
+    pub event: PeripheralConnectionFirstEvent,
+}
+
+impl PeripheralConnectionImageBuilder {
+    pub fn prepare<
+        'pool,
+        'epoch,
+        const A: usize,
+        const C: usize,
+        const N: usize,
+        const R: usize,
+        const O: usize,
+        const Q: usize,
+    >(
+        self,
+        engine: &mut Engine<ArenaMemory<'pool, 'epoch, A, C, N, 1, R, O, Q>>,
+        lease: &SchedulerRoleInstance<'pool, 'epoch>,
+    ) -> Result<PeripheralConnectionEvent, EnginePrepareError<PeripheralConnectionError>> {
+        engine
+            .connections()
+            .map_err(|_| EnginePrepareError::Quarantined)?
+            .prepare_identity(lease, self.identity)
+            .map_err(EnginePrepareError::Role)?;
+        engine.prepare_first_connection(lease, self.event)
+    }
+}
+
+#[cfg(test)]
+mod tests;
+
+const ROLE_PRIORITY: SchedulerEventPriority =
+    SchedulerEventPriority::new(1).expect("reviewed priority fits");

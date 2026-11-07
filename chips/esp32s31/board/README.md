@@ -11,5 +11,5 @@ The crate links no runtime or radio role. The
 [bootstrap](../../family/staged-bootstrap/README.md) owns cold boot;
 the [runtime](../../family/staged-runtime/README.md) owns stage-two
 adoption, interrupts and retained fault reporting. Board/module facts live
-in [platform](../platform/README.md); reset recovery belongs to
+in [platform](../facts/README.md); reset recovery belongs to
 [host tooling](../../../docs/hardware-errata.md).

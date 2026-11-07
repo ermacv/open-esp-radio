@@ -4,7 +4,7 @@ Whether the S31's HP system sleeps under the PMU and wakes at an LP-timer
 target, with no domain powered down: the PLLs, the main crystal and the fast
 RC oscillator stay on and the regulators keep their active output, so only
 the CPU stalls (`oer-chips-family-power::sleep`, the HAL's
-`peripherals::sleep`).
+`power::sleep`).
 
 The image is a staged boot with the boot hart's thread-mode executor, the
 system timer and the RTC watchdog's feed; hart 1 stays held. The RTC

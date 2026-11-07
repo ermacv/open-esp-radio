@@ -47,7 +47,7 @@ error[E0271]: type mismatch resolving `<I as Entry>::Part == Ieee802154Interrupt
    = note: expected struct `Ieee802154InterruptOwner<Fixed<537931776>>`
               found struct `OtherIrq`
 note: required by a bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
-  --> src/ieee802154/mac.rs
+  --> src/radio/ieee802154/mac.rs
    |
    |     pub fn activate<
    |            -------- required by a bound in this associated function
@@ -65,7 +65,7 @@ error[E0308]: mismatched types
    = note: expected struct `Silent<Ieee802154InterruptOwner<Fixed<537931776>>>`
               found struct `Silent<OtherIrq>`
 note: associated function defined here
-  --> src/ieee802154/polled.rs
+  --> src/radio/ieee802154/polled.rs
    |
    |     pub fn new(
    |            ^^^
@@ -77,7 +77,7 @@ error[E0061]: this function takes 3 arguments but 2 arguments were supplied
    |             ^^^^^^^^^^^^^^^^^^^^^^^^-------------- argument #3 of type `Silent<Ieee802154InterruptOwner<Fixed<537931776>>>` is missing
    |
 note: associated function defined here
-  --> src/ieee802154/polled.rs
+  --> src/radio/ieee802154/polled.rs
    |
    |     pub fn new(
    |            ^^^

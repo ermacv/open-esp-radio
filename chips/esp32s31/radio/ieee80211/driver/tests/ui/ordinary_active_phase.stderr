@@ -1,0 +1,5 @@
+error[E0599]: no method named `start_single_attempt` found for struct `OrdinaryTxActive<'owner, 'slot, P, E, T, N, LEGACY_ONLY>` in the current scope
+  --> tests/ui/ordinary_active_phase.rs:14:20
+   |
+14 |     let _ = active.start_single_attempt(hardware, _plan, oer_chips_esp32s31_radio_ieee80211_driver::ordinary_tx::SingleAttempt::new(...
+   |                    ^^^^^^^^^^^^^^^^^^^^ method not found in `OrdinaryTxActive<'_, '_, P, E, T, 64>`

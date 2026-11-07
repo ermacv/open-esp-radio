@@ -1,10 +1,10 @@
 //! Image binding of the SAR/PWDET pilot to the measured P2 line pair.
-use oer_chips_esp32s31_compose::Esp32s31;
-use oer_chips_esp32s31_hal::domain::transaction::{
+use oer_chips_esp32s31_hal::peripherals::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmParts};
+use oer_chips_esp32s31_hal::radio::domain::transaction::{
     Fault, FaultReason, SarSetupFault, SarSetupStorage,
 };
-use oer_chips_esp32s31_hal::peripherals::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmParts};
-use oer_chips_esp32s31_phy::sar_pilot;
+use oer_chips_esp32s31_radio_phy::sar_pilot;
+use oer_chips_esp32s31_runtime::Esp32s31;
 use oer_chips_family_executor::InterruptExecutor;
 use oer_chips_family_interrupt_table::{
     Controller, Router,
@@ -43,7 +43,7 @@ pub(crate) fn init<const H: u8>(
     }
     let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
         oer_chips_family_staged_runtime::interrupts::reset_binding::<
-            oer_chips_esp32s31_hal::platform::Port,
+            oer_chips_esp32s31_hal::system::platform::Port,
             _,
         >(error)
     });
@@ -52,7 +52,7 @@ pub(crate) fn init<const H: u8>(
 pub(crate) fn interrupt(part: &mut Timg0AlarmInterrupt) {
     match HANDLER.with(|handler| handler.service(part, &oer_portable_embassy_time::EmbassyClock)) {
         Some(Ok(())) => {}
-        Some(Err(fault)) => oer_chips_esp32s31_compose::phy_fault::reset(Fault {
+        Some(Err(fault)) => oer_chips_esp32s31_runtime::phy_fault::reset(Fault {
             reason: FaultReason::SarAlarmWithoutBundle(fault),
             registration: None,
         }),
@@ -61,7 +61,7 @@ pub(crate) fn interrupt(part: &mut Timg0AlarmInterrupt) {
 }
 
 fn reset(fault: SarSetupFault) -> ! {
-    oer_chips_esp32s31_compose::phy_fault::reset(Fault {
+    oer_chips_esp32s31_runtime::phy_fault::reset(Fault {
         reason: FaultReason::SarSetup(fault),
         registration: None,
     })

@@ -1,14 +1,7 @@
 //! One bounded RX traffic capture with real take/recycle. No live CPU buffer write.
 use crate::usb;
 use oer_chips_esp32s31_board as board;
-use oer_chips_esp32s31_compose::Esp32s31;
 use oer_chips_esp32s31_hal::{
-    ieee80211::{
-        dma::{descriptor::RxDescriptor, rx_storage::RxDmaStorage},
-        init::{
-            MAC_COLD_HANDSHAKE_DEADLINE, MacSlowClockCalibration, MacSlowClockCalibrationSource,
-        },
-    },
     peripherals::usb_serial_jtag::ConsoleInterrupt,
     peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
     peripherals::{
@@ -17,14 +10,21 @@ use oer_chips_esp32s31_hal::{
         system_timer::{SystimerAlarm0, SystimerAlarm1},
     },
     power::ChipClocks,
-    root::Root,
+    radio::ieee80211::{
+        dma::{descriptor::RxDescriptor, rx_storage::RxDmaStorage},
+        init::{
+            MAC_COLD_HANDSHAKE_DEADLINE, MacSlowClockCalibration, MacSlowClockCalibrationSource,
+        },
+    },
+    system::root::Root,
 };
-use oer_chips_esp32s31_phy::{
+use oer_chips_esp32s31_radio_client::{LpClock, RcSlow};
+use oer_chips_esp32s31_radio_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
     concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
-use oer_chips_esp32s31_radio_client::{LpClock, RcSlow};
 use oer_chips_esp32s31_radio_system::Esp32s31Radio;
+use oer_chips_esp32s31_runtime::Esp32s31;
 use oer_chips_family_executor::{Executor, InterruptExecutor};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
@@ -53,8 +53,8 @@ type Backend = Esp32s31Radio<
 >;
 static DIRECT_BACKEND: StaticCell<Backend> = StaticCell::new();
 struct DirectOutput {
-    access: oer_chips_esp32s31_hal::owner::RadioAccess,
-    _clocks: oer_chips_esp32s31_hal::ieee80211::client::WifiClocksOn,
+    access: oer_chips_esp32s31_hal::system::owner::RadioAccess,
+    _clocks: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
 }
 static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
 static DIRECT_READY: oer_portable_memory::ClaimCell<
@@ -81,7 +81,7 @@ oer_chips_family_interrupt_table::interrupt_table! {
 }
 oer_chips_family_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
-        direct(backend: &'static mut Backend, lp: LpClock<RcSlow>, wifi: oer_chips_esp32s31_hal::root::WifiPartition, delay_random: u32, station: [u8;6], ap: [u8;6]) = direct_start;
+        direct(backend: &'static mut Backend, lp: LpClock<RcSlow>, wifi: oer_chips_esp32s31_hal::system::root::WifiPartition, delay_random: u32, station: [u8;6], ap: [u8;6]) = direct_start;
     }
 }
 oer_chips_family_executor::tasks! {
@@ -93,18 +93,20 @@ oer_chips_family_executor::tasks! {
 struct Boot {
     console: usb::Console,
     _pads: oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
-    mac_irq: oer_chips_esp32s31_hal::owner::MacInterruptRegisters,
+    mac_irq: oer_chips_esp32s31_hal::system::owner::MacInterruptRegisters,
     traffic: &'static mut traffic::Trace,
 }
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_compose::phy_fault::reset);
+oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_runtime::phy_fault::reset);
 oer_chips_family_staged_runtime::entry!(
     main,
-    oer_chips_esp32s31_hal::platform::Port,
+    oer_chips_esp32s31_hal::system::platform::Port,
     hook = crate::diagnostic::panic,
     exception = crate::diagnostic::exception
 );
 fn main(
-    handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal::platform::Port>,
+    handoff: oer_chips_family_staged_runtime::Handoff<
+        oer_chips_esp32s31_hal::system::platform::Port,
+    >,
 ) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_portable_diagnostics::name!("root"; 32));
@@ -124,7 +126,7 @@ fn main(
         _psram,
         mut adopted,
     ) = match oer_chips_family_staged_runtime::adoption::run::<
-        oer_chips_esp32s31_compose::Esp32s31,
+        oer_chips_esp32s31_runtime::Esp32s31,
         _,
         _,
     >(
@@ -132,10 +134,10 @@ fn main(
         root.into_runtime(),
         INTERRUPT_TABLE,
         board::BootstrapPsram,
-        oer_chips_esp32s31_compose::phy_fault::report_previous,
+        oer_chips_esp32s31_runtime::phy_fault::report_previous,
         |hardware| {
             let _reset_causes =
-                oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
 
             crate::diagnostic::report_previous();
             (
@@ -169,12 +171,12 @@ fn main(
     let (domain, partitions) = runtime_radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
-            oer_chips_esp32s31_compose::phy_fault::identity(),
+            oer_chips_esp32s31_runtime::phy_fault::identity(),
         )
         .unwrap_or_else(|failure| {
             let fault = failure.fault();
             let _owners = failure;
-            oer_chips_esp32s31_compose::phy_fault::reset(fault)
+            oer_chips_esp32s31_runtime::phy_fault::reset(fault)
         });
     let Some(lp) = LpClock::<RcSlow>::claim() else {
         fail(oer_portable_diagnostics::name!("claim"; 32));
@@ -277,14 +279,13 @@ fn main(
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
-    oer_chips_family_staged_runtime::fatal::boot_failure::<oer_chips_esp32s31_hal::platform::Port>(
-        reason.as_str(),
-        || {
-            let _ = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
-                &oer_portable_diagnostics::Note::runtime_fail(reason),
-            );
-        },
-    )
+    oer_chips_family_staged_runtime::fatal::boot_failure::<
+        oer_chips_esp32s31_hal::system::platform::Port,
+    >(reason.as_str(), || {
+        let _ = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
+            &oer_portable_diagnostics::Note::runtime_fail(reason),
+        );
+    })
 }
 type DirectRun =
     impl core::future::Future<Output = Result<DirectOutput, oer_portable_diagnostics::Name<32>>>;
@@ -298,7 +299,7 @@ type DirectTrack<'a> = impl core::future::Future<
         Output = Result<
             oer_chips_esp32s31_radio_client::wifi::WifiTracked,
             oer_chips_esp32s31_radio_client::Failed<
-                oer_chips_esp32s31_hal::ieee80211::client::WifiClocked,
+                oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocked,
             >,
         >,
     > + 'a;
@@ -351,13 +352,15 @@ static DIRECT_RUN: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace
 fn direct_future(
     backend: &'static mut Backend,
     lp: LpClock<RcSlow>,
-    wifi: oer_chips_esp32s31_hal::root::WifiPartition,
+    wifi: oer_chips_esp32s31_hal::system::root::WifiPartition,
     delay_random: u32,
     station: [u8; 6],
     ap: [u8; 6],
 ) -> DirectRun {
     async move {
-        use oer_chips_esp32s31_hal::ieee80211::{client::WifiCold, init::MacColdStartConfig};
+        use oer_chips_esp32s31_hal::radio::ieee80211::{
+            client::WifiCold, init::MacColdStartConfig,
+        };
         use oer_chips_esp32s31_radio_client::wifi::{WifiJoin, WifiTrack};
         use oer_chips_esp32s31_radio_system::ClientBackend;
         let channel = WifiChannel::new_2_4_ghz(CHANNEL, WifiChannelWidth::Mhz20)
@@ -415,7 +418,7 @@ fn direct_future(
 fn placed_direct(
     backend: &'static mut Backend,
     lp: LpClock<RcSlow>,
-    wifi: oer_chips_esp32s31_hal::root::WifiPartition,
+    wifi: oer_chips_esp32s31_hal::system::root::WifiPartition,
     delay_random: u32,
     station: [u8; 6],
     ap: [u8; 6],
@@ -428,7 +431,7 @@ fn placed_direct(
 async fn direct_start(
     backend: &'static mut Backend,
     lp: LpClock<RcSlow>,
-    wifi: oer_chips_esp32s31_hal::root::WifiPartition,
+    wifi: oer_chips_esp32s31_hal::system::root::WifiPartition,
     delay_random: u32,
     station: [u8; 6],
     ap: [u8; 6],
@@ -558,7 +561,7 @@ async fn capture(boot: Boot) {
 async fn run_direct(
     console: &mut usb::Console,
     trace: &mut traffic::Trace,
-    mut mac_irq: oer_chips_esp32s31_hal::owner::MacInterruptRegisters,
+    mut mac_irq: oer_chips_esp32s31_hal::system::owner::MacInterruptRegisters,
 ) -> Result<(), oer_portable_diagnostics::Name<32>> {
     let deadline = EmbassyClock
         .now()

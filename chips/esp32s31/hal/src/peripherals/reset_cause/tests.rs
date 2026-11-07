@@ -5,7 +5,7 @@ use std::{vec, vec::Vec};
 use oer_chips_esp32s31_pac::instances;
 
 use super::{ResetCause, ResetCauseRegisters, ResetCauses};
-use crate::platform::{BOOT_HART, Hart};
+use crate::system::platform::{BOOT_HART, Hart};
 
 /// Host memory of `bytes` bytes, each word `fill`.
 fn memory(bytes: usize, fill: u32) -> Vec<u32> {

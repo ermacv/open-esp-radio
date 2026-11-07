@@ -1,4 +1,4 @@
-use oer_chips_esp32s31_phy::PhyState;
+use oer_chips_esp32s31_radio_phy::PhyState;
 
 use super::*;
 

@@ -8,7 +8,7 @@ use oer_chips_esp32s31_pac::{
     instances, lp_aonclkrst::LpAonResetCause, ownership::ResetCausePeripherals,
 };
 
-use crate::platform::{HARTS, Hart};
+use crate::system::platform::{HARTS, Hart};
 
 #[cfg(test)]
 mod tests;

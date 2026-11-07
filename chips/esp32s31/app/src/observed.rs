@@ -21,12 +21,12 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::{Context, Poll};
 
 use embassy_futures::yield_now;
-use oer_chips_esp32s31_compose::sampler::{self, Ended, SamplerTimer, StartError, Storage, Timer};
 use oer_chips_esp32s31_hal::peripherals::cache_counters::{Buses, CacheCounters};
 use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1AlarmInterrupt, Timg1AlarmParts};
 #[cfg(feature = "group")]
 use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1Timer1Interrupt, Timg1Timer1Parts};
-use oer_chips_esp32s31_wifi::observation as station;
+use oer_chips_esp32s31_radio_ieee80211_station::observation as station;
+use oer_chips_esp32s31_runtime::sampler::{self, Ended, SamplerTimer, StartError, Storage, Timer};
 use oer_chips_family_interrupt_table::Entry;
 use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
@@ -46,8 +46,8 @@ pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
     DataBus, Geometry as CacheGeometry, InstructionBus, Level as CacheLevel,
     Snapshot as CacheSnapshot,
 };
-pub use oer_chips_esp32s31_wifi::WifiRxReport;
-pub use oer_chips_esp32s31_wifi::observation::StationRxKind;
+pub use oer_chips_esp32s31_radio_ieee80211_station::WifiRxReport;
+pub use oer_chips_esp32s31_radio_ieee80211_station::observation::StationRxKind;
 pub use oer_portable_trace::profile::{PcSample, Thinning};
 
 /// The library's executors.
@@ -169,7 +169,7 @@ pub struct Counters {
     /// bound.
     pub driver: Option<WifiRxReport>,
     /// The MAC's statistics at their last sample, and its frequency offset.
-    pub mac: oer_chips_esp32s31_wifi::MacCounters,
+    pub mac: oer_chips_esp32s31_radio_ieee80211_station::MacCounters,
 }
 
 /// The counts now.
@@ -185,8 +185,8 @@ pub fn counters() -> Counters {
         ampdu: LINK.ampdu(),
         link: LINK.link(),
         positions: LINK.positions(),
-        driver: oer_chips_esp32s31_wifi::rx_counters(),
-        mac: oer_chips_esp32s31_wifi::mac_counters(),
+        driver: oer_chips_esp32s31_radio_ieee80211_station::rx_counters(),
+        mac: oer_chips_esp32s31_radio_ieee80211_station::mac_counters(),
     }
 }
 

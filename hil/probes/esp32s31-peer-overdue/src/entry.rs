@@ -2,8 +2,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_board as board;
-use oer_chips_esp32s31_compose::Esp32s31;
-use oer_chips_esp32s31_hal::cores::Cores;
+use oer_chips_esp32s31_runtime::Esp32s31;
+use oer_chips_esp32s31_hal::system::cores::Cores;
 use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag;
 use oer_chips_esp32s31_hal::peripherals::watchdog::{
@@ -13,8 +13,8 @@ use oer_chips_esp32s31_hal::peripherals::{
     software_interrupt::{FromCpu0Irq, FromCpu1Irq},
     system_timer::SystimerAlarm0,
 };
-use oer_chips_esp32s31_hal::platform::{BOOT_HART, Port};
-use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_esp32s31_hal::system::platform::{BOOT_HART, Port};
+use oer_chips_esp32s31_hal::system::root::Root;
 use oer_chips_family_executor::peer::liveness::{self, Beat, Period, Responder, Supervisor};
 use oer_chips_family_executor::peer::{Obligations, PeerClient, PeerServer};
 use oer_chips_family_executor::{Executor, InterruptExecutor};
@@ -210,14 +210,14 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((runtime_system_timer, runtime_software_interrupts, runtime_watchdogs, reset_causes, hart1), _psram, mut adopted) =
-        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
+        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_runtime::Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
             board::BootstrapPsram,
-            oer_chips_esp32s31_compose::phy_fault::report_previous,
+            oer_chips_esp32s31_runtime::phy_fault::report_previous,
             |hardware| {
-                let reset_causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                let reset_causes = oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
                 (
                     hardware.system_timer,
                     hardware.software_interrupts,
@@ -295,7 +295,7 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     let Ok(Some(mut cores)) = Cores::take() else {
         fail(oer_portable_diagnostics::name!("cores-taken"; 32));
     };
-    let hart1 = oer_chips_esp32s31_compose::secondary::launch_hart1(
+    let hart1 = oer_chips_esp32s31_runtime::secondary::launch_hart1(
         &mut cores,
         hart1,
         reset_causes,

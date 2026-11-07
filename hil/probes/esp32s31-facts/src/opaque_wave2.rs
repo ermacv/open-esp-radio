@@ -112,7 +112,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
         .modem_lpcon_chip_clocks
         .set_i2c_ana_mst_master_clock(true);
 
-    // SOURCE: hal/src/phy/analog_i2c.rs prepare_open_i2c_pre_delay and
+    // SOURCE: hal/src/radio/phy/analog_i2c.rs prepare_open_i2c_pre_delay and
     // complete_open_i2c_power_and_reset; modem/ops.rs. The false BB tie
     // deliberately has no write in production (write-trigger field).
     s.sar.radio.pmu_radio.modify_rf_pwc(|w| {
@@ -154,7 +154,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             w.set_rstb_perif_i2c(true);
         });
     }
-    // SOURCE: hal/src/phy/i2c/master.rs configure_clock_selection and
+    // SOURCE: hal/src/radio/phy/i2c/master.rs configure_clock_selection and
     // configure_master_registers (six timing RMWs, mode then enable).
     let m = &mut s.sar.analog.i2c_ana_mst;
     m.modify_i2c0_ctrl1(|w| {
@@ -273,7 +273,7 @@ fn busy(s: &Session<'_>, host: Host) -> bool {
 
 fn start(s: &mut Session<'_>, host: Host, address: Address, seed: u8) {
     let m = &mut s.sar.analog.i2c_ana_mst;
-    // SOURCE: hal/src/phy/i2c/master.rs publish_command; ROM_REV0_PHY_I2C.
+    // SOURCE: hal/src/radio/phy/i2c/master.rs publish_command; ROM_REV0_PHY_I2C.
     // Deliberate probe difference: nonzero DATA seeds distinguish a read
     // returning zero from an unchanged command. READ_WRITE is always false.
     match host {
@@ -336,7 +336,7 @@ fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
 }
 
 fn normal_map(s: &mut Session<'_>) {
-    // SOURCE: hal/src/phy/i2c/master.rs configure_host_map, image 0x3fa0.
+    // SOURCE: hal/src/radio/phy/i2c/master.rs configure_host_map, image 0x3fa0.
     s.sar.analog.i2c_ana_mst.modify_ana_conf2(|w| {
         w.set_bbtop_mst0_select(false)
             .set_txrf_mst0_select(false)

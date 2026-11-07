@@ -5,8 +5,8 @@
 
 use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
-use oer_chips_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocked};
-use oer_chips_esp32s31_phy::{
+use oer_chips_esp32s31_hal::{radio::domain::RadioDomain, radio::ieee80211::client::WifiClocked};
+use oer_chips_esp32s31_radio_phy::{
     ConcurrentWifiChannelError, PhyTargetObserver, RomShortDelay, concurrent::ConcurrentPhy,
     select_concurrent_wifi_channel,
 };
@@ -25,7 +25,8 @@ pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>
         Result<(), ConcurrentWifiChannelError>,
     ),
 > {
-    let transaction = domain.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Retune);
+    let transaction =
+        domain.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Retune);
     async move {
         let channel = crate::channel::lower_wifi_channel(channel.channel().channel());
         let mut platform = ();
