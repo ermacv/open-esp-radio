@@ -430,6 +430,34 @@ pub trait CommitTxDma: PreparedTxDma<DmaRef<WifiTxDmaDescriptor>> + sealed::Owne
 
     /// Record hardware ownership, then run `start`.
     fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>));
+
+    /// Play the MAC following this chain from its head: `read` gets each
+    /// descriptor's used bytes, up to the descriptor marked last. A host
+    /// model's view; the chip's MAC has its own.
+    ///
+    /// # Errors
+    ///
+    /// A descriptor the MAC would not follow ([`TxChainUnreadable`]).
+    #[cfg(any(test, feature = "test-support"))]
+    fn read_chain(&mut self, _read: &mut dyn FnMut(&[u8])) -> Result<(), TxChainUnreadable> {
+        Err(TxChainUnreadable::NoTable)
+    }
+}
+
+/// Why a host model could not follow a chain ([`CommitTxDma::read_chain`]).
+#[cfg(any(test, feature = "test-support"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxChainUnreadable {
+    /// This owner keeps no table of its buffers for a model.
+    NoTable,
+    /// A descriptor without the hardware's ownership bit.
+    NotOwned,
+    /// A buffer address outside every retained buffer, or a length past it.
+    OutsideBuffers,
+    /// A link that does not name the arena's next descriptor.
+    BadLink,
+    /// The chain ran past the arena without a last descriptor.
+    NoLast,
 }
 
 pub struct TxDmaPublication<'owner, L> {

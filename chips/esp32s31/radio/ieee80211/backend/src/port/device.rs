@@ -19,7 +19,6 @@ use crate::{
 };
 use core::cell::RefCell;
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::space::DmaSpace;
-use oer_chips_esp32s31_radio_phy::PhyTxTargetPowerProfile;
 use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 use oer_portable_memory::HandlerCell;
 use oer_protocols_ieee80211_wire::channel::WifiChannel;
@@ -38,7 +37,8 @@ pub trait Composition: 'static {
         + 'p;
 }
 
-pub type Power = crate::tx::CappedTxPowerProfile<PhyTxTargetPowerProfile>;
+/// The transmit power of a device over the frontier `F`.
+pub type Power<F> = crate::tx::CappedTxPowerProfile<<F as Frontier>::Calibrated>;
 
 /// The stopped radio's owner a device runs from and returns to: what it
 /// splits into while the device runs and how it moves between channels. The
@@ -48,6 +48,8 @@ pub trait Frontier: Sized + 'static {
     type Registers: LowerMacHardware + ReceiveRegisters + 'static;
     /// The DMA space of the receive ring.
     type Space: DmaSpace;
+    /// The calibrated transmit power a retune reports.
+    type Calibrated: WifiTxPowerProfile;
     /// What stays beside the registers while the device runs.
     type Context;
     /// The device's cell of the radio's actor.
@@ -78,7 +80,7 @@ pub enum RetuneEnd<F: Frontier> {
     Moved {
         stopped: F,
         cell: F::Cell,
-        tx_power: PhyTxTargetPowerProfile,
+        tx_power: F::Calibrated,
     },
     /// The retune failed and the radio changed nothing: the owner stays on
     /// its channel.
@@ -194,7 +196,7 @@ pub struct RadioDevice<
     domain: RegulatoryDomain,
     limits: PowerLimits,
     timeline: MacTimeline,
-    power: Option<Power>,
+    power: Option<Power<F>>,
     rx_pending: bool,
     tx_pending: u32,
     tbtt_pending: bool,
@@ -357,7 +359,7 @@ where
     V: WifiIrqActivation + 'static,
     D: RadioDoorbell + 'static,
 {
-    type Power = Power;
+    type Power = Power<F>;
     type Coex = C::Coex;
     type Entropy = C::Entropy;
     type Timer = T;
@@ -395,7 +397,7 @@ where
     fn event_waiting(&self) -> bool {
         self.session.as_ref().is_ok_and(ReceiveSession::has_event)
     }
-    fn take_power_profile(&mut self) -> Option<Power> {
+    fn take_power_profile(&mut self) -> Option<Power<F>> {
         self.power.take()
     }
     fn radio_now(&mut self) -> Result<Ieee80211Instant, ClockError> {
@@ -426,7 +428,7 @@ where
                         .domain
                         .permit(RegulatedChannel::from(channel))
                         .map_err(|_| Fault::ChannelNotPermitted)?;
-                    self.power = Some(Power::new(tx_power, permit.tx_ceiling(self.limits)));
+                    self.power = Some(Power::<F>::new(tx_power, permit.tx_ceiling(self.limits)));
                     self.active = Some(Active { registers, context });
                     self.paused = true;
                 }

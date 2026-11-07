@@ -82,6 +82,14 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   Trigger-response or beamformee service. The chip MAC and HAL contain
   Trigger queue primitives; their presence does not advertise those
   services through the port.
+- **Host model.** `hardware_model` (feature `test-support`) stands under the
+  real port, device, receive session and DMA owners, where the chip has its
+  registers, so a host test runs them joined; the station facade's `joined`
+  tests run a socket through them. Each behaviour is a named rule with its
+  evidence, listed in the module; what has none (an abort's end under forced
+  CCA, the collision bit, the tail's `rx_state`, the key at capture) is a
+  test's input, never a claim about the chip. Passing proves the logic above
+  the rules, not the rules.
 - **Host tests.** The shared data-port cases
   (`oer-protocols-ieee80211-testing-conformance::data_port`) run against
   `Esp32s31Port` over the host device model, beside the port's own tests in
@@ -293,7 +301,9 @@ place on the same device, driver state and allocations, and `release`
 hands the device back. The P3 handlers own only their interrupt epoch and
 static typed signals. The task-side `RadioDevice` retains the cooperative
 registers, PHY actor transaction and RX ring. No ISR accesses its
-task-only `RefCell` state.
+task-only `RefCell` state. It names what it needs of the stopped radio's
+owner (`Frontier`) and of the registers (`ReceiveRegisters`); on the chip
+those are `WifiStopped` and `RadioAccess`, on a host the model below.
 
 Eight shared TX tickets feed four hardware queues; an MPDU takes one, and
 the station's two data arenas hold one each. Every MPDU is written into one

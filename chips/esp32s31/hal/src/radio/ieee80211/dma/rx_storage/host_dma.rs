@@ -8,7 +8,10 @@
 //! port.
 
 use super::{ExternalRxReturnState, RxDmaBuffer, RxDmaStorage, RxRingLive};
-use crate::radio::ieee80211::dma::space::HostDma;
+use crate::radio::ieee80211::dma::{
+    rx_dma::model::{RxWalkerLanding, RxWalkerModel},
+    space::HostDma,
+};
 
 /// Why the modelled DMA engine refused an access.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,23 +33,59 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
     /// include the leading recycle guard; anything else is refused and
     /// nothing is written. `ring` is this arena's live ring: borrowing it
     /// shared proves that no completed-descriptor view of a buffer exists.
-    #[allow(
-        unsafe_code,
-        reason = "the modelled DMA engine writes a buffer the live ring published"
-    )]
     pub fn dma_write(
         &self,
         ring: &RxRingLive<'_, COUNT>,
         address: u32,
         bytes: &[u8],
     ) -> Result<(), HostDmaAccessError> {
-        let (buffer, offset) = self.dma_range(ring, address, bytes.len())?;
-        // SAFETY: `dma_range` bounded `offset + bytes.len()` by this buffer's
-        // `STORAGE_SIZE` bytes, which live in its `UnsafeCell`. CPU views of
-        // them exist only inside completed-descriptor tokens, which borrow the
-        // live ring mutably while `ring` is borrowed shared here, and inside
-        // detached buffers, which `dma_range` refused. The ring is neither
-        // `Send` nor `Sync`, so no other thread can use it meanwhile.
+        if !ring.belongs_to_arena(&self.arena) {
+            return Err(HostDmaAccessError::ForeignRing);
+        }
+        self.write_published(address, bytes)
+    }
+
+    /// Model the DMA engine landing one whole received unit in the
+    /// descriptor `walker`'s NEXT names: the bytes first, then the word that
+    /// completes it, as [`RxWalkerModel::land`] rules. The descriptor stays
+    /// armed in the ring until that word, so this needs no ring. A walker
+    /// that lands nothing writes nothing and says why.
+    ///
+    /// # Errors
+    ///
+    /// `bytes` do not fit the armed buffer; nothing is written.
+    pub fn land_unit(
+        &self,
+        walker: &core::cell::RefCell<RxWalkerModel>,
+        bytes: &[u8],
+    ) -> Result<RxWalkerLanding, HostDmaAccessError> {
+        let table = self
+            .walker_table()
+            .ok_or(HostDmaAccessError::OutsideBuffers)?;
+        let length = u32::try_from(bytes.len()).map_err(|_| HostDmaAccessError::OutsideBuffers)?;
+        let mut walker = walker.borrow_mut();
+        if let Some(descriptor) = walker.armed_next(table) {
+            self.write_published(descriptor.buffer_address(), bytes)?;
+        }
+        Ok(walker.land(table, length, true))
+    }
+
+    /// Write `bytes` at `address` of a buffer in the ring: a caller has
+    /// checked that the ring holds no view of it.
+    #[allow(
+        unsafe_code,
+        reason = "the modelled DMA engine writes a buffer the ring published"
+    )]
+    fn write_published(&self, address: u32, bytes: &[u8]) -> Result<(), HostDmaAccessError> {
+        let (buffer, offset) = self.published_range(address, bytes.len())?;
+        // SAFETY: `published_range` bounded `offset + bytes.len()` by this
+        // buffer's `STORAGE_SIZE` bytes, which live in its `UnsafeCell`, and
+        // refused a detached buffer. CPU views of an attached buffer exist
+        // only inside completed-descriptor tokens: `dma_write`'s shared ring
+        // borrow excludes those, whose tokens borrow the ring mutably, and
+        // `land_unit` writes only under a descriptor that is armed and not
+        // completed, of which no token exists. Both run on the thread of
+        // their `!Sync` proof.
         unsafe {
             buffer
                 .0
@@ -70,10 +109,13 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         address: u32,
         output: &mut [u8],
     ) -> Result<(), HostDmaAccessError> {
-        let (buffer, offset) = self.dma_range(ring, address, output.len())?;
-        // SAFETY: as in `dma_write`: the range lies inside this buffer's
-        // `UnsafeCell`, and no CPU writer of it can run while `ring` is
-        // borrowed shared.
+        if !ring.belongs_to_arena(&self.arena) {
+            return Err(HostDmaAccessError::ForeignRing);
+        }
+        let (buffer, offset) = self.published_range(address, output.len())?;
+        // SAFETY: as in `write_published`: the range lies inside this
+        // buffer's `UnsafeCell`, and no CPU writer of it can run while `ring`
+        // is borrowed shared.
         unsafe {
             buffer
                 .0
@@ -87,15 +129,11 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
 
     /// The published buffer (a ring buffer or the reserved descriptor's)
     /// holding `address .. address + len` and the offset of `address` in it.
-    fn dma_range(
+    fn published_range(
         &self,
-        ring: &RxRingLive<'_, COUNT>,
         address: u32,
         len: usize,
     ) -> Result<(&RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>, usize), HostDmaAccessError> {
-        if !ring.belongs_to_arena(&self.arena) {
-            return Err(HostDmaAccessError::ForeignRing);
-        }
         for buffer in self.buffers.iter().chain([&self.reserved_buffer]) {
             let start = self
                 .buffer_dma_address(buffer)

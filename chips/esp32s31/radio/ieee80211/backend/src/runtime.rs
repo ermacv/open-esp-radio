@@ -335,6 +335,7 @@ impl<W: crate::startup::WifiMacPlatform + 'static> crate::port::device::Frontier
 {
     type Registers = RadioAccess;
     type Space = oer_chips_esp32s31_hal::radio::ieee80211::dma::space::ChipDma;
+    type Calibrated = oer_chips_esp32s31_radio_phy::PhyTxTargetPowerProfile;
     type Context = (W, WifiRuntimeContext);
     type Cell = MembershipCell<Wifi>;
     type Retune = WifiRetunePending<W>;

@@ -1643,6 +1643,56 @@ fn live_host_arena<const COUNT: usize>() -> (
 }
 
 #[test]
+fn a_landed_unit_writes_its_bytes_under_a_descriptor_it_completes() {
+    use crate::radio::ieee80211::dma::rx_dma::model::{RxWalkerLanding, RxWalkerModel};
+    const COUNT: usize = 2;
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
+    let placed = place(storage);
+    let storage = placed.storage();
+    let buffers = storage.buffer_addresses().bits();
+    let base = placed.descriptor_base();
+    let mut mmio = RxWalkerModel::new();
+    mmio.next_descriptor_low = base & ADDRESS_LOW_MASK;
+    let live = placed
+        .prepare_ring(&mut mmio)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut mmio))
+        .expect("prepared owner")
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .expect("live epoch");
+    let walker = core::cell::RefCell::new(mmio);
+
+    assert_eq!(
+        storage.land_unit(&walker, &[1, 2, 3, 4]),
+        Ok(RxWalkerLanding::Landed(base & ADDRESS_LOW_MASK))
+    );
+    let mut read = [0; 4];
+    storage.dma_read(&live, buffers[0], &mut read).unwrap();
+    assert_eq!(read, [1, 2, 3, 4]);
+    assert!(storage.descriptors()[0].word0().rx_done());
+    assert_eq!(storage.descriptors()[0].word0().length(), 4);
+
+    // A unit past the buffer lands nothing and moves nothing.
+    let next = walker.borrow().next_descriptor_low;
+    assert_eq!(
+        storage.land_unit(&walker, &[0xff; 17]),
+        Err(HostDmaAccessError::OutsideBuffers)
+    );
+    assert_eq!(walker.borrow().next_descriptor_low, next);
+    assert!(!storage.descriptors()[1].word0().rx_done());
+
+    // A clear owner bit stops the walker there, the buffer unwritten.
+    let armed = storage.descriptors()[1].word0();
+    storage.descriptors()[1].write_word0(armed.with_owner(false));
+    assert_eq!(
+        storage.land_unit(&walker, &[9; 4]),
+        Ok(RxWalkerLanding::StoppedOnOwner(next))
+    );
+    storage.dma_read(&live, buffers[1], &mut read).unwrap();
+    assert_ne!(read, [9; 4]);
+}
+
+#[test]
 fn host_dma_port_writes_only_inside_one_ring_buffer() {
     const COUNT: usize = 2;
     let (storage, buffers, mut mmio, mut live) = live_host_arena::<COUNT>();

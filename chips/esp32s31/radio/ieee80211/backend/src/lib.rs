@@ -40,7 +40,7 @@
 //! SOURCE(esp32s31): `libpp[hal_utilities.o]::rutype2str` names RU types
 //! zero through three in this HE20 backend profile.
 
-#[cfg(test)]
+#[cfg(any(test, all(feature = "test-support", not(target_arch = "riscv32"))))]
 extern crate std;
 
 // Host driver fixtures own virtual time; no installed image trace consumes
@@ -57,6 +57,8 @@ pub mod ampdu_tx;
 pub mod coex;
 pub mod cooperative_hardware;
 pub mod datapath;
+#[cfg(any(test, all(feature = "test-support", not(target_arch = "riscv32"))))]
+pub mod hardware_model;
 pub mod irq;
 pub mod lower_mac;
 pub mod mac;
