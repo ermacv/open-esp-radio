@@ -176,6 +176,8 @@ pub struct Facts {
     pub memory: Option<Memory>,
     /// The interrupt contract the interrupt-stack check reads.
     pub interrupts: Option<InterruptContract>,
+    /// The image's interrupt layout, on a chip that has an application entry.
+    pub interrupt_layout: Option<InterruptLayout>,
     /// The ROM the stack analyses read; `None` for a chip without a pinned
     /// ROM ELF.
     pub rom: Option<Rom>,
@@ -226,6 +228,8 @@ struct Stated {
     memory: Option<StatedMemory>,
     #[serde(default)]
     interrupts: Option<InterruptContract>,
+    #[serde(default)]
+    interrupt_layout: Option<InterruptLayout>,
     #[serde(default)]
     rom: Option<Rom>,
     #[serde(default)]
@@ -443,6 +447,7 @@ impl Facts {
             flash,
             memory,
             interrupts: stated.interrupts,
+            interrupt_layout: stated.interrupt_layout,
             rom: stated.rom,
             placement: stated.placement,
             core_start: stated.core_start,

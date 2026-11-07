@@ -20,6 +20,44 @@ mod stacks;
 
 pub use pma::{PMA_ADDRESS_INDEX, Pma, PmaEntry, PmaWrite};
 
+/// The interrupt table of `template` with the chip's layout: `@contexts` is
+/// the context declaration and `@layout(name)` that entry's line, context and
+/// hart. Every entry of the layout is used once.
+pub fn interrupt_table(facts: &Facts, template: &str) -> Result<String> {
+    let layout = facts
+        .interrupt_layout
+        .as_ref()
+        .ok_or_else(|| format!("{}: the table needs `[interrupt-layout]`", facts.id))?;
+    let contexts = layout
+        .contexts
+        .iter()
+        .map(|(name, level)| format!("{name}: {level};"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut table = template.replace("@contexts", &format!("contexts {{ {contexts} }}"));
+    for entry in &layout.entries {
+        if !layout.contexts.contains_key(&entry.context) {
+            return Err(format!("{}: `{}` names no context", facts.id, entry.name).into());
+        }
+        let marker = format!("@layout({})", entry.name);
+        if table.matches(&marker).count() != 1 {
+            return Err(format!("{}: the table must name `{}` once", facts.id, entry.name).into());
+        }
+        table = table.replace(
+            &marker,
+            &format!(
+                "line {}, context {}, hart {}",
+                entry.line, entry.context, entry.hart
+            ),
+        );
+    }
+    if let Some(start) = table.find("@layout(") {
+        let row = table[start..].lines().next().unwrap_or_default();
+        return Err(format!("{}: `{row}` has no layout entry", facts.id).into());
+    }
+    Ok(table)
+}
+
 /// A typed PAC selection for the boot clock owner. Register encodings stay
 /// in the register model; a missing policy is an error, never an inherited root.
 pub fn lp_fast_source(facts: &Facts) -> Result<String> {
@@ -912,5 +950,71 @@ mod tests {
                 .to_string()
                 .contains("hart count is zero")
         );
+    }
+
+    fn layout_facts() -> Facts {
+        let (mut facts, _) = super::tracked("esp32s31").expect("the tracked facts load");
+        facts.interrupt_layout = Some(crate::InterruptLayout {
+            contexts: std::collections::BTreeMap::from([("radio".to_owned(), 3)]),
+            entries: vec![crate::InterruptLayoutEntry {
+                name: "wifi".to_owned(),
+                line: 21,
+                context: "radio".to_owned(),
+                hart: 0,
+            }],
+        });
+        facts
+    }
+
+    #[test]
+    fn the_table_takes_its_lines_and_levels_from_the_facts() {
+        let table = interrupt_table(&layout_facts(), "@contexts\nwifi: @layout(wifi),\n")
+            .expect("every entry is named once");
+        assert_eq!(
+            table,
+            "contexts { radio: 3; }\nwifi: line 21, context radio, hart 0,\n"
+        );
+    }
+
+    #[test]
+    fn a_row_without_a_layout_entry_is_refused() {
+        let error = interrupt_table(&layout_facts(), "@layout(wifi) @layout(ghost)\n")
+            .expect_err("`ghost` has no entry");
+        assert!(error.to_string().contains("ghost"), "{error}");
+    }
+
+    #[test]
+    fn a_layout_entry_without_a_row_is_refused() {
+        let error = interrupt_table(&layout_facts(), "@contexts\n").expect_err("no row");
+        assert!(error.to_string().contains("wifi"), "{error}");
+    }
+
+    #[test]
+    fn an_entry_naming_an_unknown_context_is_refused() {
+        let mut facts = layout_facts();
+        if let Some(layout) = facts.interrupt_layout.as_mut() {
+            layout.contexts.clear();
+        }
+        let error = interrupt_table(&facts, "@layout(wifi)\n").expect_err("no context");
+        assert!(error.to_string().contains("no context"), "{error}");
+    }
+
+    #[test]
+    fn the_chip_layout_stands_on_lines_and_levels_it_has() {
+        let (facts, _) = super::tracked("esp32s31").expect("the tracked facts load");
+        let geometry = Vectors::of(&facts).expect("the vectors");
+        let layout = facts
+            .interrupt_layout
+            .as_ref()
+            .expect("the S31 has a layout");
+        for entry in &layout.entries {
+            assert!(
+                u32::from(entry.line) >= geometry.first_source_line
+                    && u32::from(entry.line) < geometry.lines,
+                "{}",
+                entry.name
+            );
+            assert!(u32::from(entry.hart) < geometry.harts, "{}", entry.name);
+        }
     }
 }

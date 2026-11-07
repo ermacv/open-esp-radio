@@ -398,6 +398,9 @@ the image's parts for it through the image's SRAM mailbox
 (`secondary_entry!`); the hart then makes its own interrupt context and may
 run its own executor.
 
+P*n* names level *n* of the 8 the CLIC offers. Each context's level, and each
+entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
+
 | Context | Runs | Rule |
 | --- | --- | --- |
 | P3, boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |

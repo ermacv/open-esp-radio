@@ -2,7 +2,7 @@
 
 | File | Holds | Read by |
 | --- | --- | --- |
-| `chip.toml` | the chip layer of the [chip facts](../../family/facts/README.md): properties, flash map, address map with its attributes, boot chain, harts, revisions, reset cause; the vendor comparison's probe list (`[[probe]]`) | `oer-chips-family-facts`, `oer-tools-chip-profile` and everything that loads a profile |
+| `chip.toml` | the chip layer of the [chip facts](../../family/facts/README.md): properties, flash map, address map with its attributes, boot chain, harts, revisions, reset cause, the interrupt layout; the vendor comparison's probe list (`[[probe]]`) | `oer-chips-family-facts`, `oer-tools-chip-profile` and everything that loads a profile |
 | `rom-rev0.toml` | the ROM layer: the revision 0 mask ROM (its ELF pin, symbol script, summaries, forbidden code) and what it uses of the internal SRAM | `oer-chips-family-facts` |
 | `modules/esp32-s31-wroom.toml` | the module layer: the flash and PSRAM fitted with the chip | `oer-chips-family-facts` |
 | `boards/esp32-s31-function-coreboard-1.toml` | the board layer: the board that carries the module | `oer-chips-family-facts` |

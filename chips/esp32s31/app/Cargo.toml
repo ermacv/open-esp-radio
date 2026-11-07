@@ -56,5 +56,8 @@ embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "5b77314960
 # of 1400-byte datagrams at 65 Mbit/s (the revision the stack pins).
 xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "45ddde5904aad35bd81a802897e18b98fe70e654", default-features = false, features = ["udp-rx-queue-count-16"], optional = true }
 
+[build-dependencies]
+oer-chips-family-facts = { path = "../../family/facts" }
+
 [lints]
 workspace = true
