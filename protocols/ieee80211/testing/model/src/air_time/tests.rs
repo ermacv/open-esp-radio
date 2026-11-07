@@ -40,6 +40,8 @@ struct World {
     agreed: Cell<Option<u16>>,
     ring: Cell<usize>,
     landed: RefCell<Vec<Vec<u8>>>,
+    /// Sequence Numbers whose next landing finds no slot.
+    refused: RefCell<Vec<u16>>,
 }
 
 impl AirWorld for World {
@@ -48,6 +50,14 @@ impl AirWorld for World {
     }
 
     fn land(&self, frame: Vec<u8>, _: ModelRxMeta) -> bool {
+        let mut refused = self.refused.borrow_mut();
+        if let Some(at) = refused
+            .iter()
+            .position(|refused| *refused == sequence_of(&frame))
+        {
+            refused.remove(at);
+            return false;
+        }
         if self.ring.get() == 0 {
             return false;
         }
@@ -112,10 +122,12 @@ fn request(medium: &mut Medium, at: u64) -> AirTicket {
 fn saturate(medium: &mut Medium, world: &World, end: u64) -> u64 {
     let mut count = 0;
     let mut ticket = request(medium, 0);
+    let mut last = None;
     while let Some(at) = medium.next_event() {
         if at > end {
             break;
         }
+        assert_ne!(Some(at), last.replace(at), "the channel stands still");
         medium.advance(at, world).unwrap();
         if medium.progress(ticket) != AirProgress::Pending {
             medium.forget(ticket);
@@ -641,6 +653,67 @@ fn a_hole_at_the_head_holds_the_window_however_much_is_offered() {
     let peer = medium.peer.as_ref().unwrap();
     assert_eq!(peer.unacked.len(), 4);
     assert_eq!(peer.next_sequence.get(), 4, "nothing beyond the window");
+}
+
+#[test]
+fn a_lost_head_holds_the_window_while_the_frames_after_it_landed() {
+    let world = roomy();
+    world.refused.borrow_mut().push(0);
+    let mut medium = medium(1, Some(peer(PeerWindow::Assumed(8), Offered::Saturated)));
+    medium.advance(0, &world).unwrap();
+    let end = medium.on_air.as_ref().unwrap().end;
+    medium.advance(end, &world).unwrap();
+    assert_eq!(world.landed.borrow().len(), 7);
+    // The next aggregate is the hole alone: 8 would lie past the window.
+    let before = medium.report().peer.subframes;
+    while medium.report().peer.exchanges < 2 {
+        let at = medium.next_event().unwrap();
+        medium.advance(at, &world).unwrap();
+    }
+    assert_eq!(medium.report().peer.subframes - before, 1);
+    assert_eq!(medium.report().bounds.window, 2);
+}
+
+#[test]
+fn the_peers_frames_carry_their_overhead_on_the_air() {
+    let world = roomy();
+    let mut air_peer = peer(PeerWindow::Agreed, Offered::Saturated);
+    air_peer.frame = frames(100);
+    air_peer.air_overhead_octets = 400;
+    let mut medium = medium(1, Some(air_peer));
+    medium.advance(0, &world).unwrap();
+    let ppdu = stand_rate().max_ppdu_duration_micros(500).unwrap();
+    assert_eq!(medium.on_air.as_ref().unwrap().end, u64::from(ppdu + 44));
+}
+
+#[test]
+fn a_burst_takes_the_slots_that_passed_before_it_and_no_more() {
+    let world = roomy();
+    let mut medium = Medium::new(
+        0,
+        1,
+        AirTiming::HT_2_4_GHZ,
+        Some(BusyChannel {
+            period_micros: NonZeroU32::new(100_000).unwrap(),
+            busy_micros: 300,
+        }),
+        None,
+    );
+    // The first burst is due at once; move it into the backoff.
+    medium.bursts.as_mut().unwrap().next = 37 + 3 * 9;
+    medium.station.slots = 10;
+    medium.station.idle = Some(0);
+    medium.station.posted = true;
+    let ticket = request(&mut medium, 0);
+    medium.advance(10_000, &world).unwrap();
+    assert_eq!(medium.progress(ticket), AirProgress::Answered);
+    let station = medium
+        .spans()
+        .iter()
+        .find(|span| span.holder == AirHolder::Station)
+        .unwrap();
+    // Seven slots left after the burst's end and AIFS.
+    assert_eq!(station.start_micros, 64 + 300 + 37 + 7 * 9);
 }
 
 #[test]

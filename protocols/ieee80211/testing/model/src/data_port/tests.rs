@@ -846,6 +846,20 @@ fn a_publications_protection_and_encryption_take_their_time_on_the_air() {
 }
 
 #[test]
+fn an_arena_on_the_air_reports_no_completion_while_other_work_is_due() {
+    with_harness(|harness| {
+        harness.air.set_air_time(timed(8, 8, 8)).unwrap();
+        harness.start();
+        assert!(harness.publish_arena());
+        let attempt = harness.mpdu().unwrap();
+        let (now, waker) = harness.now_wake();
+        assert!(harness.port.submit(attempt, now, &mut harness.sink).is_ok());
+        let facts = harness.port.poll_facts(&mut Context::from_waker(&waker));
+        assert_eq!(facts.tx.map(|tx| tx.bits()), Some(0), "work, no completion");
+    });
+}
+
+#[test]
 fn a_collision_on_a_timed_air_ends_the_publication_unanswered() {
     with_harness(|harness| {
         let config = AirConfig {

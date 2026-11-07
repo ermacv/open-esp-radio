@@ -540,7 +540,12 @@ impl<'s, const HELD: u8> Bench<'_, 's, HELD> {
 
     /// Everything that can happen at the current instant.
     fn at_this_instant(&mut self) {
-        loop {
+        for round in 0.. {
+            assert!(
+                round < 10_000,
+                "the world does not move at {:?}",
+                self.clock.now()
+            );
             let now = self.clock.now();
             let due = self.air.next_air_event().is_some_and(|at| at <= now);
             if due {
