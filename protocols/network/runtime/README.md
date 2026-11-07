@@ -33,8 +33,14 @@ the credit frees when the command has ended, whichever comes last.
 A socket's lanes wake through waker cells, so today a socket and its service
 share a hart.
 
-A turn takes commands, then received frames, then chooses work and publishes it,
-then hands results and datagrams back. Each part is bounded, so no lane and no
+A service's `Egress` policy chooses what goes out, among all ready work and before
+any frame exists, and keeps its own account: `Direct` is the first ready work and no
+account. No await falls between a choice and its answer from the port, so a
+cancelled `run` leaves no reservation unanswered. A policy that cannot go on ends the
+service with `EndCause::Egress`, and `Ended` returns the policy with its account.
+
+A turn takes commands, received frames and the port's completions, then chooses
+work and publishes it, then hands results and datagrams back. Each part is bounded, so no lane and no
 port starves the others.
 
 `Service::run` ends at the first look after a stop, or at once when the port

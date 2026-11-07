@@ -1,5 +1,6 @@
 //! The task that owns the core.
 
+use core::convert::Infallible;
 use core::future::poll_fn;
 use core::pin::pin;
 use core::task::{Context, Poll};
@@ -13,7 +14,7 @@ use oer_protocols_network_core::{
     CommandId, CommandState, NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId,
     Unsent,
 };
-use oer_protocols_network_port::{FramePort, FrameSource};
+use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::socket::{
@@ -25,6 +26,39 @@ use crate::socket::{
 const TURN_COMMANDS: usize = 4;
 /// Frames one turn takes in, and publishes.
 const TURN_FRAMES: usize = 8;
+
+/// The egress with no policy: the first ready work goes, no account is kept and
+/// a completion says nothing.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Direct;
+
+impl<Ticket, Completion> Egress<Ticket, Completion> for Direct {
+    type Reservation = ();
+    type Fault = Infallible;
+
+    fn choose<C: Candidate>(
+        &mut self,
+        mut ready: impl Iterator<Item = C> + Clone,
+    ) -> Result<Option<(C, ())>, Infallible> {
+        Ok(ready.next().map(|work| (work, ())))
+    }
+
+    fn accepted(&mut self, (): (), _ticket: Ticket) -> Result<(), Infallible> {
+        Ok(())
+    }
+
+    fn refused(&mut self, (): ()) -> Result<(), Infallible> {
+        Ok(())
+    }
+
+    fn unknown(&mut self, (): ()) -> Result<(), Infallible> {
+        Ok(())
+    }
+
+    fn completed(&mut self, _completion: Completion) -> Result<(), Infallible> {
+        Ok(())
+    }
+}
 
 /// The lane that stops a service: whoever holds its sender asks once.
 pub type StopLane = WakingSpscQueue<(), 1>;
@@ -39,6 +73,9 @@ pub enum EndCause {
     /// `Outcome::Retired`, and the port goes back to its owner in
     /// [`Ended::retired`].
     PortContract,
+    /// The egress policy cannot go on: [`Ended::fault`] says why, and its
+    /// account is in [`Ended::egress`].
+    Egress,
 }
 
 /// What a service's end hands on.
@@ -53,9 +90,15 @@ pub struct Ended<
     const DEPTH: usize,
     const LANE: usize,
     P,
+    E,
+    F,
 > {
     pub cause: EndCause,
     pub retired: Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P>,
+    /// The policy and its account, in-flight work included.
+    pub egress: E,
+    /// What ended the policy, with [`EndCause::Egress`].
+    pub fault: Option<F>,
     /// One per socket bound, for what a socket dropped later holds.
     pub sockets: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
 }
@@ -102,9 +145,13 @@ pub struct Service<
     const BLOCKS: usize,
     const DEPTH: usize,
     const LANE: usize,
-    P,
+    P: FramePort + FrameSource,
+    E: Egress<P::Ticket, P::Completion>,
 > {
     owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+    egress: E,
+    /// What ended the policy.
+    fault: Option<E::Fault>,
     bound: [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>>; SOCKETS],
     stop: WakingSpscReceiver<'a, (), 1>,
     /// Why [`Self::run`] ended; it serves no more once this is set.
@@ -124,7 +171,8 @@ impl<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P>
+    E: Egress<P::Ticket, P::Completion>,
+> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E>
 {
     /// Own `owner`. A service keeps its owners until [`Self::retire`] hands
     /// them on, so a cancelled [`Self::run`] loses none. Dropping a service
@@ -133,10 +181,13 @@ impl<
     /// reused, and waiting sockets and observers end.
     pub const fn new(
         owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        egress: E,
         stop: WakingSpscReceiver<'a, (), 1>,
     ) -> Self {
         Self {
             owner,
+            egress,
+            fault: None,
             bound: [const { None }; SOCKETS],
             stop,
             ended: None,
@@ -202,6 +253,8 @@ impl<
             let moved = self.turn(clock.now(), events);
             if self.owner.port_broken() {
                 self.ended = Some(EndCause::PortContract);
+            } else if self.fault.is_some() {
+                self.ended = Some(EndCause::Egress);
             } else if moved {
                 yield_now().await;
             } else {
@@ -222,6 +275,17 @@ impl<
                 break;
             }
             moved = true;
+        }
+        for _ in 0..TURN_FRAMES {
+            let Some(completion) = self.owner.take_completion() else {
+                break;
+            };
+            moved = true;
+            let answer = self.egress.completed(completion);
+            self.note(answer);
+            if self.fault.is_some() {
+                return true;
+            }
         }
         moved |= self.publish(now);
         for bound in self.bound.iter_mut().flatten() {
@@ -281,16 +345,53 @@ impl<
         moved
     }
 
-    /// Publish what is ready, until the port has no room.
+    /// Keep the first fault of the policy.
+    fn note(&mut self, answer: Result<(), E::Fault>) {
+        if let Err(fault) = answer {
+            self.fault.get_or_insert(fault);
+        }
+    }
+
+    /// Publish what the policy chooses, until it or the port has no room. No
+    /// await falls between a choice and its answer, so no cancellation can
+    /// leave a reservation unanswered.
     fn publish(&mut self, now: Instant) -> bool {
         let mut moved = false;
         for _ in 0..TURN_FRAMES {
-            let Some(demand) = self.owner.poll_demand(now) else {
+            let chosen = match self.egress.choose(self.owner.demands(now)) {
+                Ok(chosen) => chosen,
+                Err(fault) => {
+                    self.note(Err(fault));
+                    break;
+                }
+            };
+            let Some((demand, reservation)) = chosen else {
                 break;
             };
             match self.owner.transmit(now, demand.grant()) {
-                Ok(()) | Err(Unsent::Stale) => moved = true,
-                Err(Unsent::Port(_) | Unsent::PortContract) => break,
+                Ok(ticket) => {
+                    moved = true;
+                    let answer = self.egress.accepted(reservation, ticket);
+                    self.note(answer);
+                }
+                Err(Unsent::Stale) => {
+                    moved = true;
+                    let answer = self.egress.refused(reservation);
+                    self.note(answer);
+                }
+                Err(Unsent::Port(_)) => {
+                    let answer = self.egress.refused(reservation);
+                    self.note(answer);
+                    break;
+                }
+                Err(Unsent::PortContract) => {
+                    let answer = self.egress.unknown(reservation);
+                    self.note(answer);
+                    break;
+                }
+            }
+            if self.fault.is_some() {
+                break;
             }
         }
         moved
@@ -331,7 +432,9 @@ impl<
     /// each socket gets the request lane, with what the service never saw, and
     /// every owner comes back. Its owner calls this after [`Self::run`] ended
     /// or was cancelled.
-    pub fn retire(self) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P> {
+    pub fn retire(
+        self,
+    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, E::Fault> {
         let cause = self.ended.unwrap_or(EndCause::Stopped);
         let mut retired = self.owner.retire();
         let sockets = self
@@ -340,6 +443,8 @@ impl<
         Ended {
             cause,
             retired,
+            egress: self.egress,
+            fault: self.fault,
             sockets,
         }
     }

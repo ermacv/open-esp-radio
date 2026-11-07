@@ -38,7 +38,7 @@
 mod service;
 mod socket;
 
-pub use service::{BindRefused, EndCause, Ended, Service, StopLane};
+pub use service::{BindRefused, Direct, EndCause, Ended, Service, StopLane};
 pub use socket::{LateSocket, Observer, Refusal, Refused, Sent, Socket, SocketClosed, SocketLanes};
 
 #[cfg(test)]

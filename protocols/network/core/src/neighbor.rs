@@ -178,7 +178,7 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// The requests owed: each entry with its address and resolution.
-    pub(crate) fn owed_requests(&self) -> impl Iterator<Item = (u8, [u8; 4], u64)> + '_ {
+    pub(crate) fn owed_requests(&self) -> impl Iterator<Item = (u8, [u8; 4], u64)> + Clone + '_ {
         self.entries
             .iter()
             .enumerate()
