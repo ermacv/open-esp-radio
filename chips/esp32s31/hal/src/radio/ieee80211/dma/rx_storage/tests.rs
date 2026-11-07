@@ -1696,10 +1696,21 @@ fn a_landed_unit_writes_its_bytes_under_a_descriptor_it_completes() {
 /// landing answers to the ring's own record of what the CPU holds.
 #[test]
 fn a_landing_never_writes_under_a_completed_token() {
+    landing_under_a_token(0);
+}
+
+/// A descriptor's buffer is its binding's, not the one of its own number.
+#[test]
+fn a_landing_goes_by_the_binding_of_a_rotated_ring() {
+    landing_under_a_token(1);
+}
+
+fn landing_under_a_token(rotation: usize) {
     use crate::radio::ieee80211::dma::rx_dma::model::{RxWalkerLanding, RxWalkerModel};
     const COUNT: usize = 2;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
-    let placed = place(storage);
+    let placed =
+        RxDmaStorage::place_rotated(Placed::host(storage), rotation).expect("a valid rotation");
     let storage = placed.storage();
     let buffers = storage.buffer_addresses().bits();
     let base = placed.descriptor_base();
@@ -1725,6 +1736,19 @@ fn a_landing_never_writes_under_a_completed_token() {
         .expect("a completed descriptor");
     let word = storage.descriptors()[0].word0();
     assert!(word.owner(), "completion leaves OWNER set");
+
+    // A free descriptor that names the held buffer changes nothing.
+    let second = storage.descriptors()[1].word0();
+    let link = storage.descriptors()[1].next_address();
+    storage.descriptors()[1].inject_corrupt_words(second, buffers[0], link);
+    let free = walker.borrow().next_descriptor_low;
+    assert_ne!(free, first);
+    assert_eq!(
+        storage.land_unit(&walker, &[9, 9, 9, 9]),
+        Err(HostDmaAccessError::HeldByCpu)
+    );
+    assert_eq!(walker.borrow().next_descriptor_low, free, "NEXT stays");
+    assert_eq!(storage.descriptors()[1].word0(), second);
 
     walker.borrow_mut().next_descriptor_low = first;
     assert_eq!(

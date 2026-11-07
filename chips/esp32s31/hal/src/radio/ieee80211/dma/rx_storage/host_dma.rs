@@ -22,9 +22,9 @@ pub enum HostDmaAccessError {
     OutsideBuffers,
     /// The buffer is detached to an upper owner, not in the DMA ring.
     NotInRing,
-    /// The CPU holds this descriptor's completed view: OWNER stays set after
-    /// a completion and NEXT can name any descriptor, so neither says so. A
-    /// landing here would write under a live token.
+    /// The CPU holds this buffer through a completed view. OWNER stays set
+    /// after a completion and a descriptor can name any buffer, so neither
+    /// says so: the check goes by the buffer's own binding.
     HeldByCpu,
 }
 
@@ -70,20 +70,33 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
             .ok_or(HostDmaAccessError::OutsideBuffers)?;
         let length = u32::try_from(bytes.len()).map_err(|_| HostDmaAccessError::OutsideBuffers)?;
         let mut walker = walker.borrow_mut();
-        if let Some(descriptor) = walker.armed_next(table)
-            && self
-                .descriptors
-                .ring()
-                .iter()
-                .position(|armed| core::ptr::eq(armed, descriptor))
-                .is_some_and(|index| self.arena.host_taken(index))
-        {
-            return Err(HostDmaAccessError::HeldByCpu);
-        }
         if let Some(descriptor) = walker.armed_next(table) {
-            self.write_published(descriptor.buffer_address(), bytes)?;
+            let address = descriptor.buffer_address();
+            if self.held_by_cpu(address, bytes.len())? {
+                return Err(HostDmaAccessError::HeldByCpu);
+            }
+            self.write_published(address, bytes)?;
         }
         Ok(walker.land(table, length, true))
+    }
+
+    /// Whether a completed view holds the buffer at `address`. The address
+    /// comes from a descriptor, which can name any buffer, so what counts is
+    /// the buffer written, against each taken descriptor's own binding.
+    fn held_by_cpu(&self, address: u32, len: usize) -> Result<bool, HostDmaAccessError> {
+        let (buffer, _) = self.published_range(address, len)?;
+        let Some(written) = self
+            .buffers
+            .iter()
+            .position(|bound| core::ptr::eq(bound, buffer))
+        else {
+            // R's buffer: no view of it leaves the ring.
+            return Ok(false);
+        };
+        Ok((0..COUNT).any(|descriptor| {
+            self.arena.host_taken(descriptor)
+                && self.descriptor_buffer_id(descriptor) == Some(written)
+        }))
     }
 
     /// Write `bytes` at `address` of a buffer in the ring: a caller has
