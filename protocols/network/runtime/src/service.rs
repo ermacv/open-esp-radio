@@ -8,11 +8,11 @@ use core::task::{Context, Poll};
 use embassy_futures::select::select;
 use embassy_futures::yield_now;
 use oer_portable_events::EventSink;
-use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
+use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, Eviction, Group, GroupsFull, NetEvent, NetworkOwner, OpenRefused,
-    Outcome, Pool, Retired, SocketId, Unsent,
+    Block, CommandId, CommandState, Eviction, Group, GroupsFull, NetEvent, NetworkOwner,
+    OpenRefused, Outcome, Pool, Retired, SocketId, Unsent,
 };
 use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
@@ -57,6 +57,33 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
 
     fn notice(&mut self, _notice: Notice) -> Result<(), Infallible> {
         Ok(())
+    }
+}
+
+/// The lane that brings blocks home with no socket: an application's block whose
+/// socket has gone, or that outlived its service. It holds a pool's every block, so
+/// it always has room. It goes from a service to the next with [`Ended::returns`].
+pub type ReturnLane<'m, B, const SIZE: usize, const BLOCKS: usize> =
+    WakingSpscQueue<Block<'m, B, SIZE>, BLOCKS>;
+
+/// The way a block home to whichever service holds the pool now.
+pub struct Returner<'a, 'm, B, const SIZE: usize, const BLOCKS: usize> {
+    sender: WakingSpscSender<'a, Block<'m, B, SIZE>, BLOCKS>,
+}
+
+impl<'a, 'm, B, const SIZE: usize, const BLOCKS: usize> Returner<'a, 'm, B, SIZE, BLOCKS> {
+    #[must_use]
+    pub const fn new(sender: WakingSpscSender<'a, Block<'m, B, SIZE>, BLOCKS>) -> Self {
+        Self { sender }
+    }
+
+    /// Send `block` home.
+    ///
+    /// # Errors
+    /// The lane has no room, which only a lane deeper than its pool's blocks
+    /// were not could cause; the block comes back.
+    pub fn give(&self, block: Block<'m, B, SIZE>) -> Result<(), Block<'m, B, SIZE>> {
+        self.sender.try_send(block).map_err(|error| error.0)
     }
 }
 
@@ -115,6 +142,41 @@ pub struct Ended<
     pub fault: Option<F>,
     /// One per socket bound, for what a socket dropped later holds.
     pub sockets: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
+    /// Those of earlier services, adopted here, whose sockets have not gone.
+    pub adopted: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
+    /// The receiving end of the [`ReturnLane`], for the next service.
+    pub returns: Option<WakingSpscReceiver<'a, Block<'m, B, SIZE>, BLOCKS>>,
+}
+
+impl<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const BLOCKS: usize,
+    const DEPTH: usize,
+    const LANE: usize,
+    P,
+    E,
+    F,
+> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, F>
+{
+    /// With no service to come, bring home what has arrived.
+    pub fn collect(&mut self) {
+        let pool = &mut self.retired.pool;
+        if let Some(returns) = &self.returns {
+            while let Some(block) = returns.try_receive() {
+                pool.give(block);
+            }
+        }
+        for late in self.sockets.iter_mut().chain(&mut self.adopted) {
+            if late.as_mut().is_some_and(|late| late.collect(pool)) {
+                *late = None;
+            }
+        }
+    }
 }
 
 /// A socket the core refused, with its storage untouched for another try.
@@ -178,6 +240,9 @@ pub struct Service<
     memory: MemoryPolicy,
     /// When the oldest possible victim may go, under pressure.
     pressure_at: Option<Instant>,
+    /// Sockets of earlier services not yet dropped.
+    adopted: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
+    returns: Option<WakingSpscReceiver<'a, Block<'m, B, SIZE>, BLOCKS>>,
 }
 
 impl<
@@ -217,7 +282,55 @@ impl<
             next_block: 0,
             memory,
             pressure_at: None,
+            adopted: [const { None }; SOCKETS],
+            returns: None,
         }
+    }
+
+    /// Take blocks home through `returns`, the receiving end of a
+    /// [`ReturnLane`], for as long as this service holds the pool.
+    pub fn attach_returns(&mut self, returns: WakingSpscReceiver<'a, Block<'m, B, SIZE>, BLOCKS>) {
+        self.returns = Some(returns);
+    }
+
+    /// Hold an earlier service's `late`: when its socket is dropped, its blocks
+    /// come to this pool, which it could not reach on its own while this runs.
+    ///
+    /// # Errors
+    /// Every place is taken: `late` comes back to its holder.
+    pub fn adopt(
+        &mut self,
+        late: LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>,
+    ) -> Result<(), LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>> {
+        match self.adopted.iter_mut().find(|place| place.is_none()) {
+            Some(place) => {
+                *place = Some(late);
+                Ok(())
+            }
+            None => Err(late),
+        }
+    }
+
+    /// Bring home what came by the return lane and from adopted sockets.
+    fn take_home(&mut self) -> bool {
+        let mut moved = false;
+        let pool = self.owner.pool();
+        if let Some(returns) = &self.returns {
+            for _ in 0..TURN_FRAMES {
+                let Some(block) = returns.try_receive() else {
+                    break;
+                };
+                pool.give(block);
+                moved = true;
+            }
+        }
+        for late in &mut self.adopted {
+            if late.as_mut().is_some_and(|late| late.collect(pool)) {
+                *late = None;
+                moved = true;
+            }
+        }
+        moved
     }
 
     /// A new group of at most `limit` blocks.
@@ -305,6 +418,7 @@ impl<
         for index in 0..SOCKETS {
             moved |= self.commands(now, index);
         }
+        moved |= self.take_home();
         moved |= self.give_blocks();
         for _ in 0..TURN_FRAMES {
             if !self.owner.take_frame(now, events) {
@@ -523,7 +637,12 @@ impl<
             (core, pressure) => core.or(pressure),
         };
         let Self {
-            owner, bound, stop, ..
+            owner,
+            bound,
+            stop,
+            adopted,
+            returns,
+            ..
         } = self;
         let mut registered = false;
         let ready = poll_fn(|cx| {
@@ -535,6 +654,12 @@ impl<
             owner.register_port(cx);
             for bound in bound.iter_mut().flatten() {
                 ready |= bound.poll_lanes(cx);
+            }
+            for late in adopted.iter_mut().flatten() {
+                ready |= pin!(late.abandon.ready()).poll(cx).is_ready();
+            }
+            if let Some(returns) = returns {
+                ready |= pin!(returns.ready()).poll(cx).is_ready();
             }
             if ready {
                 Poll::Ready(())
@@ -558,16 +683,22 @@ impl<
         self,
     ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, E::Fault> {
         let cause = self.ended.unwrap_or(EndCause::Stopped);
-        let mut retired = self.owner.retire();
-        let sockets = self
+        let mut this = self;
+        while this.take_home() {}
+        let adopted = this.adopted;
+        let returns = this.returns;
+        let mut retired = this.owner.retire();
+        let sockets = this
             .bound
             .map(|bound| bound.map(|bound| bound.finish(&mut retired)));
         Ended {
             cause,
             retired,
-            egress: self.egress,
-            fault: self.fault,
+            egress: this.egress,
+            fault: this.fault,
             sockets,
+            adopted,
+            returns,
         }
     }
 }

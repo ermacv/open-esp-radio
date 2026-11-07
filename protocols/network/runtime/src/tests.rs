@@ -27,8 +27,8 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Direct, EndCause, Ended, MemoryPolicy, Observer, Refusal, Sent, Service, Socket, SocketClosed,
-    SocketLanes, StopLane,
+    Direct, EndCause, Ended, MemoryPolicy, Observer, Refusal, ReturnLane, Returner, Sent, Service,
+    Socket, SocketClosed, SocketLanes, StopLane,
 };
 
 /// A brand of the test's own.
@@ -1891,6 +1891,190 @@ fn pressure_leaves_a_lighter_group_alone_when_the_heaviest_is_in_hands() {
         (blocks, queued)
     };
     run_tasks(clock, service.run(clock, &mut events), drive);
+}
+
+/// A pair's pieces with a return lane.
+fn returning<B: 'static>(
+    limit: usize,
+) -> (
+    TestPair<B, 2>,
+    [TestSocket<B>; 2],
+    WakingSpscSender<'static, (), 1>,
+    Returner<'static, 'static, B, SIZE, 2>,
+) {
+    let (mut service, sockets, _, stop) = pair::<B>(limit, MemoryPolicy::KEEP);
+    let (sender, receiver) = Box::leak(Box::new(ReturnLane::new())).split();
+    service.attach_returns(receiver);
+    (service, sockets, stop, Returner::new(sender))
+}
+
+#[test]
+fn a_block_goes_home_with_no_socket_and_wakes_who_waits() {
+    brand!(Net);
+    let (mut service, [_other, mut limited], stop, returner) = returning::<Net>(1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let held = limited.reserve().await.unwrap();
+        assert!(pin!(limited.reserve()).poll(cx).is_pending());
+        settle().await;
+        returner.give(held).ok().unwrap();
+        let again = limited.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        again
+    };
+    let _kept = run_tasks(clock, service.run(clock, &mut events), drive);
+}
+
+#[test]
+fn the_return_lane_holds_every_block() {
+    brand!(Net);
+    let (mut service, [mut other, _limited], stop, returner) = returning::<Net>(1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let drive = async {
+        let blocks = [
+            other.reserve().await.unwrap(),
+            other.reserve().await.unwrap(),
+        ];
+        for block in blocks {
+            returner.give(block).ok().unwrap();
+        }
+        stop.try_send(()).ok().unwrap();
+    };
+    let (cause, ()) = run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(cause, EndCause::Stopped);
+    let mut ended = service.retire();
+    ended.collect();
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn a_block_outlives_its_service_and_reaches_the_next() {
+    brand!(Net);
+    let (mut service, [_first, mut second], stop, returner) = returning::<Net>(1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let drive = async {
+        let held = second.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        held
+    };
+    let (_, held) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let ended = service.retire();
+    let retired = ended.retired;
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut next: TestPair<Net, 2> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    next.attach_returns(ended.returns.unwrap());
+    let dscp = Dscp::default();
+    let group = held.group();
+    let mut socket = next.bind(5002, dscp, group, storage::<Net>()).ok().unwrap();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        assert!(pin!(socket.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(
+            pin!(socket.reserve()).poll(cx).is_pending(),
+            "the limit holds"
+        );
+        returner.give(held).ok().unwrap();
+        let block = socket.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        block
+    };
+    let _kept = run_tasks(clock, next.run(clock, &mut events), drive);
+}
+
+#[test]
+fn an_adopted_socket_brings_its_blocks_to_the_running_service() {
+    brand!(Net);
+    let (mut service, [mut first, mut second], _, stop) =
+        pair::<Net>(usize::MAX, MemoryPolicy::KEEP);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        // Each block stays unread in its socket's lanes.
+        assert!(pin!(first.reserve()).poll(cx).is_pending());
+        assert!(pin!(second.reserve()).poll(cx).is_pending());
+        settle().await;
+        stop.try_send(()).ok().unwrap();
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive);
+    let mut ended = service.retire();
+    let late = ended.sockets.each_mut().map(|late| late.take().unwrap());
+    assert_eq!(ended.retired.pool.outstanding(), 2);
+    let retired = ended.retired;
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut next: TestPair<Net, 2> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let [one, two] = late;
+    next.adopt(one).ok().unwrap();
+    next.adopt(two).ok().unwrap();
+    let dscp = Dscp::default();
+    let mut socket = next
+        .bind(5002, dscp, Group::shared(), storage::<Net>())
+        .ok()
+        .unwrap();
+    let drive = async {
+        assert!(pin!(socket.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(pin!(socket.reserve()).poll(cx).is_pending(), "both are out");
+        drop(first);
+        // Only the dropped socket's message can wake the service now.
+        let block = socket.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        block
+    };
+    let (_, block) = run_tasks(clock, next.run(clock, &mut events), drive);
+    let mut ended = next.retire();
+    drop(second);
+    ended.collect();
+    assert_eq!(ended.retired.pool.outstanding(), 1, "the block in hand");
+    ended.retired.pool.give(block);
+}
+
+#[test]
+fn a_retirement_brings_home_what_has_arrived() {
+    brand!(Net);
+    let (mut service, [mut other, _limited], stop, returner) = returning::<Net>(1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let drive = async {
+        let block = other.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        block
+    };
+    let (_, block) = run_tasks(clock, service.run(clock, &mut events), drive);
+    returner.give(block).ok().unwrap();
+    let ended = service.retire();
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn adopted_sockets_not_yet_dropped_go_on_to_the_next_service() {
+    brand!(Net);
+    let (service, sockets, _, _stop) = pair::<Net>(usize::MAX, MemoryPolicy::KEEP);
+    let mut ended = service.retire();
+    let [one, two] = ended.sockets.each_mut().map(|late| late.take().unwrap());
+    let retired = ended.retired;
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
+    let (_, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut next: TestPair<Net, 2> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    next.adopt(one).ok().unwrap();
+    next.adopt(two).ok().unwrap();
+    let (service, _late_sockets, _, _stop) = (next, sockets, (), ());
+    let mut ended = service.retire();
+    let adopted = ended.adopted.each_mut().map(Option::take);
+    assert!(
+        adopted.iter().all(Option::is_some),
+        "they stay for the next"
+    );
 }
 
 #[test]

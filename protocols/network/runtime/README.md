@@ -50,6 +50,13 @@ counts toward the group holding the most, and more than the waiter's. It ends
 application's blocks. This is pressure, not a deadline: nothing is evicted while none
 waits. A block a received datagram cannot have is dropped, and counted as an event.
 
+A block always has a way home, whichever service holds its pool by then. A `Returner`
+takes it there through a `ReturnLane`, which holds a pool's every block and goes from
+service to service with `Ended::returns`, so a block needs no socket and no live
+service of its own. An earlier service's `LateSocket` can be adopted by the next one
+with `adopt`, whose pool it could not reach alone. With no service to come,
+`Ended::collect` brings home what has arrived. A charge lifts when the block arrives.
+
 A turn takes commands, received frames and the port's notices, then, once it has
 read them all, chooses work and publishes it, then hands results and datagrams back. Each part is bounded, so no lane and no
 port starves the others, and sockets waiting for blocks take turns.

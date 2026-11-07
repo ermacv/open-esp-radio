@@ -19,7 +19,7 @@ oer-protocols-network-wire = { path = "../../wire" }
 embassy-futures = "0.1.2"
 oer-portable-memory = { path = "../../../../portable/memory" }
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
-oer-protocols-network-core = { path = "../../core" }
+oer-protocols-network-core = { path = "../../core", features = ["test-support"] }
 oer-protocols-network-runtime = { path = "../../runtime" }
 
 [lints]
