@@ -242,9 +242,10 @@ client owner; no fallible rollback from Pending is needed. A due commit returns
 caller runs `maintain_concurrent_phy` before using RF. Wi-Fi uses the same
 prepared pure client acquisition without BTBB. IEEE 802.15.4 issues an affine
 `Ieee802154PhyMembership`.
-`RegisteredIeee802154Operational` keeps the membership beside the operational
-MAC owners; they return through a foundation readback, not a policy readback,
-because the operational MAC rewrote the PIB. `leave_ieee802154` releases the
+`RegisteredIeee802154Operational` in the IEEE 802.15.4 driver keeps the
+membership beside the operational MAC owners; they return through a foundation
+readback, not a policy readback, because the operational MAC rewrote the PIB.
+`leave_ieee802154` releases the
 client and the BTBB reference, neither with register access.
 
 IEEE 802.15.4 stays a PHY client while it sleeps. On the ESP32-S31 the
