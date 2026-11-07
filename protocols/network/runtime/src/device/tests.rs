@@ -281,6 +281,7 @@ fn a_frame_the_device_refuses_frees_its_buffer() {
         port.transmit.refuse = Some(reason);
         assert_eq!(port.publish(4, octets), Err(expected));
         assert_eq!(port.buffers.free, 2);
+        assert!(wakes_at_once(&mut port), "its room is watched");
     }
 }
 
