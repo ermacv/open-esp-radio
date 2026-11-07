@@ -15,7 +15,7 @@ use oer_protocols_network_wire::ip::{
 };
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN, UdpHeader};
 
-use crate::block::{Block, Brand, CoreBrand, Pool};
+use crate::block::{Block, CoreBrand, Pool, Tag};
 use crate::interface::{BROADCAST_HARDWARE, Interface};
 use crate::neighbor::{Lookup, Neighbors};
 
@@ -65,7 +65,7 @@ enum Work {
 /// Work that is ready, before any frame of it exists: what a scheduler needs
 /// to choose it.
 #[derive(Debug, Eq, PartialEq)]
-pub struct Demand<'id> {
+pub struct Demand<B> {
     pub class: Class,
     /// The frame's length: what a slot must hold.
     pub length: usize,
@@ -76,12 +76,12 @@ pub struct Demand<'id> {
     /// Its priority.
     pub dscp: Dscp,
     work: Work,
-    brand: Brand<'id>,
+    brand: Tag<B>,
 }
 
-impl<'id> Demand<'id> {
+impl<B> Demand<B> {
     /// Choose this work.
-    pub const fn grant(self) -> Grant<'id> {
+    pub const fn grant(self) -> Grant<B> {
         Grant {
             work: self.work,
             brand: self.brand,
@@ -91,9 +91,9 @@ impl<'id> Demand<'id> {
 
 /// The right to send one piece of work, and no other.
 #[derive(Debug, Eq, PartialEq)]
-pub struct Grant<'id> {
+pub struct Grant<B> {
     work: Work,
-    brand: Brand<'id>,
+    brand: Tag<B>,
 }
 
 /// A frame ready to write, as values.
@@ -133,19 +133,19 @@ pub struct SlotTooShort;
 
 /// A socket. Its handle is not a copy: closing consumes it.
 #[derive(Debug, Eq, PartialEq)]
-pub struct SocketId<'id> {
+pub struct SocketId<B> {
     index: u8,
     serial: u64,
-    brand: Brand<'id>,
+    brand: Tag<B>,
 }
 
 /// A running command's right to its one result.
 #[derive(Debug, Eq, PartialEq)]
-pub struct CommandId<'id> {
+pub struct CommandId<B> {
     socket: u8,
     place: u8,
     serial: u64,
-    brand: Brand<'id>,
+    brand: Tag<B>,
 }
 
 /// How a command ended.
@@ -162,24 +162,27 @@ pub enum Outcome {
     /// The port contradicted itself, so whether the datagram went out is not
     /// known. It is not sent again.
     Unknown,
+    /// The core retired before the port accepted it.
+    Retired,
 }
 
 /// What became of a command.
 #[derive(Debug, Eq, PartialEq)]
-pub enum CommandState<'id> {
+pub enum CommandState<B> {
     /// It ended; its place freed.
     Finished(Outcome),
     /// It runs; the right to its result comes back.
-    Running(CommandId<'id>),
-    /// Its core retired, so no result will come.
+    Running(CommandId<B>),
+    /// Not this core's: a retired core's result is with its
+    /// [`RetiredResults`].
     Gone,
 }
 
 /// A datagram that was received.
 #[derive(Debug)]
-pub struct Datagram<'id, const SIZE: usize> {
+pub struct Datagram<'m, B, const SIZE: usize> {
     pub remote: Remote,
-    pub block: Block<'id, SIZE>,
+    pub block: Block<'m, B, SIZE>,
 }
 
 /// Why a socket did not open.
@@ -213,9 +216,9 @@ pub enum SendRefusal {
 
 /// A refused datagram with its block.
 #[derive(Debug)]
-pub struct SendRefused<'id, const SIZE: usize> {
+pub struct SendRefused<'m, B, const SIZE: usize> {
     pub reason: SendRefusal,
-    pub block: Block<'id, SIZE>,
+    pub block: Block<'m, B, SIZE>,
 }
 
 /// What the core dropped, for a sink that counts.
@@ -242,32 +245,32 @@ pub enum NetEvent {
 }
 
 #[derive(Debug)]
-struct Sending<'id, const SIZE: usize> {
+struct Sending<'m, B, const SIZE: usize> {
     remote: Remote,
-    block: Block<'id, SIZE>,
+    block: Block<'m, B, SIZE>,
     /// The neighbor it goes through; broadcast has none. Its station address
     /// is read when the frame is built, so a change reaches a waiting datagram.
     hop: Option<[u8; 4]>,
 }
 
 #[derive(Debug)]
-enum Run<'id, const SIZE: usize> {
+enum Run<'m, B, const SIZE: usize> {
     Free,
-    Sending(Sending<'id, SIZE>),
+    Sending(Sending<'m, B, SIZE>),
     Finished(Outcome),
 }
 
 /// One command's place: what it runs and, after, its result.
 #[derive(Debug)]
-struct Place<'id, const SIZE: usize> {
+struct Place<'m, B, const SIZE: usize> {
     /// The running command's, or 0.
     serial: u64,
     /// Someone holds the right to the result.
     observed: bool,
-    run: Run<'id, SIZE>,
+    run: Run<'m, B, SIZE>,
 }
 
-impl<const SIZE: usize> Place<'_, SIZE> {
+impl<B, const SIZE: usize> Place<'_, B, SIZE> {
     const fn new() -> Self {
         Self {
             serial: 0,
@@ -293,20 +296,20 @@ impl<const SIZE: usize> Place<'_, SIZE> {
 }
 
 #[derive(Debug)]
-struct Socket<'id, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize> {
+struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize> {
     serial: u64,
     /// The bound port; a socket being closed keeps its slot, not its port.
     port: Option<u16>,
     open: bool,
     dscp: Dscp,
-    places: [Place<'id, SIZE>; CREDITS],
+    places: [Place<'m, B, SIZE>; CREDITS],
     /// Held from the socket's creation: a close always has a place.
-    close: Place<'id, SIZE>,
-    received: heapless::Deque<Datagram<'id, SIZE>, RECEIVED>,
+    close: Place<'m, B, SIZE>,
+    received: heapless::Deque<Datagram<'m, B, SIZE>, RECEIVED>,
 }
 
-impl<'id, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>
-    Socket<'id, SIZE, CREDITS, RECEIVED>
+impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>
+    Socket<'m, B, SIZE, CREDITS, RECEIVED>
 {
     const fn new() -> Self {
         Self {
@@ -337,7 +340,7 @@ impl<'id, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>
     }
 
     /// A command's place by its number: `CREDITS` is the close's.
-    fn place_mut(&mut self, place: u8) -> Option<&mut Place<'id, SIZE>> {
+    fn place_mut(&mut self, place: u8) -> Option<&mut Place<'m, B, SIZE>> {
         let place = usize::from(place);
         if place == CREDITS {
             Some(&mut self.close)
@@ -358,7 +361,8 @@ struct Reply {
 /// The owner of the network state.
 #[derive(Debug)]
 pub struct Core<
-    'id,
+    'm,
+    B,
     const SIZE: usize,
     const SOCKETS: usize,
     const CREDITS: usize,
@@ -370,23 +374,24 @@ pub struct Core<
     /// Replies owed, oldest first. Bounded by the table: an asker past it
     /// asks again.
     replies: heapless::Vec<Reply, NEIGHBORS>,
-    sockets: [Socket<'id, SIZE, CREDITS, RECEIVED>; SOCKETS],
+    sockets: [Socket<'m, B, SIZE, CREDITS, RECEIVED>; SOCKETS],
     /// Where the next look for a datagram starts, so sockets take turns.
     cursor: usize,
     identification: u16,
     /// The last serial given: 2^64 of them outlast any device.
     serial: u64,
-    brand: Brand<'id>,
+    brand: Tag<B>,
 }
 
 impl<
-    'id,
+    'm,
+    B,
     const SIZE: usize,
     const SOCKETS: usize,
     const CREDITS: usize,
     const RECEIVED: usize,
     const NEIGHBORS: usize,
-> Core<'id, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS>
+> Core<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS>
 {
     const FITS: () = {
         if SOCKETS > 255 || CREDITS >= 255 || NEIGHBORS > 255 {
@@ -397,8 +402,8 @@ impl<
         }
     };
 
-    /// The core of `brand`'s [`scope`](crate::scope).
-    pub const fn new(brand: CoreBrand<'id>, interface: Interface) -> Self {
+    /// The core of `brand`.
+    pub const fn new(brand: CoreBrand<B>, interface: Interface) -> Self {
         const { Self::FITS };
         Self {
             interface,
@@ -421,7 +426,7 @@ impl<
     ///
     /// # Errors
     /// [`OpenRefused`]: every socket is in use, or the port is held.
-    pub fn open(&mut self, port: u16, dscp: Dscp) -> Result<SocketId<'id>, OpenRefused> {
+    pub fn open(&mut self, port: u16, dscp: Dscp) -> Result<SocketId<B>, OpenRefused> {
         if self.sockets.iter().any(|socket| socket.port == Some(port)) {
             return Err(OpenRefused::PortInUse);
         }
@@ -448,7 +453,7 @@ impl<
         &mut self,
         index: u8,
         serial: u64,
-    ) -> Option<&mut Socket<'id, SIZE, CREDITS, RECEIVED>> {
+    ) -> Option<&mut Socket<'m, B, SIZE, CREDITS, RECEIVED>> {
         self.sockets
             .get_mut(usize::from(index))
             .filter(|socket| socket.serial == serial)
@@ -463,10 +468,10 @@ impl<
     pub fn send(
         &mut self,
         now: Instant,
-        socket: &SocketId<'id>,
+        socket: &SocketId<B>,
         remote: Remote,
-        block: Block<'id, SIZE>,
-    ) -> Result<CommandId<'id>, SendRefused<'id, SIZE>> {
+        block: Block<'m, B, SIZE>,
+    ) -> Result<CommandId<B>, SendRefused<'m, B, SIZE>> {
         let refused = |reason, block| Err(SendRefused { reason, block });
         let datagram = IPV4_HEADER_LEN
             .saturating_add(UDP_HEADER_LEN)
@@ -525,7 +530,7 @@ impl<
     }
 
     /// The command's result, once it ended: its place frees.
-    pub fn take_result(&mut self, command: CommandId<'id>) -> CommandState<'id> {
+    pub fn take_result(&mut self, command: CommandId<B>) -> CommandState<B> {
         let Some(place) = self
             .sockets
             .get_mut(usize::from(command.socket))
@@ -545,7 +550,7 @@ impl<
     /// Nobody will read this command's result. A finished command's place
     /// frees now; a running command keeps it until its end, so that end
     /// never reaches a later command.
-    pub fn drop_observer(&mut self, command: CommandId<'id>) {
+    pub fn drop_observer(&mut self, command: CommandId<B>) {
         if let Some(place) = self
             .sockets
             .get_mut(usize::from(command.socket))
@@ -566,8 +571,8 @@ impl<
     /// [`StaleSocket`]: a final refusal.
     pub fn receive(
         &mut self,
-        socket: &SocketId<'id>,
-    ) -> Result<Option<Datagram<'id, SIZE>>, StaleSocket> {
+        socket: &SocketId<B>,
+    ) -> Result<Option<Datagram<'m, B, SIZE>>, StaleSocket> {
         let open = self
             .socket_mut(socket.index, socket.serial)
             .ok_or(StaleSocket)?;
@@ -582,9 +587,9 @@ impl<
     /// [`StaleSocket`]: a final refusal.
     pub fn close<const BLOCKS: usize>(
         &mut self,
-        socket: SocketId<'id>,
-        pool: &mut Pool<'id, SIZE, BLOCKS>,
-    ) -> Result<CommandId<'id>, StaleSocket> {
+        socket: SocketId<B>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) -> Result<CommandId<B>, StaleSocket> {
         let serial = self.next_serial();
         let open = self
             .socket_mut(socket.index, socket.serial)
@@ -606,6 +611,9 @@ impl<
         open.close.observed = true;
         open.close.serial = serial;
         open.close.run = Run::Finished(Outcome::SocketClosed);
+        let sockets = &self.sockets;
+        self.neighbors
+            .forget_unneeded(|address| sockets.iter().any(|socket| socket.needs(address)));
         let place = u8::try_from(CREDITS).map_err(|_| StaleSocket)?;
         Ok(CommandId {
             socket: socket.index,
@@ -621,7 +629,7 @@ impl<
         &mut self,
         now: Instant,
         frame: &[u8],
-        pool: &mut Pool<'id, SIZE, BLOCKS>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) {
         let Ok((header, payload)) = EthernetHeader::parse(frame) else {
@@ -667,7 +675,7 @@ impl<
     fn input_ipv4<const BLOCKS: usize>(
         &mut self,
         payload: &[u8],
-        pool: &mut Pool<'id, SIZE, BLOCKS>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) {
         let Ok(packet) = Ipv4Header::parse(payload) else {
@@ -762,7 +770,11 @@ impl<
     /// first at every time [`Self::poll_deadline`] names, and before
     /// [`Self::demands`] at a later `now`: an address past its life is no work
     /// until this has asked for it again.
-    pub fn tick<const BLOCKS: usize>(&mut self, now: Instant, pool: &mut Pool<'id, SIZE, BLOCKS>) {
+    pub fn tick<const BLOCKS: usize>(
+        &mut self,
+        now: Instant,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) {
         let mut serial = self.serial;
         for place in self.sockets.iter().flat_map(|socket| socket.places.iter()) {
             if let Run::Sending(Sending { hop: Some(hop), .. }) = place.run {
@@ -803,7 +815,7 @@ impl<
     /// Every piece of work ready now, with no frame built: control first,
     /// then datagrams from the socket whose turn it is. A scheduler chooses
     /// among these; a direct interface takes [`Self::poll_demand`].
-    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<'id>> + '_ {
+    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<B>> + '_ {
         let brand = self.brand;
         let replies = self.replies.iter().map(move |reply| Demand {
             class: Class::Control,
@@ -847,10 +859,10 @@ impl<
         &self,
         now: Instant,
         index: usize,
-        socket: &Socket<'id, SIZE, CREDITS, RECEIVED>,
+        socket: &Socket<'m, B, SIZE, CREDITS, RECEIVED>,
         number: usize,
-        place: &Place<'id, SIZE>,
-    ) -> Option<Demand<'id>> {
+        place: &Place<'m, B, SIZE>,
+    ) -> Option<Demand<B>> {
         let Run::Sending(sending) = &place.run else {
             return None;
         };
@@ -876,7 +888,7 @@ impl<
 
     /// The next ready work, and the next socket's turn. A direct interface
     /// grants this at once; a port's refusal leaves it ready.
-    pub fn poll_demand(&mut self, now: Instant) -> Option<Demand<'id>> {
+    pub fn poll_demand(&mut self, now: Instant) -> Option<Demand<B>> {
         let demand = self.demands(now).next()?;
         if let Work::Datagram { socket, .. } = demand.work {
             self.cursor = usize::from(socket).wrapping_add(1);
@@ -888,7 +900,7 @@ impl<
     /// neighbor address, a later reply or a retired command is `None`. Only
     /// [`NetworkOwner`](crate::NetworkOwner) reaches this, so the port's
     /// answer is always committed.
-    pub(crate) fn frame(&self, now: Instant, grant: &Grant<'id>) -> Option<Frame<'_>> {
+    pub(crate) fn frame(&self, now: Instant, grant: &Grant<B>) -> Option<Frame<'_>> {
         match grant.work {
             Work::Reply { serial } => {
                 let reply = self.replies.iter().find(|reply| reply.serial == serial)?;
@@ -1031,9 +1043,9 @@ impl<
     pub(crate) fn commit<const BLOCKS: usize>(
         &mut self,
         now: Instant,
-        grant: Grant<'id>,
+        grant: Grant<B>,
         written: bool,
-        pool: &mut Pool<'id, SIZE, BLOCKS>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) {
         match grant.work {
             Work::Reply { serial } => {
@@ -1060,27 +1072,121 @@ impl<
         }
     }
 
-    /// End this core: every block it holds returns to `pool`, and the brand
-    /// comes back for the next core. What applications hold stays out
-    /// ([`Pool::outstanding`]) and returns whenever they give it. Old handles
-    /// and grants find nothing: the next core goes on from this one's serials.
-    pub fn retire<const BLOCKS: usize>(self, pool: &mut Pool<'id, SIZE, BLOCKS>) -> CoreBrand<'id> {
+    /// End this core. Every block it holds returns to `pool`, and the brand
+    /// comes back for the next core. Results move to [`RetiredResults`], so a
+    /// confirmed one never depends on having been read in time; a datagram
+    /// still running ends [`Outcome::Retired`]. What applications hold stays
+    /// out ([`Pool::outstanding`]) and returns whenever they give it.
+    pub fn retire<const BLOCKS: usize>(
+        self,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) -> (RetiredResults<B, SOCKETS, CREDITS>, CoreBrand<B>) {
         let Self {
             sockets,
             serial,
             brand,
             ..
         } = self;
+        let mut received_dropped = 0_u32;
+        let mut index = 0;
+        let mut results = [const { [Kept::NONE; CREDITS] }; SOCKETS];
+        let mut closes = [Kept::NONE; SOCKETS];
         for mut socket in sockets {
             while let Some(datagram) = socket.received.pop_front() {
                 pool.give(datagram.block);
+                received_dropped = received_dropped.saturating_add(1);
             }
-            for place in socket.places {
-                if let Run::Sending(sending) = place.run {
-                    pool.give(sending.block);
+            let close = Kept::of(socket.close);
+            let kept = socket.places.map(|place| {
+                let observed = place.observed;
+                let place_serial = place.serial;
+                let outcome = match place.run {
+                    Run::Sending(sending) => {
+                        pool.give(sending.block);
+                        Some(Outcome::Retired)
+                    }
+                    Run::Finished(outcome) => Some(outcome),
+                    Run::Free => None,
+                };
+                Kept {
+                    serial: place_serial,
+                    outcome: outcome.filter(|_| observed),
                 }
+            });
+            if let Some(slot) = results.get_mut(index) {
+                *slot = kept;
             }
+            if let Some(slot) = closes.get_mut(index) {
+                *slot = close;
+            }
+            index = index.wrapping_add(1);
         }
-        CoreBrand { brand, serial }
+        (
+            RetiredResults {
+                results,
+                closes,
+                received_dropped,
+                brand,
+            },
+            CoreBrand { brand, serial },
+        )
+    }
+}
+
+/// A result kept past its core.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Kept {
+    serial: u64,
+    outcome: Option<Outcome>,
+}
+
+impl Kept {
+    const NONE: Self = Self {
+        serial: 0,
+        outcome: None,
+    };
+
+    fn of<B, const SIZE: usize>(place: Place<'_, B, SIZE>) -> Self {
+        match place.run {
+            Run::Finished(outcome) if place.observed => Self {
+                serial: place.serial,
+                outcome: Some(outcome),
+            },
+            _ => Self::NONE,
+        }
+    }
+}
+
+/// A retired core's results, each read once, whenever its observer comes.
+#[derive(Debug)]
+pub struct RetiredResults<B, const SOCKETS: usize, const CREDITS: usize> {
+    results: [[Kept; CREDITS]; SOCKETS],
+    closes: [Kept; SOCKETS],
+    /// Received datagrams nobody read, which went back to the pool.
+    pub received_dropped: u32,
+    brand: Tag<B>,
+}
+
+impl<B, const SOCKETS: usize, const CREDITS: usize> RetiredResults<B, SOCKETS, CREDITS> {
+    /// The command's result, once.
+    pub fn take(&mut self, command: CommandId<B>) -> CommandState<B> {
+        let kept = self
+            .results
+            .get_mut(usize::from(command.socket))
+            .and_then(|places| places.get_mut(usize::from(command.place)))
+            .or_else(|| self.closes.get_mut(usize::from(command.socket)))
+            .filter(|kept| kept.serial == command.serial);
+        kept.and_then(|kept| kept.outcome.take())
+            .map_or(CommandState::Gone, CommandState::Finished)
+    }
+
+    /// How many results nobody has read yet.
+    pub fn unread(&self) -> usize {
+        self.results
+            .iter()
+            .flatten()
+            .chain(self.closes.iter())
+            .filter(|kept| kept.outcome.is_some())
+            .count()
     }
 }

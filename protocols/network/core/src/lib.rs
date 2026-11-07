@@ -25,65 +25,92 @@
 
 //! A sans-IO network core with one owner (see the crate's README).
 //!
-//! A core's values carry its [`scope`]'s brand, so another core's handle does
-//! not compile here:
+//! A core's values carry its [`Brand`], a type, so another network's handle
+//! does not compile here:
 //!
-//! ```compile_fail
-//! # use oer_protocols_network_core::{Core, Interface, scope};
+//! ```compile_fail,E0308
+//! # use oer_protocols_network_core::{Core, Interface, Pool, brand, claim};
 //! # use oer_protocols_network_wire::ip::Dscp;
+//! brand!(First);
+//! brand!(Second);
 //! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1], interface: Interface) {
-//! scope(a, |_, brand| {
-//!     let mut first: Core<'_, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-//!     scope(b, |_, brand| {
-//!         let mut second: Core<'_, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-//!         let socket = second.open(1, Dscp::default()).unwrap();
-//!         first.receive(&socket).unwrap();
-//!     });
-//! });
+//! let (_, brand) = claim::<First, 64, 1>(a).unwrap();
+//! let mut first: Core<'_, First, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//! let (_, brand) = claim::<Second, 64, 1>(b).unwrap();
+//! let mut second: Core<'_, Second, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//! let socket = second.open(1, Dscp::default()).unwrap();
+//! first.receive(&socket).unwrap();
 //! # }
 //! ```
 //!
-//! Nor does another core's grant:
+//! Nor does another network's block:
 //!
-//! ```compile_fail
-//! # use oer_portable_time::Instant;
-//! # use oer_protocols_network_core::{Core, Interface, scope};
-//! # fn f(a: &mut [[u8; 64]; 1], interface: Interface, now: Instant) {
-//! let grant = scope(a, |_, brand| {
-//!     let mut core: Core<'_, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-//!     core.poll_demand(now).unwrap().grant()
-//! });
-//! # }
-//! ```
-//!
-//! Nor does another pool's block:
-//!
-//! ```compile_fail
-//! # use oer_protocols_network_core::scope;
+//! ```compile_fail,E0308
+//! # use oer_protocols_network_core::{brand, claim};
+//! brand!(First);
+//! brand!(Second);
 //! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
-//! scope(a, |mut first, _| {
-//!     scope(b, |mut second, _| {
-//!         let block = second.take().unwrap();
-//!         first.give(block);
-//!     });
-//! });
+//! let (mut first, _) = claim::<First, 64, 1>(a).unwrap();
+//! let (mut second, _) = claim::<Second, 64, 1>(b).unwrap();
+//! let block = second.take().unwrap();
+//! first.give(block);
 //! # }
 //! ```
 //!
-//! The same code within one scope compiles:
+//! The same code within one brand compiles:
 //!
 //! ```
-//! # use oer_protocols_network_core::{Core, Interface, scope};
+//! # use oer_protocols_network_core::{Core, Interface, brand, claim};
 //! # use oer_protocols_network_wire::ip::Dscp;
+//! brand!(Net);
 //! # fn f(a: &mut [[u8; 64]; 1], interface: Interface) {
-//! scope(a, |mut pool, brand| {
-//!     let mut core: Core<'_, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-//!     let socket = core.open(1, Dscp::default()).unwrap();
-//!     core.receive(&socket).unwrap();
-//!     let block = pool.take().unwrap();
-//!     pool.give(block);
-//! });
+//! let (mut pool, brand) = claim::<Net, 64, 1>(a).unwrap();
+//! let mut core: Core<'_, Net, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//! let socket = core.open(1, Dscp::default()).unwrap();
+//! core.receive(&socket).unwrap();
+//! let block = pool.take().unwrap();
+//! pool.give(block);
 //! # }
+//! ```
+//!
+//! A brand is a type, so tasks and their queues can name a block:
+//!
+//! ```
+//! # use oer_protocols_network_core::{Block, brand, claim};
+//! # use std::sync::Mutex;
+//! brand!(Net);
+//! type Lane = Mutex<Option<Block<'static, Net, 64>>>;
+//! static TO_NETWORK: Lane = Mutex::new(None);
+//! static BACK: Lane = Mutex::new(None);
+//!
+//! async fn application(mut block: Block<'static, Net, 64>) {
+//!     block.fill(b"filled by the application").unwrap();
+//!     *TO_NETWORK.lock().unwrap() = Some(block);
+//! }
+//!
+//! async fn network() {
+//!     let block = TO_NETWORK.lock().unwrap().take().unwrap();
+//!     assert_eq!(block.octets(), b"filled by the application");
+//!     *BACK.lock().unwrap() = Some(block);
+//! }
+//!
+//! fn task<F: Future<Output = ()> + Send + 'static>(future: F) -> F {
+//!     future
+//! }
+//!
+//! let storage = Box::leak(Box::new([[0; 64]; 1]));
+//! let (mut pool, _brand) = claim::<Net, 64, 1>(storage).unwrap();
+//! let block = pool.take().unwrap();
+//! let (first, second) = (task(application(block)), task(network()));
+//! let run = async {
+//!     first.await;
+//!     second.await;
+//! };
+//! let mut run = std::pin::pin!(run);
+//! let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+//! assert!(run.as_mut().poll(&mut cx).is_ready());
+//! pool.give(BACK.lock().unwrap().take().unwrap());
+//! assert_eq!(pool.outstanding(), 0);
 //! ```
 
 mod block;
@@ -92,13 +119,13 @@ mod machine;
 mod neighbor;
 mod owner;
 
-pub use block::{Block, BlockTooShort, CoreBrand, Pool, scope, scope_async};
+pub use block::{Block, BlockTooShort, Brand, Claimed, CoreBrand, Pool, claim};
 pub use interface::{Interface, InterfaceError};
 pub use machine::{
     Class, CommandId, CommandState, Core, Datagram, Demand, Grant, NetEvent, OpenRefused, Outcome,
-    Remote, SendRefusal, SendRefused, SlotTooShort, SocketId, StaleSocket,
+    Remote, RetiredResults, SendRefusal, SendRefused, SlotTooShort, SocketId, StaleSocket,
 };
-pub use owner::{FramePort, NetworkOwner, Unsent};
+pub use owner::{FramePort, NetworkOwner, Retired, Unsent};
 
 #[cfg(test)]
 mod tests;
