@@ -19,7 +19,9 @@ use oer_protocols_network_core::{
     Block, Eviction, Group, Interface, NetworkOwner, OpenRefused, Outcome, Remote, SendRefusal,
     claim,
 };
-use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource, SlotTooShort};
+use oer_protocols_network_port::{
+    Candidate, Egress, EthernetFrameView, FramePort, FrameSource, SlotTooShort,
+};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
@@ -60,6 +62,8 @@ struct Wire {
     answers: bool,
     /// The port says it took a frame it never filled.
     contradicts: bool,
+    /// The port refuses every frame for good.
+    rejects: bool,
     /// Tickets given.
     tickets: u32,
     /// Ended frames, by ticket.
@@ -79,23 +83,31 @@ impl Wire {
 struct WirePort(Rc<RefCell<Wire>>);
 
 impl FramePort for WirePort {
-    type Refusal = ();
+    /// Whether this refusal is for good.
+    type Refusal = bool;
     type Ticket = u32;
+
+    fn is_final(refusal: &bool) -> bool {
+        *refusal
+    }
 
     fn publish(
         &mut self,
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<u32, ()> {
+    ) -> Result<u32, bool> {
         let mut wire = self.0.borrow_mut();
         if wire.full {
-            return Err(());
+            return Err(false);
+        }
+        if wire.rejects {
+            return Err(true);
         }
         if wire.contradicts {
             return Ok(0);
         }
         let mut frame = std::vec![0; length];
-        fill(&mut frame).map_err(|_| ())?;
+        fill(&mut frame).map_err(|_| false)?;
         let reply = wire.answers.then(|| answer_of(&frame)).flatten();
         wire.sent.push(frame);
         wire.incoming.extend(reply);
@@ -111,11 +123,17 @@ impl FrameSource for WirePort {
         self.0.borrow_mut().ended.pop_front()
     }
 
-    fn take_frame(&mut self, read: impl FnOnce(&[u8])) -> bool {
+    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
         let frame = self.0.borrow_mut().incoming.pop_front();
         match frame {
             Some(frame) => {
-                read(&frame);
+                let (header, payload) = EthernetHeader::parse(&frame).unwrap();
+                read(EthernetFrameView {
+                    destination: header.destination,
+                    source: header.source,
+                    ether_type: header.ether_type.value(),
+                    payload,
+                });
                 true
             }
             None => false,
@@ -2259,6 +2277,35 @@ fn a_receive_loan_stays_owed_across_a_retired_service() {
     loans.give_back(held);
     assert!(loans.released());
     loans.grant(0, 2).unwrap();
+}
+
+#[test]
+fn a_frame_the_port_rejects_for_good_ends_and_the_service_goes_on() {
+    brand!(Net);
+    let (ended, _, sent) = run(bench::<Net>(), async |socket, wire| {
+        send_one(socket, b"resolved").await;
+        wire.0.borrow_mut().rejects = true;
+        let rejected = send_one(socket, b"never").await;
+        wire.0.borrow_mut().rejects = false;
+        assert_eq!(
+            send_one(socket, b"after").await,
+            Sent::Ended(Outcome::Accepted)
+        );
+        rejected
+    });
+    assert_eq!(sent, Sent::Ended(Outcome::Rejected));
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn a_neighbor_request_the_port_rejects_ends_the_datagram_at_once() {
+    brand!(Net);
+    let (ended, _, sent) = run(bench::<Net>(), async |socket, wire| {
+        wire.0.borrow_mut().rejects = true;
+        send_one(socket, b"never").await
+    });
+    assert_eq!(sent, Sent::Ended(Outcome::Rejected));
+    assert_eq!(ended.retired.pool.outstanding(), 0);
 }
 
 #[test]

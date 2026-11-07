@@ -595,7 +595,7 @@ impl<
                     let answer = self.egress.accepted(reservation, ticket);
                     self.note(answer);
                 }
-                Err(Unsent::Stale) => {
+                Err(Unsent::Stale | Unsent::Rejected(_)) => {
                     moved = true;
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
@@ -614,6 +614,9 @@ impl<
             if self.fault.is_some() {
                 break;
             }
+        }
+        if moved {
+            self.owner.flush();
         }
         moved
     }

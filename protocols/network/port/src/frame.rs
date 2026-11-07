@@ -5,6 +5,8 @@ use core::task::Context;
 
 use oer_protocols_network_wire::ip::Dscp;
 
+use crate::device::EthernetFrameView;
+
 /// Where a frame goes out, and the one answer to it. A port that says `Ok`
 /// without calling `fill` contradicts itself, and whoever publishes treats
 /// that as a fault of the port.
@@ -24,6 +26,17 @@ pub trait FramePort {
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
     ) -> Result<Self::Ticket, Self::Refusal>;
+
+    /// Whether `refusal` is final for that frame: no wake will change it, so
+    /// the work ends instead of waiting.
+    fn is_final(refusal: &Self::Refusal) -> bool {
+        let _ = refusal;
+        false
+    }
+
+    /// End a burst of publications: a frame may wait for this before the port
+    /// acts on it.
+    fn flush(&mut self) {}
 }
 
 /// Frames coming in, news for the egress policy, and the wakes of a port.
@@ -33,7 +46,7 @@ pub trait FrameSource {
     type Notice;
 
     /// Show the next received frame to `read`; whether there was one.
-    fn take_frame(&mut self, read: impl FnOnce(&[u8])) -> bool;
+    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool;
 
     /// The next notice.
     fn take_notice(&mut self) -> Option<Self::Notice>;

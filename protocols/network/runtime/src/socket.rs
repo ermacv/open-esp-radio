@@ -47,7 +47,7 @@ pub enum Sent {
 }
 
 /// Every [`Sent`], at the word [`word_of`] gives it, less [`FIRST_RESULT`].
-const RESULTS: [Sent; 12] = [
+const RESULTS: [Sent; 13] = [
     Sent::Refused(SendRefusal::Stale),
     Sent::Refused(SendRefusal::NoPlace),
     Sent::Refused(SendRefusal::TooLong),
@@ -60,6 +60,7 @@ const RESULTS: [Sent; 12] = [
     Sent::Ended(Outcome::Unknown),
     Sent::Ended(Outcome::Retired),
     Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure)),
+    Sent::Ended(Outcome::Rejected),
 ];
 
 /// A place's command runs, and its observer may wait.
@@ -84,6 +85,7 @@ const fn word_of(sent: Sent) -> u32 {
         Sent::Ended(Outcome::Unknown) => 11,
         Sent::Ended(Outcome::Retired) => 12,
         Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure)) => 13,
+        Sent::Ended(Outcome::Rejected) => 14,
     }
 }
 

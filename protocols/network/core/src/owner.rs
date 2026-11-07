@@ -41,6 +41,10 @@ pub enum Unsent<R> {
     Stale,
     /// The port refused; the work stays ready.
     Port(R),
+    /// The port refused this frame for good ([`FramePort::is_final`]), so its
+    /// work ended: a datagram's outcome is
+    /// [`Outcome::Rejected`](crate::Outcome::Rejected).
+    Rejected(R),
     /// The port said `Ok` though the frame was not written, which breaks
     /// [`FramePort::publish`]. What reached it is not known, so the work
     /// ended and is not repeated: a datagram's outcome is
@@ -114,14 +118,19 @@ impl<
         }
         let frame = self.core.frame(now, &grant).ok_or(Unsent::Stale)?;
         let mut written = false;
-        let ticket = self
-            .port
-            .publish(frame.length(), |slot| {
-                let result = frame.write(slot);
-                written = result.is_ok();
-                result
-            })
-            .map_err(Unsent::Port)?;
+        let published = self.port.publish(frame.length(), |slot| {
+            let result = frame.write(slot);
+            written = result.is_ok();
+            result
+        });
+        let ticket = match published {
+            Ok(ticket) => ticket,
+            Err(refusal) if P::is_final(&refusal) => {
+                self.core.reject(&grant, &mut self.pool);
+                return Err(Unsent::Rejected(refusal));
+            }
+            Err(refusal) => return Err(Unsent::Port(refusal)),
+        };
         self.core.commit(now, grant, written, &mut self.pool);
         if written {
             Ok(ticket)
@@ -164,7 +173,12 @@ impl<
         let core = &mut self.core;
         let pool = &mut self.pool;
         self.port
-            .take_frame(|frame| core.input(now, frame, pool, events))
+            .take_frame(|frame| core.input_view(now, frame, pool, events))
+    }
+
+    /// End a burst of publications.
+    pub fn flush(&mut self) {
+        self.port.flush();
     }
 
     /// The port's next notice, for the egress policy.

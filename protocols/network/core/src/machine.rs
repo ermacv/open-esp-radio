@@ -7,7 +7,7 @@ use core::marker::PhantomData;
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
-use oer_protocols_network_port::{Candidate, Class, Ready, SlotTooShort};
+use oer_protocols_network_port::{Candidate, Class, EthernetFrameView, Ready, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{self, EtherType, EthernetHeader};
@@ -177,6 +177,9 @@ pub enum Outcome {
     Retired,
     /// The stack took it back before the port accepted it.
     Evicted(Eviction),
+    /// The port refused this frame, or the neighbor request it waited for,
+    /// for good. It did not go out.
+    Rejected,
 }
 
 /// Why accepted work was taken back.
@@ -315,6 +318,34 @@ impl<B, const SIZE: usize> Place<'_, B, SIZE> {
     fn free(&mut self) {
         self.run = Run::Free;
         self.serial = 0;
+    }
+}
+
+/// End every datagram that waits for `address` as `outcome`, its block home.
+fn end_waiting<
+    'm,
+    B,
+    const SIZE: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const BLOCKS: usize,
+>(
+    sockets: &mut [Socket<'m, B, SIZE, CREDITS, RECEIVED>],
+    address: [u8; 4],
+    outcome: Outcome,
+    pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+) {
+    for socket in sockets {
+        for place in &mut socket.places {
+            let waits = matches!(
+                &place.run,
+                Run::Sending(Sending { hop: Some(hop), .. }) if *hop == address
+            );
+            if waits && let Run::Sending(sending) = core::mem::replace(&mut place.run, Run::Free) {
+                pool.give(sending.block);
+                place.finish(outcome);
+            }
+        }
     }
 }
 
@@ -732,15 +763,33 @@ impl<
             report(events, || NetEvent::Malformed);
             return;
         };
-        if header.destination != self.interface.hardware()
-            && header.destination != BROADCAST_HARDWARE
+        let view = EthernetFrameView {
+            destination: header.destination,
+            source: header.source,
+            ether_type: header.ether_type.value(),
+            payload,
+        };
+        self.input_view(now, view, pool, events);
+    }
+
+    /// As [`Self::input`], for a frame whose fields a port read apart from its
+    /// payload.
+    pub fn input_view<const BLOCKS: usize>(
+        &mut self,
+        now: Instant,
+        frame: EthernetFrameView<'_>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+        events: &mut impl EventSink<NetEvent>,
+    ) {
+        if frame.destination != self.interface.hardware() && frame.destination != BROADCAST_HARDWARE
         {
             return;
         }
-        if header.ether_type == EtherType::ARP {
-            self.input_arp(now, payload, events);
-        } else if header.ether_type == EtherType::IPV4 {
-            self.input_ipv4(payload, pool, events);
+        let ether_type = EtherType::new(frame.ether_type);
+        if ether_type == EtherType::ARP {
+            self.input_arp(now, frame.payload, events);
+        } else if ether_type == EtherType::IPV4 {
+            self.input_ipv4(frame.payload, pool, events);
         }
     }
 
@@ -889,20 +938,7 @@ impl<
         self.serial = serial;
         let sockets = &mut self.sockets;
         self.neighbors.tick(now, |address| {
-            for socket in sockets.iter_mut() {
-                for place in &mut socket.places {
-                    let waits = matches!(
-                        &place.run,
-                        Run::Sending(Sending { hop: Some(hop), .. }) if *hop == address
-                    );
-                    if waits
-                        && let Run::Sending(sending) = core::mem::replace(&mut place.run, Run::Free)
-                    {
-                        pool.give(sending.block);
-                        place.finish(Outcome::Unreachable);
-                    }
-                }
-            }
+            end_waiting(sockets, address, Outcome::Unreachable, pool);
         });
     }
 
@@ -1144,6 +1180,48 @@ impl<
 
     /// The port took the granted work, or said it did without a written
     /// frame: then its datagram ends `Unknown`, and nothing is sent again.
+    /// The port refused `grant`'s frame for good: its work ends, and nothing
+    /// offers it again.
+    pub(crate) fn reject<const BLOCKS: usize>(
+        &mut self,
+        grant: &Grant<B>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) {
+        match grant.work {
+            Work::Reply { serial } => {
+                self.replies.retain(|reply| reply.serial != serial);
+            }
+            // No request left: what waits for this neighbor has its answer, and
+            // nothing was accepted to wait for.
+            Work::Request { neighbor, serial } => {
+                if let Some(address) = self.neighbors.request_refused(neighbor, serial) {
+                    end_waiting(&mut self.sockets, address, Outcome::Rejected, pool);
+                }
+            }
+            Work::Datagram {
+                socket,
+                place,
+                serial,
+                ..
+            } => {
+                if let Some(entry) = self
+                    .sockets
+                    .get_mut(usize::from(socket))
+                    .and_then(|open| open.places.get_mut(usize::from(place)))
+                    .filter(|entry| entry.serial == serial)
+                    && let Run::Sending(_) = entry.run
+                    && let Run::Sending(sending) = core::mem::replace(&mut entry.run, Run::Free)
+                {
+                    pool.give(sending.block);
+                    entry.finish(Outcome::Rejected);
+                }
+                let sockets = &self.sockets;
+                self.neighbors
+                    .forget_unneeded(|address| sockets.iter().any(|socket| socket.needs(address)));
+            }
+        }
+    }
+
     pub(crate) fn commit<const BLOCKS: usize>(
         &mut self,
         now: Instant,
