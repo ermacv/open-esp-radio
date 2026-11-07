@@ -103,6 +103,11 @@ impl Dscp {
         Self(value)
     }
 
+    /// The field that carries this codepoint, with no ECN.
+    pub const fn field(self) -> DsField {
+        DsField::from_bytes([0]).with_dscp(self.0)
+    }
+
     /// The three most significant bits: the Class Selector codepoint.
     ///
     /// SOURCE: RFC 2474, 4.2.2 (Class Selector Codepoints).

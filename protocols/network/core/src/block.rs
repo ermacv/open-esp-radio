@@ -1,10 +1,32 @@
-//! Blocks of stack memory, moved by value.
+//! Blocks of stack memory, moved by value, and the brand of one core.
+
+use core::marker::PhantomData;
+
+/// Who a value belongs to: an invariant lifetime no other [`scope`] shares.
+pub(crate) type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
+
+/// The right to make the one core of a [`scope`].
+#[derive(Debug)]
+pub struct CoreBrand<'id> {
+    pub(crate) brand: Brand<'id>,
+}
+
+/// Give `storage` a pool and one core's brand. Everything of this scope, its
+/// pool, core, blocks, sockets and commands, carries one lifetime no other
+/// scope has, so a value of another core or pool does not compile here.
+pub fn scope<const SIZE: usize, const BLOCKS: usize, R>(
+    storage: &mut [[u8; SIZE]; BLOCKS],
+    run: impl for<'id> FnOnce(Pool<'id, SIZE, BLOCKS>, CoreBrand<'id>) -> R,
+) -> R {
+    run(Pool::new(storage), CoreBrand { brand: PhantomData })
+}
 
 /// One block of stack memory and the octets it holds.
 #[derive(Debug)]
-pub struct Block<'m, const SIZE: usize> {
-    bytes: &'m mut [u8; SIZE],
+pub struct Block<'id, const SIZE: usize> {
+    bytes: &'id mut [u8; SIZE],
     length: usize,
+    brand: Brand<'id>,
 }
 
 impl<const SIZE: usize> Block<'_, SIZE> {
@@ -47,36 +69,38 @@ impl<const SIZE: usize> Block<'_, SIZE> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BlockTooShort;
 
-/// The free blocks of the storage the composition placed. It outlives a core,
-/// so a block out at a core's end stays out and can still come back.
+/// The free blocks of one [`scope`]'s storage. Only its own blocks fit its
+/// brand, and it holds room for all of them, so a block always has its place.
 #[derive(Debug)]
-pub struct Pool<'m, const SIZE: usize, const BLOCKS: usize> {
-    free: heapless::Vec<Block<'m, SIZE>, BLOCKS>,
+pub struct Pool<'id, const SIZE: usize, const BLOCKS: usize> {
+    free: heapless::Vec<Block<'id, SIZE>, BLOCKS>,
 }
 
-impl<'m, const SIZE: usize, const BLOCKS: usize> Pool<'m, SIZE, BLOCKS> {
-    pub fn new(storage: &'m mut [[u8; SIZE]; BLOCKS]) -> Self {
+impl<'id, const SIZE: usize, const BLOCKS: usize> Pool<'id, SIZE, BLOCKS> {
+    fn new(storage: &'id mut [[u8; SIZE]; BLOCKS]) -> Self {
         let mut free = heapless::Vec::new();
         for bytes in storage {
             // BLOCKS blocks fit a capacity of BLOCKS.
-            let _fits = free.push(Block { bytes, length: 0 });
+            let _fits = free.push(Block {
+                bytes,
+                length: 0,
+                brand: PhantomData,
+            });
         }
         Self { free }
     }
 
     /// A free block, emptied.
-    pub fn take(&mut self) -> Option<Block<'m, SIZE>> {
+    pub fn take(&mut self) -> Option<Block<'id, SIZE>> {
         let mut block = self.free.pop()?;
         block.length = 0;
         Some(block)
     }
 
     /// Take a block back.
-    ///
-    /// # Errors
-    /// The pool is full, so the block is another pool's; it comes back.
-    pub fn give(&mut self, block: Block<'m, SIZE>) -> Result<(), Block<'m, SIZE>> {
-        self.free.push(block)
+    pub fn give(&mut self, block: Block<'id, SIZE>) {
+        // This pool made the block, so the others out leave it room.
+        let _fits = self.free.push(block);
     }
 
     /// How many blocks are free.
