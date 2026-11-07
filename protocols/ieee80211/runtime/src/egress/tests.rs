@@ -265,3 +265,26 @@ fn a_retired_peers_frame_settles_on_its_old_account() {
     policy.completed(done).unwrap();
     assert_eq!(policy.balance_micros(1), None, "the account ended with it");
 }
+
+#[test]
+fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
+    let mut storage = AirtimeStorage::<u8, 1, 2>::new(micros(QUANTUM));
+    let mut policy = AirtimeEgress::<'_, Air, u32, 1, 2>::new(&mut storage, Air::default());
+    let mut go = |policy: &mut AirtimeEgress<'_, Air, u32, 1, 2>, ready: &[Work], ticket| {
+        let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        policy.accepted(held, ticket).unwrap();
+        let done = Exchange {
+            ticket,
+            charged: Some(micros(COST)),
+        };
+        policy.completed(done).unwrap();
+        work.0.flow.unwrap()
+    };
+    go(&mut policy, &[data(1, 5)], 0);
+    policy.retire(1);
+    let ready = [data(2, 0), data(2, 1)];
+    let flows: Vec<_> = (1..5)
+        .map(|ticket| go(&mut policy, &ready, ticket))
+        .collect();
+    assert_eq!(flows, [0, 1, 0, 1]);
+}
