@@ -10,8 +10,12 @@
 //!
 //! Every duration comes from [`PhyRate::max_ppdu_duration_micros`], the
 //! production TXTIME, and the delimiters and padding of an A-MPDU from
-//! [`oer_protocols_ieee80211_wire::ampdu`]. Only control-frame lengths, SIFS,
-//! the slot and the backoff rules are written here, each with its source.
+//! [`oer_protocols_ieee80211_wire::ampdu`]. A subframe lands at the end of
+//! the data symbol that carries its last octet, at its offset in that
+//! layout, after the preamble. A TXOP limit holds the protection exchange,
+//! the PPDU and its response, as ns-3 counts them. Only control-frame
+//! lengths, SIFS, the slot and the backoff rules are written here, each
+//! with its source.
 //! An [`AirExchange`] is the protection, the PPDU and its response; the
 //! access before it depends on the channel.
 //!
@@ -42,7 +46,9 @@
 //!
 //! # What it leaves out
 //!
-//! It predicts no CPU: every software turn takes no time. No frame is lost
+//! Its numbers are an idealized estimate for the parameters chosen, not a
+//! proven bound of what hardware achieves. It predicts no CPU: every
+//! software turn takes no time. No frame is lost
 //! to noise unless an [`crate::AirAnswer`] scripts it, a TXOP holds one
 //! exchange, the station's queues contend as one side and the channel has
 //! exactly the sides named here. An attempt that ends before its data
@@ -320,8 +326,9 @@ pub enum PeerWindow {
     /// The agreement the station's owner applied through the port for
     /// [`AirPeer::tid`]; single MPDUs without one.
     Agreed,
-    /// This window whatever the port applied: a recipient the production
-    /// owner cannot agree, for a scenario that asks what it would change.
+    /// This window whatever the port applied, with no recipient owner
+    /// behind it: a hypothetical configuration for a scenario that asks what
+    /// a window would change. Production agrees at most 16 today.
     Assumed(u16),
 }
 
@@ -756,8 +763,34 @@ struct Bursts {
 
 /// One aggregate the access point built.
 struct Built {
+    /// Each frame's Sequence Number, image and landing time after the
+    /// protection exchange.
     frames: Vec<(SequenceNumber, Vec<u8>, u32)>,
     exchange: AirExchange,
+}
+
+/// What a PPDU of `rate` carries after its last data symbol, as
+/// [`PhyRate::max_ppdu_duration_micros`] counts it: the 6 us signal
+/// extension of an OFDM PPDU at 2.4 GHz, and for HE the longest packet
+/// extension (16 us) before it.
+const fn trailer_micros(rate: PhyRate) -> u32 {
+    match rate {
+        PhyRate::Legacy(legacy) if !legacy.is_ofdm() => 0,
+        PhyRate::Legacy(_) | PhyRate::Ht(_) => 6,
+        PhyRate::He(_) => 16 + 6,
+    }
+}
+
+/// When the octet `end` of a PSDU of `rate` has arrived, from the PPDU's
+/// start: the end of the data symbol that carries it, as a PPDU ending at
+/// that octet would end before its trailer. That symbol also carries the
+/// BCC tail bits such a PPDU would add, so the instant lies at most one
+/// symbol, and the 4-us grid of a short guard interval, after the octet's
+/// own symbol; never before the preamble's end.
+fn arrival_micros(rate: PhyRate, end: u32) -> Result<u32, AirTimeError> {
+    rate.max_ppdu_duration_micros(end)
+        .map(|micros| micros.saturating_sub(trailer_micros(rate)))
+        .ok_or(AirTimeError::Unrepresentable)
 }
 
 /// The shared channel.
@@ -1047,28 +1080,15 @@ impl Medium {
     fn peer_ppdu(&mut self, at: u64, built: Built, collided: bool) -> PeerPpdu {
         let Built { frames, exchange } = built;
         let first = at.saturating_add(u64::from(exchange.protection_micros));
-        let total: u64 = frames
-            .iter()
-            .fold(0_u64, |total, (_, _, octets)| {
-                total.saturating_add(u64::from(*octets))
-            })
-            .max(1);
-        let mut carried = 0_u64;
         let frames: Vec<PeerFrame> = frames
             .into_iter()
-            .map(|(sequence, image, octets)| {
-                carried = carried.saturating_add(u64::from(octets));
-                PeerFrame {
-                    sequence,
-                    image,
-                    at: first.saturating_add(
-                        u64::from(exchange.ppdu_micros)
-                            .saturating_mul(carried)
-                            .checked_div(total)
-                            .unwrap_or(0),
-                    ),
-                    landed: false,
-                }
+            .map(|(sequence, image, arrival)| PeerFrame {
+                sequence,
+                image,
+                // A lone subframe goes without its delimiter: no later
+                // than the PPDU's last symbol.
+                at: first.saturating_add(u64::from(arrival.min(exchange.ppdu_micros))),
+                landed: false,
             })
             .collect();
         let side = &mut self.report.peer;
@@ -1109,21 +1129,26 @@ impl Medium {
         };
         let txop =
             u32::from(peer.config.edca.txop_limit_units_32_us).saturating_mul(TXOP_UNIT_MICROS);
-        let response = AirExchange::new(
+        // What the TXOP holds beside the PPDU: the protection exchange
+        // before it and the response after it, as ns-3 counts them.
+        let around = AirExchange::new(
             timing,
             rate,
             0,
-            Protection::None,
+            peer.config.protection,
             if aggregates {
                 AirResponse::BlockAck
             } else {
                 AirResponse::Ack
             },
-        )?
-        .response_micros;
+        )?;
+        let beside = around
+            .protection_micros
+            .saturating_add(around.response_micros);
         let retries: Vec<SequenceNumber> = peer.unacked.iter().copied().collect();
         let mut retries = retries.into_iter();
         let mut frames: Vec<(SequenceNumber, Vec<u8>, u32)> = Vec::new();
+        let mut single_octets = 0;
         // The window holds every frame from its head: the retries lie in it,
         // and no new frame goes past its end.
         let limit = if aggregates {
@@ -1164,12 +1189,16 @@ impl Medium {
                 if rate.max_txtime_micros().is_some_and(|limit| ppdu > limit) {
                     break Bound::PpduTime;
                 }
-                if txop != 0 && ppdu.saturating_add(response) > txop {
+                if txop != 0 && ppdu.saturating_add(beside) > txop {
                     break Bound::Txop;
                 }
                 *run = next;
             }
-            frames.push((sequence, image, octets));
+            if frames.is_empty() {
+                single_octets = octets;
+            }
+            let end = run.map_or(octets, |run| run.length);
+            frames.push((sequence, image, arrival_micros(rate, end)?));
             if retry.is_none() {
                 peer.unacked.push_back(sequence);
                 peer.next_sequence = SequenceNumber::from_low_bits(sequence.get().wrapping_add(1));
@@ -1191,7 +1220,7 @@ impl Medium {
         *count = count.saturating_add(1);
         let psdu = match run.filter(|_| frames.len() > 1) {
             Some(run) => run.length,
-            None => frames.first().map_or(0, |(_, _, octets)| *octets),
+            None => single_octets,
         };
         let response = if frames.len() > 1 {
             AirResponse::BlockAck

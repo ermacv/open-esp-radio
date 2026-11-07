@@ -565,7 +565,7 @@ fn a_saturated_channel_gives_way_to_bursts_in_proportion() {
 }
 
 #[test]
-fn frames_land_while_the_ppdu_is_on_the_air_and_the_last_at_its_end() {
+fn frames_land_while_the_ppdu_is_on_the_air_and_the_last_with_its_last_symbol() {
     let world = roomy();
     world.agreed.set(Some(4));
     let mut medium = medium(1, Some(peer(PeerWindow::Agreed, Offered::Saturated)));
@@ -582,7 +582,19 @@ fn frames_land_while_the_ppdu_is_on_the_air_and_the_last_at_its_end() {
     assert!(instants.windows(2).all(|pair| pair[0].0 < pair[1].0));
     let psdu = ampdu_psdu_octets([STAND_MPDU; 4], stand_rate(), 0).unwrap();
     let ppdu = stand_rate().max_ppdu_duration_micros(psdu).unwrap();
-    assert_eq!(instants[3].0, u64::from(ppdu), "the last at the PPDU's end");
+    // The last symbol ends before the 6-us signal extension.
+    assert_eq!(
+        instants[3].0,
+        u64::from(ppdu - 6),
+        "the last with its symbol"
+    );
+    // Each lands at the end of the symbol of its last octet: one subframe
+    // of delimiter, MPDU and padding is 1560 octets, 23.1 symbols of 540
+    // bits, so landings lie 22 or 23 symbols of 3.6 us apart on a 4-us grid.
+    for pair in instants.windows(2) {
+        let apart = pair[1].0 - pair[0].0;
+        assert!((80..=88).contains(&apart), "{apart}");
+    }
     let sequences: Vec<u16> = world
         .landed
         .borrow()
@@ -590,6 +602,66 @@ fn frames_land_while_the_ppdu_is_on_the_air_and_the_last_at_its_end() {
         .map(|frame| sequence_of(frame))
         .collect();
     assert_eq!(sequences, [0, 1, 2, 3]);
+}
+
+#[test]
+fn no_subframe_lands_before_the_preamble_ends() {
+    // Review counterexample: 64 short MPDUs, the first of which landed 6 us
+    // into a PPDU whose preamble takes 36.
+    let world = roomy();
+    let mut air_peer = peer(PeerWindow::Assumed(64), Offered::Saturated);
+    air_peer.frame = frames(40);
+    let mut medium = medium(1, Some(air_peer));
+    medium.advance(0, &world).unwrap();
+    let ppdu = medium.on_air.as_ref().unwrap().peer.as_ref().unwrap();
+    assert_eq!(ppdu.frames.len(), 64);
+    let landings: Vec<u64> = ppdu.frames.iter().map(|frame| frame.at).collect();
+    // HT-mixed preamble 36 us, then the symbol carrying the first delimiter
+    // and MPDU (16 + 352 + 6 bits of 540): one 3.6-us symbol, on a 4-us grid.
+    assert_eq!(landings[0], 36 + 4);
+    assert!(landings.iter().all(|at| *at >= 36 + 4));
+    assert!(landings.windows(2).all(|pair| pair[0] <= pair[1]));
+    let psdu = ampdu_psdu_octets([44; 64], stand_rate(), 0).unwrap();
+    let end = stand_rate().max_ppdu_duration_micros(psdu).unwrap();
+    assert_eq!(*landings.last().unwrap(), u64::from(end - 6));
+}
+
+#[test]
+fn a_txop_limit_holds_the_protection_exchange_too() {
+    // Review counterexample: a 320-us TXOP admitted an RTS/CTS-protected
+    // aggregate whose exchange took 406 us.
+    let world = roomy();
+    let mut air_peer = peer(PeerWindow::Assumed(64), Offered::Saturated);
+    air_peer.frame = frames(196);
+    air_peer.edca.txop_limit_units_32_us = 10;
+    air_peer.protection = Protection::RtsCts {
+        rate: LegacyRate::Ofdm24M,
+    };
+    let mut medium = medium(1, Some(air_peer));
+    medium.advance(0, &world).unwrap();
+    let on_air = medium.on_air.as_ref().unwrap();
+    let held = on_air.end - on_air.started;
+    assert!(held <= 320, "{held}");
+    assert_eq!(medium.report().bounds.txop, 1);
+    // One more subframe would not fit: the limit bound, not the window.
+    let subframes = medium.report().peer.subframes;
+    let longer = ampdu_psdu_octets(
+        [200; 64].into_iter().take(subframes as usize + 1),
+        stand_rate(),
+        0,
+    )
+    .unwrap();
+    let exchange = AirExchange::new(
+        AirTiming::HT_2_4_GHZ,
+        stand_rate(),
+        longer,
+        Protection::RtsCts {
+            rate: LegacyRate::Ofdm24M,
+        },
+        AirResponse::BlockAck,
+    )
+    .unwrap();
+    assert!(exchange.occupancy_micros().unwrap() > 320);
 }
 
 #[test]

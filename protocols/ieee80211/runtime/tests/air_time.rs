@@ -3,10 +3,16 @@
 //!
 //! The test plays the lifecycle and the network; the actor, the data plane,
 //! the receive agreements and the link are the product's. Every software
-//! turn takes no time, so these scenarios bound what the air allows and
-//! say nothing of the CPU. They assert structure: which limit binds and
-//! which way a number moves, not its value. [`validation`] holds the
-//! comparison with the stand.
+//! turn takes no time, so these scenarios give an idealized estimate of what
+//! the air allows for the parameters chosen here, not a proven bound of what
+//! hardware achieves, and say nothing of the CPU. They assert structure:
+//! which limit binds and which way a number moves, not its value.
+//! [`validation`] holds the comparison with the stand.
+//!
+//! `PeerWindow::Assumed(32)` is a hypothetical configuration: no production
+//! recipient agrees a window of 32 (`RX_BLOCK_ACK_WINDOW` is 16), so those
+//! runs have no reorder owner behind them and ask only what the air would
+//! do with such a window.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -962,6 +968,7 @@ fn a_transmit_window_of_32_carries_no_more_than_one_of_16() {
 
 #[test]
 fn the_agreed_window_sets_the_receive_aggregate_and_rx_held_does_not() {
+    // Window 32 is hypothetical: no production recipient agrees it.
     let (narrow, wide) = (
         receive(PeerWindow::Assumed(16)),
         receive(PeerWindow::Assumed(32)),
@@ -1106,6 +1113,7 @@ fn the_window_binds_a_fast_network_and_the_network_binds_a_window_it_cannot_keep
             ..Inputs::receiving(window)
         })
     };
+    // Window 32 is hypothetical: no production recipient agrees it.
     let (narrow, wide) = (
         taking(PeerWindow::Assumed(16)),
         taking(PeerWindow::Assumed(32)),
@@ -1276,7 +1284,8 @@ mod validation {
             ("TX unpaced", Inputs::transmitting(64)),
             ("RX saturated, agreed 16", Inputs::receiving(agreed())),
             (
-                "RX saturated, assumed 32",
+                // Hypothetical: no production recipient agrees 32.
+                "RX saturated, assumed 32 (hypothetical)",
                 Inputs::receiving(PeerWindow::Assumed(32)),
             ),
             ("RX+TX saturated", both),
