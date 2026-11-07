@@ -1,4 +1,4 @@
-use super::{PROTOCOL_TCP, PROTOCOL_UDP, Ports, TransportError};
+use super::{PROTOCOL_TCP, PROTOCOL_UDP, Ports, TransportError, UdpHeader};
 
 #[test]
 fn tcp_and_udp_headers_give_their_ports_within_their_lengths() {
@@ -62,4 +62,24 @@ fn a_transport_header_refuses_lengths_it_cannot_have() {
         Ports::parse(PROTOCOL_UDP, &udp[..7]),
         Err(TransportError::Truncated)
     );
+}
+
+#[test]
+fn a_udp_header_bounds_its_data_by_its_length() {
+    let datagram = [0, 7, 0x13, 0x88, 0, 10, 0xAB, 0xCD, 1, 2, 3, 4];
+    let (header, data) = UdpHeader::parse(&datagram).unwrap();
+    assert_eq!(header.ports.source, 7);
+    assert_eq!(header.ports.destination, 5000);
+    assert_eq!(header.checksum, 0xABCD);
+    assert_eq!(data, [1, 2]);
+    assert_eq!(header.to_bytes(), datagram[..8]);
+}
+
+#[test]
+fn a_udp_length_outside_its_octets_is_refused() {
+    let short = [0, 7, 0, 7, 0, 7, 0, 0];
+    assert_eq!(UdpHeader::parse(&short), Err(TransportError::Length));
+    let long = [0, 7, 0, 7, 0, 9, 0, 0];
+    assert_eq!(UdpHeader::parse(&long), Err(TransportError::Length));
+    assert_eq!(UdpHeader::parse(&long[..7]), Err(TransportError::Truncated));
 }

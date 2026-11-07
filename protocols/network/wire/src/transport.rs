@@ -30,6 +30,75 @@ oer_portable_wire::bitfield! {
     }
 }
 
+/// Length of the UDP header.
+pub const UDP_HEADER_LEN: usize = 8;
+
+/// One UDP header.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UdpHeader {
+    pub ports: Ports,
+    /// Header and data, in octets.
+    pub length: u16,
+    pub checksum: u16,
+}
+
+impl UdpHeader {
+    /// The header at the front of `datagram` and the data its Length bounds.
+    ///
+    /// # Errors
+    /// [`TransportError`]: fewer octets than the header, or a Length below it
+    /// or past the octets given.
+    pub fn parse(datagram: &[u8]) -> Result<(Self, &[u8]), TransportError> {
+        let mut reader = Reader::new(datagram);
+        let header = reader
+            .array::<UDP_HEADER_LEN>()
+            .map_err(|_| TransportError::Truncated)?;
+        let [
+            source_high,
+            source_low,
+            destination_high,
+            destination_low,
+            length_high,
+            length_low,
+            checksum_high,
+            checksum_low,
+        ] = *header;
+        let length = u16::from_be_bytes([length_high, length_low]);
+        let data = usize::from(length)
+            .checked_sub(UDP_HEADER_LEN)
+            .and_then(|data| reader.remaining().get(..data))
+            .ok_or(TransportError::Length)?;
+        Ok((
+            Self {
+                ports: Ports {
+                    source: u16::from_be_bytes([source_high, source_low]),
+                    destination: u16::from_be_bytes([destination_high, destination_low]),
+                },
+                length,
+                checksum: u16::from_be_bytes([checksum_high, checksum_low]),
+            },
+            data,
+        ))
+    }
+
+    /// The header's octets.
+    pub const fn to_bytes(&self) -> [u8; UDP_HEADER_LEN] {
+        let [source_high, source_low, destination_high, destination_low] = self.ports.to_bytes();
+        let [length_high, length_low] = self.length.to_be_bytes();
+        let [checksum_high, checksum_low] = self.checksum.to_be_bytes();
+        [
+            source_high,
+            source_low,
+            destination_high,
+            destination_low,
+            length_high,
+            length_low,
+            checksum_high,
+            checksum_low,
+        ]
+    }
+}
+
 /// Source and destination port of one TCP or UDP header.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ports {

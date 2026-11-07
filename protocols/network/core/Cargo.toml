@@ -1,0 +1,19 @@
+[package]
+name = "oer-protocols-network-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A sans-IO network core: interfaces, neighbors, IPv4 and UDP"
+readme = "README.md"
+
+[dependencies]
+heapless = "0.9.3"
+oer-portable-events = { path = "../../../portable/events" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-portable-wire = { path = "../../../portable/wire" }
+oer-protocols-network-wire = { path = "../wire" }
+
+[lints]
+workspace = true

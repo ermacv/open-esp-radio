@@ -7,6 +7,8 @@
 use oer_portable_wire::Reader;
 
 const IPV4_MIN_LEN: usize = 20;
+/// Length of an IPv4 header with no options.
+pub const IPV4_HEADER_LEN: usize = IPV4_MIN_LEN;
 const IPV6_LEN: usize = 40;
 
 /// A header that cannot be the version it claims.
@@ -21,6 +23,63 @@ pub enum IpError {
     HeaderLength,
     /// The total (IPv4) or payload (IPv6) length runs past the octets given.
     Length,
+}
+
+/// The fields of an IPv4 header with no options, Don't Fragment set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Ipv4Fields {
+    pub services: DsField,
+    pub total_length: u16,
+    pub identification: u16,
+    pub time_to_live: u8,
+    pub protocol: u8,
+    pub source: [u8; 4],
+    pub destination: [u8; 4],
+}
+
+impl Ipv4Fields {
+    /// The header's octets, with its checksum.
+    pub fn to_bytes(&self) -> [u8; IPV4_HEADER_LEN] {
+        // Version 4, five words.
+        let [version_ihl] = Ipv4VersionIhl::from_bytes([0x45]).to_bytes();
+        let [services] = self.services.to_bytes();
+        let [length_high, length_low] = self.total_length.to_be_bytes();
+        let [identification_high, identification_low] = self.identification.to_be_bytes();
+        let [flags_high, flags_low] = Ipv4Fragment::from_bytes([0, 0])
+            .with_dont_fragment(true)
+            .to_bytes();
+        let [source0, source1, source2, source3] = self.source;
+        let [destination0, destination1, destination2, destination3] = self.destination;
+        let header = |checksum_high, checksum_low| {
+            [
+                version_ihl,
+                services,
+                length_high,
+                length_low,
+                identification_high,
+                identification_low,
+                flags_high,
+                flags_low,
+                self.time_to_live,
+                self.protocol,
+                checksum_high,
+                checksum_low,
+                source0,
+                source1,
+                source2,
+                source3,
+                destination0,
+                destination1,
+                destination2,
+                destination3,
+            ]
+        };
+        let [checksum_high, checksum_low] = crate::checksum::Checksum::new()
+            .with(&header(0, 0))
+            .finish()
+            .to_be_bytes();
+        header(checksum_high, checksum_low)
+    }
 }
 
 /// Valid six-bit IPv4/IPv6 Differentiated Services Code Point.
