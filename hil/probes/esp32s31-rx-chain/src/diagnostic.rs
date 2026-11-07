@@ -1,6 +1,6 @@
 //! A pre-RX fault survives reset without taking the live console's owner.
 use core::sync::atomic::{AtomicU32, Ordering};
-use oer_chips_family_staged_runtime::{self as runtime, trap::TrapFrame};
+use oer_chips_family_platform_runtime::{self as runtime, trap::TrapFrame};
 
 use oer_portable_diagnostics::fault::{Class, Domain, Record};
 use runtime::retained_fault::{self, Claim};

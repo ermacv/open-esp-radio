@@ -130,7 +130,7 @@ mod tests {
                 let mut pending = vec![name.as_str()];
                 let mut visited = BTreeSet::new();
                 while let Some(dependency) = pending.pop() {
-                    if dependency == "oer-chips-family-staged-runtime" {
+                    if dependency == "oer-chips-family-platform-runtime" {
                         return Some(package.clone());
                     }
                     if visited.insert(dependency)
@@ -174,7 +174,7 @@ mod tests {
 [workspace]
 members = ["examples/new", "hil/probes/new", "tools/host", "chips/adapter"]
 [workspace.dependencies]
-rt = { package = "oer-chips-family-staged-runtime", version = "0.1" }
+rt = { package = "oer-chips-family-platform-runtime", version = "0.1" }
 "#,
         )
         .unwrap();
@@ -194,7 +194,7 @@ adapter = "0.1"
 [package]
 name = "new-probe"
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-rt = { package = "oer-chips-family-staged-runtime", version = "0.1" }
+rt = { package = "oer-chips-family-platform-runtime", version = "0.1" }
 "#,
             ),
             (
@@ -212,7 +212,7 @@ rt.workspace = true
 [package]
 name = "host-tool"
 [dependencies]
-oer-chips-family-staged-runtime = "0.1"
+oer-chips-family-platform-runtime = "0.1"
 "#,
             ),
         ] {

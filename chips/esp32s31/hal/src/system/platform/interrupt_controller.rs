@@ -1,6 +1,6 @@
 //! Each hart's interrupt controller: its interrupt-matrix bank and its own
 //! CLIC, which the interrupt table's router
-//! (`oer_chips_family_interrupt_table::Router`) writes through the typed blocks.
+//! (`oer_chips_family_platform_interrupt_table::Router`) writes through the typed blocks.
 //!
 //! The CLIC is context-relative: every hart reaches its own controller at
 //! the same address (SOURCE: `HW1_S31_CLIC_20261026` and
@@ -34,7 +34,7 @@ use oer_chips_esp32s31_pac::{
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
 };
-use oer_chips_family_interrupt_table::{Controller, Error};
+use oer_chips_family_platform_interrupt_table::{Controller, Error};
 use oer_portable_memory::{ClaimCell, zeroed::ZeroedOnce};
 use oer_portable_riscv::clic::{Control, LevelBits, LineState, Trigger};
 

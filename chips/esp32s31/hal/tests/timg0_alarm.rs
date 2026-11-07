@@ -3,7 +3,7 @@ use oer_chips_esp32s31_hal::{
     system::platform::interrupt_controller::facts::LINES,
 };
 use oer_chips_esp32s31_pac::Interrupt;
-use oer_chips_family_interrupt_table::{Class, Entry, ExecutorHandler};
+use oer_chips_family_platform_interrupt_table::{Class, Entry, ExecutorHandler};
 use oer_portable_mmio::InterruptSource;
 
 pub fn on_timer(_: &mut Timg0AlarmInterrupt) {}
@@ -22,7 +22,7 @@ impl ExecutorHandler<FromCpu2Irq> for OnExecutor {
 // p.86. This fixture binds lines 20/21 using that family contract.
 // SOURCE: HW23_S31_P2_ARBITRATION_20261027 measured lines 16/17 on S31
 // hart0 at P2 with TIMG0/FROM_CPU2 assigned both ways; 20/21 was not measured.
-oer_chips_family_interrupt_table::interrupt_table! {
+oer_chips_family_platform_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];
     contexts { radio: 2; }

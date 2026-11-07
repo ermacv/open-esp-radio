@@ -4,8 +4,8 @@ use oer_chips_esp32s31_hal::radio::ieee802154::{
         Ieee802154InterruptSetupOwner, Ieee802154StartupPort, Ieee802154TaskOwner},
     polled::Ieee802154MacOwners,
 };
-use oer_chips_family_ieee802154_mac_values::{Ieee802154EventMask, Ieee802154InterruptStartup};
-use oer_chips_family_interrupt_table::{Bound, Controller, Entry, Router, Silent};
+use oer_chips_family_radio_ieee802154_values::{Ieee802154EventMask, Ieee802154InterruptStartup};
+use oer_chips_family_platform_interrupt_table::{Bound, Controller, Entry, Router, Silent};
 
 pub fn setup_is_not_bindable<const H: u8, C: Controller, I: Entry<Part = Ieee802154InterruptOwner>>(
     router: &mut Router<C, H>, token: I, setup: Ieee802154InterruptSetupOwner,

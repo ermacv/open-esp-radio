@@ -77,7 +77,7 @@ impl Root {
 
     /// Split the reset claim into bootstrap owners without installing the
     /// console, opening clocks or checking the timer. Startup belongs to the
-    /// family staged-bootstrap runner. Unused partitions are dropped.
+    /// family platform-bootstrap runner. Unused partitions are dropped.
     pub fn into_bootstrap(self) -> Bootstrap {
         let Partitions {
             usb_serial_jtag,
@@ -153,7 +153,7 @@ impl Root {
     /// Split the claim into unstarted runtime owners. No register access,
     /// global installation, clock adoption or watchdog arming occurs here.
     /// The family adoption driver consumes these owners; staged images use
-    /// it through the staged-runtime runner. Cold boot is never repeated.
+    /// it through the platform-runtime runner. Cold boot is never repeated.
     pub fn into_runtime(self) -> oer_chips_family_boot::adoption::Owners<RuntimePort> {
         let Partitions {
             usb_serial_jtag,
@@ -597,7 +597,7 @@ pub struct RadioSplitFailure<T> {
     hardware: RadioHardware,
     attachment: T,
     identity: crate::radio::domain::transaction::PhyIdentity,
-    error: oer_chips_family_modem_clock::IdentityExhausted,
+    error: oer_chips_family_radio_modem_clock::IdentityExhausted,
 }
 
 impl<T> core::fmt::Debug for RadioSplitFailure<T> {
@@ -609,7 +609,7 @@ impl<T> core::fmt::Debug for RadioSplitFailure<T> {
 }
 
 impl<T> RadioSplitFailure<T> {
-    pub const fn error(&self) -> oer_chips_family_modem_clock::IdentityExhausted {
+    pub const fn error(&self) -> oer_chips_family_radio_modem_clock::IdentityExhausted {
         self.error
     }
 
@@ -668,7 +668,7 @@ impl RadioHardware {
         identity: crate::radio::domain::transaction::PhyIdentity,
         clock_identity: Result<
             crate::power::clock::ModemClockPlannerIdentity,
-            oer_chips_family_modem_clock::IdentityExhausted,
+            oer_chips_family_radio_modem_clock::IdentityExhausted,
         >,
     ) -> Result<(RadioDomain<B, T>, ProtocolPartitions), RadioSplitFailure<T>> {
         let clock_identity = match clock_identity {

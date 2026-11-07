@@ -1,7 +1,7 @@
 use super::super::host::HostMemory;
 use super::*;
 use core::cmp::Ordering;
-use oer_chips_family_ieee802154_mac_values::Ieee802154RxStatus;
+use oer_chips_family_radio_ieee802154_values::Ieee802154RxStatus;
 
 #[test]
 fn every_named_rx_abort_reason_retains_its_semantic_identity() {

@@ -4,7 +4,7 @@ This workspace runs the public ESP-IDF IEEE 802.15.4 driver on the host so the
 production port can be compared with the real vendor behavior. Unlike the PHY,
 Wi-Fi and Bluetooth libraries, this driver is published as source, so the stand
 compiles it directly instead of executing a captured binary. The
-[MAC engine](../../../chips/family/ieee802154-engine/README.md) identifies the pinned
+[MAC engine](../../../chips/family/radio/ieee802154/engine/README.md) identifies the pinned
 sources and their production owners.
 
 ## What is compiled and what is recorded
@@ -80,7 +80,7 @@ check the catalog against expectations read from the pinned source.
 ## Comparing the production engine
 
 `compare` runs the same scenario through the production engine
-(`oer_chips_family_ieee802154_engine::engine`) and prints `MATCH`, `DIFF` with the first
+(`oer_chips_family_radio_ieee802154_engine::engine`) and prints `MATCH`, `DIFF` with the first
 differing record, or `INCOMPLETE` with the reason. [`src/port.rs`](src/port.rs)
 renders each HAL low-level call as the vendor `ieee802154_ll_*` accessor and
 argument, and each modem ETM access as the vendor's direct register access;

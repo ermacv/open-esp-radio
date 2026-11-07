@@ -787,7 +787,7 @@ macro_rules! bind_station {
   $vis mod $name {
    use super::*;
    pub struct Binding;
-   oer_chips_family_executor::declare_installations!(pub slot);
+   oer_chips_family_platform_executor::declare_installations!(pub slot);
    impl $crate::Binding for Binding {
     type Id=slot::Id;type Wifi=$wifi;type DriverEntry=$driver_entry;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Events=$events;
     type Notifies=$notifies;type TxSupply=$tx_supply;

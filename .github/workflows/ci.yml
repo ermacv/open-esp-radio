@@ -56,7 +56,7 @@ jobs:
           exit "$status"
       - name: Tests
         # The default members: every package but the chip-only firmware ones.
-        # This includes host tests of chips/family/interrupt-table.
+        # This includes host tests of chips/family/platform/interrupt-table.
         run: cargo test --locked
       - name: Tests in the feature sets the workspace run does not build
         run: |
@@ -68,8 +68,8 @@ jobs:
           cargo test --locked -p oer-chips-esp32s31-radio-ieee80211-driver
           cargo test --locked -p oer-portable-time --features serde
           cargo test --locked -p oer-portable-time --features schema
-          cargo test --locked -p oer-chips-family-executor --features installations --lib --test installations
-          cargo clippy --locked -p oer-chips-family-executor --features installations --all-targets
+          cargo test --locked -p oer-chips-family-platform-executor --features installations --lib --test installations
+          cargo clippy --locked -p oer-chips-family-platform-executor --features installations --all-targets
       - name: Tests under each instrumentation cfg
         # The default members whose sources hold code under an
         # instrumentation class's cfg, tested once with it, each cfg in a
@@ -102,7 +102,7 @@ jobs:
         # Every library of protocols/, portable/ and chips/ builds for the chip;
         # the platform packages (the board, the chip's bootstrap and the
         # staged runtime and bootstrap) are checked with the images.
-        # chips/family/interrupt-table is included by the chips/ selection.
+        # chips/family/platform/interrupt-table is included by the chips/ selection.
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))
@@ -118,7 +118,7 @@ jobs:
           # with their cfgs, as `cargo fw` builds it.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/platform/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
@@ -154,7 +154,7 @@ jobs:
           # The clippy step checks the instrumented images, with their cfgs.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/platform/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }

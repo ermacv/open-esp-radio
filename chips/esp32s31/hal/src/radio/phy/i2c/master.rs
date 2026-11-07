@@ -1,5 +1,5 @@
 //! Owned master atoms and the legacy calibration bus binding.
-//! Serial-byte sequencing belongs to `oer_chips_family_phy::serial`.
+//! Serial-byte sequencing belongs to `oer_chips_family_radio_phy::serial`.
 #![forbid(unsafe_code)]
 use super::commands::{
     PHY_I2C_COMMAND_MEMORY_DYNAMIC_INDICES, PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT,
@@ -10,8 +10,8 @@ use oer_chips_esp32s31_pac::{
     i2c_ana_mst::I2cAnaMst,
     i2c_ana_mst_mem::PhyI2cCommandRam,
 };
-use oer_chips_family_analog::BusRefusal;
-use oer_chips_family_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
+use oer_chips_family_peripherals_analog::BusRefusal;
+use oer_chips_family_radio_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
 use oer_portable_mmio::{Bits, Index, Placement};
 
 /// Exclusive atom loan from the master owner.
@@ -115,8 +115,8 @@ impl<P: Placement> Port for MasterPort<'_, P> {
         );
     }
 }
-impl<P: Placement> oer_chips_family_phy::i2c::PhyI2cParallelAccess for MasterPort<'_, P> {
-    type Pair = oer_chips_family_phy::i2c::PhyI2cParallelWrite<Address>;
+impl<P: Placement> oer_chips_family_radio_phy::i2c::PhyI2cParallelAccess for MasterPort<'_, P> {
+    type Pair = oer_chips_family_radio_phy::i2c::PhyI2cParallelWrite<Address>;
     fn is_busy(&self, host: Host) -> bool {
         is_busy(self.master, host)
     }
@@ -144,7 +144,7 @@ impl<P: Placement> oer_chips_family_phy::i2c::PhyI2cParallelAccess for MasterPor
     }
 
     /// Start both writes of one parallel pair, host zero first.
-    fn start_pair(&mut self, pair: oer_chips_family_phy::i2c::PhyI2cParallelWrite<Address>) {
+    fn start_pair(&mut self, pair: oer_chips_family_radio_phy::i2c::PhyI2cParallelWrite<Address>) {
         let (address, value) = pair.first;
         publish_command(
             self.master,
@@ -318,7 +318,9 @@ impl<'a, P: Placement> ConfigurationBus<'a, P> {
         Self(AnalogBus::new(MasterPort::new(master)))
     }
 }
-impl<P: Placement> oer_chips_family_analog::AnalogRegisterBus for ConfigurationBus<'_, P> {
+impl<P: Placement> oer_chips_family_peripherals_analog::AnalogRegisterBus
+    for ConfigurationBus<'_, P>
+{
     type Address = Address;
     fn try_start_read(&mut self, address: Address) -> Result<(), BusRefusal> {
         self.0.try_start_read(address).map_err(refusal)

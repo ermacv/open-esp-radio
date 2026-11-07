@@ -1,0 +1,25 @@
+[package]
+name = "oer-chips-esp32s31-platform-bootstrap"
+description = "ESP32-S31 first-stage image: cold boot, its profiles and the handoff to stage two"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+build = "build.rs"
+
+[dependencies]
+oer-chips-esp32s31-platform-layout.workspace = true
+oer-chips-family-platform-bootstrap = { path = "../../../family/platform/bootstrap" }
+oer-chips-esp32s31-hal = { path = "../../hal" }
+oer-chips-family-boot = { path = "../../../family/boot" }
+oer-chips-family-peripherals-system-timer = { path = "../../../family/peripherals/system-timer" }
+oer-portable-time = { path = "../../../../portable/time" }
+static_cell.workspace = true
+
+[build-dependencies]
+oer-chips-family-facts = { path = "../../../family/facts" }
+oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true

@@ -13,14 +13,14 @@ use oer_chips_esp32s31_hal::{
     },
 };
 use oer_chips_esp32s31_radio_phy::ieee802154_client::Ieee802154PhyMembership;
-use oer_chips_family_ieee802154_engine::{
+use oer_chips_family_platform_interrupt_table::{Bound, Entry};
+use oer_chips_family_radio_ieee802154_engine::{
     interrupt,
     lifecycle::{
         Ieee802154FoundationFailure, Ieee802154FoundationReturn, Ieee802154Lifecycle,
         Ieee802154ResetFailure, state,
     },
 };
-use oer_chips_family_interrupt_table::{Bound, Entry};
 use oer_portable_mmio::Placement;
 
 /// Pulse the private MAC/APB reset through the shared radio's exclusive loan.
@@ -82,7 +82,7 @@ pub fn deactivate<'a, P: Placement, E: Placement, B: Placement>(
 ///
 /// ```
 /// use oer_chips_esp32s31_hal::radio::ieee802154::Ieee802154Clocked;
-/// use oer_chips_family_ieee802154_engine::lifecycle::{Ieee802154Lifecycle, state};
+/// use oer_chips_family_radio_ieee802154_engine::lifecycle::{Ieee802154Lifecycle, state};
 /// use oer_chips_esp32s31_radio_ieee802154_driver::lifecycle::RegisteredIeee802154Operational;
 /// use oer_chips_esp32s31_radio_phy::ieee802154_client::Ieee802154PhyMembership;
 /// fn install(
@@ -97,7 +97,7 @@ pub fn deactivate<'a, P: Placement, E: Placement, B: Placement>(
 ///
 /// ```compile_fail,E0061
 /// use oer_chips_esp32s31_hal::radio::ieee802154::Ieee802154Clocked;
-/// use oer_chips_family_ieee802154_engine::lifecycle::{Ieee802154Lifecycle, state};
+/// use oer_chips_family_radio_ieee802154_engine::lifecycle::{Ieee802154Lifecycle, state};
 /// use oer_chips_esp32s31_radio_ieee802154_driver::lifecycle::RegisteredIeee802154Operational;
 /// fn install(foundation: Ieee802154Lifecycle<Ieee802154Clocked, state::FoundationConfigured>) -> RegisteredIeee802154Operational {
 ///     RegisteredIeee802154Operational::new(foundation)

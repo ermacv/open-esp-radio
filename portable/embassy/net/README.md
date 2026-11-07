@@ -99,7 +99,7 @@ these ownership restrictions.
 Link notification uses `oer_portable_sync::PriorityWaker`; no blocking mutex
 or critical section is introduced.
 
-HIL `wifi-station` selects `oer_chips_family_executor::ThreadContext<0>`:
+HIL `wifi-station` selects `oer_chips_family_platform_executor::ThreadContext<0>`:
 its network and station sides remain on the existing P1 executor. Host tests
 use `oer_portable_memory::HostContext`. RX ordinary atomic wakers and the packet-pool
 waiter are still confined to that composition. These types do not admit new

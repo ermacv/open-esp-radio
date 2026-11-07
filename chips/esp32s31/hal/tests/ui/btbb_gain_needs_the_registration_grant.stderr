@@ -37,5 +37,5 @@ error[E0423]: cannot initialize a tuple struct which contains private fields
 note: constructor is not visible here due to private fields
   --> src/radio/domain.rs
    |
-   | pub struct BtbbGain(oer_chips_family_radio::domain::Gain<PhyRegistrationEpoch>);
-   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private field
+   | pub struct BtbbGain(oer_chips_family_radio_domain::domain::Gain<PhyRegistrationEpoch>);
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private field

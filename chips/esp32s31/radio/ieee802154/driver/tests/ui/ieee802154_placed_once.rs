@@ -1,12 +1,12 @@
 #![no_std]
 use oer_chips_esp32s31_hal::{system::memory::dma_static::Placed, layouts::DmaWindowAddress};
 use oer_chips_esp32s31_radio_ieee802154_driver::engine::Ieee802154Engine;
-use oer_chips_family_ieee802154_engine::{
+use oer_chips_family_radio_ieee802154_engine::{
     ll::Ieee802154LowLevel,
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
 };
-use oer_chips_family_ieee802154_mac_values::Ieee802154EngineBuffers;
-use oer_chips_family_ieee802154_mac_values::Ieee802154TxPowerLevels;
+use oer_chips_family_radio_ieee802154_values::Ieee802154EngineBuffers;
+use oer_chips_family_radio_ieee802154_values::Ieee802154TxPowerLevels;
 
 pub fn bind<Mac: Ieee802154LowLevel<Address = DmaWindowAddress>>(
     mac: Mac,

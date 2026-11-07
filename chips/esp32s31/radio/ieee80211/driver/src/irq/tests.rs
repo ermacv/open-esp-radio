@@ -17,7 +17,7 @@ use oer_chips_esp32s31_hal::types::{
     MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
     MacPowerInterruptObservation,
 };
-use oer_chips_family_interrupt_table::signal::host::Host;
+use oer_chips_family_platform_interrupt_table::signal::host::Host;
 
 use super::*;
 
@@ -70,12 +70,12 @@ fn parts() -> (
     PowerIrqConsumer<'static, Host>,
 ) {
     let (mac, irq) = leak(IrqStorage::new(
-        oer_chips_family_interrupt_table::signal::host::signal().0,
-        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+        oer_chips_family_platform_interrupt_table::signal::host::signal().0,
     ))
     .split();
     let (power, power_consumer) = leak(PowerIrqStorage::new(
-        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_platform_interrupt_table::signal::host::signal().0,
     ))
     .split();
     let parts = WifiIrqLineParts {
@@ -141,10 +141,10 @@ impl Wake for WakeCount {
 struct Rings(Cell<usize>);
 
 impl RadioDoorbell for Rings {
-    const HANDLER: oer_chips_family_interrupt_table::Context =
-        oer_chips_family_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_chips_family_interrupt_table::Context =
-        oer_chips_family_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_chips_family_platform_interrupt_table::Context =
+        oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_chips_family_platform_interrupt_table::Context =
+        oer_chips_family_platform_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.0.set(self.0.get() + 1);
     }
@@ -152,7 +152,7 @@ impl RadioDoorbell for Rings {
 
 #[test]
 fn the_part_names_both_banks_and_the_doorbell_as_its_sources() {
-    use oer_chips_family_interrupt_table::InterruptSource;
+    use oer_chips_family_platform_interrupt_table::InterruptSource;
     let sources = <WifiIrqPart<Lower> as InterruptSources>::SOURCES;
     assert_eq!(
         sources,
@@ -457,7 +457,9 @@ fn install_clears_stale_requests_and_refuses_a_second_line() {
 fn the_chip_part_and_line_with_a_shareable_context_can_live_in_static_cells() {
     fn sync<T: Sync>() {}
     fn send<T: Send>() {}
-    sync::<HandlerCell<WifiIrqLine<oer_chips_family_interrupt_table::signal::host::Foreign>>>();
+    sync::<
+        HandlerCell<WifiIrqLine<oer_chips_family_platform_interrupt_table::signal::host::Foreign>>,
+    >();
     send::<WifiIrqPart<Lower>>();
 }
 

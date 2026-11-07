@@ -600,12 +600,12 @@ impl Io<'_> {
             use crate::RomShortDelay;
             use oer_chips_esp32s31_hal::radio::phy::agc;
             if !work_mode {
-                oer_chips_family_phy::pbus::configure_debug_mode(
+                oer_chips_family_radio_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 return Ok(false);
             }
-            let settled = oer_chips_family_phy::pbus::configure_work_mode(
+            let settled = oer_chips_family_radio_phy::pbus::configure_work_mode(
                 &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
             );
             if settled {

@@ -2,9 +2,9 @@
 //! header: the payload CRC-32 is computed with its own field read as zero.
 //!
 //! The profile data is the host's view of the bootstrap's contract
-//! (`oer-chips-family-staged-layout`'s `stage_two`), which this generic
+//! (`oer-chips-family-platform-layout`'s `stage_two`), which this generic
 //! pipeline does not link; both check the shared fixture
-//! `chips/family/staged-layout/fixtures/stage-two.txt`, so they agree.
+//! `chips/family/platform/layout/fixtures/stage-two.txt`, so they agree.
 use crate::Result;
 use oer_chips_family_facts::StageTwo;
 use std::{fs, path::Path};

@@ -7,7 +7,7 @@
 //! its [`CoexAbsent`]: it cannot leave power while it takes part. External
 //! coexistence takes part with its own [`ExternalCoexistence`]. The
 //! domain's participant set follows these states; the coexistence policy
-//! acts on it in the shared radio's owner (the `oer-chips-family-coex` README
+//! acts on it in the shared radio's owner (the `oer-chips-family-radio-coex` README
 //! records the participant policy).
 //!
 //! Coexistence does not depend on the client's common power: Wi-Fi enables
@@ -106,7 +106,7 @@ pub struct ExternalCoexistence {
 
 /// The radios that enabled coexistence (`coex_core_enable`).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct CoexParticipants(oer_chips_family_radio::membership::Participants);
+pub(crate) struct CoexParticipants(oer_chips_family_radio_domain::membership::Participants);
 
 impl CoexParticipants {
     pub(crate) const fn count(self) -> u32 {

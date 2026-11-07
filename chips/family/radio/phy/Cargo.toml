@@ -1,0 +1,18 @@
+[package]
+name = "oer-chips-family-radio-phy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "Family PHY analog and PBus operations over owned register ports"
+
+[dependencies]
+oer-chips-family-peripherals-analog = { path = "../../peripherals/analog" }
+
+[dev-dependencies]
+oer-portable-time = { path = "../../../../portable/time" }
+oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
+
+[lints]
+workspace = true

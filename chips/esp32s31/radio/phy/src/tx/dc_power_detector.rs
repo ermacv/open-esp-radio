@@ -844,7 +844,7 @@ impl PhyTxDcPwdetTransition {
 
         oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(physical.hardware(), true);
         oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(physical.hardware());
-        oer_chips_family_phy::pbus::configure_debug_mode(
+        oer_chips_family_radio_phy::pbus::configure_debug_mode(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware()),
         );
 
@@ -958,7 +958,7 @@ impl PhyTxDcPwdetTransition {
             0x80,
             0x78,
         );
-        if oer_chips_family_phy::pbus::configure_work_mode(
+        if oer_chips_family_radio_phy::pbus::configure_work_mode(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware()),
         ) {
             settle(crate::executor::wait::tx::Scope::Root, 1)?;
@@ -1438,7 +1438,7 @@ impl PhyTxDcPwdetMmioBinding {
                 Ok(PhyTxDcPwdetCompletion::PowerDetectorConfigured)
             }
             PhyTxDcPwdetMmioAction::ConfigurePbusDebugMode => {
-                oer_chips_family_phy::pbus::configure_debug_mode(
+                oer_chips_family_radio_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 Ok(PhyTxDcPwdetCompletion::PbusDebugModeConfigured)
@@ -1477,7 +1477,7 @@ impl PhyTxDcPwdetMmioBinding {
             }
             PhyTxDcPwdetMmioAction::ConfigurePbusWorkMode => {
                 Ok(PhyTxDcPwdetCompletion::PbusWorkModeConfigured {
-                    settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                    settle_required: oer_chips_family_radio_phy::pbus::configure_work_mode(
                         &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                     ),
                 })

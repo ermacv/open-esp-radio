@@ -2,13 +2,13 @@
 //! timer groups (MWDT0, MWDT1), both groups' clock and reset words, the
 //! RTC watchdog (RWDT) and the super watchdog (SWD).
 //!
-//! Each owner implements the `oer-chips-family-watchdog` ports with one
+//! Each owner implements the `oer-chips-family-peripherals-watchdog` ports with one
 //! read-modify-write of its generated fields per call, keeping every other
 //! bit, and strobes only through the generated triggers.
 //!
 //! ```compile_fail,E0061
 //! # use oer_chips_esp32s31_hal::peripherals::watchdog::Mwdt1Registers;
-//! # use oer_chips_family_watchdog::{WRITE_KEY, WriteProtected};
+//! # use oer_chips_family_peripherals_watchdog::{WRITE_KEY, WriteProtected};
 //! fn raw_key(mut mwdt1: Mwdt1Registers) {
 //!     mwdt1.store_write_key(WRITE_KEY); // the key is stored only inside a session
 //! }
@@ -19,13 +19,13 @@
 //!
 //! ```compile_fail,E0277
 //! # use oer_chips_esp32s31_hal::peripherals::watchdog::Mwdt0Registers;
-//! # use oer_chips_family_watchdog::{MainWatchdog, MicrosecondTick};
+//! # use oer_chips_family_peripherals_watchdog::{MainWatchdog, MicrosecondTick};
 //! fn arm(mwdt0: Mwdt0Registers, tick: MicrosecondTick) {
 //!     let _armable = MainWatchdog::new(mwdt0, tick);
 //! }
 //! ```
 
-use oer_chips_family_watchdog::{
+use oer_chips_family_peripherals_watchdog::{
     Access, MainConfig, MainStageAction, MainWatchdogEnable, MainWatchdogRegisters, ResetLength,
     RtcStageAction, RtcWatchdogArm, RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
 };

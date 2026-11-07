@@ -1,0 +1,2208 @@
+//! Interrupt-driven IEEE 802.15.4 MAC engine ported from the public ESP-IDF
+//! driver (`components/ieee802154/driver/esp_ieee802154_dev.c`).
+//!
+//! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
+//! `components/ieee802154/driver/esp_ieee802154_dev.c` (Copyright Espressif
+//! Systems (Shanghai) Co Ltd, Apache-2.0) and modified by Vladislav
+//! Ermachenkov; see `NOTICE`.
+//!
+//! The engine keeps the vendor's private state machine, receive ring and
+//! operation order. Every decision the vendor takes inside its interrupt
+//! handler — ACK and pending-bit selection, the enhanced ACK, the ACK
+//! watchdog and the next operation — is taken here in [`Ieee802154Engine::isr`].
+//! Register accesses go through the HAL [`Ieee802154LowLevel`] backend and
+//! upper-layer notifications through [`Ieee802154Environment`], so a
+//! recording backend observes the accessor sequence. Configuration publication,
+//! promiscuous ACK masking and retained settings follow the contract in the
+//! crate README; these intentionally differ from the vendor.
+//!
+//! The caller serializes every entry point in one critical section, as the
+//! vendor does with `ieee802154_enter_critical`. The build matches the
+//! vendor defaults: no RF power gating, no multi-PAN, no test mode and no
+//! statistics. Software coexistence follows the engine's
+//! [`Ieee802154Coexistence`]: disabled by default, as in a build without it,
+//! or publishing the scene priorities where the vendor's
+//! `IEEE802154_SET_TXRX_PTI` does.
+
+use crate::coex::Ieee802154Coexistence;
+use crate::ll::{self, Ieee802154LowLevel};
+use crate::pib::{Ieee802154Permit, Ieee802154Pib, Ieee802154PibDefaults};
+use oer_chips_family_radio_ieee802154_values::{
+    Ieee802154Channel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
+    Ieee802154MacCommand, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+    Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
+    Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortReason,
+    Ieee802154TxAbortReasonObservation, Ieee802154TxPowerLevels,
+};
+use oer_protocols_ieee802154_port::RadioOperation;
+use oer_protocols_ieee802154_port::{PendingTable, ack_pending};
+use oer_protocols_ieee802154_wire::{FrameAddress, FrameType, FrameVersion, PhrFrame};
+
+mod rx_index;
+mod settings;
+use rx_index::RxIndex;
+mod statistics;
+
+use oer_chips_family_radio_ieee802154_values::{
+    DmaFrame, FRAME_SIZE, Ieee802154DmaAddresses, Ieee802154EngineBuffers, RX_BUFFER_COUNT,
+};
+
+pub mod fault;
+pub mod owner;
+pub use fault::Fault;
+use fault::{ServiceError, ServiceProgress, ServiceStage};
+pub use statistics::{
+    Ieee802154RxAbortStatistics, Ieee802154RxStatistics, Ieee802154TxAbortStatistics,
+    Ieee802154TxRxStatistics, Ieee802154TxStatistics, StatisticsCounter, StatisticsOverflow,
+};
+
+/// Pending-table entries per address kind (`CONFIG_IEEE802154_PENDING_TABLE_SIZE`).
+pub const PENDING_TABLE_SIZE: usize = 20;
+
+/// `CCA_DETECTION_TIME` in 16-microsecond symbols.
+const CCA_DETECTION_TIME: u16 = 8;
+
+/// ACK receive timeout started after an ACK-requesting transmission.
+const ACK_TIMEOUT_MICROSECONDS: u32 = 200_000;
+
+/// `IEEE802154_ED_TRIG_TX_RAMPUP_TIME_US`.
+const ED_TRIG_TX_RAMPUP_MICROSECONDS: u32 = 256;
+
+/// `IEEE802154_TX_RAMPUP_TIME_US`.
+const TX_RAMPUP_MICROSECONDS: u32 = 98;
+
+/// `IEEE802154_RX_RAMPUP_TIME_US`.
+const RX_RAMPUP_MICROSECONDS: u32 = 146;
+
+/// `IEEE802154_FRAME_MIN_LEN`.
+const FRAME_MIN_LEN: u8 = 3;
+
+/// The vendor private radio state (`ieee802154_state_t` without test mode).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Ieee802154State {
+    /// Disabled.
+    Disable,
+    /// Idle.
+    Idle,
+    /// Sleeping.
+    Sleep,
+    /// Receiving.
+    Rx,
+    /// Transmitting a hardware ACK.
+    TxAck,
+    /// Transmitting a software enhanced ACK.
+    TxEnhAck,
+    /// Clear-channel assessment, then transmit.
+    TxCca,
+    /// Transmitting.
+    Tx,
+    /// Waiting for an ACK.
+    RxAck,
+    /// Energy detection.
+    Ed,
+    /// Standalone clear-channel assessment.
+    Cca,
+}
+
+/// Transmit failure reported to the upper layer (`esp_ieee802154_tx_error_t`).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Ieee802154TxError {
+    /// The channel is busy.
+    CcaBusy,
+    /// The transmission was aborted.
+    Abort,
+    /// No ACK arrived before the timeout.
+    NoAck,
+    /// The received ACK was invalid.
+    InvalidAck,
+    /// Coexistence rejected the transmission.
+    Coexist,
+    /// The security configuration is invalid.
+    Security,
+}
+
+/// Receive metadata (`esp_ieee802154_frame_info_t`).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Ieee802154FrameInfo {
+    /// The frame was acknowledged with the pending bit set.
+    pub pending: bool,
+    /// The upper layer holds the frame until `receive_handle_done`.
+    pub process: bool,
+    /// Receive channel, zero for a frame shorter than three bytes.
+    pub channel: u8,
+    /// RSSI in dBm.
+    pub rssi: i8,
+    /// Link quality indicator.
+    pub lqi: u8,
+    /// Microsecond timestamp of the SFD.
+    pub timestamp: u64,
+    /// The multi-PAN interface the frame addresses, `None` for a broadcast
+    /// or unmatched frame (`ESP_IEEE802154_MULTIPAN_MAX`). Without multi-PAN
+    /// it stays interface zero.
+    pub mpf_index: Option<Ieee802154MultipanIndex>,
+}
+
+impl Default for Ieee802154FrameInfo {
+    /// The zeroed vendor frame information: interface zero.
+    fn default() -> Self {
+        Self {
+            pending: false,
+            process: false,
+            channel: 0,
+            rssi: 0,
+            lqi: 0,
+            timestamp: 0,
+            mpf_index: Some(Ieee802154MultipanIndex::CONTEXT0),
+        }
+    }
+}
+
+/// The multi-PAN build configuration (`CONFIG_IEEE802154_MULTI_PAN_ENABLE`
+/// and `CONFIG_IEEE802154_INTERFACE_NUM`).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Ieee802154Interfaces(u8);
+
+impl Ieee802154Interfaces {
+    const SINGLE: Self = Self(1);
+    /// Multi-PAN with `count` interfaces, one through four.
+    pub const fn new(count: u8) -> Option<Self> {
+        if count >= 1 && count <= Ieee802154MultipanIndex::COUNT {
+            Some(Self(count))
+        } else {
+            None
+        }
+    }
+
+    /// The interface count.
+    pub const fn count(self) -> u8 {
+        self.0
+    }
+
+    fn indices(self) -> impl Iterator<Item = Ieee802154MultipanIndex> {
+        Ieee802154MultipanIndex::ALL
+            .into_iter()
+            .take(usize::from(self.0))
+    }
+}
+
+/// A receive-ring slot the upper layer holds until
+/// [`Ieee802154Engine::receive_handle_done`].
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Ieee802154RxSlot(RxIndex);
+
+impl Ieee802154RxSlot {
+    /// The ring index.
+    pub const fn index(self) -> usize {
+        self.0.value() as usize
+    }
+}
+
+/// A received ACK reported with its transmit completion.
+#[derive(Clone, Copy, Debug)]
+pub struct Ieee802154ReceivedAck<'frame> {
+    /// Ring slot holding the ACK.
+    pub slot: Ieee802154RxSlot,
+    /// The ACK image `[PHR, PSDU...]`.
+    pub frame: &'frame [u8; FRAME_SIZE],
+    /// ACK metadata.
+    pub info: &'frame Ieee802154FrameInfo,
+}
+
+/// Upper-layer notifications and platform services, invoked inside the
+/// engine's critical section (`esp_ieee802154_event.c` and `esp_timer`).
+pub trait Ieee802154Environment {
+    /// Notify the coexistence owner that arbitration interrupted TX or its ACK.
+    /// SOURCE: ESP-IDF 4d80c1b2, esp_ieee802154_dev.c,
+    /// `isr_handle_tx_ack_phase_rx_abort` and `isr_handle_tx_abort`.
+    /// Only software coexistence calls it.
+    fn coexistence_break(&mut self);
+    /// A secured ACK returned by the generator failed header validation.
+    /// The operation is stopped and the received frame is delivered without
+    /// an ACK; the environment owns this typed diagnostic, without reset.
+    fn enhanced_ack_security_failed(&mut self, error: Ieee802154SecurityFrameError);
+    /// `esp_timer_get_time` in microseconds.
+    fn now_micros(&mut self) -> u64;
+    /// `esp_ieee802154_receive_done`.
+    fn receive_done(
+        &mut self,
+        slot: Ieee802154RxSlot,
+        frame: &[u8; FRAME_SIZE],
+        info: &Ieee802154FrameInfo,
+    );
+    /// `esp_ieee802154_receive_sfd_done`.
+    fn receive_sfd_done(&mut self);
+    /// `esp_ieee802154_transmit_done`.
+    fn transmit_done(&mut self, frame: &[u8; FRAME_SIZE], ack: Option<Ieee802154ReceivedAck<'_>>);
+    /// `esp_ieee802154_transmit_failed`.
+    fn transmit_failed(&mut self, frame: &[u8; FRAME_SIZE], error: Ieee802154TxError);
+    /// `esp_ieee802154_transmit_sfd_done`: the frame whose SFD went out,
+    /// which the upper layer may still edit in place, as ESP-IDF's
+    /// OpenThread port writes the CSL IE phase; the engine writes the
+    /// changed bytes back into the transmitted frame.
+    fn transmit_sfd_done(&mut self, frame: &mut [u8; FRAME_SIZE]);
+    /// `esp_ieee802154_energy_detect_done` in dBm.
+    fn energy_detect_done(&mut self, power: i8);
+    /// `esp_ieee802154_cca_done`.
+    fn cca_done(&mut self, busy: bool);
+    /// `esp_ieee802154_ed_failed` with the receive status.
+    fn ed_failed(&mut self, status: Ieee802154RxStatus);
+    /// `esp_ieee802154_receive_at_done`.
+    fn receive_at_done(&mut self);
+    /// `esp_ieee802154_enh_ack_generator`: build the enhanced ACK for
+    /// `frame` into `ack`.
+    fn generate_enhanced_ack(
+        &mut self,
+        frame: &[u8; FRAME_SIZE],
+        info: &Ieee802154FrameInfo,
+        ack: &mut [u8; FRAME_SIZE],
+    ) -> Ieee802154EnhancedAck;
+}
+
+/// Outcome of [`Ieee802154Environment::generate_enhanced_ack`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Ieee802154EnhancedAck {
+    /// No ACK: the frame is delivered without one.
+    Refused,
+    /// An unsecured ACK was generated.
+    Generated,
+    /// A secured ACK was generated with its frame counter; the engine
+    /// configures transmit security with `key` and the interface's extended
+    /// address, as ESP-IDF's OpenThread port does from its generator
+    /// (`esp_ieee802154_get_extended_address`,
+    /// `esp_ieee802154_set_transmit_security`).
+    Secured {
+        /// The AES-128 key of the ACK's key index.
+        key: [u8; 16],
+    },
+}
+
+/// A transmit request refused before new DMA publication or completion notification.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Ieee802154FrameImageError {
+    /// Empty or oversized DMA frame image.
+    InvalidImage,
+    /// Diagnostic counting refused before transmit work or notifications.
+    Statistics(statistics::StatisticsOverflow),
+}
+
+/// A refused transmit-security configuration; no security register was written.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Ieee802154SecurityFrameError {
+    /// The frame does not enable security.
+    SecurityDisabled,
+    /// Address, auxiliary security, IE or command bytes exceed the MAC extent.
+    MalformedHeader,
+}
+
+/// Invalid Multi-PAN API input; no configuration write or operation change occurs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MultipanError {
+    /// The selected interface is absent from this engine configuration.
+    Interface {
+        /// Requested interface.
+        index: Ieee802154MultipanIndex,
+        /// Configured interface count.
+        count: u8,
+    },
+    /// The enable state includes an unconfigured interface.
+    Enable {
+        /// Requested enable state.
+        enable: Ieee802154MultipanEnableState,
+        /// Configured interface count.
+        count: u8,
+    },
+}
+
+/// A slot outside the receive ring (`ieee802154_receive_handle_done` failure).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Ieee802154SlotError;
+
+/// Which buffer `s_tx_frame` points to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TxSource {
+    Frame,
+    EnhancedAck,
+}
+
+/// A pending timer callback (`ieee802154_timer*_set_callback`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TimerAction {
+    StartReceiveAt { stop_time: u32 },
+    FinishReceiveAt,
+}
+
+const STUB: RxIndex = RxIndex::Stub;
+
+fn event_mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
+    events
+        .iter()
+        .fold(Ieee802154EventMask::NONE, |mask, event| {
+            mask.union(event.mask())
+        })
+}
+
+/// Select a seven-bit PHR-relative byte from the complete 128-byte DMA image.
+/// Every arm uses a fixed in-bounds position. Masking makes the last arm
+/// exactly position 127; no runtime bounds check or missing-byte path remains.
+fn phr_byte(image: &[u8; FRAME_SIZE], position: u8) -> u8 {
+    const {
+        if FRAME_SIZE != 128 {
+            panic!("seven-bit PHR metadata requires a 128-byte DMA image");
+        }
+    }
+    macro_rules! select {
+        ($($position:literal),* $(,)?) => {
+            match position & 0x7f {
+                $($position => image[$position],)*
+                _ => image[127],
+            }
+        };
+    }
+    select!(
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+        48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
+        71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93,
+        94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
+        113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126,
+    )
+}
+
+fn frame_metadata(image: &[u8; FRAME_SIZE], length: u8) -> (i8, u8) {
+    // rx_frame_info_update admits only PHR lengths 3..=127. RSSI precedes
+    // LQI, so both positions are inside the same complete DMA image.
+    (
+        phr_byte(image, length.wrapping_sub(1)) as i8,
+        phr_byte(image, length),
+    )
+}
+
+/// Hardware and environment borrowed for one engine entry.
+struct Cx<'a, L: ?Sized, E: ?Sized> {
+    ll: &'a mut L,
+    env: &'a mut E,
+}
+
+/// The ported MAC engine.
+pub struct Ieee802154Engine<'storage, Address: Copy + Eq> {
+    addresses: Ieee802154DmaAddresses<Address>,
+    buffers: &'storage mut Ieee802154EngineBuffers,
+    levels: Ieee802154TxPowerLevels<'static>,
+    pib: Ieee802154Pib,
+    settings: settings::RetainedSettings,
+    /// The defaults used at construction.
+    defaults: Ieee802154PibDefaults,
+    pending_tables: [PendingTable<PENDING_TABLE_SIZE>; Ieee802154MultipanIndex::COUNT as usize],
+    multipan: Option<Ieee802154Interfaces>,
+    rx_when_idle_mask: u8,
+    state: Ieee802154State,
+    tx: TxSource,
+    rx_info: [Ieee802154FrameInfo; RX_BUFFER_COUNT + 1],
+    rx_index: RxIndex,
+    recent_rx_info_index: RxIndex,
+    needs_next_operation: bool,
+    pending_rx_stop: bool,
+    rx_armed: bool,
+    // Independent of the public software state: disable/enable/mac_init do
+    // not stop an operation already using the MAC and its DMA storage.
+    operation_active: bool,
+    /// TX/RX statistics while collected (`CONFIG_IEEE802154_TXRX_STATISTIC`).
+    statistics: Option<Ieee802154TxRxStatistics>,
+    timer0: Option<()>,
+    timer1: Option<TimerAction>,
+    coexistence: Ieee802154Coexistence,
+}
+
+impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
+    /// A disabled engine over exclusively borrowed buffers. `levels` is the
+    /// transmit-power provider the vendor reads through
+    /// `bt_bb_get_tx_pwr_table`; `start` is the permitted channel and power
+    /// ceiling used at construction.
+    pub fn new(
+        buffers: &'storage mut Ieee802154EngineBuffers,
+        addresses: Ieee802154DmaAddresses<Address>,
+        levels: Ieee802154TxPowerLevels<'static>,
+        defaults: Ieee802154PibDefaults,
+        start: Ieee802154Permit,
+    ) -> Self {
+        Self {
+            addresses,
+            buffers,
+            levels,
+            pib: Ieee802154Pib::new(defaults, levels, start),
+            settings: settings::RetainedSettings::new(),
+            defaults,
+            pending_tables: [const { PendingTable::new() };
+                Ieee802154MultipanIndex::COUNT as usize],
+            multipan: None,
+            rx_when_idle_mask: 0,
+            state: Ieee802154State::Disable,
+            tx: TxSource::Frame,
+            rx_info: [Ieee802154FrameInfo::default(); RX_BUFFER_COUNT + 1],
+            rx_index: RxIndex::Slot0,
+            recent_rx_info_index: RxIndex::Slot0,
+            needs_next_operation: false,
+            pending_rx_stop: false,
+            rx_armed: false,
+            operation_active: false,
+            statistics: None,
+            timer0: None,
+            timer1: None,
+            coexistence: Ieee802154Coexistence::Disabled,
+        }
+    }
+
+    /// A disabled engine built with multi-PAN and `interfaces` interfaces.
+    pub fn new_multipan(
+        buffers: &'storage mut Ieee802154EngineBuffers,
+        addresses: Ieee802154DmaAddresses<Address>,
+        levels: Ieee802154TxPowerLevels<'static>,
+        defaults: Ieee802154PibDefaults,
+        interfaces: Ieee802154Interfaces,
+        start: Ieee802154Permit,
+    ) -> Self {
+        let mut engine = Self::new(buffers, addresses, levels, defaults, start);
+        engine.multipan = Some(interfaces);
+        engine
+    }
+
+    /// Take part in software coexistence with `coexistence`, or leave it.
+    ///
+    /// The priorities apply from the next scene switch, as the vendor reads
+    /// the shared table at each `IEEE802154_SET_TXRX_PTI`; the ACK priority
+    /// applies from the next [`Self::mac_init`], where the vendor sets it.
+    pub fn set_coexistence(&mut self, coexistence: Ieee802154Coexistence) {
+        self.coexistence = coexistence;
+    }
+
+    /// The defaults used at construction.
+    pub const fn pib_defaults(&self) -> Ieee802154PibDefaults {
+        self.defaults
+    }
+
+    /// The transmit-power provider levels.
+    pub const fn tx_power_levels(&self) -> Ieee802154TxPowerLevels<'static> {
+        self.levels
+    }
+
+    /// The coexistence the engine publishes.
+    pub const fn coexistence(&self) -> Ieee802154Coexistence {
+        self.coexistence
+    }
+
+    /// The multi-PAN interfaces, `None` without multi-PAN.
+    pub const fn multipan(&self) -> Option<Ieee802154Interfaces> {
+        self.multipan
+    }
+
+    fn validate_interface(&self, index: Ieee802154MultipanIndex) -> Result<(), MultipanError> {
+        let count = self.multipan.map_or(1, Ieee802154Interfaces::count);
+        if index.value() < count {
+            Ok(())
+        } else {
+            Err(MultipanError::Interface { index, count })
+        }
+    }
+
+    /// `ieee802154_get_state`.
+    pub const fn state(&self) -> Ieee802154State {
+        self.state
+    }
+
+    /// The retained PAN information base, for inspection.
+    pub const fn pib(&self) -> &Ieee802154Pib {
+        &self.pib
+    }
+
+    /// Replace PIB settings in this engine entry. Receive-side changes apply
+    /// at once while listening without a frame in progress, otherwise at
+    /// the frame/ACK boundary. Channel, power and CCA wait for operation start.
+    pub fn update_pib<L, E>(
+        &mut self,
+        ll: &mut L,
+        env: &mut E,
+        update: impl FnOnce(&mut Ieee802154Pib),
+    ) where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        update(&mut self.pib);
+        self.publish_rx_when_safe(&mut Cx { ll, env });
+    }
+
+    fn publish_rx_when_safe<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        if !self.pib.is_rx_pending() {
+            return;
+        }
+        match self.state {
+            Ieee802154State::Idle | Ieee802154State::Sleep => self.pib.update_rx(cx.ll),
+            Ieee802154State::Rx => {
+                // This is the same hardware after-SFD test used by transmit
+                // admission and the receive-window end. A latched event still
+                // belongs to its frame even if the hardware already left RX.
+                if cx.ll.is_current_rx_frame() {
+                    return;
+                }
+                let events = cx.ll.events();
+                if [
+                    Ieee802154Event::RxSfdDone,
+                    Ieee802154Event::RxDone,
+                    Ieee802154Event::AckTxDone,
+                    Ieee802154Event::RxAbort,
+                    Ieee802154Event::Timer1Overflow,
+                ]
+                .iter()
+                .any(|event| events.contains(*event))
+                {
+                    return;
+                }
+                if self.rx_armed {
+                    // No RX_START before a scheduled window's timer fires.
+                    self.pib.update_rx(cx.ll);
+                } else {
+                    self.stop_rx(cx);
+                    self.enable_rx(cx);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Set one configured interface's pending mode and publish it at the
+    /// same safe RX point as the other receive-side PIB values.
+    pub fn set_pending_mode<L, E>(
+        &mut self,
+        ll: &mut L,
+        env: &mut E,
+        index: Ieee802154MultipanIndex,
+        mode: oer_protocols_ieee802154_port::AutoPendingMode,
+    ) -> Result<(), MultipanError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.validate_interface(index)?;
+        self.update_pib(ll, env, |pib| pib.set_pending_mode(index, mode));
+        Ok(())
+    }
+
+    /// The frame-pending table of interface zero.
+    pub fn pending_table(&mut self) -> &mut PendingTable<PENDING_TABLE_SIZE> {
+        Ieee802154MultipanIndex::CONTEXT0.select_mut(&mut self.pending_tables)
+    }
+
+    /// The frame-pending table of one interface
+    /// (`esp_ieee802154_multipan_*_pending_*`).
+    pub fn pending_table_for(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<&mut PendingTable<PENDING_TABLE_SIZE>, MultipanError> {
+        self.validate_interface(index)?;
+        Ok(index.select_mut(&mut self.pending_tables))
+    }
+
+    /// `esp_ieee802154_set_multipan_panid`.
+    pub fn set_multipan_panid<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        index: Ieee802154MultipanIndex,
+        panid: u16,
+    ) -> Result<(), MultipanError> {
+        self.validate_interface(index)?;
+        self.settings.identity(ll, index).panid = panid;
+        ll.set_multipan_panid(index, panid);
+        Ok(())
+    }
+
+    /// `esp_ieee802154_get_multipan_panid`.
+    pub fn multipan_panid<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<u16, MultipanError> {
+        self.validate_interface(index)?;
+        Ok(ll.multipan_panid(index))
+    }
+
+    /// `esp_ieee802154_set_multipan_short_address`.
+    pub fn set_multipan_short_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        index: Ieee802154MultipanIndex,
+        address: u16,
+    ) -> Result<(), MultipanError> {
+        self.validate_interface(index)?;
+        self.settings.identity(ll, index).short_address = address;
+        ll.set_multipan_short_address(index, address);
+        Ok(())
+    }
+
+    /// `esp_ieee802154_get_multipan_short_address`.
+    pub fn multipan_short_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<u16, MultipanError> {
+        self.validate_interface(index)?;
+        Ok(ll.multipan_short_address(index))
+    }
+
+    /// `esp_ieee802154_set_multipan_extended_address` in frame byte order.
+    pub fn set_multipan_extended_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        index: Ieee802154MultipanIndex,
+        address: [u8; 8],
+    ) -> Result<(), MultipanError> {
+        self.validate_interface(index)?;
+        self.settings.identity(ll, index).extended_address = address;
+        ll.set_multipan_extended_address(index, address);
+        Ok(())
+    }
+
+    /// `esp_ieee802154_get_multipan_extended_address`.
+    pub fn multipan_extended_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<[u8; 8], MultipanError> {
+        self.validate_interface(index)?;
+        Ok(ll.multipan_extended_address(index))
+    }
+
+    /// `esp_ieee802154_set_multipan_enable`: the enabled interfaces must
+    /// exist.
+    pub fn set_multipan_enable<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        enable: Ieee802154MultipanEnableState,
+    ) -> Result<(), MultipanError> {
+        self.validate_enable(enable)?;
+        self.settings.enable = Some(enable);
+        ll.set_multipan_enable(enable);
+        Ok(())
+    }
+
+    /// `esp_ieee802154_get_multipan_enable`.
+    pub fn multipan_enable<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+    ) -> Ieee802154MultipanEnableState {
+        ll.multipan_enable()
+    }
+
+    fn validate_enable(&self, enable: Ieee802154MultipanEnableState) -> Result<(), MultipanError> {
+        let count = self.multipan.map_or(1, Ieee802154Interfaces::count);
+        if Ieee802154MultipanIndex::ALL
+            .into_iter()
+            .skip(usize::from(count))
+            .all(|index| !enable.contains(index))
+        {
+            Ok(())
+        } else {
+            Err(MultipanError::Enable { enable, count })
+        }
+    }
+
+    /// `esp_ieee802154_multipan_receive`: enable `index`, then receive.
+    pub fn multipan_receive<L, E>(
+        &mut self,
+        ll: &mut L,
+        env: &mut E,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<(), MultipanError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.validate_interface(index)?;
+        let enable = ll.multipan_enable().with(index);
+        self.validate_enable(enable)?;
+        self.settings.enable = Some(enable);
+        ll.set_multipan_enable(enable);
+        self.receive(ll, env);
+        Ok(())
+    }
+
+    /// `esp_ieee802154_multipan_sleep`: disable `index`; the last disabled
+    /// interface puts the radio to sleep.
+    pub fn multipan_sleep<L, E>(
+        &mut self,
+        ll: &mut L,
+        env: &mut E,
+        index: Ieee802154MultipanIndex,
+    ) -> Result<(), MultipanError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.validate_interface(index)?;
+        let enable = ll.multipan_enable().without(index);
+        self.validate_enable(enable)?;
+        self.settings.enable = Some(enable);
+        ll.set_multipan_enable(enable);
+        if enable == Ieee802154MultipanEnableState::NONE {
+            self.sleep(ll, env);
+        }
+        Ok(())
+    }
+
+    /// `esp_ieee802154_multipan_set_rx_when_idle`: receive when idle while
+    /// any interface asks for it.
+    pub fn multipan_set_rx_when_idle(
+        &mut self,
+        index: Ieee802154MultipanIndex,
+        enable: bool,
+    ) -> Result<(), MultipanError> {
+        self.validate_interface(index)?;
+        if enable {
+            self.rx_when_idle_mask |= 1 << index.value();
+            self.pib.set_rx_when_idle(true);
+        } else {
+            self.rx_when_idle_mask &= !(1 << index.value());
+            if self.rx_when_idle_mask == 0 {
+                self.pib.set_rx_when_idle(false);
+            }
+        }
+        Ok(())
+    }
+
+    /// `esp_ieee802154_set_panid`: PAN ID of interface zero.
+    pub fn set_panid<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        panid: u16,
+    ) {
+        self.settings
+            .identity(ll, Ieee802154MultipanIndex::CONTEXT0)
+            .panid = panid;
+        ll.set_multipan_panid(Ieee802154MultipanIndex::CONTEXT0, panid);
+    }
+
+    /// `esp_ieee802154_get_panid`.
+    pub fn panid<L: Ieee802154LowLevel<Address = Address> + ?Sized>(&mut self, ll: &mut L) -> u16 {
+        ll.multipan_panid(Ieee802154MultipanIndex::CONTEXT0)
+    }
+
+    /// `esp_ieee802154_set_short_address` of interface zero.
+    pub fn set_short_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        address: u16,
+    ) {
+        self.settings
+            .identity(ll, Ieee802154MultipanIndex::CONTEXT0)
+            .short_address = address;
+        ll.set_multipan_short_address(Ieee802154MultipanIndex::CONTEXT0, address);
+    }
+
+    /// `esp_ieee802154_get_short_address`.
+    pub fn short_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+    ) -> u16 {
+        ll.multipan_short_address(Ieee802154MultipanIndex::CONTEXT0)
+    }
+
+    /// `esp_ieee802154_set_extended_address` of interface zero, in frame
+    /// (little-endian) byte order.
+    pub fn set_extended_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        address: [u8; 8],
+    ) {
+        self.settings
+            .identity(ll, Ieee802154MultipanIndex::CONTEXT0)
+            .extended_address = address;
+        ll.set_multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0, address);
+    }
+
+    /// `esp_ieee802154_get_extended_address`.
+    pub fn extended_address<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+    ) -> [u8; 8] {
+        ll.multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0)
+    }
+
+    /// `esp_ieee802154_set_ack_timeout`: microseconds rounded up to the
+    /// 16-microsecond unit, validated before the call.
+    pub fn set_ack_timeout<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        timeout: oer_chips_family_radio_ieee802154_values::Ieee802154AckTimeout,
+    ) {
+        let units = timeout.units();
+        self.settings.ack_timeout = Some(units);
+        ll.set_ack_timeout(units);
+    }
+
+    /// `esp_ieee802154_get_ack_timeout` in microseconds.
+    pub fn ack_timeout<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+    ) -> u32 {
+        oer_chips_family_radio_ieee802154_values::Ieee802154AckTimeout::from_units(ll.ack_timeout())
+            .effective_microseconds()
+    }
+
+    /// Arm security only after the complete secured header has been validated.
+    /// Refusal leaves every security register unchanged.
+    /// SOURCE: ESP-IDF 4d80c1b2, `ieee802154_transmit_security_config`.
+    pub fn set_transmit_security<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
+        &mut self,
+        ll: &mut L,
+        frame: &[u8],
+        key: &[u8; 16],
+        address: &[u8; 8],
+    ) -> Result<(), Ieee802154SecurityFrameError> {
+        let frame = PhrFrame::new(frame);
+        let offset = frame
+            .security_payload_offset()
+            .ok_or(Ieee802154SecurityFrameError::MalformedHeader)?;
+        if !frame.security_enabled() {
+            return Err(Ieee802154SecurityFrameError::SecurityDisabled);
+        }
+        ll.set_security_address(address);
+        ll.set_security_key(key);
+        ll.set_security_offset(offset);
+        ll.set_transmit_security(true);
+        Ok(())
+    }
+
+    /// `ieee802154_get_recent_lqi`.
+    pub fn recent_lqi(&self) -> u8 {
+        self.recent_rx_info_index.select(&self.rx_info).lqi
+    }
+
+    /// The image and metadata of a slot the upper layer holds.
+    pub fn rx_frame(&self, slot: Ieee802154RxSlot) -> ([u8; FRAME_SIZE], Ieee802154FrameInfo) {
+        (
+            slot.0.select(self.buffers.rx_frames()).read(),
+            *slot.0.select(&self.rx_info),
+        )
+    }
+
+    /// Model a DMA write into the buffer published at `address`; host models
+    /// have no MAC to write received frames.
+    #[cfg(not(target_arch = "riscv32"))]
+    pub fn model_dma_write(&mut self, address: Address, image: &[u8]) -> bool {
+        match self.addresses.frame_at_mut(self.buffers, address) {
+            Some(frame) => {
+                frame.write(image);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The receive slot whose buffer is published at `address`, for host
+    /// models that release the frame they delivered.
+    #[cfg(not(target_arch = "riscv32"))]
+    pub fn model_rx_slot(&self, address: Address) -> Option<Ieee802154RxSlot> {
+        self.addresses
+            .rx
+            .iter()
+            .take(RX_BUFFER_COUNT)
+            .position(|candidate| *candidate == address)
+            .and_then(|index| RxIndex::from_raw(index as u8))
+            .map(Ieee802154RxSlot)
+    }
+
+    /// The address the engine publishes for its transmit buffer, for host
+    /// models that label DMA addresses.
+    #[cfg(not(target_arch = "riscv32"))]
+    pub fn model_transmit_address(&self) -> Address {
+        self.addresses.tx
+    }
+
+    /// The image of the buffer published at `address`, for host models that
+    /// read what the MAC would transmit.
+    #[cfg(not(target_arch = "riscv32"))]
+    pub fn model_dma_read(&mut self, address: Address) -> Option<[u8; FRAME_SIZE]> {
+        self.addresses
+            .frame_at(self.buffers, address)
+            .map(|frame| frame.read())
+    }
+
+    fn set_state(&mut self, to: Ieee802154State) {
+        if !matches!(
+            to,
+            Ieee802154State::Disable | Ieee802154State::Idle | Ieee802154State::Sleep
+        ) {
+            self.operation_active = true;
+        }
+        self.state = to;
+    }
+
+    fn quiescent(&self) -> bool {
+        !self.operation_active
+            && matches!(
+                self.state,
+                Ieee802154State::Disable | Ieee802154State::Idle | Ieee802154State::Sleep
+            )
+            && !self.rx_armed
+            && self.timer0.is_none()
+            && self.timer1.is_none()
+            && !self.pending_rx_stop
+            && !self.needs_next_operation
+            && !self.rx_info.iter().any(|info| info.process)
+    }
+
+    /// `ieee802154_enable` after the modem clock is enabled.
+    pub fn enable(&mut self) {
+        self.set_state(Ieee802154State::Idle);
+    }
+
+    /// `ieee802154_disable` after the modem clock is disabled.
+    pub fn disable(&mut self) {
+        self.set_state(Ieee802154State::Disable);
+    }
+
+    /// Initialize the MAC after reset, restoring retained configuration and
+    /// clearing the receive ring. Defaults are chosen only at construction.
+    pub fn mac_init<L: Ieee802154LowLevel<Address = Address> + ?Sized>(&mut self, ll: &mut L) {
+        self.clear_txrx_statistics();
+        ll::mac_init_registers(ll, &self.coexistence);
+        self.settings
+            .restore(ll, self.multipan.unwrap_or(Ieee802154Interfaces::SINGLE));
+        self.pib.invalidate();
+        self.pib.update(ll, self.levels);
+        self.rx_buffer_clear();
+        self.rx_armed = false;
+        self.set_state(Ieee802154State::Idle);
+    }
+
+    /// Collect TX/RX statistics, as the vendor's debug build with
+    /// `CONFIG_IEEE802154_TXRX_STATISTIC` does, or stop collecting them.
+    /// Collection starts from zero; each interrupt then drains the MAC's
+    /// diagnostic counters.
+    pub fn set_txrx_statistics(&mut self, collect: bool) {
+        self.statistics = collect.then(Ieee802154TxRxStatistics::default);
+    }
+
+    /// The TX/RX statistics, while collected.
+    pub const fn txrx_statistics(&self) -> Option<Ieee802154TxRxStatistics> {
+        self.statistics
+    }
+
+    /// `ieee802154_txrx_statistic_clear`.
+    pub fn clear_txrx_statistics(&mut self) {
+        if let Some(statistics) = self.statistics.as_mut() {
+            *statistics = Ieee802154TxRxStatistics::default();
+        }
+    }
+
+    /// Return the MAC's PTIs to the disabled foundation image before the
+    /// owners leave the operational epoch, as interrupt teardown returns the
+    /// event enables. The vendor leaves them published; the MAC stops
+    /// requesting the radio once its clocks are released either way.
+    pub fn mac_deinit<L: Ieee802154LowLevel<Address = Address> + ?Sized>(&mut self, ll: &mut L) {
+        if matches!(self.coexistence, Ieee802154Coexistence::Software(_)) {
+            ll.disable_coex();
+        }
+    }
+
+    fn rx_buffer_clear(&mut self) {
+        for frame in self.buffers.rx_frames_mut() {
+            frame.write(&[]);
+        }
+        self.rx_info = [Ieee802154FrameInfo::default(); RX_BUFFER_COUNT + 1];
+        self.rx_index = RxIndex::Slot0;
+        self.recent_rx_info_index = RxIndex::Slot0;
+        self.needs_next_operation = false;
+        self.pending_rx_stop = false;
+    }
+
+    /// `ieee802154_receive_handle_done`: release a slot to the ring.
+    pub fn receive_handle_done(
+        &mut self,
+        slot: Ieee802154RxSlot,
+    ) -> Result<(), Ieee802154SlotError> {
+        if slot.index() >= RX_BUFFER_COUNT {
+            return Err(Ieee802154SlotError);
+        }
+        slot.0.select_mut(&mut self.rx_info).process = false;
+        Ok(())
+    }
+
+    /// `ieee802154_transmit`: `frame` is a `[PHR, PSDU...]` image. A frame
+    /// arriving while a received frame or its ACK is in flight fails at
+    /// once.
+    pub fn transmit<L, E>(
+        &mut self,
+        ll: &mut L,
+        env: &mut E,
+        frame: &[u8],
+        cca: bool,
+    ) -> Result<(), Ieee802154FrameImageError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        if frame.is_empty() || frame.len() > FRAME_SIZE {
+            return Err(Ieee802154FrameImageError::InvalidImage);
+        }
+        let mut cx = Cx { ll, env };
+        if (self.state == Ieee802154State::Rx && cx.ll.is_current_rx_frame())
+            || self.state == Ieee802154State::TxAck
+            || self.state == Ieee802154State::TxEnhAck
+        {
+            let error = if cca {
+                Ieee802154TxError::CcaBusy
+            } else {
+                Ieee802154TxError::Abort
+            };
+            if let Some(statistics) = self.statistics.as_mut() {
+                statistics::add(
+                    &mut statistics.tx.deferred_nums,
+                    1,
+                    StatisticsCounter::Deferred,
+                    0,
+                )
+                .map_err(Ieee802154FrameImageError::Statistics)?;
+            }
+            let mut image = [0; FRAME_SIZE];
+            for (destination, source) in image.iter_mut().zip(frame) {
+                *destination = *source;
+            }
+            cx.env.transmit_failed(&image, error);
+            ll::sec_clear(cx.ll);
+            return Ok(());
+        }
+        self.tx_init(&mut cx, frame)?;
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Tx);
+        if cca {
+            cx.ll.set_ed_duration(CCA_DETECTION_TIME);
+            cx.ll
+                .set_command(Ieee802154MacCommand::ClearChannelThenTransmit);
+            self.set_state(Ieee802154State::TxCca);
+        } else {
+            cx.ll.set_command(Ieee802154MacCommand::Transmit);
+            self.set_state(Ieee802154State::Tx);
+        }
+        Ok(())
+    }
+
+    /// `ieee802154_transmit_at`: start the transmission when TIMER0 reaches
+    /// `time` minus the ramp-up, through ETM channel zero.
+    pub fn transmit_at<L, E>(
+        &mut self,
+        ll: &mut L,
+        env: &mut E,
+        frame: &[u8],
+        cca: bool,
+        time: u32,
+    ) -> Result<(), Ieee802154FrameImageError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        if frame.is_empty() || frame.len() > FRAME_SIZE {
+            return Err(Ieee802154FrameImageError::InvalidImage);
+        }
+        let mut cx = Cx { ll, env };
+        self.tx_init(&mut cx, frame)?;
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::TxAt);
+        if cca {
+            cx.ll.set_ed_duration(CCA_DETECTION_TIME);
+        }
+        self.set_state(if cca {
+            Ieee802154State::TxCca
+        } else {
+            Ieee802154State::Tx
+        });
+        let (route, rampup) = if cca {
+            (
+                Ieee802154EtmRoute::Timer0ToCcaTx,
+                ED_TRIG_TX_RAMPUP_MICROSECONDS,
+            )
+        } else {
+            (Ieee802154EtmRoute::Timer0ToTxStart, TX_RAMPUP_MICROSECONDS)
+        };
+        ll::etm_set_event_task(cx.ll, route);
+        self.timer_fire_at(&mut cx, Ieee802154Timer::Timer0, time.wrapping_sub(rampup));
+        Ok(())
+    }
+
+    /// `ieee802154_receive`: keep an ongoing reception unless the PIB changed.
+    pub fn receive<L, E>(&mut self, ll: &mut L, env: &mut E)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        if matches!(self.state, Ieee802154State::Rx | Ieee802154State::TxAck)
+            && !self.pib.is_pending()
+        {
+            return;
+        }
+        let mut cx = Cx { ll, env };
+        self.rx_init(&mut cx);
+        self.enable_rx(&mut cx);
+    }
+
+    /// `ieee802154_receive_at`: receive from `time`, for `duration`
+    /// microseconds when nonzero, starting through ETM channel one. Returns
+    /// `false`, leaving the current operation, for a window that already
+    /// ended, where the vendor returns `ESP_OK` without starting it.
+    pub fn receive_at<L, E>(&mut self, ll: &mut L, env: &mut E, time: u32, duration: u32) -> bool
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let mut cx = Cx { ll, env };
+        if duration != 0 {
+            let now = cx.env.now_micros() as u32;
+            if ll::target_time_expired(time.wrapping_add(duration), now) {
+                return false;
+            }
+        }
+        self.rx_init(&mut cx);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::RxAt);
+        self.set_next_rx_buffer(&mut cx);
+        self.set_state(Ieee802154State::Rx);
+        self.rx_armed = true;
+        ll::etm_set_event_task(cx.ll, Ieee802154EtmRoute::Timer1ToRxStart);
+        if duration != 0 {
+            self.timer1 = Some(TimerAction::StartReceiveAt {
+                stop_time: time.wrapping_add(duration),
+            });
+        }
+        self.timer_fire_at(
+            &mut cx,
+            Ieee802154Timer::Timer1,
+            time.wrapping_sub(RX_RAMPUP_MICROSECONDS),
+        );
+        true
+    }
+
+    /// `ieee802154_sleep`.
+    pub fn sleep<L, E>(&mut self, ll: &mut L, env: &mut E)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let mut cx = Cx { ll, env };
+        self.enter_sleep(&mut cx);
+    }
+
+    /// `ieee802154_energy_detect` for `duration` 16-microsecond symbols.
+    pub fn energy_detect<L, E>(&mut self, ll: &mut L, env: &mut E, duration: u16)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let mut cx = Cx { ll, env };
+        self.stop_current_operation(&mut cx);
+        self.pib.update(cx.ll, self.levels);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Rx);
+        Self::start_ed(&mut cx, duration);
+        self.set_state(Ieee802154State::Ed);
+    }
+
+    /// `ieee802154_cca`.
+    pub fn cca<L, E>(&mut self, ll: &mut L, env: &mut E)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let mut cx = Cx { ll, env };
+        self.stop_current_operation(&mut cx);
+        self.pib.update(cx.ll, self.levels);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Rx);
+        Self::start_ed(&mut cx, CCA_DETECTION_TIME);
+        self.set_state(Ieee802154State::Cca);
+    }
+
+    /// `ieee802154_isr`: sample and clear the events, handle them in the
+    /// vendor order and start the next operation.
+    ///
+    /// # Errors
+    /// Unsupported events retain the complete observation and entry state before
+    /// acknowledgement. A service invariant retains the actual acknowledged and
+    /// completed prefix. Quarantine the MAC and storage without replay or rollback;
+    /// the image owns the terminal record/reset policy.
+    pub fn isr<L, E>(&mut self, ll: &mut L, env: &mut E) -> Result<(), Fault>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let mut cx = Cx { ll, env };
+        let observation = cx.ll.events();
+        let events = observation
+            .classification()
+            .map_err(|_| Fault::UnhandledEvents {
+                observation,
+                state: self.state,
+            })?;
+        // CLOCK_COUNT_MATCH has a name but no supported consumer. Reject it
+        // before acknowledging any lane or dispatching a simultaneous event.
+        if events.contains(Ieee802154Event::ClockCountMatch) {
+            return Err(Fault::UnhandledEvents {
+                observation,
+                state: self.state,
+            });
+        }
+        let entry_state = self.state;
+        let mut events = events;
+        let mut progress = ServiceProgress {
+            acknowledged: false,
+            completed: Ieee802154EventMask::NONE,
+            rx_abort_phase_done: false,
+            coexistence_break_notified: false,
+            statistics_completed: false,
+            stage: ServiceStage::Statistics,
+        };
+        let rx_abort_reason = cx.ll.rx_abort_reason();
+        let tx_abort_reason = cx.ll.tx_abort_reason();
+        let result = (|| -> Result<(), ServiceError> {
+            if let Some(statistics) = self.statistics.as_mut() {
+                statistics
+                    .record(cx.ll, events)
+                    .map_err(ServiceError::Statistics)?;
+                progress.statistics_completed = true;
+            }
+            cx.ll.clear_events(events);
+            progress.acknowledged = true;
+            progress.stage = ServiceStage::Dispatch;
+
+            let rx_abort = if events.contains(Ieee802154Event::RxAbort) {
+                progress.stage = ServiceStage::RxAbort;
+                let reason = self.isr_rx_phase_rx_abort(&mut cx, rx_abort_reason)?;
+                progress.rx_abort_phase_done = true;
+                progress.stage = ServiceStage::Dispatch;
+                Some(reason)
+            } else {
+                None
+            };
+            if events.contains(Ieee802154Event::RxSfdDone) {
+                if !matches!(
+                    self.state,
+                    Ieee802154State::Rx
+                        | Ieee802154State::RxAck
+                        | Ieee802154State::Tx
+                        | Ieee802154State::TxCca
+                        | Ieee802154State::TxEnhAck
+                ) {
+                    return Err(ServiceError::EventState(Ieee802154Event::RxSfdDone));
+                }
+                self.rx_index.select_mut(&mut self.rx_info).timestamp = cx.env.now_micros();
+                cx.env.receive_sfd_done();
+                progress.completed = progress.completed.with(Ieee802154Event::RxSfdDone);
+                events = events.difference(Ieee802154Event::RxSfdDone.mask());
+            }
+            if events.contains(Ieee802154Event::TxSfdDone) {
+                if !matches!(
+                    self.state,
+                    Ieee802154State::Tx
+                        | Ieee802154State::TxCca
+                        | Ieee802154State::TxEnhAck
+                        | Ieee802154State::TxAck
+                ) {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxSfdDone));
+                }
+                let original = self.tx_frame().read();
+                let mut frame = original;
+                cx.env.transmit_sfd_done(&mut frame);
+                self.tx_frame_mut().patch(&original, &frame);
+                progress.completed = progress.completed.with(Ieee802154Event::TxSfdDone);
+                events = events.difference(Ieee802154Event::TxSfdDone.mask());
+            }
+            if events.contains(Ieee802154Event::TxDone) {
+                if !matches!(self.state, Ieee802154State::Tx | Ieee802154State::TxCca) {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxDone));
+                }
+                self.isr_tx_done(&mut cx);
+                progress.completed = progress.completed.with(Ieee802154Event::TxDone);
+                events = events.difference(Ieee802154Event::TxDone.mask());
+            }
+            if events.contains(Ieee802154Event::RxDone) {
+                if self.state != Ieee802154State::Rx {
+                    return Err(ServiceError::EventState(Ieee802154Event::RxDone));
+                }
+                progress.stage = ServiceStage::RxDone;
+                self.isr_rx_done(&mut cx)?;
+                progress.stage = ServiceStage::Dispatch;
+                progress.completed = progress.completed.with(Ieee802154Event::RxDone);
+                events = events.difference(Ieee802154Event::RxDone.mask());
+            }
+            if events.contains(Ieee802154Event::AckTxDone) {
+                if !matches!(
+                    self.state,
+                    Ieee802154State::TxAck | Ieee802154State::Rx | Ieee802154State::TxEnhAck
+                ) {
+                    return Err(ServiceError::EventState(Ieee802154Event::AckTxDone));
+                }
+                ll::sec_clear(cx.ll);
+                self.receive_done(&mut cx);
+                self.needs_next_operation = true;
+                progress.completed = progress.completed.with(Ieee802154Event::AckTxDone);
+                events = events.difference(Ieee802154Event::AckTxDone.mask());
+            }
+            if events.contains(Ieee802154Event::AckRxDone) {
+                if !matches!(
+                    self.state,
+                    Ieee802154State::RxAck
+                        | Ieee802154State::Tx
+                        | Ieee802154State::TxCca
+                        | Ieee802154State::TxEnhAck
+                ) {
+                    return Err(ServiceError::EventState(Ieee802154Event::AckRxDone));
+                }
+                self.timer_stop(&mut cx, Ieee802154Timer::Timer0);
+                cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
+                cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
+                progress.stage = ServiceStage::AckRxDone;
+                self.rx_frame_info_update(&mut cx)?;
+                progress.stage = ServiceStage::Dispatch;
+                self.transmit_done(&mut cx, true);
+                self.needs_next_operation = true;
+                progress.completed = progress.completed.with(Ieee802154Event::AckRxDone);
+                events = events.difference(Ieee802154Event::AckRxDone.mask());
+            }
+            if let Some(reason) = rx_abort {
+                self.isr_tx_ack_phase_rx_abort(&mut cx, reason, &mut progress);
+                progress.stage = ServiceStage::Dispatch;
+                progress.completed = progress.completed.with(Ieee802154Event::RxAbort);
+                events = events.difference(Ieee802154Event::RxAbort.mask());
+            }
+            if events.contains(Ieee802154Event::TxAbort) {
+                progress.stage = ServiceStage::TxAbort;
+                self.isr_tx_abort(&mut cx, tx_abort_reason, &mut progress)?;
+                progress.stage = ServiceStage::Dispatch;
+                progress.completed = progress.completed.with(Ieee802154Event::TxAbort);
+                events = events.difference(Ieee802154Event::TxAbort.mask());
+            }
+            if events.contains(Ieee802154Event::EdDone) {
+                if !matches!(self.state, Ieee802154State::Ed | Ieee802154State::Cca) {
+                    return Err(ServiceError::EventState(Ieee802154Event::EdDone));
+                }
+                if self.state == Ieee802154State::Cca {
+                    let busy = cx.ll.cca_busy();
+                    cx.env.cca_done(busy);
+                } else if self.state == Ieee802154State::Ed {
+                    let power = cx.ll.ed_rss().wrapping_add(cx.ll.rssi_compensation_dbm());
+                    cx.env.energy_detect_done(power);
+                }
+                self.needs_next_operation = true;
+                progress.completed = progress.completed.with(Ieee802154Event::EdDone);
+                events = events.difference(Ieee802154Event::EdDone.mask());
+            }
+            if events.contains(Ieee802154Event::Timer0Overflow) {
+                if self.state != Ieee802154State::RxAck {
+                    return Err(ServiceError::EventState(Ieee802154Event::Timer0Overflow));
+                }
+                if self.timer0.take().is_some() {
+                    self.transmit_failed(&mut cx, Ieee802154TxError::NoAck);
+                    self.needs_next_operation = true;
+                }
+                progress.completed = progress.completed.with(Ieee802154Event::Timer0Overflow);
+                events = events.difference(Ieee802154Event::Timer0Overflow.mask());
+            }
+            if events.contains(Ieee802154Event::Timer1Overflow) {
+                self.rx_armed = false;
+                let action = self.timer1.take();
+                if let Some(action) = action {
+                    self.run_timer_action(&mut cx, action);
+                }
+                progress.completed = progress.completed.with(Ieee802154Event::Timer1Overflow);
+            }
+            if self.needs_next_operation {
+                self.next_operation(&mut cx);
+                self.needs_next_operation = false;
+            }
+            self.publish_rx_when_safe(&mut cx);
+            Ok(())
+        })();
+        result.map_err(|reason| Fault::Service {
+            reason,
+            observation,
+            entry_state,
+            state: self.state,
+            rx_abort: rx_abort_reason,
+            tx_abort: tx_abort_reason,
+            progress,
+        })
+    }
+
+    // ---- buffers and notifications -------------------------------------
+
+    fn tx_frame(&self) -> &DmaFrame {
+        match self.tx {
+            TxSource::Frame => self.buffers.tx_frame(),
+            TxSource::EnhancedAck => self.buffers.enhanced_ack_frame(),
+        }
+    }
+
+    fn tx_frame_mut(&mut self) -> &mut DmaFrame {
+        match self.tx {
+            TxSource::Frame => self.buffers.tx_frame_mut(),
+            TxSource::EnhancedAck => self.buffers.enhanced_ack_frame_mut(),
+        }
+    }
+
+    fn current_rx(&self) -> &DmaFrame {
+        self.rx_index.select(self.buffers.rx_frames())
+    }
+
+    /// `ieee802154_receive_done` of the current slot: the stub buffer drops
+    /// the frame.
+    fn receive_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        if self.rx_index == STUB {
+            return;
+        }
+        let index = self.rx_index;
+        index.select_mut(self.buffers.rx_frames_mut()).mask_length();
+        index.select_mut(&mut self.rx_info).process = true;
+        let frame = index.select(self.buffers.rx_frames()).read();
+        cx.env.receive_done(
+            Ieee802154RxSlot(self.rx_index),
+            &frame,
+            index.select(&self.rx_info),
+        );
+    }
+
+    /// `ieee802154_transmit_done`: an ACK landing in the stub buffer turns
+    /// the completion into a missing ACK.
+    fn transmit_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>, with_ack: bool)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let frame = self.tx_frame().read();
+        if !with_ack {
+            cx.env.transmit_done(&frame, None);
+            return;
+        }
+        if self.rx_index == STUB {
+            cx.env.transmit_failed(&frame, Ieee802154TxError::NoAck);
+            return;
+        }
+        let index = self.rx_index;
+        index.select_mut(&mut self.rx_info).process = true;
+        let ack = index.select(self.buffers.rx_frames()).read();
+        cx.env.transmit_done(
+            &frame,
+            Some(Ieee802154ReceivedAck {
+                slot: Ieee802154RxSlot(self.rx_index),
+                frame: &ack,
+                info: index.select(&self.rx_info),
+            }),
+        );
+    }
+
+    fn transmit_failed<L, E>(&mut self, cx: &mut Cx<'_, L, E>, error: Ieee802154TxError)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let frame = self.tx_frame().read();
+        cx.env.transmit_failed(&frame, error);
+    }
+
+    /// `ieee802154_rx_frame_info_update`.
+    fn rx_frame_info_update<L, E>(&mut self, cx: &mut Cx<'_, L, E>) -> Result<(), ServiceError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let index = self.rx_index;
+        let image = index.select(self.buffers.rx_frames()).read();
+        let [phr, ..] = image;
+        let length = phr & 0x7f;
+        let info = index.select_mut(&mut self.rx_info);
+        if length < FRAME_MIN_LEN {
+            info.channel = 0;
+            info.rssi = 0;
+            info.lqi = 0;
+            return Ok(());
+        }
+        let (rssi, lqi) = frame_metadata(&image, length);
+        if let Some(interfaces) = self.multipan {
+            let interface = Self::match_interface(cx, &image, interfaces);
+            index.select_mut(&mut self.rx_info).mpf_index = interface;
+        }
+        let code = cx.ll.frequency_code();
+        let channel = Ieee802154Channel::from_frequency_code(code)
+            .ok_or(ServiceError::FrequencyCode(code))?;
+        let info = index.select_mut(&mut self.rx_info);
+        info.channel = channel.number();
+        info.rssi = rssi.wrapping_add(cx.ll.rssi_compensation_dbm());
+        info.lqi = lqi;
+        self.recent_rx_info_index = self.rx_index;
+        Ok(())
+    }
+
+    /// `update_mpf_index`: the first interface whose PAN ID (when the frame
+    /// carries one) and destination address match; none for a broadcast
+    /// address or PAN ID. The identities are read from the MAC.
+    fn match_interface<L, E>(
+        cx: &mut Cx<'_, L, E>,
+        image: &[u8; FRAME_SIZE],
+        interfaces: Ieee802154Interfaces,
+    ) -> Option<Ieee802154MultipanIndex>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let frame = PhrFrame::new(image);
+        let panid = if frame.frame_type() == FrameType::Beacon {
+            frame.source_panid()
+        } else {
+            frame.destination_panid()
+        };
+        let Ok(destination) = frame.destination_address() else {
+            return None;
+        };
+        let broadcast = match destination {
+            Some(FrameAddress::Short(address)) => address == [0xff; 2],
+            Some(FrameAddress::Extended(address)) => address == [0xff; 8],
+            None => false,
+        };
+        if broadcast || panid == Some([0xff, 0xff]) {
+            return None;
+        }
+        for index in interfaces.indices() {
+            if let Some(panid) = panid
+                && u16::from_le_bytes(panid) != cx.ll.multipan_panid(index)
+            {
+                continue;
+            }
+            match destination {
+                Some(FrameAddress::Short(address))
+                    if u16::from_le_bytes(address) == cx.ll.multipan_short_address(index) =>
+                {
+                    return Some(index);
+                }
+                Some(FrameAddress::Extended(address))
+                    if address == cx.ll.multipan_extended_address(index) =>
+                {
+                    return Some(index);
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// `set_next_rx_buffer`: reuse the current slot when free, otherwise the
+    /// first free slot after it, otherwise the stub buffer.
+    fn set_next_rx_buffer<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let current_free = self.rx_index != STUB && !self.rx_index.select(&self.rx_info).process;
+        if !current_free {
+            let mut candidate = self.rx_index;
+            self.rx_index = STUB;
+            for _ in 0..RX_BUFFER_COUNT {
+                candidate = candidate.next();
+                if !candidate.select(&self.rx_info).process {
+                    self.rx_index = candidate;
+                    break;
+                }
+            }
+        }
+        let address = *self.rx_index.select(&self.addresses.rx);
+        cx.ll.set_rx_address(address);
+    }
+
+    // ---- timers --------------------------------------------------------
+
+    /// Drop the callback before stopping its hardware timer.
+    fn timer_stop<L, E>(&mut self, cx: &mut Cx<'_, L, E>, timer: Ieee802154Timer)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        match timer {
+            Ieee802154Timer::Timer0 => self.timer0 = None,
+            Ieee802154Timer::Timer1 => self.timer1 = None,
+        }
+        cx.ll.stop_timer(timer);
+    }
+
+    /// `ieee802154_timer*_fire_at` against a fresh `esp_timer` sample.
+    fn timer_fire_at<L, E>(&mut self, cx: &mut Cx<'_, L, E>, timer: Ieee802154Timer, time: u32)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let now = cx.env.now_micros() as u32;
+        ll::timer_fire_at(cx.ll, timer, time, now);
+    }
+
+    /// `event_end_process`, including the timer callbacks it drops.
+    fn event_end_process<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.timer0 = None;
+        self.timer1 = None;
+        ll::event_end_process(cx.ll);
+    }
+
+    fn run_timer_action<L, E>(&mut self, cx: &mut Cx<'_, L, E>, action: TimerAction)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        match action {
+            // `ieee802154_start_receive_at`.
+            TimerAction::StartReceiveAt { stop_time } => {
+                self.timer1 = Some(TimerAction::FinishReceiveAt);
+                self.timer_fire_at(cx, Ieee802154Timer::Timer1, stop_time);
+            }
+            // `ieee802154_finish_receive_at`.
+            TimerAction::FinishReceiveAt => {
+                if self.state == Ieee802154State::Rx && cx.ll.is_current_rx_frame() {
+                    cx.ll.enable_rx_aborts(Ieee802154RxAbortEnableSet::All);
+                    self.pending_rx_stop = true;
+                } else {
+                    self.stop_current_operation(cx);
+                    cx.env.receive_at_done();
+                }
+            }
+        }
+    }
+
+    // ---- operation starts ------------------------------------------------
+
+    fn tx_init<L, E>(
+        &mut self,
+        cx: &mut Cx<'_, L, E>,
+        frame: &[u8],
+    ) -> Result<(), Ieee802154FrameImageError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        if let Some(statistics) = self.statistics.as_mut() {
+            statistics::add(&mut statistics.tx.nums, 1, StatisticsCounter::Transmit, 0)
+                .map_err(Ieee802154FrameImageError::Statistics)?;
+        }
+        // The vendor points `s_tx_frame` at the new frame before stopping the
+        // current operation, so a stopped transmission reports the new frame.
+        self.buffers.tx_frame_mut().write(frame);
+        self.tx = TxSource::Frame;
+        self.stop_current_operation(cx);
+        self.pib.update(cx.ll, self.levels);
+        cx.ll.set_tx_address(self.addresses.tx);
+        if PhrFrame::new(frame).ack_required() {
+            self.set_next_rx_buffer(cx);
+        }
+        Ok(())
+    }
+
+    fn rx_init<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.stop_current_operation(cx);
+        self.pib.update(cx.ll, self.levels);
+    }
+
+    fn enable_rx<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.pib.update_rx(cx.ll);
+        self.set_next_rx_buffer(cx);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Rx);
+        cx.ll.set_command(Ieee802154MacCommand::Receive);
+        self.set_state(Ieee802154State::Rx);
+    }
+
+    fn start_ed<L, E>(cx: &mut Cx<'_, L, E>, duration: u16)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        cx.ll.enable_event(Ieee802154Event::EdDone);
+        cx.ll.set_ed_duration(duration);
+        cx.ll.set_command(Ieee802154MacCommand::EnergyDetection);
+    }
+
+    fn enter_sleep<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        if self.state != Ieee802154State::Sleep {
+            self.stop_current_operation(cx);
+            self.set_state(Ieee802154State::Sleep);
+        }
+    }
+
+    fn next_operation<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.pib.update_rx(cx.ll);
+        if self.pending_rx_stop {
+            cx.ll.disable_rx_aborts(Ieee802154RxAbortEnableSet::All);
+            cx.ll
+                .enable_rx_aborts(Ieee802154RxAbortEnableSet::RuntimeBaseline);
+            cx.env.receive_at_done();
+            self.pending_rx_stop = false;
+        }
+        if self.pib.rx_when_idle() {
+            self.enable_rx(cx);
+        } else {
+            self.set_state(Ieee802154State::Idle);
+            self.enter_sleep(cx);
+        }
+    }
+
+    // ---- stops -----------------------------------------------------------
+
+    fn stop_current_operation<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.rx_armed = false;
+        self.event_end_process(cx);
+        match self.state {
+            Ieee802154State::Disable | Ieee802154State::Sleep => {}
+            Ieee802154State::Idle => cx.ll.set_command(Ieee802154MacCommand::Stop),
+            Ieee802154State::Rx => self.stop_rx(cx),
+            Ieee802154State::TxAck => self.stop_tx_ack(cx),
+            Ieee802154State::TxCca => {
+                self.stop_tx(cx);
+                cx.ll.clear_events(Ieee802154Event::TxAbort.mask());
+            }
+            Ieee802154State::Cca | Ieee802154State::Ed => {
+                cx.ll.set_command(Ieee802154MacCommand::Stop);
+                cx.ll.clear_events(event_mask(&[
+                    Ieee802154Event::EdDone,
+                    Ieee802154Event::RxAbort,
+                ]));
+            }
+            Ieee802154State::Tx | Ieee802154State::TxEnhAck => self.stop_tx(cx),
+            Ieee802154State::RxAck => self.stop_rx_ack(cx),
+        }
+        // Only a completed stop closes the operation epoch. A software-only
+        // disable must never make an earlier RX/TX operation detachable.
+        if !matches!(
+            self.state,
+            Ieee802154State::Disable | Ieee802154State::Sleep
+        ) {
+            self.operation_active = false;
+        }
+    }
+
+    fn stop_rx<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        cx.ll.set_command(Ieee802154MacCommand::Stop);
+        if cx.ll.events().contains(Ieee802154Event::RxDone) {
+            self.receive_done(cx);
+        }
+        cx.ll.clear_events(event_mask(&[
+            Ieee802154Event::RxDone,
+            Ieee802154Event::RxAbort,
+            Ieee802154Event::RxSfdDone,
+        ]));
+    }
+
+    fn stop_tx_ack<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        cx.ll.set_command(Ieee802154MacCommand::Stop);
+        ll::sec_clear(cx.ll);
+        self.receive_done(cx);
+        cx.ll.clear_events(event_mask(&[
+            Ieee802154Event::AckTxDone,
+            Ieee802154Event::RxAbort,
+            Ieee802154Event::TxSfdDone,
+        ]));
+    }
+
+    fn stop_tx<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        cx.ll.set_command(Ieee802154MacCommand::Stop);
+        ll::sec_clear(cx.ll);
+        let events = cx.ll.events();
+        if self.state == Ieee802154State::TxEnhAck {
+            self.receive_done(cx);
+            cx.ll.clear_events(Ieee802154Event::AckTxDone.mask());
+        } else if events.contains(Ieee802154Event::TxDone)
+            && (!PhrFrame::new(&self.tx_frame().read()).ack_required() || !cx.ll.rx_auto_ack())
+        {
+            self.transmit_done(cx, false);
+        } else {
+            self.transmit_failed(cx, Ieee802154TxError::Abort);
+        }
+        cx.ll.clear_events(event_mask(&[
+            Ieee802154Event::TxDone,
+            Ieee802154Event::TxAbort,
+            Ieee802154Event::TxSfdDone,
+        ]));
+    }
+
+    fn stop_rx_ack<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        cx.ll.set_command(Ieee802154MacCommand::Stop);
+        self.timer_stop(cx, Ieee802154Timer::Timer0);
+        let events = cx.ll.events();
+        cx.ll.clear_events(event_mask(&[
+            Ieee802154Event::Timer0Overflow,
+            Ieee802154Event::AckRxDone,
+            Ieee802154Event::RxSfdDone,
+            Ieee802154Event::TxAbort,
+        ]));
+        cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
+        if events.contains(Ieee802154Event::AckRxDone) {
+            self.transmit_done(cx, true);
+        } else {
+            self.transmit_failed(cx, Ieee802154TxError::NoAck);
+        }
+    }
+
+    // ---- interrupt handlers ---------------------------------------------
+
+    fn isr_tx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>)
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        ll::sec_clear(cx.ll);
+        self.event_end_process(cx);
+        let frame = self.tx_frame().read();
+        let frame = PhrFrame::new(&frame);
+        if !frame.frame_type().is_supported() {
+            cx.ll.set_command(Ieee802154MacCommand::Stop);
+            self.transmit_done(cx, false);
+            self.needs_next_operation = true;
+            return;
+        }
+        if matches!(self.state, Ieee802154State::Tx | Ieee802154State::TxCca) {
+            if frame.ack_required() && cx.ll.rx_auto_ack() {
+                self.set_state(Ieee802154State::RxAck);
+                // `receive_ack_timeout_timer_start`.
+                cx.ll.enable_event(Ieee802154Event::Timer0Overflow);
+                // TIMER0 is stopped by event_end_process: expose and clear
+                // only stale pending before publishing the next deadline.
+                // SOURCE: hw8-20261026-radio-local-05, PR #689.
+                cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
+                let now = cx.env.now_micros() as u32;
+                self.timer0 = Some(());
+                self.timer_fire_at(
+                    cx,
+                    Ieee802154Timer::Timer0,
+                    now.wrapping_add(ACK_TIMEOUT_MICROSECONDS),
+                );
+                self.needs_next_operation = false;
+            } else {
+                self.transmit_done(cx, false);
+                self.needs_next_operation = true;
+            }
+        }
+    }
+
+    fn isr_rx_done<L, E>(&mut self, cx: &mut Cx<'_, L, E>) -> Result<(), ServiceError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        self.event_end_process(cx);
+        self.rx_frame_info_update(cx)?;
+        let image = self.current_rx().read();
+        let frame = PhrFrame::new(&image);
+        if !frame.frame_type().is_supported() {
+            cx.ll.set_command(Ieee802154MacCommand::Stop);
+            self.receive_done(cx);
+            self.needs_next_operation = true;
+            return Ok(());
+        }
+        if self.state != Ieee802154State::Rx {
+            return Ok(());
+        }
+        let index = self.rx_index;
+        if frame.ack_required()
+            && matches!(frame.version(), FrameVersion::V2003 | FrameVersion::V2006)
+            && cx.ll.tx_auto_ack()
+        {
+            index.select_mut(&mut self.rx_info).pending = self.ack_config_pending_bit(cx, frame);
+            self.set_state(Ieee802154State::TxAck);
+            self.needs_next_operation = false;
+        } else if frame.ack_required()
+            && frame.version() == FrameVersion::V2015
+            && cx.ll.tx_enhanced_ack()
+        {
+            index.select_mut(&mut self.rx_info).pending = self.ack_config_pending_bit(cx, frame);
+            let mut ack = [0; FRAME_SIZE];
+            let generated =
+                cx.env
+                    .generate_enhanced_ack(&image, index.select(&self.rx_info), &mut ack);
+            let generated = match generated {
+                Ieee802154EnhancedAck::Secured { key } => {
+                    let address = cx
+                        .ll
+                        .multipan_extended_address(Ieee802154MultipanIndex::CONTEXT0);
+                    self.set_transmit_security(cx.ll, &ack, &key, &address)
+                        .map(|()| generated)
+                }
+                other => Ok(other),
+            };
+            if matches!(
+                generated,
+                Ok(Ieee802154EnhancedAck::Generated | Ieee802154EnhancedAck::Secured { .. })
+            ) {
+                self.buffers.enhanced_ack_frame_mut().write(&ack);
+                cx.ll.set_tx_address(self.addresses.enhanced_ack);
+                self.tx = TxSource::EnhancedAck;
+                cx.ll.notify_enhanced_ack_generated();
+                self.set_state(Ieee802154State::TxEnhAck);
+                self.needs_next_operation = false;
+            } else {
+                // SOURCE: ESP-IDF 4d80c1b2 esp_ieee802154_dev.c:593-597.
+                cx.ll.set_command(Ieee802154MacCommand::Stop);
+                if let Err(error) = generated {
+                    cx.env.enhanced_ack_security_failed(error);
+                }
+                self.receive_done(cx);
+                self.needs_next_operation = true;
+            }
+        } else {
+            self.receive_done(cx);
+            self.needs_next_operation = true;
+        }
+        Ok(())
+    }
+
+    /// `ieee802154_ack_config_pending_bit`.
+    fn ack_config_pending_bit<L, E>(&mut self, cx: &mut Cx<'_, L, E>, frame: PhrFrame<'_>) -> bool
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        let interface = if self.multipan.is_some() {
+            match self.rx_index.select(&self.rx_info).mpf_index {
+                Some(interface) => interface,
+                // An unmatched frame gets no pending decision, not even on
+                // the hardware ACK.
+                None => return false,
+            }
+        } else {
+            Ieee802154MultipanIndex::CONTEXT0
+        };
+        let enhanced_lookup = cx.ll.pending_mode();
+        let mode = self.pib.active_pending_mode(interface);
+        let table = interface.select(&self.pending_tables);
+        let decision = ack_pending(frame, enhanced_lookup, mode, table);
+        if decision.set_to_hardware {
+            cx.ll.set_pending_bit(decision.pending);
+        }
+        decision.pending
+    }
+
+    fn isr_rx_phase_rx_abort<L, E>(
+        &mut self,
+        cx: &mut Cx<'_, L, E>,
+        reason: Ieee802154RxAbortReasonObservation,
+    ) -> Result<Ieee802154RxAbortReason, ServiceError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        use Ieee802154RxAbortReason as Reason;
+        self.event_end_process(cx);
+        let status = cx.ll.rx_status();
+        let Ieee802154RxAbortReasonObservation::Named(reason) = reason else {
+            return Err(ServiceError::RxAbortUnclassified(status));
+        };
+        match reason {
+            Reason::RxStop | Reason::TxAckStop | Reason::EdStop => return Ok(reason),
+            Reason::SfdTimeout
+            | Reason::CrcError
+            | Reason::InvalidLength
+            | Reason::FilterFail
+            | Reason::NoRss
+            | Reason::UnexpectedAck
+            | Reason::RxRestart
+            | Reason::CoexistenceBreak => {
+                if self.state != Ieee802154State::Rx {
+                    return Err(ServiceError::RxAbortState(status));
+                }
+            }
+            Reason::EdAbort | Reason::EdCoexistenceReject => {
+                if !matches!(self.state, Ieee802154State::Ed | Ieee802154State::Cca) {
+                    return Err(ServiceError::RxAbortState(status));
+                }
+                cx.env.ed_failed(status);
+            }
+            Reason::TxAckTimeout
+            | Reason::TxAckCoexistenceBreak
+            | Reason::EnhancedAckSecurityError => {
+                return Ok(reason);
+            }
+        }
+        self.needs_next_operation = true;
+        Ok(reason)
+    }
+
+    fn isr_tx_ack_phase_rx_abort<L, E>(
+        &mut self,
+        cx: &mut Cx<'_, L, E>,
+        reason: Ieee802154RxAbortReason,
+        progress: &mut ServiceProgress,
+    ) where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        use Ieee802154RxAbortReason as Reason;
+        ll::sec_clear(cx.ll);
+        self.event_end_process(cx);
+        match reason {
+            Reason::TxAckStop
+            | Reason::RxStop
+            | Reason::EdStop
+            | Reason::SfdTimeout
+            | Reason::CrcError
+            | Reason::InvalidLength
+            | Reason::FilterFail
+            | Reason::NoRss
+            | Reason::UnexpectedAck
+            | Reason::RxRestart
+            | Reason::CoexistenceBreak
+            | Reason::EdAbort
+            | Reason::EdCoexistenceReject => return,
+            Reason::TxAckCoexistenceBreak => {
+                if matches!(self.coexistence, Ieee802154Coexistence::Software(_)) {
+                    cx.env.coexistence_break();
+                    progress.coexistence_break_notified = true;
+                }
+                self.receive_done(cx);
+            }
+            Reason::TxAckTimeout | Reason::EnhancedAckSecurityError => self.receive_done(cx),
+        }
+        self.needs_next_operation = true;
+    }
+
+    fn isr_tx_abort<L, E>(
+        &mut self,
+        cx: &mut Cx<'_, L, E>,
+        reason: Ieee802154TxAbortReasonObservation,
+        progress: &mut ServiceProgress,
+    ) -> Result<(), ServiceError>
+    where
+        L: Ieee802154LowLevel<Address = Address> + ?Sized,
+        E: Ieee802154Environment + ?Sized,
+    {
+        use Ieee802154TxAbortReason as Reason;
+        ll::sec_clear(cx.ll);
+        self.event_end_process(cx);
+        let Ieee802154TxAbortReasonObservation::Named(reason) = reason else {
+            return Err(ServiceError::TxAbortUnclassified);
+        };
+        match reason {
+            Reason::RxAckStop | Reason::TxStop => {}
+            Reason::RxAckSfdTimeout
+            | Reason::RxAckCrcError
+            | Reason::RxAckInvalidLength
+            | Reason::RxAckFilterFail
+            | Reason::RxAckNoRss
+            | Reason::RxAckCoexistenceBreak
+            | Reason::RxAckTypeNotAck
+            | Reason::RxAckRestart => {
+                if self.state != Ieee802154State::RxAck {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxAbort));
+                }
+                self.transmit_failed(cx, Ieee802154TxError::InvalidAck);
+                self.needs_next_operation = false;
+            }
+            Reason::RxAckTimeout => {
+                if self.state != Ieee802154State::RxAck {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxAbort));
+                }
+                // event_end_process stopped TIMER0 before this sample.
+                cx.ll.clear_events(Ieee802154Event::Timer0Overflow.mask());
+                cx.ll.disable_event(Ieee802154Event::Timer0Overflow);
+                self.transmit_failed(cx, Ieee802154TxError::NoAck);
+                self.needs_next_operation = true;
+            }
+            Reason::TxCoexistenceBreak | Reason::TxSecurityError => {
+                if !matches!(self.state, Ieee802154State::Tx | Ieee802154State::TxCca) {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxAbort));
+                }
+                let error = if reason == Reason::TxCoexistenceBreak {
+                    if matches!(self.coexistence, Ieee802154Coexistence::Software(_)) {
+                        cx.env.coexistence_break();
+                        progress.coexistence_break_notified = true;
+                    }
+                    if let Some(statistics) = self.statistics.as_mut() {
+                        statistics::add(
+                            &mut statistics.tx.abort.tx_coex_break,
+                            1,
+                            StatisticsCounter::TxCoexistenceBreak,
+                            0,
+                        )
+                        .map_err(ServiceError::Statistics)?;
+                    }
+                    Ieee802154TxError::Coexist
+                } else {
+                    Ieee802154TxError::Security
+                };
+                self.transmit_failed(cx, error);
+                self.needs_next_operation = true;
+            }
+            Reason::CcaFailed | Reason::CcaBusy => {
+                if self.state != Ieee802154State::TxCca {
+                    return Err(ServiceError::EventState(Ieee802154Event::TxAbort));
+                }
+                let error = if reason == Reason::CcaFailed {
+                    Ieee802154TxError::Abort
+                } else {
+                    Ieee802154TxError::CcaBusy
+                };
+                self.transmit_failed(cx, error);
+                self.needs_next_operation = true;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable,
+    reason = "test assertions and reference fixtures"
+)]
+mod multipan_tests;
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    clippy::unreachable,
+    reason = "test assertions and reference fixtures"
+)]
+pub(crate) mod tests;

@@ -1,0 +1,49 @@
+[package]
+name = "oer-chips-esp32s31-platform-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The ESP32-S31 side of an image's platform over the Espressif staged runtime and executor: the executor's chip binding and the chip's retained fault records"
+
+[features]
+## Shared retained Wi-Fi fatal assertion record, reset and next-boot
+## reporting; images without Wi-Fi leave it out.
+wifi-fault = []
+## The shared RF actor's retained tracking fault, reset and next-boot
+## reporting; images without the actor leave it out.
+radio-fault = []
+
+[dependencies]
+oer-portable-diagnostics = { path = "../../../../portable/diagnostics" }
+oer-chips-esp32s31-peripherals-crypto = { path = "../../peripherals/crypto" }
+oer-portable-embassy-time = { path = "../../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../../portable/time" }
+oer-chips-family-platform-interrupt-table = { path = "../../../family/platform/interrupt-table" }
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
+oer-chips-esp32s31-hal = { path = "../../hal" }
+oer-chips-family-platform-runtime.workspace = true
+oer-portable-memory = { path = "../../../../portable/memory" }
+oer-portable-trace = { path = "../../../../portable/trace" }
+
+# The executor runs on the chip target only.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+embedded-io-async = "0.7.0"
+oer-chips-family-peripherals-usb-serial-jtag.workspace = true
+oer-portable-embassy-time = { path = "../../../../portable/embassy/time" }
+oer-chips-family-platform-interrupt-table = { path = "../../../family/platform/interrupt-table" }
+oer-chips-family-platform-port = { path = "../../../family/platform/port" }
+oer-portable-memory = { path = "../../../../portable/memory" }
+oer-portable-riscv = { path = "../../../../portable/riscv" }
+oer-portable-time = { path = "../../../../portable/time" }
+static_cell.workspace = true
+oer-chips-family-platform-executor = { path = "../../../family/platform/executor", features = ["chip"] }
+oer-chips-family-boot = { path = "../../../family/boot" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+oer-chips-esp32s31-hal = { path = "../../hal", features = ["test-support"] }

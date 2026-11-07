@@ -632,7 +632,7 @@ impl MacTxPowerSource for MockPlatform {
 impl MacCoexPtiSource for MockPlatform {
     fn mac_coex_pti(&mut self, event: MacCoexEvent) -> MacCoexPti {
         self.operations.push(PlatformOperation::CoexPti(event));
-        oer_chips_family_coex::CoexPtiTable::VENDOR
+        oer_chips_family_radio_coex::CoexPtiTable::VENDOR
             .pti(event.coex_event())
             .into()
     }

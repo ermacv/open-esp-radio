@@ -8,8 +8,8 @@ error[E0271]: type mismatch resolving `<O as Entry>::Part == UsbInterrupt<Fixed<
    |
    = note: expected struct `UsbInterrupt<oer_portable_mmio::Fixed<540610560>>`
               found struct `SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>`
-note: required by a bound in `oer_chips_family_usb_serial_jtag::Endpoint::<E, R>::new`
-  --> $WORKSPACE/chips/family/usb-serial-jtag/src/endpoint.rs
+note: required by a bound in `oer_chips_family_peripherals_usb_serial_jtag::Endpoint::<E, R>::new`
+  --> $WORKSPACE/chips/family/peripherals/usb-serial-jtag/src/endpoint.rs
    |
    |     pub fn new(
    |            --- required by a bound in this associated function
@@ -27,16 +27,16 @@ error[E0277]: the trait bound `Silent<SystimerAlarm0<oer_portable_mmio::Fixed<54
    |
 help: the trait `EventAuthority<UsbInterrupt<oer_portable_mmio::Fixed<540610560>>>` is not implemented for `Silent<SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>>`
       but trait `EventAuthority<SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>>` is implemented for it
-  --> $WORKSPACE/chips/family/interrupt-table/src/router.rs
+  --> $WORKSPACE/chips/family/platform/interrupt-table/src/router.rs
    |
    | impl<P: InterruptSources> EventAuthority<P> for Silent<P> {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: for that trait implementation, expected `SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>`, found `UsbInterrupt<oer_portable_mmio::Fixed<540610560>>`
 note: required by a bound in `enable_events`
-  --> $WORKSPACE/chips/family/usb-serial-jtag/src/lib.rs
+  --> $WORKSPACE/chips/family/peripherals/usb-serial-jtag/src/lib.rs
    |
    |     fn enable_events(
    |        ------------- required by a bound in this associated function
    |         &mut self,
-   |         authority: &impl oer_chips_family_interrupt_table::EventAuthority<Self::Interrupt>,
-   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EndpointRegisters::enable_events`
+   |         authority: &impl oer_chips_family_platform_interrupt_table::EventAuthority<Self::Interrupt>,
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EndpointRegisters::enable_events`

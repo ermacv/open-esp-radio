@@ -4,7 +4,7 @@
 use std::{vec, vec::Vec};
 
 use oer_chips_esp32s31_pac::instances;
-use oer_chips_family_power::sleep::{
+use oer_chips_family_peripherals_power::sleep::{
     Outcome, RtcTicks, SleepClocks, SleepRequest, now, sleep_until,
 };
 

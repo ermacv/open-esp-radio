@@ -3,7 +3,7 @@
 //! Frame parsing and one generic agreement state machine live in
 //! [`oer_protocols_ieee80211_wire::block_ack`], the station's originator in
 //! `oer_protocols_ieee80211_core_upper_mac::block_ack::originator` and the vendor TIDs and Dialog Tokens in
-//! `oer_chips_family_ieee80211_policy::block_ack`. This module retains only
+//! `oer_chips_family_radio_ieee80211_policy::block_ack`. This module retains only
 //! the S31 window bound and the three-register completion snapshot. It still owns no DMA address or register access.
 
 use oer_protocols_ieee80211_contracts_port::BlockAckReport;

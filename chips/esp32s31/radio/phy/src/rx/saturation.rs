@@ -270,13 +270,13 @@ impl PhyRxSaturationMmioBinding {
     ) -> PhyRxSaturationCompletion {
         match self.action {
             PhyRxSaturationMmioAction::ConfigureDebugMode => {
-                oer_chips_family_phy::pbus::configure_debug_mode(
+                oer_chips_family_radio_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 PhyRxSaturationCompletion::DebugModeConfigured
             }
             PhyRxSaturationMmioAction::ConfigureWorkMode => {
-                let _ = oer_chips_family_phy::pbus::configure_work_mode(
+                let _ = oer_chips_family_radio_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 PhyRxSaturationCompletion::WorkModeConfigured

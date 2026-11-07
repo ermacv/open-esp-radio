@@ -7,9 +7,9 @@ use oer_chips_esp32s31_hal::{
         polled::Ieee802154MacOwners,
     },
 };
-use oer_chips_family_coex::CoexPti;
-use oer_chips_family_ieee802154_engine::ll::{Ieee802154LowLevel, Ieee802154RecentRssi};
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_coex::CoexPti;
+use oer_chips_family_radio_ieee802154_engine::ll::{Ieee802154LowLevel, Ieee802154RecentRssi};
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
     Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,

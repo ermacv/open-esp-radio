@@ -5,7 +5,7 @@ use core::{mem::ManuallyDrop, ops::Deref};
 use oer_chips_esp32s31_hal::{
     layouts::DmaWindowAddress, radio::ieee802154::frames, system::memory::dma_static::Placed,
 };
-use oer_chips_family_ieee802154_engine::{
+use oer_chips_family_radio_ieee802154_engine::{
     engine::{
         Fault, Ieee802154Engine as SharedEngine, Ieee802154Interfaces,
         owner::{DetachedIeee802154Engine as DetachedEngine, Ieee802154EngineOwner},
@@ -13,7 +13,7 @@ use oer_chips_family_ieee802154_engine::{
     ll::Ieee802154LowLevel,
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
 };
-use oer_chips_family_ieee802154_mac_values::{Ieee802154EngineBuffers, Ieee802154TxPowerLevels};
+use oer_chips_family_radio_ieee802154_values::{Ieee802154EngineBuffers, Ieee802154TxPowerLevels};
 /// The MAC token and placed frame storage of one IEEE 802.15.4 engine.
 ///
 /// Its operations borrow its own MAC; callers see frames and slots, never
@@ -21,7 +21,7 @@ use oer_chips_family_ieee802154_mac_values::{Ieee802154EngineBuffers, Ieee802154
 ///
 /// ```compile_fail,E0596
 /// use oer_chips_esp32s31_radio_ieee802154_driver::engine::Ieee802154Engine;
-/// use oer_chips_family_ieee802154_engine::engine::Ieee802154Environment;
+/// use oer_chips_family_radio_ieee802154_engine::engine::Ieee802154Environment;
 /// fn bypass(engine: &mut Ieee802154Engine, env: &mut impl Ieee802154Environment) {
 ///     engine.service(env);
 /// }
@@ -116,7 +116,9 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         clippy::result_large_err,
         reason = "quarantine retains the complete affine owner"
     )]
-    pub fn isr<E: oer_chips_family_ieee802154_engine::engine::Ieee802154Environment + ?Sized>(
+    pub fn isr<
+        E: oer_chips_family_radio_ieee802154_engine::engine::Ieee802154Environment + ?Sized,
+    >(
         mut self,
         env: &mut E,
     ) -> Result<Self, Quarantined<Self>> {

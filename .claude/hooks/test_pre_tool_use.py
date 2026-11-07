@@ -31,7 +31,7 @@ class Edits(unittest.TestCase):
         for tool, path, command in [
             ("Edit", "/w/chips/esp32s31/pac/src/generated.rs", "cargo registers generate"),
             ("Write", "chips/esp32s31/pac/src/generated.rs", "cargo registers generate --chip"),
-            ("Edit", "/w/chips/esp32s31/layout/linker/dma-window.x", "cargo registers generate --chip"),
+            ("Edit", "/w/chips/esp32s31/platform/layout/linker/dma-window.x", "cargo registers generate --chip"),
             ("Edit", "/w/chips/esp32s31/vendor/facts/idf-function-signatures.toml", "cargo registers signatures"),
             ("Write", "chips/esp32s31/vendor/facts/idf-function-signatures.provenance.toml", "cargo registers signatures"),
             ("Edit", "/w/chips/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
@@ -49,7 +49,7 @@ class Edits(unittest.TestCase):
             "/w/chips/esp32s31/vendor/artifacts.toml",
             "/w/chips/esp32s31/vendor/facts/names/README.md",
             "/w/.claude/hooks/pre_tool_use.py",
-            "/w/chips/family/staged-layout/linker/runtime/sections.x",
+            "/w/chips/family/platform/layout/linker/runtime/sections.x",
         ]:
             self.assertEqual(run("Edit", file_path=path), (0, ""), path)
 
@@ -77,7 +77,7 @@ class Reads(unittest.TestCase):
             "pkill -f cargo",
             "sleep 30",
             "grep -n x chips/esp32s31/pac/src/generated.rs",
-            "cat chips/esp32s31/layout/linker/dma-window.x",
+            "cat chips/esp32s31/platform/layout/linker/dma-window.x",
         ]:
             self.assertEqual(run("Bash", command=command), (0, ""), command)
 

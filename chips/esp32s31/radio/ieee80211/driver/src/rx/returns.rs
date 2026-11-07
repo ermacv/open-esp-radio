@@ -14,7 +14,7 @@
 //! parked, starts at most one harmless pass.
 
 use core::ops::{Deref, DerefMut};
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 
 use crate::mac::{irq::consumer::IrqPublisher, rx::pool::NetworkRxFrame};
 

@@ -26,7 +26,7 @@ use oer_chips_esp32s31_hal::radio::bluetooth::{
     },
 };
 use oer_chips_esp32s31_radio_client::bluetooth::{Operation, Permission};
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_bluetooth_le_port::dtm::{DtmTest, next_window};
 use oer_protocols_bluetooth_le_port::{LeInstant, LeWindow, RadioDuration, RadioTiming, TestPhy};

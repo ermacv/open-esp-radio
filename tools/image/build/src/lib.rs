@@ -275,7 +275,7 @@ fn runtime_link(command: &mut std::process::Command, spec: &ImageSpec) -> Result
         None => std::env::var(name).ok(),
     };
     let arguments = match spec.chip.as_str() {
-        "esp32s31" => oer_chips_esp32s31_layout::build::runtime_link_arguments(&variable)
+        "esp32s31" => oer_chips_esp32s31_platform_layout::build::runtime_link_arguments(&variable)
             .map_err(|error| format!("{}: {error}", spec.chip))?,
         chip => return Err(format!("no runtime layout of chip `{chip}`").into()),
     };

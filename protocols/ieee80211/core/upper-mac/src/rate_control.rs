@@ -6,7 +6,7 @@
 //! station; each asks its controller for the rate of a single MPDU and of an
 //! A-MPDU and reports every exchange's outcome to it. The controller is an
 //! integrator's policy: the Espressif controller of
-//! `oer-chips-family-ieee80211-policy::rate_control` adapts as the vendor does.
+//! `oer-chips-family-radio-ieee80211-policy::rate_control` adapts as the vendor does.
 
 use core::num::NonZeroU16;
 

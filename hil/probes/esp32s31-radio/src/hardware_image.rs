@@ -9,23 +9,23 @@ use oer_chips_esp32s31_hal::{
     power::ChipClocks,
     system::root::{RadioHardware, Root},
 };
+use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_phy::{PhyCalibrationIdentity, phy_get_rf_cal_version};
-use oer_chips_esp32s31_runtime::Esp32s31;
-use oer_chips_family_executor::{Executor, InterruptExecutor};
+use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
 
-oer_chips_family_staged_runtime::interrupt_table! {
+oer_chips_family_platform_runtime::interrupt_table! {
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
-    wake: WakeToken = FromCpu0Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app, hart 0, Hardware;
-    radio: RadioToken = FromCpu2Irq => oer_chips_family_executor::Round<RadioTasks>, line 17, context radio_exec, hart 0, Executor;
-    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_chips_family_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
-    app_alarm: AppAlarm = SystimerAlarm1 => oer_chips_family_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 20, context app, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app, hart 0, Hardware;
+    radio: RadioToken = FromCpu2Irq => oer_chips_family_platform_executor::Round<RadioTasks>, line 17, context radio_exec, hart 0, Executor;
+    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
+    app_alarm: AppAlarm = SystimerAlarm1 => oer_chips_family_platform_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 20, context app, hart 0, Hardware;
 }
-oer_chips_family_executor::tasks! {
+oer_chips_family_platform_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> { sheets(boot: Boot) = sheets; }
 }
-oer_chips_family_executor::tasks! {
+oer_chips_family_platform_executor::tasks! {
     AppTasks: Executor<Esp32s31, 0> { watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_watchdog; }
 }
 struct Boot {
@@ -39,10 +39,10 @@ struct Boot {
 static CALIBRATION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<[u128; 512]>> =
     static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
 
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_runtime::phy_fault::reset);
-oer_chips_family_staged_runtime::entry!(main, oer_chips_esp32s31_hal::system::platform::Port);
+oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime::phy_fault::reset);
+oer_chips_family_platform_runtime::entry!(main, oer_chips_esp32s31_hal::system::platform::Port);
 fn main(
-    handoff: oer_chips_family_staged_runtime::Handoff<
+    handoff: oer_chips_family_platform_runtime::Handoff<
         oer_chips_esp32s31_hal::system::platform::Port,
     >,
 ) -> ! {
@@ -60,19 +60,19 @@ fn main(
         ),
         _psram,
         mut adopted,
-    ) = match oer_chips_family_staged_runtime::adoption::run::<
-        oer_chips_esp32s31_runtime::Esp32s31,
+    ) = match oer_chips_family_platform_runtime::adoption::run::<
+        oer_chips_esp32s31_platform_runtime::Esp32s31,
         _,
         _,
     >(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
-        oer_chips_esp32s31_board::BootstrapPsram,
-        oer_chips_esp32s31_runtime::phy_fault::report_previous,
+        oer_chips_esp32s31_platform_board::BootstrapPsram,
+        oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
         |hardware| {
             let _reset_causes =
-                oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
+                oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
             (
                 hardware.efuse,
                 hardware.system_timer,
@@ -96,8 +96,8 @@ fn main(
         mac_extension: factory.mac_extension(),
     };
     let timer = runtime_system_timer;
-    let mut timer_ready = oer_chips_family_executor::init::<Esp32s31, 2, _, _, _>(
-        oer_chips_family_executor::systimer::SystemTimer {
+    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _>(
+        oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
         },
@@ -106,7 +106,7 @@ fn main(
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_chips_family_executor::bind::<Esp32s31, 0, _, _, _>(
+    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _>(
         &mut timer_ready,
         adopted.router(),
         interrupts.app_alarm,
@@ -147,7 +147,7 @@ fn main(
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
-    oer_chips_family_staged_runtime::fatal::boot_failure::<
+    oer_chips_family_platform_runtime::fatal::boot_failure::<
         oer_chips_esp32s31_hal::system::platform::Port,
     >(reason.as_str(), || {
         let _ = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
@@ -174,7 +174,7 @@ async fn sheets(boot: Boot) {
     crate::est_freq::clear();
     crate::est_freq::emit(150, oer_portable_riscv::cycle32(), 0, 0);
     crate::est_freq::status(0x1950_0002);
-    let timer = oer_chips_family_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock);
+    let timer = oer_chips_family_platform_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock);
     let started = oer_portable_riscv::cycle32();
     let Some(place) = CALIBRATION.try_take() else {
         fail(oer_portable_diagnostics::name!("calibration-place"; 32));
@@ -186,8 +186,8 @@ async fn sheets(boot: Boot) {
                 boot.clocks,
                 boot.identity,
                 &timer,
-                oer_chips_esp32s31_runtime::phy_fault::identity(),
-                |fault| oer_chips_esp32s31_runtime::phy_fault::reset(fault),
+                oer_chips_esp32s31_platform_runtime::phy_fault::identity(),
+                |fault| oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault),
             )
         })
         .await;
@@ -219,4 +219,4 @@ async fn sheets(boot: Boot) {
     }
 }
 
-oer_chips_family_executor::time_driver!(Esp32s31);
+oer_chips_family_platform_executor::time_driver!(Esp32s31);

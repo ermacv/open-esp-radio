@@ -15,16 +15,16 @@ oer-portable-riscv = { path = "../../../portable/riscv" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 heapless = "0.9.3"
 static_cell = { workspace = true }
-oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-chips-esp32s31-runtime = { path = "../../../chips/esp32s31/runtime" }
-oer-chips-family-executor = { path = "../../../chips/family/executor" }
-oer-chips-family-usb-serial-jtag.workspace = true
+oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
+oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/runtime" }
+oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform/runtime" }
+oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
+oer-chips-family-peripherals-usb-serial-jtag.workspace = true
 embedded-io-async = "0.7.0"
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-portable-trace = { path = "../../../portable/trace" }
-oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
+oer-chips-family-platform-interrupt-table = { path = "../../../chips/family/platform/interrupt-table" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-chips-esp32s31-radio-phy = { path = "../../../chips/esp32s31/radio/phy" }
@@ -39,7 +39,7 @@ oer-protocols-radio-regulatory = { path = "../../../protocols/radio/regulatory" 
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 
 [build-dependencies]
-oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

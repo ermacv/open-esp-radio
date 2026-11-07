@@ -26,9 +26,9 @@ use oer_chips_esp32s31_hal::{
     system::platform::{Hart1Grant, Port},
 };
 use oer_chips_family_boot::wait::{BootBudget, BootDeadline, BootWait};
-use oer_chips_family_executor::{AlarmGrant, Executor, Root, TimeDriverReady};
-use oer_chips_family_interrupt_table::signal::{FromPeerHart, IrqSignal, PeerNotify};
-use oer_chips_family_staged_runtime::{Mailbox, Running, SecondaryHandoff};
+use oer_chips_family_platform_executor::{AlarmGrant, Executor, Root, TimeDriverReady};
+use oer_chips_family_platform_interrupt_table::signal::{FromPeerHart, IrqSignal, PeerNotify};
+use oer_chips_family_platform_runtime::{Mailbox, Running, SecondaryHandoff};
 use oer_portable_embassy_time::EmbassyClock;
 
 use super::{
@@ -41,7 +41,7 @@ pub(crate) type AppExecutor = Executor<Esp32s31, 0>;
 /// Hart 1's executor.
 pub(crate) type Hart1Executor = Executor<Esp32s31, 1>;
 
-oer_chips_family_executor::tasks! {
+oer_chips_family_platform_executor::tasks! {
     /// Hart 1's executor's tasks: none of the library's; the group's
     /// IP service and future are its roots.
     pub Hart1Tasks: Executor<Esp32s31, 1> {
@@ -49,7 +49,7 @@ oer_chips_family_executor::tasks! {
     }
 }
 
-oer_chips_family_staged_runtime::placed_static! {
+oer_chips_family_platform_runtime::placed_static! {
     static APPLICATION_SIGNAL: IrqSignal<AppExecutor> = IrqSignal::new::<FromPeerHart<Hart1Executor, Hart1WakeToken>, WakeToken>(), in critical_data "hart_peers";
     static SECOND_SIGNAL: IrqSignal<Hart1Executor> = IrqSignal::new::<FromPeerHart<AppExecutor, WakeToken>, Hart1WakeToken>(), in critical_data "hart_peers";
     /// The application's future on hart 0: the IP status and its channel
@@ -133,12 +133,15 @@ pub(crate) fn launch(
     handed: GroupPeripherals,
 ) -> Running<Port, 1> {
     let (mut ready, comparator) = timers;
-    let alarm =
-        oer_chips_family_executor::grant::<Esp32s31, 1, _>(&mut ready, launch.alarm, comparator);
+    let alarm = oer_chips_family_platform_executor::grant::<Esp32s31, 1, _>(
+        &mut ready,
+        launch.alarm,
+        comparator,
+    );
     let Ok(Some(mut cores)) = Cores::take() else {
         fail(oer_portable_diagnostics::name!("hart1-cores"; 32));
     };
-    let running = oer_chips_esp32s31_runtime::secondary::launch_hart1(
+    let running = oer_chips_esp32s31_platform_runtime::secondary::launch_hart1(
         &mut cores,
         launch.permit,
         launch.causes,

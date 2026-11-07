@@ -14,7 +14,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::vec::Vec;
 
-use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
+use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
 use oer_portable_time::Clock;
 use oer_portable_time_virtual::VirtualClock;

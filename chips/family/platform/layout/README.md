@@ -1,0 +1,88 @@
+# Espressif staged-boot layout
+
+`oer-chips-family-platform-layout` is the chip-neutral contract of the staged
+boot: the `Layout` type, in which each chip's layout crate
+(`chips/<chip>/platform/layout`) generates its address map from the chip facts
+(`oer-chips-family-facts`), the stage-two image header and checksum, the
+input sections the boot zeroes, and the linker binding. It is a `no_std`
+library without hardware access, shared by the bootstrap, the stage-two
+runtime, the chip layouts and the build scripts of every staged image.
+
+`Region` keeps its geometry private. Its const constructor refuses an
+exclusive end beyond `u32::MAX`; its const `first` and `after` operations
+refuse subregions outside that geometry. These operations return `Option`,
+including the derived Flash text and runtime PSRAM windows on `Layout`.
+Generated maps admit each region in a const initializer and validate the
+whole layout in a const item. Chip linker bindings pass const-checked
+subregions to the shared build helpers; the bootstrap rejects an invalid
+runtime PSRAM window through its header failure path.
+
+| Module | Owns |
+| --- | --- |
+| `memory` | `Region` and `Layout`: SRAM, Flash XIP, PSRAM and retained regions, the second-stage loader bound, the bootstrap PSRAM probe page, the MMU page, the image headers before the bootstrap's text, the handoff SRAM margin, the stage-two PSRAM window, stack sizes, hart count and the chip's ROM script |
+| `stage_two` | The little-endian image `Header`, its magic, ABI version (2) and size, the used-hart word (`harts_of`: one bit per hart with a task stack, which the bootstrap reads as a constant), and the payload CRC-32 with the checksum field read as zero |
+| `handoff` | The stage-two handoff proof, a board's mapping adoption and `SecondaryEntry`, the generated entry a secondary hart's launch writes to its boot word (minted only by the runtime; the boot hart is refused at monomorphization) |
+| `zeroed` | The input sections the runtime linker script places in regions the boot zeroes |
+| `build` (feature `build`) | `configure_runtime` and `configure_bootstrap`, which link a binary with the shared scripts under [`linker`](linker) and the chip's ROM script, define every layout value as a `--defsym` symbol and keep the link's relocations (`--emit-relocs`) for the stack analysis |
+
+The bootstrap links all code and ordinary constants into internal SRAM,
+including out-of-line callees and tables emitted by other crates. A section
+attribute on an entry is not transitive across calls. Explicit payload and
+tuning-reference input sections alone stay in flash. Every staged image build
+audits the final bootstrap's executable and ordinary constant sections before
+encoding it; this check also rejects a cached reused ELF during a diagnostic
+run. The report is `bootstrap-placement.txt`. Every allocated flash section
+must have an exact allowlisted metadata/payload name and non-writable,
+non-executable flags; an ordinary or orphan constant is rejected regardless
+of its name. The [image checks](../../../../tools/image/checks/README.md) own
+that allowlist.
+
+The S31 loader requires exactly two mapped ESP image records in its shared
+D/I window (SOURCE in the chip's `[boot-chain] mapped-segments`). The script
+separates the real payload and tuning-reference spans across an MMU-page
+boundary; neither contains executable bootstrap code. The staged encoder
+checks the resulting image records after adjacent ELF sections merge and
+emits `bootstrap-loader.txt`. This is a loader-format contract, not a
+requirement for one code mapping and one data mapping.
+
+Both staged links omit `.debug_aranges`: the pinned LLVM's fat-LTO emitter
+can encode backward spans when CUs share an input section. Address lookup
+uses the CU ranges and line tables retained in the ELF. The shared
+[`dwarf.x`](linker/dwarf.x) precedes scripts that place debug sections;
+allocated sections and their relocations are unaffected.
+
+The linker scripts contain no addresses, sizes or header constants of their
+own; they read `SRAM_ORIGIN` (stage two's, the whole internal SRAM),
+`BOOTSTRAP_SRAM_ORIGIN`, `RUNTIME_PSRAM_ORIGIN`, `HART_COUNT`,
+`MMU_PAGE_BYTES`, `STAGE_TWO_MAGIC` and the other symbols emitted by `build`.
+Stage two's entry leaves the bootstrap's SRAM stack for its PSRAM task stack
+before it copies or clears anything in SRAM. The runtime script includes
+`oer-staged-runtime-vectors.x`, every line's default handler, which the
+staged runtime's build generates from the chip facts into its build
+directory, a library search path of every image that links it. Stage two has
+one placement: code, data and task stacks in PSRAM; interrupt entries,
+per-hart interrupt stacks, hot code, critical state and DMA state in
+internal SRAM. The shared panic handler and compiler panic entry helpers
+also stay in SRAM, since an exception or interrupt may reach them with
+caches unavailable. HAL owns the register-only reset preparation for each
+chip; it must not reacquire locks held by the failing context.
+Image panic hooks share this placement requirement, including their data.
+The hook receives the platform's `PanicDetails`; an interrupt-context panic
+omits text/location metadata that the compiler may have placed in PSRAM.
+The final-image interrupt gate follows every linked compiler panic entry,
+the platform handler and the image hook and rejects cached callees.
+It also rejects static cached-memory references from the image hook and its
+callees, including anonymous constants generated by the compiler.
+
+## Layout seed
+
+Code that runs from cached external memory is sensitive to where the linker
+happens to place each function: an unrelated dependency change can re-sort
+them and move a throughput figure by tens of percent. Setting
+`OER_LAYOUT_SEED` to a nonzero decimal `u32` while building a runtime image
+makes the linker shuffle the ordinary `.text.*` and `.rodata.*` input sections
+with that seed. The same seed reproduces the same image; only the binary is
+relinked. The entry, trap and instruction-stream sections and the explicitly
+placed ISR, hot and critical sections keep their placement. Zero is rejected,
+because the linker would read it as a random seed that no build record could
+reproduce.

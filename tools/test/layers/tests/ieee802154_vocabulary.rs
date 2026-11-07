@@ -5,9 +5,9 @@ use std::{
     path::Path,
 };
 
-const VALUES: &str = "oer-chips-family-ieee802154-mac-values";
+const VALUES: &str = "oer-chips-family-radio-ieee802154-values";
 const KNOWLEDGE: &str = "oer-chips-esp32s31-knowledge";
-const ENGINE: &str = "oer-chips-family-ieee802154-engine";
+const ENGINE: &str = "oer-chips-family-radio-ieee802154-engine";
 
 fn normal_dependencies(value: &toml::Value, workspace: &toml::Value) -> BTreeSet<String> {
     let mut tables = vec![value];

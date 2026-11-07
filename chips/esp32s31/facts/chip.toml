@@ -44,7 +44,7 @@ bootloader-mode = "dio"
 start = "reset"
 
 # The staged-boot address map: host tools check images against it, and
-# chips/esp32s31/layout generates its LAYOUT, which the linker scripts read,
+# chips/esp32s31/platform/layout generates its LAYOUT, which the linker scripts read,
 # from it. The PSRAM's size is the module's; stage two lies in it after the
 # bootstrap's probe page (`runtime-psram`).
 [memory]

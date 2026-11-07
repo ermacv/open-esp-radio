@@ -1,6 +1,5 @@
 //! One bounded RX traffic capture with real take/recycle. No live CPU buffer write.
 use crate::usb;
-use oer_chips_esp32s31_board as board;
 use oer_chips_esp32s31_hal::{
     peripherals::usb_serial_jtag::ConsoleInterrupt,
     peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
@@ -18,14 +17,15 @@ use oer_chips_esp32s31_hal::{
     },
     system::root::Root,
 };
+use oer_chips_esp32s31_platform_board as board;
+use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_client::{LpClock, RcSlow};
 use oer_chips_esp32s31_radio_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
     concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_chips_esp32s31_radio_system::Esp32s31Radio;
-use oer_chips_esp32s31_runtime::Esp32s31;
-use oer_chips_family_executor::{Executor, InterruptExecutor};
+use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
 use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
@@ -46,7 +46,7 @@ const _: () = assert!(BUFFER >= 4 && BUFFER.is_multiple_of(4) && COUNT <= u32::B
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
 type Backend = Esp32s31Radio<
     ChipClocks,
-    oer_chips_family_executor::Cooperative<Esp32s31, EmbassyClock>,
+    oer_chips_family_platform_executor::Cooperative<Esp32s31, EmbassyClock>,
     NoopPhyTargetObserver,
     crate::phy_pilot::Client,
     oer_portable_trace::Noop,
@@ -66,25 +66,25 @@ use crate::phy_pilot;
 
 // SAFETY: the production runtime script maps .hot.text.* to executable SRAM;
 // each generated wrapper retains the interrupt-table ABI and owned part.
-oer_chips_family_interrupt_table::interrupt_table! {
-    lines: oer_chips_family_staged_runtime::interrupts::LINES,
+oer_chips_family_platform_interrupt_table::interrupt_table! {
+    lines: oer_chips_family_platform_runtime::interrupts::LINES,
     handler_attributes: [#[unsafe(link_section = ".hot.text.rx_chain_vectors")]];
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
-    wake: WakeToken = FromCpu0Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
     // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:
     // only P2 line17 before16 is measured on S31.
     phy: PhyToken = oer_chips_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
-    radio: RadioToken = FromCpu2Irq => oer_chips_family_executor::Round<RadioTasks>, line 17, context radio_exec, hart 0, Executor;
-    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_chips_family_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
+    radio: RadioToken = FromCpu2Irq => oer_chips_family_platform_executor::Round<RadioTasks>, line 17, context radio_exec, hart 0, Executor;
+    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
-    app_alarm: AppAlarm = SystimerAlarm1 => oer_chips_family_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
+    app_alarm: AppAlarm = SystimerAlarm1 => oer_chips_family_platform_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
 }
-oer_chips_family_executor::tasks! {
+oer_chips_family_platform_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
         direct(backend: &'static mut Backend, lp: LpClock<RcSlow>, wifi: oer_chips_esp32s31_hal::system::root::WifiPartition, delay_random: u32, station: [u8;6], ap: [u8;6]) = direct_start;
     }
 }
-oer_chips_family_executor::tasks! {
+oer_chips_family_platform_executor::tasks! {
     AppTasks: Executor<Esp32s31, 0> {
         capture(boot: Boot) = capture;
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_watchdog;
@@ -96,15 +96,15 @@ struct Boot {
     mac_irq: oer_chips_esp32s31_hal::system::owner::MacInterruptRegisters,
     traffic: &'static mut traffic::Trace,
 }
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_runtime::phy_fault::reset);
-oer_chips_family_staged_runtime::entry!(
+oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime::phy_fault::reset);
+oer_chips_family_platform_runtime::entry!(
     main,
     oer_chips_esp32s31_hal::system::platform::Port,
     hook = crate::diagnostic::panic,
     exception = crate::diagnostic::exception
 );
 fn main(
-    handoff: oer_chips_family_staged_runtime::Handoff<
+    handoff: oer_chips_family_platform_runtime::Handoff<
         oer_chips_esp32s31_hal::system::platform::Port,
     >,
 ) -> ! {
@@ -125,8 +125,8 @@ fn main(
         ),
         _psram,
         mut adopted,
-    ) = match oer_chips_family_staged_runtime::adoption::run::<
-        oer_chips_esp32s31_runtime::Esp32s31,
+    ) = match oer_chips_family_platform_runtime::adoption::run::<
+        oer_chips_esp32s31_platform_runtime::Esp32s31,
         _,
         _,
     >(
@@ -134,10 +134,10 @@ fn main(
         root.into_runtime(),
         INTERRUPT_TABLE,
         board::BootstrapPsram,
-        oer_chips_esp32s31_runtime::phy_fault::report_previous,
+        oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
         |hardware| {
             let _reset_causes =
-                oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
+                oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
 
             crate::diagnostic::report_previous();
             (
@@ -171,12 +171,12 @@ fn main(
     let (domain, partitions) = runtime_radio
         .split::<ChipClocks, _>(
             ConcurrentPhy::new(),
-            oer_chips_esp32s31_runtime::phy_fault::identity(),
+            oer_chips_esp32s31_platform_runtime::phy_fault::identity(),
         )
         .unwrap_or_else(|failure| {
             let fault = failure.fault();
             let _owners = failure;
-            oer_chips_esp32s31_runtime::phy_fault::reset(fault)
+            oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault)
         });
     let Some(lp) = LpClock::<RcSlow>::claim() else {
         fail(oer_portable_diagnostics::name!("claim"; 32));
@@ -186,7 +186,7 @@ fn main(
         domain,
         partitions.wifi_coex,
         runtime_clocks,
-        oer_chips_family_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
+        oer_chips_family_platform_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
         NoopPhyTargetObserver,
         oer_portable_trace::Noop,
         PhyRegisterConfig::new(identity),
@@ -196,8 +196,8 @@ fn main(
         fail(oer_portable_diagnostics::name!("direct-backend"; 32));
     };
     let timer = runtime_system_timer;
-    let mut timer_ready = oer_chips_family_executor::init::<Esp32s31, 2, _, _, _>(
-        oer_chips_family_executor::systimer::SystemTimer {
+    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _>(
+        oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
         },
@@ -206,7 +206,7 @@ fn main(
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_chips_family_executor::bind::<Esp32s31, 0, _, _, _>(
+    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _>(
         &mut timer_ready,
         adopted.router(),
         interrupts.app_alarm,
@@ -279,7 +279,7 @@ fn main(
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
-    oer_chips_family_staged_runtime::fatal::boot_failure::<
+    oer_chips_family_platform_runtime::fatal::boot_failure::<
         oer_chips_esp32s31_hal::system::platform::Port,
     >(reason.as_str(), || {
         let _ = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
@@ -647,4 +647,4 @@ async fn run_direct(
     Ok(())
 }
 
-oer_chips_family_executor::time_driver!(Esp32s31);
+oer_chips_family_platform_executor::time_driver!(Esp32s31);

@@ -10,8 +10,8 @@ fn request_directions_are_rejected_during_codegen() {
     fs::create_dir_all(scratch_root).expect("create compiler scratch root");
     let scratch = tempfile::tempdir_in(scratch_root).expect("own compiler scratch");
     fs::write(scratch.path().join("Cargo.toml"), format!(
-        "[package]\nname = \"bluetooth-request-directions\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-chips-esp32s31-radio-bluetooth-driver = {{ path = {:?} }}\noer-chips-family-interrupt-table = {{ path = {:?}, features = [\"host-signal\"] }}\n",
-        manifest, manifest.join("../../../../family/interrupt-table")
+        "[package]\nname = \"bluetooth-request-directions\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-chips-esp32s31-radio-bluetooth-driver = {{ path = {:?} }}\noer-chips-family-platform-interrupt-table = {{ path = {:?}, features = [\"host-signal\"] }}\n",
+        manifest, manifest.join("../../../../family/platform/interrupt-table")
     )).expect("write isolated compiler manifest");
     for case in ["exchange", "attach"] {
         let source =

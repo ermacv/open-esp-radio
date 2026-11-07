@@ -9,7 +9,7 @@ use crate::{
     scheduler::SchedulerInitialized,
 };
 use oer_chips_esp32s31_hal::radio::bluetooth::engine::scheduler::SchedulerSoftwareConfig;
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 
 use oer_chips_esp32s31_hal::radio::bluetooth::{
     BluetoothLowPowerRuntimeControlObservation, BluetoothModemLpTimerOwnerError,
@@ -161,7 +161,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
     /// The caller runs outside the event cells' executor.
     pub fn runtime_is_pristine(
         &self,
-    ) -> Result<bool, oer_chips_family_interrupt_table::signal::ForeignContext> {
+    ) -> Result<bool, oer_chips_family_platform_interrupt_table::signal::ForeignContext> {
         self.scheduler.runtime_is_pristine()
     }
 

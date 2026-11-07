@@ -463,15 +463,15 @@ fn uncertain_hardware_reachability_blocks_all_graph_access_even_after_late_stop(
 fn detached_completion_epochs_never_wrap_into_an_old_installation() {
     let counter = core::sync::atomic::AtomicU32::new(u32::MAX - 1);
     assert_eq!(
-        oer_chips_family_bluetooth_engine::phase::EngineEpoch::allocate(&counter),
-        Some(oer_chips_family_bluetooth_engine::phase::EngineEpoch::from_sequence(u32::MAX - 1))
+        oer_chips_family_radio_bluetooth::phase::EngineEpoch::allocate(&counter),
+        Some(oer_chips_family_radio_bluetooth::phase::EngineEpoch::from_sequence(u32::MAX - 1))
     );
     assert_eq!(
-        oer_chips_family_bluetooth_engine::phase::EngineEpoch::allocate(&counter),
+        oer_chips_family_radio_bluetooth::phase::EngineEpoch::allocate(&counter),
         None
     );
     assert_eq!(
-        oer_chips_family_bluetooth_engine::phase::EngineEpoch::allocate(&counter),
+        oer_chips_family_radio_bluetooth::phase::EngineEpoch::allocate(&counter),
         None
     );
 }

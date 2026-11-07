@@ -2,7 +2,7 @@ use oer_chips_esp32s31_hal::radio::bluetooth::{
     BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchStep,
     BluetoothControllerTimeLatchStepError,
 };
-use oer_chips_family_bluetooth_engine::port::ControllerTimePort;
+use oer_chips_family_radio_bluetooth::port::ControllerTimePort;
 
 use oer_chips_esp32s31_hal::radio::bluetooth::{
     BluetoothControllerHalInitConfig, BluetoothControllerLatchedTime, BluetoothHalInitPeriod,
@@ -784,7 +784,7 @@ fn physical_duration_admission_enforces_the_retained_scales_half_range() {
 #[test]
 fn counted_time_survives_n_overflows_without_live_samples_or_p2_dequeues() {
     use crate::interrupt::{PrimaryInterruptCapture, SchedulerWakeCell};
-    use oer_chips_family_interrupt_table::signal::host;
+    use oer_chips_family_platform_interrupt_table::signal::host;
     use oer_portable_time::{Clock, Duration, Instant};
     use oer_portable_time_virtual::VirtualClock;
     let clock = VirtualClock::<1>::starting_at(Instant::EPOCH);

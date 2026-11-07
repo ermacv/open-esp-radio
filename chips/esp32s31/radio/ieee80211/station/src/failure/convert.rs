@@ -677,8 +677,8 @@ pub(super) fn modem_clock_error(
     }
 }
 
-pub(super) fn power_error(value: oer_chips_family_radio::power::PowerError) -> PowerError {
-    let oer_chips_family_radio::power::PowerError {
+pub(super) fn power_error(value: oer_chips_family_radio_domain::power::PowerError) -> PowerError {
+    let oer_chips_family_radio_domain::power::PowerError {
         checkpoint,
         expected,
         observed,
@@ -691,9 +691,9 @@ pub(super) fn power_error(value: oer_chips_family_radio::power::PowerError) -> P
 }
 
 pub(super) fn power_checkpoint(
-    value: oer_chips_family_radio::power::PowerCheckpoint,
+    value: oer_chips_family_radio_domain::power::PowerCheckpoint,
 ) -> PowerCheckpoint {
-    use oer_chips_family_radio::power::PowerCheckpoint as Source;
+    use oer_chips_family_radio_domain::power::PowerCheckpoint as Source;
     match value {
         Source::Mpll => PowerCheckpoint::Mpll,
         Source::ResetReleased => PowerCheckpoint::ResetReleased,

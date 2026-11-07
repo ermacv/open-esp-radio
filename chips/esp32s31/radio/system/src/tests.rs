@@ -234,7 +234,7 @@ impl ClientBackend<Wifi, RcSlow> for Model {
             wifi: track.wifi,
             report: TrackReport {
                 probe_priority: crate::mac_sources::probe_priority(
-                    oer_chips_family_coex::CoexPtiTable::VENDOR,
+                    oer_chips_family_radio_coex::CoexPtiTable::VENDOR,
                 ),
                 tracking_micros: Some(7),
                 temperature: PhyState::default().temperature_observation(),
@@ -259,7 +259,7 @@ impl ClientBackend<Wifi, RcSlow> for Model {
             wifi: retune.wifi,
             report: RetuneReport {
                 probe_priority: crate::mac_sources::probe_priority(
-                    oer_chips_family_coex::CoexPtiTable::VENDOR,
+                    oer_chips_family_radio_coex::CoexPtiTable::VENDOR,
                 ),
                 micros: 11,
                 temperature: PhyState::default().temperature_observation(),

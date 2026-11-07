@@ -65,9 +65,9 @@ impl MacTxPowerSource for MacSources {
 mod tests;
 
 pub(crate) fn probe_priority(
-    table: oer_chips_family_coex::CoexPtiTable,
+    table: oer_chips_family_radio_coex::CoexPtiTable,
 ) -> oer_chips_esp32s31_radio_client::wifi::ProbePriority {
-    use oer_chips_family_coex::wifi_events;
+    use oer_chips_family_radio_coex::wifi_events;
     let packet = table.pti(wifi_events::PROBE_REQUEST);
     let scheduler = packet.min(table.pti(wifi_events::SLICE));
     oer_chips_esp32s31_radio_client::wifi::ProbePriority {
@@ -81,7 +81,7 @@ mod probe_tests {
     use super::*;
     #[test]
     fn probe_priority_follows_the_live_shared_operation_and_slice_entries() {
-        use oer_chips_family_coex::{CoexPti, CoexPtiTable, wifi_events};
+        use oer_chips_family_radio_coex::{CoexPti, CoexPtiTable, wifi_events};
         let event = wifi_events::PROBE_REQUEST;
         let mut table = CoexPtiTable::VENDOR;
         table.set(event, CoexPti::new(2).expect("PTI"));

@@ -5,7 +5,7 @@ the target and the host decoder. It holds typed events, their two-word
 encoding and decoding, ordering of caller-owned record slices, and the
 contract through which an owner reports observations. It has no global
 recorder, clock, placement, persistence or boot policy; the platform's
-recorder (`oer-chips-family-staged-runtime::trace`) owns those.
+recorder (`oer-chips-family-platform-runtime::trace`) owns those.
 
 ## Events
 

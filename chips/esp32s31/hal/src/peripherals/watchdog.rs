@@ -13,7 +13,7 @@
 //! main watchdog serves the system deadline.
 
 mod registers;
-pub use oer_chips_family_watchdog::{
+pub use oer_chips_family_peripherals_watchdog::{
     ArmedRtcWatchdog, MainSession, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog,
     StoppedMainWatchdog, SuperWatchdog,
     deadline::{DeadlineBudget, DeadlineError},
@@ -101,7 +101,8 @@ impl WatchdogRegisters {
 
 /// The system deadline on timer group 1's main watchdog, measured on `C`.
 pub type DeadlineWatchdog<C> =
-    oer_chips_family_watchdog::deadline::DeadlineWatchdog<Mwdt1Registers, C>;
+    oer_chips_family_peripherals_watchdog::deadline::DeadlineWatchdog<Mwdt1Registers, C>;
 
 /// An armed system deadline on timer group 1's main watchdog.
-pub type DeadlineLease<C> = oer_chips_family_watchdog::deadline::DeadlineLease<Mwdt1Registers, C>;
+pub type DeadlineLease<C> =
+    oer_chips_family_peripherals_watchdog::deadline::DeadlineLease<Mwdt1Registers, C>;

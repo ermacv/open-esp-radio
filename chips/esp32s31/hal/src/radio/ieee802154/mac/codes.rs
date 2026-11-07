@@ -5,7 +5,7 @@
 //! the register model; unknown abort/security values remain unclassified.
 
 use oer_chips_esp32s31_pac::ieee802154::{rx_status, tx_status};
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation, Ieee802154RxStateCode,
     Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityError,
     Ieee802154TxSecurityErrorObservation,

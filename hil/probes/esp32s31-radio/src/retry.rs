@@ -78,7 +78,7 @@ pub(crate) fn select(
 mod tests {
     use super::*;
     use oer_chips_esp32s31_hal::types::MacLegacyRate;
-    use oer_chips_family_ieee80211_policy::retry_ladder::EspressifRetryLadder;
+    use oer_chips_family_radio_ieee80211_policy::retry_ladder::EspressifRetryLadder;
     use oer_protocols_ieee80211_wire::phy::{
         FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
     };

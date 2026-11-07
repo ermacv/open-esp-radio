@@ -130,7 +130,7 @@ fn run(s: &mut Session<'_>, scenario: u32) {
         return;
     }
 
-    // SOURCE: staged-runtime fatal::reset_recording -> HAL cores::{fatal,
+    // SOURCE: platform-runtime fatal::reset_recording -> HAL cores::{fatal,
     // stop_other, software_reset, prepare_reset}, hart0, other hart already Held.
     // No HAL call, peripheral takeover, UART perturbation or timer cleanup.
     let _ = oer_portable_riscv::swap_interrupt_threshold(u8::MAX);

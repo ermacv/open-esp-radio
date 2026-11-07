@@ -9,7 +9,7 @@
 //! critical section; here every step is finite, sequenced through durable P3 replies, and the caller owns the deadline.
 
 #[cfg(feature = "bluetooth-engine")]
-use oer_chips_family_bluetooth_engine::port::SchedulerTaskPort;
+use oer_chips_family_radio_bluetooth::port::SchedulerTaskPort;
 
 use crate::radio::bluetooth::registers::{
     BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionLockPublished,
@@ -131,7 +131,7 @@ pub(crate) fn clear_start(
     lock: &mut BluetoothSchedulerExecutionLock,
 ) {
     if let Some(published) = lock.take_published() {
-        oer_chips_family_bluetooth_engine::port::SchedulerTaskPort::clear_execution_lock(
+        oer_chips_family_radio_bluetooth::port::SchedulerTaskPort::clear_execution_lock(
             task, published,
         );
     }

@@ -2,7 +2,7 @@
 use super::*;
 use core::marker::PhantomData;
 use oer_chips_esp32s31_pac::ieee802154::command::Opcode;
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154InterruptStartup, Ieee802154InterruptTeardown,
 };
 use oer_portable_mmio::Placement;

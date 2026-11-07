@@ -199,7 +199,7 @@ system these rules serve.
   Generated register code has no `unsafe`: volatile access lives in
   `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
   instructions in `portable/riscv`, Espressif interrupt bindings in
-  `chips/family/interrupt-table`, typed symbol export attributes in
+  `chips/family/platform/interrupt-table`, typed symbol export attributes in
   `portable/memory`, the waker cell in `portable/waker`, the PAC's one root
   claim, probe images,
   the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
@@ -229,7 +229,7 @@ system these rules serve.
   and `chips/*/vendor/facts/**/*.toml` (including TOML files directly in
   `facts/`) are never read whole or edited by hand: grep them by path, regenerate them. `cargo registers generate
   --chip <chip>` renders the PAC and
-  `chips/*/layout/linker/dma-window.x`; the linker fragment may be read,
+  `chips/*/platform/layout/linker/dma-window.x`; the linker fragment may be read,
   never edited. Its inputs are `chips/<chip>/registers/chip.toml`, `types/`,
   `layouts/`, `evidence/` and the schema-6 `policy.toml`.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A

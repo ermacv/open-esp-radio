@@ -389,7 +389,7 @@ fn loader_fixture(
     )).unwrap();
     let output = directory.join("loader.elf");
     let scripts =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/family/staged-layout/linker");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/family/platform/layout/linker");
     let result = std::process::Command::new(oer_tools_os_toolchain::lld().unwrap())
         .arg("-L")
         .arg(scripts)

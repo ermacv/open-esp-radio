@@ -35,13 +35,13 @@ pub mod temperature;
 /// Place a PHY engine code item in executable internal SRAM for performance.
 ///
 /// This chip boundary owns section placement; PHY callers remain safe Rust.
-/// The existing staged-runtime linker and startup copy `.hot.text.*` to SRAM.
+/// The existing platform-runtime linker and startup copy `.hot.text.*` to SRAM.
 /// This macro accepts functions only, never writable storage.
 #[macro_export]
 macro_rules! place_phy_engine_hot_path {
     ($(#[$attribute:meta])* $visibility:vis fn $name:ident $($body:tt)*) => {
         $(#[$attribute])*
-        // SAFETY: the S31 staged-runtime linker maps `.hot.text.*` into aligned
+        // SAFETY: the S31 platform-runtime linker maps `.hot.text.*` into aligned
         // executable SRAM and startup copies it before execution. Only code
         // items are accepted; storage and its initialization are unchanged.
         #[cfg_attr(

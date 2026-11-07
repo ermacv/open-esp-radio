@@ -156,7 +156,7 @@ impl StaAssociatedPeer {
     /// The peer `access_point`, whose ERP elements ask for `erp`, became by
     /// `response` to an association with `phy`. `he_packet_padding` reads the nominal packet padding from the
     /// access point's HE Capabilities element, an integrator's policy (the
-    /// Espressif stack's is `oer-chips-family-ieee80211-policy`'s).
+    /// Espressif stack's is `oer-chips-family-radio-ieee80211-policy`'s).
     pub fn derive(
         access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord,
         erp: oer_protocols_ieee80211_wire::protection::ErpProtection,

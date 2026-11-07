@@ -91,10 +91,10 @@ oer_tools_probe_macros::probe! {
         if output.is_null() {
             return 0x102;
         }
-        let Some(event) = oer_chips_family_coex::CoexEventId::new(event as u8) else {
+        let Some(event) = oer_chips_family_radio_coex::CoexEventId::new(event as u8) else {
             return 0x102;
         };
-        let pti = oer_chips_family_coex::CoexPtiTable::VENDOR.pti(event);
+        let pti = oer_chips_family_radio_coex::CoexPtiTable::VENDOR.pti(event);
         // SAFETY: verification profiles provide a writable caller-owned output
         // byte and compare its final state with the vendor execution.
         unsafe { output.write(pti.value()) };
@@ -114,8 +114,8 @@ oer_tools_probe_macros::probe! {
         if output.is_null() {
             return u32::MAX;
         }
-        let duration = oer_chips_family_coex::CoexEventId::new(event as u8)
-            .and_then(|event| oer_chips_family_coex::CoexEventDurations::reviewed_vendor().duration(event));
+        let duration = oer_chips_family_radio_coex::CoexEventId::new(event as u8)
+            .and_then(|event| oer_chips_family_radio_coex::CoexEventDurations::reviewed_vendor().duration(event));
         // SAFETY: verification profiles provide a writable caller-owned output
         // word and compare its final state with the vendor execution.
         unsafe { output.write(duration.unwrap_or(0)) };
@@ -127,10 +127,10 @@ oer_tools_probe_macros::probe! {
     /// Compiled production-path projection of the complete vendor event-to-timer
     /// switch. `0xff` is the exact unmapped sentinel returned by the vendor leaf.
     pub fn open_coex_core_trace_timer_idx_get(event: u32) -> u32 {
-        let Some(event) = oer_chips_family_coex::CoexEventId::new(event as u8) else {
+        let Some(event) = oer_chips_family_radio_coex::CoexEventId::new(event as u8) else {
             return 0xff;
         };
-        oer_chips_family_coex::timer_index(event).map_or(0xff, |index| u32::from(index.value()))
+        oer_chips_family_radio_coex::timer_index(event).map_or(0xff, |index| u32::from(index.value()))
     }
 }
 
@@ -147,7 +147,7 @@ oer_tools_probe_macros::probe! {
     /// Complete register projection of `coex_core_release`. The vendor ABI keeps
     /// the client in `a0` but selects the timer exclusively from event `a1`.
     pub fn open_coex_core_trace_release(_client: u32, event: u32) -> u32 {
-        use oer_chips_family_coex::{CoexError, CoexEventId};
+        use oer_chips_family_radio_coex::{CoexError, CoexEventId};
 
         let Some(event) = CoexEventId::new(event as u8) else {
             return 0x102;
@@ -240,7 +240,7 @@ oer_tools_probe_macros::probe! {
         };
         let selected = match retry::select(
             initial_rate, counters,
-            &oer_chips_family_ieee80211_policy::retry_ladder::EspressifRetryLadder,
+            &oer_chips_family_radio_ieee80211_policy::retry_ladder::EspressifRetryLadder,
         ) {
             Ok(selected) => selected,
             Err(refusal) => return refusal.status() as u32,

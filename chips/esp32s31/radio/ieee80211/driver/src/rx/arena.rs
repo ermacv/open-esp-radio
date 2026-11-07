@@ -11,7 +11,7 @@
 //! [`bind`]: WifiRxArena::bind
 
 use core::mem::MaybeUninit;
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 
 use crate::mac::{
     irq::consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
@@ -37,9 +37,9 @@ use crate::irq::{WifiIrqLine, WifiIrqLineParts, WifiIrqRequests};
 /// line's facts: the MAC facts but the receive ones, the receive facts and
 /// the power facts.
 pub struct WifiIrqSignals<X: SignalExecutor> {
-    pub mac: &'static oer_chips_family_interrupt_table::signal::IrqSignal<X>,
-    pub receive: &'static oer_chips_family_interrupt_table::signal::IrqSignal<X>,
-    pub power: &'static oer_chips_family_interrupt_table::signal::IrqSignal<X>,
+    pub mac: &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<X>,
+    pub receive: &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<X>,
+    pub power: &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<X>,
 }
 
 /// The static arena of one receive epoch.

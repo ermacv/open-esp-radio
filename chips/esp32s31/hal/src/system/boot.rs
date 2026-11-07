@@ -1,5 +1,5 @@
 //! The ESP32-S31 bootstrap owners and memory/CPU profiles.
-//! LP-fast, brownout and TRNG profiles live in `oer-chips-esp32s31-bootstrap`.
+//! LP-fast, brownout and TRNG profiles live in `oer-chips-esp32s31-platform-bootstrap`.
 //! The remaining facts for the `oer-chips-family-boot` sequences are:
 //! the CPU clock profiles, the flash read commands and timing candidates,
 //! the octal PSRAM's profile, the named boot waits and the boot budget below

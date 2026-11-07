@@ -329,7 +329,7 @@ at every level and the exception. Both `Required::Product` and
 negative spare remains visible in the table.
 Its placement summary lines separate strict code in cached memory by hart/level
 from executor task code in PSRAM and name the task roots. A level's class is
-its table entries' (`oer_chips_family_interrupt_table::Class`): the level of an `Executor`
+its table entries' (`oer_chips_family_platform_interrupt_table::Class`): the level of an `Executor`
 entry is the executor's, every other level is hardware. Only an executor's
 level has a task boundary; it comes from
 the executor's task poll sites (`task_poll_sites`) through `Analysis::reached_cut`; each level
@@ -414,12 +414,12 @@ report or inspection error is explicit. The image JSON envelope and each
 crate's compiler facts have independent schema versions.
 
 The stage-two header, checksum and address map come from the
-[platform layout](../../../chips/family/staged-layout/README.md), which application
+[platform layout](../../../chips/family/platform/layout/README.md), which application
 build scripts also use to configure the linker.
 
 The staged runtime's placement audit (`staged::placement`) checks the
 PSRAM/SRAM placement contract of the
-[platform layout](../../../chips/family/staged-layout/README.md) and that each
+[platform layout](../../../chips/family/platform/layout/README.md) and that each
 PSRAM trap and interrupt entry first swaps to its SRAM stack; the caller's
 audit runs beside it.
 

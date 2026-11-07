@@ -6,7 +6,7 @@ logic and the backend that puts frames on the air, as
 the interaction with the peripheral and the representation of the data that
 crosses it: typestate wrappers, outcomes and facts. Wire codecs live in
 `oer-protocols-ieee80211-wire`, policy in the cores above the port, vendor records in
-`oer-chips-family-ieee80211-policy` and chip models in the chip's MAC; no normal
+`oer-chips-family-radio-ieee80211-policy` and chip models in the chip's MAC; no normal
 dependency of the port reaches an ieee80211 core (`oer-tools-test-layers`). It is
 sans-IO: it declares the port and its values and never waits on it.
 
@@ -395,7 +395,7 @@ Limits, rate ladders and duration estimates in which implementations differ
 are parameters of those algorithms; the Espressif values recovered from the
 vendor stack, including the opaque rate-schedule records and the default
 contention of each access category, are the family package
-`oer-chips-family-ieee80211-policy`.
+`oer-chips-family-radio-ieee80211-policy`.
 
 ## Implementers
 

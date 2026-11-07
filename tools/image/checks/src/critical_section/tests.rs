@@ -180,7 +180,7 @@ pub fn entry(value: u32) -> u32 { critical::hart::_critical_section_1_0_acquire(
         .args([
             "--edition=2024",
             "--crate-type=lib",
-            "--crate-name=oer_chips_family_staged_runtime",
+            "--crate-name=oer_chips_family_platform_runtime",
             "--target=riscv32imafc-unknown-none-elf",
             "--emit=obj",
             "-Copt-level=3",
@@ -218,7 +218,7 @@ pub fn entry(value: u32) -> u32 { critical::hart::_critical_section_1_0_acquire(
     assert!(image.symbol(ENTRIES[0]).is_none());
     let owners = callers(&image);
     assert!(!owners.is_empty());
-    let root = image.address_of("oer_chips_family_staged_runtime::entry")[0];
+    let root = image.address_of("oer_chips_family_platform_runtime::entry")[0];
     assert!(owners.contains(&root));
     let roots = BTreeMap::from([((OTHER, root), "foreign inlined section".into())]);
     let error = audit_roots(&image, &roots, BOOT).unwrap_err().to_string();

@@ -10,22 +10,22 @@ description = "A staged image that puts the S31's HP system into PMU light sleep
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-chips-esp32s31-runtime = { path = "../../../chips/esp32s31/runtime" }
+oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/runtime" }
+oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform/runtime" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
-oer-chips-family-executor = { path = "../../../chips/family/executor" }
-oer-chips-family-platform-port = { path = "../../../chips/family/platform-port", features = ["esp32s31"] }
-oer-chips-family-power = { path = "../../../chips/family/power" }
-oer-chips-family-watchdog = { path = "../../../chips/family/watchdog" }
+oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
+oer-chips-family-platform-port = { path = "../../../chips/family/platform/port", features = ["esp32s31"] }
+oer-chips-family-peripherals-power = { path = "../../../chips/family/peripherals/power" }
+oer-chips-family-peripherals-watchdog = { path = "../../../chips/family/peripherals/watchdog" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
-oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
+oer-chips-family-platform-interrupt-table = { path = "../../../chips/family/platform/interrupt-table" }
 oer-portable-riscv = { path = "../../../portable/riscv" }
 
 [build-dependencies]
-oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

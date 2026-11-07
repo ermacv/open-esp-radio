@@ -56,14 +56,14 @@ const BUFFER: usize = 1_664;
 const STORAGE: usize = BUFFER;
 const SLOTS: usize = 32;
 
-type HostLine<X = oer_chips_family_interrupt_table::signal::host::Host> = WifiIrqLine<X>;
+type HostLine<X = oer_chips_family_platform_interrupt_table::signal::host::Host> = WifiIrqLine<X>;
 type HostPart = WifiIrqPart<HostLower, (), MacInterruptModel, PowerInterruptModel>;
 type HostStatic = WifiRxStatic<
     COUNT,
     BUFFER,
     STORAGE,
     SLOTS,
-    oer_chips_family_interrupt_table::signal::host::Host,
+    oer_chips_family_platform_interrupt_table::signal::host::Host,
     HostDma,
 >;
 
@@ -98,7 +98,7 @@ enum Event {
 }
 
 /// The hardware every host owner shares.
-struct Host<X: SignalExecutor = oer_chips_family_interrupt_table::signal::host::Host> {
+struct Host<X: SignalExecutor = oer_chips_family_platform_interrupt_table::signal::host::Host> {
     walker: RefCell<RxWalkerModel>,
     log: RefCell<Vec<Event>>,
     /// The radio handler's part: both bank models, closed until a request
@@ -194,7 +194,8 @@ impl<X: SignalExecutor> Host<X> {
     }
 }
 
-struct HostRadio<X: SignalExecutor = oer_chips_family_interrupt_table::signal::host::Host> {
+struct HostRadio<X: SignalExecutor = oer_chips_family_platform_interrupt_table::signal::host::Host>
+{
     host: &'static Host<X>,
 }
 
@@ -269,16 +270,18 @@ impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
     }
 }
 
-struct HostDoorbell<X: SignalExecutor = oer_chips_family_interrupt_table::signal::host::Host> {
+struct HostDoorbell<
+    X: SignalExecutor = oer_chips_family_platform_interrupt_table::signal::host::Host,
+> {
     host: &'static Host<X>,
     rx: &'static HostStorage,
 }
 
 impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
-    const HANDLER: oer_chips_family_interrupt_table::Context =
-        oer_chips_family_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_chips_family_interrupt_table::Context =
-        oer_chips_family_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_chips_family_platform_interrupt_table::Context =
+        oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_chips_family_platform_interrupt_table::Context =
+        oer_chips_family_platform_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.host.record(Event::Ring {
             released: self.rx.released_buffer_count(),
@@ -297,10 +300,10 @@ impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
 struct Silent;
 
 impl RadioDoorbell for Silent {
-    const HANDLER: oer_chips_family_interrupt_table::Context =
-        oer_chips_family_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_chips_family_interrupt_table::Context =
-        oer_chips_family_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_chips_family_platform_interrupt_table::Context =
+        oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_chips_family_platform_interrupt_table::Context =
+        oer_chips_family_platform_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {}
 }
 
@@ -350,7 +353,7 @@ impl Admission for OverReserved {
     }
 }
 
-struct Harness<X: SignalExecutor = oer_chips_family_interrupt_table::signal::host::Host> {
+struct Harness<X: SignalExecutor = oer_chips_family_platform_interrupt_table::signal::host::Host> {
     host: &'static Host<X>,
     rx: &'static HostStorage,
     base: u32,
@@ -381,11 +384,11 @@ where
 
 /// The host executor's signals, each serviced at its raise.
 fn host_signals()
--> crate::rx::arena::WifiIrqSignals<oer_chips_family_interrupt_table::signal::host::Host> {
+-> crate::rx::arena::WifiIrqSignals<oer_chips_family_platform_interrupt_table::signal::host::Host> {
     crate::rx::arena::WifiIrqSignals {
-        mac: oer_chips_family_interrupt_table::signal::host::signal().0,
-        receive: oer_chips_family_interrupt_table::signal::host::signal().0,
-        power: oer_chips_family_interrupt_table::signal::host::signal().0,
+        mac: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+        receive: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+        power: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
     }
 }
 
@@ -395,8 +398,13 @@ fn host_signals()
 fn harness_staged<const STAGE: usize, E, M>(
     owners: impl FnOnce(
         &'static WifiRxCounters,
-        RxReturnNotifier<'static, oer_chips_family_interrupt_table::signal::host::Host>,
-        RxFrameEnds<'static, STAGE, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>,
+        RxReturnNotifier<'static, oer_chips_family_platform_interrupt_table::signal::host::Host>,
+        RxFrameEnds<
+            'static,
+            STAGE,
+            BUFFER,
+            oer_chips_family_platform_interrupt_table::signal::host::Host,
+        >,
         &'static VirtualClock,
     ) -> (E, M),
 ) -> Harness
@@ -1059,9 +1067,9 @@ fn cold_start_refuses_an_occupied_cell_without_opening_mac() {
     let (parts, mut stop, _frames) = WifiRxArena::bind(
         oer_chips_esp32s31_hal::system::memory::dma_static::Placed::host(arena),
         crate::rx::arena::WifiIrqSignals {
-            mac: oer_chips_family_interrupt_table::signal::host::signal().0,
-            receive: oer_chips_family_interrupt_table::signal::host::signal().0,
-            power: oer_chips_family_interrupt_table::signal::host::signal().0,
+            mac: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+            receive: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+            power: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
         },
     )
     .unwrap();
@@ -1141,7 +1149,7 @@ type Returned<const N: usize = STAGE> = RefCell<
             'static,
             N,
             BUFFER,
-            oer_chips_family_interrupt_table::signal::host::Host,
+            oer_chips_family_platform_interrupt_table::signal::host::Host,
         >,
     >,
 >;
@@ -1151,7 +1159,8 @@ type Returned<const N: usize = STAGE> = RefCell<
 struct ReturningSink<const N: usize = STAGE> {
     held: &'static Returned<N>,
     holding: &'static Cell<bool>,
-    returns: RxReturnNotifier<'static, oer_chips_family_interrupt_table::signal::host::Host>,
+    returns:
+        RxReturnNotifier<'static, oer_chips_family_platform_interrupt_table::signal::host::Host>,
     counters: &'static WifiRxCounters,
 }
 
@@ -1190,7 +1199,7 @@ fn returning_harness() -> (
     Harness,
     &'static Returned,
     &'static Cell<bool>,
-    RxReturnNotifier<'static, oer_chips_family_interrupt_table::signal::host::Host>,
+    RxReturnNotifier<'static, oer_chips_family_platform_interrupt_table::signal::host::Host>,
 ) {
     returning_harness_with::<STAGE>()
 }
@@ -1200,7 +1209,7 @@ fn returning_harness_with<const N: usize>() -> (
     Harness,
     &'static Returned<N>,
     &'static Cell<bool>,
-    RxReturnNotifier<'static, oer_chips_family_interrupt_table::signal::host::Host>,
+    RxReturnNotifier<'static, oer_chips_family_platform_interrupt_table::signal::host::Host>,
 ) {
     let held: &'static Returned<N> = leak(RefCell::new(Vec::new()));
     let holding: &'static Cell<bool> = leak(Cell::new(true));
@@ -1360,7 +1369,12 @@ fn a_return_while_rx_is_live_is_harmless() {
 /// of the queue is returned beside it.
 fn queue_harness() -> (
     Harness,
-    FrameReceiver<'static, STAGE, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>,
+    FrameReceiver<
+        'static,
+        STAGE,
+        BUFFER,
+        oer_chips_family_platform_interrupt_table::signal::host::Host,
+    >,
 ) {
     let mut receiver = None;
     let harness = harness_staged::<STAGE, _, _>(|counters, _, frames, clock| {
@@ -1384,7 +1398,7 @@ fn poll_next(
         'static,
         STAGE,
         BUFFER,
-        oer_chips_family_interrupt_table::signal::host::Host,
+        oer_chips_family_platform_interrupt_table::signal::host::Host,
     >,
 ) -> Option<
     HeldRxFrame<
@@ -1392,7 +1406,7 @@ fn poll_next(
         'static,
         STAGE,
         BUFFER,
-        oer_chips_family_interrupt_table::signal::host::Host,
+        oer_chips_family_platform_interrupt_table::signal::host::Host,
     >,
 > {
     let mut next = core::pin::pin!(receiver.next());
@@ -2129,9 +2143,9 @@ fn a_walker_reported_on_a_held_lease_descriptor_quarantines_the_epoch() {
 fn a_runner_outside_its_signals_executor_ends_instead_of_waiting_forever() {
     let mut harness = harness_staged_with::<SLOTS, _, _, _>(
         crate::rx::arena::WifiIrqSignals {
-            mac: oer_chips_family_interrupt_table::signal::host::foreign_signal(),
-            receive: oer_chips_family_interrupt_table::signal::host::foreign_signal(),
-            power: oer_chips_family_interrupt_table::signal::host::foreign_signal(),
+            mac: oer_chips_family_platform_interrupt_table::signal::host::foreign_signal(),
+            receive: oer_chips_family_platform_interrupt_table::signal::host::foreign_signal(),
+            power: oer_chips_family_platform_interrupt_table::signal::host::foreign_signal(),
         },
         |counters, _, _, _| {
             (

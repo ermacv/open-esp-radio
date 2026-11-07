@@ -247,7 +247,7 @@ to hardware-shared memory.
 A DMA static is declared with the chip HAL's `dma_static!`: a zeroed
 `DmaStatic<T>` in a `.dma.bss.<block>` section (the macro refuses any other
 section name), claimed once as a `Placed<T>`. The register generator writes
-each chip's `layout/linker/dma-window.x` from the model: the `dma-window`
+each chip's `platform/layout/linker/dma-window.x` from the model: the `dma-window`
 region and the low address bits its pointers keep. The
 runtime linker script includes it and asserts that all DMA storage lies in
 the window and holds no address whose low address bits are zero; the

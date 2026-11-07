@@ -5,7 +5,7 @@ use super::*;
 fn sources() -> MacSources {
     MacSources {
         pti: [1, 3, 10, 15].map(|value| {
-            oer_chips_family_coex::CoexPti::new(value)
+            oer_chips_family_radio_coex::CoexPti::new(value)
                 .expect("a coexistence priority")
                 .into()
         }),

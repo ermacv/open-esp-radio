@@ -113,20 +113,20 @@ fn compiler_imports_stay_in_the_reporter_and_its_private_bridge() {
 const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/esp32s31/pac",
     "chips/esp32s31/hal",
-    "chips/esp32s31/board",
-    "chips/family/staged-bootstrap",
-    "chips/family/staged-layout",
-    "chips/family/staged-runtime",
-    "chips/family/executor",
+    "chips/esp32s31/platform/board",
+    "chips/family/platform/bootstrap",
+    "chips/family/platform/layout",
+    "chips/family/platform/runtime",
+    "chips/family/platform/executor",
     "portable/memory",
     "portable/mmio",
     "portable/riscv",
     "portable/waker",
-    "chips/family/interrupt-table",
+    "chips/family/platform/interrupt-table",
     "tools/os/process",
     "tools/os/serial",
     "tools/vendor/ieee802154-esp32s31",
-    "chips/esp32s31/bootstrap",
+    "chips/esp32s31/platform/bootstrap",
     "hil/probes/",
 ];
 
@@ -143,7 +143,7 @@ fn below_the_boundary(package: &str) -> bool {
 fn the_boundary_is_named_by_package_or_domain() {
     for package in [
         "chips/esp32s31/hal",
-        "chips/family/staged-runtime",
+        "chips/family/platform/runtime",
         "tools/os/serial",
         "hil/probes/esp32s31-radio",
     ] {
@@ -168,19 +168,19 @@ fn the_boundary_is_named_by_package_or_domain() {
 
 // The metadata-derived Espressif value/algorithm crates in docs/architecture.md.
 const ESPRESSIF_SANS_IO: &[&str] = &[
-    "chips/family/analog",
+    "chips/family/peripherals/analog",
     "chips/family/boot",
-    "chips/family/coex",
-    "chips/family/efuse",
+    "chips/family/radio/coex",
+    "chips/family/peripherals/efuse",
     "chips/family/facts",
-    "chips/family/ieee80211-policy",
-    "chips/family/ieee802154-engine",
-    "chips/family/ieee802154-mac-values",
-    "chips/family/modem-clock",
-    "chips/family/radio",
-    "chips/family/phy",
-    "chips/family/bluetooth-engine",
-    "chips/family/system-timer",
+    "chips/family/radio/ieee80211/policy",
+    "chips/family/radio/ieee802154/engine",
+    "chips/family/radio/ieee802154/values",
+    "chips/family/radio/modem-clock",
+    "chips/family/radio/domain",
+    "chips/family/radio/phy",
+    "chips/family/radio/bluetooth",
+    "chips/family/peripherals/system-timer",
 ];
 
 fn sans_io(package: &str) -> bool {
@@ -482,12 +482,12 @@ fn ieee802154_engine_has_no_terminal_custody_or_retained_policy() {
         })
         .collect();
     assert!(
-        forbidden_paths(&graph, "oer-chips-family-ieee802154-engine", |name| {
-            forbidden_dependency(name) || name == "oer-chips-family-staged-runtime"
+        forbidden_paths(&graph, "oer-chips-family-radio-ieee802154-engine", |name| {
+            forbidden_dependency(name) || name == "oer-chips-family-platform-runtime"
         })
         .is_empty()
     );
-    let mut pending = vec![root.join("chips/family/ieee802154-engine/src")];
+    let mut pending = vec![root.join("chips/family/radio/ieee802154/engine/src")];
     while let Some(path) = pending.pop() {
         if path.is_dir() {
             pending.extend(
@@ -723,7 +723,7 @@ fn hal_and_knowledge_do_not_reach_the_ieee802154_engine_or_driver() {
 fn ieee802154_execution(name: &str) -> bool {
     matches!(
         name,
-        "oer-chips-family-ieee802154-engine" | "oer-chips-esp32s31-radio-ieee802154-driver"
+        "oer-chips-family-radio-ieee802154-engine" | "oer-chips-esp32s31-radio-ieee802154-driver"
     )
 }
 
@@ -733,12 +733,15 @@ fn the_ieee802154_boundary_rejects_the_indirect_knowledge_path() {
         ("hal".into(), BTreeSet::from(["knowledge".into()])),
         (
             "knowledge".into(),
-            BTreeSet::from(["hal".into(), "oer-chips-family-ieee802154-engine".into()]),
+            BTreeSet::from([
+                "hal".into(),
+                "oer-chips-family-radio-ieee802154-engine".into(),
+            ]),
         ),
     ]);
     assert_eq!(
         forbidden_paths(&graph, "hal", ieee802154_execution),
-        ["hal -> knowledge -> oer-chips-family-ieee802154-engine"],
+        ["hal -> knowledge -> oer-chips-family-radio-ieee802154-engine"],
     );
     assert!(forbidden_paths(&graph, "unrelated", ieee802154_execution).is_empty());
 }
@@ -937,44 +940,53 @@ enum Role {
 /// `protocols/hil/` or `hil/` (but `hil/probes/`), or a `hil` leaf, is listed here.
 const ROLES: &[(&str, Role)] = &[
     ("chips/family/facts", Role::Facts),
-    ("chips/family/efuse", Role::Facts),
-    ("chips/family/ieee802154-mac-values", Role::Facts),
+    ("chips/family/peripherals/efuse", Role::Facts),
+    ("chips/family/radio/ieee802154/values", Role::Facts),
     ("chips/esp32s31/knowledge", Role::Facts),
     ("chips/esp32s31/pac", Role::Pac),
     ("chips/esp32s31/hal", Role::Hal),
-    ("chips/family/analog", Role::HardwareDriver),
+    ("chips/family/peripherals/analog", Role::HardwareDriver),
     ("chips/family/boot", Role::HardwareDriver),
-    ("chips/family/coex", Role::HardwareDriver),
-    ("chips/family/ieee802154-engine", Role::HardwareDriver),
-    ("chips/family/modem-clock", Role::HardwareDriver),
-    ("chips/family/radio", Role::HardwareDriver),
-    ("chips/family/phy", Role::HardwareDriver),
-    ("chips/family/bluetooth-engine", Role::HardwareDriver),
-    ("chips/family/usb-serial-jtag", Role::HardwareDriver),
-    ("chips/family/watchdog", Role::HardwareDriver),
-    ("chips/family/system-timer", Role::HardwareDriver),
-    ("chips/family/power", Role::HardwareDriver),
+    ("chips/family/radio/coex", Role::HardwareDriver),
+    ("chips/family/radio/ieee802154/engine", Role::HardwareDriver),
+    ("chips/family/radio/modem-clock", Role::HardwareDriver),
+    ("chips/family/radio/domain", Role::HardwareDriver),
+    ("chips/family/radio/phy", Role::HardwareDriver),
+    ("chips/family/radio/bluetooth", Role::HardwareDriver),
+    (
+        "chips/family/peripherals/usb-serial-jtag",
+        Role::HardwareDriver,
+    ),
+    ("chips/family/peripherals/watchdog", Role::HardwareDriver),
+    (
+        "chips/family/peripherals/system-timer",
+        Role::HardwareDriver,
+    ),
+    ("chips/family/peripherals/power", Role::HardwareDriver),
     ("chips/esp32s31/radio/phy", Role::HardwareDriver),
-    ("chips/esp32s31/crypto", Role::HardwareDriver),
+    ("chips/esp32s31/peripherals/crypto", Role::HardwareDriver),
     ("chips/esp32s31/radio/bluetooth/driver", Role::ChipAdapter),
     ("chips/esp32s31/radio/ieee80211/driver", Role::ChipAdapter),
     ("chips/esp32s31/radio/ieee802154/driver", Role::ChipAdapter),
     // docs/repository-layout.md: "Wi-Fi upper-MAC and the family policy
     // select each attempt's rate and protection" places this family policy
     // above the backend with the cores.
-    ("chips/family/ieee80211-policy", Role::CoreSidePolicy),
+    ("chips/family/radio/ieee80211/policy", Role::CoreSidePolicy),
     ("chips/esp32s31/radio/client", Role::ServiceClient),
     ("chips/esp32s31/radio/system", Role::Service),
-    ("chips/family/interrupt-table", Role::PlatformContract),
-    ("chips/family/platform-port", Role::PlatformContract),
-    ("chips/family/staged-layout", Role::PlatformContract),
-    ("chips/family/executor", Role::Platform),
-    ("chips/family/staged-bootstrap", Role::Platform),
-    ("chips/family/staged-runtime", Role::Platform),
-    ("chips/esp32s31/board", Role::Platform),
-    ("chips/esp32s31/bootstrap", Role::Image),
-    ("chips/esp32s31/layout", Role::Platform),
-    ("chips/esp32s31/runtime", Role::Composition),
+    (
+        "chips/family/platform/interrupt-table",
+        Role::PlatformContract,
+    ),
+    ("chips/family/platform/port", Role::PlatformContract),
+    ("chips/family/platform/layout", Role::PlatformContract),
+    ("chips/family/platform/executor", Role::Platform),
+    ("chips/family/platform/bootstrap", Role::Platform),
+    ("chips/family/platform/runtime", Role::Platform),
+    ("chips/esp32s31/platform/board", Role::Platform),
+    ("chips/esp32s31/platform/bootstrap", Role::Image),
+    ("chips/esp32s31/platform/layout", Role::Platform),
+    ("chips/esp32s31/platform/runtime", Role::Composition),
     ("chips/esp32s31/radio/ieee80211/station", Role::Facade),
     ("oer", Role::Sdk),
     ("chips/family/app", Role::Sdk),
@@ -1013,7 +1025,9 @@ fn image_path(path: &str) -> bool {
     ["examples/", "hil/images/", "hil/probes/"]
         .iter()
         .any(|root| path.starts_with(root))
-        || (path.starts_with("chips/") && path.ends_with("/bootstrap"))
+        || (path.starts_with("chips/")
+            && !path.starts_with("chips/family/")
+            && path.ends_with("/bootstrap"))
 }
 
 fn role(path: &str) -> Option<Role> {
@@ -1351,13 +1365,16 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
         ("portable/mmio", Some(Role::HardwareAccess)),
         ("portable/riscv", Some(Role::HardwareAccess)),
         ("portable/embassy/net", Some(Role::EmbassyAdapter)),
-        ("chips/family/ieee80211-policy", Some(Role::CoreSidePolicy)),
+        (
+            "chips/family/radio/ieee80211/policy",
+            Some(Role::CoreSidePolicy),
+        ),
         (
             "chips/esp32s31/radio/ieee80211/driver",
             Some(Role::ChipAdapter),
         ),
         ("chips/esp32s31/radio/system", Some(Role::Service)),
-        ("chips/esp32s31/runtime", Some(Role::Composition)),
+        ("chips/esp32s31/platform/runtime", Some(Role::Composition)),
         ("chips/esp32s31/radio/ieee80211/station", Some(Role::Facade)),
         // A new chip package has no role until it is listed, whatever its
         // directory says.
@@ -1870,8 +1887,8 @@ fn the_ieee80211_runtime_takes_neither_formats_cipher_chips_nor_an_executor() {
 #[test]
 fn the_ieee80211_runtime_rule_rejects_formats_and_transitive_chip_and_time_paths() {
     let paths = BTreeMap::from([(
-        "oer-chips-family-executor".into(),
-        "chips/family/executor".into(),
+        "oer-chips-family-platform-executor".into(),
+        "chips/family/platform/executor".into(),
     )]);
     let manifest: toml::Value = toml::from_str(
         r#"
@@ -1882,7 +1899,7 @@ station = { package = "oer-protocols-ieee80211-core-roles-sta", version = "1" }
 clock = { package = "embassy-time", version = "0.5", optional = true }
 [dev-dependencies]
 protect = { package = "oer-protocols-ieee80211-core-security-cipher", version = "1" }
-policy = { package = "oer-chips-family-ieee80211-policy", version = "1" }
+policy = { package = "oer-chips-family-radio-ieee80211-policy", version = "1" }
 "#,
     )
     .expect("manifest");
@@ -1900,7 +1917,7 @@ policy = { package = "oer-chips-family-ieee80211-policy", version = "1" }
         ),
         (
             "helper".into(),
-            BTreeSet::from(["oer-chips-family-executor".into()]),
+            BTreeSet::from(["oer-chips-family-platform-executor".into()]),
         ),
     ]);
     assert_eq!(
@@ -1909,7 +1926,7 @@ policy = { package = "oer-chips-family-ieee80211-policy", version = "1" }
         }),
         [
             "oer-protocols-ieee80211-runtime -> embassy-time",
-            "oer-protocols-ieee80211-runtime -> oer-protocols-ieee80211-core-roles-sta -> helper -> oer-chips-family-executor",
+            "oer-protocols-ieee80211-runtime -> oer-protocols-ieee80211-core-roles-sta -> helper -> oer-chips-family-platform-executor",
         ]
     );
 }
@@ -2269,7 +2286,7 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
                 // The application entry re-exports the executors' clock.
                 || path == "chips/esp32s31/app"
         }
-        "embassy-time-driver" => path == "chips/family/executor",
+        "embassy-time-driver" => path == "chips/family/platform/executor",
         // The application entry names the stack its IP service pins, for
         // its applications' sockets, and the stack's socket receive queue.
         "embassy-net" | "xarxa" | "xarxa-driver" => {
@@ -2627,7 +2644,10 @@ serde = "1"
 fn external_crate_homes_and_futures_exclusions_are_explicit() {
     for (dependency, allowed) in [
         ("embassy-time", vec!["portable/embassy/time"]),
-        ("embassy-time-driver", vec!["chips/family/executor"]),
+        (
+            "embassy-time-driver",
+            vec!["chips/family/platform/executor"],
+        ),
         (
             "embassy-net",
             vec!["portable/embassy/net", "hil/probes/esp32s31-radio-root"],
@@ -2674,7 +2694,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("protocols/bluetooth/le/wire", false),
         ("protocols/ieee80211/core/security/cipher", false),
         ("protocols/bluetooth/le/controller", false),
-        ("chips/family/ieee80211-policy", false),
+        ("chips/family/radio/ieee80211/policy", false),
         ("chips/family/facts", false),
         ("chips/esp32s31/pac", false),
         ("chips/esp32s31/hal", false),
@@ -2957,7 +2977,12 @@ fn the_edge_rules_see_optional_target_and_aliased_dependencies_and_judge_by_path
         normal_dependencies(&manifest, &workspace)
     };
     let members = [
-        member("chips/family/analog", "oer-chips-family-analog", false, &[]),
+        member(
+            "chips/family/peripherals/analog",
+            "oer-chips-family-peripherals-analog",
+            false,
+            &[],
+        ),
         Member {
             dependencies: manifest(
                 r#"
@@ -2970,8 +2995,8 @@ tool = { package = "oer-tool-pins", version = "1" }
 "#,
             ),
             ..member(
-                "chips/family/executor",
-                "oer-chips-family-executor",
+                "chips/family/platform/executor",
+                "oer-chips-family-platform-executor",
                 false,
                 &[],
             )
@@ -3014,13 +3039,16 @@ tool = { package = "oer-tool-pins", version = "1" }
     assert_eq!(
         forbidden_edges(&members, image_or_program),
         BTreeSet::from([
-            edge("chips/family/executor", "hil/probes/esp32s31-radio-root"),
+            edge(
+                "chips/family/platform/executor",
+                "hil/probes/esp32s31-radio-root"
+            ),
             edge("tools/image/checks", "tools/pins"),
         ])
     );
     assert_eq!(
         forbidden_edges(&members, family_reaches_a_chip),
-        BTreeSet::from([edge("chips/family/executor", "chips/esp32s31/hal")])
+        BTreeSet::from([edge("chips/family/platform/executor", "chips/esp32s31/hal")])
     );
     assert_eq!(
         forbidden_edges(&members, portable_reaches_a_protocol_or_a_chip),
@@ -3041,7 +3069,7 @@ port = { package = "oer-chips-family-platform-port", version = "1" }
 [build-dependencies]
 facts = { package = "oer-chips-family-facts", version = "1" }
 [target.'cfg(unix)'.build-dependencies]
-layout = { package = "oer-chips-esp32s31-layout", version = "1", optional = true }
+layout = { package = "oer-chips-esp32s31-platform-layout", version = "1", optional = true }
 [dev-dependencies]
 hal = { package = "oer-chips-esp32s31-hal", version = "1" }
 "#,
@@ -3053,22 +3081,22 @@ hal = { package = "oer-chips-esp32s31-hal", version = "1" }
             dependencies: normal_dependencies(&manifest, &workspace),
             build_dependencies: scoped_dependencies(&manifest, &workspace, "build-dependencies"),
             ..member(
-                "chips/family/staged-runtime",
-                "oer-chips-family-staged-runtime",
+                "chips/family/platform/runtime",
+                "oer-chips-family-platform-runtime",
                 false,
                 &[],
             )
         },
         member(
-            "chips/family/platform-port",
+            "chips/family/platform/port",
             "oer-chips-family-platform-port",
             false,
             &[],
         ),
         member("chips/family/facts", "oer-chips-family-facts", false, &[]),
         member(
-            "chips/esp32s31/layout",
-            "oer-chips-esp32s31-layout",
+            "chips/esp32s31/platform/layout",
+            "oer-chips-esp32s31-platform-layout",
             false,
             &[],
         ),
@@ -3078,8 +3106,8 @@ hal = { package = "oer-chips-esp32s31-hal", version = "1" }
     assert_eq!(
         forbidden_edges(&with_build_edges(members), family_reaches_a_chip),
         BTreeSet::from([(
-            "chips/family/staged-runtime".to_owned(),
-            "chips/esp32s31/layout".to_owned()
+            "chips/family/platform/runtime".to_owned(),
+            "chips/esp32s31/platform/layout".to_owned()
         )])
     );
 }
@@ -3121,7 +3149,7 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "chips/esp32s31/pac",
-        "chips/family/analog",
+        "chips/family/peripherals/analog",
         "analog-I2C model types out of the family driver (#848)",
     ),
 ];
@@ -3161,7 +3189,11 @@ fn facts_pac_and_platform_contracts_stand_on_values_alone() {
             (Role::SharedVocabulary, "protocols/radio/regulatory", true),
             (Role::Portable, "portable/memory", true),
             (Role::Hal, "chips/esp32s31/hal", false),
-            (Role::HardwareDriver, "chips/family/analog", false),
+            (
+                Role::HardwareDriver,
+                "chips/family/peripherals/analog",
+                false,
+            ),
             (PROTOCOL_PORT, "protocols/ieee802154/port", false),
         ],
     );
@@ -3170,7 +3202,11 @@ fn facts_pac_and_platform_contracts_stand_on_values_alone() {
         &[
             (Role::HardwareAccess, "portable/mmio", true),
             (Role::Facts, "chips/esp32s31/knowledge", true),
-            (Role::HardwareDriver, "chips/family/analog", false),
+            (
+                Role::HardwareDriver,
+                "chips/family/peripherals/analog",
+                false,
+            ),
             (Role::Hal, "chips/esp32s31/hal", false),
         ],
     );
@@ -3178,8 +3214,8 @@ fn facts_pac_and_platform_contracts_stand_on_values_alone() {
         Role::PlatformContract,
         &[
             (Role::HardwareAccess, "portable/riscv", true),
-            (Role::PlatformContract, "chips/family/staged-layout", true),
-            (Role::Platform, "chips/family/staged-runtime", false),
+            (Role::PlatformContract, "chips/family/platform/layout", true),
+            (Role::Platform, "chips/family/platform/runtime", false),
             (Role::Hal, "chips/esp32s31/hal", false),
         ],
     );
@@ -3191,7 +3227,7 @@ fn the_hal_implements_family_ports_and_runs_no_chip_driver_or_protocol() {
         Role::Hal,
         &[
             (Role::Pac, "chips/esp32s31/pac", true),
-            (Role::PlatformContract, "chips/family/platform-port", true),
+            (Role::PlatformContract, "chips/family/platform/port", true),
             (Role::HardwareDriver, "chips/family/boot", true),
             (Role::HardwareDriver, "chips/esp32s31/radio/phy", false),
             (
@@ -3200,7 +3236,7 @@ fn the_hal_implements_family_ports_and_runs_no_chip_driver_or_protocol() {
                 false,
             ),
             (Role::Service, "chips/esp32s31/radio/system", false),
-            (Role::Platform, "chips/family/staged-runtime", false),
+            (Role::Platform, "chips/family/platform/runtime", false),
             (Role::SharedVocabulary, "protocols/radio/coex", false),
             (PROTOCOL_PORT, "protocols/ieee80211/contracts/port", false),
         ],
@@ -3211,8 +3247,16 @@ fn the_hal_implements_family_ports_and_runs_no_chip_driver_or_protocol() {
 fn drivers_and_adapters_stand_on_the_hal_and_the_port_never_above_it() {
     let below = [
         (Role::Hal, "chips/esp32s31/hal", true),
-        (Role::HardwareDriver, "chips/family/analog", true),
-        (Role::PlatformContract, "chips/family/interrupt-table", true),
+        (
+            Role::HardwareDriver,
+            "chips/family/peripherals/analog",
+            true,
+        ),
+        (
+            Role::PlatformContract,
+            "chips/family/platform/interrupt-table",
+            true,
+        ),
         (
             Role::ObservationContract,
             "protocols/radio/instrumentation",
@@ -3222,12 +3266,16 @@ fn drivers_and_adapters_stand_on_the_hal_and_the_port_never_above_it() {
         (PROTOCOL_WIRE, "protocols/ieee80211/wire", true),
         (PROTOCOL_CORE, "protocols/ieee80211/core/roles/sta", false),
         (PROTOCOL_RUNTIME, "protocols/ieee80211/runtime", false),
-        (Role::CoreSidePolicy, "chips/family/ieee80211-policy", false),
+        (
+            Role::CoreSidePolicy,
+            "chips/family/radio/ieee80211/policy",
+            false,
+        ),
         (Role::Pac, "chips/esp32s31/pac", false),
         (Role::HardwareAccess, "portable/mmio", false),
-        (Role::Platform, "chips/family/staged-runtime", false),
+        (Role::Platform, "chips/family/platform/runtime", false),
         (Role::Service, "chips/esp32s31/radio/system", false),
-        (Role::Composition, "chips/esp32s31/runtime", false),
+        (Role::Composition, "chips/esp32s31/platform/runtime", false),
         (
             Role::Facade,
             "chips/esp32s31/radio/ieee80211/station",
@@ -3282,7 +3330,7 @@ fn core_side_policy_stays_with_the_cores_and_the_platform_reaches_no_chip_hal() 
     assert_role_cases(
         Role::Platform,
         &[
-            (Role::PlatformContract, "chips/family/platform-port", true),
+            (Role::PlatformContract, "chips/family/platform/port", true),
             (Role::HardwareDriver, "chips/family/boot", true),
             (Role::HardwareDriver, "chips/esp32s31/radio/phy", false),
             (Role::Hal, "chips/esp32s31/hal", false),
@@ -3310,7 +3358,7 @@ fn only_a_composition_and_a_facade_assemble_runtimes_and_backends() {
                     true,
                 ),
                 (Role::Service, "chips/esp32s31/radio/system", true),
-                (Role::Platform, "chips/family/executor", true),
+                (Role::Platform, "chips/family/platform/executor", true),
                 (Role::Pac, "chips/esp32s31/pac", false),
                 (Role::HilAgent, "protocols/hil/agent", false),
                 (Role::HilImage, "hil/images/aes", false),
@@ -3322,7 +3370,7 @@ fn only_a_composition_and_a_facade_assemble_runtimes_and_backends() {
     assert!(role_allows(
         Role::Facade,
         Role::Composition,
-        "chips/esp32s31/runtime"
+        "chips/esp32s31/platform/runtime"
     ));
     assert!(!role_allows(
         Role::Composition,
@@ -3385,7 +3433,7 @@ fn an_observation_contract_names_values_and_no_owner() {
                 "chips/esp32s31/radio/ieee80211/driver",
                 false,
             ),
-            (Role::Platform, "chips/family/staged-runtime", false),
+            (Role::Platform, "chips/family/platform/runtime", false),
         ],
     );
 }
@@ -3420,8 +3468,8 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
         &[
             (Role::Sdk, "oer", true),
             (Role::HilAgent, "protocols/hil/agent", true),
-            (Role::Composition, "chips/esp32s31/runtime", true),
-            (Role::Platform, "chips/family/staged-runtime", true),
+            (Role::Composition, "chips/esp32s31/platform/runtime", true),
+            (Role::Platform, "chips/family/platform/runtime", true),
             (Role::HardwareAccess, "portable/riscv", true),
             (Role::HardwareAccess, "portable/mmio", false),
             (
@@ -3457,13 +3505,13 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (Role::HilBinding, "protocols/ieee80211/hil", true),
             (Role::HilSdkAgent, "hil/agent", true),
             (Role::EmbassyAdapter, "portable/embassy/net", true),
-            (Role::Composition, "chips/esp32s31/runtime", false),
+            (Role::Composition, "chips/esp32s31/platform/runtime", false),
             (
                 Role::Facade,
                 "chips/esp32s31/radio/ieee80211/station",
                 false,
             ),
-            (Role::Platform, "chips/family/executor", false),
+            (Role::Platform, "chips/family/platform/executor", false),
             (
                 Role::ObservationContract,
                 "protocols/radio/instrumentation",
@@ -3549,18 +3597,18 @@ fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
             "hil/images/wifi-station",
             "image",
             true,
-            &["oer", "oer-chips-esp32s31-runtime"],
+            &["oer", "oer-chips-esp32s31-platform-runtime"],
         ),
         member(
             "hil/images/aes",
             "hand-built",
             true,
-            &["oer-chips-esp32s31-runtime"],
+            &["oer-chips-esp32s31-platform-runtime"],
         ),
         member("oer", "oer", false, &[]),
         member(
-            "chips/esp32s31/runtime",
-            "oer-chips-esp32s31-runtime",
+            "chips/esp32s31/platform/runtime",
+            "oer-chips-esp32s31-platform-runtime",
             false,
             &[],
         ),
@@ -3569,7 +3617,7 @@ fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
         outside_the_entry(&members),
         BTreeSet::from([(
             "hil/images/wifi-station".to_owned(),
-            "chips/esp32s31/runtime".to_owned(),
+            "chips/esp32s31/platform/runtime".to_owned(),
         )])
     );
 }
@@ -3606,18 +3654,18 @@ fn a_hil_image_without_the_entry_is_named_and_another_image_is_not() {
             "hil/images/aes",
             "hand-built",
             true,
-            &["oer-chips-esp32s31-runtime"],
+            &["oer-chips-esp32s31-platform-runtime"],
         ),
         member(
             "hil/probes/esp32s31-radio-root",
             "radio-root",
             true,
-            &["oer-chips-esp32s31-runtime"],
+            &["oer-chips-esp32s31-platform-runtime"],
         ),
         member("oer", "oer", false, &[]),
         member(
-            "chips/esp32s31/runtime",
-            "oer-chips-esp32s31-runtime",
+            "chips/esp32s31/platform/runtime",
+            "oer-chips-esp32s31-platform-runtime",
             false,
             &[],
         ),

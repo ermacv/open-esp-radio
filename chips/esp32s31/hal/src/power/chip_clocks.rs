@@ -69,7 +69,7 @@ impl PsramMpll {
     }
 }
 
-use oer_chips_family_radio::clocks::{ClockCounts, ClockError, ClockGates, ClockReferences};
+use oer_chips_family_radio_domain::clocks::{ClockCounts, ClockError, ClockGates, ClockReferences};
 
 impl ClockReferences for PlatformClockHolds {
     type Clock = PlatformClock;

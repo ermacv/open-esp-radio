@@ -5,9 +5,9 @@ use proc_macro2::{TokenStream, TokenTree};
 
 // Only these crates/files may own assembly outside the instruction API.
 const ABI_ASSEMBLY: &[(&str, &[&str])] = &[
-    ("chips/family/staged-bootstrap", &["src/entry.rs"]),
+    ("chips/family/platform/bootstrap", &["src/entry.rs"]),
     (
-        "chips/family/staged-runtime",
+        "chips/family/platform/runtime",
         &["src/entry.rs", "src/stacks.rs"],
     ),
 ];
@@ -28,7 +28,7 @@ fn allowed(package: &str, file: &str, instruction: &str) -> bool {
     ABI_ASSEMBLY
         .iter()
         .any(|(owner, files)| package == *owner && files.contains(&file))
-        || package == "chips/esp32s31/bootstrap"
+        || package == "chips/esp32s31/platform/bootstrap"
         || package.starts_with("hil/probes/")
 }
 
@@ -193,23 +193,23 @@ fn abi_exceptions_do_not_allow_inline_operations_or_other_files() {
     assert!(allowed("portable/riscv", "src/instructions.rs", "asm"));
     for instruction in ["asm", "global_asm", "naked_asm"] {
         assert!(!allowed(
-            "chips/family/staged-bootstrap",
+            "chips/family/platform/bootstrap",
             "src/runtime.rs",
             instruction
         ));
     }
     assert!(allowed(
-        "chips/family/staged-runtime",
+        "chips/family/platform/runtime",
         "src/stacks.rs",
         "global_asm"
     ));
     assert!(!allowed(
-        "chips/family/staged-runtime",
+        "chips/family/platform/runtime",
         "src/stacks.rs",
         "asm"
     ));
     assert!(!allowed(
-        "chips/family/staged-runtime",
+        "chips/family/platform/runtime",
         "src/other.rs",
         "naked_asm"
     ));

@@ -3,11 +3,11 @@
 //! fatal note.
 //!
 //! Platform startup installs the reset root's console parts once ([`install`]) in this
-//! chip's one [`Ownership`](oer_chips_family_usb_serial_jtag::ownership::Ownership):
+//! chip's one [`Ownership`](oer_chips_family_peripherals_usb_serial_jtag::ownership::Ownership):
 //! each early record borrows the endpoint while it writes, until the
 //! console's driver takes the parts for good ([`retire_early_writer`]);
 //! then every early record goes through the driver
-//! ([`oer_chips_family_usb_serial_jtag::Endpoint`]). The fatal note
+//! ([`oer_chips_family_peripherals_usb_serial_jtag::Endpoint`]). The fatal note
 //! ([`fatal_note`]) takes only a free block, for good. A record before the
 //! root installed the parts is counted as lost.
 //!
@@ -27,9 +27,9 @@ use oer_chips_esp32s31_pac::{
     ownership::UsbSerialJtagPeripherals,
     usb_serial_jtag::{UsbSerialJtagIrq, UsbSerialJtagPads, UsbSerialJtagTask},
 };
-pub use oer_chips_family_usb_serial_jtag::ownership::RetireError;
-use oer_chips_family_usb_serial_jtag::ownership::{Console, Ownership};
-use oer_chips_family_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
+pub use oer_chips_family_peripherals_usb_serial_jtag::ownership::RetireError;
+use oer_chips_family_peripherals_usb_serial_jtag::ownership::{Console, Ownership};
+use oer_chips_family_peripherals_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
 use oer_portable_diagnostics::{Note, Written};
 use oer_portable_mmio::{Fixed, InterruptSource, Placement};
 
@@ -153,7 +153,7 @@ impl<P: Placement> EndpointRegisters for Endpoint<P> {
 
     fn enable_events(
         &mut self,
-        _authority: &impl oer_chips_family_interrupt_table::EventAuthority<Self::Interrupt>,
+        _authority: &impl oer_chips_family_platform_interrupt_table::EventAuthority<Self::Interrupt>,
     ) {
         self.0.modify_int_ena(|enables| {
             enables
@@ -188,7 +188,7 @@ impl<P: Placement> EndpointRegisters for UsbEndpoint<P> {
 
     fn enable_events(
         &mut self,
-        authority: &impl oer_chips_family_interrupt_table::EventAuthority<Self::Interrupt>,
+        authority: &impl oer_chips_family_platform_interrupt_table::EventAuthority<Self::Interrupt>,
     ) {
         self.0.enable_events(authority);
     }

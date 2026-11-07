@@ -10,19 +10,19 @@ description = "A staged image whose boot-hart client posts one watched request t
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-chips-esp32s31-runtime = { path = "../../../chips/esp32s31/runtime" }
+oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/runtime" }
+oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform/runtime" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
-oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
-oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
+oer-chips-family-platform-interrupt-table = { path = "../../../chips/family/platform/interrupt-table" }
 oer-portable-memory = { path = "../../../portable/memory" }
 
 [build-dependencies]
-oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

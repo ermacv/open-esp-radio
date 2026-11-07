@@ -82,13 +82,13 @@ reported by the image checks.
 register code or a property of the board. Its supported value is `xtal`;
 `rc-fast` is refused because no RC_FAST power/readiness policy is supported.
 `generate::lp_fast_source` requires this key and renders a typed constant for
-`oer-chips-esp32s31-bootstrap`, using the HAL port's named source type. Encodings remain solely in the register model.
+`oer-chips-esp32s31-platform-bootstrap`, using the HAL port's named source type. Encodings remain solely in the register model.
 
 `generate` turns the facts into the sources a person writing them could get
 wrong, each a pure function of the facts; build scripts call it, and nothing
 it writes is in git:
 
-- `tracked_layout`: a chip's `LAYOUT` (`oer-chips-family-staged-layout`), from
+- `tracked_layout`: a chip's `LAYOUT` (`oer-chips-family-platform-layout`), from
   its facts and its stack policy's `default_task_stack_bytes`
   (`chips/<id>/facts/stack.toml`), which its layout crate's build writes
   and every `--defsym` of the linker scripts comes from;
@@ -104,7 +104,7 @@ it writes is in git:
   fragment `oer-staged-runtime-vectors.x`) and the interrupt table's
   `LINES`, from the chip's harts and CLIC lines. The same geometry generates
   `oer-staged-runtime-stacks.x`, runtime marker tables and exact vector coverage;
-  handwritten ABI reviews live in `staged-layout/stack-coverage-reviews.toml`.
+  handwritten ABI reviews live in `platform-layout/stack-coverage-reviews.toml`.
 - `rom_script`: the ROM linker assignments from `[[rom.functions]]`, each
   with a `name`, `address` and pinned `SOURCE:` citation in `source`. The
   S31 layout build writes `[rom] linker-script` under its `OUT_DIR` and

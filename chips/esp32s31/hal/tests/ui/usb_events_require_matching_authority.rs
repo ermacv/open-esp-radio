@@ -1,11 +1,11 @@
 #![no_std]
 use oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::{ConsoleEndpoint, ConsoleInterrupt};
-use oer_chips_family_usb_serial_jtag::{Endpoint, EndpointRegisters};
-use oer_chips_family_interrupt_table::signal::{IrqSignal, SignalExecutor};
-use oer_chips_family_interrupt_table::{Bound, Silent};
+use oer_chips_family_peripherals_usb_serial_jtag::{Endpoint, EndpointRegisters};
+use oer_chips_family_platform_interrupt_table::signal::{IrqSignal, SignalExecutor};
+use oer_chips_family_platform_interrupt_table::{Bound, Silent};
 
-pub fn endpoint<E: SignalExecutor, U: oer_chips_family_interrupt_table::Entry<Part = ConsoleInterrupt>, O: oer_chips_family_interrupt_table::Entry<Part = SystimerAlarm0>>(
+pub fn endpoint<E: SignalExecutor, U: oer_chips_family_platform_interrupt_table::Entry<Part = ConsoleInterrupt>, O: oer_chips_family_platform_interrupt_table::Entry<Part = SystimerAlarm0>>(
     registers: ConsoleEndpoint,
     signal: &'static IrqSignal<E>,
     usb: &Bound<U>,

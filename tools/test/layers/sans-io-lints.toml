@@ -405,5 +405,5 @@ disallowed-macros = [
     "core::debug_assert",
     "core::debug_assert_eq",
     "core::debug_assert_ne",
-    "oer_chips_family_ieee802154_engine::engine::vendor_assert",
+    "oer_chips_family_radio_ieee802154_engine::engine::vendor_assert",
 ]

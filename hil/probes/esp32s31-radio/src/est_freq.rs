@@ -87,7 +87,7 @@ fn settle() -> Result<(), u32> {
 fn force(phy: &mut impl SharedPhyAccess, selector: u8, path: u8, value: u16) -> Result<(), u32> {
     pbus::start_force_test(phy, selector, path, value);
     for _ in 0..20 {
-        if oer_chips_family_phy::pbus::try_finish_force_test(
+        if oer_chips_family_radio_phy::pbus::try_finish_force_test(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
         )
         .is_ok()
@@ -96,7 +96,7 @@ fn force(phy: &mut impl SharedPhyAccess, selector: u8, path: u8, value: u16) -> 
         }
         settle()?;
     }
-    oer_chips_family_phy::pbus::try_finish_force_test(
+    oer_chips_family_radio_phy::pbus::try_finish_force_test(
         &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
     )
     .map_err(|_| 6)
@@ -141,7 +141,7 @@ fn estimator(
     phy.configure_calibration_tone(true, 0x80, 0);
     pbus::configure_rx_clock(phy, true);
     pbus::configure_tx_clock(phy, true);
-    oer_chips_family_phy::pbus::configure_debug_mode(
+    oer_chips_family_radio_phy::pbus::configure_debug_mode(
         &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
     );
     let prepared = (|| {
@@ -223,7 +223,7 @@ fn estimator(
     }
     if bus_usable
         && cleanup.is_ok()
-        && oer_chips_family_phy::pbus::configure_work_mode(
+        && oer_chips_family_radio_phy::pbus::configure_work_mode(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
         )
     {

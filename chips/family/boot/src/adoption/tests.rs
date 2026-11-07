@@ -12,7 +12,7 @@ use std::vec;
     reason = "the staged runner uses the shared fake mapping events"
 )]
 mod support;
-use oer_chips_family_watchdog::{LOCK, WRITE_KEY};
+use oer_chips_family_peripherals_watchdog::{LOCK, WRITE_KEY};
 use oer_portable_time::Duration;
 use support::{Log, Op};
 
@@ -43,7 +43,7 @@ fn adoption_preserves_order_owners_watchdog_words_and_the_unarmed_window() {
             Op::Key(1, LOCK),
             Op::Key(2, WRITE_KEY),
             Op::Hold(612_000),
-            Op::Action(oer_chips_family_watchdog::RtcStageAction::ResetRtc),
+            Op::Action(oer_chips_family_peripherals_watchdog::RtcStageAction::ResetRtc),
             Op::Feed,
             Op::Running(2, true, false),
             Op::Key(2, LOCK),

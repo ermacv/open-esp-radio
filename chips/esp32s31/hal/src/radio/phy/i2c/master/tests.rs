@@ -13,8 +13,8 @@ use oer_chips_esp32s31_pac::{
     analog_i2c::{Host, blocks},
     i2c_ana_mst::I2cAnaMst,
 };
-use oer_chips_family_phy::i2c::PhyI2cParallelAccess;
-use oer_chips_family_phy::serial::{AnalogBus, PhyI2cAccessError};
+use oer_chips_family_radio_phy::i2c::PhyI2cParallelAccess;
+use oer_chips_family_radio_phy::serial::{AnalogBus, PhyI2cAccessError};
 use std::{vec, vec::Vec};
 
 /// Word indices of the byte offsets above.
@@ -126,7 +126,7 @@ fn a_completion_is_one_sample_of_the_busy_bit() {
     words[HOST_1] = BUSY | (0x5a << 16);
     let master = I2cAnaMst::host(&mut words).expect("memory holds the block");
     assert_eq!(
-        oer_chips_family_phy::serial::try_finish_read(
+        oer_chips_family_radio_phy::serial::try_finish_read(
             &MasterSample::new(&master),
             analog_i2c::bbtop::rf_close_control::ADDRESS
         ),
@@ -136,14 +136,14 @@ fn a_completion_is_one_sample_of_the_busy_bit() {
     words[HOST_1] = 0x5a << 16;
     let master = I2cAnaMst::host(&mut words).expect("memory holds the block");
     assert_eq!(
-        oer_chips_family_phy::serial::try_finish_read(
+        oer_chips_family_radio_phy::serial::try_finish_read(
             &MasterSample::new(&master),
             analog_i2c::bbtop::rf_close_control::ADDRESS
         ),
         Ok(0x5a)
     );
     assert_eq!(
-        oer_chips_family_phy::serial::try_finish_write(
+        oer_chips_family_radio_phy::serial::try_finish_write(
             &MasterSample::new(&master),
             analog_i2c::bbtop::rf_close_control::ADDRESS
         ),
@@ -165,7 +165,7 @@ fn an_unrouted_block_publishes_nothing() {
 
 #[test]
 fn the_configuration_bus_calls_an_unrouted_block_what_it_is() {
-    use oer_chips_family_analog::{AnalogRegisterBus, BusRefusal};
+    use oer_chips_family_peripherals_analog::{AnalogRegisterBus, BusRefusal};
     let mut words = memory();
     let mut master = I2cAnaMst::host(&mut words).expect("memory holds the block");
     let mut bus = ConfigurationBus::new(&mut master);
@@ -184,7 +184,7 @@ fn a_parallel_pair_starts_host_zero_then_host_one_and_the_map_is_restored() {
     let mut master = I2cAnaMst::host(&mut words).expect("memory holds the block");
     let mut bus = MasterPort::new(&mut master);
     bus.select_parallel_host_map();
-    let pair = oer_chips_family_phy::i2c::PhyI2cParallelWrite {
+    let pair = oer_chips_family_radio_phy::i2c::PhyI2cParallelWrite {
         first: (analog_i2c::txrf::tx_capacitor_low::ADDRESS, 0x73),
         second: (analog_i2c::bbtop::rf_close_control::ADDRESS, 0x27),
     };

@@ -82,7 +82,7 @@ fn full_event_cell_applies_backpressure_without_overwrite() {
 #[test]
 fn source_127_task_readiness_survives_late_acquisition_and_coalesces_reentry() {
     let cell = ModemLpTimerWorkerWakeCell::new(
-        oer_chips_family_interrupt_table::signal::host::deferred_signal().0,
+        oer_chips_family_platform_interrupt_table::signal::host::deferred_signal().0,
     );
 
     assert_eq!(
@@ -113,8 +113,9 @@ fn source_127_task_readiness_survives_late_acquisition_and_coalesces_reentry() {
 fn source_127_readiness_wakes_the_worker_without_being_taken() {
     use core::task::{Context, Poll, Waker};
 
-    let cell =
-        ModemLpTimerWorkerWakeCell::new(oer_chips_family_interrupt_table::signal::host::signal().0);
+    let cell = ModemLpTimerWorkerWakeCell::new(
+        oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+    );
     let mut cx = Context::from_waker(Waker::noop());
     assert_eq!(cell.poll_pending(&mut cx), Poll::Pending);
     let _ = ModemLpTimerStableInterruptStep::SoftwarePending.publish(&cell);
@@ -125,13 +126,13 @@ fn source_127_readiness_wakes_the_worker_without_being_taken() {
     assert_eq!(cell.poll_pending(&mut cx), Poll::Pending);
 
     let foreign = ModemLpTimerWorkerWakeCell::new(
-        oer_chips_family_interrupt_table::signal::host::foreign_signal(),
+        oer_chips_family_platform_interrupt_table::signal::host::foreign_signal(),
     );
     let _ = ModemLpTimerStableInterruptStep::SoftwarePending.publish(&foreign);
     assert_eq!(
         foreign.poll_pending(&mut cx),
         Poll::Ready(Err(
-            oer_chips_family_interrupt_table::signal::ForeignContext
+            oer_chips_family_platform_interrupt_table::signal::ForeignContext
         ))
     );
 }
@@ -156,7 +157,7 @@ fn p2_uses_one_snapshot_and_returns_a_plan_after_publication() {
     assert_eq!(pending.event().deadline(), instant(20));
     let events = ModemLpTimerEventCell::new();
     let (work, _) = pending
-        .publish::<oer_chips_family_interrupt_table::signal::host::Deferred>(&events)
+        .publish::<oer_chips_family_platform_interrupt_table::signal::host::Deferred>(&events)
         .ok()
         .unwrap();
     clock.advance(Duration::from_micros(20)).unwrap();

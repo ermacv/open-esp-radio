@@ -31,8 +31,8 @@ other `portable/` support, firmware images and tools.
 | `CoreSidePolicy` | `espressif/ieee80211-policy` | wire, port, cipher, cores, facts, observation contracts, portable, shared vocabulary |
 | `ServiceClient` | `esp32s31/radio/client` | as a hardware driver |
 | `Service` | `esp32s31/radio/system` | as a hardware driver, and service clients |
-| `PlatformContract` | `espressif/{interrupt-table,platform-port,staged-layout}` | platform contracts, facts, portable, hardware access |
-| `Platform` | `espressif/{executor,staged-bootstrap,staged-runtime}`, `esp32s31/{board,layout}` | platform, platform contracts, family hardware drivers, facts, shared vocabulary, portable, hardware access |
+| `PlatformContract` | `espressif/{interrupt-table,platform-port,platform-layout}` | platform contracts, facts, portable, hardware access |
+| `Platform` | `espressif/{executor,platform-bootstrap,platform-runtime}`, `esp32s31/{board,layout}` | platform, platform contracts, family hardware drivers, facts, shared vocabulary, portable, hardware access |
 | `Composition` | `esp32s31/compose` | every chip role but PAC, composition and facade, every protocol role, portable, Embassy adapters, hardware access; no HIL |
 | `Facade` | `esp32s31/wifi` | as a composition, and the composition |
 | `ObservationContract` | `protocols/*/instrumentation` | observation contracts, facts, shared vocabulary, portable, wire, port |
@@ -86,7 +86,7 @@ are outside this rule; it does not inspect third-party dependency closures.
 | `embassy-futures` | All except wire, cipher, core, core-side policy, facts, PAC and HAL |
 | `embassy-sync` | Development only, with the exact normal-edge deviations above |
 | `embassy-time` | `portable/embassy/time`, `oer` (the executors' clock) |
-| `embassy-time-driver` | `chips/family/executor` |
+| `embassy-time-driver` | `chips/family/platform/executor` |
 | `embassy-net`, `xarxa`, `xarxa-driver` | `portable/embassy/net`, `firmware/*` |
 | `trouble-host` | `portable/embassy/trouble`, `firmware/*` |
 | `bt-hci` | `protocols/bluetooth/hci`, `portable/embassy/trouble`, `tools/*` |

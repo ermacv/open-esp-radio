@@ -1,7 +1,0 @@
-use oer_chips_family_interrupt_table::signal::{FromHandler, IrqSignal, host::Deferred};
-include!("support/table.rs");
-
-#[cfg(ui_reject)]
-const SIGNAL: IrqSignal<Deferred> = IrqSignal::new::<FromHandler<IrqToken>, WakeToken>(); // ui-error@outside: E0080: evaluation panicked: an executor's entry must name its software interrupt
-#[cfg(not(ui_reject))]
-const SIGNAL: IrqSignal<Deferred> = IrqSignal::new::<FromHandler<IrqToken>, ExecutorToken>();

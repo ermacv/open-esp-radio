@@ -1,0 +1,26 @@
+[package]
+name = "oer-chips-family-radio-ieee802154-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "IEEE 802.15.4 MAC driver engine of the Espressif chips, ported from the public ESP-IDF driver"
+
+[features]
+# Recording LL and synthetic addresses for explicit host models.
+test-support = []
+
+[dependencies]
+oer-chips-family-radio-ieee802154-values = { path = "../values" }
+oer-portable-memory = { path = "../../../../../portable/memory" }
+oer-chips-family-radio-coex = { path = "../../coex" }
+oer-protocols-ieee802154-port = { path = "../../../../../protocols/ieee802154/port" }
+oer-protocols-ieee802154-wire = { path = "../../../../../protocols/ieee802154/wire" }
+oer-protocols-radio-regulatory = { path = "../../../../../protocols/radio/regulatory" }
+
+[dev-dependencies]
+oer-protocols-radio-regulatory = { path = "../../../../../protocols/radio/regulatory", features = ["test-support"] }
+
+[lints]
+workspace = true

@@ -1,6 +1,6 @@
 disallowed-methods = [
-    { path = "oer_chips_family_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
-    { path = "oer_chips_family_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
+    { path = "oer_chips_family_platform_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
+    { path = "oer_chips_family_platform_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
     "slice::split_at",
     "slice::split_at_mut",
     "slice::copy_from_slice",
@@ -427,5 +427,5 @@ disallowed-macros = [
     "core::debug_assert",
     "core::debug_assert_eq",
     "core::debug_assert_ne",
-    "oer_chips_family_ieee802154_engine::engine::vendor_assert",
+    "oer_chips_family_radio_ieee802154_engine::engine::vendor_assert",
 ]

@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (facts, _) = oer_chips_family_facts::generate::tracked("esp32s31")?;
     let vectors = oer_chips_family_facts::generate::Vectors::of(&facts)?;
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../chips/family/staged-layout/stack-coverage.toml");
+        .join("../../../chips/family/platform/layout/stack-coverage.toml");
     std::fs::write(path, vectors.stack_coverage()?)?;
     Ok(())
 }

@@ -1,6 +1,6 @@
 //! S31 retained-wake profile. SOURCE: BLOB_LIBPHY_PHY_I2C_INIT2_20260907.
 use super::{Address, PhyRfInitParameterSnapshot, analog_i2c};
-use oer_chips_family_phy::i2c::PhyI2cParallelWrite;
+use oer_chips_family_radio_phy::i2c::PhyI2cParallelWrite;
 
 // SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS; opaque-blobray-phy.md, TXRF.
 // Existing vendor initialization 0x08 selects class 1 with all other bits 0.

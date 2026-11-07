@@ -224,9 +224,9 @@ impl MacPti {
 
     /// Preserve a shared coexistence priority in the MAC field. The entire
     /// source domain must fit the generated field geometry at compile time.
-    pub const fn from_coex(pti: oer_chips_family_coex::CoexPti) -> Self {
+    pub const fn from_coex(pti: oer_chips_family_radio_coex::CoexPti) -> Self {
         const {
-            if oer_chips_family_coex::CoexPti::MAX as u32 > Self::MAX {
+            if oer_chips_family_radio_coex::CoexPti::MAX as u32 > Self::MAX {
                 panic!("the coexistence priority domain must fit the MAC PTI field");
             }
         };

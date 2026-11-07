@@ -9,7 +9,7 @@
 use crate::analog::i2c::{MaskedI2cWriteBinding, MaskedI2cWriteBindingError, analog_i2c};
 
 /// Semantic replacement for the vendor range byte at `phy_param + 0x4d`.
-type Write = oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>;
+type Write = oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWifiI2cTrackingBand {
@@ -83,13 +83,13 @@ pub struct PhyWifiI2cTrackingOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWifiI2cTrackingAction {
-    MaskedWrite(oer_chips_family_analog::Action<crate::analog::i2c::Address, ()>),
+    MaskedWrite(oer_chips_family_peripherals_analog::Action<crate::analog::i2c::Address, ()>),
     Complete(PhyWifiI2cTrackingOutcome),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWifiI2cTrackingCompletion {
-    MaskedWrite(oer_chips_family_analog::Completion<crate::analog::i2c::Address>),
+    MaskedWrite(oer_chips_family_peripherals_analog::Completion<crate::analog::i2c::Address>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -105,7 +105,9 @@ pub struct PhyWifiI2cTrackingTransition {
     target_band: PhyWifiI2cTrackingBand,
     changed: bool,
     write_index: u8,
-    write: Option<oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>>,
+    write: Option<
+        oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>,
+    >,
 }
 
 impl PhyWifiI2cTrackingTransition {
@@ -123,7 +125,8 @@ impl PhyWifiI2cTrackingTransition {
     fn write(
         band: PhyWifiI2cTrackingBand,
         index: u8,
-    ) -> oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address> {
+    ) -> oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>
+    {
         // Both values of every band fit their fields, at compile time.
         const WRITES: [[Write; 2]; 4] = [
             PhyWifiI2cTrackingBand::Nominal.writes(),
@@ -159,16 +162,16 @@ impl PhyWifiI2cTrackingTransition {
         };
         let PhyWifiI2cTrackingCompletion::MaskedWrite(completion) = completion;
         write.advance(completion).map_err(|error| match error {
-            oer_chips_family_analog::TransitionError::WrongCompletion
-            | oer_chips_family_analog::TransitionError::IndexExhausted { .. } => {
+            oer_chips_family_peripherals_analog::TransitionError::WrongCompletion
+            | oer_chips_family_peripherals_analog::TransitionError::IndexExhausted { .. } => {
                 PhyWifiI2cTrackingTransitionError::WrongCompletion
             }
-            oer_chips_family_analog::TransitionError::AlreadyComplete => {
+            oer_chips_family_peripherals_analog::TransitionError::AlreadyComplete => {
                 PhyWifiI2cTrackingTransitionError::AlreadyComplete
             }
         })?;
 
-        if write.action() == oer_chips_family_analog::Action::Complete(()) {
+        if write.action() == oer_chips_family_peripherals_analog::Action::Complete(()) {
             self.write_index += 1;
             self.write = (self.write_index < 2).then(|| Self::write(self.target_band, 1));
         } else {

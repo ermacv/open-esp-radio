@@ -3,7 +3,7 @@
 //! sequence and compares the registers it leaves.
 
 use oer_chips_esp32s31_hal::radio::coex::{CoexDomainPorts, CoexPolicyTimer, CoexPolicyTimerBank};
-use oer_chips_family_coex::{CoexClockSelector, CoexCore, CoexError, CoexEventId};
+use oer_chips_family_radio_coex::{CoexClockSelector, CoexCore, CoexError, CoexEventId};
 
 use crate::session;
 

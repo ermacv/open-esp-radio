@@ -2,11 +2,11 @@
 //!
 //! The radio domain owns the timer bank, the event priority table and the shared
 //! modem clock fields. [`CoexDomainPorts`] lends them to
-//! [`oer_chips_family_coex::CoexCore`] for one transaction: the timer port
+//! [`oer_chips_family_radio_coex::CoexCore`] for one transaction: the timer port
 //! programs the policy timers and reads the domain's current event
 //! priorities, the clock port samples the bank's low-power clock selection.
 
-use oer_chips_family_coex::{
+use oer_chips_family_radio_coex::{
     CoexClient, CoexClockHardware, CoexClockSelector, CoexError, CoexEventId, CoexPti,
     CoexTimerClock, CoexTimerHardware, CoexTimerIndex,
 };

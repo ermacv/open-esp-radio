@@ -1176,8 +1176,8 @@ fn the_repository_policies_load() {
                 include_str!("../../../../../chips/esp32s31/facts/stack.toml"),
             ),
             (
-                "chips/family/staged-layout/stack-coverage.toml",
-                include_str!("../../../../../chips/family/staged-layout/stack-coverage.toml"),
+                "chips/family/platform/layout/stack-coverage.toml",
+                include_str!("../../../../../chips/family/platform/layout/stack-coverage.toml"),
             ),
         ])
     {

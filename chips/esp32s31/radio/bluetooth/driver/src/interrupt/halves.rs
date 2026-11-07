@@ -4,12 +4,12 @@ use core::task::{Context, Poll};
 use oer_chips_esp32s31_hal::radio::bluetooth::engine::scheduler::interrupt::{
     SchedulerDoorbell as HalSchedulerDoorbell, SchedulerInterruptError,
 };
-use oer_chips_family_interrupt_table::signal::{IrqSignal, SignalExecutor};
+use oer_chips_family_platform_interrupt_table::signal::{IrqSignal, SignalExecutor};
 
 /// The composition's shared FROM_CPU line 3 radio doorbell, at P3/core 0.
 pub trait RadioDoorbell {
-    const HANDLER: oer_chips_family_interrupt_table::Context;
-    const EXECUTOR: oer_chips_family_interrupt_table::Context;
+    const HANDLER: oer_chips_family_platform_interrupt_table::Context;
+    const EXECUTOR: oer_chips_family_platform_interrupt_table::Context;
     fn ring(&self);
 }
 
