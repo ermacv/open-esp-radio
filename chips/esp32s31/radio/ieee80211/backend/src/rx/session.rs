@@ -13,16 +13,17 @@ use super::{
     sink::CountingAdmission,
     transaction::Publisher,
 };
+use crate::cooperative_hardware::ReceiveRegisters;
 use crate::irq::{RadioDoorbell, WifiIrqActivation, WifiIrqLine, WifiIrqRequest, WifiIrqRequests};
 use crate::mac::{
-    init::{MacRuntimeStopHardware, activate_promiscuous_receive},
+    init::{MacRuntimeStartHardware, MacRuntimeStopHardware, activate_promiscuous_receive},
     irq::consumer::{IrqBatch, IrqConsumer, PowerIrqConsumer},
     rx::pool::RxStagePool,
 };
 use core::task::{Context, Poll};
-use oer_chips_esp32s31_hal::{
-    radio::ieee80211::dma::{rx_storage::RxDmaStorage, space::ChipDma},
-    system::owner::RadioAccess,
+use oer_chips_esp32s31_hal::radio::ieee80211::dma::{
+    rx_storage::RxDmaStorage,
+    space::{ChipDma, DmaSpace},
 };
 use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 use oer_portable_memory::HandlerCell;
@@ -33,7 +34,8 @@ use oer_portable_time::{Instant, Timer};
 /// `V` is the router's proof that the image binds the radio handler's part
 /// ([`Bound`](oer_chips_family_platform_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)); the session holds it, and
-/// every activation takes it.
+/// every activation takes it. `A` is the DMA space of the ring: the chip's,
+/// or a host model's.
 pub struct ReceiveSession<
     const N: usize,
     const B: usize,
@@ -41,8 +43,9 @@ pub struct ReceiveSession<
     const Q: usize,
     X: SignalExecutor,
     V: WifiIrqActivation,
+    A: DmaSpace = ChipDma,
 > {
-    rx: &'static RxDmaStorage<N, B, S>,
+    rx: &'static RxDmaStorage<N, B, S, A>,
     stage: &'static RxStagePool<Q, B>,
     irq: IrqConsumer<'static, X>,
     power: PowerIrqConsumer<'static, X>,
@@ -61,10 +64,11 @@ pub struct ReceiveSession<
     port_close_started: Option<Instant>,
 }
 
-impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalExecutor, V>
-    ReceiveSession<N, B, S, Q, X, V>
+impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalExecutor, V, A>
+    ReceiveSession<N, B, S, Q, X, V, A>
 where
     V: WifiIrqActivation,
+    A: DmaSpace,
 {
     /// Bind once while the role is stopped: install the interrupt line in
     /// the radio handler's `cell`, keep `bound`, the proof that the image's
@@ -72,9 +76,9 @@ where
     /// this arena; the caller retains its role/register owners for
     /// quarantine or reset.
     pub fn new(
-        parts: WifiRxParts<'static, N, B, S, Q, ChipDma, X>,
+        parts: WifiRxParts<'static, N, B, S, Q, A, X>,
         bound: V,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         cell: &'static HandlerCell<WifiIrqLine<X>>,
     ) -> Result<Self, WifiRxCause> {
         let WifiRxParts {
@@ -125,7 +129,7 @@ where
     /// starts.
     pub async fn start(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         timer: &impl Timer,
         doorbell: &impl RadioDoorbell,
     ) -> Result<(), WifiRxCause> {
@@ -171,7 +175,7 @@ where
     /// affine leases in the supplied publisher until its receiver drops them.
     pub async fn drain<P: Publisher<'static, B, Q>>(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
         publisher: &P,
@@ -205,7 +209,7 @@ where
     /// receiver before awaiting this boundary; no held frame is discarded.
     pub async fn pause<P: Publisher<'static, B, Q>>(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
         publisher: &P,
@@ -283,7 +287,7 @@ where
     /// the executor waits for the walker-enable settle.
     pub(crate) fn port_start(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         timer: &impl Timer,
         doorbell: &impl RadioDoorbell,
     ) -> Poll<Result<(), WifiRxCause>> {
@@ -326,7 +330,7 @@ where
 
     pub(crate) fn port_service<P: Publisher<'static, B, Q>>(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
         live: &impl oer_portable_time::Clock,
@@ -376,7 +380,7 @@ where
     pub(crate) fn port_freeze(
         &mut self,
         cx: &mut Context<'_>,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
     ) -> Poll<Result<(), WifiRxCause>> {
@@ -406,13 +410,13 @@ where
                 }
                 return Poll::Pending;
             }
-            let mut mac = registers.wifi_mac_hal();
+            let mut mac = registers.mac();
             deactivate_promiscuous_receive(&mut mac);
             mac.request_mac_runtime_stop();
             self.port_stop_deadline =
                 Some(timer.now().saturating_add(super::receive::DRAIN_TIMEOUT));
         }
-        if registers.wifi_mac_hal().mac_runtime_active_state() != 0 {
+        if registers.mac().mac_runtime_active_state() != 0 {
             if self
                 .port_stop_deadline
                 .is_some_and(|deadline| timer.now() >= deadline)
@@ -436,7 +440,7 @@ where
     /// resumes.
     pub(crate) fn port_resume_cut(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
     ) -> Result<(), WifiRxCause> {
         if !self.port_frozen {
@@ -444,8 +448,8 @@ where
         }
         self.reattach();
         self.requests.activate(&self.bound, doorbell);
-        activate_promiscuous_receive(&mut registers.wifi_mac_hal());
-        registers.wifi_mac_hal().resume_mac_runtime();
+        activate_promiscuous_receive(&mut registers.mac());
+        registers.mac().resume_mac_runtime();
         Ok(())
     }
 
@@ -455,7 +459,7 @@ where
     pub(crate) fn port_pause(
         &mut self,
         cx: &mut Context<'_>,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
     ) -> Poll<Result<(), WifiRxCause>> {

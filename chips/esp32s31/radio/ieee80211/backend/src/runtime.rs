@@ -328,6 +328,76 @@ impl<W> WifiStopped<W> {
     }
 }
 
+/// The chip's frontier of a device: its registers run on, its platform and
+/// common state wait beside them.
+impl<W: crate::startup::WifiMacPlatform + 'static> crate::port::device::Frontier
+    for WifiStopped<W>
+{
+    type Registers = RadioAccess;
+    type Space = oer_chips_esp32s31_hal::radio::ieee80211::dma::space::ChipDma;
+    type Context = (W, WifiRuntimeContext);
+    type Cell = MembershipCell<Wifi>;
+    type Retune = WifiRetunePending<W>;
+    type Failed = WifiRetuneFailure<W>;
+    fn into_running(self) -> (RadioAccess, (W, WifiRuntimeContext)) {
+        let WifiRuntimeParts {
+            platform,
+            registers,
+            context,
+        } = self.into_runtime_parts();
+        (registers, (platform, context))
+    }
+    fn into_stopped(registers: RadioAccess, (platform, context): (W, WifiRuntimeContext)) -> Self {
+        context.into_stopped(platform, registers)
+    }
+    fn current_channel((_, context): &(W, WifiRuntimeContext)) -> WifiChannel {
+        context.current_channel()
+    }
+    fn start_retune(
+        self,
+        cell: MembershipCell<Wifi>,
+        channel: oer_protocols_radio_regulatory::Permitted<
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+        >,
+        ceiling: oer_protocols_radio_regulatory::TxCeiling,
+    ) -> WifiRetunePending<W> {
+        WifiStopped::start_retune(self, cell, channel, ceiling)
+    }
+    fn poll_retune(
+        retune: &mut WifiRetunePending<W>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<crate::port::device::RetuneEnd<Self>> {
+        use crate::port::device::RetuneEnd;
+        use core::{future::Future as _, pin::Pin};
+        core::task::Poll::Ready(match core::task::ready!(Pin::new(retune).poll(cx)) {
+            Err(quarantine) => {
+                drop(quarantine);
+                RetuneEnd::Abandoned
+            }
+            Ok((cell, Ok((stopped, report)))) => RetuneEnd::Moved {
+                stopped,
+                cell,
+                tx_power: report.tx_power,
+            },
+            Ok((cell, Err(failure))) => {
+                let cause = failure.cause;
+                match failure.resume() {
+                    Ok(stopped) => RetuneEnd::Unchanged {
+                        stopped,
+                        cell,
+                        cause,
+                    },
+                    Err(failed) => RetuneEnd::Poisoned {
+                        failed,
+                        cell,
+                        cause,
+                    },
+                }
+            }
+        })
+    }
+}
+
 /// Atomic transfer object between the common stopped owner and one role.
 ///
 /// Keeping the membership, MMIO and platform ownership together avoids a public constructor which could combine pieces from
