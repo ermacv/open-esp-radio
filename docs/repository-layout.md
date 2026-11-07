@@ -56,6 +56,7 @@ protocols/ieee80211/core/security/{cipher, rsn}/
 protocols/ieee80211/testing/{conformance, model}/
 protocols/ieee802154/{mac, model, port, wire}/
 protocols/network/{core, port, runtime, wire}/
+protocols/network/testing/model/
 protocols/radio/{coex, port, regulatory}/
 chips/esp32s31/{app, hal, knowledge, pac}/
 chips/esp32s31/drivers/aes/

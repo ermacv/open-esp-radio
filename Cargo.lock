@@ -2854,6 +2854,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-protocols-network-testing-model"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-runtime",
+ "oer-protocols-network-core",
+ "oer-protocols-network-port",
+ "oer-protocols-network-runtime",
+ "oer-protocols-network-wire",
+]
+
+[[package]]
 name = "oer-protocols-network-wire"
 version = "0.1.0"
 dependencies = [

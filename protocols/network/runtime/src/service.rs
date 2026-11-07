@@ -156,6 +156,9 @@ pub struct Service<
     stop: WakingSpscReceiver<'a, (), 1>,
     /// Why [`Self::run`] ended; it serves no more once this is set.
     ended: Option<EndCause>,
+    /// The socket after the last one given a block: all wait in turn when
+    /// blocks run out.
+    next_block: usize,
 }
 
 impl<
@@ -191,6 +194,7 @@ impl<
             bound: [const { None }; SOCKETS],
             stop,
             ended: None,
+            next_block: 0,
         }
     }
 
@@ -270,6 +274,7 @@ impl<
         for index in 0..SOCKETS {
             moved |= self.commands(now, index);
         }
+        moved |= self.give_blocks();
         for _ in 0..TURN_FRAMES {
             if !self.owner.take_frame(now, events) {
                 break;
@@ -302,17 +307,14 @@ impl<
             bound.abort(inbound, &mut self.owner);
             return true;
         }
-        let mut moved = bound.reserving && bound.reserve(self.owner.pool());
+        let mut moved = false;
         for _ in 0..TURN_COMMANDS {
             let Some(request) = bound.end.requests.try_receive() else {
                 break;
             };
             moved = true;
             match request {
-                Request::Reserve => {
-                    bound.reserving = true;
-                    let _found = bound.reserve(self.owner.pool());
-                }
+                Request::Reserve => bound.reserving = true,
                 Request::Release(block) => self.owner.pool().give(block),
                 Request::Send { tag, remote, block } => {
                     let Some(socket) = &bound.socket else {
@@ -343,6 +345,27 @@ impl<
             }
         }
         moved
+    }
+
+    /// Give waiting sockets a block each, in turn. This comes after all
+    /// commands, so a socket's release gives it no place ahead of another.
+    fn give_blocks(&mut self) -> bool {
+        let mut gave = false;
+        for offset in 0..SOCKETS {
+            let index = self
+                .next_block
+                .wrapping_add(offset)
+                .checked_rem(SOCKETS)
+                .unwrap_or(0);
+            let Some(bound) = self.bound.get_mut(index).and_then(Option::as_mut) else {
+                continue;
+            };
+            if bound.reserving && bound.reserve(self.owner.pool()) {
+                gave = true;
+                self.next_block = index.wrapping_add(1);
+            }
+        }
+        gave
     }
 
     /// Keep the first fault of the policy.

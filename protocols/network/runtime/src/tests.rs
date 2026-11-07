@@ -1250,6 +1250,41 @@ fn a_dropped_service_ends_a_full_lane_wait() {
 }
 
 #[test]
+fn sockets_waiting_for_blocks_take_turns() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; 1]));
+    let (pool, brand) = claim::<Net, SIZE, 1>(memory).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner: NetworkOwner<'static, Net, SIZE, 2, CREDITS, RECEIVED, 2, 1, WirePort> =
+        NetworkOwner::new(brand, interface, pool, WirePort::default());
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service = Service::new(owner, Direct, stopping);
+    let dscp = Dscp::default();
+    let mut first = service.bind(5000, dscp, storage::<Net>()).ok().unwrap();
+    let mut second = service.bind(5001, dscp, storage::<Net>()).ok().unwrap();
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        for _ in 0..4 {
+            let block = first.reserve().await.unwrap();
+            // The second asks while the first holds the one block.
+            assert!(pin!(second.reserve()).poll(cx).is_pending());
+            settle().await;
+            first.release(block).ok().unwrap();
+            // The first asks at once, and the second was first in line.
+            assert!(pin!(first.reserve()).poll(cx).is_pending());
+            let block = second.reserve().await.unwrap();
+            settle().await;
+            second.release(block).ok().unwrap();
+        }
+        stop.try_send(()).ok().unwrap();
+    };
+    let (cause, ()) = run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(cause, EndCause::Stopped);
+}
+
+#[test]
 fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
     brand!(Net);
     let (ended, _, _) = run(bench::<Net>(), async |socket, _| {

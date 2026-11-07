@@ -41,7 +41,7 @@ service with `EndCause::Egress`, and `Ended` returns the policy with its account
 
 A turn takes commands, received frames and the port's completions, then chooses
 work and publishes it, then hands results and datagrams back. Each part is bounded, so no lane and no
-port starves the others.
+port starves the others, and sockets waiting for blocks take turns.
 
 `Service::run` ends at the first look after a stop, or at once when the port
 contradicts itself, and returns the cause. Nothing is published from then on.
