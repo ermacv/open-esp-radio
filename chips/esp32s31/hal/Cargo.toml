@@ -22,6 +22,7 @@ oer-chips-esp32s31-knowledge = { path = "../knowledge" }
 oer-chips-family-efuse = { path = "../../family/efuse" }
 oer-chips-family-watchdog = { path = "../../family/watchdog" }
 oer-chips-family-boot = { path = "../../family/boot" }
+oer-chips-family-system-timer = { path = "../../family/system-timer" }
 oer-chips-family-power = { path = "../../family/power" }
 oer-portable-mmio = { path = "../../../portable/mmio" }
 oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }

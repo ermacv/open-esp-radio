@@ -324,7 +324,7 @@ statics once in the chip's composition crate: the storage of the port's owned
 blocks and the one waker vtable. Each image declares its Embassy time driver
 and observer through `time_driver!`; the driver's exported ABI remains shared.
 The platform port names the counter owner; the executor binding requires
-`oer-chips-family-boot::drivers::system_timer::CounterLatch` on it. HAL supplies
+`oer-chips-family-system-timer::CounterLatch` on it. HAL supplies
 strobe/VALID/LO/HI atoms, and the family driver owns settling, verification
 and the bootstrap's named `Monotonic::start_initial_latch_check` check.
 The core driver likewise owns status, confirmation, peer-stop and reset
@@ -473,7 +473,7 @@ run its own executor.
   when it serves its timers at the start of a round), then the alarm
   interrupt and the receiving executor's round. Every context of every hart
   reads the one SYSTIMER counter latch through
-  `oer-chips-family-boot::drivers::system_timer`: across harts strobes and reads
+  `oer-chips-family-system-timer`: across harts strobes and reads
   interleave access by access, and the LO/HI/LO verification still returns
   one whole copy completed during the read, monotonic across harts, or an
   unverified monotonic floor once another hart's strobes exhaust its rounds

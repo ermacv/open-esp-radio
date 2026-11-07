@@ -175,7 +175,7 @@ The time driver consumes `SystemTimer`, containing
 the running timer's disjoint owners from the reset root: our comparator writer, three alarm
 acknowledgers that each strobe their own bit of the shared
 acknowledgement block, and the shared counter latch, which every context
-of every hart reads through `oer-chips-family-boot::drivers::system_timer`: strobe, 64 bounded
+of every hart reads through `oer-chips-family-system-timer`: strobe, 64 bounded
 VALID polls per settle, then up to 16 LO/HI/LO rounds, retaining a
 monotonic floor when other strobes (a preempting context's, or another
 hart's between any two accesses) prevent verification. The binding

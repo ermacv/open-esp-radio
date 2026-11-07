@@ -196,7 +196,7 @@ root's one-shot `LaunchPermit`; the released hart's grant moves out once
 (`Released::take_interrupts`). Confirmation counts at most 10,000 completed status reads, with a fence
 before sampling and after success, and no peripheral takeover authority.
 
-`drivers::system_timer` owns latch settling and LO/HI/LO verification: 64
+`oer-chips-family-system-timer` owns latch settling and LO/HI/LO verification: 64
 VALID polls per settle and 16 verification rounds, preserving the unverified
 floor. HAL implements only strobe/VALID/LO/HI atoms. The executor reaches the
 owned counter through `platform-port` and its binding requires the family's

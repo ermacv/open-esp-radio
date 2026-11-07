@@ -2,12 +2,13 @@
 //! adapters; images supply only their payload and flash-tuning resources.
 use oer_chips_family_boot::{
     cache, clock,
-    drivers::{self, access_control, cores, entropy, system_timer::LatchStuck},
+    drivers::{self, access_control, cores, entropy},
     flash, mmu, psram,
     wait::{BootBudget, BootDeadline, BootWait},
 };
 use oer_chips_family_platform_port::EarlyText;
 use oer_chips_family_staged_layout::Layout;
+use oer_chips_family_system_timer::LatchStuck;
 use oer_portable_time::Clock;
 
 /// CPU settings expressed in the register value types of one chip binding.
