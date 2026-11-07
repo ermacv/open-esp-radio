@@ -48,6 +48,8 @@ struct Port {
     lazy: bool,
     /// Says `Ok` whatever the writing said.
     careless: bool,
+    /// Refuses every frame for good.
+    rejects: bool,
     /// Gives less room than was asked for.
     room: Option<usize>,
     sent: Vec<Vec<u8>>,
@@ -57,6 +59,10 @@ impl FramePort for Port {
     type Refusal = &'static str;
     type Ticket = ();
 
+    fn is_final(refusal: &&'static str) -> bool {
+        *refusal == "rejected"
+    }
+
     fn publish(
         &mut self,
         length: usize,
@@ -64,6 +70,9 @@ impl FramePort for Port {
     ) -> Result<(), &'static str> {
         if self.full {
             return Err("full");
+        }
+        if self.rejects {
+            return Err("rejected");
         }
         if self.lazy {
             return Ok(());
@@ -1483,4 +1492,41 @@ fn an_old_loan_pays_nothing_of_a_new_one() {
     assert_eq!(pool.loans().lend(0).err(), Some(NotLent::NoCredit));
     pool.loans().give_back(new);
     assert!(pool.loans().released());
+
+#[test]
+fn a_datagram_the_port_rejects_for_good_ends_named_and_goes_no_more() {
+    world!(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        knows_peer(stack);
+        let block = filled(stack.pool(), b"never");
+        let free = stack.pool().free();
+        let command = stack.send(at(0), &socket, peer(), block).unwrap();
+        stack.port_mut().rejects = true;
+        let demand = stack.poll_demand(at(0)).unwrap();
+        let refused = stack.transmit(at(0), demand.grant());
+        assert!(matches!(refused, Err(Unsent::Rejected("rejected"))));
+        assert!(
+            stack.poll_demand(at(0)).is_none(),
+            "it is not offered again"
+        );
+        assert_eq!(stack.pool().free(), free + 1);
+        assert_eq!(
+            stack.take_result(command),
+            CommandState::Finished(Outcome::Rejected)
+        );
+    });
+}
+
+#[test]
+fn an_arp_request_rejected_for_good_waits_for_its_retry() {
+    world!(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"waits");
+        stack.send(at(0), &socket, peer(), block).unwrap();
+        stack.port_mut().rejects = true;
+        let demand = stack.poll_demand(at(0)).unwrap();
+        assert!(stack.transmit(at(0), demand.grant()).is_err());
+        assert!(stack.poll_demand(at(0)).is_none(), "no spin on one refusal");
+        assert!(stack.poll_deadline().is_some(), "its retry still ends it");
+    });
 }

@@ -16,6 +16,9 @@ pub trait TxBuffers {
     /// Whether a buffer is free.
     fn available(&self) -> bool;
 
+    /// As [`Self::available`], registering `cx` for the next free buffer.
+    fn poll_free(&mut self, cx: &mut Context<'_>) -> Poll<()>;
+
     /// Write a frame of `length` octets by `fill` in a free buffer.
     ///
     /// # Errors
@@ -30,16 +33,30 @@ pub trait TxBuffers {
     fn restore(&mut self, frame: Self::Frame);
 }
 
-/// Why a frame did not go to the device. Each leaves the work ready, and the
-/// port wakes the service when room or the link comes back.
+/// Why a frame did not go to the device.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PortRefusal {
-    /// No free buffer, or a full queue.
+    /// No free buffer, or a full queue: the work stays ready, and the buffer
+    /// or the room wakes the service.
     NoRoom,
-    /// The link is down.
+    /// The link is down: the work stays ready, and a change of link wakes the
+    /// service.
     LinkDown,
-    /// The frame does not fit a buffer, or the device reads it as malformed.
+    /// The frame does not fit a buffer, or the device reads it as malformed:
+    /// the same frame would meet the same, so this is final for it.
     BadFrame,
+}
+
+/// What a refused frame needs before it is worth another try.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Waiting {
+    Nothing,
+    /// A free buffer.
+    Buffer,
+    /// Room in the device's queue.
+    Room,
+    /// A change of link, which the port always hears.
+    Link,
 }
 
 /// A device and its transmit half as the port of a service.
@@ -47,8 +64,8 @@ pub struct DevicePort<D, T, X> {
     device: D,
     transmit: T,
     buffers: X,
-    /// A frame was refused: the service hears the next room.
-    blocked: bool,
+    /// What the last refused frame needs.
+    waiting: Waiting,
     /// Frames the device handed over and could not show.
     unreadable: u32,
 }
@@ -59,7 +76,7 @@ impl<D, T, X> DevicePort<D, T, X> {
             device,
             transmit,
             buffers,
-            blocked: false,
+            waiting: Waiting::Nothing,
             unreadable: 0,
         }
     }
@@ -80,26 +97,45 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
     ) -> Result<(), PortRefusal> {
-        if !self.buffers.available() || !self.transmit.has_room() {
-            self.blocked = true;
+        if !self.buffers.available() {
+            self.waiting = Waiting::Buffer;
             return Err(PortRefusal::NoRoom);
         }
-        let frame = self.buffers.write(length, fill)?;
+        if !self.transmit.has_room() {
+            self.waiting = Waiting::Room;
+            return Err(PortRefusal::NoRoom);
+        }
+        let frame = match self.buffers.write(length, fill) {
+            Ok(frame) => frame,
+            Err(refusal) => {
+                self.waiting = match refusal {
+                    PortRefusal::NoRoom => Waiting::Buffer,
+                    PortRefusal::LinkDown => Waiting::Link,
+                    PortRefusal::BadFrame => Waiting::Nothing,
+                };
+                return Err(refusal);
+            }
+        };
         match self.transmit.try_transmit(frame) {
             Ok(()) => {
-                self.blocked = false;
+                self.waiting = Waiting::Nothing;
                 Ok(())
             }
             Err(refused) => {
                 self.buffers.restore(refused.frame);
-                self.blocked = true;
-                Err(match refused.reason {
-                    TransmitError::LinkDown => PortRefusal::LinkDown,
-                    TransmitError::QueueFull => PortRefusal::NoRoom,
-                    TransmitError::InvalidLength(_) => PortRefusal::BadFrame,
-                })
+                let (waiting, refusal) = match refused.reason {
+                    TransmitError::LinkDown => (Waiting::Link, PortRefusal::LinkDown),
+                    TransmitError::QueueFull => (Waiting::Room, PortRefusal::NoRoom),
+                    TransmitError::InvalidLength(_) => (Waiting::Nothing, PortRefusal::BadFrame),
+                };
+                self.waiting = waiting;
+                Err(refusal)
             }
         }
+    }
+
+    fn is_final(refusal: &PortRefusal) -> bool {
+        *refusal == PortRefusal::BadFrame
     }
 
     fn flush(&mut self) {
@@ -107,7 +143,7 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
     }
 }
 
-impl<D: NetDevice, T: NetTransmit, X> FrameSource for DevicePort<D, T, X> {
+impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T, X> {
     type Notice = ();
 
     fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
@@ -131,9 +167,14 @@ impl<D: NetDevice, T: NetTransmit, X> FrameSource for DevicePort<D, T, X> {
     fn register(&mut self, cx: &mut Context<'_>) {
         let received = self.device.poll_receive_ready(cx).is_ready();
         let link = self.device.poll_link(cx).is_ready();
-        // Room matters only to a frame that met none: otherwise an idle port
-        // with room would wake the service for nothing, for ever.
-        let room = self.blocked && matches!(self.transmit.poll_room(cx), Poll::Ready(()));
+        // Only what a refused frame needs: a free queue with the link down
+        // or no buffer would wake the service to the same refusal, for ever,
+        // and an idle port needs nothing.
+        let room = match self.waiting {
+            Waiting::Nothing | Waiting::Link => false,
+            Waiting::Room => self.transmit.poll_room(cx).is_ready(),
+            Waiting::Buffer => self.buffers.poll_free(cx).is_ready(),
+        };
         if received || link || room {
             cx.waker().wake_by_ref();
         }

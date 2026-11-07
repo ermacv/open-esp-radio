@@ -27,6 +27,13 @@ pub trait FramePort {
         fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
     ) -> Result<Self::Ticket, Self::Refusal>;
 
+    /// Whether `refusal` is final for that frame: no wake will change it, so
+    /// the work ends instead of waiting.
+    fn is_final(refusal: &Self::Refusal) -> bool {
+        let _ = refusal;
+        false
+    }
+
     /// End a burst of publications: a frame may wait for this before the port
     /// acts on it.
     fn flush(&mut self) {}

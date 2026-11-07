@@ -177,6 +177,8 @@ pub enum Outcome {
     Retired,
     /// The stack took it back before the port accepted it.
     Evicted(Eviction),
+    /// The port refused this frame for good. It did not go out.
+    Rejected,
 }
 
 /// Why accepted work was taken back.
@@ -1162,6 +1164,44 @@ impl<
 
     /// The port took the granted work, or said it did without a written
     /// frame: then its datagram ends `Unknown`, and nothing is sent again.
+    /// The port refused `grant`'s frame for good: its work ends, and nothing
+    /// offers it again.
+    pub(crate) fn reject<const BLOCKS: usize>(
+        &mut self,
+        now: Instant,
+        grant: &Grant<B>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) {
+        match grant.work {
+            Work::Reply { serial } => {
+                self.replies.retain(|reply| reply.serial != serial);
+            }
+            // The neighbor's own retries end it, as with an answer not heard.
+            Work::Request { neighbor, .. } => self.neighbors.request_accepted(neighbor, now),
+            Work::Datagram {
+                socket,
+                place,
+                serial,
+                ..
+            } => {
+                if let Some(entry) = self
+                    .sockets
+                    .get_mut(usize::from(socket))
+                    .and_then(|open| open.places.get_mut(usize::from(place)))
+                    .filter(|entry| entry.serial == serial)
+                    && let Run::Sending(_) = entry.run
+                    && let Run::Sending(sending) = core::mem::replace(&mut entry.run, Run::Free)
+                {
+                    pool.give(sending.block);
+                    entry.finish(Outcome::Rejected);
+                }
+                let sockets = &self.sockets;
+                self.neighbors
+                    .forget_unneeded(|address| sockets.iter().any(|socket| socket.needs(address)));
+            }
+        }
+    }
+
     pub(crate) fn commit<const BLOCKS: usize>(
         &mut self,
         now: Instant,

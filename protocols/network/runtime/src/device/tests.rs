@@ -162,6 +162,9 @@ impl NetTransmit for Transmit {
 struct Buffers {
     free: usize,
     room: usize,
+    /// `write` refuses though a buffer looked free.
+    refuse: Option<PortRefusal>,
+    free_polls: u32,
 }
 
 impl TxBuffers for Buffers {
@@ -169,11 +172,22 @@ impl TxBuffers for Buffers {
     fn available(&self) -> bool {
         self.free != 0
     }
+    fn poll_free(&mut self, _: &mut Context<'_>) -> Poll<()> {
+        self.free_polls += 1;
+        if self.free == 0 {
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
+    }
     fn write(
         &mut self,
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
     ) -> Result<Written, PortRefusal> {
+        if let Some(refusal) = self.refuse {
+            return Err(refusal);
+        }
         if self.free == 0 {
             return Err(PortRefusal::NoRoom);
         }
@@ -193,7 +207,12 @@ fn port() -> Port {
     DevicePort::new(
         Device::default(),
         Transmit::default(),
-        Buffers { free: 2, room: 64 },
+        Buffers {
+            free: 2,
+            room: 64,
+            refuse: None,
+            free_polls: 0,
+        },
     )
 }
 
@@ -281,7 +300,6 @@ fn a_frame_the_device_refuses_frees_its_buffer() {
         port.transmit.refuse = Some(reason);
         assert_eq!(port.publish(4, octets), Err(expected));
         assert_eq!(port.buffers.free, 2);
-        assert!(wakes_at_once(&mut port), "its room is watched");
     }
 }
 
@@ -325,5 +343,70 @@ fn a_received_frame_and_a_link_change_wake_at_once() {
     port.device.incoming.clear();
     port.device.link_changed = true;
     assert!(wakes_at_once(&mut port));
+    assert!(!wakes_at_once(&mut port));
+}
+
+#[test]
+fn a_down_link_with_a_free_queue_wakes_nobody_until_it_changes() {
+    let mut port = port();
+    port.transmit.refuse = Some(TransmitError::LinkDown);
+    assert_eq!(port.publish(4, octets), Err(PortRefusal::LinkDown));
+    assert!(!wakes_at_once(&mut port), "room is not what it waits for");
+    assert_eq!(port.transmit.room_polls, 0);
+    port.device.link_changed = true;
+    assert!(wakes_at_once(&mut port));
+}
+
+#[test]
+fn no_buffer_with_a_free_queue_wakes_nobody_until_one_is_free() {
+    let mut port = port();
+    port.buffers.free = 0;
+    assert_eq!(port.publish(4, octets), Err(PortRefusal::NoRoom));
+    assert!(!wakes_at_once(&mut port), "room is not what it waits for");
+    assert_eq!(port.buffers.free_polls, 1, "it asked for a buffer");
+    port.buffers.free = 1;
+    assert!(wakes_at_once(&mut port));
+}
+
+#[test]
+fn a_full_queue_is_watched_after_the_device_refused() {
+    let mut port = port();
+    port.transmit.refuse = Some(TransmitError::QueueFull);
+    assert_eq!(port.publish(4, octets), Err(PortRefusal::NoRoom));
+    assert!(wakes_at_once(&mut port));
+    assert_eq!(port.transmit.room_polls, 1);
+}
+
+#[test]
+fn a_write_refused_for_room_watches_for_a_buffer() {
+    let mut port = port();
+    port.buffers.refuse = Some(PortRefusal::NoRoom);
+    assert_eq!(port.publish(4, octets), Err(PortRefusal::NoRoom));
+    port.buffers.free = 0;
+    assert!(!wakes_at_once(&mut port));
+    assert_eq!(port.buffers.free_polls, 1);
+}
+
+#[test]
+fn a_write_refused_for_the_link_waits_for_the_link() {
+    let mut port = port();
+    port.buffers.refuse = Some(PortRefusal::LinkDown);
+    assert_eq!(port.publish(4, octets), Err(PortRefusal::LinkDown));
+    assert!(!wakes_at_once(&mut port));
+    assert_eq!(port.transmit.room_polls + port.buffers.free_polls, 0);
+}
+
+#[test]
+fn only_a_bad_frame_is_final() {
+    assert!(Port::is_final(&PortRefusal::BadFrame));
+    assert!(!Port::is_final(&PortRefusal::NoRoom));
+    assert!(!Port::is_final(&PortRefusal::LinkDown));
+}
+
+#[test]
+fn a_bad_frame_waits_for_nothing() {
+    let mut port = port();
+    port.transmit.refuse = Some(TransmitError::InvalidLength(FrameLengthError::TooLong));
+    assert_eq!(port.publish(4, octets), Err(PortRefusal::BadFrame));
     assert!(!wakes_at_once(&mut port));
 }
