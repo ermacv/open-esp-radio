@@ -1500,7 +1500,15 @@ fn a_datagram_comes_in_through_the_ring_to_the_socket() {
         assert_eq!(end.moved.rx_frames - start.moved.rx_frames, 1);
         assert_eq!(end.atoms.units_landed - start.atoms.units_landed, 1);
 
-        // The unit goes back to the ring: the next frame lands past it.
+        // Units that land before anyone looks stay apart, in their order.
+        bench.land_from_peer(&udp_from_peer(b"the first of two"));
+        bench.land_from_peer(&udp_from_peer(b"the second of two"));
+        let first = bench.receive_datagram();
+        let second = bench.receive_datagram();
+        assert_eq!(first.block.octets(), b"the first of two");
+        assert_eq!(second.block.octets(), b"the second of two");
+
+        // The units go back to the ring.
         let mut socket = bench.socket.take().unwrap();
         socket
             .release(datagram.block)
@@ -1591,6 +1599,10 @@ fn stop_with_work_in_flight<T: 'static>(
     if end == PpduEnd::DuringStop {
         assert!(bench.stopped.is_none(), "the stop waits for the PPDU");
         bench.line.latch(bench.atoms.end_ppdu(queue, 0, 0));
+        // A unit lands behind the mask: its event is the closing epoch's.
+        bench.until("the banks are masked", |bench| bench.line.masked());
+        bench.land_from_peer(&udp_from_peer(b"behind the mask"));
+        assert!(bench.line.latched(), "the event waits under the mask");
     }
     bench.until("the stop answers", |bench| bench.stopped.is_some());
     (held, queue)
