@@ -765,7 +765,11 @@ async fn serve_network<T: 'static>(
         }
     };
     let mut ended = service.retire();
-    // The port's device ends here, with the frames it still holds.
+    // The queue outlives the port, so its frames are given back first, as the
+    // application's stop does.
+    if let Some(port) = ended.retired.port.inner.as_mut() {
+        port.give_back_received();
+    }
     ended.retired.port.inner = None;
     {
         let mut ends = ends.borrow_mut();
@@ -1697,11 +1701,10 @@ fn a_stop_with_a_ppdu_that_never_ends_aborts_it_at_the_publication_bound() {
 }
 
 /// The network's stop ends with more lent units in its queue than one of its
-/// turns took. The receiving end's drop leaves them in the channel, so the
-/// units never come back, the ring's pause waits for them and the stop ends
-/// unconfirmed at its bound.
+/// turns took. Dropping the receiving end leaves them in the channel, so the
+/// stop gives them back first, or the ring's pause waits for them and the stop
+/// ends unconfirmed at its bound.
 #[test]
-#[ignore = "fails today: a stop leaves units in the network's queue, see the pull request"]
 fn a_stop_gets_back_the_units_the_network_had_not_taken() {
     struct Network;
     joined::<Network>(|bench| {
