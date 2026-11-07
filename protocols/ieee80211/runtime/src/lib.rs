@@ -55,6 +55,7 @@
 //! value nor queue capacity; the receiver may run on another thread.
 
 pub mod datapath;
+pub mod egress;
 pub mod lifecycle;
 pub mod monitor;
 pub mod station;
