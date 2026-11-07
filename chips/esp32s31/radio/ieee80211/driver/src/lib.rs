@@ -50,7 +50,7 @@ mod trace_clock {
     fn now() -> u64 {
         0
     }
-    oer_chips_family_staged_runtime::trace_clock!(now);
+    oer_portable_trace_recorder::trace_clock!(now);
 }
 
 pub mod ampdu_tx;

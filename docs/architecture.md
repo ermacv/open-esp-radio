@@ -1392,10 +1392,10 @@ of an image declaring the `trace` class keeps.
 Instrumentation is never a Cargo feature of a library under
 `chips/`, `protocols/` or `portable/`; `oer-tools-test-layers` rejects feature
 names carrying an instrumentation word, and its list of remaining ones only
-shrinks. `oer-chips-family-staged-runtime::trace` owns the
+shrinks. `oer-portable-trace-recorder` owns the
 retained recorder, commit/clear protocol, global installation and previous-boot
 policy. The image places its retained storage and recorder and supplies its
-clock with `trace_clock!`. The platform preserves OETR layout 1: the six-word
+clock with `trace_clock!`. It preserves OETR layout 1: the six-word
 header, 16-byte entries, three-word snapshot headers and snapshot payload words.
 Retained storage uses plain atomic loads/stores; the recorder's read-modify-write
 counters and global pointer/mask stay in ordinary atomic RAM.

@@ -132,11 +132,11 @@ impl<const ENTRIES: usize, const SLOTS: usize, const WORDS: usize> Retained<ENTR
     /// Invalid geometry is rejected even outside a static initializer.
     ///
     /// ```compile_fail,E0080
-    /// let _ = oer_chips_family_staged_runtime::trace::Retained::<0, 1, 1>::new();
+    /// let _ = oer_portable_trace_recorder::Retained::<0, 1, 1>::new();
     /// ```
     ///
     /// ```compile_fail,E0080
-    /// let _ = oer_chips_family_staged_runtime::trace::Retained::<1, 32768, 1>::new();
+    /// let _ = oer_portable_trace_recorder::Retained::<1, 32768, 1>::new();
     /// ```
     pub const fn new() -> Self {
         const {
@@ -333,7 +333,10 @@ impl Trace {
         let sequence = self.sequence.fetch_add(1, Ordering::Relaxed);
         // Retained::new const-checks ENTRIES > 0; Trace::new preserves
         // that private geometry. This selection always contains one entry.
-        if let Some(entry) = self.entries.get(sequence as usize % self.entries.len()) {
+        if let Some(entry) = (sequence as usize)
+            .checked_rem(self.entries.len())
+            .and_then(|slot| self.entries.get(slot))
+        {
             entry.write(commit(kind, sequence), t_us, words);
         }
         if last {
@@ -382,8 +385,10 @@ impl Trace {
             return;
         }
         let sequence = self.snapshot_sequence.fetch_add(1, Ordering::Relaxed);
-        let slot = sequence as usize % self.slots.len();
-        // The nonempty slot geometry and modulo above prove this index.
+        let Some(slot) = (sequence as usize).checked_rem(self.slots.len()) else {
+            return;
+        };
+        // The nonempty slot geometry and remainder above prove this index.
         let Some(header) = self.slots.get(slot) else {
             return;
         };
@@ -493,7 +498,7 @@ impl Trace {
     }
 }
 
-/// What [`super::install`] found.
+/// What [`crate::install`] found.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Boot {
     /// `None` when the storage holds no trace of this layout and geometry,
@@ -501,7 +506,7 @@ pub struct Boot {
     pub previous: Option<Previous>,
 }
 
-/// What the previous boot left, readable until [`super::start`].
+/// What the previous boot left, readable until [`crate::start`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Previous {
     pub trigger: Option<Trigger>,
@@ -578,6 +583,11 @@ impl SnapshotWriter<'_> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 mod format_tests {
     use super::*;
     use core::mem::{offset_of, size_of};

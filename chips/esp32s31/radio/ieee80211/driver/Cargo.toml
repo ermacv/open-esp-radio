@@ -32,7 +32,7 @@ oer-portable-trace = { path = "../../../../../portable/trace" }
 oer-chips-family-interrupt-table = { path = "../../../../family/interrupt-table" }
 
 [target.'cfg(oer_debug_control)'.dependencies]
-oer-chips-family-staged-runtime = { path = "../../../../family/staged-runtime" }
+oer-portable-trace-recorder = { path = "../../../../../portable/trace-recorder" }
 
 [features]
 default = []
