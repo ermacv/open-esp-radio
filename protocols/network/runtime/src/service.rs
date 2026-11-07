@@ -119,7 +119,9 @@ pub enum EndCause {
     Egress,
 }
 
-/// What a service's end hands on.
+/// What a service's end hands on. Dropping it strands what is still on its way
+/// home.
+#[must_use = "it holds the pool, the port and the way home of every block"]
 pub struct Ended<
     'a,
     'm,
@@ -289,8 +291,19 @@ impl<
 
     /// Take blocks home through `returns`, the receiving end of a
     /// [`ReturnLane`], for as long as this service holds the pool.
-    pub fn attach_returns(&mut self, returns: WakingSpscReceiver<'a, Block<'m, B, SIZE>, BLOCKS>) {
+    ///
+    /// # Errors
+    /// A lane is attached already: replacing it would strand what it holds, so
+    /// `returns` comes back.
+    pub fn attach_returns(
+        &mut self,
+        returns: WakingSpscReceiver<'a, Block<'m, B, SIZE>, BLOCKS>,
+    ) -> Result<(), WakingSpscReceiver<'a, Block<'m, B, SIZE>, BLOCKS>> {
+        if self.returns.is_some() {
+            return Err(returns);
+        }
         self.returns = Some(returns);
+        Ok(())
     }
 
     /// Hold an earlier service's `late`: when its socket is dropped, its blocks
