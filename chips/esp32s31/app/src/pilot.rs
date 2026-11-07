@@ -1,5 +1,4 @@
 //! Permanent SAR/PWDET binding; image entries retain priority and hart policy.
-use crate::Esp32s31;
 use oer_chips_esp32s31_hal::{
     peripherals::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmParts},
     radio::domain::transaction::{
@@ -7,6 +6,7 @@ use oer_chips_esp32s31_hal::{
     },
 };
 use oer_chips_esp32s31_radio_phy::sar_pilot::{self, Service};
+use oer_chips_esp32s31_runtime::{Esp32s31, phy_fault};
 use oer_chips_family_executor::InterruptExecutor;
 use oer_chips_family_interrupt_table::{
     Bound, Controller, Entry, Router,
@@ -81,7 +81,7 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
             .with(|handler| handler.service(part, &oer_portable_embassy_time::EmbassyClock))
         {
             Some(Ok(())) => {}
-            Some(Err(fault)) => crate::phy_fault::reset(Fault {
+            Some(Err(fault)) => phy_fault::reset(Fault {
                 reason: FaultReason::SarAlarmWithoutBundle(fault),
                 registration: None,
             }),
@@ -90,7 +90,7 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
     }
 }
 fn reset(storage: SarSetupStorage) -> ! {
-    crate::phy_fault::reset(Fault {
+    phy_fault::reset(Fault {
         reason: FaultReason::SarSetup(SarSetupFault::Storage(storage)),
         registration: None,
     })

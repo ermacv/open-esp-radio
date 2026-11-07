@@ -33,7 +33,6 @@ oer-portable-trace = { path = "../../../portable/trace" }
 embedded-io-async = "0.7.0"
 oer-chips-family-usb-serial-jtag.workspace = true
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
-oer-chips-esp32s31-radio-phy = { path = "../radio/phy" }
 oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }
 oer-chips-family-platform-port = { path = "../../family/platform-port" }
 oer-portable-memory = { path = "../../../portable/memory" }

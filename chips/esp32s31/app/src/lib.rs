@@ -111,6 +111,8 @@ const fn executor_observer<const SLOT: usize>() -> oer_portable_trace::Noop {
 mod aes;
 pub use aes::AesEngine;
 
+#[cfg(feature = "wifi")]
+mod pilot;
 /// The Wi-Fi station and its IP service.
 #[cfg(feature = "wifi")]
 pub mod wifi;
