@@ -210,6 +210,22 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
+    /// The port refused the request of entry `index` for good: this resolution
+    /// ends here, and its address comes back. Nothing asks in its name, so a
+    /// later resolution of that address is a new one.
+    pub(crate) fn request_refused(&mut self, index: u8, resolution: u64) -> Option<[u8; 4]> {
+        let entry = self.entries.get_mut(usize::from(index))?;
+        match *entry {
+            Entry::Asking {
+                address, serial, ..
+            } if serial == resolution => {
+                *entry = Entry::Free;
+                Some(address)
+            }
+            _ => None,
+        }
+    }
+
     /// Ask again where the time came. Each address given up goes to `gave_up`.
     pub(crate) fn tick(&mut self, now: Instant, mut gave_up: impl FnMut([u8; 4])) {
         for entry in &mut self.entries {

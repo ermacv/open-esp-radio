@@ -1518,15 +1518,84 @@ fn a_datagram_the_port_rejects_for_good_ends_named_and_goes_no_more() {
 }
 
 #[test]
-fn an_arp_request_rejected_for_good_waits_for_its_retry() {
+fn an_arp_request_rejected_for_good_ends_what_waits_with_that_cause() {
     world!(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
-        let block = filled(stack.pool(), b"waits");
-        stack.send(at(0), &socket, peer(), block).unwrap();
+        let one = filled(stack.pool(), b"one");
+        let two = filled(stack.pool(), b"two");
+        let free = stack.pool().free();
+        let first = stack.send(at(0), &socket, peer(), one).unwrap();
+        let second = stack.send(at(0), &socket, peer(), two).unwrap();
+        stack.port_mut().rejects = true;
+        let demand = stack.poll_demand(at(0)).unwrap();
+        let refused = stack.transmit(at(0), demand.grant());
+        assert!(matches!(refused, Err(Unsent::Rejected("rejected"))));
+        assert_eq!(finished(stack.take_result(first)), Outcome::Rejected);
+        assert_eq!(finished(stack.take_result(second)), Outcome::Rejected);
+        assert_eq!(stack.pool().free(), free + 2);
+        assert!(stack.poll_demand(at(0)).is_none(), "nothing is asked again");
+        assert_eq!(stack.poll_deadline(), None, "and no time is owed to it");
+    });
+}
+
+#[test]
+fn a_rejected_arp_request_leaves_another_neighbor_waiting() {
+    world!(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let near = filled(stack.pool(), b"near");
+        let far = filled(stack.pool(), b"far");
+        let other = Remote {
+            address: [192, 0, 2, 77],
+            ..peer()
+        };
+        let first = stack.send(at(0), &socket, peer(), near).unwrap();
+        let waiting = stack.send(at(0), &socket, other, far).unwrap();
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(at(0)).unwrap();
         assert!(stack.transmit(at(0), demand.grant()).is_err());
-        assert!(stack.poll_demand(at(0)).is_none(), "no spin on one refusal");
-        assert!(stack.poll_deadline().is_some(), "its retry still ends it");
+        assert_eq!(finished(stack.take_result(first)), Outcome::Rejected);
+        stack.port_mut().rejects = false;
+        assert!(send_next(stack, at(0)).is_ok(), "the other is still asked");
+        let waiting = running(stack.take_result(waiting));
+        stack.tick(at(4000));
+        stack.tick(at(5000));
+        send_next(stack, at(5000)).ok();
+        stack.tick(at(6000));
+        send_next(stack, at(6000)).ok();
+        stack.tick(at(7000));
+        assert_eq!(finished(stack.take_result(waiting)), Outcome::Unreachable);
+    });
+}
+
+#[test]
+fn a_request_refused_after_one_went_out_ends_rejected() {
+    world!(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"waits");
+        let command = stack.send(at(0), &socket, peer(), block).unwrap();
+        send_next(stack, at(0)).unwrap();
+        stack.tick(at(1000));
+        stack.port_mut().rejects = true;
+        let demand = stack.poll_demand(at(1000)).unwrap();
+        assert!(stack.transmit(at(1000), demand.grant()).is_err());
+        assert_eq!(finished(stack.take_result(command)), Outcome::Rejected);
+    });
+}
+
+#[test]
+fn a_new_datagram_after_a_rejected_request_asks_anew() {
+    world!(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"never");
+        let first = stack.send(at(0), &socket, peer(), block).unwrap();
+        stack.port_mut().rejects = true;
+        let demand = stack.poll_demand(at(0)).unwrap();
+        assert!(stack.transmit(at(0), demand.grant()).is_err());
+        assert_eq!(finished(stack.take_result(first)), Outcome::Rejected);
+        stack.port_mut().rejects = false;
+        let block = filled(stack.pool(), b"later");
+        let later = stack.send(at(0), &socket, peer(), block).unwrap();
+        assert!(send_next(stack, at(0)).is_ok());
+        assert!(matches!(stack.take_result(later), CommandState::Running(_)));
     });
 }

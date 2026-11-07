@@ -177,7 +177,8 @@ pub enum Outcome {
     Retired,
     /// The stack took it back before the port accepted it.
     Evicted(Eviction),
-    /// The port refused this frame for good. It did not go out.
+    /// The port refused this frame, or the neighbor request it waited for,
+    /// for good. It did not go out.
     Rejected,
 }
 
@@ -317,6 +318,34 @@ impl<B, const SIZE: usize> Place<'_, B, SIZE> {
     fn free(&mut self) {
         self.run = Run::Free;
         self.serial = 0;
+    }
+}
+
+/// End every datagram that waits for `address` as `outcome`, its block home.
+fn end_waiting<
+    'm,
+    B,
+    const SIZE: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const BLOCKS: usize,
+>(
+    sockets: &mut [Socket<'m, B, SIZE, CREDITS, RECEIVED>],
+    address: [u8; 4],
+    outcome: Outcome,
+    pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+) {
+    for socket in sockets {
+        for place in &mut socket.places {
+            let waits = matches!(
+                &place.run,
+                Run::Sending(Sending { hop: Some(hop), .. }) if *hop == address
+            );
+            if waits && let Run::Sending(sending) = core::mem::replace(&mut place.run, Run::Free) {
+                pool.give(sending.block);
+                place.finish(outcome);
+            }
+        }
     }
 }
 
@@ -909,20 +938,7 @@ impl<
         self.serial = serial;
         let sockets = &mut self.sockets;
         self.neighbors.tick(now, |address| {
-            for socket in sockets.iter_mut() {
-                for place in &mut socket.places {
-                    let waits = matches!(
-                        &place.run,
-                        Run::Sending(Sending { hop: Some(hop), .. }) if *hop == address
-                    );
-                    if waits
-                        && let Run::Sending(sending) = core::mem::replace(&mut place.run, Run::Free)
-                    {
-                        pool.give(sending.block);
-                        place.finish(Outcome::Unreachable);
-                    }
-                }
-            }
+            end_waiting(sockets, address, Outcome::Unreachable, pool);
         });
     }
 
@@ -1168,7 +1184,6 @@ impl<
     /// offers it again.
     pub(crate) fn reject<const BLOCKS: usize>(
         &mut self,
-        now: Instant,
         grant: &Grant<B>,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) {
@@ -1176,8 +1191,13 @@ impl<
             Work::Reply { serial } => {
                 self.replies.retain(|reply| reply.serial != serial);
             }
-            // The neighbor's own retries end it, as with an answer not heard.
-            Work::Request { neighbor, .. } => self.neighbors.request_accepted(neighbor, now),
+            // No request left: what waits for this neighbor has its answer, and
+            // nothing was accepted to wait for.
+            Work::Request { neighbor, serial } => {
+                if let Some(address) = self.neighbors.request_refused(neighbor, serial) {
+                    end_waiting(&mut self.sockets, address, Outcome::Rejected, pool);
+                }
+            }
             Work::Datagram {
                 socket,
                 place,

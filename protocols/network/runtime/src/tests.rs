@@ -2296,6 +2296,17 @@ fn a_frame_the_port_rejects_for_good_ends_and_the_service_goes_on() {
 }
 
 #[test]
+fn a_neighbor_request_the_port_rejects_ends_the_datagram_at_once() {
+    brand!(Net);
+    let (ended, _, sent) = run(bench::<Net>(), async |socket, wire| {
+        wire.0.borrow_mut().rejects = true;
+        send_one(socket, b"never").await
+    });
+    assert_eq!(sent, Sent::Ended(Outcome::Rejected));
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
 fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
     brand!(Net);
     let (ended, _, _) = run(bench::<Net>(), async |socket, _| {

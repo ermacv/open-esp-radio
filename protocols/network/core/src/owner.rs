@@ -126,7 +126,7 @@ impl<
         let ticket = match published {
             Ok(ticket) => ticket,
             Err(refusal) if P::is_final(&refusal) => {
-                self.core.reject(now, &grant, &mut self.pool);
+                self.core.reject(&grant, &mut self.pool);
                 return Err(Unsent::Rejected(refusal));
             }
             Err(refusal) => return Err(Unsent::Port(refusal)),
