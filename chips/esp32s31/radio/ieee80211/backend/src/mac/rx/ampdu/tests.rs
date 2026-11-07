@@ -1,39 +1,6 @@
 use super::*;
 
 #[test]
-fn station_and_access_point_share_one_public_reorder_classifier() {
-    let local = [2, 0, 0, 0, 0, 1];
-    let peer = [2, 0, 0, 0, 0, 2];
-    let mut raw = [0_u8; PUBLIC_HEADER_SIZE + 32];
-    let frame = &mut raw[PUBLIC_HEADER_SIZE..];
-    frame[..2].copy_from_slice(&0x4188_u16.to_le_bytes());
-    frame[4..10].copy_from_slice(&local);
-    frame[10..16].copy_from_slice(&peer);
-    frame[22..24].copy_from_slice(&0x1230_u16.to_le_bytes());
-    frame[24] = 5;
-    let expected = RxBlockAckMpduKey {
-        peer,
-        tid: 5,
-        sequence: SequenceNumber::new(0x123).unwrap(),
-        retry: false,
-    };
-
-    assert_eq!(
-        rx_block_ack_mpdu_key(&raw, local, Some(peer)),
-        Some(expected)
-    );
-    assert_eq!(rx_block_ack_mpdu_key(&raw, local, None), Some(expected));
-    assert_eq!(rx_block_ack_mpdu_key(&raw, local, Some([3; 6])), None);
-
-    raw[PUBLIC_HEADER_SIZE + 22] |= 1;
-    assert_eq!(rx_block_ack_mpdu_key(&raw, local, None), None);
-
-    raw[PUBLIC_HEADER_SIZE + 22] &= !1;
-    raw[PUBLIC_HEADER_SIZE + 1] |= 0x04;
-    assert_eq!(rx_block_ack_mpdu_key(&raw, local, None), None);
-}
-
-#[test]
 fn a_block_ack_request_names_its_session_regardless_of_policy_bits() {
     let local = [2, 0, 0, 0, 0, 1];
     let peer = [2, 0, 0, 0, 0, 2];

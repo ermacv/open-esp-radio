@@ -27,69 +27,9 @@ use crate::mac::rx::PUBLIC_HEADER_SIZE;
 // while this sequence window remains active.
 pub const RX_BLOCK_ACK_MAX_WINDOW: u16 = 64;
 use oer_protocols_ieee80211_wire::{
-    frame::{FrameControlFields, FrameType, QosControl},
-    sequence::SequenceControl,
+    frame::{FrameControlFields, FrameType},
     trigger::BarControlFields,
 };
-
-/// Public ordering identity of one protected QoS data MPDU.
-///
-/// These fields precede the encrypted body. Both station and access-point
-/// receive paths use this exact classifier before deciding whether an active
-/// agreement owns the frame.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RxBlockAckMpduKey {
-    pub peer: [u8; 6],
-    pub tid: u8,
-    pub sequence: SequenceNumber,
-    pub retry: bool,
-}
-
-/// Extract the role-neutral infrastructure RX BlockAck key.
-///
-/// `local_address` is the receiver address (Address 1). A connected STA also
-/// supplies `expected_peer`; an AP leaves it absent and validates admission in
-/// its peer table after extraction. Group, foreign, unprotected, non-QoS and
-/// fragmented frames do not enter a reorder sequence space.
-#[inline(always)]
-pub fn rx_block_ack_mpdu_key(
-    raw: &[u8],
-    local_address: [u8; 6],
-    expected_peer: Option<[u8; 6]>,
-) -> Option<RxBlockAckMpduKey> {
-    let frame_offset = PUBLIC_HEADER_SIZE;
-    let frame_control =
-        FrameControlFields::from_bytes([*raw.get(frame_offset)?, *raw.get(frame_offset + 1)?]);
-    if frame_control.kind() != FrameType::Data
-        || !frame_control.protected()
-        || !frame_control.qos()
-        || frame_control.more_fragments()
-        || raw.get(frame_offset + 4..frame_offset + 10)? != local_address
-    {
-        return None;
-    }
-    let peer: [u8; 6] = raw
-        .get(frame_offset + 10..frame_offset + 16)?
-        .try_into()
-        .ok()?;
-    if expected_peer.is_some_and(|expected| expected != peer) {
-        return None;
-    }
-    let sequence_control =
-        u16::from_le_bytes([*raw.get(frame_offset + 22)?, *raw.get(frame_offset + 23)?]);
-    if SequenceControl::from_bytes(sequence_control.to_le_bytes()).fragment() != 0 {
-        return None;
-    }
-    let qos_offset = frame_offset + 24 + usize::from(frame_control.ds() == 3) * 6;
-    Some(RxBlockAckMpduKey {
-        peer,
-        tid: QosControl::from_bytes([*raw.get(qos_offset)?, 0])
-            .tid()
-            .get(),
-        sequence: SequenceNumber::from_sequence_control(sequence_control),
-        retry: frame_control.retry(),
-    })
-}
 
 /// Receive BlockAck session and window start named by one BlockAckReq.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

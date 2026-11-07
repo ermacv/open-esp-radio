@@ -5,8 +5,8 @@ datapath actor owns (`port::Esp32s31Port`), DMA rings, keys and the path
 from the P3 interrupt to the actor's task. System context: [architecture](../../../../../docs/architecture.md).
 
 The driver's MAC building blocks cover initialization and receive policy,
-EDCA and channel state, DMA ownership, aggregate formatting, local/TSF time
-relations, transmission costs and work receipts. Hardware rate codes come
+EDCA, DMA ownership, aggregate formatting, local/TSF time relations,
+transmission costs and work receipts. Hardware rate codes come
 from the HAL's register-model domains. `mac` groups these primitives beside
 the driver's RX/TX/IRQ orchestration; callers use `oer-chips-esp32s31-hal::types`
 for HAL values, including `MacLegacyRate`. Portable rate conversions live
@@ -32,8 +32,7 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
 - **MAC ownership.** The driver coordinates MAC stop, RX draining and the
   radio client's channel retune through owned HAL transactions. P3 latches
   power events; the port tracks station TBTT deadlines from the installed schedule.
-  Caller-supplied coexistence intent selects the publication PTI. The `coex`
-  module's time-slice status values have no runtime publisher.
+  Caller-supplied coexistence intent selects the publication PTI.
 - **MAC preparation and start.** Cold preparation programs configuration
   with the common MAC gates closed and never writes an interrupt bank;
   runtime start requires the
@@ -113,13 +112,10 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   The event is built only for an enabled receiver; images pass `()`. The
   EDCA host suite checks each draw separately against the AIFSN and backoff
   of the legacy program the driver handed the hardware.
-- **Conformance.** The hardware lower-MAC conformance image runs every case
-  the backend's declared capabilities support; a case outside them is
-  reported as unsupported, never as model-only. The final
-  GTK rollback case injects rejection of the new write, lets restoration
-  program the real hardware, and compares its retained owners and fail-stop
-  with the model. It returns diagnostic evidence without a reusable radio
-  owner; the image must reset before another case.
+- **Conformance.** The shared conformance cases run only as the host tests
+  above; no image runs them on hardware. The GTK rollback case rejects the
+  new key write in the host device model, and restoration programs that
+  model's key table.
 
 ## TX CONTROL bit 22
 
