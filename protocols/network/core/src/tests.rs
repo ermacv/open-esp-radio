@@ -12,8 +12,9 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Block, BrandRefusal, CommandState, CoreBrand, Eviction, Interface, InterfaceError, NetEvent,
-    NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal, Unsent, claim,
+    Block, BrandRefusal, CommandState, CoreBrand, Eviction, GROUPS, Group, GroupsFull, Interface,
+    InterfaceError, NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal,
+    Unsent, claim,
 };
 use oer_protocols_network_port::{Class, FramePort, SlotTooShort};
 
@@ -1212,4 +1213,210 @@ fn work_the_port_took_cannot_be_evicted() {
             CommandState::Finished(Outcome::Accepted)
         );
     });
+}
+
+#[test]
+fn a_group_counts_a_block_until_the_pool_has_it_back() {
+    brand!(Net);
+    let (mut pool, _) = claimed::<Net>();
+    let group = pool.group(1).unwrap();
+    let block = pool.take_as(group).unwrap();
+    assert_eq!(block.group(), group);
+    assert_eq!(pool.held(group), 1);
+    assert!(
+        pool.take_as(group).is_none(),
+        "free blocks do not lift a limit"
+    );
+    assert!(pool.take().is_some(), "the shared group has its own count");
+    pool.give(block);
+    assert_eq!(pool.held(group), 0);
+    assert!(pool.take_as(group).is_some());
+}
+
+#[test]
+fn a_pool_keeps_as_many_groups_as_it_can() {
+    brand!(Net);
+    let (mut pool, _) = claimed::<Net>();
+    for _ in 1..GROUPS {
+        pool.group(1).unwrap();
+    }
+    assert_eq!(pool.group(1), Err(GroupsFull));
+}
+
+/// A generator of no consequence: the walk below only needs to be repeatable.
+struct Walk(u64);
+
+impl Walk {
+    fn below(&mut self, bound: usize) -> usize {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        usize::try_from(self.0 % u64::try_from(bound).unwrap()).unwrap()
+    }
+}
+
+/// What the test itself knows is out of the pool, apart from the pool's count.
+struct Ledger<B: 'static> {
+    /// In the application's hands, with the group each was taken for.
+    held: Vec<(Block<'static, B, SIZE>, usize)>,
+    /// Commands running, with their blocks' groups.
+    running: Vec<(crate::CommandId<B>, usize)>,
+    /// Datagrams waiting in each socket, by group.
+    received: [Vec<usize>; 2],
+}
+
+impl<B: core::fmt::Debug + 'static> Ledger<B> {
+    fn count(&self, group: usize) -> usize {
+        self.held.iter().filter(|(_, of)| *of == group).count()
+            + self.running.iter().filter(|(_, of)| *of == group).count()
+            + self
+                .received
+                .iter()
+                .flatten()
+                .filter(|of| **of == group)
+                .count()
+    }
+
+    /// Commands that ended have returned their blocks.
+    fn harvest(&mut self, stack: &mut Stack<B>) {
+        let running = core::mem::take(&mut self.running);
+        for (command, group) in running {
+            if let CommandState::Running(command) = stack.take_result(command) {
+                self.running.push((command, group));
+            }
+        }
+    }
+}
+
+/// Every way a block moves, in a repeatable order, with the pool's count held to
+/// the test's own ledger after each step.
+fn walk_blocks<B: core::fmt::Debug + 'static>(seed: u64) {
+    const LIMITS: [usize; 3] = [usize::MAX, 2, 3];
+    let (mut pool, brand) = claimed::<B>();
+    let groups = [
+        Group::shared(),
+        pool.group(LIMITS[1]).unwrap(),
+        pool.group(LIMITS[2]).unwrap(),
+    ];
+    let of_socket = [1, 2];
+    let local = interface(OUR_IP, 24, None);
+    let mut stack: Stack<B> = NetworkOwner::new(brand, local, pool, Port::default());
+    let open = |stack: &mut Stack<B>, index: usize| {
+        let port = 5000 + u16::try_from(index).unwrap();
+        let group = groups[of_socket[index]];
+        stack.open_in(port, best_effort(), group).unwrap()
+    };
+    let mut sockets = [Some(open(&mut stack, 0)), Some(open(&mut stack, 1))];
+    let mut ledger = Ledger {
+        held: Vec::new(),
+        running: Vec::new(),
+        received: [Vec::new(), Vec::new()],
+    };
+    let mut walk = Walk(seed.wrapping_mul(0x9e37_79b9).wrapping_add(1));
+    for step in 0..2_000_u32 {
+        let now = at(step);
+        let socket = walk.below(2);
+        match walk.below(10) {
+            0 => {
+                let group = walk.below(3);
+                let wanted = stack.pool().free() > 0 && ledger.count(group) < LIMITS[group];
+                let block = stack.pool().take_as(groups[group]);
+                assert_eq!(block.is_some(), wanted, "step {step}");
+                if let Some(block) = block {
+                    ledger.held.push((block, group));
+                }
+            }
+            1 if !ledger.held.is_empty() => {
+                let at_random = walk.below(ledger.held.len());
+                let (block, _) = ledger.held.swap_remove(at_random);
+                stack.pool().give(block);
+            }
+            2 if !ledger.held.is_empty() => {
+                let at_random = walk.below(ledger.held.len());
+                let (block, group) = ledger.held.swap_remove(at_random);
+                let id = sockets[socket].as_ref().unwrap();
+                match stack.send(now, id, peer(), block) {
+                    Ok(command) => ledger.running.push((command, group)),
+                    Err(refused) => ledger.held.push((refused.block, group)),
+                }
+            }
+            3 => {
+                stack.port_mut().full = walk.below(3) == 0;
+                if let Some(demand) = stack.poll_demand(now) {
+                    let _taken = stack.transmit(now, demand.grant());
+                }
+            }
+            4 => {
+                let group = of_socket[socket];
+                let wanted = ledger.received[socket].len() < 2
+                    && stack.pool().free() > 0
+                    && ledger.count(group) < LIMITS[group];
+                let port = 5000 + u16::try_from(socket).unwrap();
+                stack.input(now, &udp_frame(7, port, b"in"), &mut ());
+                if wanted {
+                    ledger.received[socket].push(group);
+                }
+            }
+            5 => {
+                let id = sockets[socket].as_ref().unwrap();
+                if let Some(datagram) = stack.receive(id).unwrap() {
+                    let group = ledger.received[socket].remove(0);
+                    ledger.held.push((datagram.block, group));
+                }
+            }
+            6 => {
+                let queued: Vec<_> = stack.queued().collect();
+                let count = queued.len();
+                if count != 0 {
+                    let chosen = walk.below(count);
+                    let queued = queued.into_iter().nth(chosen).unwrap();
+                    assert!(stack.evict(queued, Eviction::MemoryPressure));
+                }
+            }
+            7 => {
+                let id = sockets[socket].take().unwrap();
+                let close = stack.close(id).unwrap();
+                ledger.received[socket].clear();
+                ledger.harvest(&mut stack);
+                stack.take_result(close);
+                sockets[socket] = Some(open(&mut stack, socket));
+            }
+            8 => {
+                let reply = arp_frame(Operation::Reply, (PEER, PEER_IP), OUR_IP);
+                stack.input(now, &reply, &mut ());
+            }
+            9 if walk.below(20) == 0 => {
+                let retired = stack.retire();
+                ledger.running.clear();
+                ledger.received = [Vec::new(), Vec::new()];
+                let local = interface(OUR_IP, 24, None);
+                stack = NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
+                sockets = [Some(open(&mut stack, 0)), Some(open(&mut stack, 1))];
+            }
+            _ => stack.tick(now),
+        }
+        ledger.harvest(&mut stack);
+        let mut sum = 0;
+        for group in 0..3 {
+            let held = stack.pool().held(groups[group]);
+            assert_eq!(held, ledger.count(group), "step {step}, group {group}");
+            assert!(held <= LIMITS[group], "step {step}, group {group}");
+            sum += held;
+        }
+        assert_eq!(sum, stack.pool().outstanding(), "step {step}");
+    }
+    for (block, group) in ledger.held.drain(..) {
+        assert_eq!(block.group(), groups[group]);
+        stack.pool().give(block);
+    }
+}
+
+#[test]
+fn a_block_counts_toward_its_group_through_every_move() {
+    brand!(First);
+    brand!(Second);
+    brand!(Third);
+    walk_blocks::<First>(1);
+    walk_blocks::<Second>(2);
+    walk_blocks::<Third>(3);
 }

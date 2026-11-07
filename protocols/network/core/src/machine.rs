@@ -16,7 +16,7 @@ use oer_protocols_network_wire::ip::{
 };
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN, UdpHeader};
 
-use crate::block::{Block, CoreBrand, Pool, Tag};
+use crate::block::{Block, CoreBrand, Group, Pool, Tag};
 use crate::interface::{BROADCAST_HARDWARE, Interface};
 use crate::neighbor::{Lookup, Neighbors};
 
@@ -141,6 +141,8 @@ impl<B> SocketId<B> {
 #[derive(Debug, Eq, PartialEq)]
 pub struct Queued<B> {
     pub flow: u8,
+    /// What its block counts toward, which need not be its socket's.
+    pub group: Group<B>,
     /// When it was accepted.
     pub since: Instant,
     place: u8,
@@ -252,6 +254,8 @@ pub enum NetEvent {
     ReceiveFull,
     /// No block for a received datagram.
     NoBlock,
+    /// A socket's group is at its limit, so a received datagram was dropped.
+    GroupLimit,
     /// A received datagram longer than a block.
     TooLong,
     /// A fragment, which this core does not reassemble.
@@ -321,6 +325,8 @@ struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: us
     port: Option<u16>,
     open: bool,
     dscp: Dscp,
+    /// What its received data counts toward.
+    group: Group<B>,
     places: [Place<'m, B, SIZE>; CREDITS],
     /// Held from the socket's creation: a close always has a place.
     close: Place<'m, B, SIZE>,
@@ -336,6 +342,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>
             port: None,
             open: false,
             dscp: BEST_EFFORT,
+            group: Group::shared(),
             places: [const { Place::new() }; CREDITS],
             close: Place::new(),
             received: heapless::Deque::new(),
@@ -446,6 +453,19 @@ impl<
     /// # Errors
     /// [`OpenRefused`]: every socket is in use, or the port is held.
     pub fn open(&mut self, port: u16, dscp: Dscp) -> Result<SocketId<B>, OpenRefused> {
+        self.open_in(port, dscp, Group::shared())
+    }
+
+    /// Open a socket on `port`, whose received data counts toward `group`.
+    ///
+    /// # Errors
+    /// [`OpenRefused`].
+    pub fn open_in(
+        &mut self,
+        port: u16,
+        dscp: Dscp,
+        group: Group<B>,
+    ) -> Result<SocketId<B>, OpenRefused> {
         if self.sockets.iter().any(|socket| socket.port == Some(port)) {
             return Err(OpenRefused::PortInUse);
         }
@@ -461,6 +481,7 @@ impl<
         socket.port = Some(port);
         socket.open = true;
         socket.dscp = dscp;
+        socket.group = group;
         Ok(SocketId {
             index,
             serial,
@@ -582,6 +603,7 @@ impl<
                     .filter_map(move |(place, entry)| match &entry.run {
                         Run::Sending(sending) => Some(Queued {
                             flow,
+                            group: sending.block.group(),
                             since: sending.since,
                             place,
                             serial: entry.serial,
@@ -817,8 +839,14 @@ impl<
             report(events, || NetEvent::ReceiveFull);
             return;
         }
-        let Some(mut block) = pool.take() else {
-            report(events, || NetEvent::NoBlock);
+        let Some(mut block) = pool.take_as(socket.group) else {
+            report(events, || {
+                if pool.free() == 0 {
+                    NetEvent::NoBlock
+                } else {
+                    NetEvent::GroupLimit
+                }
+            });
             return;
         };
         if block.fill(data).is_err() {

@@ -7,7 +7,7 @@ use oer_portable_time::Instant;
 use oer_protocols_network_port::{FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
-use crate::block::{Block, CoreBrand, Pool};
+use crate::block::{Block, CoreBrand, Group, Pool};
 use crate::interface::Interface;
 use crate::machine::{
     CommandId, CommandState, Core, Datagram, Demand, Eviction, Grant, NetEvent, OpenRefused,
@@ -222,6 +222,19 @@ impl<
     /// [`StaleSocket`].
     pub fn close(&mut self, socket: SocketId<B>) -> Result<CommandId<B>, StaleSocket> {
         self.core.close(socket, &mut self.pool)
+    }
+
+    /// See [`Core::open_in`].
+    ///
+    /// # Errors
+    /// [`OpenRefused`].
+    pub fn open_in(
+        &mut self,
+        port: u16,
+        dscp: Dscp,
+        group: Group<B>,
+    ) -> Result<SocketId<B>, OpenRefused> {
+        self.core.open_in(port, dscp, group)
     }
 
     /// See [`Core::queued`].

@@ -134,7 +134,8 @@ mod neighbor;
 mod owner;
 
 pub use block::{
-    Block, BlockTooShort, BrandRefusal, ClaimRefused, Claimed, CoreBrand, Pool, claim,
+    Block, BlockTooShort, BrandRefusal, ClaimRefused, Claimed, CoreBrand, GROUPS, Group,
+    GroupsFull, Pool, claim,
 };
 pub use interface::{Interface, InterfaceError};
 pub use machine::{

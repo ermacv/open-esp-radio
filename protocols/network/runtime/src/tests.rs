@@ -16,7 +16,8 @@ use embassy_futures::yield_now;
 use oer_portable_memory::WakingSpscSender;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, Eviction, Interface, NetworkOwner, OpenRefused, Outcome, Remote, SendRefusal, claim,
+    Block, Eviction, Group, Interface, NetworkOwner, OpenRefused, Outcome, Remote, SendRefusal,
+    claim,
 };
 use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
@@ -26,8 +27,8 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Direct, EndCause, Ended, MemoryPolicy, Observer, Refusal, Sent, Service, Share, Socket,
-    SocketClosed, SocketLanes, StopLane,
+    Direct, EndCause, Ended, MemoryPolicy, Observer, Refusal, Sent, Service, Socket, SocketClosed,
+    SocketLanes, StopLane,
 };
 
 /// A brand of the test's own.
@@ -295,7 +296,7 @@ fn bench_on<B: 'static, E: Egress<u32, u32>>(
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let mut service = Service::new(owner, egress, MemoryPolicy::KEEP, stopping);
     let socket = service
-        .bind(5000, Dscp::default(), Share::unlimited(0), storage::<B>())
+        .bind(5000, Dscp::default(), Group::shared(), storage::<B>())
         .ok()
         .unwrap();
     Bench {
@@ -997,20 +998,20 @@ fn a_refused_bind_changes_nothing_and_the_storage_serves_again() {
     let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
     let dscp = Dscp::default();
     let mut first = service
-        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5000, dscp, Group::shared(), storage::<Net>())
         .ok()
         .unwrap();
     let refused = service
-        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5000, dscp, Group::shared(), storage::<Net>())
         .err()
         .unwrap();
     assert_eq!(refused.reason, OpenRefused::PortInUse);
     let mut second = service
-        .bind(5001, dscp, Share::unlimited(0), refused.storage)
+        .bind(5001, dscp, Group::shared(), refused.storage)
         .ok()
         .unwrap();
     let full = service
-        .bind(5002, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5002, dscp, Group::shared(), storage::<Net>())
         .err()
         .unwrap();
     assert_eq!(full.reason, OpenRefused::NoSocket);
@@ -1273,11 +1274,11 @@ fn sockets_waiting_for_blocks_take_turns() {
     let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
     let dscp = Dscp::default();
     let mut first = service
-        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5000, dscp, Group::shared(), storage::<Net>())
         .ok()
         .unwrap();
     let mut second = service
-        .bind(5001, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5001, dscp, Group::shared(), storage::<Net>())
         .ok()
         .unwrap();
     let clock = Box::leak(Box::new(VirtualClock::new()));
@@ -1314,15 +1315,15 @@ fn three_sockets_waiting_for_two_blocks_all_take_turns() {
     let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
     let dscp = Dscp::default();
     let mut first = service
-        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5000, dscp, Group::shared(), storage::<Net>())
         .ok()
         .unwrap();
     let mut second = service
-        .bind(5001, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5001, dscp, Group::shared(), storage::<Net>())
         .ok()
         .unwrap();
     let mut third = service
-        .bind(5002, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5002, dscp, Group::shared(), storage::<Net>())
         .ok()
         .unwrap();
     let clock = Box::leak(Box::new(VirtualClock::new()));
@@ -1388,12 +1389,12 @@ fn pair<B: 'static>(
     let mut service = Service::new(owner, Direct, memory, stopping);
     let dscp = Dscp::default();
     let first = service
-        .bind(5000, dscp, Share::unlimited(0), storage::<B>())
+        .bind(5000, dscp, Group::shared(), storage::<B>())
         .ok()
         .unwrap();
-    let share = Share { group: 1, limit };
+    let group = service.group(limit).unwrap();
     let second = service
-        .bind(5001, dscp, share, storage::<B>())
+        .bind(5001, dscp, group, storage::<B>())
         .ok()
         .unwrap();
     (service, [first, second], wire, stop)
@@ -1570,16 +1571,20 @@ fn pressure_spares_a_group_that_holds_less_however_old_its_work() {
     };
     let mut service = Service::new(owner, Direct, evict, stopping);
     let dscp = Dscp::default();
+    let groups = [
+        service.group(usize::MAX).unwrap(),
+        service.group(usize::MAX).unwrap(),
+    ];
     let mut few = service
-        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .bind(5000, dscp, Group::shared(), storage::<Net>())
         .ok()
         .unwrap();
     let mut many = service
-        .bind(5001, dscp, Share::unlimited(1), storage::<Net>())
+        .bind(5001, dscp, groups[0], storage::<Net>())
         .ok()
         .unwrap();
     let mut waits = service
-        .bind(5002, dscp, Share::unlimited(2), storage::<Net>())
+        .bind(5002, dscp, groups[1], storage::<Net>())
         .ok()
         .unwrap();
     let clock = Box::leak(Box::new(VirtualClock::new()));
@@ -1611,6 +1616,191 @@ fn pressure_spares_a_group_that_holds_less_however_old_its_work() {
     };
     let (_, (block, _oldest, _two)) = run_tasks(clock, service.run(clock, &mut events), drive);
     drop(block);
+}
+
+/// Runs `client` beside a pair's service until it stops the service.
+fn on_a_pair<B: 'static, R>(
+    limit: usize,
+    client: impl AsyncFnOnce([TestSocket<B>; 2], WirePort, &mut Context<'_>) -> R,
+) -> R {
+    let (mut service, sockets, wire, stop) = pair::<B>(limit, MemoryPolicy::KEEP);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let mut cx = Context::from_waker(Waker::noop());
+    let drive = async {
+        let result = client(sockets, wire, &mut cx).await;
+        stop.try_send(()).ok().unwrap();
+        result
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive).1
+}
+
+#[test]
+fn a_block_returned_through_another_socket_frees_its_group() {
+    brand!(Net);
+    on_a_pair::<Net, _>(1, async |[mut other, mut limited], _, cx| {
+        let block = limited.reserve().await.unwrap();
+        other.release(block).ok().unwrap();
+        settle().await;
+        assert!(pin!(limited.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(pin!(limited.reserve()).poll(cx).is_ready(), "it is back");
+    });
+}
+
+#[test]
+fn a_block_sent_through_another_socket_frees_its_group_when_it_goes() {
+    brand!(Net);
+    on_a_pair::<Net, _>(1, async |[mut other, mut limited], _, cx| {
+        let block = limited.reserve().await.unwrap();
+        let observer = other.send(peer(), block).ok().unwrap();
+        assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
+        settle().await;
+        assert!(pin!(limited.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(pin!(limited.reserve()).poll(cx).is_ready(), "it went");
+    });
+}
+
+#[test]
+fn another_groups_block_returned_here_frees_nothing_of_this_group() {
+    brand!(Net);
+    on_a_pair::<Net, _>(1, async |[mut other, mut limited], _, cx| {
+        let held = limited.reserve().await.unwrap();
+        let foreign = other.reserve().await.unwrap();
+        limited.release(foreign).ok().unwrap();
+        settle().await;
+        assert!(pin!(limited.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(
+            pin!(limited.reserve()).poll(cx).is_pending(),
+            "the limit holds"
+        );
+        held
+    });
+}
+
+#[test]
+fn a_dropped_socket_leaves_its_blocks_charged_until_they_return() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; 2]));
+    let (pool, brand) = claim::<Net, SIZE, 2>(memory).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let wire = WirePort::default();
+    let owner: NetworkOwner<'static, Net, SIZE, 2, CREDITS, RECEIVED, 2, 2, WirePort> =
+        NetworkOwner::new(brand, interface, pool, wire);
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let dscp = Dscp::default();
+    let group = service.group(1).unwrap();
+    let mut first = service
+        .bind(5000, dscp, group, storage::<Net>())
+        .ok()
+        .unwrap();
+    let mut second = service
+        .bind(5001, dscp, group, storage::<Net>())
+        .ok()
+        .unwrap();
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let held = first.reserve().await.unwrap();
+        drop(first);
+        settle().await;
+        assert!(pin!(second.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(pin!(second.reserve()).poll(cx).is_pending(), "one is held");
+        second.release(held).ok().unwrap();
+        settle().await;
+        assert!(
+            pin!(second.reserve()).poll(cx).is_ready(),
+            "and now it is not"
+        );
+        stop.try_send(()).ok().unwrap();
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive);
+}
+
+#[test]
+fn received_data_stays_within_its_groups_limit() {
+    brand!(Net);
+    on_a_pair::<Net, _>(1, async |[_other, mut limited], wire, cx| {
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.incoming
+                .extend([udp_frame(5001, b"one"), udp_frame(5001, b"two")]);
+            wire.wake();
+        }
+        let held = limited.receive().await.unwrap();
+        settle().await;
+        assert!(
+            pin!(limited.receive()).poll(cx).is_pending(),
+            "the second has no block within the limit"
+        );
+        held
+    });
+}
+
+#[test]
+fn a_group_has_one_limit_however_many_sockets_it_has() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; 2]));
+    let (pool, brand) = claim::<Net, SIZE, 2>(memory).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner: NetworkOwner<'static, Net, SIZE, 2, CREDITS, RECEIVED, 2, 2, WirePort> =
+        NetworkOwner::new(brand, interface, pool, WirePort::default());
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let dscp = Dscp::default();
+    let group = service.group(1).unwrap();
+    let mut first = service
+        .bind(5000, dscp, group, storage::<Net>())
+        .ok()
+        .unwrap();
+    let mut second = service
+        .bind(5001, dscp, group, storage::<Net>())
+        .ok()
+        .unwrap();
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let held = first.reserve().await.unwrap();
+        assert!(pin!(second.reserve()).poll(cx).is_pending());
+        settle().await;
+        assert!(pin!(second.reserve()).poll(cx).is_pending());
+        stop.try_send(()).ok().unwrap();
+        held
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive);
+}
+
+#[test]
+fn a_policy_chooses_only_after_every_notice_was_read() {
+    brand!(Net);
+    let policy = Policy::default();
+    let bench = bench_with::<Net, _>(policy.clone());
+    run(bench, async |socket, wire| {
+        send_one(socket, b"resolved").await;
+        settle().await;
+        const NOTICES: u32 = 40;
+        policy.0.borrow_mut().shut = true;
+        let block = fill(socket, b"ready").await;
+        {
+            let mut account = policy.0.borrow_mut();
+            account.shut = false;
+            account.notices_before_work = Some(NOTICES);
+        }
+        drop(socket.send(peer(), block).ok().unwrap());
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.ended.extend(0..NOTICES);
+            wire.wake();
+        }
+        settle().await;
+        assert_eq!(policy.0.borrow().completed.len(), NOTICES as usize);
+    });
 }
 
 #[test]
@@ -1650,6 +1840,8 @@ struct Account {
     fails_late: bool,
     /// `completed` cannot go on.
     fails_completing: bool,
+    /// Work chosen before this many notices were read fails the test.
+    notices_before_work: Option<u32>,
     /// Reservations not yet answered.
     open: usize,
     accepted: Vec<u32>,
@@ -1675,6 +1867,11 @@ impl Egress<u32, u32> for Policy {
         }
         if account.shut {
             return Ok(None);
+        }
+        if let Some(needed) = account.notices_before_work
+            && ready.clone().next().is_some()
+        {
+            assert_eq!(account.completed.len(), needed as usize, "chose too early");
         }
         let work = if account.last {
             ready.last()
