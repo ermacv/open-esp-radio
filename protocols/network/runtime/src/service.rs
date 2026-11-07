@@ -2,7 +2,6 @@
 
 use core::future::poll_fn;
 use core::pin::pin;
-use core::sync::atomic::Ordering;
 use core::task::{Context, Poll};
 
 use embassy_futures::select::select;
@@ -16,7 +15,7 @@ use oer_protocols_network_core::{
 };
 use oer_protocols_network_wire::ip::Dscp;
 
-use crate::socket::{Answer, Request, Sent, ServiceEnd, tag_bit};
+use crate::socket::{Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, drain_requests};
 
 /// Commands one turn takes from a lane.
 const TURN_COMMANDS: usize = 4;
@@ -25,6 +24,37 @@ const TURN_FRAMES: usize = 8;
 
 /// The lane that stops a service: whoever holds its sender asks once.
 pub type StopLane = WakingSpscQueue<(), 1>;
+
+/// Why a service ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EndCause {
+    /// A stop was asked.
+    Stopped,
+    /// The port said it took a frame it never filled, so what it does is not
+    /// known. The command that met this ends `Outcome::Unknown`, the others
+    /// `Outcome::Retired`, and the port goes back to its owner in
+    /// [`Ended::retired`].
+    PortContract,
+}
+
+/// What a service's end hands on.
+pub struct Ended<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const BLOCKS: usize,
+    const DEPTH: usize,
+    const LANE: usize,
+    P,
+> {
+    pub cause: EndCause,
+    pub retired: Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P>,
+    /// One per socket, for what a socket dropped later holds.
+    pub sockets: [LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>; SOCKETS],
+}
 
 /// A service that did not start, with its owner: pool, port and brand are not
 /// lost with it. Sockets opened before the refusal stay open in the owner.
@@ -61,6 +91,8 @@ struct Bound<
     reserving: bool,
     /// A received datagram waits for room in the lane.
     blocked: bool,
+    /// The socket was dropped and its lanes are drained.
+    abandoned: bool,
 }
 
 /// The network's task.
@@ -124,6 +156,7 @@ impl<
                 closing: None,
                 reserving: false,
                 blocked: false,
+                abandoned: false,
             }
         });
         match refused {
@@ -132,17 +165,22 @@ impl<
         }
     }
 
-    /// Serve until a stop is asked, and return what the core hands on.
+    /// Serve until a stop is asked or the port is at fault, and return why,
+    /// with what the core hands on.
     pub async fn run<T: Timer>(
         mut self,
         clock: &T,
         events: &mut impl EventSink<NetEvent>,
-    ) -> Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P> {
+    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P> {
         loop {
             if self.stop.try_receive().is_some() {
-                return self.retire();
+                return self.retire(EndCause::Stopped);
             }
-            if self.turn(clock.now(), events) {
+            let moved = self.turn(clock.now(), events);
+            if self.owner.port_broken() {
+                return self.retire(EndCause::PortContract);
+            }
+            if moved {
                 yield_now().await;
             } else {
                 self.wait(clock).await;
@@ -174,6 +212,10 @@ impl<
         let Some(bound) = self.bound.get_mut(index) else {
             return false;
         };
+        if let Some(inbound) = bound.end.abandon.try_receive() {
+            bound.abort(inbound, &mut self.owner);
+            return true;
+        }
         let mut moved = bound.reserving && bound.reserve(self.owner.pool());
         for _ in 0..TURN_COMMANDS {
             let Some(request) = bound.end.requests.try_receive() else {
@@ -189,7 +231,7 @@ impl<
                 Request::Send { tag, remote, block } => {
                     let Some(socket) = &bound.socket else {
                         self.owner.pool().give(block);
-                        bound.ended(usize::from(tag), Sent::Ended(Outcome::SocketClosed));
+                        bound.ended(tag, Sent::Ended(Outcome::Closed));
                         continue;
                     };
                     match self.owner.send(now, socket, remote, block) {
@@ -200,7 +242,7 @@ impl<
                         }
                         Err(refused) => {
                             self.owner.pool().give(refused.block);
-                            bound.ended(usize::from(tag), Sent::Refused(refused.reason));
+                            bound.ended(tag, Sent::Refused(refused.reason));
                         }
                     }
                 }
@@ -261,22 +303,27 @@ impl<
         }
     }
 
-    /// Stop: nothing more is published, every known result goes to its
-    /// socket, and so does the request lane, with what the service never saw.
-    fn retire(self) -> Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P> {
+    /// End: nothing more is published, every known result goes to its place,
+    /// and each socket gets the request lane, with what the service never saw.
+    fn retire(
+        self,
+        cause: EndCause,
+    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P> {
         let mut retired = self.owner.retire();
-        for bound in self.bound {
-            bound.finish(&mut retired);
+        let sockets = self.bound.map(|bound| bound.finish(&mut retired));
+        Ended {
+            cause,
+            retired,
+            sockets,
         }
-        retired
     }
 }
 
 impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const CREDITS: usize>
     Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>
 {
-    /// Tell the socket. `lanes` proved the lane's depth for all it can owe
-    /// unread, and a tag or a reservation is reused only once it was read.
+    /// Tell the socket. Its answer lane holds all it can be owed: one
+    /// reservation at a time, a close, and a stop.
     fn answer(&mut self, answer: Answer<'a, 'm, B, SIZE, DEPTH>) {
         let _room_is_proven = self.end.answers.try_send(answer);
     }
@@ -291,15 +338,37 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         true
     }
 
-    /// The command of `tag` ended: its observer hears, or, gone, its tag frees.
-    fn ended(&mut self, tag: usize, sent: Sent) {
-        let tag = u8::try_from(tag).unwrap_or(u8::MAX);
-        let bit = tag_bit(tag);
-        if self.end.dropped.fetch_and(!bit, Ordering::AcqRel) & bit == 0 {
-            self.answer(Answer::Ended { tag, sent });
-        } else {
-            self.answer(Answer::Forgotten { tag });
+    /// The command of `tag` ended.
+    fn ended(&self, tag: u8, sent: Sent) {
+        if let Some(place) = self.end.places.get(usize::from(tag)) {
+            place.end(sent, self.end.credits, tag);
         }
+    }
+
+    /// The socket was dropped: its accepted commands end, and every block
+    /// in its lanes goes back to the pool.
+    fn abort<
+        const SOCKETS: usize,
+        const RECEIVED: usize,
+        const NEIGHBORS: usize,
+        const BLOCKS: usize,
+        P: FramePort,
+    >(
+        &mut self,
+        inbound: Inbound<'a, 'm, B, SIZE, DEPTH, LANE>,
+        owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+    ) {
+        let this = &*self;
+        drain_requests(&this.end.requests, owner.pool(), |tag| {
+            this.ended(tag, Sent::Ended(Outcome::Closed));
+        });
+        if let Some(socket) = self.socket.take() {
+            self.closing = owner.close(socket).ok();
+        }
+        inbound.drain(owner.pool());
+        self.reserving = false;
+        self.blocked = false;
+        self.abandoned = true;
     }
 
     /// Hand results and datagrams back; whether any went.
@@ -318,6 +387,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             let Some(command) = self.commands.get_mut(tag).and_then(Option::take) else {
                 continue;
             };
+            let tag_byte = u8::try_from(tag).unwrap_or(u8::MAX);
             match owner.take_result(command) {
                 CommandState::Running(command) => {
                     if let Some(place) = self.commands.get_mut(tag) {
@@ -326,11 +396,11 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
                 }
                 CommandState::Finished(outcome) => {
                     moved = true;
-                    self.ended(tag, Sent::Ended(outcome));
+                    self.ended(tag_byte, Sent::Ended(outcome));
                 }
                 CommandState::Gone => {
                     moved = true;
-                    self.ended(tag, Sent::Ended(Outcome::Unknown));
+                    self.ended(tag_byte, Sent::Ended(Outcome::Unknown));
                 }
             }
         }
@@ -360,30 +430,53 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
     /// Whether a lane has something for the turn; `cx` hears the next.
     fn poll_lanes(&mut self, cx: &mut Context<'_>) -> bool {
         let mut ready = pin!(self.end.requests.ready()).poll(cx).is_ready();
+        if !self.abandoned {
+            ready |= pin!(self.end.abandon.ready()).poll(cx).is_ready();
+        }
         if self.blocked {
             ready |= pin!(self.end.datagrams.ready()).poll(cx).is_ready();
         }
         ready
     }
 
-    /// The core retired: tell the socket what it decided, and hand it the
-    /// lane the service stops reading.
+    /// The core retired: write what it decided into the places, say so, and
+    /// hand on the lanes the service stops reading.
     fn finish<const SOCKETS: usize, const BLOCKS: usize, P>(
-        mut self,
+        self,
         retired: &mut Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P>,
-    ) {
-        for tag in 0..CREDITS {
-            if let Some(command) = self.commands.get_mut(tag).and_then(Option::take) {
+    ) -> LateSocket<'a, 'm, B, SIZE, DEPTH, LANE> {
+        let Self {
+            end,
+            mut commands,
+            abandoned,
+            ..
+        } = self;
+        for (tag, place) in (0_u8..).zip(end.places.iter()) {
+            let command = commands.get_mut(usize::from(tag)).and_then(Option::take);
+            if let Some(command) = command {
                 let sent = match retired.results.take(command) {
                     CommandState::Finished(outcome) => Sent::Ended(outcome),
                     CommandState::Running(_) | CommandState::Gone => Sent::Ended(Outcome::Unknown),
                 };
-                self.ended(tag, sent);
+                place.end(sent, end.credits, tag);
             }
         }
+        end.credits.stop();
+        for place in end.places {
+            place.wake();
+        }
         let ServiceEnd {
-            requests, answers, ..
-        } = self.end;
-        let _room_is_proven = answers.try_send(Answer::Stopped(requests));
+            requests,
+            answers,
+            abandon,
+            ..
+        } = end;
+        if let Some(inbound) = abandon.try_receive() {
+            drain_requests(&requests, &mut retired.pool, |_| {});
+            inbound.drain(&mut retired.pool);
+        } else if !abandoned {
+            let _room_is_proven = answers.try_send(Answer::Stopped(requests));
+        }
+        LateSocket { abandon }
     }
 }

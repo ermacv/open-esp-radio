@@ -1,11 +1,15 @@
 //! A socket: what an application holds, and the lanes to the service.
 
-use core::ptr;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::future::poll_fn;
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use core::task::Poll;
 
 use embassy_futures::select::select;
-use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
-use oer_protocols_network_core::{Block, Datagram, Outcome, Remote, SendRefusal};
+use oer_portable_memory::{AtomicWaker, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_protocols_network_core::{Block, Datagram, Outcome, Pool, Remote, SendRefusal};
+
+/// The answers a socket can be owed at once: a block, a close and a stop.
+const ANSWERS: usize = 3;
 
 /// What a socket asks of the service.
 pub(crate) enum Request<'m, B, const SIZE: usize> {
@@ -13,7 +17,7 @@ pub(crate) enum Request<'m, B, const SIZE: usize> {
     Reserve,
     /// A block back.
     Release(Block<'m, B, SIZE>),
-    /// A datagram, under its observer's tag.
+    /// A datagram, under its credit's tag.
     Send {
         tag: u8,
         remote: Remote,
@@ -26,19 +30,10 @@ pub(crate) enum Request<'m, B, const SIZE: usize> {
 /// What the service tells a socket.
 pub(crate) enum Answer<'a, 'm, B, const SIZE: usize, const DEPTH: usize> {
     Reserved(Block<'m, B, SIZE>),
-    /// A command ended.
-    Ended {
-        tag: u8,
-        sent: Sent,
-    },
-    /// The command of a dropped observer ended: its tag is free.
-    Forgotten {
-        tag: u8,
-    },
-    /// The socket's close finished; every result came before this.
+    /// The socket's close finished.
     Closed,
-    /// The service stopped, and every result it knows came before this. What
-    /// the request lane still holds, it never saw: the lane comes back.
+    /// The service stopped. What the request lane still holds, it never saw:
+    /// the lane comes back.
     Stopped(WakingSpscReceiver<'a, Request<'m, B, SIZE>, DEPTH>),
 }
 
@@ -51,13 +46,100 @@ pub enum Sent {
     Ended(Outcome),
 }
 
+/// Every [`Sent`], at the word [`word_of`] gives it, less [`FIRST_RESULT`].
+const RESULTS: [Sent; 11] = [
+    Sent::Refused(SendRefusal::Stale),
+    Sent::Refused(SendRefusal::NoPlace),
+    Sent::Refused(SendRefusal::TooLong),
+    Sent::Refused(SendRefusal::NoRoute),
+    Sent::Refused(SendRefusal::NeighborsFull),
+    Sent::Ended(Outcome::Accepted),
+    Sent::Ended(Outcome::Unreachable),
+    Sent::Ended(Outcome::Closed),
+    Sent::Ended(Outcome::SocketClosed),
+    Sent::Ended(Outcome::Unknown),
+    Sent::Ended(Outcome::Retired),
+];
+
+/// A place's command runs, and its observer may wait.
+const WAITING: u32 = 0;
+/// A place's observer has gone.
+const GONE: u32 = 1;
+/// The first word holding a result.
+const FIRST_RESULT: u32 = 2;
+
+/// The word of `sent`: exhaustive, so a new outcome does not compile unnamed.
+const fn word_of(sent: Sent) -> u32 {
+    match sent {
+        Sent::Refused(SendRefusal::Stale) => 2,
+        Sent::Refused(SendRefusal::NoPlace) => 3,
+        Sent::Refused(SendRefusal::TooLong) => 4,
+        Sent::Refused(SendRefusal::NoRoute) => 5,
+        Sent::Refused(SendRefusal::NeighborsFull) => 6,
+        Sent::Ended(Outcome::Accepted) => 7,
+        Sent::Ended(Outcome::Unreachable) => 8,
+        Sent::Ended(Outcome::Closed) => 9,
+        Sent::Ended(Outcome::SocketClosed) => 10,
+        Sent::Ended(Outcome::Unknown) => 11,
+        Sent::Ended(Outcome::Retired) => 12,
+    }
+}
+
+/// A credit's own place for its one result.
+pub(crate) struct Place {
+    word: AtomicU32,
+    waker: AtomicWaker,
+}
+
+impl Place {
+    const fn new() -> Self {
+        Self {
+            word: AtomicU32::new(WAITING),
+            waker: AtomicWaker::new(),
+        }
+    }
+
+    /// The command ended: its observer hears, or, gone, its credit frees.
+    pub(crate) fn end(&self, sent: Sent, credits: &Credits, tag: u8) {
+        if self.word.swap(word_of(sent), Ordering::AcqRel) == GONE {
+            credits.give(tag);
+        } else {
+            self.waker.wake();
+        }
+    }
+
+    pub(crate) fn wake(&self) {
+        self.waker.wake();
+    }
+}
+
+/// What a socket and its observers share with the service.
+pub(crate) struct Credits {
+    /// Tags free for a command.
+    free: AtomicU32,
+    /// The waiter for a free tag.
+    waker: AtomicWaker,
+    /// The service stopped, after writing every result it knows.
+    stopped: AtomicBool,
+}
+
+impl Credits {
+    /// Free `tag`, and tell who waits for one.
+    fn give(&self, tag: u8) {
+        self.free.fetch_or(tag_bit(tag), Ordering::AcqRel);
+        self.waker.wake();
+    }
+
+    /// Everything the service wrote is in the places: tell who waits.
+    pub(crate) fn stop(&self) {
+        self.stopped.store(true, Ordering::Release);
+        self.waker.wake();
+    }
+}
+
 /// The socket closed, or its service stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SocketClosed;
-
-/// An observer of another socket.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ForeignObserver;
 
 /// Why a socket did not take a block.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -75,18 +157,27 @@ pub struct Refused<'m, B, const SIZE: usize> {
     pub block: Block<'m, B, SIZE>,
 }
 
-/// The storage of one socket's lanes. `DEPTH` must hold all a socket can be
-/// owed unread: every credit's result, a block, a close and a stop.
-pub struct SocketLanes<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize> {
+/// The storage of one socket's lanes and its credits' places.
+pub struct SocketLanes<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const DEPTH: usize,
+    const RECEIVED: usize,
+    const CREDITS: usize,
+> {
     requests: WakingSpscQueue<Request<'m, B, SIZE>, DEPTH>,
-    answers: WakingSpscQueue<Answer<'a, 'm, B, SIZE, DEPTH>, DEPTH>,
+    answers: WakingSpscQueue<Answer<'a, 'm, B, SIZE, DEPTH>, ANSWERS>,
     datagrams: WakingSpscQueue<Datagram<'m, B, SIZE>, RECEIVED>,
-    /// Tags whose observers were dropped.
-    dropped: AtomicU32,
+    /// A dropped socket's last message, used once.
+    abandon: WakingSpscQueue<Inbound<'a, 'm, B, SIZE, DEPTH, RECEIVED>, 1>,
+    credits: Credits,
+    places: [Place; CREDITS],
 }
 
-impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize>
-    SocketLanes<'_, '_, B, SIZE, DEPTH, RECEIVED>
+impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, const CREDITS: usize>
+    SocketLanes<'_, '_, B, SIZE, DEPTH, RECEIVED, CREDITS>
 {
     #[must_use]
     pub const fn new() -> Self {
@@ -94,13 +185,19 @@ impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize>
             requests: WakingSpscQueue::new(),
             answers: WakingSpscQueue::new(),
             datagrams: WakingSpscQueue::new(),
-            dropped: AtomicU32::new(0),
+            abandon: WakingSpscQueue::new(),
+            credits: Credits {
+                free: AtomicU32::new(tag_mask(const { CREDITS as u8 })),
+                waker: AtomicWaker::new(),
+                stopped: AtomicBool::new(false),
+            },
+            places: [const { Place::new() }; CREDITS],
         }
     }
 }
 
-impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize> Default
-    for SocketLanes<'_, '_, B, SIZE, DEPTH, RECEIVED>
+impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, const CREDITS: usize> Default
+    for SocketLanes<'_, '_, B, SIZE, DEPTH, RECEIVED, CREDITS>
 {
     fn default() -> Self {
         Self::new()
@@ -131,44 +228,49 @@ pub fn lanes<
     const RECEIVED: usize,
     const CREDITS: usize,
 >(
-    storage: &'a mut SocketLanes<'a, 'm, B, SIZE, DEPTH, RECEIVED>,
+    storage: &'a mut SocketLanes<'a, 'm, B, SIZE, DEPTH, RECEIVED, CREDITS>,
 ) -> Lanes<'a, 'm, B, SIZE, DEPTH, RECEIVED, CREDITS> {
     const {
         if CREDITS == 0 || CREDITS > 32 {
             panic!("a socket's tags are the bits of one word");
-        }
-        if DEPTH < CREDITS + 3 {
-            panic!("the answer lane holds all it can owe: every credit, a block, a close, a stop");
         }
     };
     let SocketLanes {
         requests,
         answers,
         datagrams,
-        dropped,
+        abandon,
+        credits,
+        places,
     } = storage;
     let (request_sender, request_receiver) = requests.split();
     let (answer_sender, answer_receiver) = answers.split();
     let (datagram_sender, datagram_receiver) = datagrams.split();
+    let (abandon_sender, abandon_receiver) = abandon.split();
+    let (credits, places) = (&*credits, &*places);
     (
         Socket {
             requests: request_sender,
-            answers: answer_receiver,
-            datagrams: datagram_receiver,
-            dropped,
-            free: tag_mask(const { CREDITS as u8 }),
-            ended: [None; CREDITS],
+            inbound: Some(Inbound {
+                answers: answer_receiver,
+                datagrams: datagram_receiver,
+                reserved: None,
+                stopped: None,
+            }),
+            abandon: abandon_sender,
+            credits,
+            places,
             reserving: false,
-            reserved: None,
             closing: false,
             closed: false,
-            stopped: None,
         },
         ServiceEnd {
             requests: request_receiver,
             answers: answer_sender,
             datagrams: datagram_sender,
-            dropped,
+            abandon: abandon_receiver,
+            credits,
+            places,
         },
     )
 }
@@ -181,7 +283,7 @@ const fn tag_mask(count: u8) -> u32 {
     }
 }
 
-pub(crate) const fn tag_bit(tag: u8) -> u32 {
+const fn tag_bit(tag: u8) -> u32 {
     match 1_u32.checked_shl(tag as u32) {
         Some(bit) => bit,
         None => 0,
@@ -199,30 +301,153 @@ pub struct ServiceEnd<
     const CREDITS: usize,
 > {
     pub(crate) requests: WakingSpscReceiver<'a, Request<'m, B, SIZE>, DEPTH>,
-    pub(crate) answers: WakingSpscSender<'a, Answer<'a, 'm, B, SIZE, DEPTH>, DEPTH>,
+    pub(crate) answers: WakingSpscSender<'a, Answer<'a, 'm, B, SIZE, DEPTH>, ANSWERS>,
     pub(crate) datagrams: WakingSpscSender<'a, Datagram<'m, B, SIZE>, RECEIVED>,
-    pub(crate) dropped: &'a AtomicU32,
+    pub(crate) abandon: WakingSpscReceiver<'a, Inbound<'a, 'm, B, SIZE, DEPTH, RECEIVED>, 1>,
+    pub(crate) credits: &'a Credits,
+    pub(crate) places: &'a [Place; CREDITS],
 }
 
-/// The right to a datagram's one result. Dropping it gives the result up;
-/// the command still runs to its end.
-#[derive(Debug)]
+/// The right to a datagram's one result, which needs no socket. Reading
+/// consumes it, so a result is read once and a credit's next command is out of
+/// reach. Dropping it gives the result up; the command still runs to its end,
+/// and its credit frees then.
 #[must_use = "dropping an observer gives up the datagram's result"]
 pub struct Observer<'a> {
+    place: &'a Place,
+    credits: &'a Credits,
     tag: u8,
-    read: bool,
-    dropped: &'a AtomicU32,
+}
+
+impl Observer<'_> {
+    fn read(&self) -> Option<Sent> {
+        // In this order: the service writes every result before it stops.
+        let stopped = self.credits.stopped.load(Ordering::Acquire);
+        match self.place.word.load(Ordering::Acquire) {
+            // The service stopped without seeing this command.
+            WAITING => stopped.then_some(Sent::Ended(Outcome::Retired)),
+            word => RESULTS
+                .get(word.wrapping_sub(FIRST_RESULT) as usize)
+                .copied()
+                .or(Some(Sent::Ended(Outcome::Unknown))),
+        }
+    }
+
+    /// Wait until [`Self::take`] has the result. A wait may be cancelled and
+    /// begun again.
+    pub async fn finished(&mut self) {
+        poll_fn(|cx| {
+            self.place.waker.register(cx.waker());
+            if self.read().is_some() {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
+    }
+
+    /// The result.
+    ///
+    /// # Errors
+    /// The command still runs: the observer comes back.
+    pub fn take(self) -> Result<Sent, Self> {
+        self.read().ok_or(self)
+    }
+}
+
+impl core::fmt::Debug for Observer<'_> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.debug_tuple("Observer").field(&self.tag).finish()
+    }
 }
 
 impl Drop for Observer<'_> {
     fn drop(&mut self) {
-        if !self.read {
-            self.dropped.fetch_or(tag_bit(self.tag), Ordering::AcqRel);
+        if self.place.word.swap(GONE, Ordering::AcqRel) != WAITING {
+            self.credits.give(self.tag);
         }
     }
 }
 
-/// What an application holds of a socket.
+/// What a socket receives on, and the blocks in it: a dropped socket's last
+/// message hands all this over, so every block keeps an owner.
+pub struct Inbound<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize> {
+    answers: WakingSpscReceiver<'a, Answer<'a, 'm, B, SIZE, DEPTH>, ANSWERS>,
+    datagrams: WakingSpscReceiver<'a, Datagram<'m, B, SIZE>, RECEIVED>,
+    reserved: Option<Block<'m, B, SIZE>>,
+    /// The request lane, after a stop.
+    stopped: Option<WakingSpscReceiver<'a, Request<'m, B, SIZE>, DEPTH>>,
+}
+
+/// Give what `requests` holds to `pool`, and name the commands' tags.
+pub(crate) fn drain_requests<'m, B, const SIZE: usize, const DEPTH: usize, const BLOCKS: usize>(
+    requests: &WakingSpscReceiver<'_, Request<'m, B, SIZE>, DEPTH>,
+    pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    mut command: impl FnMut(u8),
+) {
+    while let Some(request) = requests.try_receive() {
+        match request {
+            Request::Send { tag, block, .. } => {
+                pool.give(block);
+                command(tag);
+            }
+            Request::Release(block) => pool.give(block),
+            Request::Reserve | Request::Close => {}
+        }
+    }
+}
+
+impl<'m, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize>
+    Inbound<'_, 'm, B, SIZE, DEPTH, RECEIVED>
+{
+    /// Give every block in here to `pool`. The commands of a lane that came
+    /// after a stop end by that stop.
+    pub(crate) fn drain<const BLOCKS: usize>(mut self, pool: &mut Pool<'m, B, SIZE, BLOCKS>) {
+        if let Some(block) = self.reserved.take() {
+            pool.give(block);
+        }
+        while let Some(answer) = self.answers.try_receive() {
+            match answer {
+                Answer::Reserved(block) => pool.give(block),
+                Answer::Stopped(requests) => drain_requests(&requests, pool, |_| {}),
+                Answer::Closed => {}
+            }
+        }
+        if let Some(requests) = &self.stopped {
+            drain_requests(requests, pool, |_| {});
+        }
+        while let Some(datagram) = self.datagrams.try_receive() {
+            pool.give(datagram.block);
+        }
+    }
+}
+
+/// What a stop leaves of a socket: if the socket is dropped later, this
+/// gives the pool's holder what it held.
+pub struct LateSocket<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize> {
+    pub(crate) abandon: WakingSpscReceiver<'a, Inbound<'a, 'm, B, SIZE, DEPTH, RECEIVED>, 1>,
+}
+
+impl<'m, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize>
+    LateSocket<'_, 'm, B, SIZE, DEPTH, RECEIVED>
+{
+    /// Whether the socket was dropped: if so, its blocks are in `pool` now.
+    pub fn collect<const BLOCKS: usize>(&mut self, pool: &mut Pool<'m, B, SIZE, BLOCKS>) -> bool {
+        match self.abandon.try_receive() {
+            Some(inbound) => {
+                inbound.drain(pool);
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+/// What an application holds of a socket. Dropping it aborts the socket
+/// without waiting: its accepted commands still reach their results, and its
+/// lanes' blocks go back to the pool. A block in the application's hands stays
+/// there, for the pool's holder.
 pub struct Socket<
     'a,
     'm,
@@ -233,22 +458,28 @@ pub struct Socket<
     const CREDITS: usize,
 > {
     requests: WakingSpscSender<'a, Request<'m, B, SIZE>, DEPTH>,
-    answers: WakingSpscReceiver<'a, Answer<'a, 'm, B, SIZE, DEPTH>, DEPTH>,
-    datagrams: WakingSpscReceiver<'a, Datagram<'m, B, SIZE>, RECEIVED>,
-    dropped: &'a AtomicU32,
-    /// Tags free for a command.
-    free: u32,
-    /// Results that came, until read.
-    ended: [Option<Sent>; CREDITS],
+    /// `None` only inside `drop`.
+    inbound: Option<Inbound<'a, 'm, B, SIZE, DEPTH, RECEIVED>>,
+    abandon: WakingSpscSender<'a, Inbound<'a, 'm, B, SIZE, DEPTH, RECEIVED>, 1>,
+    credits: &'a Credits,
+    places: &'a [Place; CREDITS],
     /// A reservation is out.
     reserving: bool,
-    reserved: Option<Block<'m, B, SIZE>>,
     /// The socket asked to close: no command follows.
     closing: bool,
-    /// Every result came.
+    /// The socket's close finished, or the service stopped.
     closed: bool,
-    /// The service stopped, and the requests it never saw.
-    stopped: Option<WakingSpscReceiver<'a, Request<'m, B, SIZE>, DEPTH>>,
+}
+
+impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, const CREDITS: usize> Drop
+    for Socket<'_, '_, B, SIZE, DEPTH, RECEIVED, CREDITS>
+{
+    fn drop(&mut self) {
+        if let Some(inbound) = self.inbound.take() {
+            // This lane's one use, so it has room.
+            let _first_use = self.abandon.try_send(inbound);
+        }
+    }
 }
 
 impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, const CREDITS: usize>
@@ -256,33 +487,28 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
 {
     /// Take what the service said.
     fn take_answers(&mut self) {
-        while let Some(answer) = self.answers.try_receive() {
+        let Some(inbound) = &mut self.inbound else {
+            return;
+        };
+        while let Some(answer) = inbound.answers.try_receive() {
             match answer {
                 Answer::Reserved(block) => {
                     self.reserving = false;
-                    self.reserved = Some(block);
+                    inbound.reserved = Some(block);
                 }
-                Answer::Ended { tag, sent } => {
-                    if let Some(place) = self.ended.get_mut(usize::from(tag)) {
-                        *place = Some(sent);
-                    }
-                }
-                Answer::Forgotten { tag } => self.free |= tag_bit(tag),
                 Answer::Closed => self.closed = true,
                 Answer::Stopped(requests) => {
                     self.closed = true;
-                    self.stopped = Some(requests);
+                    inbound.stopped = Some(requests);
                 }
             }
         }
-        // The service ended this command before it saw the observer go.
-        for (tag, place) in (0_u8..).zip(self.ended.iter_mut()) {
-            let bit = tag_bit(tag);
-            if place.is_some() && self.dropped.load(Ordering::Acquire) & bit != 0 {
-                self.dropped.fetch_and(!bit, Ordering::AcqRel);
-                *place = None;
-                self.free |= bit;
-            }
+    }
+
+    /// Wait for the service's next word.
+    async fn answered(&mut self) {
+        if let Some(inbound) = &mut self.inbound {
+            inbound.answers.ready().await;
         }
     }
 
@@ -300,32 +526,46 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     pub async fn room(&mut self) -> Result<(), SocketClosed> {
         loop {
             self.take_answers();
-            if self.stopped.is_some() {
+            let Some(inbound) = self
+                .inbound
+                .as_mut()
+                .filter(|lanes| lanes.stopped.is_none())
+            else {
                 return Err(SocketClosed);
-            }
+            };
             if self.requests.free_capacity() != 0 {
                 return Ok(());
             }
-            let _either = select(self.requests.ready(), self.answers.ready()).await;
+            let _either = select(self.requests.ready(), inbound.answers.ready()).await;
         }
     }
 
     /// Wait until [`Socket::send`] can take a datagram: a free credit and
-    /// room in the lane.
+    /// room in the lane. A credit frees when its observer reads or goes and
+    /// its command has ended.
     ///
     /// # Errors
     /// [`SocketClosed`].
     pub async fn credit(&mut self) -> Result<(), SocketClosed> {
-        loop {
-            self.take_answers();
-            if self.closed || self.closing {
-                return Err(SocketClosed);
-            }
-            if self.free != 0 {
-                return self.room().await;
-            }
-            self.answers.ready().await;
+        self.take_answers();
+        if self.closed || self.closing {
+            return Err(SocketClosed);
         }
+        let credits = self.credits;
+        poll_fn(|cx| {
+            credits.waker.register(cx.waker());
+            let open = credits.free.load(Ordering::Acquire) != 0;
+            if open || credits.stopped.load(Ordering::Acquire) {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
+        if credits.stopped.load(Ordering::Acquire) {
+            return Err(SocketClosed);
+        }
+        self.room().await
     }
 
     /// A free block for a datagram, once the service has one. A cancelled
@@ -336,7 +576,11 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     pub async fn reserve(&mut self) -> Result<Block<'m, B, SIZE>, SocketClosed> {
         loop {
             self.take_answers();
-            if let Some(block) = self.reserved.take() {
+            let held = self
+                .inbound
+                .as_mut()
+                .and_then(|lanes| lanes.reserved.take());
+            if let Some(block) = held {
                 return Ok(block);
             }
             if self.closed || self.closing {
@@ -346,13 +590,15 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
                 self.room().await?;
                 self.reserving = self.requests.try_send(Request::Reserve).is_ok();
             }
-            self.answers.ready().await;
+            self.answered().await;
         }
     }
 
     /// Commit a datagram. Writing it into the lane is the acceptance point:
     /// before it a [`Refused`] with the block, after it one result, which
-    /// the returned [`Observer`] holds the right to.
+    /// the returned [`Observer`] holds the right to. A command the service
+    /// never saw before it stopped ends [`Outcome::Retired`], and its block
+    /// comes back through [`Socket::reclaim`].
     ///
     /// # Errors
     /// [`Refused`].
@@ -362,53 +608,30 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
         block: Block<'m, B, SIZE>,
     ) -> Result<Observer<'a>, Refused<'m, B, SIZE>> {
         self.take_answers();
-        if self.closed || self.closing {
+        if self.closed || self.closing || self.credits.stopped.load(Ordering::Acquire) {
             return Err(Refused {
                 reason: Refusal::Closed,
                 block,
             });
         }
-        let tag = u8::try_from(self.free.trailing_zeros()).unwrap_or(u8::MAX);
+        let free = self.credits.free.load(Ordering::Acquire);
+        let tag = u8::try_from(free.trailing_zeros()).unwrap_or(u8::MAX);
+        let place = self.places.get(usize::from(tag));
         let permit = self.requests.try_reserve();
-        let (true, Some(permit)) = (self.free != 0, permit) else {
+        let (Some(place), Some(permit)) = (place, permit) else {
             return Err(Refused {
                 reason: Refusal::Busy,
                 block,
             });
         };
+        place.word.store(WAITING, Ordering::Release);
+        self.credits.free.fetch_and(!tag_bit(tag), Ordering::AcqRel);
         permit.send(Request::Send { tag, remote, block });
-        self.free &= !tag_bit(tag);
         Ok(Observer {
+            place,
+            credits: self.credits,
             tag,
-            read: false,
-            dropped: self.dropped,
         })
-    }
-
-    /// The result of `observer`'s command. A wait may be cancelled and begun
-    /// again; the result is read once. A command the service never saw
-    /// before it stopped ends [`Outcome::Retired`], and its block comes back
-    /// through [`Socket::reclaim`].
-    ///
-    /// # Errors
-    /// [`ForeignObserver`], changing nothing.
-    pub async fn result(&mut self, observer: &mut Observer<'a>) -> Result<Sent, ForeignObserver> {
-        if !ptr::eq(observer.dropped, self.dropped) {
-            return Err(ForeignObserver);
-        }
-        loop {
-            self.take_answers();
-            let place = self.ended.get_mut(usize::from(observer.tag));
-            let result = place
-                .and_then(Option::take)
-                .or(self.closed.then_some(Sent::Ended(Outcome::Retired)));
-            if let Some(sent) = result {
-                observer.read = true;
-                self.free |= tag_bit(observer.tag);
-                return Ok(sent);
-            }
-            self.answers.ready().await;
-        }
     }
 
     /// The next received datagram.
@@ -419,13 +642,16 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
         loop {
             // In this order: nothing follows a close in the lane.
             self.take_answers();
-            if let Some(datagram) = self.datagrams.try_receive() {
+            let Some(inbound) = &mut self.inbound else {
+                return Err(SocketClosed);
+            };
+            if let Some(datagram) = inbound.datagrams.try_receive() {
                 return Ok(datagram);
             }
             if self.closed {
                 return Err(SocketClosed);
             }
-            let _either = select(self.datagrams.ready(), self.answers.ready()).await;
+            let _either = select(inbound.datagrams.ready(), inbound.answers.ready()).await;
         }
     }
 
@@ -435,7 +661,11 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     /// [`Refused`].
     pub fn release(&mut self, block: Block<'m, B, SIZE>) -> Result<(), Refused<'m, B, SIZE>> {
         self.take_answers();
-        if self.stopped.is_some() {
+        let stopped = self
+            .inbound
+            .as_ref()
+            .is_none_or(|lanes| lanes.stopped.is_some());
+        if stopped {
             return Err(Refused {
                 reason: Refusal::Closed,
                 block,
@@ -466,21 +696,16 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
                 }
                 self.closing = self.requests.try_send(Request::Close).is_ok();
             }
-            self.answers.ready().await;
+            self.answered().await;
         }
-    }
-
-    /// Whether a result came and waits to be read.
-    #[cfg(test)]
-    pub(crate) fn ended_count(&mut self) -> usize {
-        self.take_answers();
-        self.ended.iter().flatten().count()
     }
 
     /// Datagrams in the lane.
     #[cfg(test)]
     pub(crate) fn received(&self) -> usize {
-        self.datagrams.len()
+        self.inbound
+            .as_ref()
+            .map_or(0, |lanes| lanes.datagrams.len())
     }
 
     /// After a stop, the next block its lanes hold, one call each: a
@@ -488,8 +713,9 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     /// and a datagram not read. It goes to the pool's holder.
     pub fn reclaim(&mut self) -> Option<Block<'m, B, SIZE>> {
         self.take_answers();
-        let requests = self.stopped.as_ref()?;
-        if let Some(block) = self.reserved.take() {
+        let inbound = self.inbound.as_mut()?;
+        let requests = inbound.stopped.as_ref()?;
+        if let Some(block) = inbound.reserved.take() {
             return Some(block);
         }
         while let Some(request) = requests.try_receive() {
@@ -497,6 +723,19 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
                 return Some(block);
             }
         }
-        self.datagrams.try_receive().map(|datagram| datagram.block)
+        let datagram = inbound.datagrams.try_receive()?;
+        Some(datagram.block)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FIRST_RESULT, RESULTS, word_of};
+
+    #[test]
+    fn every_result_has_its_own_word() {
+        for (word, sent) in (FIRST_RESULT..).zip(RESULTS) {
+            assert_eq!(word_of(sent), word);
+        }
     }
 }
