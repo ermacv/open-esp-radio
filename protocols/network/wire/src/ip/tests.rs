@@ -1,4 +1,4 @@
-use super::{DsField, Dscp, IpError, Ipv4Header, Ipv6Header};
+use super::{DsField, Dscp, IpError, Ipv4Fields, Ipv4Header, Ipv6Header};
 
 /// RFC 791 header, 20 octets: DSCP 46 (EF) with ECN 1, total length 24,
 /// UDP, 192.0.2.1 to 198.51.100.2, then four payload octets and one past
@@ -76,4 +76,23 @@ fn a_dscp_names_its_class_selector_and_refuses_seven_bits() {
     assert_eq!(Dscp::new(64), None);
     let field = DsField::from_bytes([46 << 2 | 1]);
     assert_eq!(Dscp::from_field(field.dscp()).value(), 46);
+}
+
+#[test]
+fn ipv4_fields_write_a_header_that_parses_and_verifies() {
+    let bytes = Ipv4Fields {
+        services: DsField::from_bytes([0]),
+        total_length: 20,
+        identification: 7,
+        time_to_live: 64,
+        protocol: 17,
+        source: [192, 0, 2, 1],
+        destination: [192, 0, 2, 2],
+    }
+    .to_bytes();
+    assert!(crate::checksum::Checksum::new().with(&bytes).verifies());
+    let header = Ipv4Header::parse(&bytes).unwrap();
+    assert_eq!(header.protocol(), 17);
+    assert_eq!(header.addresses(), [192, 0, 2, 1, 192, 0, 2, 2]);
+    assert!(!header.is_fragment());
 }
