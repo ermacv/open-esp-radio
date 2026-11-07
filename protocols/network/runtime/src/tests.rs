@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::Wake;
 use std::vec::Vec;
 
@@ -26,7 +26,8 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    ForeignObserver, Refusal, Sent, Service, Socket, SocketClosed, SocketLanes, StopLane, lanes,
+    EndCause, Ended, Observer, Refusal, Sent, Service, Socket, SocketClosed, SocketLanes, StopLane,
+    lanes,
 };
 
 /// A brand of the test's own.
@@ -56,6 +57,8 @@ struct Wire {
     full: bool,
     /// The peer answers ARP.
     answers: bool,
+    /// The port says it took a frame it never filled.
+    contradicts: bool,
     waker: Option<Waker>,
 }
 
@@ -81,6 +84,9 @@ impl FramePort for WirePort {
         let mut wire = self.0.borrow_mut();
         if wire.full {
             return Err(());
+        }
+        if wire.contradicts {
+            return Ok(());
         }
         let mut frame = std::vec![0; length];
         fill(&mut frame).map_err(|_| ())?;
@@ -214,8 +220,7 @@ fn datagrams(wire: &Wire) -> Vec<Vec<u8>> {
 type TestSocket<B> = Socket<'static, 'static, B, SIZE, DEPTH, RECEIVED, CREDITS>;
 type TestService<B> =
     Service<'static, 'static, B, SIZE, 1, CREDITS, RECEIVED, 2, BLOCKS, DEPTH, RECEIVED, WirePort>;
-type TestRetired<B> =
-    oer_protocols_network_core::Retired<'static, B, SIZE, 1, CREDITS, BLOCKS, WirePort>;
+type TestEnded<B> = Ended<'static, 'static, B, SIZE, 1, CREDITS, BLOCKS, DEPTH, RECEIVED, WirePort>;
 
 /// A stack of brand `B`, its one socket, and the test's handles.
 struct Bench<B: 'static> {
@@ -229,10 +234,19 @@ struct Bench<B: 'static> {
 fn bench<B: 'static>() -> Bench<B> {
     let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, BLOCKS>(memory).unwrap();
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let wire = WirePort::default();
     wire.0.borrow_mut().answers = true;
-    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    bench_on(
+        NetworkOwner::new(brand, interface, pool, wire.clone()),
+        wire,
+    )
+}
+
+fn bench_on<B: 'static>(
+    owner: NetworkOwner<'static, B, SIZE, 1, CREDITS, RECEIVED, 2, BLOCKS, WirePort>,
+    wire: WirePort,
+) -> Bench<B> {
     let storage = Box::leak(Box::new(SocketLanes::new()));
     let (socket, end) = lanes::<_, SIZE, DEPTH, RECEIVED, CREDITS>(storage);
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -257,8 +271,9 @@ impl Wake for Woken {
     }
 }
 
-/// Run two tasks as an executor would: a task is polled only once woken, so
-/// a lost wake stops the test. With nothing woken, time moves on.
+/// Run two tasks as an executor would: a task is polled only once woken, and
+/// with nothing woken, time moves on. A test fails when nothing is woken and no
+/// time is due, so where only one wake can come, losing it fails the test.
 fn run_tasks<T, U>(
     clock: &VirtualClock,
     first: impl Future<Output = T>,
@@ -300,7 +315,7 @@ fn run_tasks<T, U>(
 fn run<B: 'static, R>(
     bench: Bench<B>,
     client: impl AsyncFnOnce(&mut TestSocket<B>, &WirePort) -> R,
-) -> (TestRetired<B>, TestSocket<B>, R) {
+) -> (TestEnded<B>, TestSocket<B>, R) {
     let Bench {
         service,
         mut socket,
@@ -314,8 +329,29 @@ fn run<B: 'static, R>(
         stop.try_send(()).ok().unwrap();
         result
     };
-    let (retired, result) = run_tasks(clock, service.run(clock, &mut events), drive);
-    (retired, socket, result)
+    let (ended, result) = run_tasks(clock, service.run(clock, &mut events), drive);
+    (ended, socket, result)
+}
+
+/// As [`run`], for a client that owns its socket and may drop it.
+fn run_owning<B: 'static, R>(
+    bench: Bench<B>,
+    client: impl AsyncFnOnce(TestSocket<B>, &WirePort) -> R,
+) -> (TestEnded<B>, R) {
+    let Bench {
+        service,
+        socket,
+        wire,
+        stop,
+        clock,
+    } = bench;
+    let mut events = ();
+    let drive = async {
+        let result = client(socket, &wire).await;
+        stop.try_send(()).ok().unwrap();
+        result
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive)
 }
 
 async fn fill<B>(socket: &mut TestSocket<B>, data: &[u8]) -> Block<'static, B, SIZE> {
@@ -337,19 +373,49 @@ fn open_port(wire: &WirePort, full: bool) {
     wire.wake();
 }
 
-async fn send_one<B>(socket: &mut TestSocket<B>, data: &[u8]) -> Sent {
+fn arrive(wire: &WirePort, count: usize) {
+    let mut wire = wire.0.borrow_mut();
+    wire.incoming
+        .extend((0..count).map(|_| udp_frame(5000, b"many")));
+    wire.wake();
+}
+
+async fn result_of(mut observer: Observer<'_>) -> Sent {
+    observer.finished().await;
+    observer.take().unwrap()
+}
+
+async fn send<B>(socket: &mut TestSocket<B>, data: &[u8]) -> Observer<'static> {
     let block = fill(socket, data).await;
     socket.credit().await.unwrap();
-    let mut observer = socket.send(peer(), block).ok().unwrap();
-    socket.result(&mut observer).await.unwrap()
+    socket.send(peer(), block).ok().unwrap()
+}
+
+async fn send_one<B>(socket: &mut TestSocket<B>, data: &[u8]) -> Sent {
+    result_of(send(socket, data).await).await
 }
 
 /// Every block the service did not see again comes back from the socket.
-fn returned<B>(retired: &mut TestRetired<B>, socket: &mut TestSocket<B>) {
+fn returned<B>(ended: &mut TestEnded<B>, socket: &mut TestSocket<B>) {
     while let Some(block) = socket.reclaim() {
-        retired.pool.give(block);
+        ended.retired.pool.give(block);
     }
-    assert_eq!(retired.pool.outstanding(), 0);
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+/// A waker that counts, for one named notification.
+struct Count(AtomicUsize);
+
+impl Wake for Count {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+fn counter() -> (Arc<Count>, Waker) {
+    let count = Arc::new(Count(AtomicUsize::new(0)));
+    let waker = Waker::from(count.clone());
+    (count, waker)
 }
 
 #[test]
@@ -366,7 +432,7 @@ fn a_datagram_goes_from_a_socket_through_the_service_to_the_port() {
 #[test]
 fn a_received_datagram_reaches_the_socket_and_its_block_returns() {
     brand!(Net);
-    let (mut retired, mut socket, ()) = run(bench::<Net>(), async |socket, wire| {
+    let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, wire| {
         {
             let mut wire = wire.0.borrow_mut();
             wire.incoming.push_back(udp_frame(5000, b"in"));
@@ -377,7 +443,7 @@ fn a_received_datagram_reaches_the_socket_and_its_block_returns() {
         assert_eq!(datagram.remote, peer());
         socket.release(datagram.block).ok().unwrap();
     });
-    returned(&mut retired, &mut socket);
+    returned(&mut ended, &mut socket);
 }
 
 #[test]
@@ -385,13 +451,11 @@ fn a_port_with_no_room_keeps_the_datagram_until_it_wakes_the_service() {
     brand!(Net);
     let (_, _, sent) = run(bench::<Net>(), async |socket, wire| {
         open_port(wire, true);
-        let block = fill(socket, b"late").await;
-        socket.credit().await.unwrap();
-        let mut observer = socket.send(peer(), block).ok().unwrap();
+        let observer = send(socket, b"late").await;
         settle().await;
         assert!(wire.0.borrow().sent.is_empty());
         open_port(wire, false);
-        socket.result(&mut observer).await.unwrap()
+        result_of(observer).await
     });
     assert_eq!(sent, Sent::Ended(Outcome::Accepted));
 }
@@ -401,19 +465,51 @@ fn a_wait_for_a_result_may_be_cancelled_and_begun_again() {
     brand!(Net);
     run(bench::<Net>(), async |socket, wire| {
         open_port(wire, true);
-        let block = socket.reserve().await.unwrap();
-        socket.credit().await.unwrap();
-        let mut observer = socket.send(peer(), block).ok().unwrap();
+        let mut observer = send(socket, b"wait").await;
         {
-            let mut waiting = pin!(socket.result(&mut observer));
+            let mut waiting = pin!(observer.finished());
             let mut cx = Context::from_waker(Waker::noop());
             assert!(waiting.as_mut().poll(&mut cx).is_pending());
         }
+        let observer = observer.take().err().unwrap();
         open_port(wire, false);
-        assert_eq!(
-            socket.result(&mut observer).await,
-            Ok(Sent::Ended(Outcome::Accepted))
-        );
+        assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
+    });
+}
+
+#[test]
+fn a_result_wakes_its_observer_and_needs_no_socket() {
+    brand!(Net);
+    run(bench::<Net>(), async |socket, wire| {
+        open_port(wire, true);
+        let mut observer = send(socket, b"apart").await;
+        let (count, waker) = counter();
+        {
+            let mut waiting = pin!(observer.finished());
+            assert!(
+                waiting
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending()
+            );
+        }
+        open_port(wire, false);
+        settle().await;
+        assert_eq!(count.0.load(Ordering::SeqCst), 1);
+        assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Accepted)));
+    });
+}
+
+#[test]
+fn two_commands_on_one_credit_keep_their_own_results() {
+    brand!(Net);
+    run(bench::<Net>(), async |socket, wire| {
+        for round in 0..2 * CREDITS {
+            let data = [u8::try_from(round).unwrap()];
+            let observer = send(socket, &data).await;
+            assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
+        }
+        assert_eq!(datagrams(&wire.0.borrow()).len(), 2 * CREDITS);
     });
 }
 
@@ -422,9 +518,7 @@ fn a_dropped_observer_frees_its_credit_once_the_command_ended() {
     brand!(Net);
     run(bench::<Net>(), async |socket, wire| {
         for round in 0..6_u8 {
-            let block = fill(socket, &[round]).await;
-            socket.credit().await.unwrap();
-            drop(socket.send(peer(), block).ok().unwrap());
+            drop(send(socket, &[round]).await);
         }
         let sent = send_one(socket, b"after").await;
         assert_eq!(sent, Sent::Ended(Outcome::Accepted));
@@ -438,15 +532,65 @@ fn a_dropped_observer_of_a_running_command_keeps_its_credit() {
     run(bench::<Net>(), async |socket, wire| {
         open_port(wire, true);
         for _ in 0..CREDITS {
-            let block = socket.reserve().await.unwrap();
-            drop(socket.send(peer(), block).ok().unwrap());
+            drop(send(socket, b"held").await);
         }
         let block = socket.reserve().await.unwrap();
         let refused = socket.send(peer(), block).err().unwrap();
         assert_eq!(refused.reason, Refusal::Busy);
-        open_port(wire, false);
-        socket.credit().await.unwrap();
+        settle().await;
+        let (count, waker) = counter();
+        {
+            let mut waiting = pin!(socket.credit());
+            let mut cx = Context::from_waker(&waker);
+            assert!(waiting.as_mut().poll(&mut cx).is_pending());
+            open_port(wire, false);
+            settle().await;
+            assert!(count.0.load(Ordering::SeqCst) >= 1, "its end wakes credit");
+            assert_eq!(waiting.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+        }
         drop(socket.send(peer(), refused.block).ok().unwrap());
+    });
+}
+
+#[test]
+fn dropping_an_observer_wakes_a_credit_already_waiting() {
+    brand!(Net);
+    run(bench::<Net>(), async |socket, _| {
+        let mut held = Vec::new();
+        for _ in 0..CREDITS {
+            let mut observer = send(socket, b"done").await;
+            observer.finished().await;
+            held.push(observer);
+        }
+        let (count, waker) = counter();
+        let mut waiting = pin!(socket.credit());
+        let mut cx = Context::from_waker(&waker);
+        assert!(waiting.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(count.0.load(Ordering::SeqCst), 0);
+        drop(held.pop());
+        assert_eq!(count.0.load(Ordering::SeqCst), 1);
+        assert_eq!(waiting.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    });
+}
+
+#[test]
+fn reading_a_result_wakes_a_credit_already_waiting() {
+    brand!(Net);
+    run(bench::<Net>(), async |socket, _| {
+        let mut held = Vec::new();
+        for _ in 0..CREDITS {
+            let mut observer = send(socket, b"done").await;
+            observer.finished().await;
+            held.push(observer);
+        }
+        let (count, waker) = counter();
+        let mut waiting = pin!(socket.credit());
+        let mut cx = Context::from_waker(&waker);
+        assert!(waiting.as_mut().poll(&mut cx).is_pending());
+        let observer = held.pop().unwrap();
+        assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Accepted)));
+        assert_eq!(count.0.load(Ordering::SeqCst), 1);
+        assert_eq!(waiting.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
     });
 }
 
@@ -474,17 +618,16 @@ fn a_reservation_waits_for_a_block_to_return() {
 #[test]
 fn a_datagram_the_core_refuses_ends_with_that_reason() {
     brand!(Net);
-    let (retired, _, sent) = run(bench::<Net>(), async |socket, _| {
+    let (ended, _, sent) = run(bench::<Net>(), async |socket, _| {
         let block = socket.reserve().await.unwrap();
         let far = Remote {
             address: [198, 51, 100, 1],
             port: 7,
         };
-        let mut observer = socket.send(far, block).ok().unwrap();
-        socket.result(&mut observer).await.unwrap()
+        result_of(socket.send(far, block).ok().unwrap()).await
     });
     assert_eq!(sent, Sent::Refused(SendRefusal::NoRoute));
-    assert_eq!(retired.pool.outstanding(), 0);
+    assert_eq!(ended.retired.pool.outstanding(), 0);
 }
 
 #[test]
@@ -497,26 +640,9 @@ fn time_ends_a_neighbor_that_never_answers() {
 }
 
 #[test]
-fn an_observer_of_another_socket_reads_nothing() {
-    brand!(Net);
-    brand!(Other);
-    let mut other = bench::<Other>();
-    run(bench::<Net>(), async |socket, _| {
-        let block = socket.reserve().await.unwrap();
-        let mut observer = socket.send(peer(), block).ok().unwrap();
-        let foreign = other.socket.result(&mut observer).await;
-        assert_eq!(foreign, Err(ForeignObserver));
-        assert_eq!(
-            socket.result(&mut observer).await,
-            Ok(Sent::Ended(Outcome::Accepted))
-        );
-    });
-}
-
-#[test]
 fn a_close_ends_the_socket_and_later_commands_are_refused() {
     brand!(Net);
-    let (mut retired, mut socket, ()) = run(bench::<Net>(), async |socket, _| {
+    let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, _| {
         let block = socket.reserve().await.unwrap();
         socket.close().await;
         assert!(socket.closed());
@@ -526,48 +652,73 @@ fn a_close_ends_the_socket_and_later_commands_are_refused() {
         assert_eq!(socket.receive().await.err(), Some(SocketClosed));
         socket.release(refused.block).ok().unwrap();
     });
-    returned(&mut retired, &mut socket);
+    returned(&mut ended, &mut socket);
 }
 
 #[test]
 fn a_stop_publishes_nothing_more_and_each_result_arrives_after_it() {
     brand!(Net);
-    let (mut retired, mut socket, (mut known, mut running, held)) =
+    let (mut ended, mut socket, (known, running, held)) =
         run(bench::<Net>(), async |socket, wire| {
-            let block = fill(socket, b"known").await;
-            let known = socket.send(peer(), block).ok().unwrap();
-            while datagrams(&wire.0.borrow()).is_empty() {
-                yield_now().await;
-            }
+            let mut known = send(socket, b"known").await;
+            known.finished().await;
             open_port(wire, true);
-            let block = fill(socket, b"unsent").await;
-            socket.credit().await.unwrap();
-            let running = socket.send(peer(), block).ok().unwrap();
+            let running = send(socket, b"unsent").await;
             let held = socket.reserve().await.unwrap();
-            while socket.ended_count() == 0 {
-                yield_now().await;
-            }
-            assert_eq!(wire.0.borrow().sent.len(), 2, "ARP and the first");
+            settle().await;
             (known, running, held)
         });
-    open_port(&retired.port.clone(), false);
+    open_port(&ended.retired.port.clone(), false);
     assert_eq!(
-        datagrams(&retired.port.0.borrow()),
+        datagrams(&ended.retired.port.0.borrow()),
         [b"known".to_vec()],
         "a port with room again gets nothing"
     );
-    let (known, running) = embassy_futures::block_on(async {
-        (
-            socket.result(&mut known).await,
-            socket.result(&mut running).await,
-        )
-    });
-    assert_eq!(known, Ok(Sent::Ended(Outcome::Accepted)));
-    assert_eq!(running, Ok(Sent::Ended(Outcome::Retired)));
-    assert_eq!(retired.pool.outstanding(), 1, "the application's block");
-    retired.pool.give(held);
-    assert_eq!(retired.pool.outstanding(), 0);
+    assert_eq!(known.take().ok(), Some(Sent::Ended(Outcome::Accepted)));
+    assert_eq!(running.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+    assert_eq!(ended.cause, EndCause::Stopped);
+    assert_eq!(
+        ended.retired.pool.outstanding(),
+        1,
+        "the application's block"
+    );
+    ended.retired.pool.give(held);
+    assert_eq!(ended.retired.pool.outstanding(), 0);
     assert!(socket.closed());
+}
+
+#[test]
+fn a_stop_wakes_a_service_with_nothing_to_do() {
+    brand!(Net);
+    run(bench::<Net>(), async |_, _| settle().await);
+}
+
+#[test]
+fn a_stop_wakes_a_waiting_observer_and_a_waiting_credit() {
+    brand!(Net);
+    let (_, _, ((count, _), (credits, _))) = run(bench::<Net>(), async |socket, wire| {
+        open_port(wire, true);
+        let mut first = send(socket, b"one").await;
+        let mut second = send(socket, b"two").await;
+        settle().await;
+        let observed = counter();
+        let credited = counter();
+        assert!(
+            pin!(first.finished())
+                .poll(&mut Context::from_waker(&observed.1))
+                .is_pending()
+        );
+        assert!(
+            pin!(socket.credit())
+                .poll(&mut Context::from_waker(&credited.1))
+                .is_pending()
+        );
+        let _ = pin!(second.finished()).poll(&mut Context::from_waker(Waker::noop()));
+        core::mem::forget((first, second));
+        (observed, credited)
+    });
+    assert_eq!(count.0.load(Ordering::SeqCst), 1);
+    assert_eq!(credits.0.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -587,78 +738,159 @@ fn a_datagram_written_as_the_service_stops_ends_retired_and_its_block_returns() 
         stop.try_send(()).ok().unwrap();
         socket.send(peer(), block).ok().unwrap()
     };
-    let (mut retired, mut observer) = run_tasks(clock, service.run(clock, &mut events), drive);
-    assert_eq!(
-        embassy_futures::block_on(socket.result(&mut observer)),
-        Ok(Sent::Ended(Outcome::Retired))
-    );
-    assert_eq!(retired.pool.outstanding(), 1);
-    returned(&mut retired, &mut socket);
+    let (mut ended, observer) = run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+    assert_eq!(ended.retired.pool.outstanding(), 1);
+    returned(&mut ended, &mut socket);
+    assert!(socket.reclaim().is_none());
     assert!(datagrams(&wire.0.borrow()).is_empty());
 }
 
 #[test]
 fn a_late_application_gets_its_blocks_back_after_a_stop() {
     brand!(Net);
-    let (mut retired, mut socket, ()) = run(bench::<Net>(), async |socket, wire| {
-        {
-            let mut wire = wire.0.borrow_mut();
-            wire.incoming.push_back(udp_frame(5000, b"unread"));
-            wire.wake();
-        }
+    let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, wire| {
+        arrive(wire, 1);
         while socket.received() == 0 {
             yield_now().await;
         }
     });
+    assert_eq!(ended.retired.pool.outstanding(), 1);
+    returned(&mut ended, &mut socket);
+}
+
+#[test]
+fn a_port_that_contradicts_itself_ends_the_service_with_that_cause() {
+    brand!(Net);
+    let (mut ended, mut socket, (first, second)) = run(bench::<Net>(), async |socket, wire| {
+        assert_eq!(
+            send_one(socket, b"resolved").await,
+            Sent::Ended(Outcome::Accepted)
+        );
+        wire.0.borrow_mut().contradicts = true;
+        let (one, two) = (fill(socket, b"one").await, fill(socket, b"two").await);
+        let mut first = socket.send(peer(), one).ok().unwrap();
+        let second = socket.send(peer(), two).ok().unwrap();
+        first.finished().await;
+        while !socket.closed() {
+            yield_now().await;
+        }
+        let block = socket.reserve().await.err();
+        assert_eq!(block, Some(SocketClosed));
+        (first, second)
+    });
+    assert_eq!(ended.cause, EndCause::PortContract);
+    assert_eq!(first.take().ok(), Some(Sent::Ended(Outcome::Unknown)));
+    assert_eq!(second.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+    assert!(ended.retired.port.0.borrow().contradicts);
+    returned(&mut ended, &mut socket);
+}
+
+#[test]
+fn a_dropped_socket_ends_its_commands_and_returns_its_blocks() {
+    brand!(Net);
+    let (mut ended, (seen, unseen, held)) = run_owning(bench::<Net>(), async |mut socket, wire| {
+        open_port(wire, true);
+        let seen = send(&mut socket, b"seen").await;
+        arrive(wire, 1);
+        while socket.received() == 0 {
+            yield_now().await;
+        }
+        let held = socket.reserve().await.unwrap();
+        let block = fill(&mut socket, b"unseen").await;
+        let unseen = socket.send(peer(), block).ok().unwrap();
+        {
+            let waiting = pin!(socket.reserve());
+            let _ = waiting.poll(&mut Context::from_waker(Waker::noop()));
+        }
+        drop(socket);
+        let (seen, unseen) = (result_of(seen).await, result_of(unseen).await);
+        open_port(wire, false);
+        settle().await;
+        (seen, unseen, held)
+    });
+    assert_eq!(seen, Sent::Ended(Outcome::Closed));
+    assert_eq!(unseen, Sent::Ended(Outcome::Closed));
+    assert_eq!(
+        ended.retired.pool.outstanding(),
+        1,
+        "the application's block"
+    );
+    ended.retired.pool.give(held);
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+    assert!(datagrams(&ended.retired.port.0.borrow()).is_empty());
+}
+
+#[test]
+fn a_dropped_idle_socket_wakes_the_service() {
+    brand!(Net);
+    let (_, sent) = run_owning(bench::<Net>(), async |mut socket, wire| {
+        open_port(wire, true);
+        let observer = send(&mut socket, b"held").await;
+        settle().await;
+        drop(socket);
+        result_of(observer).await
+    });
+    assert_eq!(sent, Sent::Ended(Outcome::Closed));
+}
+
+#[test]
+fn a_socket_dropped_as_the_service_stops_loses_no_block() {
+    brand!(Net);
+    let Bench {
+        service,
+        mut socket,
+        stop,
+        clock,
+        ..
+    } = bench::<Net>();
+    let mut events = ();
+    let drive = async {
+        let block = fill(&mut socket, b"late").await;
+        let observer = socket.send(peer(), block).ok().unwrap();
+        stop.try_send(()).ok().unwrap();
+        drop(socket);
+        observer
+    };
+    let (ended, observer) = run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Retired)));
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn a_socket_dropped_after_a_stop_leaves_its_blocks_to_the_late_socket() {
+    brand!(Net);
+    let (mut ended, socket, ()) = run(bench::<Net>(), async |socket, wire| {
+        arrive(wire, 1);
+        while socket.received() == 0 {
+            yield_now().await;
+        }
+    });
+    let Ended {
+        retired, sockets, ..
+    } = &mut ended;
+    assert!(!sockets[0].collect(&mut retired.pool));
     assert_eq!(retired.pool.outstanding(), 1);
-    returned(&mut retired, &mut socket);
+    drop(socket);
+    assert!(sockets[0].collect(&mut retired.pool));
+    assert_eq!(retired.pool.outstanding(), 0);
 }
 
 #[test]
 fn a_full_datagram_lane_wakes_the_service_when_it_is_read() {
     brand!(Net);
-    let arrive = |wire: &WirePort| {
-        let mut wire = wire.0.borrow_mut();
-        wire.incoming
-            .extend((0..RECEIVED).map(|_| udp_frame(5000, b"many")));
-        wire.wake();
-    };
     run(bench::<Net>(), async |socket, wire| {
-        arrive(wire);
+        arrive(wire, RECEIVED);
         while socket.received() < RECEIVED {
             yield_now().await;
         }
         // These wait in the core, as the lane is full.
-        arrive(wire);
+        arrive(wire, RECEIVED);
         settle().await;
         // Nothing is released: only the room read here can wake the service.
         let mut held = Vec::new();
         for _ in 0..2 * RECEIVED {
             held.push(socket.receive().await.unwrap());
-        }
-    });
-}
-
-#[test]
-fn a_stop_wakes_a_service_with_nothing_to_do() {
-    brand!(Net);
-    run(bench::<Net>(), async |_, _| settle().await);
-}
-
-#[test]
-fn an_observer_dropped_after_its_result_came_frees_its_credit() {
-    brand!(Net);
-    run(bench::<Net>(), async |socket, _| {
-        for round in 0..2 * CREDITS {
-            let block = fill(socket, &[0]).await;
-            socket.credit().await.unwrap();
-            let observer = socket.send(peer(), block).ok().unwrap();
-            while socket.ended_count() == 0 {
-                yield_now().await;
-            }
-            drop(observer);
-            assert_eq!(socket.credit().await, Ok(()), "round {round}");
-            assert_eq!(socket.ended_count(), 0);
         }
     });
 }
@@ -688,12 +920,10 @@ fn a_service_refused_a_socket_hands_its_owner_back() {
 #[test]
 fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
     brand!(Net);
-    let (retired, _, _) = run(bench::<Net>(), async |socket, _| {
+    let (ended, _, _) = run(bench::<Net>(), async |socket, _| {
         send_one(socket, b"first").await
     });
-    let storage = Box::leak(Box::new(SocketLanes::new()));
-    let (socket, end) = lanes::<_, SIZE, DEPTH, RECEIVED, CREDITS>(storage);
-    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let retired = ended.retired;
     let wire = retired.port.clone();
     let owner = NetworkOwner::new(
         retired.brand,
@@ -701,17 +931,9 @@ fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
         retired.pool,
         retired.port,
     );
-    let service = Service::new(owner, [(5000, Dscp::default(), end)], stopping)
-        .ok()
-        .unwrap();
-    let again = Bench {
-        service,
-        socket,
-        wire: wire.clone(),
-        stop,
-        clock: Box::leak(Box::new(VirtualClock::new())),
-    };
-    let (_, _, sent) = run(again, async |socket, _| send_one(socket, b"second").await);
+    let (_, _, sent) = run(bench_on(owner, wire.clone()), async |socket, _| {
+        send_one(socket, b"second").await
+    });
     assert_eq!(sent, Sent::Ended(Outcome::Accepted));
     assert_eq!(
         datagrams(&wire.0.borrow()),

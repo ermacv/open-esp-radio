@@ -24,13 +24,23 @@
 )]
 
 //! The network core's task and its sockets over messages (see the README).
+//!
+//! Reading a result consumes its observer, so it cannot read a credit's next
+//! command:
+//!
+//! ```compile_fail,E0382
+//! fn twice(observer: oer_protocols_network_runtime::Observer<'_>) {
+//!     let _first = observer.take();
+//!     let _second = observer.take();
+//! }
+//! ```
 
 mod service;
 mod socket;
 
-pub use service::{NotStarted, Service, StopLane};
+pub use service::{EndCause, Ended, NotStarted, Service, StopLane};
 pub use socket::{
-    ForeignObserver, Lanes, Observer, Refusal, Refused, Sent, ServiceEnd, Socket, SocketClosed,
+    Inbound, Lanes, LateSocket, Observer, Refusal, Refused, Sent, ServiceEnd, Socket, SocketClosed,
     SocketLanes, lanes,
 };
 
