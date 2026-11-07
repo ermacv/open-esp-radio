@@ -43,7 +43,7 @@ name does not establish that its task runs on P2.
 | `portable/embassy/net/src/owned.rs`: radio_waker, network_waker | HIL station/network tasks P1 ↔ P1 | `oer_portable_sync::PriorityWaker` over atomic link state. The image retains the same P1 composition; endpoint and link-controller loans are affine and local. |
 | RX in `portable/embassy/net/src/owned.rs` | Station producer and network consumer P1 ↔ P1 | Affine `WakingSpscQueue` ends and ordinary AtomicWakers. TX has no queue here: a frame goes to the device's transmit half in the call that sent it. |
 | Xarxa's pinned `PacketPoolWaiter`, through `owned.rs` and the stack's general pool | Packet destruction P1 → stack runner P1 | Dependency's ordinary AtomicWaker, same executor; its `register` may wake its own task. `oer-portable-waker` does not cover it. The RX pool's waiter is claimed and never registered. |
-| `chips/esp32s31/app/src/lib.rs`: `APPLICATION` | IP status writer → the application's `status`, `wait_ipv4`, `wait_link_down` | One cell through `&self`. Its consumer is one task: futures of one task share its waker, so a `select` or `join` over them replaces no one. Two tasks on it would. Across harts it is a `PeerNotify`. |
+| `chips/esp32s31/app/src/lib.rs`: `APPLICATION` | IP status writer → the application's `status`, `wait_ipv4`, `wait_link_down` | One cell through `&self`, so its live registrations must wake alike. `embassy-futures`' `select` and `join` hand their children the task's waker, and replace no one. A combinator with a waker per child, such as `FuturesUnordered`, loses a wake here: the last registration replaces the other, and a ready wait stays pending. Across harts it is a `PeerNotify`. |
 | `chips/esp32s31/wifi/src/lib.rs`: `StartState`, `StopState`, `NetworkStopState` | Station service and network P1 ↔ application or actor P1 | `PriorityWaker`s after atomic facts, or `AcrossHarts` notifies on the network's stop. |
 | `protocols/ieee80211/runtime/src/station/control.rs`: `policy_waker`, `control/operation.rs`: `Operations` | Application ↔ station service, P1 | `PriorityWaker`s after atomic facts. |
 | `portable/embassy/net/src/ip.rs`: `State.runner` | The service's `Control` → its runner, P1 | `PriorityWaker` after the atomic request. |
@@ -68,9 +68,10 @@ copied or sent to another thread. The RX queue's ordinary wakers and the pool
 waiter remain in one P1 composition; no new cross-priority distribution is
 admitted.
 
-A cell has one consumer task, not one future: several futures of a task share
-its waker. Only a queue's affine ends prove this by type. The cells reached
-through `&self` keep it by composition.
+A cell holds one waker, so all its live registrations must be interchangeable
+for waking; otherwise each needs a registration of its own. One task does not
+give this: a combinator may hand each child its own waker. A queue's affine ends
+prove it by type. The cells reached through `&self` keep it by composition.
 
 Direct `embassy-sync` dependencies remain in `portable/cooperate`,
 `protocols/hil/agent` and the three HIL images. The
