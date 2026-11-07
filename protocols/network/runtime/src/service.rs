@@ -15,7 +15,10 @@ use oer_protocols_network_core::{
 };
 use oer_protocols_network_wire::ip::Dscp;
 
-use crate::socket::{Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, drain_requests};
+use crate::socket::{
+    Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, Socket, SocketLanes, drain_requests,
+    lanes,
+};
 
 /// Commands one turn takes from a lane.
 const TURN_COMMANDS: usize = 4;
@@ -52,25 +55,15 @@ pub struct Ended<
 > {
     pub cause: EndCause,
     pub retired: Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P>,
-    /// One per socket, for what a socket dropped later holds.
-    pub sockets: [LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>; SOCKETS],
+    /// One per socket bound, for what a socket dropped later holds.
+    pub sockets: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
 }
 
-/// A service that did not start, with its owner: pool, port and brand are not
-/// lost with it. Sockets opened before the refusal stay open in the owner.
-pub struct NotStarted<
-    'm,
-    B,
-    const SIZE: usize,
-    const SOCKETS: usize,
-    const CREDITS: usize,
-    const RECEIVED: usize,
-    const NEIGHBORS: usize,
-    const BLOCKS: usize,
-    P,
-> {
+/// A socket the core refused, with its storage untouched for another try.
+#[derive(Debug)]
+pub struct BindRefused<'a, T> {
     pub reason: OpenRefused,
-    pub owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+    pub storage: &'a mut T,
 }
 
 /// One socket as the service holds it.
@@ -111,7 +104,7 @@ pub struct Service<
     P,
 > {
     owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
-    bound: [Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>; SOCKETS],
+    bound: [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>>; SOCKETS],
     stop: WakingSpscReceiver<'a, (), 1>,
 }
 
@@ -130,39 +123,55 @@ impl<
     P: FramePort + FrameSource,
 > Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P>
 {
-    /// Own `owner` and open a socket for each end.
+    /// Own `owner`. Dropping a service drops its pool, so no block has an
+    /// owner left; its sockets end and their observers read `Retired`.
+    pub const fn new(
+        owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        stop: WakingSpscReceiver<'a, (), 1>,
+    ) -> Self {
+        Self {
+            owner,
+            bound: [const { None }; SOCKETS],
+            stop,
+        }
+    }
+
+    /// Open a socket on `port`, and give the application its end: a socket
+    /// exists only once its service holds the other. A refusal changes nothing.
     ///
     /// # Errors
-    /// [`NotStarted`]: the core refused a socket.
-    pub fn new(
-        mut owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
-        ends: [(u16, Dscp, ServiceEnd<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>); SOCKETS],
-        stop: WakingSpscReceiver<'a, (), 1>,
-    ) -> Result<Self, NotStarted<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>>
-    {
-        let mut refused = None;
-        let bound = ends.map(|(port, dscp, end)| {
-            let socket = match owner.open(port, dscp) {
-                Ok(socket) => Some(socket),
-                Err(error) => {
-                    refused = Some(error);
-                    None
-                }
-            };
-            Bound {
-                end,
-                socket,
-                commands: [const { None }; CREDITS],
-                closing: None,
-                reserving: false,
-                blocked: false,
-                abandoned: false,
-            }
+    /// [`BindRefused`], with `storage`.
+    #[expect(clippy::type_complexity, reason = "the types of one socket's lanes")]
+    pub fn bind(
+        &mut self,
+        port: u16,
+        dscp: Dscp,
+        storage: &'a mut SocketLanes<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>,
+    ) -> Result<
+        Socket<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>,
+        BindRefused<'a, SocketLanes<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>>,
+    > {
+        let Some(place) = self.bound.iter_mut().find(|place| place.is_none()) else {
+            return Err(BindRefused {
+                reason: OpenRefused::NoSocket,
+                storage,
+            });
+        };
+        let id = match self.owner.open(port, dscp) {
+            Ok(id) => id,
+            Err(reason) => return Err(BindRefused { reason, storage }),
+        };
+        let (socket, end) = lanes(storage);
+        *place = Some(Bound {
+            end,
+            socket: Some(id),
+            commands: [const { None }; CREDITS],
+            closing: None,
+            reserving: false,
+            blocked: false,
+            abandoned: false,
         });
-        match refused {
-            Some(reason) => Err(NotStarted { reason, owner }),
-            None => Ok(Self { owner, bound, stop }),
-        }
+        Ok(socket)
     }
 
     /// Serve until a stop is asked or the port is at fault, and return why,
@@ -202,14 +211,14 @@ impl<
             moved = true;
         }
         moved |= self.publish(now);
-        for bound in &mut self.bound {
+        for bound in self.bound.iter_mut().flatten() {
             moved |= bound.hand_back(&mut self.owner);
         }
         moved
     }
 
     fn commands(&mut self, now: Instant, index: usize) -> bool {
-        let Some(bound) = self.bound.get_mut(index) else {
+        let Some(bound) = self.bound.get_mut(index).and_then(Option::as_mut) else {
             return false;
         };
         if let Some(inbound) = bound.end.abandon.try_receive() {
@@ -286,7 +295,7 @@ impl<
             }
             let mut ready = pin!(stop.ready()).poll(cx).is_ready();
             owner.register_port(cx);
-            for bound in bound.iter_mut() {
+            for bound in bound.iter_mut().flatten() {
                 ready |= bound.poll_lanes(cx);
             }
             if ready {
@@ -310,7 +319,9 @@ impl<
         cause: EndCause,
     ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P> {
         let mut retired = self.owner.retire();
-        let sockets = self.bound.map(|bound| bound.finish(&mut retired));
+        let sockets = self
+            .bound
+            .map(|bound| bound.map(|bound| bound.finish(&mut retired)));
         Ended {
             cause,
             retired,
@@ -461,14 +472,11 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
                 place.end(sent, end.credits, tag);
             }
         }
-        end.credits.stop();
-        for place in end.places {
-            place.wake();
-        }
         let ServiceEnd {
             requests,
             answers,
             abandon,
+            ending,
             ..
         } = end;
         if let Some(inbound) = abandon.try_receive() {
@@ -477,6 +485,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         } else if !abandoned {
             let _room_is_proven = answers.try_send(Answer::Stopped(requests));
         }
+        drop(ending);
         LateSocket { abandon }
     }
 }
