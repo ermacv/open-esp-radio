@@ -233,7 +233,6 @@ impl<
     ///
     /// # Errors
     /// [`BindRefused`], with `storage`.
-    #[expect(clippy::type_complexity, reason = "the types of one socket's lanes")]
     pub fn bind(
         &mut self,
         port: u16,
