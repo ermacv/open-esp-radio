@@ -22,12 +22,13 @@
 //! - a [`Device`] no [`Net::start`] took tells the station it has no
 //!   network: the station returns each received frame's buffer at once.
 
+use crate::pilot;
 use embassy_futures::select::{Either, select};
 use oer_chips_esp32s31_hal::peripherals::{
     efuse::EfuseRegisters, software_interrupt::FromCpu3Irq, timg0_alarm::Timg0AlarmParts,
 };
 use oer_chips_esp32s31_radio_ieee80211_station::{self as wifi, InterruptTypes};
-use oer_chips_esp32s31_runtime::{Esp32s31, pilot, platform::DeviceIdentity};
+use oer_chips_esp32s31_runtime::{Esp32s31, platform::DeviceIdentity};
 use oer_chips_family_executor::{
     Doorbell, DoorbellLine, Executor, InterruptExecutor, ThreadContext, UrgentSource,
 };

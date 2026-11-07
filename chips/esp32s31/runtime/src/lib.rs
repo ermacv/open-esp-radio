@@ -92,8 +92,6 @@ pub mod sampler;
 pub mod secondary;
 
 #[cfg(target_arch = "riscv32")]
-pub mod pilot;
-#[cfg(target_arch = "riscv32")]
 pub mod platform;
 
 #[cfg(target_arch = "riscv32")]

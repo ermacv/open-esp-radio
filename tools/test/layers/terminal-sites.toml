@@ -404,10 +404,10 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 
 # Facade/platform terminal bindings.
 "chips/esp32s31/runtime/src/phy_fault.rs:crate::phy_fault::impl Failure::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/runtime", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"chips/esp32s31/runtime/src/pilot.rs:crate::pilot::impl Storage < I >::init:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/runtime", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"chips/esp32s31/runtime/src/pilot.rs:crate::pilot::impl Storage < I >::interrupt:terminal-reference:reset:1" = { owner = "chips/esp32s31/runtime", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"chips/esp32s31/runtime/src/pilot.rs:crate::pilot::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/runtime", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"chips/esp32s31/runtime/src/pilot.rs:crate::pilot::reset:terminal-reference:reset:1" = { owner = "chips/esp32s31/runtime", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"chips/esp32s31/app/src/pilot.rs:crate::pilot::impl Storage < I >::init:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+"chips/esp32s31/app/src/pilot.rs:crate::pilot::impl Storage < I >::interrupt:terminal-reference:reset:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"chips/esp32s31/app/src/pilot.rs:crate::pilot::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"chips/esp32s31/app/src/pilot.rs:crate::pilot::reset:terminal-reference:reset:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "chips/esp32s31/runtime/src/sampler.rs:crate::sampler::chip::impl Storage < I , O , T >::init:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/runtime", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 
 "chips/esp32s31/runtime/src/console.rs:crate::console::impl Binding::open:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/runtime", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }

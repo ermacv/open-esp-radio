@@ -49,14 +49,6 @@ executor entries. The nominal `Console` implements async Read/Write, and `Pads`
 retains the independent right to disconnect USB. Early output and lost-record
 accounting keep the HAL's existing exclusive writer protocol.
 
-`pilot::Storage` holds the permanent affine SAR/PWDET request/reply cells,
-handler and signal. An image places it in critical data, selects its PHY and
-radio-executor entries and calls `init` once before enabling interrupts. The PHY
-driver stops/masks the timer and discards stale RAW before binding. Interrupt
-service returns custody through the same P2 signal; neither a task waker nor a
-hardware owner crosses into the handler. Existing retained faults and explicit
-reset policy apply to setup failure and an orphan alarm.
-
 `sampler::Storage<I, O, T>` is a program-counter sampler on a TIMG1 timer
 `T` (`Timer0` on hart 0, `Timer1` on hart 1) for an image that binds its
 entry `I` above the levels it wants to see and names the observer `O` of

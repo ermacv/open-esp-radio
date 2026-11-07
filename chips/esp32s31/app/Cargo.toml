@@ -39,6 +39,7 @@ oer-chips-family-boot = { path = "../../family/boot" }
 oer-chips-esp32s31-board = { path = "../board" }
 oer-chips-esp32s31-runtime = { path = "../runtime", features = ["wifi-fault", "radio-fault"] }
 oer-chips-esp32s31-hal = { path = "../hal" }
+oer-chips-esp32s31-radio-phy = { path = "../radio/phy" }
 oer-chips-family-executor = { path = "../../family/executor", features = ["installations"] }
 oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }
 oer-chips-family-staged-runtime = { path = "../../family/staged-runtime" }
