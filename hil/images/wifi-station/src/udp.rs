@@ -71,6 +71,11 @@ pub(crate) fn received_frames(net: &Network) -> u32 {
     net.stack().statistics().rx_frames
 }
 
+/// The network core's turns: this image runs the IP stack, which has none.
+pub(crate) fn network_turns(_: &Network) -> oer_hil_services_load::NetworkTurns {
+    oer_hil_services_load::NetworkTurns::default()
+}
+
 impl Run<'_> {
     pub(crate) fn split(&mut self) -> (Receiving<'_>, Sending<'_>) {
         (

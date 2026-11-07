@@ -17,6 +17,7 @@ mod ping;
 mod profile;
 mod tracking;
 mod traffic;
+mod turns;
 
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
@@ -27,11 +28,11 @@ use std::{
 
 use oer_hil_services_load::{
     CacheGeometry, CacheLevel, Collect, CollectCounters, CollectHart1, CollectLink, CollectMac,
-    CollectParts, CollectPositions, CollectTracking, Collected, Counters, CountersCollected,
-    DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected, Load,
-    MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, PartWindow, PartsCollected, Positions,
-    PositionsCollected, Report, Start, Started, StaticAddress, TUNE_KNOBS, TUNE_UNSET, Tracking,
-    TrackingCollected, Transmit,
+    CollectNetwork, CollectParts, CollectPositions, CollectTracking, Collected, Counters,
+    CountersCollected, DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected,
+    Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns,
+    PartWindow, PartsCollected, Positions, PositionsCollected, Report, Start, Started,
+    StaticAddress, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Ipv4, Join, Joined, Leave, Left, ScanVisit,
@@ -281,6 +282,7 @@ struct Ended {
     positions: Positions,
     hart1: Hart1Window,
     tracking: Tracking,
+    network: NetworkTurns,
 }
 
 fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
@@ -331,8 +333,12 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         Hart1Collected::Report(hart1) => hart1,
         other => return Err(Failure::Fail(format!("the image's hart 1: {other:?}"))),
     };
-    match cx.call(CollectTracking { run }, CALL)? {
-        TrackingCollected::Report(tracking) => Ok(Ended {
+    let tracking = match cx.call(CollectTracking { run }, CALL)? {
+        TrackingCollected::Report(tracking) => tracking,
+        other => return Err(Failure::Fail(format!("the image's tracking: {other:?}"))),
+    };
+    match cx.call(CollectNetwork { run }, CALL)? {
+        NetworkCollected::Report(network) => Ok(Ended {
             report,
             parts,
             counters,
@@ -341,8 +347,11 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             positions,
             hart1,
             tracking,
+            network,
         }),
-        other => Err(Failure::Fail(format!("the image's tracking: {other:?}"))),
+        other => Err(Failure::Fail(format!(
+            "the image's network turns: {other:?}"
+        ))),
     }
 }
 
@@ -375,6 +384,13 @@ fn positions_counts(positions: &Positions) -> serde_json::Value {
 fn tracking_measurement(name: &str, ended: &Ended) -> serde_json::Value {
     println!("  tracking {name}: {}", tracking::summary(&ended.tracking));
     tracking::window(&ended.tracking)
+}
+
+/// What the network core's turns did over a window; its one-line summary
+/// is printed as `name`'s.
+fn turns_measurement(name: &str, ended: &Ended) -> serde_json::Value {
+    println!("  network turns {name}: {}", turns::summary(&ended.network));
+    turns::window(&ended.network)
 }
 
 /// What the link ran over a window: the access point's view between
@@ -1460,6 +1476,8 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         object.insert("link".to_owned(), link);
         let tracking = tracking_measurement(name, &ended);
         object.insert("tracking".to_owned(), tracking);
+        let turns = turns_measurement(name, &ended);
+        object.insert("network_turns".to_owned(), turns);
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
         let elf = profile::elf(if static_address().is_some() {
@@ -1715,6 +1733,7 @@ mod tests {
             positions: Positions::default(),
             hart1: Hart1Window::default(),
             tracking: Tracking::default(),
+            network: NetworkTurns::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
         let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);
@@ -1803,6 +1822,7 @@ mod tests {
             positions: Positions::default(),
             hart1: window((0, 0), (320_000_000, 3_000_000)),
             tracking: Tracking::default(),
+            network: NetworkTurns::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
         let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);

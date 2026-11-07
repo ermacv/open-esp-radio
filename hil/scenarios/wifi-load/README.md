@@ -105,6 +105,29 @@ holds the PHY's temperature after the window's last tracked tick and its
 conversion is established. `tick_us` is the ticks' whole time and
 `longest_tick_us` the longest.
 
+Each level's `network_turns` records what the network core's service did
+in its turns over the window, and prints one line (`network turns
+<level>:`); only a trace image on the network core (`hil-wifi-network`)
+counts them (`available` false otherwise). `requests` counts the requests
+the turns took from the sockets' lanes by kind, with `reserve_per_send`.
+`budget_spent` counts the sockets whose lane still held requests when the
+turn had taken its budget of them, `budget_turns` the turns with any and
+`budget_turn_share` their share of `turns`; `intake_full` the turns that
+took in their whole budget of received frames. `accepted` counts the frames
+the port accepted, `accepted_per_turn` their mean and `accepted_by_turn`
+the turns by how many (`0` to `4`, `5-8`, `9+`). `publish_end` counts the
+turns by how publishing ended: `chose` (the policy chose nothing),
+`refused` (the port had no room or link), `budget` (publishing took its
+whole budget), `deferred` (notices were left untold) and `fault`.
+`out_at_turn_end` counts the turns that ended with no free `blocks`, and
+with an open socket out of `credits`. `yields` counts the passes after a
+turn that moved and gave the executor its turn, `yields_with_work` those
+after a turn known to leave work (a spent budget, a full intake,
+publishing at its budget or deferred); `waits_pending` the waits that
+found nothing as they registered, which end the poll unless a deadline
+was due, and `waits_ready` those that found something and turned again in
+the same poll. Nothing counts which source woke a poll.
+
 Each level's `link`, and the `path` case's `idle link` over the idle
 window, record what the link ran, and print one line (`link <level>:`):
 the access point's last rate each way and width, the image's commonest

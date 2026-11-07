@@ -1406,6 +1406,7 @@ dependencies = [
  "oer-portable-diagnostics",
  "oer-portable-embassy-net",
  "oer-portable-embassy-time",
+ "oer-portable-events",
  "oer-portable-memory",
  "oer-portable-riscv",
  "oer-portable-time",

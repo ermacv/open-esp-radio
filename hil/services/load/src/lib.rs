@@ -79,6 +79,8 @@ oer_protocols_hil_protocol::messages! {
     topic PositionsCollected = "load/positions-report";
     endpoint CollectHart1 = "load/hart1" => Hart1Collected;
     topic Hart1Collected = "load/hart1-report";
+    endpoint CollectNetwork = "load/network" => NetworkCollected;
+    topic NetworkCollected = "load/network-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -982,6 +984,110 @@ pub struct Tracking {
     pub longest_tick_us: Option<u32>,
 }
 
+/// What the network core's turns did within run `run`'s window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectNetwork {
+    pub run: u32,
+}
+
+/// The answer to [`CollectNetwork`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum NetworkCollected {
+    Report(NetworkTurns),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// The bins of [`NetworkTurns::accepted_by_turn`]: turns whose port took 0,
+/// 1, 2, 3, 4, 5 to 8, and 9 or more frames.
+pub const ACCEPTED_BINS: usize = 7;
+
+/// The network core's turns within one window: the requests they took from
+/// the sockets' lanes, the sockets they left with requests when their
+/// budget ran out, the frames the port accepted, how each turn's publishing
+/// ended and what had run out when it ended, and how each pass after a turn
+/// went on. Only a trace image on the network core counts them; others
+/// report `available: false` and zeros.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct NetworkTurns {
+    /// Whether the image counts the turns.
+    pub available: bool,
+    pub turns: u32,
+    /// Requests the turns took, by kind.
+    pub reserves: u32,
+    pub releases: u32,
+    pub sends: u32,
+    pub closes: u32,
+    /// Sockets whose lane still held requests when the turn had taken its
+    /// budget of them, summed over the turns, and the turns with any.
+    pub budget_spent: u32,
+    pub budget_turns: u32,
+    /// Turns that took in their whole budget of received frames.
+    pub intake_full: u32,
+    /// Frames the port accepted, and the turns by how many they had it take
+    /// ([`ACCEPTED_BINS`]).
+    pub accepted: u32,
+    pub accepted_by_turn: [u32; ACCEPTED_BINS],
+    /// Turns by how their publishing ended: the policy chose nothing, the
+    /// port refused for room or link, publishing took its whole budget, it
+    /// waited for untold notices, or a fault.
+    pub publish_chose: u32,
+    pub publish_refused: u32,
+    pub publish_budget: u32,
+    pub publish_deferred: u32,
+    pub publish_fault: u32,
+    /// Turns that ended with no free block, and with an open socket out of
+    /// credits.
+    pub blocks_out: u32,
+    pub credits_out: u32,
+    /// Passes after a turn that moved, yielded to the executor: all, and
+    /// those after a turn known to leave work (a spent budget, a full
+    /// intake, publishing at its budget or deferred).
+    pub yields: u32,
+    pub yields_with_work: u32,
+    /// Waits after a turn that moved nothing: those that found nothing as
+    /// they registered and so end their poll (unless a deadline was due),
+    /// and those that found something and turn again in the same poll.
+    pub waits_pending: u32,
+    pub waits_ready: u32,
+}
+
+impl NetworkTurns {
+    /// The counts between readings `start` and `end`, wrapping at 2^32;
+    /// available when `end` is.
+    pub fn window(start: &Self, end: &Self) -> Self {
+        let count = |at: fn(&Self) -> u32| at(end).wrapping_sub(at(start));
+        Self {
+            available: end.available,
+            turns: count(|turns| turns.turns),
+            reserves: count(|turns| turns.reserves),
+            releases: count(|turns| turns.releases),
+            sends: count(|turns| turns.sends),
+            closes: count(|turns| turns.closes),
+            budget_spent: count(|turns| turns.budget_spent),
+            budget_turns: count(|turns| turns.budget_turns),
+            intake_full: count(|turns| turns.intake_full),
+            accepted: count(|turns| turns.accepted),
+            accepted_by_turn: core::array::from_fn(|bin| {
+                let at = |turns: &Self| turns.accepted_by_turn.get(bin).copied().unwrap_or(0);
+                at(end).wrapping_sub(at(start))
+            }),
+            publish_chose: count(|turns| turns.publish_chose),
+            publish_refused: count(|turns| turns.publish_refused),
+            publish_budget: count(|turns| turns.publish_budget),
+            publish_deferred: count(|turns| turns.publish_deferred),
+            publish_fault: count(|turns| turns.publish_fault),
+            blocks_out: count(|turns| turns.blocks_out),
+            credits_out: count(|turns| turns.credits_out),
+            yields: count(|turns| turns.yields),
+            yields_with_work: count(|turns| turns.yields_with_work),
+            waits_pending: count(|turns| turns.waits_pending),
+            waits_ready: count(|turns| turns.waits_ready),
+        }
+    }
+}
+
 /// The L1 cache's access counts within one window, by bus: the image
 /// clears each bus's counts at the window's start and reads them at its
 /// end. Instruction bus 0 carries hart 0's fetches and instruction bus 1
@@ -1179,6 +1285,7 @@ oer_protocols_hil_agent::service! {
         CollectMac(CollectMac) => mac,
         CollectPositions(CollectPositions) => positions,
         CollectHart1(CollectHart1) => hart1,
+        CollectNetwork(CollectNetwork) => network,
     }
 }
 

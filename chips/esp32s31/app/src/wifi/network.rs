@@ -415,6 +415,10 @@ async fn serve_network(start: NetworkStart) {
     };
     let cause = match service.as_mut() {
         Some(running) => {
+            // A measuring image counts the turns; a product lends `()`.
+            #[cfg(feature = "observe")]
+            let mut events = crate::observed::NetworkSink::default();
+            #[cfg(not(feature = "observe"))]
             let mut events = ();
             let mut run = core::pin::pin!(running.run(&EmbassyClock, &mut events));
             match select(run.as_mut(), stopper.requested()).await {

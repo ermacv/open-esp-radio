@@ -114,6 +114,37 @@ pub(crate) fn received_frames(net: &Network) -> u32 {
     net.delivered.get()
 }
 
+/// What the network core's turns did since boot, as the load service names
+/// it: the chip's observation, which the host's tests of this facade lack.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn network_turns(_: &Network) -> oer_hil_services_load::NetworkTurns {
+    let turns = oer::observe::network_turns();
+    oer_hil_services_load::NetworkTurns {
+        available: true,
+        turns: turns.turns,
+        reserves: turns.reserves,
+        releases: turns.releases,
+        sends: turns.sends,
+        closes: turns.closes,
+        budget_spent: turns.budget_spent,
+        budget_turns: turns.budget_turns,
+        intake_full: turns.intake_full,
+        accepted: turns.accepted,
+        accepted_by_turn: turns.accepted_by_turn,
+        publish_chose: turns.publish_chose,
+        publish_refused: turns.publish_refused,
+        publish_budget: turns.publish_budget,
+        publish_deferred: turns.publish_deferred,
+        publish_fault: turns.publish_fault,
+        blocks_out: turns.blocks_out,
+        credits_out: turns.credits_out,
+        yields: turns.yields,
+        yields_with_work: turns.yields_with_work,
+        waits_pending: turns.waits_pending,
+        waits_ready: turns.waits_ready,
+    }
+}
+
 /// A run's sockets, the network's again when it ends.
 pub(crate) struct Run<'a> {
     sockets: RefMut<'a, [Socket; wifi::SOCKETS]>,
