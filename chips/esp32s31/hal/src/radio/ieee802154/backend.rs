@@ -11,11 +11,11 @@
 // later dataplane transition.
 #![cfg_attr(not(test), allow(dead_code))]
 
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154EdSampleMode,
     Ieee802154MacControl, Ieee802154PanIdentity, Ieee802154StateSnapshot,
 };
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154FoundationSnapshot, Ieee802154MacPolicySnapshot,
 };
 use oer_portable_mmio::Placement;

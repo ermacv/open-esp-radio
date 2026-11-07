@@ -25,8 +25,8 @@ oer-protocols-ieee80211-core-upper-mac = { path = "../../../../../protocols/ieee
 oer-protocols-ieee80211-contracts-port = { path = "../../../../../protocols/ieee80211/contracts/port" }
 oer-protocols-radio-port = { path = "../../../../../protocols/radio/port" }
 oer-protocols-ieee80211-core-arbiter = { path = "../../../../../protocols/ieee80211/core/arbiter" }
-oer-chips-family-ieee80211-policy = { path = "../../../../family/ieee80211-policy" }
-oer-chips-family-coex = { path = "../../../../family/coex" }
+oer-chips-family-radio-ieee80211-policy = { path = "../../../../family/radio/ieee80211/policy" }
+oer-chips-family-radio-coex = { path = "../../../../family/radio/coex" }
 oer-protocols-radio-regulatory = { path = "../../../../../protocols/radio/regulatory" }
 oer-portable-time = { path = "../../../../../portable/time" }
 oer-portable-trace = { path = "../../../../../portable/trace" }
@@ -34,20 +34,20 @@ oer-portable-events = { path = "../../../../../portable/events" }
 oer-portable-memory = { path = "../../../../../portable/memory" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-chips-family-radio = { path = "../../../../family/radio" }
+oer-chips-family-radio-domain = { path = "../../../../family/radio/domain" }
 oer-chips-esp32s31-hal = { path = "../../../hal" }
-oer-chips-esp32s31-board = { path = "../../../board" }
-oer-chips-esp32s31-runtime = { path = "../../../runtime", features = ["wifi-fault", "radio-fault"] }
+oer-chips-esp32s31-platform-board = { path = "../../../platform/board" }
+oer-chips-esp32s31-platform-runtime = { path = "../../../platform/runtime", features = ["wifi-fault", "radio-fault"] }
 oer-chips-esp32s31-radio-phy = { path = "../../phy" }
 oer-chips-esp32s31-radio-client = { path = "../../client" }
 oer-chips-esp32s31-radio-system = { path = "../../system" }
 oer-chips-esp32s31-radio-ieee80211-driver = { path = "../driver" }
-oer-chips-family-executor = { path = "../../../../family/executor", features = ["installations"] }
-oer-chips-family-interrupt-table = { path = "../../../../family/interrupt-table" }
+oer-chips-family-platform-executor = { path = "../../../../family/platform/executor", features = ["installations"] }
+oer-chips-family-platform-interrupt-table = { path = "../../../../family/platform/interrupt-table" }
 oer-portable-embassy-time = { path = "../../../../../portable/embassy/time" }
 
 [dev-dependencies]
-oer-chips-family-radio = { path = "../../../../family/radio" }
+oer-chips-family-radio-domain = { path = "../../../../family/radio/domain" }
 oer-chips-esp32s31-hal = { path = "../../../hal", features = ["test-support"] }
 oer-chips-esp32s31-radio-phy = { path = "../../phy" }
 oer-chips-esp32s31-radio-client = { path = "../../client" }

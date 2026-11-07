@@ -282,7 +282,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 }
 
 impl<P: crate::radio::phy::registers::RadioPlacement>
-    oer_chips_family_radio::baseline::PowerBaselinePort for RadioPhyRegisters<P>
+    oer_chips_family_radio_domain::baseline::PowerBaselinePort for RadioPhyRegisters<P>
 {
     type Baseline = WifiPowerBaseline;
     fn restore_syscon(&mut self, baseline: WifiPowerBaseline) {

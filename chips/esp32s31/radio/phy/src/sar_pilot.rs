@@ -11,7 +11,7 @@ use oer_chips_esp32s31_hal::{
         FaultHandle, PhyHardware, PhyTransaction, SarAlarmWithoutBundle, SarTransferFault,
     },
 };
-use oer_chips_family_interrupt_table::{
+use oer_chips_family_platform_interrupt_table::{
     Bound, Entry,
     signal::{IrqSignal, SignalExecutor},
 };
@@ -139,7 +139,7 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> UnboundC
         const {
             if !matches!(
                 I::CLASS,
-                oer_chips_family_interrupt_table::Class::ExemptExecutorLevel
+                oer_chips_family_platform_interrupt_table::Class::ExemptExecutorLevel
             ) {
                 panic!("the SAR alarm must be an executor-level exempt entry");
             }

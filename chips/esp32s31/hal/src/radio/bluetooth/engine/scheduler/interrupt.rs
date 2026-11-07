@@ -10,7 +10,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_chips_family_bluetooth_engine::port::OutputInterruptPort;
+use oer_chips_family_radio_bluetooth::port::OutputInterruptPort;
 use oer_portable_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
 
 use crate::radio::bluetooth::{

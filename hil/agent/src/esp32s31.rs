@@ -24,17 +24,17 @@ struct EarlyUsb;
 
 impl oer_protocols_hil_agent::console::Immediate for EarlyUsb {
     fn note(note: &oer_portable_diagnostics::Note<'_>) -> oer_portable_diagnostics::Written {
-        oer_chips_esp32s31_runtime::console::early(note)
+        oer_chips_esp32s31_platform_runtime::console::early(note)
     }
 
     fn take_lost() -> u32 {
-        oer_chips_esp32s31_runtime::console::take_early_lost()
+        oer_chips_esp32s31_platform_runtime::console::take_early_lost()
     }
 }
 
 type HilConsole = oer_protocols_hil_agent::console::Console<NOTES, MESSAGES, EarlyUsb>;
 
-oer_chips_family_staged_runtime::placed_static! {
+oer_chips_family_platform_runtime::placed_static! {
     static CONSOLE: HilConsole = oer_protocols_hil_agent::console::Console::new(), in critical_data "logging";
 }
 
@@ -95,7 +95,7 @@ pub async fn serve<R: Requests, W: Future<Output = AppResult>>(
         boot,
         image.keys,
         image.maximum_payload_bytes,
-        oer_chips_family_staged_runtime::layout::payload_crc32(),
+        oer_chips_family_platform_runtime::layout::payload_crc32(),
     );
     let platform = Platform(evidence);
     let serve = CONSOLE.run(console, intake, &platform, |identity, request: R| {

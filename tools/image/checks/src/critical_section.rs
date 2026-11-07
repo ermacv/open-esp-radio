@@ -14,8 +14,8 @@ pub const REPORT: &str = "critical-section.txt";
 const ENTRIES: &[&str] = &[
     "_critical_section_1_0_acquire",
     "_critical_section_1_0_release",
-    "oer_chips_family_staged_runtime::critical::hart::_critical_section_1_0_acquire",
-    "oer_chips_family_staged_runtime::critical::hart::_critical_section_1_0_release",
+    "oer_chips_family_platform_runtime::critical::hart::_critical_section_1_0_acquire",
+    "oer_chips_family_platform_runtime::critical::hart::_critical_section_1_0_release",
 ];
 
 /// Functions containing an out-of-line or inlined critical-section entry.

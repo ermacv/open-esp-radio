@@ -1,6 +1,6 @@
 //! The engine's typed selection from the chip's hardware-free provider facts.
 use oer_chips_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
-use oer_chips_family_ieee802154_mac_values::Ieee802154TxPowerLevels;
+use oer_chips_family_radio_ieee802154_values::Ieee802154TxPowerLevels;
 
 /// The ESP32-S31 BTBB provider's level set, [`TX_POWER_LEVELS_DBM`].
 ///

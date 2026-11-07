@@ -17,7 +17,7 @@ const EXCEPTIONS: &[(&str, usize)] = &[
         "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_storage/buffers.rs",
         1,
     ),
-    ("chips/family/executor/src/task.rs", 1),
+    ("chips/family/platform/executor/src/task.rs", 1),
     // The waker cell's home: sharing it is the crate's whole purpose.
     ("portable/waker/src/lib.rs", 1),
 ];
@@ -163,9 +163,9 @@ fn a_new_crate_with_unsafe_sync_is_rejected_even_below_the_unsafe_boundary() {
 
 #[test]
 fn exception_counts_must_match_including_removed_files_and_zero_entries() {
-    let file = "chips/family/interrupt-table/src/signal.rs";
+    let file = "chips/family/platform/interrupt-table/src/signal.rs";
     let root = fixture(
-        "chips/family/interrupt-table",
+        "chips/family/platform/interrupt-table",
         "src/signal.rs",
         "struct Cell; unsafe impl Sync for Cell {}",
     );
@@ -197,9 +197,9 @@ fn exception_counts_must_match_including_removed_files_and_zero_entries() {
 
 #[test]
 fn an_exception_does_not_allow_more_impls_or_another_file() {
-    let file = "chips/family/interrupt-table/src/signal.rs";
+    let file = "chips/family/platform/interrupt-table/src/signal.rs";
     let root = fixture(
-        "chips/family/interrupt-table",
+        "chips/family/platform/interrupt-table",
         "src/signal.rs",
         "struct Cell; unsafe impl Sync for Cell {} unsafe impl Send for Cell {}",
     );
@@ -212,7 +212,7 @@ fn an_exception_does_not_allow_more_impls_or_another_file() {
     std::fs::rename(
         root.path().join(file),
         root.path()
-            .join("chips/family/interrupt-table/src/other.rs"),
+            .join("chips/family/platform/interrupt-table/src/other.rs"),
     )
     .expect("move source");
     assert_eq!(violations(root.path(), &[(file, 2)]).len(), 2);

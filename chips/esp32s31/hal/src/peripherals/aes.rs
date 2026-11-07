@@ -9,7 +9,7 @@ use oer_chips_esp32s31_pac::{
     aes, hp_sys_clkrst,
     ownership::{AesPeripherals, AxiDmaPeripherals, CryptoClockPeripherals},
 };
-use oer_chips_family_interrupt_table::Silent;
+use oer_chips_family_platform_interrupt_table::Silent;
 use oer_portable_mmio::{Bits, Index, InterruptSource};
 
 use super::aes_dma::{AesDma, AesDmaChannel, DmaLengthError};

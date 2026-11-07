@@ -4,7 +4,7 @@ use crate::{
     Access,
     wait::{BootDeadline, BootWait, WaitFailure},
 };
-use oer_chips_family_analog::{
+use oer_chips_family_peripherals_analog::{
     AnalogField, AnalogRegisterBus, DriverError, FieldWrite, Step, ValueTooWide,
 };
 use oer_portable_time::Clock;

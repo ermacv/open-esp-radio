@@ -17,7 +17,7 @@
 //!   ED result words; the task side holds every other register.
 //!
 //! The armed interrupt owner has two homes. An interrupt table's handler
-//! holds it once `oer_chips_family_interrupt_table::Router::bind` placed it, and the task
+//! holds it once `oer_chips_family_platform_interrupt_table::Router::bind` placed it, and the task
 //! activates its affine startup task owner with the binding's `Bound` proof,
 //! selecting the same ten runtime events as its later sessions
 //! ([`Ieee802154TaskOwner::enable_events`]) and mask them again at the end
@@ -39,7 +39,7 @@ use oer_chips_esp32s31_pac::{
     ieee802154::{Ieee802154MacIrq, Ieee802154MacTask},
     modem_etm::ModemEtmIeee802154,
 };
-use oer_chips_family_interrupt_table::{Bound, Silent};
+use oer_chips_family_platform_interrupt_table::{Bound, Silent};
 use oer_portable_mmio::{Fixed, Placement};
 
 mod codes;
@@ -93,10 +93,10 @@ pub struct Ieee802154TaskOwner<
 ///
 /// ```compile_fail,E0382
 /// use oer_chips_esp32s31_hal::radio::ieee802154::mac::{Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner};
-/// use oer_chips_family_interrupt_table::{Bound, Entry};
+/// use oer_chips_family_platform_interrupt_table::{Bound, Entry};
 /// fn twice<I: Entry<Part = Ieee802154InterruptOwner>>(startup: Ieee802154ArmedTaskOwner, bound: &Bound<I>) {
-///     let _first = startup.activate(bound, oer_chips_family_ieee802154_mac_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
-///     let _second = startup.activate(bound, oer_chips_family_ieee802154_mac_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
+///     let _first = startup.activate(bound, oer_chips_family_radio_ieee802154_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
+///     let _second = startup.activate(bound, oer_chips_family_radio_ieee802154_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
 /// }
 /// ```
 ///
@@ -120,11 +120,11 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154ArmedTaskOwner<P, E, B>
     /// its permanent handler. This accesses only task-owned enable registers;
     /// it never borrows the handler cell or grants acknowledgement authority.
     pub fn activate<
-        I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
+        I: oer_chips_family_platform_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
     >(
         mut self,
         _bound: &Bound<I>,
-        events: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask,
+        events: oer_chips_family_radio_ieee802154_values::Ieee802154EventMask,
     ) -> Ieee802154TaskOwner<P, E, B> {
         self.task.publish_events(events);
         self.task
@@ -160,24 +160,24 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 ///     Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner,
 /// };
 /// use oer_chips_esp32s31_hal::system::platform::InterruptController;
-/// use oer_chips_family_interrupt_table::{BindError, Bound, Router};
-/// # const LINES: oer_chips_family_interrupt_table::Lines =
-/// #     oer_chips_family_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_chips_esp32s31_pac::HARTS as u8, tie_break: oer_chips_family_interrupt_table::TieBreak::HighestLine };
-/// use oer_chips_family_ieee802154_mac_values::Ieee802154EventMask;
+/// use oer_chips_family_platform_interrupt_table::{BindError, Bound, Router};
+/// # const LINES: oer_chips_family_platform_interrupt_table::Lines =
+/// #     oer_chips_family_platform_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_chips_esp32s31_pac::HARTS as u8, tie_break: oer_chips_family_platform_interrupt_table::TieBreak::HighestLine };
+/// use oer_chips_family_radio_ieee802154_values::Ieee802154EventMask;
 /// pub fn on_ieee802154(mac: &mut Ieee802154InterruptOwner) {
 ///     // Acknowledge the sampled named events; latch them for the task.
 ///     let snapshot = mac.events();
 ///     let _observed = snapshot.observation();
 ///     mac.clear_events(snapshot, Ieee802154EventMask::NAMED);
 /// }
-/// oer_chips_family_interrupt_table::interrupt_table! {
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
 ///     lines: LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
 ///     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// }
 /// # fn prepare(setup: Ieee802154InterruptSetupOwner, task: Ieee802154TaskOwner) -> (Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner) {
-/// # use oer_chips_family_ieee802154_mac_values::Ieee802154InterruptStartup as _;
+/// # use oer_chips_family_radio_ieee802154_values::Ieee802154InterruptStartup as _;
 /// # type P = oer_chips_esp32s31_hal::radio::ieee802154::mac::Ieee802154StartupPort;
 /// # let p = P::mask_events(setup, task);
 /// # let p = P::runtime_tx_aborts(p);
@@ -216,11 +216,11 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// ```compile_fail,E0382
 /// # use oer_chips_esp32s31_hal::radio::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
 /// # use oer_chips_esp32s31_hal::system::platform::InterruptController;
-/// # use oer_chips_family_interrupt_table::Router;
-/// # const LINES: oer_chips_family_interrupt_table::Lines =
-/// #     oer_chips_family_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_chips_esp32s31_pac::HARTS as u8, tie_break: oer_chips_family_interrupt_table::TieBreak::HighestLine };
+/// # use oer_chips_family_platform_interrupt_table::Router;
+/// # const LINES: oer_chips_family_platform_interrupt_table::Lines =
+/// #     oer_chips_family_platform_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_chips_esp32s31_pac::HARTS as u8, tie_break: oer_chips_family_platform_interrupt_table::TieBreak::HighestLine };
 /// # pub fn on_ieee802154(_: &mut Ieee802154InterruptOwner) {}
-/// # oer_chips_family_interrupt_table::interrupt_table! {
+/// # oer_chips_family_platform_interrupt_table::interrupt_table! {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
 /// #     contexts { radio: 3; }
@@ -362,22 +362,22 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     ///
     /// ```compile_fail,E0271
     /// # use oer_chips_esp32s31_hal::radio::ieee802154::mac::Ieee802154TaskOwner;
-    /// # use oer_chips_family_interrupt_table::Bound;
+    /// # use oer_chips_family_platform_interrupt_table::Bound;
     /// struct OtherIrq;
     /// impl oer_portable_mmio::InterruptSource for OtherIrq {
     ///     const SOURCE: u16 = 3;
     /// }
-    /// fn enable<E: oer_chips_family_interrupt_table::Entry<Part = OtherIrq>>(task: &mut Ieee802154TaskOwner, bound: &Bound<E>) {
+    /// fn enable<E: oer_chips_family_platform_interrupt_table::Entry<Part = OtherIrq>>(task: &mut Ieee802154TaskOwner, bound: &Bound<E>) {
     ///     // Another part's binding proves nothing about this interrupt.
-    ///     task.enable_events(bound, oer_chips_family_ieee802154_mac_values::Ieee802154EventMask::NAMED);
+    ///     task.enable_events(bound, oer_chips_family_radio_ieee802154_values::Ieee802154EventMask::NAMED);
     /// }
     /// ```
     pub fn enable_events<
-        I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
+        I: oer_chips_family_platform_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
     >(
         &mut self,
         bound: &Bound<I>,
-        events: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask,
+        events: oer_chips_family_radio_ieee802154_values::Ieee802154EventMask,
     ) {
         let _bound = bound;
         self.publish_events(events);
@@ -386,7 +386,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// The runtime events, published and fenced.
     pub(crate) fn publish_events(
         &mut self,
-        events: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask,
+        events: oer_chips_family_radio_ieee802154_values::Ieee802154EventMask,
     ) {
         self.replace_events(events);
         oer_portable_riscv::fence();

@@ -17,13 +17,13 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
             ControlCommand::Registers(enabled) => {
                 crate::hardware::configure_phy_rx_gain_dc_registers(self, enabled)
             }
-            ControlCommand::Debug => oer_chips_family_phy::pbus::configure_debug_mode(
+            ControlCommand::Debug => oer_chips_family_radio_phy::pbus::configure_debug_mode(
                 &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(self),
             ),
             ControlCommand::RxClock(enabled) => pbus::configure_rx_clock(self, enabled),
             ControlCommand::TxClock(enabled) => pbus::configure_tx_clock(self, enabled),
             ControlCommand::WorkMode => {
-                if oer_chips_family_phy::pbus::configure_work_mode(
+                if oer_chips_family_radio_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(self),
                 ) {
                     settle::<D>(1)?;

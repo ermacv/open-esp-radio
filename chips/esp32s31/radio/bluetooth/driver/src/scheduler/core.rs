@@ -3,7 +3,7 @@
 use oer_chips_esp32s31_hal::radio::bluetooth::engine::ControllerMemory;
 
 use oer_chips_esp32s31_hal::radio::bluetooth::engine::scheduler::SchedulerSoftwareConfig;
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 
 use oer_chips_esp32s31_hal::radio::bluetooth::{
     BluetoothControllerTimeScale, BluetoothSchedulerHardwareListsCleared,
@@ -125,7 +125,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
     /// The caller runs outside the event cells' executor.
     pub fn runtime_is_pristine(
         &self,
-    ) -> Result<bool, oer_chips_family_interrupt_table::signal::ForeignContext> {
+    ) -> Result<bool, oer_chips_family_platform_interrupt_table::signal::ForeignContext> {
         self.runtime.is_pristine()
     }
 
@@ -179,7 +179,7 @@ pub enum ControllerTimeAccess<'owner, 'cells, X: SignalExecutor, M: ControllerMe
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_chips_esp32s31_radio_bluetooth_driver::scheduler::ControllerTimeReady;
 /// use oer_chips_esp32s31_hal::radio::bluetooth::engine::ControllerMemory;
-/// fn duplicate<X: oer_chips_family_interrupt_table::signal::SignalExecutor, M: ControllerMemory>(ready: ControllerTimeReady<'_, '_, X, M>) {
+/// fn duplicate<X: oer_chips_family_platform_interrupt_table::signal::SignalExecutor, M: ControllerMemory>(ready: ControllerTimeReady<'_, '_, X, M>) {
 ///     let first = ready.request();
 ///     let duplicate = ready.request();
 /// }

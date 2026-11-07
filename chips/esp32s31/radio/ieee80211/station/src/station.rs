@@ -5,7 +5,7 @@ use crate::chip::{
 use crate::radio::{self, Caps};
 use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeUninit};
 use oer_chips_esp32s31_radio_ieee80211_driver::port::{self, device::Composition};
-use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
+use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_embassy_time::EmbassyClock;
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_runtime::datapath::ActorRxMeta;

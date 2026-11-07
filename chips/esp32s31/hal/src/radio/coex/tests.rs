@@ -38,7 +38,7 @@ fn a_grant_delay_above_the_field_is_refused() {
 fn clock_port_observes_each_configuration_afresh_and_refuses_unknown_sources() {
     use super::CoexClockPort;
     use crate::types::{CoexTimerClockDividerMinusOne, CoexTimerClockSource};
-    use oer_chips_family_coex::{CoexClockHardware, CoexError};
+    use oer_chips_family_radio_coex::{CoexClockHardware, CoexError};
     crate::radio::phy::registers::host::with_registers(0, |registers| {
         let mut clock = CoexClockPort::new(registers);
         assert_eq!(clock.sample(), Err(CoexError::UnsupportedClock));

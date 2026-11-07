@@ -29,14 +29,14 @@ observed-functions = [
 ]
 
 # The interrupt contract the interrupt-stack check reads: the staged runtime
-# (chips/family/staged-runtime) installs these vectors and stacks; the
-# symbols are the interrupt table's (chips/family/interrupt-table) and the staged
-# runtime's (chips/family/staged-runtime stacks.rs). A chip adds its harts
+# (chips/family/platform/runtime) installs these vectors and stacks; the
+# symbols are the interrupt table's (chips/family/platform/interrupt-table) and the staged
+# runtime's (chips/family/platform/runtime stacks.rs). A chip adds its harts
 # and their guards.
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
-# `oer_chips_family_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
-# u8 at 3, class u8 at 4 (`oer_chips_family_interrupt_table::Class`), hart u8 at 5,
+# `oer_chips_family_platform_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
+# u8 at 3, class u8 at 4 (`oer_chips_family_platform_interrupt_table::Class`), hart u8 at 5,
 # handler word at 8; fields as [offset, bytes]. An exempt entry's reason is
 # the bytes of the symbol named by the prefix and the entry's handler symbol.
 table-entry-bytes = 12
@@ -81,11 +81,11 @@ tie-break = "highest-line"
 irq-stack-bytes = 0x8000
 irq-stack-margin-percent = 10
 # Routes and line levels are written through the interrupt table's router
-# (chips/family/interrupt-table) by the chip's controller, whose writer
+# (chips/family/platform/interrupt-table) by the chip's controller, whose writer
 # functions this list names with the contexts they may run in.
 level-writers = []
 
-# The staged runtime's placement contract (chips/family/staged-layout/linker/runtime):
+# The staged runtime's placement contract (chips/family/platform/layout/linker/runtime):
 # code, data and the per-hart task stacks in PSRAM; interrupt entries, vector
 # tables, interrupt stacks, critical code and data, DMA data and the panic
 # entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
@@ -125,7 +125,7 @@ stack-swap = [
 ]
 
 # The staged boot's host contract: the stage-two header the image pipeline
-# packs (chips/family/staged-layout stage_two.rs) and the input sections
+# packs (chips/family/platform/layout stage_two.rs) and the input sections
 # the runtime linker script zeroes (zeroed.rs), which the image linker refuses
 # initialized bytes in.
 [staged]

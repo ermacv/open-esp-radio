@@ -10,10 +10,10 @@
 | `partitions/applications.csv` | the application partition table | the image pipeline (`chip.toml` `[flash]` names it) |
 | `rom-functions.toml` | reviewed summaries of the ROM functions the images call | the stack analysis (`rom-rev0.toml` `[rom]`), the provenance check |
 
-The linker scripts are in `chips/esp32s31/layout/linker` and
-`chips/family/staged-layout/linker`; the boot is described in
-[staged bootstrap](../../family/staged-bootstrap/README.md) and
-[stage-two runtime](../../family/staged-runtime/README.md).
+The linker scripts are in `chips/esp32s31/platform/layout/linker` and
+`chips/family/platform/layout/linker`; the boot is described in
+[staged bootstrap](../../family/platform/bootstrap/README.md) and
+[stage-two runtime](../../family/platform/runtime/README.md).
 
 `chip.toml` `[interrupts] harts` is the sole HP-hart cardinality, with
 `boot-hart` naming primary initialization. SOURCE: ESP-IDF 4d80c1b2
@@ -65,7 +65,7 @@ may start an executor there. The boot hart waits for each report as a named
 boot wait (`secondary-entered` 10 ms, `secondary-ready` 50 ms) under a 100
 ms launch deadline; any failure after the release records its stage and
 observations and resets.
-SOURCE: `hal/src/system/cores/launch.rs`, `staged-runtime/src/secondary.rs` and
+SOURCE: `hal/src/system/cores/launch.rs`, `platform-runtime/src/secondary.rs` and
 `entry.rs`, HW E1 of 2026-10-31 (oer-notes research/hw-hart1-entry-e1.md)
 for the ROM entry state, and the image checks' cores, critical-section and
 stack gates.

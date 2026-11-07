@@ -1,7 +1,7 @@
 //! The MAC owners' register operations over host memory: what each writes,
 //! what it keeps, and the ownership of the interrupt side.
 
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
     Ieee802154EventMask, Ieee802154MacControl, Ieee802154MultipanEnableState,
@@ -19,7 +19,7 @@ use super::{
     Ieee802154Pti,
     host::{HostMemory, changed},
 };
-use oer_chips_family_ieee802154_mac_values::Ieee802154MacPolicySnapshot;
+use oer_chips_family_radio_ieee802154_values::Ieee802154MacPolicySnapshot;
 
 fn mask(events: &[Ieee802154Event]) -> Ieee802154EventMask {
     events
@@ -554,7 +554,7 @@ fn assert_startup_discard(events_7: bool, clock: bool, events_13: bool, other: b
     // the initial read, the pre-bind discard writes one to every event field.
     assert_eq!(
         observed,
-        oer_chips_family_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
+        oer_chips_family_radio_ieee802154_values::Ieee802154EventObservation::from_parts(
             Ieee802154EventMask::NAMED,
             true,
             true,
@@ -576,7 +576,7 @@ fn startup_discards_hidden_pending_even_with_an_empty_visible_image() {
     let image = interrupts.events().observation();
     assert_eq!(
         image,
-        oer_chips_family_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
+        oer_chips_family_radio_ieee802154_values::Ieee802154EventObservation::from_parts(
             Ieee802154EventMask::NAMED,
             true,
             true,
@@ -586,7 +586,7 @@ fn startup_discards_hidden_pending_even_with_an_empty_visible_image() {
 
 #[test]
 fn transmit_status_keeps_zero_and_unclassified_observations_distinct() {
-    use oer_chips_family_ieee802154_mac_values::{
+    use oer_chips_family_radio_ieee802154_values::{
         Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityErrorObservation,
     };
     for (fill, security, zero) in [

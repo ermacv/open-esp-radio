@@ -1,6 +1,6 @@
 //! Which shared-table event a Wi-Fi operation requests.
 
-use oer_chips_family_coex::{CoexEventId, wifi_events};
+use oer_chips_family_radio_coex::{CoexEventId, wifi_events};
 use oer_protocols_ieee80211_contracts_port::{
     ConnectionFrame, Operation as WifiOperation, TxOperation,
 };

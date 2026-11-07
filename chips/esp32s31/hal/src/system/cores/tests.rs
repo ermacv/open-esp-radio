@@ -543,7 +543,7 @@ mod launch {
 
     #[test]
     fn hart_1_sets_its_own_level_bits_when_it_builds_its_controller() {
-        use oer_chips_family_interrupt_table::Controller as _;
+        use oer_chips_family_platform_interrupt_table::Controller as _;
         let mut memory = held();
         let cell = memory.cell();
         let mut permit = Permit::new(&[]);

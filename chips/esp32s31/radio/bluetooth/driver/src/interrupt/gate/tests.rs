@@ -4,7 +4,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Waker},
 };
-use oer_chips_family_interrupt_table::signal::host::{self, Deferred};
+use oer_chips_family_platform_interrupt_table::signal::host::{self, Deferred};
 use oer_portable_time_virtual::VirtualClock;
 use std::{
     boxed::Box,
@@ -249,10 +249,10 @@ impl DoorbellLine for Line {
 struct Ring(Arc<AtomicUsize>);
 
 impl RadioDoorbell for Ring {
-    const HANDLER: oer_chips_family_interrupt_table::Context =
-        oer_chips_family_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_chips_family_interrupt_table::Context =
-        oer_chips_family_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_chips_family_platform_interrupt_table::Context =
+        oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_chips_family_platform_interrupt_table::Context =
+        oer_chips_family_platform_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.0.fetch_add(1, Ordering::Relaxed);
     }
@@ -368,7 +368,7 @@ fn is_pending<X: SignalExecutor>(cells: &ControllerEventCells<X>) -> (bool, bool
 
 #[test]
 fn the_composite_serves_the_bank_timer_and_doorbell_sources() {
-    use oer_chips_family_interrupt_table::InterruptSources;
+    use oer_chips_family_platform_interrupt_table::InterruptSources;
     assert_eq!(
         <BluetoothInterrupts<Deferred, Line> as InterruptSources>::SOURCES,
         [124, 133, 127, 68]

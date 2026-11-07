@@ -1,6 +1,6 @@
 #![no_std]
 use oer_chips_esp32s31_hal::radio::ieee802154::mac::Ieee802154InterruptOwner;
-use oer_chips_family_ieee802154_mac_values::{Ieee802154EventMask, Ieee802154EventObservation};
+use oer_chips_family_radio_ieee802154_values::{Ieee802154EventMask, Ieee802154EventObservation};
 
 pub fn acknowledge_once(owner: &mut Ieee802154InterruptOwner) {
     let snapshot = owner.events();

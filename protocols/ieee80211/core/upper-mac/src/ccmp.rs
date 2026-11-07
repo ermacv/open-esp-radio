@@ -21,7 +21,7 @@ pub use replay::{CcmpRxProtection, CcmpRxReplayEpoch, CcmpRxReplayError};
 /// consecutive PNs; one is the ordinary step. A backend or vendor profile
 /// that must stay compatible with a peer implementation's numbering supplies
 /// its own step: the Espressif `net80211` stack advances by three
-/// (`oer-chips-family-ieee80211-policy`).
+/// (`oer-chips-family-radio-ieee80211-policy`).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CcmpPacketNumberStep(NonZeroU8);
 

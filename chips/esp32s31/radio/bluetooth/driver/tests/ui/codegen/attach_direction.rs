@@ -1,4 +1,4 @@
-use oer_chips_family_interrupt_table::{Bound, Context, Lines, TieBreak};
+use oer_chips_family_platform_interrupt_table::{Bound, Context, Lines, TieBreak};
 const LINES: Lines = Lines { first: 16, count: 48, levels: 8, harts: 1, tie_break: TieBreak::HighestLine };
 #[derive(Clone)]
 pub struct Bell;
@@ -12,11 +12,11 @@ impl oer_chips_esp32s31_radio_bluetooth_driver::interrupt::RadioDoorbell for Bel
 }
 
 use oer_chips_esp32s31_radio_bluetooth_driver::interrupt::{BluetoothInterruptEnds, BluetoothInterrupts, ChipGate, DoorbellLine};
-use oer_chips_family_interrupt_table::signal::host::Foreign;
+use oer_chips_family_platform_interrupt_table::signal::host::Foreign;
 pub struct Lower;
 impl DoorbellLine for Lower { fn acknowledge(&mut self) {} }
 pub fn on_bt(_: &mut BluetoothInterrupts<Foreign, Lower>) {}
-oer_chips_family_interrupt_table::interrupt_table! {
+oer_chips_family_platform_interrupt_table::interrupt_table! {
     lines: LINES, handler_attributes: [];
     contexts { radio: 3; }
     bt: BtToken = BluetoothInterrupts<Foreign, Lower> => on_bt, line 18, context radio, hart 0, Hardware;

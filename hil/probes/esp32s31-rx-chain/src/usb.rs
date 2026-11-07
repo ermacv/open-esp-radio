@@ -5,15 +5,15 @@
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
-use oer_chips_esp32s31_runtime::Esp32s31;
-use oer_chips_family_executor::Executor;
-use oer_chips_family_interrupt_table::{Controller, Router};
-use oer_chips_family_usb_serial_jtag::{Endpoint, Interrupt};
+use oer_chips_esp32s31_platform_runtime::Esp32s31;
+use oer_chips_family_peripherals_usb_serial_jtag::{Endpoint, Interrupt};
+use oer_chips_family_platform_executor::Executor;
+use oer_chips_family_platform_interrupt_table::{Controller, Router};
 
 /// The console's endpoint, polled by the core-0 executor's task.
 pub(crate) type Console = Endpoint<Executor<Esp32s31, 0>, ConsoleEndpoint>;
 
-oer_chips_family_staged_runtime::placed_static! {
+oer_chips_family_platform_runtime::placed_static! {
     /// The console's interrupt: the endpoint's signal.
     static INTERRUPT: Interrupt<Executor<Esp32s31, 0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
 }
@@ -56,7 +56,7 @@ pub(crate) fn open<const H: u8, C: Controller>(
     let (endpoint, interrupt, pads) =
         retire_early_writer().map_err(|_held: RetireError| OpenError::Retire)?;
     let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
-        oer_chips_family_staged_runtime::interrupts::reset_binding::<
+        oer_chips_family_platform_runtime::interrupts::reset_binding::<
             oer_chips_esp32s31_hal::system::platform::Port,
             _,
         >(error)

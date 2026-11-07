@@ -3,7 +3,7 @@
 
 use std::vec::Vec;
 
-use oer_chips_family_modem_clock::{
+use oer_chips_family_radio_modem_clock::{
     DependencySet, execute_acquire, execute_release, table_is_consistent,
 };
 

@@ -1,10 +1,12 @@
 use crate::{Caps, Channels, Control, Network, ServiceConnection, radio, station as service};
+use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_ieee80211_driver::irq::{
     DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line,
 };
-use oer_chips_esp32s31_runtime::Esp32s31;
-use oer_chips_family_executor::{Doorbell, DoorbellAcknowledger};
-use oer_chips_family_interrupt_table::{Bound, Entry, InterruptSources, signal::IrqSignal};
+use oer_chips_family_platform_executor::{Doorbell, DoorbellAcknowledger};
+use oer_chips_family_platform_interrupt_table::{
+    Bound, Entry, InterruptSources, signal::IrqSignal,
+};
 use oer_portable_memory::HandlerCell;
 use oer_portable_time::Duration;
 use oer_portable_trace::Observer;
@@ -39,14 +41,14 @@ const _: () = {
 pub const TX: usize = crate::FRAME_CAPACITY;
 /// The executor of the datapath actor and the station's lifecycle, on the
 /// boot hart.
-pub type DriverExecutor = oer_chips_family_executor::Executor<Esp32s31, 0>;
+pub type DriverExecutor = oer_chips_family_platform_executor::Executor<Esp32s31, 0>;
 /// Image-selected entries, callbacks, observers and event sink.
 pub trait Binding: Sized + 'static {
     type Id: SlotIdentity + 'static;
     type Wifi: Entry<Part = WifiIrqPart<Lower>>;
     /// The entry of the actor's executor ([`DriverExecutor`]): its wake
     /// entry, which rings the radio doorbell.
-    type DriverEntry: Entry<Part: oer_chips_family_interrupt_table::InterruptSource>;
+    type DriverEntry: Entry<Part: oer_chips_family_platform_interrupt_table::InterruptSource>;
     type Callbacks: crate::Callbacks + 'static;
     /// Receives the facade's own trace events ([`crate::observation`]).
     type Observer: Observer + Clone + 'static;
@@ -71,7 +73,7 @@ pub trait Binding: Sized + 'static {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InitializationError {
-    Phy(oer_chips_esp32s31_runtime::phy_fault::Failure),
+    Phy(oer_chips_esp32s31_platform_runtime::phy_fault::Failure),
     Country,
     Domain,
     Channel,
@@ -101,7 +103,7 @@ pub enum InitializationError {
 /// again until its MSDU's aggregate lifetime or the LMAC's long retry limit
 /// of aggregates on the air.
 ///
-/// SOURCE(esp32s31): member lifetime `oer_chips_family_ieee80211_policy::lmac::
+/// SOURCE(esp32s31): member lifetime `oer_chips_family_radio_ieee80211_policy::lmac::
 /// AMPDU_MSDU_LIFETIME_MICROS` and attempts `lmac::LONG_RETRY_LIMIT`
 /// (`libpp[lmac.o]::lmacInit`). The window is this composition's policy:
 /// the driver's `TX_BLOCK_ACK_MAX_WINDOW`, as the vendor's HT ADDBA Request
@@ -118,9 +120,9 @@ const TX_BLOCK_ACK: oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockA
         inactivity: Duration::from_secs(5),
         retry_members: oer_protocols_ieee80211_core_roles_sta::data::AggregateRetry {
             lifetime: Duration::from_micros(
-                oer_chips_family_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
+                oer_chips_family_radio_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
             ),
-            attempts: oer_chips_family_ieee80211_policy::lmac::LONG_RETRY_LIMIT,
+            attempts: oer_chips_family_radio_ieee80211_policy::lmac::LONG_RETRY_LIMIT,
         },
     };
 pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);
@@ -132,14 +134,14 @@ impl DoorbellAcknowledge for Lower {
 /// The radio doorbell, rung by the driver's executor through its entry `R`.
 pub struct Bell<E: Entry, R: Entry>(pub Doorbell<Esp32s31, 3, E, DriverExecutor, R>)
 where
-    R::Part: oer_chips_family_interrupt_table::InterruptSource;
+    R::Part: oer_chips_family_platform_interrupt_table::InterruptSource;
 impl<E: Entry, R: Entry> RadioDoorbell for Bell<E, R>
 where
-    R::Part: oer_chips_family_interrupt_table::InterruptSource,
+    R::Part: oer_chips_family_platform_interrupt_table::InterruptSource,
 {
-    const HANDLER: oer_chips_family_interrupt_table::Context =
+    const HANDLER: oer_chips_family_platform_interrupt_table::Context =
         Doorbell::<Esp32s31, 3, E, DriverExecutor, R>::HANDLER;
-    const EXECUTOR: oer_chips_family_interrupt_table::Context =
+    const EXECUTOR: oer_chips_family_platform_interrupt_table::Context =
         Doorbell::<Esp32s31, 3, E, DriverExecutor, R>::EXECUTOR;
     fn ring(&self) {
         self.0.ring();
@@ -263,10 +265,10 @@ impl Config {
 /// `STATE` flag.
 pub(crate) struct CoreCallbacks<C> {
     callbacks: C,
-    aes: oer_chips_esp32s31_runtime::crypto::AesEngine,
+    aes: oer_chips_esp32s31_platform_runtime::crypto::AesEngine,
 }
 impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
-    type AesEngine = oer_chips_esp32s31_runtime::crypto::AesEngine;
+    type AesEngine = oer_chips_esp32s31_platform_runtime::crypto::AesEngine;
     fn nonce(&mut self) -> [u8; 32] {
         self.callbacks.nonce()
     }
@@ -294,7 +296,7 @@ impl<W: Binding> Profile<W> {
         config: &Config,
         address: [u8; 6],
         callbacks: W::Callbacks,
-        aes: oer_chips_esp32s31_runtime::crypto::AesEngine,
+        aes: oer_chips_esp32s31_platform_runtime::crypto::AesEngine,
         sink: W::Sink,
     ) -> Result<Self, InitializationError> {
         let mut channels = heapless::Vec::new();

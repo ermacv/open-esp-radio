@@ -6,7 +6,7 @@ use crate::{
     wait::{BootBudget, BootDeadline, BootWait, WaitFailure},
 };
 use core::cell::{Cell, RefCell};
-use oer_chips_family_analog::{AnalogField, AnalogRegisterBus, BusRefusal};
+use oer_chips_family_peripherals_analog::{AnalogField, AnalogRegisterBus, BusRefusal};
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use std::{rc::Rc, vec, vec::Vec};
@@ -315,7 +315,7 @@ fn brownout_common_deadline_and_invalid_threshold_are_typed_failures() {
     assert_eq!(
         brownout::apply(&mut detector, &mut bus, profile, &deadline),
         Err(brownout::BrownoutFailure::ThresholdValue(
-            oer_chips_family_analog::ValueTooWide
+            oer_chips_family_peripherals_analog::ValueTooWide
         ))
     );
 }

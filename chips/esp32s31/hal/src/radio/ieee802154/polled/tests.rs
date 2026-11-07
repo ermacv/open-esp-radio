@@ -3,8 +3,8 @@
 
 use super::*;
 use crate::radio::ieee802154::mac::host::{HostMemory, changed, silent};
-use oer_chips_family_ieee802154_mac_values::COEX_DISABLED_PTI;
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::COEX_DISABLED_PTI;
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154Event, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
 };
 

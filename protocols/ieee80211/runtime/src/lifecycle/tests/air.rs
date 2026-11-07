@@ -52,7 +52,7 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
                 };
                 assert_eq!(
                     data.rate,
-                    oer_chips_family_ieee80211_policy::rate_control::EspressifRateControl::for_peer(
+                    oer_chips_family_radio_ieee80211_policy::rate_control::EspressifRateControl::for_peer(
                         (),
                         &peer,
                         meta().link_metric()

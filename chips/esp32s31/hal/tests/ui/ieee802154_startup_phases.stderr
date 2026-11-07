@@ -9,7 +9,7 @@ error[E0308]: mismatched types
    = note: expected struct `Ieee802154InterruptOwner<Fixed<537931776>>`
               found struct `Ieee802154InterruptSetupOwner<Fixed<537931776>>`
 note: method defined here
-  --> $WORKSPACE/chips/family/interrupt-table/src/router.rs
+  --> $WORKSPACE/chips/family/platform/interrupt-table/src/router.rs
    |
    |     pub fn bind<E: Entry>(&mut self, token: E, part: E::Part) -> Result<Bound<E>, BindError<E>> {
    |            ^^^^
@@ -25,7 +25,7 @@ error[E0308]: mismatched types
    = note: expected struct `Ieee802154Startup<_, _, _, 9>`
               found struct `Ieee802154Startup<Fixed<537931776>, Fixed<537954304>, Fixed<537927680>, 1>`
 note: associated function defined here
-  --> $WORKSPACE/chips/family/ieee802154-mac-values/src/interrupt.rs
+  --> $WORKSPACE/chips/family/radio/ieee802154/values/src/interrupt.rs
    |
    |     fn finish(phase: Self::Discarded) -> Self::Output;
    |        ^^^^^^
@@ -51,8 +51,8 @@ note: required by a bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
    |
    |     pub fn activate<
    |            -------- required by a bound in this associated function
-   |         I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
-   |                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
+   |         I: oer_chips_family_platform_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
+   |                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
 
 error[E0308]: mismatched types
   --> tests/ui/ieee802154_startup_phases.rs:49:52

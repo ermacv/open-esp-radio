@@ -6,8 +6,8 @@ use oer_chips_esp32s31_radio_ieee80211_driver::mac::irq::{
 #[test]
 fn split_publication_preserves_all_coalesced_facts_in_vendor_order() {
     let mut storage = IrqStorage::new(
-        oer_chips_family_interrupt_table::signal::host::signal().0,
-        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+        oer_chips_family_platform_interrupt_table::signal::host::signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     publisher.publish(
@@ -30,8 +30,8 @@ fn split_publication_preserves_all_coalesced_facts_in_vendor_order() {
 #[test]
 fn taking_a_finite_batch_does_not_consume_a_later_publication() {
     let mut storage = IrqStorage::new(
-        oer_chips_family_interrupt_table::signal::host::signal().0,
-        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+        oer_chips_family_platform_interrupt_table::signal::host::signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     publisher.publish(EVENT_RX_SUCCESS | EVENT_TX_COMPLETE);

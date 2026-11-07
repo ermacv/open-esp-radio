@@ -1,6 +1,6 @@
 #![no_std]
 use oer_chips_esp32s31_radio_bluetooth_driver::runtime_resources::ControllerRuntimeResources;
-use oer_chips_family_interrupt_table::signal::host::Deferred;
+use oer_chips_family_platform_interrupt_table::signal::host::Deferred;
 
 #[cfg(not(ui_reject))]
 const _: usize = ControllerRuntimeResources::<1, Deferred>::CAPACITY;

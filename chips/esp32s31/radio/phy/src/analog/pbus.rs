@@ -334,11 +334,11 @@ impl PhyPbusHardwareBinding {
                 PhyPbusHardwareBindingError::WrongEdge
             });
         }
-        match oer_chips_family_phy::pbus::try_finish_force_test(
+        match oer_chips_family_radio_phy::pbus::try_finish_force_test(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
         ) {
             Ok(()) => self.observe_completed(true),
-            Err(oer_chips_family_phy::pbus::PbusError::Busy) => self.observe_completed(false),
+            Err(oer_chips_family_radio_phy::pbus::PbusError::Busy) => self.observe_completed(false),
         }
     }
 

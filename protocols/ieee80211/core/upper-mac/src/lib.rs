@@ -68,7 +68,7 @@
 //! service in `oer-protocols-ieee80211-runtime` submits to the port and feeds its
 //! terminals into rate selection ([`rate_selection::RateSelection::learn`]). Vendor retry schedules, limits and
 //! duration estimates are parameters a profile supplies, such as
-//! `oer-chips-family-ieee80211-policy`.
+//! `oer-chips-family-radio-ieee80211-policy`.
 
 #[cfg(test)]
 extern crate std;

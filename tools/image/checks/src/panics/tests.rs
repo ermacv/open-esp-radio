@@ -410,8 +410,8 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
         ),
         ("oer-chips-esp32s31-hal", Path::new("chips/esp32s31/hal")),
         (
-            "oer-chips-family-executor",
-            Path::new("chips/family/executor"),
+            "oer-chips-family-platform-executor",
+            Path::new("chips/family/platform/executor"),
         ),
         ("oer-portable-time", Path::new("portable/time")),
         (
@@ -434,7 +434,7 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             "<oer_chips_esp32s31_hal::Uart as core::fmt::Write>::write_str",
             Layer::Hal,
         ),
-        ("oer_chips_family_executor::poll", Layer::Chips),
+        ("oer_chips_family_platform_executor::poll", Layer::Chips),
         (
             "<&oer_portable_time::Instant as core::fmt::Debug>::fmt",
             Layer::Portable,

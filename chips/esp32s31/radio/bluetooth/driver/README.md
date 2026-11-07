@@ -221,7 +221,7 @@ epoch; its storage stays reserved for every later epoch.
 
 Role builders accept caller-selected PTI values. The driver does not map
 active roles to coexistence schedule status or select shared-antenna priority
-policy; the chip-family coexistence vocabulary lives in `oer-chips-family-coex`.
+policy; the chip-family coexistence vocabulary lives in `oer-chips-family-radio-coex`.
 
 Stop:
 

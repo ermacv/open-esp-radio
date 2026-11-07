@@ -359,9 +359,9 @@ tails remain unresolved. No source name, source line, nearby scope or MIR
 call list substitutes for these machine and location facts.
 
 `task_poll_resolutions` finds the executor's task polls: the executor
-(`oer-chips-family-executor`) polls each declared task by a direct call of its
+(`oer-chips-family-platform-executor`) polls each declared task by a direct call of its
 never-inlined poll boundary, whose zero-sized first parameter has the type
-`TASK_POLL_MARK` (`oer_chips_family_executor::task::PollBoundary`). `read_debug`
+`TASK_POLL_MARK` (`oer_chips_family_platform_executor::task::PollBoundary`). `read_debug`
 marks every subprogram with a formal parameter of that type, directly or
 through its origin or specification (`Dwarf::poll_boundaries`): each
 out-of-line copy is a boundary, each inlined copy a failure. Every direct

@@ -19,8 +19,8 @@ pub use commands::{
     PhyI2cConfigurationCommand, PhyI2cConfigurationOperation, PhyI2cInitializationStageOneInputs,
 };
 use master::{ConfigurationBus, MasterPort};
-use oer_chips_family_analog::BusRefusal;
-use oer_chips_family_phy::serial::AnalogBus;
+use oer_chips_family_peripherals_analog::BusRefusal;
+use oer_chips_family_radio_phy::serial::AnalogBus;
 
 pub use crate::radio::phy::restore::{
     BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRestoreError,
@@ -63,14 +63,14 @@ pub enum PhyI2cConfigurationError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct OperationCommands(PhyI2cConfigurationOperation);
 
-impl oer_chips_family_analog::ConfigurationCommands for OperationCommands {
+impl oer_chips_family_peripherals_analog::ConfigurationCommands for OperationCommands {
     type Address = Address;
 
     fn command(
         &self,
         index: usize,
-    ) -> Option<oer_chips_family_analog::ConfigurationCommand<Address>> {
-        use oer_chips_family_analog::ConfigurationCommand;
+    ) -> Option<oer_chips_family_peripherals_analog::ConfigurationCommand<Address>> {
+        use oer_chips_family_peripherals_analog::ConfigurationCommand;
         let index = u8::try_from(index).ok()?;
         Some(match self.0.command(index)? {
             PhyI2cConfigurationCommand::Read(address) => ConfigurationCommand::Read(address),
@@ -87,29 +87,32 @@ impl oer_chips_family_analog::ConfigurationCommands for OperationCommands {
 /// Non-cloneable owner of one complete recovered PHY-I²C write plan.
 ///
 /// [`commands`] supplies the operation's commands with opaque analog identities;
-/// the portable [`oer_chips_family_analog::ConfigurationTransition`] owns the
+/// the portable [`oer_chips_family_peripherals_analog::ConfigurationTransition`] owns the
 /// command order and read-modify-write value, and this transaction owns the
 /// start and completion edges of each byte command.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyI2cConfigurationTransaction {
-    transition: oer_chips_family_analog::ConfigurationTransition<OperationCommands, Address>,
+    transition:
+        oer_chips_family_peripherals_analog::ConfigurationTransition<OperationCommands, Address>,
     started: bool,
 }
 
 impl PhyI2cConfigurationTransaction {
     pub fn new(operation: PhyI2cConfigurationOperation) -> Self {
         Self {
-            transition: oer_chips_family_analog::ConfigurationTransition::new(OperationCommands(
-                operation,
-            )),
+            transition: oer_chips_family_peripherals_analog::ConfigurationTransition::new(
+                OperationCommands(operation),
+            ),
             started: false,
         }
     }
 
     pub fn action(&self) -> PhyI2cConfigurationAction {
-        use oer_chips_family_analog::ByteTransition;
+        use oer_chips_family_peripherals_analog::ByteTransition;
         match self.transition.action() {
-            oer_chips_family_analog::Action::Complete(_) => PhyI2cConfigurationAction::Complete,
+            oer_chips_family_peripherals_analog::Action::Complete(_) => {
+                PhyI2cConfigurationAction::Complete
+            }
             _ if self.started => PhyI2cConfigurationAction::AwaitCompletionEdge,
             _ => PhyI2cConfigurationAction::StartCommand,
         }
@@ -117,9 +120,9 @@ impl PhyI2cConfigurationTransaction {
 
     fn start_with(
         &mut self,
-        bus: &mut impl oer_chips_family_analog::AnalogRegisterBus<Address = Address>,
+        bus: &mut impl oer_chips_family_peripherals_analog::AnalogRegisterBus<Address = Address>,
     ) -> Result<(), PhyI2cConfigurationError> {
-        use oer_chips_family_analog::{Action, ByteTransition};
+        use oer_chips_family_peripherals_analog::{Action, ByteTransition};
         if self.started {
             return Err(PhyI2cConfigurationError::WrongAction);
         }
@@ -139,9 +142,9 @@ impl PhyI2cConfigurationTransaction {
 
     fn observe_with(
         &mut self,
-        bus: &impl oer_chips_family_analog::AnalogRegisterBus<Address = Address>,
+        bus: &impl oer_chips_family_peripherals_analog::AnalogRegisterBus<Address = Address>,
     ) -> Result<PhyI2cConfigurationObservation, PhyI2cConfigurationError> {
-        use oer_chips_family_analog::{Action, ByteTransition, Completion};
+        use oer_chips_family_peripherals_analog::{Action, ByteTransition, Completion};
         if !self.started {
             return Err(match self.transition.action() {
                 Action::Complete(_) => PhyI2cConfigurationError::AlreadyComplete,
@@ -661,8 +664,8 @@ mod tests;
 /// Lend the owned master atoms for the retained-wake family driver.
 pub fn parallel_port(
     registers: &mut impl SharedPhyAccess,
-) -> impl oer_chips_family_phy::i2c::PhyI2cParallelAccess<
-    Pair = oer_chips_family_phy::i2c::PhyI2cParallelWrite<Address>,
+) -> impl oer_chips_family_radio_phy::i2c::PhyI2cParallelAccess<
+    Pair = oer_chips_family_radio_phy::i2c::PhyI2cParallelWrite<Address>,
 > + '_ {
     MasterPort::new(&mut phy_blocks_mut(registers).i2c_ana_mst)
 }
@@ -670,13 +673,13 @@ pub fn parallel_port(
 /// Lend the exclusive byte-command atoms to the family transport.
 pub fn serial_port(
     registers: &mut impl SharedPhyAccess,
-) -> impl oer_chips_family_phy::serial::Port + '_ {
+) -> impl oer_chips_family_radio_phy::serial::Port + '_ {
     MasterPort::new(&mut phy_blocks_mut(registers).i2c_ana_mst)
 }
 
 /// Borrow observations without granting command publication.
 pub fn serial_sample(
     registers: &impl SharedPhyAccess,
-) -> impl oer_chips_family_phy::serial::SamplePort + '_ {
+) -> impl oer_chips_family_radio_phy::serial::SamplePort + '_ {
     master::MasterSample::new(&phy_blocks(registers).i2c_ana_mst)
 }

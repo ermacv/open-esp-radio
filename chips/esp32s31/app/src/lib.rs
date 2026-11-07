@@ -41,8 +41,8 @@ use oer_chips_esp32s31_hal::{
     system::platform::{InterruptController, Port},
     system::root::Root,
 };
-use oer_chips_family_executor::{Executor, Spawner};
-use oer_chips_family_staged_runtime::{Adopted, Handoff};
+use oer_chips_family_platform_executor::{Executor, Spawner};
+use oer_chips_family_platform_runtime::{Adopted, Handoff};
 use oer_portable_embassy_time::EmbassyClock;
 
 // The family's shared parts keep their paths in this crate.
@@ -50,7 +50,7 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_family_app::observe;
 use oer_chips_family_app::{boot, channel, net};
 
-pub use oer_chips_esp32s31_runtime::Esp32s31;
+pub use oer_chips_esp32s31_platform_runtime::Esp32s31;
 
 /// Time on the executors' clock: timers, timeouts, instants.
 pub use embassy_time as time;
@@ -126,21 +126,23 @@ pub use console::{Console, ConsolePeripheral, UsbConsole};
 pub use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
 /// What the interrupt controller showed after the previous boot's
 /// exception trapped.
-pub use oer_chips_esp32s31_runtime::exception::{LineView, Observed, Terminal, TrapIdentity};
+pub use oer_chips_esp32s31_platform_runtime::exception::{
+    LineView, Observed, Terminal, TrapIdentity,
+};
 /// The record of the previous boot's panic.
-pub use oer_chips_family_staged_runtime::panic::PanicRecord;
+pub use oer_chips_family_platform_runtime::panic::PanicRecord;
 /// The previous boot's exception as the trap left it.
-pub use oer_chips_family_staged_runtime::trap::PreviousException;
+pub use oer_chips_family_platform_runtime::trap::PreviousException;
 
-oer_chips_family_staged_runtime::interrupt_table! {
+oer_chips_family_platform_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; hart1_app: 1; profile: 4; }
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     /// The application executor's alarm (system timer comparator 1).
-    alarm: AppAlarmToken = SystimerAlarm1 => oer_chips_family_executor::alarm_interrupt::<SdkTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
+    alarm: AppAlarmToken = SystimerAlarm1 => oer_chips_family_platform_executor::alarm_interrupt::<SdkTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi")]
     /// The radio executor's alarm (system timer comparator 0).
-    radio_alarm: RadioAlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0 => oer_chips_family_executor::alarm_interrupt::<wifi::RadioTasks, 0, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<wifi::RadioTasks, 0, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
     #[cfg(feature = "wifi")]
@@ -148,7 +150,7 @@ oer_chips_family_staged_runtime::interrupt_table! {
     phy: PhyToken = oer_chips_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => wifi::on_pilot, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     #[cfg(feature = "wifi")]
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_chips_family_executor::Round<wifi::RadioTasks>, line 17, context radio_executor, hart 0, Executor;
+    radio: RadioToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_chips_family_platform_executor::Round<wifi::RadioTasks>, line 17, context radio_executor, hart 0, Executor;
     #[cfg(feature = "wifi")]
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = wifi::WifiPart => wifi::on_wifi, line 21, context radio, hart 0, Hardware;
@@ -165,10 +167,10 @@ oer_chips_family_staged_runtime::interrupt_table! {
     sampler1: Sampler1Token = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Interrupt => observed::on_sampler1, line 22, context profile, hart 1, Hardware;
     #[cfg(feature = "group")]
     /// Hart 1's executor's wake (thread mode).
-    hart1_wake: Hart1WakeToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 1, oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
+    hart1_wake: Hart1WakeToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 1, oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
     #[cfg(feature = "group")]
     /// Hart 1's executor's alarm (system timer comparator 2).
-    hart1_alarm: Hart1AlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2 => oer_chips_family_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>, line 41, context hart1_app, hart 1, Hardware;
+    hart1_alarm: Hart1AlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2 => oer_chips_family_platform_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>, line 41, context hart1_app, hart 1, Hardware;
 }
 
 #[cfg(feature = "group")]
@@ -177,7 +179,7 @@ mod hart1;
 #[doc(hidden)]
 pub use hart1::{Hart1Parts, hart1_main};
 
-oer_chips_family_executor::tasks! {
+oer_chips_family_platform_executor::tasks! {
     /// The library's service tasks on the application executor; an image's
     /// set extends it.
     pub SdkTasks: Executor<Esp32s31, 0> {
@@ -194,8 +196,8 @@ oer_chips_family_executor::tasks! {
     }
 }
 
-oer_chips_family_executor::time_driver!(Esp32s31);
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_runtime::phy_fault::reset);
+oer_chips_family_platform_executor::time_driver!(Esp32s31);
+oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime::phy_fault::reset);
 
 /// The peripherals an application may take, each once.
 pub struct Peripherals {
@@ -240,7 +242,7 @@ pub struct Boot {
     /// executor, once a station installed the time driver.
     #[cfg(feature = "group")]
     pub(crate) timers: Option<(
-        oer_chips_family_executor::TimeDriverReady<Esp32s31>,
+        oer_chips_family_platform_executor::TimeDriverReady<Esp32s31>,
         oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2,
     )>,
     /// What only the boot hart observes, until the boot takes it.
@@ -254,7 +256,7 @@ pub struct NoNet;
 impl Boot {
     pub(crate) fn router(
         &mut self,
-    ) -> &mut oer_chips_family_interrupt_table::Router<InterruptController, 0> {
+    ) -> &mut oer_chips_family_platform_interrupt_table::Router<InterruptController, 0> {
         self.adopted.router()
     }
 
@@ -300,7 +302,7 @@ pub fn boot_id() -> u64 {
 
 /// A nonzero boot identity from `rng`.
 pub(crate) fn draw_boot_id(
-    rng: &mut oer_chips_esp32s31_runtime::platform::Entropy,
+    rng: &mut oer_chips_esp32s31_platform_runtime::platform::Entropy,
 ) -> Result<u64, oer_chips_esp32s31_hal::peripherals::entropy::EntropyError> {
     let mut bytes = [0; 8];
     rng.fill(&mut bytes)?;
@@ -492,10 +494,10 @@ pub type AppNotify = oer_portable_waker::AtomicWaker;
 pub type GroupNotify = oer_portable_waker::AtomicWaker;
 #[cfg(feature = "group")]
 pub type AppNotify =
-    &'static oer_chips_family_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 0>>;
+    &'static oer_chips_family_platform_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 0>>;
 #[cfg(feature = "group")]
 pub type GroupNotify =
-    &'static oer_chips_family_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 1>>;
+    &'static oer_chips_family_platform_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 1>>;
 
 /// The application's notify, which the IP status publication tells.
 #[cfg(all(feature = "wifi", not(feature = "group")))]
@@ -684,15 +686,15 @@ pub fn start<S: Started, H: GroupStarted>(
     hart1: fn(GroupPeripherals, GroupBoot) -> Result<H, Error>,
     #[cfg_attr(not(feature = "group"), allow(unused_variables))] mailbox: GroupMailbox,
 ) -> ! {
-    let previous = oer_chips_family_staged_runtime::panic::peek_previous();
+    let previous = oer_chips_family_platform_runtime::panic::peek_previous();
     // Read before adoption prints and clears them.
-    let previous_exception =
-        oer_chips_family_staged_runtime::trap::peek_previous_exception().map(|trap| {
+    let previous_exception = oer_chips_family_platform_runtime::trap::peek_previous_exception()
+        .map(|trap| {
             ExceptionEvidence {
                 trap,
                 // Only the observations of this trap: an earlier trap's
                 // record may outlive it.
-                observed: oer_chips_esp32s31_runtime::exception::peek_previous()
+                observed: oer_chips_esp32s31_platform_runtime::exception::peek_previous()
                     .filter(|observed| observed.follows(&trap)),
             }
         });
@@ -700,21 +702,22 @@ pub fn start<S: Started, H: GroupStarted>(
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let (hardware, _psram, adopted) =
-        match oer_chips_family_staged_runtime::adoption::run::<Esp32s31, _, _>(
+        match oer_chips_family_platform_runtime::adoption::run::<Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
-            oer_chips_esp32s31_board::BootstrapPsram,
-            oer_chips_esp32s31_runtime::phy_fault::report_previous,
+            oer_chips_esp32s31_platform_board::BootstrapPsram,
+            oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
             |hardware| {
-                let causes = oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
-                oer_chips_esp32s31_runtime::wifi_fault::report_previous();
-                oer_chips_esp32s31_runtime::radio_fault::report_previous();
-                oer_chips_esp32s31_runtime::exception::report_previous();
+                let causes =
+                    oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
+                oer_chips_esp32s31_platform_runtime::wifi_fault::report_previous();
+                oer_chips_esp32s31_platform_runtime::radio_fault::report_previous();
+                oer_chips_esp32s31_platform_runtime::exception::report_previous();
                 if let Some(record) = previous {
                     let mut console =
-                        oer_chips_family_staged_runtime::diagnostics::Console::shared(whole);
-                    let _ = oer_chips_family_staged_runtime::diagnostics::previous_panic(
+                        oer_chips_family_platform_runtime::diagnostics::Console::shared(whole);
+                    let _ = oer_chips_family_platform_runtime::diagnostics::previous_panic(
                         &mut console,
                         &record,
                     );
@@ -750,7 +753,7 @@ pub fn start<S: Started, H: GroupStarted>(
             Ok(adopted) => adopted.into_parts(),
             Err(error) => fail(error.name()),
         };
-    oer_chips_esp32s31_runtime::exception::report_stack_guard();
+    oer_chips_esp32s31_platform_runtime::exception::report_stack_guard();
     let Some(interrupts) = Interrupts::take() else {
         fail(Error::InterruptTaken.name());
     };
@@ -821,8 +824,8 @@ pub fn start<S: Started, H: GroupStarted>(
     let _ = hart1;
     // Without a radio executor the application executor writes the timer.
     if let (Some(timer), Some(alarm)) = (setup.timer.take(), setup.app_alarm.take()) {
-        let ready = oer_chips_family_executor::init::<Esp32s31, 0, _, _, _>(
-            oer_chips_family_executor::systimer::SystemTimer {
+        let ready = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>(
+            oer_chips_family_platform_executor::systimer::SystemTimer {
                 comparators: timer.comparators,
                 counter: timer.counter,
             },
@@ -843,8 +846,10 @@ pub fn start<S: Started, H: GroupStarted>(
     let id = match (setup.boot_id, setup.entropy.take()) {
         (Some(id), _) => id,
         (None, Some(registers)) => {
-            let mut rng =
-                oer_chips_esp32s31_runtime::platform::Entropy::new(registers, EmbassyClock);
+            let mut rng = oer_chips_esp32s31_platform_runtime::platform::Entropy::new(
+                registers,
+                EmbassyClock,
+            );
             if !rng.is_healthy() {
                 fail(Error::Entropy.name());
             }
@@ -910,13 +915,13 @@ pub fn start<S: Started, H: GroupStarted>(
     #[cfg(not(feature = "group"))]
     let roots = (
         (
-            oer_chips_family_executor::Root::new(net.as_mut()),
-            oer_chips_family_executor::Root::new(second.as_mut()),
+            oer_chips_family_platform_executor::Root::new(net.as_mut()),
+            oer_chips_family_platform_executor::Root::new(second.as_mut()),
         ),
-        oer_chips_family_executor::Root::new(app.as_mut()),
+        oer_chips_family_platform_executor::Root::new(app.as_mut()),
     );
     #[cfg(feature = "group")]
-    let roots = oer_chips_family_executor::Root::new(app.as_mut());
+    let roots = oer_chips_family_platform_executor::Root::new(app.as_mut());
     #[cfg(feature = "wifi")]
     if let Some(urgent) = urgent {
         match executor
@@ -998,7 +1003,7 @@ struct Owned {
 /// `group` feature, nothing without it. Not an API.
 #[doc(hidden)]
 #[cfg(feature = "group")]
-pub type GroupMailbox = &'static oer_chips_family_staged_runtime::Mailbox<
+pub type GroupMailbox = &'static oer_chips_family_platform_runtime::Mailbox<
     oer_chips_esp32s31_hal::system::platform::Hart1Grant,
     Hart1Parts,
 >;
@@ -1026,7 +1031,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 /// Retain `reason`, report it and reset: the record-and-reset policy the
 /// library applies on the image's behalf.
 pub(crate) fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
-    oer_chips_family_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
+    oer_chips_family_platform_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
         let _note = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
             &oer_portable_diagnostics::Note::runtime_fail(reason),
         );
@@ -1034,7 +1039,7 @@ pub(crate) fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) ->
 }
 
 /// [`fail`] for a reason whose variant path the record keeps after it: the
-/// next boot prints `reason` and `path` ([`oer_chips_esp32s31_runtime::diagnostic_text`]),
+/// next boot prints `reason` and `path` ([`oer_chips_esp32s31_platform_runtime::diagnostic_text`]),
 /// cut to the record's payload.
 #[cfg(feature = "wifi")]
 pub(crate) fn fail_path<const B: usize>(
@@ -1042,7 +1047,7 @@ pub(crate) fn fail_path<const B: usize>(
     path: &oer_portable_diagnostics::DiagPath,
 ) -> ! {
     let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
-    let length = oer_chips_esp32s31_runtime::diagnostic_text::write(
+    let length = oer_chips_esp32s31_platform_runtime::diagnostic_text::write(
         reason.as_str().as_bytes(),
         path,
         &mut text,
@@ -1052,7 +1057,7 @@ pub(crate) fn fail_path<const B: usize>(
         .get(..length)
         .and_then(|text| core::str::from_utf8(text).ok())
         .unwrap_or(reason.as_str());
-    oer_chips_family_staged_runtime::fatal::boot_failure::<Port>(record, || {
+    oer_chips_family_platform_runtime::fatal::boot_failure::<Port>(record, || {
         let _note = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
             &oer_portable_diagnostics::Note::runtime_fail(reason),
         );
@@ -1064,9 +1069,9 @@ pub(crate) fn fail_path<const B: usize>(
 pub mod __private {
     pub use super::{no_group, start};
     pub use oer_chips_esp32s31_hal::system::platform::Port;
-    pub use oer_chips_esp32s31_runtime::exception::capture as exception;
-    pub use oer_chips_family_staged_runtime::{Handoff, entry};
-    pub use oer_chips_family_staged_runtime::{SecondaryHandoff, secondary_entry};
+    pub use oer_chips_esp32s31_platform_runtime::exception::capture as exception;
+    pub use oer_chips_family_platform_runtime::{Handoff, entry};
+    pub use oer_chips_family_platform_runtime::{SecondaryHandoff, secondary_entry};
 }
 
 /// Write `bytes` whole to the console, or fail.

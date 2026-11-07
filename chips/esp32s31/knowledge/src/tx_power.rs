@@ -2,7 +2,7 @@
 //! IEEE 802.15.4 and Bluetooth LE select from.
 //!
 //! The IEEE 802.15.4 resolution itself is chip-neutral and lives in the
-//! family `oer-chips-family-ieee802154-mac-values` crate.
+//! family `oer-chips-family-radio-ieee802154-values` crate.
 
 /// The BTBB provider's transmit-power levels, in dBm.
 ///

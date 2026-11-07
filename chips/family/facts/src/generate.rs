@@ -80,13 +80,13 @@ pub fn default_task_stack_bytes(policy: &str, harts: u32) -> Result<Vec<u32>> {
 
 fn region(region: Region) -> String {
     format!(
-        "const {{ oer_chips_family_staged_layout::Region::new({:#010x}, {:#010x}).expect(\"region end fits u32\") }}",
+        "const {{ oer_chips_family_platform_layout::Region::new({:#010x}, {:#010x}).expect(\"region end fits u32\") }}",
         region.origin(),
         region.length()
     )
 }
 
-/// The Rust source of a chip's `LAYOUT` (`oer_chips_family_staged_layout::Layout`)
+/// The Rust source of a chip's `LAYOUT` (`oer_chips_family_platform_layout::Layout`)
 /// with its compile-time check, from its facts and the default per-hart task
 /// stack of its stack policy.
 pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
@@ -121,7 +121,7 @@ pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
          // `{id}` (its layers from the ISA to the board) and the chip's stack\n\
          // policy; edit those, not this.\n\n\
          /// The staged-boot layout of `{id}` on {board}.\n\
-         pub const LAYOUT: oer_chips_family_staged_layout::Layout = oer_chips_family_staged_layout::Layout {{\n\
+         pub const LAYOUT: oer_chips_family_platform_layout::Layout = oer_chips_family_platform_layout::Layout {{\n\
          \x20   sram: {sram},\n\
          \x20   bootstrap_sram: {bootstrap_sram},\n\
          \x20   second_stage_loader_start: {loader:#010x},\n\
@@ -140,7 +140,7 @@ pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
          \x20   rom_script: {script:?},\n\
          }};\n\n\
          const _: () = LAYOUT.check();\n\
-         const _: () = if LAYOUT.boot_hart as usize != oer_chips_family_staged_layout::boot::BOOT_HART {{ panic!(\"layout boot hart disagrees with the boot contract\"); }};\n",
+         const _: () = if LAYOUT.boot_hart as usize != oer_chips_family_platform_layout::boot::BOOT_HART {{ panic!(\"layout boot hart disagrees with the boot contract\"); }};\n",
         id = facts.id,
         board = facts
             .board
@@ -295,12 +295,12 @@ impl Vectors {
             );
         }
         text.push_str(
-            "}\n\n/// The generated entry of secondary hart `H`; `None` for the boot hart\n/// or a hart outside the geometry.\npub(crate) fn secondary_entry<const H: u8>() -> Option<oer_chips_family_staged_layout::handoff::SecondaryEntry> {\n    match H {\n",
+            "}\n\n/// The generated entry of secondary hart `H`; `None` for the boot hart\n/// or a hart outside the geometry.\npub(crate) fn secondary_entry<const H: u8>() -> Option<oer_chips_family_platform_layout::handoff::SecondaryEntry> {\n    match H {\n",
         );
         for hart in self.secondaries() {
             let _ = writeln!(
                 text,
-                "        // SAFETY: `{entry}` is the generated entry of hart {hart} in this\n        // module's assembly: it implements the ROM-entry and launch handshake\n        // contract of `SecondaryEntry::new` and runs only from internal SRAM.\n        {hart} => Some(unsafe {{\n            oer_chips_family_staged_layout::handoff::SecondaryEntry::new::<{hart}>(\n                core::ptr::addr_of!({entry}) as usize as u32,\n            )\n        }}),",
+                "        // SAFETY: `{entry}` is the generated entry of hart {hart} in this\n        // module's assembly: it implements the ROM-entry and launch handshake\n        // contract of `SecondaryEntry::new` and runs only from internal SRAM.\n        {hart} => Some(unsafe {{\n            oer_chips_family_platform_layout::handoff::SecondaryEntry::new::<{hart}>(\n                core::ptr::addr_of!({entry}) as usize as u32,\n            )\n        }}),",
                 entry = Self::secondary_entry(hart),
             );
         }
@@ -405,12 +405,12 @@ impl Vectors {
              pub const PRIORITY_BITS: u8 = CONTROL_BITS - LEVEL_BITS;\n\n\
              /// The CPU lines of the chip's CLIC: peripheral sources route to\n\
              /// lines {first} to {last}, a line holds levels 1 to {levels}, on harts 0 to {last_hart}.\n\
-             pub const LINES: oer_chips_family_interrupt_table::Lines = oer_chips_family_interrupt_table::Lines {{\n\
+             pub const LINES: oer_chips_family_platform_interrupt_table::Lines = oer_chips_family_platform_interrupt_table::Lines {{\n\
              \x20   first: {first},\n\
              \x20   count: {lines},\n\
              \x20   levels: {levels},\n\
              \x20   harts: {harts},\n\
-             \x20   tie_break: oer_chips_family_interrupt_table::TieBreak::{tie_break},\n\
+             \x20   tie_break: oer_chips_family_platform_interrupt_table::TieBreak::{tie_break},\n\
              }};\n\n\
              /// The words of one hart's vector table in `_runtime_mtvt`, the table's\n\
              /// alignment in words; lines 0 to {last} have their word.\n\
@@ -735,7 +735,7 @@ mod tests {
         let vectors = Vectors::of(&tracked("esp32s31")).unwrap();
         assert_eq!(
             vectors.stack_coverage().unwrap(),
-            include_str!("../../staged-layout/stack-coverage.toml")
+            include_str!("../../platform/layout/stack-coverage.toml")
         );
     }
 
@@ -747,11 +747,11 @@ mod tests {
         tasks[facts.interrupts.as_ref().unwrap().boot_hart as usize] = 0x30000;
         let layout = layout(&facts, &tasks).expect("a staged layout");
         for field in [
-            "sram: const { oer_chips_family_staged_layout::Region::new(0x2f000000, 0x00080000).expect(\"region end fits u32\") },",
-            "bootstrap_sram: const { oer_chips_family_staged_layout::Region::new(0x2f000000, 0x0007afc0).expect(\"region end fits u32\") },",
+            "sram: const { oer_chips_family_platform_layout::Region::new(0x2f000000, 0x00080000).expect(\"region end fits u32\") },",
+            "bootstrap_sram: const { oer_chips_family_platform_layout::Region::new(0x2f000000, 0x0007afc0).expect(\"region end fits u32\") },",
             "second_stage_loader_start: 0x2f06cfb0,",
-            "psram: const { oer_chips_family_staged_layout::Region::new(0x50000000, 0x01000000).expect(\"region end fits u32\") },",
-            "retained: const { oer_chips_family_staged_layout::Region::new(0x2e000000, 0x00008000).expect(\"region end fits u32\") },",
+            "psram: const { oer_chips_family_platform_layout::Region::new(0x50000000, 0x01000000).expect(\"region end fits u32\") },",
+            "retained: const { oer_chips_family_platform_layout::Region::new(0x2e000000, 0x00008000).expect(\"region end fits u32\") },",
             "retained_reserved_tail: 24,",
             "irq_stack_bytes: 0x8000,",
             "flash_tuning_reference_bytes: 0x10000,",
@@ -825,9 +825,9 @@ mod tests {
         let tasks = alloc::vec![16; interrupts.harts.len()];
         let build = tempfile::tempdir().expect("a private compiler fixture");
         let layout_sources =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../staged-layout/src");
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../platform/layout/src");
         let prefix = format!(
-            "mod oer_chips_family_staged_layout {{\n#[path = {boot:?}] pub mod boot;\n#[path = {memory:?}] mod memory;\npub use memory::{{Layout, Region}};\n}}\n",
+            "mod oer_chips_family_platform_layout {{\n#[path = {boot:?}] pub mod boot;\n#[path = {memory:?}] mod memory;\npub use memory::{{Layout, Region}};\n}}\n",
             boot = layout_sources.join("boot.rs"),
             memory = layout_sources.join("memory.rs"),
         );

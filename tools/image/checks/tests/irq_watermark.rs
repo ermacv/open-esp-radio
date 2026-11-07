@@ -1,3 +1,3 @@
 // Exercise the exact platform scanner without an ESP target or a shadow model.
-#[path = "../../../../chips/family/staged-runtime/src/stacks/watermark.rs"]
+#[path = "../../../../chips/family/platform/runtime/src/stacks/watermark.rs"]
 mod watermark;

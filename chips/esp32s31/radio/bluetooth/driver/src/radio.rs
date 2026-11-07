@@ -13,7 +13,7 @@ use oer_chips_esp32s31_radio_client::bluetooth::{
     ControllerFault, PreparationFailure, RadioController,
 };
 use oer_chips_esp32s31_radio_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 
 use crate::{
     ble_phy::{BlePhyRuntime, ControllerBlePhyEngineInitialized},

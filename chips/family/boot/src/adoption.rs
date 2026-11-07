@@ -1,17 +1,17 @@
 //! Adoption of an already initialized platform, without cold boot or a
-//! staged-runtime dependency. Isolated verifier sessions use this same API.
+//! platform-runtime dependency. Isolated verifier sessions use this same API.
 
-use oer_chips_family_watchdog::{
+use oer_chips_family_peripherals_watchdog::{
     ArmedRtcWatchdog, MainWatchdog, MainWatchdogEnable, MainWatchdogRegisters, MicrosecondTick,
     RtcWatchdog, RtcWatchdogArm, StoppedMainWatchdog, SuperWatchdog, SuperWatchdogRegisters,
 };
 
 /// Accept only the mapping the staged entry proves is already in use.
 /// The board implementation performs no reset, remap or clock programming.
-/// This contract belongs to staged-layout, not to the staged runtime.
-pub fn adopt_mapping<B: oer_chips_family_staged_layout::handoff::AdoptsBootstrapMapping>(
+/// This contract belongs to platform-layout, not to the staged runtime.
+pub fn adopt_mapping<B: oer_chips_family_platform_layout::handoff::AdoptsBootstrapMapping>(
     board: B,
-    proof: &oer_chips_family_staged_layout::handoff::StageTwoHandoff,
+    proof: &oer_chips_family_platform_layout::handoff::StageTwoHandoff,
 ) -> B::Mapping {
     board.adopt(proof)
 }

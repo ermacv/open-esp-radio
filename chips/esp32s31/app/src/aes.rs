@@ -9,7 +9,7 @@ use super::{AesPeripheral, Boot, Error};
 /// flag within its settle, and the AES interrupt stays silent. An operation
 /// borrows it for the length of its call (`oer_portable_crypto::block::unwrap_now`),
 /// so it is free again on return.
-pub type AesEngine = oer_chips_esp32s31_runtime::crypto::AesEngine;
+pub type AesEngine = oer_chips_esp32s31_platform_runtime::crypto::AesEngine;
 
 impl AesPeripheral {
     /// The accelerator as the image's AES engine, owned by the caller from
@@ -22,7 +22,7 @@ impl AesPeripheral {
             .router()
             .silent::<AesInterrupt>()
             .map_err(|_| Error::InterruptRouted)?;
-        Ok(oer_chips_esp32s31_runtime::crypto::aes_engine(
+        Ok(oer_chips_esp32s31_platform_runtime::crypto::aes_engine(
             self.0, silent,
         ))
     }

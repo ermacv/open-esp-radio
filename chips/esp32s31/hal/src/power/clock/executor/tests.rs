@@ -371,7 +371,7 @@ fn execute_acquire<B: PlatformClockBackend>(
     ),
     super::super::PoisonedModemClockAcquire,
 > {
-    oer_chips_family_modem_clock::execution::acquire(
+    oer_chips_family_radio_modem_clock::execution::acquire(
         prepared,
         &mut ModemExecution {
             port,
@@ -386,7 +386,7 @@ fn execute_release<B: PlatformClockBackend>(
     port: &mut impl ModemClockPort,
     held: &mut ModemPlatformClocks<B>,
 ) -> Result<super::super::ModemClockPlanner, super::super::PoisonedModemClockRelease> {
-    oer_chips_family_modem_clock::execution::release(
+    oer_chips_family_radio_modem_clock::execution::release(
         prepared,
         &mut ModemExecution {
             port,

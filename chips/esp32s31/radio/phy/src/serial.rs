@@ -21,11 +21,11 @@ pub fn try_start_read(
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     address: Address,
 ) -> Result<(), PhyI2cError> {
-    oer_chips_family_phy::serial::AnalogBus::new(hal_phy_i2c::serial_port(registers))
+    oer_chips_family_radio_phy::serial::AnalogBus::new(hal_phy_i2c::serial_port(registers))
         .try_start_read(address)
         .map_err(|error| match error {
-            oer_chips_family_phy::serial::PhyI2cAccessError::Busy => PhyI2cError::Busy,
-            oer_chips_family_phy::serial::PhyI2cAccessError::UnroutedAddress => {
+            oer_chips_family_radio_phy::serial::PhyI2cAccessError::Busy => PhyI2cError::Busy,
+            oer_chips_family_radio_phy::serial::PhyI2cAccessError::UnroutedAddress => {
                 PhyI2cError::UnroutedAddress
             }
         })
@@ -45,13 +45,16 @@ pub fn try_finish_read(
     registers: &impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     address: Address,
 ) -> Result<u8, PhyI2cError> {
-    oer_chips_family_phy::serial::try_finish_read(&hal_phy_i2c::serial_sample(registers), address)
-        .map_err(|error| match error {
-            oer_chips_family_phy::serial::PhyI2cAccessError::Busy => PhyI2cError::Busy,
-            oer_chips_family_phy::serial::PhyI2cAccessError::UnroutedAddress => {
-                PhyI2cError::UnroutedAddress
-            }
-        })
+    oer_chips_family_radio_phy::serial::try_finish_read(
+        &hal_phy_i2c::serial_sample(registers),
+        address,
+    )
+    .map_err(|error| match error {
+        oer_chips_family_radio_phy::serial::PhyI2cAccessError::Busy => PhyI2cError::Busy,
+        oer_chips_family_radio_phy::serial::PhyI2cAccessError::UnroutedAddress => {
+            PhyI2cError::UnroutedAddress
+        }
+    })
 }
 
 /// Publish one complete-register PHY-I2C write after observing the
@@ -66,11 +69,11 @@ pub fn try_start_write(
     address: Address,
     value: u8,
 ) -> Result<(), PhyI2cError> {
-    oer_chips_family_phy::serial::AnalogBus::new(hal_phy_i2c::serial_port(registers))
+    oer_chips_family_radio_phy::serial::AnalogBus::new(hal_phy_i2c::serial_port(registers))
         .try_start_write(address, value)
         .map_err(|error| match error {
-            oer_chips_family_phy::serial::PhyI2cAccessError::Busy => PhyI2cError::Busy,
-            oer_chips_family_phy::serial::PhyI2cAccessError::UnroutedAddress => {
+            oer_chips_family_radio_phy::serial::PhyI2cAccessError::Busy => PhyI2cError::Busy,
+            oer_chips_family_radio_phy::serial::PhyI2cAccessError::UnroutedAddress => {
                 PhyI2cError::UnroutedAddress
             }
         })
@@ -89,11 +92,14 @@ pub fn try_finish_write(
     registers: &impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     address: Address,
 ) -> Result<(), PhyI2cError> {
-    oer_chips_family_phy::serial::try_finish_write(&hal_phy_i2c::serial_sample(registers), address)
-        .map_err(|error| match error {
-            oer_chips_family_phy::serial::PhyI2cAccessError::Busy => PhyI2cError::Busy,
-            oer_chips_family_phy::serial::PhyI2cAccessError::UnroutedAddress => {
-                PhyI2cError::UnroutedAddress
-            }
-        })
+    oer_chips_family_radio_phy::serial::try_finish_write(
+        &hal_phy_i2c::serial_sample(registers),
+        address,
+    )
+    .map_err(|error| match error {
+        oer_chips_family_radio_phy::serial::PhyI2cAccessError::Busy => PhyI2cError::Busy,
+        oer_chips_family_radio_phy::serial::PhyI2cAccessError::UnroutedAddress => {
+            PhyI2cError::UnroutedAddress
+        }
+    })
 }

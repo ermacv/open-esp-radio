@@ -317153,12 +317153,12 @@ oer_portable_mmio::check::disjoint_blocks(&[(0x20706c00, <super::lp_apm::LpApmFi
 /// register bytes and their fields. These values perform no hardware
 /// access.
 pub mod analog_i2c {
-    pub use oer_chips_family_analog::model::{
+    pub use oer_chips_family_peripherals_analog::model::{
         BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, KnownReset,
         RegisterFacts, Route, SampledByte,
     };
     /// One field of an analog-I2C byte.
-    pub type Field = oer_chips_family_analog::AnalogField<Address>;
+    pub type Field = oer_chips_family_peripherals_analog::AnalogField<Address>;
 
     /// The block codes.
     pub mod blocks {

@@ -57,7 +57,7 @@ pub enum ArenaError {
     Placement(crate::system::memory::dma_address::ProjectionError),
 }
 
-use oer_chips_family_bluetooth_engine::phase::EngineEpoch;
+use oer_chips_family_radio_bluetooth::phase::EngineEpoch;
 
 /// Hardware reachability became uncertain; the arena remains quarantined.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

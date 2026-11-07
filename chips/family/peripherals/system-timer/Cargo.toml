@@ -1,0 +1,18 @@
+[package]
+name = "oer-chips-family-peripherals-system-timer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The Espressif system timer's verified counter read over a chip's typed latch, for every context and both harts"
+
+[dependencies]
+oer-portable-time = { path = "../../../../portable/time" }
+
+[dev-dependencies]
+oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
+
+[lints]
+workspace = true

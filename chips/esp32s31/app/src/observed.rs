@@ -25,9 +25,11 @@ use oer_chips_esp32s31_hal::peripherals::cache_counters::{Buses, CacheCounters};
 use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1AlarmInterrupt, Timg1AlarmParts};
 #[cfg(feature = "group")]
 use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1Timer1Interrupt, Timg1Timer1Parts};
+use oer_chips_esp32s31_platform_runtime::sampler::{
+    self, Ended, SamplerTimer, StartError, Storage, Timer,
+};
 use oer_chips_esp32s31_radio_ieee80211_station::observation as station;
-use oer_chips_esp32s31_runtime::sampler::{self, Ended, SamplerTimer, StartError, Storage, Timer};
-use oer_chips_family_interrupt_table::Entry;
+use oer_chips_family_platform_interrupt_table::Entry;
 use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
 
@@ -257,7 +259,7 @@ pub(crate) struct ExecutorObserver<const SLOT: usize>;
 
 impl<const SLOT: usize> oer_portable_trace::Observer for ExecutorObserver<SLOT> {
     fn event<E: oer_portable_trace::Event + Copy + 'static>(&self, event: E) {
-        use oer_chips_family_executor::observation::{Activity, Phase as Executor};
+        use oer_chips_family_platform_executor::observation::{Activity, Phase as Executor};
         const {
             if SLOT >= EXECUTORS {
                 panic!("the observer's executor is one of the library's");
@@ -524,14 +526,14 @@ pub const SAMPLES: usize = 1024;
 /// a session runs and to the sampler's owner once it ended.
 type Kept = ClaimCell<&'static mut Thinning<SAMPLES>>;
 
-oer_chips_family_staged_runtime::placed_static! {
+oer_chips_family_platform_runtime::placed_static! {
     static SAMPLER: Storage<SamplerToken, Observer> = Storage::new(), in critical_data "pc_sampler";
     static BUFFER: ConstStaticCell<Thinning<SAMPLES>> = ConstStaticCell::new(Thinning::new()), in critical_data "pc_samples";
     static KEPT: Kept = ClaimCell::new(), in critical_data "pc_samples_claim";
 }
 
 #[cfg(feature = "group")]
-oer_chips_family_staged_runtime::placed_static! {
+oer_chips_family_platform_runtime::placed_static! {
     static SAMPLER1: Storage<super::Sampler1Token, Hart1Samples, sampler::Timer1> = Storage::new(), in critical_data "pc_sampler1";
     static BUFFER1: ConstStaticCell<Thinning<SAMPLES>> = ConstStaticCell::new(Thinning::new()), in critical_data "pc_samples1";
     static KEPT1: Kept = ClaimCell::new(), in critical_data "pc_samples1_claim";
@@ -765,8 +767,8 @@ pub(crate) fn hart0(
 #[cfg(feature = "group")]
 pub(crate) fn hart1(
     timg1: Timg1Timer1Parts,
-    router: &mut oer_chips_family_interrupt_table::Router<
-        impl oer_chips_family_interrupt_table::Controller,
+    router: &mut oer_chips_family_platform_interrupt_table::Router<
+        impl oer_chips_family_platform_interrupt_table::Controller,
         1,
     >,
     token: super::Sampler1Token,

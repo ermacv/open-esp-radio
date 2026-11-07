@@ -1,6 +1,6 @@
 #![no_std]
 use oer_chips_esp32s31_hal::radio::ieee802154::Ieee802154Clocked;
-use oer_chips_family_ieee802154_engine::lifecycle::Ieee802154FoundationReturn;
+use oer_chips_family_radio_ieee802154_engine::lifecycle::Ieee802154FoundationReturn;
 
 pub fn a_return_phase_cannot_be_forged() {
     #[cfg(ui_reject)]

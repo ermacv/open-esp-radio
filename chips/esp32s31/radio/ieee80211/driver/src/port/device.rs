@@ -23,7 +23,7 @@ use crate::{
 use core::cell::RefCell;
 use oer_chips_esp32s31_hal::{radio::ieee80211::dma::space::ChipDma, system::owner::RadioAccess};
 use oer_chips_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 use oer_portable_memory::HandlerCell;
 use oer_protocols_radio_regulatory::{PowerLimits, RegulatoryDomain};
 
@@ -113,7 +113,7 @@ struct Active<W> {
 
 /// The image supplies one hardware partition, actor cell, static RX arena,
 /// the router's proof that the image binds the radio handler's part (`V`,
-/// a [`Bound`](oer_chips_family_interrupt_table::Bound) of a
+/// a [`Bound`](oer_chips_family_platform_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)) and the doorbell.
 /// Every one stays with this task-side owner.
 pub struct RadioDevice<

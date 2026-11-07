@@ -11,7 +11,7 @@ several radio protocols use one RF path:
   hard deadline.
 
 There is no urgency level. The chip family's coexistence owner, such as
-[`oer-chips-family-coex`](../../../chips/family/coex/README.md), maps a client
+[`oer-chips-family-radio-coex`](../../../chips/family/radio/coex/README.md), maps a client
 and an operation to its event numbers, hardware priorities, request kinds and
 status words, which stay below the backend.
 

@@ -921,7 +921,7 @@ impl PhyColdMmioBinding {
 
         match self.outer_action {
             PhyRfInitPrefixAction::PbusClear(PhyPbusClearAction::ConfigureDebugMode) => {
-                oer_chips_family_phy::pbus::configure_debug_mode(
+                oer_chips_family_radio_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 )
             }
@@ -989,7 +989,7 @@ impl PhyColdMmioBinding {
             )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, enabled),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigurePbusDebugMode),
-            )) => oer_chips_family_phy::pbus::configure_debug_mode(
+            )) => oer_chips_family_radio_phy::pbus::configure_debug_mode(
                 &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
             ),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
@@ -1905,7 +1905,7 @@ impl PhyColdObservationBinding {
                 })
             }
             PhyColdObservationRequest::ConfigurePbusWorkMode => {
-                let settle_required = oer_chips_family_phy::pbus::configure_work_mode(
+                let settle_required = oer_chips_family_radio_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 self.into_completion(PhyColdObservationResult::PbusWorkMode { settle_required })
@@ -2115,11 +2115,11 @@ impl PhyColdPbusBinding {
                 PhyColdPbusError::WrongEdge
             });
         }
-        match oer_chips_family_phy::pbus::try_finish_force_test(
+        match oer_chips_family_radio_phy::pbus::try_finish_force_test(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
         ) {
             Ok(()) => self.observe_result(PhyColdPbusHardwareResult::Completed),
-            Err(oer_chips_family_phy::pbus::PbusError::Busy) => {
+            Err(oer_chips_family_radio_phy::pbus::PbusError::Busy) => {
                 self.observe_result(PhyColdPbusHardwareResult::Busy)
             }
         }

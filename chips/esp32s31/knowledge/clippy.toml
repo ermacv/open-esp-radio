@@ -1,5 +1,5 @@
 disallowed-methods = [
-    { path = "oer_chips_family_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
+    { path = "oer_chips_family_platform_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
     { path = "core::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
     { path = "core::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
     { path = "std::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
@@ -14,7 +14,7 @@ disallowed-methods = [
     { path = "oer_portable_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
     # Only the interrupt table's once gate constructs entry tokens. Binding
     # independently checks table membership and refuses claimed storage.
-    { path = "oer_chips_family_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
+    { path = "oer_chips_family_platform_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
 
     "slice::split_at",
     "slice::split_at_mut",
@@ -429,5 +429,5 @@ disallowed-macros = [
     "core::debug_assert",
     "core::debug_assert_eq",
     "core::debug_assert_ne",
-    "oer_chips_family_ieee802154_engine::engine::vendor_assert",
+    "oer_chips_family_radio_ieee802154_engine::engine::vendor_assert",
 ]

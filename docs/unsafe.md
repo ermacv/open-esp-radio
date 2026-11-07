@@ -125,14 +125,14 @@ Below it are, by directory (`/` ends a domain), for the S31 workspace:
 | --- | --- |
 | Volatile register words and their claim | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32s31/pac`, `chips/esp32s31/hal` |
-| Platform, interrupt bindings, executor and architectural instructions | `chips/esp32s31/board`, `chips/family/staged-bootstrap`, `chips/family/staged-runtime`, `chips/family/interrupt-table`, `chips/family/executor`, `portable/riscv` |
-| Cores of memory the hardware shares | `portable/memory`, `chips/family/staged-layout` |
+| Platform, interrupt bindings, executor and architectural instructions | `chips/esp32s31/platform/board`, `chips/family/platform/bootstrap`, `chips/family/platform/runtime`, `chips/family/platform/interrupt-table`, `chips/family/platform/executor`, `portable/riscv` |
+| Cores of memory the hardware shares | `portable/memory`, `chips/family/platform/layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
-| Bootstrap and probe images | `chips/esp32s31/bootstrap/`, `hil/probes/` |
+| Bootstrap and probe images | `chips/esp32s31/platform/bootstrap/`, `hil/probes/` |
 
-`oer-chips-family-interrupt-table` owns the Espressif interrupt matrix contract,
-vector ABI and staged-runtime symbols. CLIC line encodings live in
+`oer-chips-family-platform-interrupt-table` owns the Espressif interrupt matrix contract,
+vector ABI and platform-runtime symbols. CLIC line encodings live in
 `oer-portable-riscv::clic`, independent of chip geometry. Its narrow unsafe
 contracts cover the existing vector/table/exemption slot names and ABI
 types; signal execution proofs belong to `oer-portable-memory`. Every safe `Entry` implementation carries
@@ -315,7 +315,7 @@ checks enforce the RV32 slot width and row size. Machine entry/exit code
 remains in `global_asm!`, with frame operands derived from `TrapFrame`.
 
 Outside `oer-portable-riscv`, firmware assembly is only `global_asm!`/`naked_asm!` for
-entry/trap ABI work: staged-bootstrap's `entry.rs`, staged-runtime's `entry.rs`
+entry/trap ABI work: platform-bootstrap's `entry.rs`, platform-runtime's `entry.rs`
 and trap-frame/stack entries in `stacks.rs`, and bootstrap/probe images. The
 layer test
 `architectural_instructions_stay_in_oer_riscv` lists these owners and locations
@@ -670,7 +670,7 @@ RAW/ST, request/reply lengths and invalid-delay values. Numeric foreign-reunion
 identities are observations only, without ownership or dereference authority.
 The HAL declares the direct `link_fn!` binding and exports
 `phy_fault_reporter!` to define that exact signature. Staged images bind it
-to `oer-chips-esp32s31-runtime`'s `phy_fault::reset`, which calls
+to `oer-chips-esp32s31-platform-runtime`'s `phy_fault::reset`, which calls
 `fatal::reset_recording`. Its common-format record preserves the source
 payload and is cleared only after successful next-boot output.
 Isolated comparison probes supply their own reporter through the same HAL
@@ -822,7 +822,7 @@ unrestricted `define fn` and string-named `export` forms are unavailable.
 The HAL's `domain::transaction::PhyFaultSlot` owns
 `__oer_phy_transaction_fault: fn(Fault) -> !`. This one narrow unsafe slot
 implementation is the HAL's permitted one-site caller-count exception.
-`oer-chips-family-interrupt-table` owns its table, vector and exemption slot
+`oer-chips-family-platform-interrupt-table` owns its table, vector and exemption slot
 contracts; the memory home emits their attributes, preserving the image ABI.
 Duplicate strong definitions are rejected by the linker. A slot's unsafe owner
 must keep its declared name/type consistent with every foreign reader; safe
@@ -885,7 +885,7 @@ The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
 
 ## Firmware and platform code below the boundary
 
-`oer-chips-family-executor::installations` binds a nominal port identity to
+`oer-chips-family-platform-executor::installations` binds a nominal port identity to
 the minting authority of its successive installations.
 `declare_installations!` irreversibly claims its private `StaticCell` before
 constructing `SlotClaim<StaticId<Declaration>>` at one unsafe site, and turns
@@ -898,7 +898,7 @@ unique. No reference lifetime or owner is cast. Local scope claims have no
 static latch and use no unsafe code.
 
 The platform crates (the boards and `chips/family/staged-*`), the bootstrap images
-(`chips/esp32s31/bootstrap`) and the probe images (`hil/probes/*`) own the
+(`chips/esp32s31/platform/bootstrap`) and the probe images (`hil/probes/*`) own the
 target ABI and placement, so they hold unsafe code that no crate above them
 needs:
 
@@ -1088,7 +1088,7 @@ The Wi-Fi source120 fatal-assertion path keeps the full sampled RAW as
 an opaque diagnostic. It quarantines both interrupt banks before returning a
 named `irq::Fault` to the image. The image retains the preempted DMA owners and
 the handler's register owners through the chip composition's
-(`oer-chips-esp32s31-runtime`) never-returning shared `wifi_fault::reset`, which
+(`oer-chips-esp32s31-platform-runtime`) never-returning shared `wifi_fault::reset`, which
 calls the runtime's `fatal::reset_recording`,
 writes a twelve-byte record through the existing safe retained-cell API, and
 reports it at the next boot. The `wifi-fault` feature selects the one record

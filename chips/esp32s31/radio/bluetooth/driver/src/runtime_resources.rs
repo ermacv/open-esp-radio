@@ -15,7 +15,9 @@ use oer_chips_esp32s31_hal::radio::bluetooth::BluetoothModemLpTimerEpoch;
 #[cfg(any(target_arch = "riscv32", test))]
 use crate::resources::TaskResources;
 
-use oer_chips_family_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
+use oer_chips_family_platform_interrupt_table::signal::{
+    ForeignContext, IrqSignal, SignalExecutor,
+};
 
 use crate::{
     interrupt::SchedulerWakeCell,
@@ -421,11 +423,11 @@ mod scheduler;
 mod tests;
 
 #[cfg(test)]
-impl ControllerEventCells<oer_chips_family_interrupt_table::signal::host::Deferred> {
+impl ControllerEventCells<oer_chips_family_platform_interrupt_table::signal::host::Deferred> {
     /// Cells over fresh host signals whose facts wait for the take, as
     /// they wait for an executor the interrupt preempted.
     pub(crate) fn host() -> Self {
-        use oer_chips_family_interrupt_table::signal::host::deferred_signal;
+        use oer_chips_family_platform_interrupt_table::signal::host::deferred_signal;
         Self::new(deferred_signal().0, deferred_signal().0)
     }
 }

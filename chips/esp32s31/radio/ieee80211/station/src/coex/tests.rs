@@ -5,7 +5,7 @@
 )]
 
 use super::wifi_event;
-use oer_chips_family_coex::wifi_events;
+use oer_chips_family_radio_coex::wifi_events;
 use oer_protocols_ieee80211_contracts_port::{ConnectionFrame, Operation, TxOperation};
 
 #[test]

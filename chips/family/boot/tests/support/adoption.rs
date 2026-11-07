@@ -3,7 +3,7 @@
 use oer_chips_family_boot::adoption::{
     self, InitError, Owners, Port, WatchdogParts, WatchdogProfile,
 };
-use oer_chips_family_watchdog::{
+use oer_chips_family_peripherals_watchdog::{
     Access, MainConfig, MainWatchdogEnable, MainWatchdogRegisters, MicrosecondTick, RtcStageAction,
     RtcWatchdogArm, RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
 };

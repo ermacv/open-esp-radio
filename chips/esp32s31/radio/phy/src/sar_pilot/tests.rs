@@ -7,7 +7,7 @@ use oer_chips_esp32s31_hal::{
     system::owner::PhyRegistrationEpoch,
     system::root::RadioHardware,
 };
-use oer_chips_family_interrupt_table::signal::host::{self, Deferred};
+use oer_chips_family_platform_interrupt_table::signal::host::{self, Deferred};
 use oer_portable_time::Instant;
 use oer_portable_time_virtual::VirtualClock;
 use std::{

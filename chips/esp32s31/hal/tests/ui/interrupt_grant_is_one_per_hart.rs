@@ -2,7 +2,7 @@ use oer_chips_esp32s31_hal::{
     system::cores::Released,
     system::platform::{Hart1Controller, Hart1Grant, InterruptController, InterruptGrant},
 };
-use oer_chips_family_interrupt_table::Router;
+use oer_chips_family_platform_interrupt_table::Router;
 
 fn send<T: Send>() {}
 fn keep(_: Hart1Grant) {}

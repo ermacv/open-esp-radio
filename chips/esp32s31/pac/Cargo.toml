@@ -8,7 +8,7 @@ repository.workspace = true
 description = "The ESP32-S31 PAC: the exact hardware model generated from the chip's register model"
 
 [dependencies]
-oer-chips-family-analog = { path = "../../family/analog" }
+oer-chips-family-peripherals-analog = { path = "../../family/peripherals/analog" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-portable-mmio = { path = "../../../portable/mmio" }

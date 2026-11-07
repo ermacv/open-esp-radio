@@ -2,7 +2,7 @@
 //! the request and outcome, and the LP main timer that wakes it.
 //!
 //! [`SleepRegisters`] implements the family sleep port
-//! (`oer_chips_family_power::sleep::Registers`), one register operation per
+//! (`oer_chips_family_peripherals_power::sleep::Registers`), one register operation per
 //! method. The state it writes powers no domain down and keeps the PLLs, the
 //! main crystal and the fast RC oscillator on, with the regulators at their
 //! active output: only the CPU stalls, and the clock gates follow the
@@ -24,7 +24,7 @@ use oer_chips_esp32s31_pac::{
     },
     rtc_timer::RtcTimerWake,
 };
-use oer_chips_family_power::{
+use oer_chips_family_peripherals_power::{
     Access,
     sleep::{RawOutcome, Registers, RtcTicks, SleepClocks},
 };

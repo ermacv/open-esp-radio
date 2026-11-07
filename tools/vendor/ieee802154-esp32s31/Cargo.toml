@@ -17,11 +17,11 @@ links = "oer_esp32s31_ieee802154_vendor"
 
 
 [dependencies]
-oer-chips-family-ieee802154-mac-values = { path = "../../../chips/family/ieee802154-mac-values" }
+oer-chips-family-radio-ieee802154-values = { path = "../../../chips/family/radio/ieee802154/values" }
 hex = "=0.4.3"
 oer-chips-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
-oer-chips-family-coex = { path = "../../../chips/family/coex" }
-oer-chips-family-ieee802154-engine = { path = "../../../chips/family/ieee802154-engine" }
+oer-chips-family-radio-coex = { path = "../../../chips/family/radio/coex" }
+oer-chips-family-radio-ieee802154-engine = { path = "../../../chips/family/radio/ieee802154/engine" }
 oer-protocols-ieee802154-port = { path = "../../../protocols/ieee802154/port" }
 oer-protocols-ieee802154-wire = { path = "../../../protocols/ieee802154/wire" }
 # The comparison runs scenarios on any channel and power the vendor driver

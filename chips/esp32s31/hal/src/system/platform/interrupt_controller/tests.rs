@@ -7,7 +7,7 @@ use oer_chips_esp32s31_pac::{
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
 };
-use oer_chips_family_interrupt_table::{Binding, Class, Controller, Error, Router, Table};
+use oer_chips_family_platform_interrupt_table::{Binding, Class, Controller, Error, Router, Table};
 use oer_portable_mmio::{Bits, Host, Index, InterruptSource};
 
 use super::{
@@ -427,7 +427,7 @@ impl InterruptSource for WakeIrq {
 
 pub fn on_wake(_: &mut WakeIrq) {}
 
-oer_chips_family_interrupt_table::interrupt_table! {
+oer_chips_family_platform_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];
     contexts { radio: 3; }

@@ -21,7 +21,7 @@ type HostStatic = WifiRxStatic<
     1_664,
     1_664,
     32,
-    oer_chips_family_interrupt_table::signal::host::Host,
+    oer_chips_family_platform_interrupt_table::signal::host::Host,
     HostDma,
 >;
 
@@ -34,9 +34,9 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
     let (parts, mut stop, frames) = WifiRxArena::bind(
         oer_chips_esp32s31_hal::system::memory::dma_static::Placed::host(placed),
         crate::rx::arena::WifiIrqSignals {
-            mac: oer_chips_family_interrupt_table::signal::host::signal().0,
-            receive: oer_chips_family_interrupt_table::signal::host::signal().0,
-            power: oer_chips_family_interrupt_table::signal::host::signal().0,
+            mac: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+            receive: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
+            power: oer_chips_family_platform_interrupt_table::signal::host::signal().0,
         },
     )
     .expect("a zeroed static binds");
@@ -90,7 +90,7 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
 
     // The line lands in the arena's own slot.
     let cell: &'static oer_portable_memory::HandlerCell<
-        WifiIrqLine<oer_chips_family_interrupt_table::signal::host::Host>,
+        WifiIrqLine<oer_chips_family_platform_interrupt_table::signal::host::Host>,
     > = Box::leak(Box::new(oer_portable_memory::HandlerCell::new()));
     let Ok(installed) = parts.line.install(cell) else {
         panic!("an empty cell takes the line");

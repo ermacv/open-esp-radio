@@ -75,7 +75,7 @@ pub(crate) fn force_pbus_direct<C: oer_portable_time::Clock + ?Sized>(
         transaction.value(),
     );
     crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
-        Ok(oer_chips_family_phy::pbus::try_finish_force_test(
+        Ok(oer_chips_family_radio_phy::pbus::try_finish_force_test(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
         )
         .is_ok())
@@ -215,10 +215,10 @@ impl DirectOperationBudget {
 pub struct RomShortDelay;
 
 impl RomShortDelay {
-    pub const MAX_MICROS: u32 = oer_chips_family_phy::settle::MAX_MICROS;
+    pub const MAX_MICROS: u32 = oer_chips_family_radio_phy::settle::MAX_MICROS;
 
     pub fn settle_micros(micros: u32) -> bool {
-        oer_chips_family_phy::settle::settle_micros(
+        oer_chips_family_radio_phy::settle::settle_micros(
             &mut oer_chips_esp32s31_hal::radio::phy::settle_clock::SettleClock,
             micros,
         )
@@ -422,7 +422,7 @@ macro_rules! define_timeout_pbus_executor {
 define_i2c_executor!(
     complete_masked_i2c,
     MaskedI2cWriteBinding,
-    oer_chips_family_analog::Completion<crate::analog::i2c::Address>
+    oer_chips_family_peripherals_analog::Completion<crate::analog::i2c::Address>
 );
 define_i2c_executor!(
     complete_temperature_i2c,

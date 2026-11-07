@@ -9,12 +9,12 @@ build = "build.rs"
 description = "Retained ESP32-S31 Rust entry points for compiled vendor verification, and the linked probe image"
 
 [dependencies]
-oer-chips-family-phy = { path = "../../../chips/family/phy" }
+oer-chips-family-radio-phy = { path = "../../../chips/family/radio/phy" }
 oer-chips-family-boot = { path = "../../../chips/family/boot" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../../protocols/ieee80211/core/upper-mac" }
-oer-chips-family-ieee80211-policy = { path = "../../../chips/family/ieee80211-policy" }
+oer-chips-family-radio-ieee80211-policy = { path = "../../../chips/family/radio/ieee80211/policy" }
 oer-tools-probe-macros = { path = "../../../tools/probe/macros" }
-oer-chips-family-coex = { path = "../../../chips/family/coex" }
+oer-chips-family-radio-coex = { path = "../../../chips/family/radio/coex" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-chips-esp32s31-radio-ieee80211-driver = { path = "../../../chips/esp32s31/radio/ieee80211/driver" }
@@ -24,10 +24,10 @@ oer-chips-esp32s31-radio-phy = { path = "../../../chips/esp32s31/radio/phy" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-portable-riscv = { path = "../../../portable/riscv" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
-oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-chips-esp32s31-runtime = { path = "../../../chips/esp32s31/runtime" }
-oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
+oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/runtime" }
+oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform/runtime" }
+oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-portable-cooperate = { path = "../../../portable/cooperate" }
@@ -46,7 +46,7 @@ path = "src/hardware.rs"
 
 [build-dependencies]
 oer-tools-probe-codegen = { path = "../../../tools/probe/codegen" }
-oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

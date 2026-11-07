@@ -156,7 +156,7 @@ remains in RAW; detection waits for a later handler entry, which that masked
 cause alone does not guarantee.
 
 Staged Wi-Fi images select the `wifi-fault` feature of the chip composition
-(`oer-chips-esp32s31-runtime`) and pass the RAW sample to its `wifi_fault::reset`, retaining their interrupt and preempted DMA
+(`oer-chips-esp32s31-platform-runtime`) and pass the RAW sample to its `wifi_fault::reset`, retaining their interrupt and preempted DMA
 owners. That shared module owns one twelve-byte retained record and calls
 `fatal::reset_recording`; after the family adoption driver installs the early console,
 its `report_previous` consumes and prints the reason and complete RAW word.
@@ -239,7 +239,7 @@ One received frame and the owner of its DMA buffer at each step:
 
 1. **P3.** The radio handler masks RX delivery, acknowledges and raises
    the RX fact in the image's static receive `IrqSignal` of the station's
-   executor (`oer_chips_family_interrupt_table::signal`), which pends it and
+   executor (`oer_chips_family_platform_interrupt_table::signal`), which pends it and
    touches no waker; the buffer is the DMA engine's.
 2. **Actor.** The executor's next round wakes the actor, the signal's
    one waiter; the port's receive pull runs the

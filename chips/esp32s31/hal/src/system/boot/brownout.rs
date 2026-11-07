@@ -103,7 +103,7 @@ impl<P: Placement> Registers for BrownoutRegisters<P> {
     fn mode1_reset(&self, _: Access<'_>) -> bool {
         self.0.read_bod_mode1_cntl().bod_mode1_reset_ena()
     }
-    fn threshold_field() -> oer_chips_family_analog::AnalogField<Self::Address> {
+    fn threshold_field() -> oer_chips_family_peripherals_analog::AnalogField<Self::Address> {
         analog_i2c::ulp_bod::i2c_bod_threshold::I2C_BOD_THRESHOLD
     }
 }

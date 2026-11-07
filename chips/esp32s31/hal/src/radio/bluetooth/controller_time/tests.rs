@@ -21,7 +21,7 @@ struct Recorder {
     operations: Vec<Operation>,
 }
 
-impl oer_chips_family_bluetooth_engine::port::ControllerTimeRegisters for Recorder {
+impl oer_chips_family_radio_bluetooth::port::ControllerTimeRegisters for Recorder {
     type Request = BluetoothControllerTimeLatchRequest;
     fn publish_latch_request(&mut self, _request: BluetoothControllerTimeLatchRequest) {
         self.latch_request_pending = true;

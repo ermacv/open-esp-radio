@@ -1,5 +1,5 @@
 //! Runs a [`Scenario`] against the production engine
-//! (`oer_chips_family_ieee802154_engine::engine`) and records the same boundary
+//! (`oer_chips_family_radio_ieee802154_engine::engine`) and records the same boundary
 //! vocabulary as the compiled vendor driver.
 //!
 //! The adapter below is the only place that knows the vendor encodings: it
@@ -8,8 +8,8 @@
 //! [`LlModel`], so both sides see the same inputs. Modem ETM accesses are
 //! rendered as the vendor's direct register reads and writes.
 
-use oer_chips_family_ieee802154_mac_values::{FRAME_SIZE, Ieee802154EngineBuffers};
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{FRAME_SIZE, Ieee802154EngineBuffers};
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
     Ieee802154EventMask, Ieee802154EventObservation, Ieee802154MacCommand,
@@ -21,15 +21,17 @@ use oer_chips_family_ieee802154_mac_values::{
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[cfg(feature = "sw-coex")]
-use oer_chips_family_coex::{CoexEventId, CoexPtiTable};
+use oer_chips_family_radio_coex::{CoexEventId, CoexPtiTable};
 #[cfg(feature = "sw-coex")]
-use oer_chips_family_ieee802154_engine::coex::{Ieee802154CoexPriorities, Ieee802154Coexistence};
-use oer_chips_family_ieee802154_engine::engine::{
+use oer_chips_family_radio_ieee802154_engine::coex::{
+    Ieee802154CoexPriorities, Ieee802154Coexistence,
+};
+use oer_chips_family_radio_ieee802154_engine::engine::{
     Ieee802154Engine, Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo,
     Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154TxError,
 };
-use oer_chips_family_ieee802154_engine::pib::Ieee802154PibDefaults;
-use oer_chips_family_ieee802154_engine::{coex::CoexPti, ll::Ieee802154LowLevel};
+use oer_chips_family_radio_ieee802154_engine::pib::Ieee802154PibDefaults;
+use oer_chips_family_radio_ieee802154_engine::{coex::CoexPti, ll::Ieee802154LowLevel};
 use oer_protocols_ieee802154_port::AutoPendingMode;
 use oer_protocols_ieee802154_wire::FrameAddress;
 
@@ -812,8 +814,8 @@ fn level_table() -> CoexPtiTable {
 /// country, and the ceiling is the open domain's EIRP.
 fn permit(
     number: u8,
-    levels: oer_chips_family_ieee802154_mac_values::Ieee802154TxPowerLevels<'_>,
-) -> Option<oer_chips_family_ieee802154_engine::pib::Ieee802154Permit> {
+    levels: oer_chips_family_radio_ieee802154_values::Ieee802154TxPowerLevels<'_>,
+) -> Option<oer_chips_family_radio_ieee802154_engine::pib::Ieee802154Permit> {
     let channel = Ieee802154Channel::new(number).ok()?;
     let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
         .permit(channel)
@@ -823,7 +825,8 @@ fn permit(
         chip_maximum_mbm: i32::MAX,
         owner_cap_mbm: None,
     });
-    oer_chips_family_ieee802154_engine::pib::Ieee802154Permit::new(permitted, ceiling, levels).ok()
+    oer_chips_family_radio_ieee802154_engine::pib::Ieee802154Permit::new(permitted, ceiling, levels)
+        .ok()
 }
 
 /// Run `scenario` against the production engine.
@@ -845,7 +848,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
     let levels = LEVELS;
     let defaults = Ieee802154PibDefaults::default();
     let start = permit(11, levels).expect("channel 11 under the open domain");
-    let addresses = oer_chips_family_ieee802154_mac_values::Ieee802154DmaAddresses {
+    let addresses = oer_chips_family_radio_ieee802154_values::Ieee802154DmaAddresses {
         rx: core::array::from_fn(|slot| PortDmaAddress(slot as u32 + 1)),
         tx: PortDmaAddress(100),
         enhanced_ack: PortDmaAddress(101),
@@ -859,7 +862,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
         addresses,
         levels,
         defaults,
-        oer_chips_family_ieee802154_engine::engine::Ieee802154Interfaces::new(2)
+        oer_chips_family_radio_ieee802154_engine::engine::Ieee802154Interfaces::new(2)
             .expect("two interfaces"),
         start,
     );

@@ -1,6 +1,6 @@
 //! Mutable semantic entries; no mutable borrow of the family owner escapes.
 use super::*;
-use oer_chips_family_ieee802154_engine::{
+use oer_chips_family_radio_ieee802154_engine::{
     coex::Ieee802154Coexistence,
     engine::{
         Ieee802154Environment, Ieee802154FrameImageError, Ieee802154RxSlot,
@@ -8,7 +8,7 @@ use oer_chips_family_ieee802154_engine::{
     },
     pib::Ieee802154Pib,
 };
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
 };
 use oer_protocols_ieee802154_port::{AutoPendingMode, PendingTable};
@@ -184,7 +184,7 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
     /// [`SharedEngine::set_ack_timeout`], using this owner's MAC.
     pub fn set_ack_timeout(
         &mut self,
-        timeout: oer_chips_family_ieee802154_mac_values::Ieee802154AckTimeout,
+        timeout: oer_chips_family_radio_ieee802154_values::Ieee802154AckTimeout,
     ) {
         self.inner.set_ack_timeout(timeout)
     }
@@ -215,7 +215,7 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
     pub fn model_dma_read(
         &mut self,
         address: DmaWindowAddress,
-    ) -> Option<[u8; oer_chips_family_ieee802154_mac_values::FRAME_SIZE]> {
+    ) -> Option<[u8; oer_chips_family_radio_ieee802154_values::FRAME_SIZE]> {
         self.inner.model_dma_read(address)
     }
 

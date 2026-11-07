@@ -1,4 +1,4 @@
-//! Executor task polls. The executor (`oer-chips-family-executor`) polls each
+//! Executor task polls. The executor (`oer-chips-family-platform-executor`) polls each
 //! declared task through its instance of `task::poll_task`, never inlined,
 //! whose zero-sized first parameter has the type [`TASK_POLL_MARK`]
 //! (`task::PollBoundary`). The image's DWARF names that type for every
@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 /// The DWARF path of the type that marks a task poll boundary: the
 /// zero-sized first parameter of the executor's `task::poll_task`.
-pub const TASK_POLL_MARK: &str = "oer_chips_family_executor::task::PollBoundary";
+pub const TASK_POLL_MARK: &str = "oer_chips_family_platform_executor::task::PollBoundary";
 
 /// The task polls of the image `analysis` and `dwarf` describe: the direct
 /// calls of the boundaries the DWARF marks, each boundary a task root.

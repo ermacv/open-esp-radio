@@ -265,7 +265,7 @@ fn clear_wake_pbus<D: PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
     for _ in 0..RF_OPERATION_LIMIT {
         let completion = match transition.action() {
             PhyPbusClearAction::ConfigureDebugMode => {
-                oer_chips_family_phy::pbus::configure_debug_mode(
+                oer_chips_family_radio_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 PhyPbusClearCompletion::DebugModeConfigured
@@ -278,7 +278,7 @@ fn clear_wake_pbus<D: PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
                 }
             }
             PhyPbusClearAction::ConfigureWorkMode => {
-                let settle_required = oer_chips_family_phy::pbus::configure_work_mode(
+                let settle_required = oer_chips_family_radio_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 PhyPbusClearCompletion::WorkModeConfigured { settle_required }
@@ -501,11 +501,13 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                         async || delay::<D, _>(timer, Kind::Completion, 1).await,
                     )
                     .await
-                    .map_err(|error| match error {
-                        oer_chips_family_phy::i2c::PhyI2cInitializationStageTwoError::Wait(
+                    .map_err(|error| {
+                        match error {
+                        oer_chips_family_radio_phy::i2c::PhyI2cInitializationStageTwoError::Wait(
                             refused,
                         ) => refused.into(),
                         _ => PhyTargetPortError::HardwareEdgeTimedOut,
+                    }
                     })?;
                 }
                 PhyRfWakeOperation::PublishRetainedFrequencyI2c => {

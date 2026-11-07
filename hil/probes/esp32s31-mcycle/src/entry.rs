@@ -3,8 +3,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::Poll;
 
 use oer_portable_embassy_time::{EmbassyClock, WaitUntil};
-use oer_chips_esp32s31_board as board;
-use oer_chips_esp32s31_runtime::Esp32s31;
+use oer_chips_esp32s31_platform_board as board;
+use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_hal::system::cores::Cores;
 use oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
 use oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
@@ -14,21 +14,21 @@ use oer_chips_esp32s31_hal::peripherals::watchdog::{
 };
 use oer_chips_esp32s31_hal::system::platform::Port;
 use oer_chips_esp32s31_hal::system::root::Root;
-use oer_chips_family_executor::Executor;
-use oer_chips_family_staged_runtime::SecondaryHandoff;
+use oer_chips_family_platform_executor::Executor;
+use oer_chips_family_platform_runtime::SecondaryHandoff;
 use oer_portable_time::{Clock as _, Duration, Timer as _};
 
 use crate::calc::{Line, offset, per_10ms};
 
-oer_chips_family_staged_runtime::interrupt_table! {
+oer_chips_family_platform_runtime::interrupt_table! {
     contexts { app_wake: 1; }
     /// The boot hart's executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The boot hart's executor's timer alarm; it only acknowledges and pends.
-    alarm: AlarmToken = SystimerAlarm0 => oer_chips_family_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
+    alarm: AlarmToken = SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
 }
 
-oer_chips_family_executor::tasks! {
+oer_chips_family_platform_executor::tasks! {
     /// The boot hart's tasks.
     Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
@@ -57,7 +57,7 @@ const HART1_ANSWER: u64 = 10_000;
 /// The request that ends hart 1's sampling.
 const STOP: u32 = u32::MAX;
 
-oer_chips_family_staged_runtime::placed_static! {
+oer_chips_family_platform_runtime::placed_static! {
     /// The boot hart's latest sample request: written by the boot hart.
     static REQUEST: AtomicU32 = AtomicU32::new(0), in critical_data "hart_exchange";
     /// The request hart 1 answered last: written by hart 1.
@@ -75,22 +75,22 @@ oer_chips_family_staged_runtime::placed_static! {
 /// What hart 1 takes at its launch: nothing beyond its handoff.
 struct Hart1Parts;
 
-oer_chips_family_staged_runtime::entry!(main, Port);
-oer_chips_family_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1_main);
+oer_chips_family_platform_runtime::entry!(main, Port);
+oer_chips_family_platform_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1_main);
 
-fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
+fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((timer, software, watchdogs, reset_causes, hart1), _psram, mut adopted) =
-        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_runtime::Esp32s31, _, _>(
+        match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
             board::BootstrapPsram,
-            oer_chips_esp32s31_runtime::phy_fault::report_previous,
+            oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
             |hardware| {
-                let reset_causes = oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
+                let reset_causes = oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
                 (
                     hardware.system_timer,
                     hardware.software_interrupts,
@@ -106,8 +106,8 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_portable_diagnostics::name!("interrupt-table"; 32));
     };
-    let timers = oer_chips_family_executor::init::<Esp32s31, 0, _, _, _>(
-        oer_chips_family_executor::systimer::SystemTimer {
+    let timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>(
+        oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
         },
@@ -119,7 +119,7 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     let Ok(Some(mut cores)) = Cores::take() else {
         fail(oer_portable_diagnostics::name!("cores-taken"; 32));
     };
-    let _hart1 = oer_chips_esp32s31_runtime::secondary::launch_hart1(
+    let _hart1 = oer_chips_esp32s31_platform_runtime::secondary::launch_hart1(
         &mut cores,
         hart1,
         reset_causes,
@@ -169,7 +169,7 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, _parts: Hart1Parts) -> ! {
         }
     }
     match adopted.enable_interrupts() {
-        Ok(_router_and_hart) => oer_chips_family_staged_runtime::idle(),
+        Ok(_router_and_hart) => oer_chips_family_platform_runtime::idle(),
         Err(error) => fail(error.name()),
     }
 }
@@ -501,9 +501,9 @@ fn text(bytes: &[u8]) {
 
 /// Retain and report a failed boot step before explicitly resetting the image.
 fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
-    oer_chips_family_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
+    oer_chips_family_platform_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
         let _note = usb_serial_jtag::fatal_note(&oer_portable_diagnostics::Note::runtime_fail(reason));
     })
 }
 
-oer_chips_family_executor::time_driver!(Esp32s31);
+oer_chips_family_platform_executor::time_driver!(Esp32s31);

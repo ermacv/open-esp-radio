@@ -85,7 +85,7 @@ mod worker {
 
     use super::ControllerTimeSample;
 
-    use oer_chips_family_bluetooth_engine::port::ControllerTimePort;
+    use oer_chips_family_radio_bluetooth::port::ControllerTimePort;
 
     /// Opaque identity of one logical controller-time request.
     ///

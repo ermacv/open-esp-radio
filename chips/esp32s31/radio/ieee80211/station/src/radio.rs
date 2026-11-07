@@ -10,7 +10,6 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use oer_chips_esp32s31_board as board;
 use oer_chips_esp32s31_hal::{
     radio::ieee80211::{
         dma::{space::ChipDma, tx_storage::TxDmaStorage},
@@ -20,6 +19,7 @@ use oer_chips_esp32s31_hal::{
     },
     system::root::WifiPartition,
 };
+use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
 use oer_chips_esp32s31_radio_ieee80211_driver::mac::tx::{
     TxBacking, TxSlot,
@@ -42,7 +42,7 @@ use oer_chips_esp32s31_radio_ieee80211_driver::{
     tx::{CappedTxPowerProfile, WifiTxResources},
 };
 use oer_chips_esp32s31_radio_phy::{PhyConfig, PhyTxTargetPowerProfile};
-use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
+use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_events::EventSink;
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
@@ -71,7 +71,7 @@ type Inner<W> = RadioDevice<
     ImageComposition<W>,
     EmbassyClock,
     Platform,
-    oer_chips_family_interrupt_table::Bound<<W as Binding>::Wifi>,
+    oer_chips_family_platform_interrupt_table::Bound<<W as Binding>::Wifi>,
     irq::Bell<<W as Binding>::Wifi, <W as Binding>::DriverEntry>,
     N,
     B,
@@ -117,15 +117,17 @@ pub(crate) struct Boot<W: Binding> {
     pub delay_random: u32,
     pub station: [u8; 6],
     pub ap: [u8; 6],
-    pub bound: oer_chips_family_interrupt_table::Bound<W::Wifi>,
+    pub bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
     pub bell: irq::Bell<W::Wifi, W::DriverEntry>,
     pub config: Config,
     pub entropy: u32,
     pub interrupts: &'static Interrupts,
-    pub mac: &'static oer_chips_family_interrupt_table::signal::IrqSignal<DriverExecutor>,
+    pub mac: &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<DriverExecutor>,
     /// The MAC's receive facts, which wake the station's task.
-    pub receive: &'static oer_chips_family_interrupt_table::signal::IrqSignal<DriverExecutor>,
-    pub power: &'static oer_chips_family_interrupt_table::signal::IrqSignal<DriverExecutor>,
+    pub receive:
+        &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<DriverExecutor>,
+    pub power:
+        &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<DriverExecutor>,
     pub rx: oer_chips_esp32s31_hal::system::memory::dma_static::Placed<
         oer_chips_esp32s31_radio_ieee80211_driver::rx::arena::WifiRxStatic<
             N,
@@ -173,8 +175,8 @@ impl RadioCoexPriorities for Coex {
     fn beacon_window_pti(&self) -> oer_chips_esp32s31_hal::types::MacPti {
         const {
             oer_chips_esp32s31_hal::types::MacPti::from_coex(
-                oer_chips_family_coex::CoexPtiTable::VENDOR
-                    .pti(oer_chips_family_coex::wifi_events::BEACON),
+                oer_chips_family_radio_coex::CoexPtiTable::VENDOR
+                    .pti(oer_chips_family_radio_coex::wifi_events::BEACON),
             )
         }
     }

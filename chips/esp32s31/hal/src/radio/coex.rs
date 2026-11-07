@@ -11,7 +11,7 @@
 //! Timer 5 is not lent: the domain programs it for the PHY grant-protect
 //! request (`RadioDomain::acquire_phy_grant_protect`).
 //!
-//! [`CoexDomainPorts`] binds the family policy of `oer-chips-family-coex` to
+//! [`CoexDomainPorts`] binds the family policy of `oer-chips-family-radio-coex` to
 //! one radio domain: it lends the timer bank and the clock port to
 //! `CoexCore` as its `CoexTimerHardware` and `CoexClockHardware` ports.
 
@@ -22,7 +22,7 @@ use crate::radio::modem::{
 
 /// The event priority table every Espressif chip
 /// shares; the domain keeps one table as shared state.
-pub use oer_chips_family_coex::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable};
+pub use oer_chips_family_radio_coex::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable};
 
 mod clock;
 pub mod external;

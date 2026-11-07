@@ -30,7 +30,7 @@ impl Outputs {
         let chip = root.join("chips").join(chip);
         Self {
             pac: chip.join("pac/src/generated.rs"),
-            linker: chip.join("layout/linker/dma-window.x"),
+            linker: chip.join("platform/layout/linker/dma-window.x"),
         }
     }
 }

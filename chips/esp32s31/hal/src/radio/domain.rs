@@ -115,7 +115,7 @@ impl oer_portable_diagnostics::DiagnosticPath for BtbbError {
 /// publication of the current registration admits [`RadioDomain::btbb_acquire`];
 /// any earlier one is [`BtbbError::Stale`].
 #[derive(Debug, Eq, PartialEq)]
-pub struct BtbbGain(oer_chips_family_radio::domain::Gain<PhyRegistrationEpoch>);
+pub struct BtbbGain(oer_chips_family_radio_domain::domain::Gain<PhyRegistrationEpoch>);
 impl BtbbGain {
     pub const fn value(&self) -> u8 {
         self.0.value()
@@ -126,7 +126,7 @@ impl BtbbGain {
 /// ([`RadioDomain::btbb_publisher`]).
 pub struct BtbbPublisher<'d> {
     current: Option<PhyRegistrationEpoch>,
-    membership: &'d mut oer_chips_family_radio::domain::BtbbMembership,
+    membership: &'d mut oer_chips_family_radio_domain::domain::BtbbMembership,
 }
 
 impl BtbbPublisher<'_> {
@@ -167,7 +167,7 @@ struct SharedRadioState<B: PlatformClockBackend, T> {
     registers: SharedRadioRegisters,
     phy: PhyRouteState,
     power: CommonRadioPower<B>,
-    btbb: oer_chips_family_radio::domain::BtbbMembership,
+    btbb: oer_chips_family_radio_domain::domain::BtbbMembership,
     clocks: ModemClocks,
     /// Platform references of the modem clock planner's enabled
     /// dependencies; a poisoned planner keeps them held.
@@ -196,7 +196,7 @@ impl<B: PlatformClockBackend, T> SharedRadioState<B, T> {
 }
 
 type ModemClocks =
-    oer_chips_family_radio::modem::ModemClocks<crate::power::clock::Dependency, CLOCK_SLOTS>;
+    oer_chips_family_radio_domain::modem::ModemClocks<crate::power::clock::Dependency, CLOCK_SLOTS>;
 
 /// Why the Bluetooth low-power timer clock selection cannot change.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -656,10 +656,10 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 &mut state.registers,
             )
             .map(|acquired| match acquired {
-                oer_chips_family_radio::domain::BtbbAcquired::Initialized => {
+                oer_chips_family_radio_domain::domain::BtbbAcquired::Initialized => {
                     BtbbAcquired::Initialized
                 }
-                oer_chips_family_radio::domain::BtbbAcquired::Joined => BtbbAcquired::Joined,
+                oer_chips_family_radio_domain::domain::BtbbAcquired::Joined => BtbbAcquired::Joined,
             })
             .map_err(btbb_error)
     }
@@ -769,7 +769,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), LowPowerClockError> {
         let state = self.state_mut();
-        oer_chips_family_radio::domain::select_low_power(
+        oer_chips_family_radio_domain::domain::select_low_power(
             &mut state.bluetooth_low_power_clock,
             &mut LowPowerBinding {
                 phy: state.registers.radio_phy_mut(),
@@ -796,7 +796,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         _owner: &BluetoothTaskRegisters,
     ) -> Result<(), LowPowerClockError> {
         let state = self.state_mut();
-        oer_chips_family_radio::domain::deselect_low_power(
+        oer_chips_family_radio_domain::domain::deselect_low_power(
             &mut state.bluetooth_low_power_clock,
             &mut LowPowerBinding::<B, ()> {
                 phy: state.registers.radio_phy_mut(),
@@ -840,7 +840,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(ExternalCoexistence, u32), crate::radio::coex::ExternalCoexError> {
         let state = self.state_mut();
-        oer_chips_family_radio::domain::start_external(
+        oer_chips_family_radio_domain::domain::start_external(
             &mut state.external_coex,
             config,
             &mut ExternalBinding {
@@ -869,7 +869,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     ) -> Result<u32, crate::radio::coex::ExternalCoexError> {
         let state = self.state_mut();
         let remaining = state.coex_participants.leave_external(external);
-        oer_chips_family_radio::domain::stop_external(
+        oer_chips_family_radio_domain::domain::stop_external(
             &mut state.external_coex,
             &mut ExternalBinding {
                 registers: &mut state.registers,
@@ -1071,8 +1071,8 @@ use crate::{
     radio::phy::RadioPhyRegisters,
 };
 
-fn btbb_error(error: oer_chips_family_radio::domain::BtbbError) -> BtbbError {
-    use oer_chips_family_radio::domain::BtbbError as E;
+fn btbb_error(error: oer_chips_family_radio_domain::domain::BtbbError) -> BtbbError {
+    use oer_chips_family_radio_domain::domain::BtbbError as E;
     match error {
         E::AlreadyAcquired => BtbbError::AlreadyAcquired,
         E::NotAcquired => BtbbError::NotAcquired,
@@ -1080,8 +1080,8 @@ fn btbb_error(error: oer_chips_family_radio::domain::BtbbError) -> BtbbError {
         E::Stale => BtbbError::Stale,
     }
 }
-fn modem_error(error: oer_chips_family_radio::modem::Error) -> ModemClockError {
-    use oer_chips_family_radio::modem::Error;
+fn modem_error(error: oer_chips_family_radio_domain::modem::Error) -> ModemClockError {
+    use oer_chips_family_radio_domain::modem::Error;
     match error {
         Error::AlreadyEnabled => ModemClockError::AlreadyEnabled,
         Error::NotEnabled => ModemClockError::NotEnabled,
@@ -1090,16 +1090,16 @@ fn modem_error(error: oer_chips_family_radio::modem::Error) -> ModemClockError {
     }
 }
 fn low_power_error(
-    error: oer_chips_family_radio::domain::LowPowerError<PlatformClockError>,
+    error: oer_chips_family_radio_domain::domain::LowPowerError<PlatformClockError>,
 ) -> LowPowerClockError {
-    use oer_chips_family_radio::domain::LowPowerError;
+    use oer_chips_family_radio_domain::domain::LowPowerError;
     match error {
         LowPowerError::AlreadySelected => LowPowerClockError::AlreadySelected,
         LowPowerError::NotSelected => LowPowerClockError::NotSelected,
         LowPowerError::Platform(error) => LowPowerClockError::PlatformClock(error),
     }
 }
-impl oer_chips_family_radio::domain::BtbbPort for SharedRadioRegisters {
+impl oer_chips_family_radio_domain::domain::BtbbPort for SharedRadioRegisters {
     fn initialize(&mut self, gain: u8) {
         self.initialize_btbb_v2_arg_one(gain);
     }
@@ -1109,7 +1109,7 @@ struct LowPowerBinding<'a, B, P> {
     platform: P,
     backend: core::marker::PhantomData<fn() -> B>,
 }
-impl<B: PlatformClockBackend, P> oer_chips_family_radio::domain::LowPowerPort
+impl<B: PlatformClockBackend, P> oer_chips_family_radio_domain::domain::LowPowerPort
     for LowPowerBinding<'_, B, P>
 {
     type Guard = PlatformClockGuard<B>;
@@ -1125,7 +1125,7 @@ impl<B: PlatformClockBackend, P> oer_chips_family_radio::domain::LowPowerPort
     }
 }
 impl<B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
-    oer_chips_family_radio::domain::LowPowerAcquirePort for LowPowerBinding<'_, B, &P>
+    oer_chips_family_radio_domain::domain::LowPowerAcquirePort for LowPowerBinding<'_, B, &P>
 {
     fn select(&mut self) {
         select_bluetooth_low_power_clock(self.phy);
@@ -1141,7 +1141,7 @@ struct ExternalBinding<'a, B: PlatformClockBackend, P> {
     platform: P,
 }
 impl<B: PlatformClockBackend, P>
-    oer_chips_family_radio::domain::ExternalPort<crate::radio::coex::ExternalCoexConfig>
+    oer_chips_family_radio_domain::domain::ExternalPort<crate::radio::coex::ExternalCoexConfig>
     for ExternalBinding<'_, B, P>
 {
     type Error = crate::radio::coex::ExternalCoexError;
@@ -1165,7 +1165,7 @@ impl<B: PlatformClockBackend, P>
     }
 }
 impl<B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
-    oer_chips_family_radio::domain::ExternalStartPort<crate::radio::coex::ExternalCoexConfig>
+    oer_chips_family_radio_domain::domain::ExternalStartPort<crate::radio::coex::ExternalCoexConfig>
     for ExternalBinding<'_, B, &P>
 {
     type Delay = crate::radio::modem::values::ExternalCoexGrantDelay;

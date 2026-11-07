@@ -11,18 +11,18 @@ description = "Allocation-free Rust ESP32-S31 PHY state machines"
 radio-health = []
 
 [dependencies]
-oer-chips-family-phy = { path = "../../../family/phy" }
-oer-chips-family-analog = { path = "../../../family/analog" }
+oer-chips-family-radio-phy = { path = "../../../family/radio/phy" }
+oer-chips-family-peripherals-analog = { path = "../../../family/peripherals/analog" }
 oer-portable-diagnostics = { path = "../../../../portable/diagnostics" }
 oer-portable-time = { path = "../../../../portable/time" }
 oer-portable-cooperate = { path = "../../../../portable/cooperate" }
 oer-portable-memory = { path = "../../../../portable/memory" }
-oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table" }
+oer-chips-family-platform-interrupt-table = { path = "../../../family/platform/interrupt-table" }
 pin-project-lite = "0.2.17"
 oer-chips-esp32s31-hal = { path = "../../hal" }
 
 [dev-dependencies]
-oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table", features = ["host-signal"] }
+oer-chips-family-platform-interrupt-table = { path = "../../../family/platform/interrupt-table", features = ["host-signal"] }
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 oer-chips-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 

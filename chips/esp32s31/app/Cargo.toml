@@ -36,13 +36,13 @@ static_cell.workspace = true
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-chips-family-boot = { path = "../../family/boot" }
-oer-chips-esp32s31-board = { path = "../board" }
-oer-chips-esp32s31-runtime = { path = "../runtime", features = ["wifi-fault", "radio-fault"] }
+oer-chips-esp32s31-platform-board = { path = "../platform/board" }
+oer-chips-esp32s31-platform-runtime = { path = "../platform/runtime", features = ["wifi-fault", "radio-fault"] }
 oer-chips-esp32s31-hal = { path = "../hal" }
 oer-chips-esp32s31-radio-phy = { path = "../radio/phy" }
-oer-chips-family-executor = { path = "../../family/executor", features = ["installations"] }
-oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }
-oer-chips-family-staged-runtime = { path = "../../family/staged-runtime" }
+oer-chips-family-platform-executor = { path = "../../family/platform/executor", features = ["installations"] }
+oer-chips-family-platform-interrupt-table = { path = "../../family/platform/interrupt-table" }
+oer-chips-family-platform-runtime = { path = "../../family/platform/runtime" }
 oer-protocols-ieee80211-core-security-cipher = { path = "../../../protocols/ieee80211/core/security/cipher" }
 oer-protocols-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
 oer-chips-esp32s31-radio-ieee80211-station = { path = "../radio/ieee80211/station" }

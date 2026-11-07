@@ -41,7 +41,7 @@ use core::{
     pin::pin,
     task::Poll,
 };
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 
 use crate::mac::{
     init::{
@@ -181,7 +181,7 @@ pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 /// the chip) and `rx_dma` its RX DMA engine (`WifiRxDmaEngine`), the two
 /// halves `RadioAccess::split_rx_dma` lends.
 /// `bound` is the router's proof that the image's interrupt table binds the
-/// radio handler's part ([`Bound`](oer_chips_family_interrupt_table::Bound) of a
+/// radio handler's part ([`Bound`](oer_chips_family_platform_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)); the activation takes it. `cell` is the image's static cell that handler runs
 /// the line through. `publisher` and
 /// `admission` take the staged units ([`QueueSink`](super::upper::QueueSink)

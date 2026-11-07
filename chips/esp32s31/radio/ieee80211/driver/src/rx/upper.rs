@@ -19,7 +19,7 @@
 //! quarantined with [`DrainTimeout`](super::control::WifiRxQuarantine::DrainTimeout).
 
 use core::{future::poll_fn, task::Poll};
-use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 
 use crate::mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, decode_rx_local_timestamp, first_segment_layout,

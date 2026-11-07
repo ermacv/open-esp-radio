@@ -57,16 +57,21 @@ protocols/ieee80211/testing/{conformance, model}/
 protocols/ieee802154/{mac, model, port, wire}/
 protocols/network/{core, port, runtime, wire}/
 protocols/radio/{coex, port, regulatory}/
-chips/esp32s31/{app, board, bootstrap, crypto, hal, knowledge, layout, pac,
-    runtime}/
+chips/esp32s31/{app, hal, knowledge, pac}/
+chips/esp32s31/peripherals/crypto/
+chips/esp32s31/platform/{board, bootstrap, layout, runtime}/
 chips/esp32s31/radio/{client, phy, system}/
 chips/esp32s31/radio/bluetooth/driver/
 chips/esp32s31/radio/ieee80211/{driver, station}/
 chips/esp32s31/radio/ieee802154/driver/
-chips/family/{analog, app, bluetooth-engine, boot, coex, efuse, executor, facts,
-    ieee80211-policy, ieee802154-engine, ieee802154-mac-values, interrupt-table,
-    modem-clock, phy, platform-port, power, radio, staged-bootstrap, staged-layout,
-    staged-runtime, system-timer, usb-serial-jtag, watchdog}/
+chips/family/{app, boot, facts}/
+chips/family/peripherals/{analog, efuse, power, system-timer, usb-serial-jtag,
+    watchdog}/
+chips/family/platform/{bootstrap, executor, interrupt-table, layout, port,
+    runtime}/
+chips/family/radio/{bluetooth, coex, domain, modem-clock, phy}/
+chips/family/radio/ieee80211/policy/
+chips/family/radio/ieee802154/{engine, values}/
 oer/
 examples/wifi-station/
 hil/agent/
@@ -84,9 +89,9 @@ hil/services/{aes, fault, load, sdk-station, wifi-station}/
 - `chips/esp32s31/facts/` holds chip, module and board facts, partitions,
   ROM functions and stack budgets. `registers/` holds block types, layouts,
   the chip root, evidence and ownership policy, and `vendor/` holds artifact
-  pins and generated facts. `layout/linker/` holds the chip's linker fragments.
-- `chips/family/executor/` contains the executor and its `bind!` macro,
-  without a chip-specific feature or dependency. `chips/esp32s31/runtime/`
+  pins and generated facts. `platform/layout/linker/` holds the chip's linker fragments.
+- `chips/family/platform/executor/` contains the executor and its `bind!` macro,
+  without a chip-specific feature or dependency. `chips/esp32s31/platform/runtime/`
   declares the `Esp32s31` executor binding over the HAL's platform port,
   alongside the chip's retained fault records and its platform, console and
   SAR/PWDET bindings.
@@ -103,6 +108,8 @@ hil/services/{aes, fault, load, sdk-station, wifi-station}/
 
 ## Chip crates
 
+The family and each chip share one skeleton: `facts`, `platform`,
+`peripherals`, `radio` and `app` ([family](../chips/family/README.md)).
 `chips/<chip>/hal/src/` groups its modules in `system`, `power`,
 `peripherals` and `radio`. `chips/<chip>/radio/` holds the crates above the
 HAL's radio atoms: the PHY driver, the radio system and its client, and under
@@ -139,12 +146,12 @@ network contract on the codec.
 ## Known deviations
 
 - `protocols/ieee80211/runtime` has a dev-dependency on
-  `chips/family/ieee80211-policy`.
-- `chips/family/ieee80211-policy` has a dev-dependency on
+  `chips/family/radio/ieee80211/policy`.
+- `chips/family/radio/ieee80211/policy` has a dev-dependency on
   `chips/esp32s31/radio/ieee80211/driver`.
 - Normal dependencies outside their role:
   `chips/esp32s31/pac` renders the analog-I2C model types of
-  `chips/family/analog`; `chips/esp32s31/hal` depends on
+  `chips/family/peripherals/analog`; `chips/esp32s31/hal` depends on
   `protocols/radio/coex`; `chips/esp32s31/radio/ieee802154/driver` depends on `portable/mmio` for
   `Placement`.
 - HAL production files that wait or poll are listed with exact counts:

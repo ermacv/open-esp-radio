@@ -1,7 +1,7 @@
 # Network boundaries
 
 This directory owns stack-facing contracts; chip radio execution belongs to
-[`exec`](../../chips/family/executor/README.md). The HIL Wi-Fi station
+[`exec`](../../chips/family/platform/executor/README.md). The HIL Wi-Fi station
 image links the pinned Embassy/Xarxa network stack through
 `portable/embassy/net`. Direct normal stack dependencies belong to that
 adapter and firmware, outside the protocol cores and runtimes.

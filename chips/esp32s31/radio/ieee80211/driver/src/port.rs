@@ -72,7 +72,7 @@ pub const TX_AMPDU_SUBFRAMES: usize = crate::mac::tx::ampdu::TX_AMPDU_SLOT_CAPAC
 /// The transmit pool's buffers: two complete aggregates, one in the air and
 /// the next one growing, and three for MPDUs beside them, the archive's. A
 /// third aggregate's 53 KiB of SRAM hold the datapath's code instead
-/// (`chips/esp32s31/layout/linker/hot-code.x`): that takes a third of hart 0
+/// (`chips/esp32s31/platform/layout/linker/hot-code.x`): that takes a third of hart 0
 /// off the ceiling, and the network waits a little more often for a buffer.
 pub const TX_BUFFERS: usize = 2 * TX_AMPDU_SUBFRAMES + 3;
 

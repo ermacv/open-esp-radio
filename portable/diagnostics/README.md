@@ -4,7 +4,7 @@
 HIL images and the host decoder. It has two layers: raw typed records and the
 synchronous line frame used by the pilot apps. It installs no queue, retained
 storage, transport singleton or trace clock. The platform still owns panic
-capture and retained memory; `staged-runtime::diagnostics::previous_panic` is
+capture and retained memory; `platform-runtime::diagnostics::previous_panic` is
 the shared conversion of its unchanged `PanicRecord` to `PreviousPanic`.
 
 ## Fault envelope: `oer_portable_diagnostics::fault`

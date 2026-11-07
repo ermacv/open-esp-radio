@@ -7,7 +7,7 @@
 
 use oer_chips_esp32s31_pac::ieee802154::{Ieee802154MacIrq, event_status};
 
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
     Ieee802154RxAbortReasonObservation, Ieee802154StateSnapshot,
     Ieee802154TxAbortReasonObservation, Ieee802154TxStateCode,

@@ -5,20 +5,20 @@ use oer_chips_esp32s31_hal::{
     radio::domain::RadioDomain,
     system::root::{ProtocolPartitions, RadioHardware},
 };
+use oer_chips_esp32s31_platform_runtime::{Esp32s31, radio_fault};
 use oer_chips_esp32s31_radio_client::{self as client, LpClock, RcSlow};
 use oer_chips_esp32s31_radio_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, concurrent::ConcurrentPhy,
     phy_get_rf_cal_version, sar_pilot,
 };
 use oer_chips_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_chips_esp32s31_runtime::{Esp32s31, radio_fault};
 use oer_portable_embassy_time::EmbassyClock;
 type Inner<P, R> = RadioSystem<
     client::wifi::Wifi,
     RcSlow,
     Esp32s31Radio<
         ChipClocks,
-        oer_chips_family_executor::Cooperative<Esp32s31, EmbassyClock>,
+        oer_chips_family_platform_executor::Cooperative<Esp32s31, EmbassyClock>,
         NoopPhyTargetObserver,
         P,
         R,
@@ -56,7 +56,7 @@ impl RadioResources {
     pub fn new<W: Binding>(
         hardware: RadioHardware,
         clocks: ChipClocks,
-        factory: &oer_chips_esp32s31_runtime::platform::DeviceIdentity,
+        factory: &oer_chips_esp32s31_platform_runtime::platform::DeviceIdentity,
     ) -> Self {
         let identity = PhyCalibrationIdentity {
             rf_cal_version: phy_get_rf_cal_version(),
@@ -66,13 +66,13 @@ impl RadioResources {
         let (domain, partitions) = hardware
             .split::<ChipClocks, _>(
                 ConcurrentPhy::new(),
-                oer_chips_esp32s31_runtime::phy_fault::identity(),
+                oer_chips_esp32s31_platform_runtime::phy_fault::identity(),
             )
             .unwrap_or_else(|failure| {
                 let fault = failure.fault();
                 let _owners = failure;
                 W::fail(InitializationError::Phy(
-                    oer_chips_esp32s31_runtime::phy_fault::Failure::capture(fault),
+                    oer_chips_esp32s31_platform_runtime::phy_fault::Failure::capture(fault),
                 ))
             });
         let (Some((end, cells)), Some(lp)) = (client::claim(), LpClock::<RcSlow>::claim()) else {
@@ -99,7 +99,7 @@ impl RadioResources {
             self.domain,
             self.partitions.wifi_coex,
             self.clocks,
-            oer_chips_family_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
+            oer_chips_family_platform_executor::Cooperative::<Esp32s31, _>::new(EmbassyClock),
             NoopPhyTargetObserver,
             tracking,
             PhyRegisterConfig::new(self.identity),

@@ -6,7 +6,7 @@
 //! ([`RateSelection::completed`]): the rates and transmissions the attempt
 //! made teach it the next plan. It hears when its interface associates
 //! with a peer and when it leaves: a controller adapts per peer. The selection is an integrator's policy;
-//! the Espressif one (`oer-chips-family-ieee80211-policy::rate_selection`)
+//! the Espressif one (`oer-chips-family-radio-ieee80211-policy::rate_selection`)
 //! sends as the vendor's station does.
 
 use oer_portable_time::Instant;

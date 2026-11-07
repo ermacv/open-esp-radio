@@ -6,20 +6,20 @@
 //! layers from the ISA to the board), its `LAYOUT` (generated from those
 //! facts and the chip's stack policy; the linker scripts and the bootstrap
 //! read it), the stage-two header and the zeroed sections of
-//! `oer-chips-family-staged-layout` and the S31 reset-cause table of
+//! `oer-chips-family-platform-layout` and the S31 reset-cause table of
 //! `oer-chips-esp32s31-knowledge`.
 
 use std::{collections::BTreeSet, mem::offset_of};
 
 use oer_chips_family_facts::{Facts, Region};
-use oer_chips_family_staged_layout::{
+use oer_chips_family_platform_layout::{
     Layout, Region as LayoutRegion,
     stage_two::{self, Header},
     zeroed::RUNTIME_ZEROED_REGIONS,
 };
 use oer_tools_chip_profile::Profile;
 
-const CHIPS: [(&str, Layout); 1] = [("esp32s31", oer_chips_esp32s31_layout::LAYOUT)];
+const CHIPS: [(&str, Layout); 1] = [("esp32s31", oer_chips_esp32s31_platform_layout::LAYOUT)];
 
 fn profile(id: &str) -> Facts {
     Profile::tracked(id).unwrap().facts

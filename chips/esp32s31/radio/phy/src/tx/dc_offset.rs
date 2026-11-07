@@ -957,7 +957,7 @@ impl PhyTxDcMmioBinding {
     ) -> PhyTxDcCompletion {
         match self.action {
             PhyTxDcMmioAction::ConfigurePbusDebugMode => {
-                oer_chips_family_phy::pbus::configure_debug_mode(
+                oer_chips_family_radio_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 PhyTxDcCompletion::PbusDebugModeConfigured
@@ -1031,7 +1031,7 @@ impl PhyTxDcMmioBinding {
                 PhyTxDcCompletion::MeasurementCleared
             }
             PhyTxDcMmioAction::ConfigurePbusWorkMode => PhyTxDcCompletion::PbusWorkModeConfigured {
-                settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                settle_required: oer_chips_family_radio_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 ),
             },

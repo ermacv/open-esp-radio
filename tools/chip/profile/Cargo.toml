@@ -16,8 +16,8 @@ toml = "=1.1.4"
 
 [dev-dependencies]
 oer-chips-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
-oer-chips-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
-oer-chips-family-staged-layout = { path = "../../../chips/family/staged-layout" }
+oer-chips-esp32s31-platform-layout = { path = "../../../chips/esp32s31/platform/layout" }
+oer-chips-family-platform-layout = { path = "../../../chips/family/platform/layout" }
 tempfile = "=3.27.0"
 
 [lints]

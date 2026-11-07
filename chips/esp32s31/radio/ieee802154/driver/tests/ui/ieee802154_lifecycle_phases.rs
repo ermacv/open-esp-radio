@@ -1,7 +1,7 @@
 #![no_std]
 use oer_chips_esp32s31_hal::radio::ieee802154::Ieee802154Clocked;
-use oer_chips_family_ieee802154_engine::lifecycle::{Ieee802154FoundationReturn, Ieee802154Lifecycle};
-use oer_chips_family_ieee802154_mac_values::{Ieee802154ResetPort, Ieee802154ResetReadback};
+use oer_chips_family_radio_ieee802154_engine::lifecycle::{Ieee802154FoundationReturn, Ieee802154Lifecycle};
+use oer_chips_family_radio_ieee802154_values::{Ieee802154ResetPort, Ieee802154ResetReadback};
 
 pub struct ForeignReset;
 impl Ieee802154ResetPort for ForeignReset {

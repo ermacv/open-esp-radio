@@ -2,7 +2,7 @@
 //! boundary marked by its zero-sized `PollBoundary` parameter.
 use super::*;
 
-/// The executor's boundary with its tasks, as `oer-chips-family-executor`
+/// The executor's boundary with its tasks, as `oer-chips-family-platform-executor`
 /// shapes it: a never-inlined poll per task type whose first parameter is
 /// the mark type. `BOUNDARY`, `INLINE` and `MARK` stand for the function's
 /// name, its inlining and its first parameter's type.
@@ -26,7 +26,7 @@ pub mod task {
 const EXECUTOR_PROGRAM: &str = r#"
 #![no_std]
 #![no_main]
-use oer_chips_family_executor::task::{Body, poll};
+use oer_chips_family_platform_executor::task::{Body, poll};
 struct First;
 struct Second;
 struct Third;
@@ -52,8 +52,8 @@ fn unpolled() { poll::<Third>(); }
 "#;
 
 /// The boundary's address taken, never called.
-const TAKEN: &str = "core::hint::black_box(oer_chips_family_executor::task::BOUNDARY::<Third> \
-                     as fn(oer_chips_family_executor::task::MARK) -> bool);";
+const TAKEN: &str = "core::hint::black_box(oer_chips_family_platform_executor::task::BOUNDARY::<Third> \
+                     as fn(oer_chips_family_platform_executor::task::MARK) -> bool);";
 
 /// The fixture with its boundary named `boundary`, inlined or not, marked
 /// by `mark`, and with the third task's boundary address taken or not.
@@ -69,7 +69,7 @@ fn executor_image(boundary: &str, inline: &str, mark: &str, taken: bool) -> Vec<
             .replace("KEEP", keep)
             .replace("BOUNDARY", boundary)
             .replace("MARK", mark),
-        "oer_chips_family_executor",
+        "oer_chips_family_platform_executor",
         "image",
     )
 }
@@ -87,7 +87,7 @@ fn task_polls(elf: &[u8], analysis: &Analysis, executor: bool) -> Result<Resolut
 
 /// The addresses of the functions `elf` names `boundary::<…>`.
 fn instances(elf: &[u8], boundary: &str) -> BTreeSet<u32> {
-    let prefix = format!("oer_chips_family_executor::task::{boundary}::<");
+    let prefix = format!("oer_chips_family_platform_executor::task::{boundary}::<");
     functions(elf)
         .unwrap()
         .iter()

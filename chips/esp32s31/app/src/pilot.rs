@@ -5,10 +5,10 @@ use oer_chips_esp32s31_hal::{
         Fault, FaultReason, PhyTransaction, SarSetupFault, SarSetupStorage,
     },
 };
+use oer_chips_esp32s31_platform_runtime::{Esp32s31, phy_fault};
 use oer_chips_esp32s31_radio_phy::sar_pilot::{self, Service};
-use oer_chips_esp32s31_runtime::{Esp32s31, phy_fault};
-use oer_chips_family_executor::InterruptExecutor;
-use oer_chips_family_interrupt_table::{
+use oer_chips_family_platform_executor::InterruptExecutor;
+use oer_chips_family_platform_interrupt_table::{
     Bound, Controller, Entry, Router,
     signal::{FromExecutorLevel, IrqSignal},
 };
@@ -38,7 +38,7 @@ pub struct Storage<I: Entry<Part = Timg0AlarmInterrupt> + 'static> {
 impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
     pub const fn new<R: Entry>() -> Self
     where
-        R::Part: oer_chips_family_interrupt_table::InterruptSource,
+        R::Part: oer_chips_family_platform_interrupt_table::InterruptSource,
     {
         Self {
             cells: StaticCell::new(),
@@ -66,7 +66,7 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
             reset(SarSetupStorage::Handler);
         }
         let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
-            oer_chips_family_staged_runtime::interrupts::reset_binding::<
+            oer_chips_family_platform_runtime::interrupts::reset_binding::<
                 oer_chips_esp32s31_hal::system::platform::Port,
                 _,
             >(error)

@@ -1,7 +1,7 @@
 //! Owned PMU atoms and the family analog-I2C power port.
 
 use crate::system::owner::SharedPhyAccess;
-use oer_chips_family_phy::analog_i2c::AnalogI2cPowerAccess;
+use oer_chips_family_radio_phy::analog_i2c::AnalogI2cPowerAccess;
 
 /// Exclusive borrowed PMU atoms; no register or restore authority escapes.
 pub struct PowerPort<'a, T: ?Sized>(&'a mut T);

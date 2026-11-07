@@ -10,9 +10,9 @@ use oer_chips_esp32s31_pac::ieee802154::{
     ed_config::{CcaMode, EdSampleMode},
     event_enable, rx_abort_enable, security_key, tx_abort_enable,
 };
-use oer_chips_family_coex::CoexPti;
-use oer_chips_family_ieee802154_mac_values::COEX_DISABLED_PTI;
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_coex::CoexPti;
+use oer_chips_family_radio_ieee802154_values::COEX_DISABLED_PTI;
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154Event, Ieee802154MacControl, Ieee802154MultipanEnableState,
     Ieee802154MultipanIndex, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet, Ieee802154RxStatus,
@@ -22,7 +22,7 @@ use oer_portable_mmio::{Bits, Index, Placement};
 
 use super::{Ieee802154TaskOwner, codes};
 use crate::layouts::DmaWindowAddress;
-use oer_chips_family_ieee802154_mac_values::{
+use oer_chips_family_radio_ieee802154_values::{
     Ieee802154FoundationSnapshot, Ieee802154MacPolicySnapshot,
 };
 
@@ -357,7 +357,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// Enable exactly the events the interrupt handler serves.
     pub(crate) fn replace_events(
         &mut self,
-        events: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask,
+        events: oer_chips_family_radio_ieee802154_values::Ieee802154EventMask,
     ) {
         self.mac.modify_event_enable(|writer| {
             set_all_events(writer, false);

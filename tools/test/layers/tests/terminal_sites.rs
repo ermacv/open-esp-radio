@@ -34,7 +34,7 @@ const CLASSES: &[&str] = &[
 // terminal decision; the registry names the image/platform owner of each reason.
 const REASON_ENUMS: &[(&str, &str)] = &[
     (
-        "chips/family/staged-runtime/src/panic/fault.rs",
+        "chips/family/platform/runtime/src/panic/fault.rs",
         "FaultReason",
     ),
     (
@@ -139,8 +139,8 @@ impl Scanner<'_> {
 
     fn image_panic_scope(&self) -> bool {
         image_file(self.file)
-            || self.file.starts_with("chips/family/staged-runtime/")
-            || self.file.starts_with("chips/family/staged-bootstrap/")
+            || self.file.starts_with("chips/family/platform/runtime/")
+            || self.file.starts_with("chips/family/platform/bootstrap/")
     }
 
     // Macro bodies are token trees: inspect definitions as well as invocations,
@@ -253,7 +253,7 @@ fn reset_module(name: &str) -> bool {
         "fatal",
         "runtime",
         "staged",
-        "oer_chips_family_staged_runtime",
+        "oer_chips_family_platform_runtime",
     ]
     .contains(&name)
         || name.ends_with("_fault")
@@ -294,7 +294,7 @@ fn aliases(tree: &syn::UseTree, prefix: Vec<String>, found: &mut BTreeMap<String
             } else {
                 &name
             };
-            if ["fatal", "oer_chips_family_staged_runtime"].contains(&module) {
+            if ["fatal", "oer_chips_family_platform_runtime"].contains(&module) {
                 found.insert(rename.rename.to_string(), module.into());
             }
             if terminal_api(&name)
@@ -374,10 +374,10 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
         }
         match item {
             syn::Item::Const(item) => {
-                if (self.file == "chips/family/staged-runtime/src/panic.rs"
+                if (self.file == "chips/family/platform/runtime/src/panic.rs"
                     && item.ident == "INVALID_HART")
-                    || (self.file == "chips/family/staged-runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
-                    || (self.file == "chips/family/staged-runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
+                    || (self.file == "chips/family/platform/runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
+                    || (self.file == "chips/family/platform/runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
                 {
                     self.add(item.ident.span(), "retained-reason", &item.ident);
                 }
@@ -652,8 +652,10 @@ fn image_file(path: &str) -> bool {
     ["examples/", "hil/images/", "hil/probes/"]
         .iter()
         .any(|root| path.starts_with(root))
-        || (path.starts_with("chips/") && path.ends_with("/bootstrap"))
-        || path.starts_with("chips/esp32s31/bootstrap/")
+        || (path.starts_with("chips/")
+            && !path.starts_with("chips/family/")
+            && path.ends_with("/bootstrap"))
+        || path.starts_with("chips/esp32s31/platform/bootstrap/")
 }
 
 fn scan(root: &Path) -> ScannedSites {
@@ -820,10 +822,10 @@ fn admitted_owner(id: &str) -> Option<&str> {
     let (home, _) = file.split_once("/src/")?;
     if [
         "chips/esp32s31/hal",
-        "chips/esp32s31/runtime",
-        "chips/family/staged-runtime",
-        "chips/family/staged-bootstrap",
-        "chips/family/executor",
+        "chips/esp32s31/platform/runtime",
+        "chips/family/platform/runtime",
+        "chips/family/platform/bootstrap",
+        "chips/family/platform/executor",
         "chips/esp32s31/app",
     ]
     .contains(&home)
@@ -1069,15 +1071,15 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
     let source = r#"
         use runtime::fatal::{reset_recording as reboot, reset as restart};
         use core::panic as fail;
-        use oer_chips_family_staged_runtime::{self as rt};
-        use oer_chips_family_staged_runtime as platform;
+        use oer_chips_family_platform_runtime::{self as rt};
+        use oer_chips_family_platform_runtime as platform;
         fn run() { reboot::<Port>(|_| ()); restart::<Port>(); fail!("image"); rt::reset::<Port>(); platform::reset::<Port>(); }
         macro_rules! emitted { () => { runtime::fatal::reset::<Port>(); rt::reset::<Port>(); } }
         enum FaultReason { One = 1, Two = 2 }
     "#;
     let parsed = syn::parse_file(source).expect("fixture parses");
     let mut scanner = Scanner {
-        file: "chips/family/staged-runtime/src/panic/fault.rs",
+        file: "chips/family/platform/runtime/src/panic/fault.rs",
         source,
         item: vec!["crate".into()],
         ordinals: BTreeMap::new(),

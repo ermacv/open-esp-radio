@@ -700,7 +700,7 @@ impl PhyTxIqCoverTransition {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackAction {
-    I2c(oer_chips_family_analog::Action<crate::analog::i2c::Address, ()>),
+    I2c(oer_chips_family_peripherals_analog::Action<crate::analog::i2c::Address, ()>),
     ConfigureTxClock { enabled: bool },
     ConfigureRxClock { enabled: bool },
     Complete { enabled: bool },
@@ -708,7 +708,7 @@ pub enum PhyTxIqLoopbackAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackCompletion {
-    I2c(oer_chips_family_analog::Completion<crate::analog::i2c::Address>),
+    I2c(oer_chips_family_peripherals_analog::Completion<crate::analog::i2c::Address>),
     TxClockConfigured { enabled: bool },
     RxClockConfigured { enabled: bool },
 }
@@ -721,7 +721,7 @@ pub enum PhyTxIqLoopbackTransitionError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LoopbackStep {
-    I2c(oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>),
+    I2c(oer_chips_family_peripherals_analog::FieldWriteTransition<crate::analog::i2c::Address>),
     TxClock,
     RxClock,
     Complete,
@@ -772,7 +772,8 @@ impl PhyTxIqLoopbackTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxIqLoopbackTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(())
+                self.step = if transition.action()
+                    == oer_chips_family_peripherals_analog::Action::Complete(())
                 {
                     LoopbackStep::TxClock
                 } else {
@@ -1627,7 +1628,7 @@ impl PhyTxIqMmioBinding {
                 Ok(PhyTxIqCalibrationCompletion::CorrectionConfigured { begin })
             }
             PhyTxIqMmioAction::ConfigurePbusDebugMode => {
-                oer_chips_family_phy::pbus::configure_debug_mode(
+                oer_chips_family_radio_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 Ok(PhyTxIqCalibrationCompletion::PbusDebugModeConfigured)

@@ -37,7 +37,7 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_portable_time::
         };
         let completion = match child.action() {
             Action::ConfigureDebugMode => {
-                oer_chips_family_phy::pbus::configure_debug_mode(
+                oer_chips_family_radio_phy::pbus::configure_debug_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 );
                 Completion::DebugModeConfigured
@@ -50,7 +50,7 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_portable_time::
                 }
             }
             Action::ConfigureWorkMode => Completion::WorkModeConfigured {
-                settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                settle_required: oer_chips_family_radio_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
                 ),
             },

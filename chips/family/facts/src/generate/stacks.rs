@@ -112,7 +112,7 @@ impl Vectors {
 
     /// Exact coverage inventory plus the reviewed, handwritten ABI obligations.
     pub fn stack_coverage(&self) -> Result<String> {
-        let template = include_str!("../../../staged-layout/stack-coverage-reviews.toml");
+        let template = include_str!("../../../platform/layout/stack-coverage-reviews.toml");
         if !template.contains("symbols = [") {
             return Err("missing assembly coverage symbols".into());
         }
