@@ -10,8 +10,8 @@ use oer_protocols_network_wire::ip::Dscp;
 use crate::block::{Block, CoreBrand, Pool};
 use crate::interface::Interface;
 use crate::machine::{
-    CommandId, CommandState, Core, Datagram, Demand, Grant, NetEvent, OpenRefused, Remote,
-    RetiredResults, SendRefused, SocketId, StaleSocket,
+    CommandId, CommandState, Core, Datagram, Demand, Eviction, Grant, NetEvent, OpenRefused,
+    Queued, Remote, RetiredResults, SendRefused, SocketId, StaleSocket,
 };
 
 /// What a retired core hands on, each to its own owner.
@@ -222,6 +222,16 @@ impl<
     /// [`StaleSocket`].
     pub fn close(&mut self, socket: SocketId<B>) -> Result<CommandId<B>, StaleSocket> {
         self.core.close(socket, &mut self.pool)
+    }
+
+    /// See [`Core::queued`].
+    pub fn queued(&self) -> impl Iterator<Item = Queued<B>> + '_ {
+        self.core.queued()
+    }
+
+    /// See [`Core::evict`].
+    pub fn evict(&mut self, queued: Queued<B>, eviction: Eviction) -> bool {
+        self.core.evict(queued, eviction, &mut self.pool)
     }
 
     /// See [`Core::take_result`].

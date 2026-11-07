@@ -12,7 +12,7 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Block, BrandRefusal, CommandState, CoreBrand, Interface, InterfaceError, NetEvent,
+    Block, BrandRefusal, CommandState, CoreBrand, Eviction, Interface, InterfaceError, NetEvent,
     NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal, Unsent, claim,
 };
 use oer_protocols_network_port::{Class, FramePort, SlotTooShort};
@@ -1172,5 +1172,44 @@ fn a_refused_datagram_keeps_its_turn() {
         assert_eq!(demand.ready.flow, flow, "refused work stays first");
         stack.transmit(at(1), demand.grant()).unwrap();
         assert_ne!(stack.poll_demand(at(1)).unwrap().ready.flow, flow);
+    });
+}
+
+#[test]
+fn an_evicted_datagram_returns_its_block_and_names_its_end() {
+    world!(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"waits");
+        let command = stack.send(at(3), &socket, peer(), block).unwrap();
+        let held = stack.pool().free();
+        let queued = stack.queued().next().unwrap();
+        assert_eq!((queued.flow, queued.since), (socket.flow(), at(3)));
+        assert!(stack.evict(queued, Eviction::MemoryPressure));
+        assert_eq!(stack.pool().free(), held + 1);
+        assert!(stack.queued().next().is_none());
+        assert_eq!(
+            stack.take_result(command),
+            CommandState::Finished(Outcome::Evicted(Eviction::MemoryPressure))
+        );
+        assert!(stack.poll_deadline().is_none(), "no neighbor is asked for");
+    });
+}
+
+#[test]
+fn work_the_port_took_cannot_be_evicted() {
+    world!(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"goes");
+        let command = stack.send(at(0), &socket, peer(), block).unwrap();
+        let reply = arp_frame(Operation::Reply, (PEER, PEER_IP), OUR_IP);
+        send_next(stack, at(0)).unwrap();
+        stack.input(at(1), &reply, &mut ());
+        let queued = stack.queued().next().unwrap();
+        send_next(stack, at(1)).unwrap();
+        assert!(!stack.evict(queued, Eviction::MemoryPressure));
+        assert_eq!(
+            stack.take_result(command),
+            CommandState::Finished(Outcome::Accepted)
+        );
     });
 }
