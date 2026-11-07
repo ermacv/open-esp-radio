@@ -5,8 +5,8 @@
 
 pub(crate) use crate::binding::Binding;
 use crate::{Failure, Fault, SoftwareInterrupt};
-use oer_chips_family_boot::drivers::system_timer;
 use oer_chips_family_platform_port::{ExecutorPlatform, Hart};
+use oer_chips_family_system_timer as system_timer;
 
 use crate::software_line::{SoftwareLine, raise, serve};
 

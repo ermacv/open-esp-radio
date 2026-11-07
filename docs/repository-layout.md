@@ -66,7 +66,7 @@ chips/esp32s31/radio/ieee802154/driver/
 chips/family/{analog, app, bluetooth-engine, boot, coex, efuse, executor, facts,
     ieee80211-policy, ieee802154-engine, ieee802154-mac-values, interrupt-table,
     modem-clock, phy, platform-port, power, radio, staged-bootstrap, staged-layout,
-    staged-runtime, usb-serial-jtag, watchdog}/
+    staged-runtime, system-timer, usb-serial-jtag, watchdog}/
 oer/
 examples/wifi-station/
 hil/agent/

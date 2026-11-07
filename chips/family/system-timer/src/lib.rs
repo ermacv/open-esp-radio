@@ -1,3 +1,17 @@
+#![no_std]
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::disallowed_methods
+)]
 //! The read of the system timer's counter, which every context makes: strobe
 //! the latch of unit zero, wait the short settle until the latched value is
 //! valid, then read LO, HI, LO until the two LO reads agree with the latch
@@ -141,6 +155,9 @@ pub fn read(latch: &impl CounterLatch) -> Result<u64, Unverified> {
     };
     Err(Unverified { floor })
 }
+
+#[cfg(test)]
+extern crate std;
 
 #[cfg(test)]
 mod tests;

@@ -1434,6 +1434,7 @@ dependencies = [
  "oer-chips-family-boot",
  "oer-chips-family-facts",
  "oer-chips-family-staged-bootstrap",
+ "oer-chips-family-system-timer",
  "oer-portable-time",
  "static_cell",
 ]
@@ -1470,6 +1471,7 @@ dependencies = [
  "oer-chips-family-platform-port",
  "oer-chips-family-power",
  "oer-chips-family-radio",
+ "oer-chips-family-system-timer",
  "oer-chips-family-usb-serial-jtag",
  "oer-chips-family-watchdog",
  "oer-portable-diagnostics",
@@ -1753,10 +1755,10 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embassy-time-driver",
- "oer-chips-family-boot",
  "oer-chips-family-interrupt-table",
  "oer-chips-family-platform-port",
  "oer-chips-family-staged-runtime",
+ "oer-chips-family-system-timer",
  "oer-portable-cooperate",
  "oer-portable-memory",
  "oer-portable-mmio",
@@ -1878,6 +1880,7 @@ dependencies = [
  "oer-chips-family-boot",
  "oer-chips-family-platform-port",
  "oer-chips-family-staged-layout",
+ "oer-chips-family-system-timer",
  "oer-portable-memory",
  "oer-portable-riscv",
  "oer-portable-time",
@@ -1907,6 +1910,14 @@ dependencies = [
  "oer-portable-trace",
  "oer-tools-test-ui-cases",
  "tempfile",
+]
+
+[[package]]
+name = "oer-chips-family-system-timer"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+ "oer-portable-time-virtual",
 ]
 
 [[package]]

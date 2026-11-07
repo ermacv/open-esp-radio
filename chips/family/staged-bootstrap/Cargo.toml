@@ -12,6 +12,7 @@ oer-portable-time = { path = "../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-chips-family-boot = { path = "../boot" }
+oer-chips-family-system-timer = { path = "../system-timer" }
 oer-portable-riscv = { path = "../../../portable/riscv" }
 oer-chips-family-staged-layout.workspace = true
 oer-chips-family-platform-port = { path = "../platform-port" }
