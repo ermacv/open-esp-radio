@@ -1492,6 +1492,7 @@ fn an_old_loan_pays_nothing_of_a_new_one() {
     assert_eq!(pool.loans().lend(0).err(), Some(NotLent::NoCredit));
     pool.loans().give_back(new);
     assert!(pool.loans().released());
+}
 
 #[test]
 fn a_datagram_the_port_rejects_for_good_ends_named_and_goes_no_more() {

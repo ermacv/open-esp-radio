@@ -2277,7 +2277,9 @@ fn a_receive_loan_stays_owed_across_a_retired_service() {
     loans.give_back(held);
     assert!(loans.released());
     loans.grant(0, 2).unwrap();
+}
 
+#[test]
 fn a_frame_the_port_rejects_for_good_ends_and_the_service_goes_on() {
     brand!(Net);
     let (ended, _, sent) = run(bench::<Net>(), async |socket, wire| {
