@@ -16,3 +16,6 @@ mod services;
 
 #[cfg(any(target_arch = "riscv32", test))]
 mod load;
+
+#[cfg(target_arch = "riscv32")]
+mod udp;

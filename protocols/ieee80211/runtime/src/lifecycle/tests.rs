@@ -692,8 +692,8 @@ impl<'b> World<'b> {
                     bytes(frame.view().unwrap())
                 }
                 Received::Copied(_) => {
-                    let copy = self.copies.borrow().try_receive().unwrap();
-                    bytes(oer_protocols_network_port::EthernetFrame::view(&copy).unwrap())
+                    let mut copy = self.copies.borrow().try_receive().unwrap();
+                    bytes(oer_protocols_network_port::EthernetFrame::view(&mut copy).unwrap())
                 }
             });
         }

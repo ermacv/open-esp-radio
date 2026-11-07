@@ -26,9 +26,10 @@ pub struct EthernetFrameView<'a> {
     pub payload: &'a [u8],
 }
 
-/// Storage stays with the concrete frame owner. A view borrows it only.
+/// Storage stays with the concrete frame owner. A view borrows it only, and
+/// the owner alone reaches its bytes, so a view takes it exclusively.
 pub trait EthernetFrame {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError>;
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError>;
 }
 
 /// Bytes a receive owner lends in place, stable while it lives. The owner
@@ -161,7 +162,7 @@ impl<S: FrameStorage> LentFrame<S> {
 }
 
 impl<S: FrameStorage> EthernetFrame for LentFrame<S> {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         LentFrame::view(self)
     }
 }

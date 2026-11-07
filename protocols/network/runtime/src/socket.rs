@@ -8,8 +8,11 @@ use embassy_futures::select::{select, select3};
 use oer_portable_memory::{AtomicWaker, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_protocols_network_core::{Block, Datagram, Eviction, Outcome, Pool, Remote, SendRefusal};
 
-/// The answers a socket can be owed at once: a block, a close and a stop.
-const ANSWERS: usize = 3;
+/// The answers a socket can be owed at once: what it asked ahead, a close and
+/// a stop.
+const ANSWERS: usize = RESERVE_AHEAD + 2;
+/// The most blocks a socket holds or asks for ahead of its sends.
+pub const RESERVE_AHEAD: usize = 16;
 
 /// What a socket asks of the service.
 pub(crate) enum Request<'m, B, const SIZE: usize> {
@@ -283,13 +286,14 @@ pub(crate) fn lanes<
             inbound: Some(Inbound {
                 answers: answer_receiver,
                 datagrams: datagram_receiver,
-                reserved: None,
+                reserved: [const { None }; RESERVE_AHEAD],
                 stopped: None,
             }),
             abandon: abandon_sender,
             credits,
             places,
-            reserving: false,
+            reserving: 0,
+            ahead: 1,
             closing: false,
             closed: false,
         },
@@ -406,7 +410,7 @@ impl Drop for Observer<'_> {
 pub(crate) struct Inbound<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize> {
     answers: WakingSpscReceiver<'a, Answer<'a, 'm, B, SIZE, DEPTH>, ANSWERS>,
     datagrams: WakingSpscReceiver<'a, Datagram<'m, B, SIZE>, RECEIVED>,
-    reserved: Option<Block<'m, B, SIZE>>,
+    reserved: [Option<Block<'m, B, SIZE>>; RESERVE_AHEAD],
     /// The request lane, after a stop.
     stopped: Option<WakingSpscReceiver<'a, Request<'m, B, SIZE>, DEPTH>>,
 }
@@ -435,7 +439,7 @@ impl<'m, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize>
     /// Give every block in here to `pool`. The commands of a lane that came
     /// after a stop end by that stop.
     pub(crate) fn drain<const BLOCKS: usize>(mut self, pool: &mut Pool<'m, B, SIZE, BLOCKS>) {
-        if let Some(block) = self.reserved.take() {
+        for block in self.reserved.iter_mut().filter_map(Option::take) {
             pool.give(block);
         }
         while let Some(answer) = self.answers.try_receive() {
@@ -494,8 +498,10 @@ pub struct Socket<
     abandon: WakingSpscSender<'a, Inbound<'a, 'm, B, SIZE, DEPTH, RECEIVED>, 1>,
     credits: &'a Credits,
     places: &'a [Place; CREDITS],
-    /// A reservation is out.
-    reserving: bool,
+    /// Reservations asked and not answered.
+    reserving: usize,
+    /// The blocks to hold or have asked for ([`Socket::reserve_ahead`]).
+    ahead: usize,
     /// The socket asked to close: no command follows.
     closing: bool,
     /// The socket's close finished, or the service stopped.
@@ -524,8 +530,11 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
         while let Some(answer) = inbound.answers.try_receive() {
             match answer {
                 Answer::Reserved(block) => {
-                    self.reserving = false;
-                    inbound.reserved = Some(block);
+                    self.reserving = self.reserving.saturating_sub(1);
+                    // As many places as a socket may ask for blocks.
+                    if let Some(place) = inbound.reserved.iter_mut().find(|place| place.is_none()) {
+                        *place = Some(block);
+                    }
                 }
                 Answer::Closed => self.closed = true,
                 Answer::Stopped(requests) => {
@@ -544,6 +553,46 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     async fn answered(&mut self) {
         if let Some(inbound) = &mut self.inbound {
             let _either = select(inbound.answers.ready(), self.credits.stopped()).await;
+        }
+    }
+
+    /// Hold up to `blocks` ready, at most [`RESERVE_AHEAD`] and at least one,
+    /// so a sender runs a batch without a turn of the service for each block.
+    /// They count toward this socket's group while they wait here, and stay
+    /// out of every other socket's reach.
+    pub fn reserve_ahead(&mut self, blocks: usize) {
+        self.ahead = blocks.max(1).min(RESERVE_AHEAD);
+    }
+
+    /// A reservation that came, if any.
+    fn take_reserved(&mut self) -> Option<Block<'m, B, SIZE>> {
+        self.inbound
+            .as_mut()?
+            .reserved
+            .iter_mut()
+            .find_map(Option::take)
+    }
+
+    /// Ask for what [`Self::reserve_ahead`] leaves out. Only the first block
+    /// may take the lane's last place: a release or a send needs it more
+    /// than a block that nobody waits for.
+    fn ask_ahead(&mut self) {
+        let held = self.inbound.as_ref().map_or(0, |lanes| {
+            lanes
+                .reserved
+                .iter()
+                .filter(|place| place.is_some())
+                .count()
+        });
+        loop {
+            let out = held.saturating_add(self.reserving);
+            if out >= self.ahead || (out != 0 && self.requests.free_capacity() <= 1) {
+                return;
+            }
+            if self.requests.try_send(Request::Reserve).is_err() {
+                return;
+            }
+            self.reserving = self.reserving.saturating_add(1);
         }
     }
 
@@ -615,22 +664,36 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     pub async fn reserve(&mut self) -> Result<Block<'m, B, SIZE>, SocketClosed> {
         loop {
             self.take_answers();
-            let held = self
-                .inbound
-                .as_mut()
-                .and_then(|lanes| lanes.reserved.take());
-            if let Some(block) = held {
+            if let Some(block) = self.take_reserved() {
                 return Ok(block);
             }
             if self.closed || self.closing {
                 return Err(SocketClosed);
             }
-            if !self.reserving {
+            if self.reserving == 0 {
                 self.room().await?;
-                self.reserving = self.requests.try_send(Request::Reserve).is_ok();
+                self.ask_ahead();
             }
             self.answered().await;
         }
+    }
+
+    /// [`Self::reserve`] without waiting: the block if it came, or `None`
+    /// with the asking under way, for a later call or a [`Self::reserve`].
+    ///
+    /// # Errors
+    /// [`SocketClosed`].
+    pub fn try_reserve(&mut self) -> Result<Option<Block<'m, B, SIZE>>, SocketClosed> {
+        self.take_answers();
+        let held = self.take_reserved();
+        if held.is_some() {
+            return Ok(held);
+        }
+        if self.closed || self.closing || self.credits.stopped.load(Ordering::Acquire) {
+            return Err(SocketClosed);
+        }
+        self.ask_ahead();
+        Ok(None)
     }
 
     /// Commit a datagram. Writing it into the lane is the acceptance point:
@@ -699,6 +762,12 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
         }
     }
 
+    /// [`Self::receive`] without waiting: the next datagram if one is here.
+    pub fn try_receive(&mut self) -> Option<Datagram<'m, B, SIZE>> {
+        self.take_answers();
+        self.inbound.as_mut()?.datagrams.try_receive()
+    }
+
     /// Give a block back.
     ///
     /// # Errors
@@ -755,7 +824,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
         self.take_answers();
         let inbound = self.inbound.as_mut()?;
         let requests = inbound.stopped.as_ref()?;
-        if let Some(block) = inbound.reserved.take() {
+        if let Some(block) = inbound.reserved.iter_mut().find_map(Option::take) {
             return Some(block);
         }
         while let Some(request) = requests.try_receive() {

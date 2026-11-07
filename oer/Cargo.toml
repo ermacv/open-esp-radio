@@ -28,6 +28,9 @@ observe = ["oer-chips-family-app/observe", "oer-chips-esp32s31-app?/observe"]
 ## UDP sockets on the IP stack (`wifi::embassy_net::udp`), each queueing
 ## up to 16 received datagrams.
 udp = ["oer-chips-esp32s31-app?/udp"]
+## The network core in place of the IP service (`wifi::Network`), for an image
+## to compare them.
+network = ["oer-chips-esp32s31-app?/network"]
 
 [dependencies]
 oer-chips-family-app = { path = "../chips/family/app" }

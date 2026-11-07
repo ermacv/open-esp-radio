@@ -33,6 +33,11 @@ the credit frees when the command has ended, whichever comes last.
 A socket's lanes wake through waker cells, so today a socket and its service
 share a hart.
 
+A block comes from the service, which takes a turn. `reserve_ahead` lets a socket hold
+up to `RESERVE_AHEAD` ready, so a sender runs a batch on one turn. They count toward
+its group and stay out of other sockets' reach while they wait, and a stop or a dropped
+socket brings them home with the rest of its lanes.
+
 A service's `Egress` policy chooses what goes out, among all ready work and before
 any frame exists, and keeps its own account: `Direct` is the first ready work and no
 account. No await falls between a choice and its answer from the port, so a

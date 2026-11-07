@@ -1,12 +1,11 @@
-//! The load server in the group: one run at a time on one UDP
-//! socket bound to the station's DHCP address, on hart 1 beside the IP
-//! stack.
+//! The load server in the group: one run at a time on the image's UDP
+//! ([`crate::udp`]), on hart 1 beside the network.
 //!
 //! A run receives and echoes from its start, sends within its window and
 //! reads the CPU, the named parts, the counters, the link's rates and the
 //! PHY tracking ticks at the window's ends (the cache's counters cleared
 //! just before its start), sampling the boot hart between them when it
-//! asks, and hart 1 beside it; after its drain it closes the socket and
+//! asks, and hart 1 beside it; after its drain it ends its socket and
 //! keeps what it read until the next run starts. The boot hart's counters
 //! and sampler come through its relay ([`super::relay`]); hart 1's sampler
 //! is the server's own. The answers go back to the worker, which publishes
@@ -14,7 +13,6 @@
 
 use core::cell::Cell;
 use core::convert::Infallible;
-use core::net::Ipv4Addr;
 use core::pin::pin;
 
 use embassy_futures::select::{Either, select};
@@ -23,10 +21,6 @@ use oer::observe;
 use oer::observe::parts::{PARTS, PartReading};
 use oer::observe::tracking::TrackingSample;
 use oer::time::{Instant, Timer};
-use oer::wifi::embassy_net::TryError;
-use oer::wifi::embassy_net::udp::{SendError, UdpSocket};
-use oer::wifi::embassy_net::wire::{ListenSocketAddr, SocketAddr};
-use oer::wifi::{IpDevice, Ipv4Status, Net};
 use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
@@ -40,10 +34,10 @@ use static_cell::ConstStaticCell;
 
 use super::action::{Action, Answer as Decided, Kept, Phase, action};
 use super::pace::{GRANULARITY_US, Next, Schedule, UNPACED_BATCH};
-use super::receive::{Datagram, Receiving, classify, echo};
+use super::receive::{Datagram, Receiving as Tallying, classify, echo};
 use super::relay::{self, Client};
 use super::report::{self, Snapshot, Windows};
-use crate::RX;
+use crate::udp::{self, Attempt, Network, Peer, Receiving, Run, Sending};
 
 const _: () = if oer_hil_services_load::TUNE_KNOBS != oer_portable_trace::tune::KNOBS
     || oer_hil_services_load::TUNE_UNSET != oer_portable_trace::tune::UNSET
@@ -103,12 +97,10 @@ impl Answer {
     }
 }
 
-type Socket = UdpSocket<'static, IpDevice<RX>>;
-
 /// Serve the load requests until the chip resets, sampling and reading
 /// the boot hart through `hart0` and sampling hart 1 with `hart1`.
 pub(crate) async fn serve(
-    net: &Net<RX>,
+    net: &Network,
     mut requests: Requests,
     mut hart0: Client,
     mut hart1: observe::Hart1,
@@ -124,7 +116,7 @@ pub(crate) async fn serve(
             Action::Start(start) => {
                 match sampled(&start, &mut hart0)
                     .await
-                    .and_then(|()| open(net, &start))
+                    .and_then(|()| udp::open(net, &start))
                 {
                     Ok(socket) => {
                         requests.send(Answer::Started(Started::Running)).await;
@@ -248,22 +240,6 @@ fn decided_answer(decided: Decided) -> Answer {
     }
 }
 
-/// The run's socket, bound to `start.port` of the station's DHCP address.
-fn open(net: &Net<RX>, start: &Start) -> Result<Socket, LoadError> {
-    let address = match net.status().ipv4 {
-        Ipv4Status::Lease(configuration) | Ipv4Status::Static(configuration) => {
-            configuration.address
-        }
-        Ipv4Status::Unconfigured => return Err(LoadError::NoAddress),
-    };
-    let mut socket = UdpSocket::new(net.stack()).map_err(|_| LoadError::Bind)?;
-    let local = SocketAddr::from((Ipv4Addr::from(address), start.port));
-    socket
-        .bind(local, ListenSocketAddr::UNSPECIFIED)
-        .map_err(|_| LoadError::Bind)?;
-    Ok(socket)
-}
-
 /// The measuring window's ends as the image kept them.
 struct Window {
     start_us: Cell<Option<u64>>,
@@ -317,10 +293,10 @@ struct Ended {
 /// time.
 async fn run(
     requests: &mut Requests,
-    socket: Socket,
+    mut socket: Run<'_>,
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
-    net: &Net<RX>,
+    net: &Network,
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
 ) -> Ended {
@@ -329,13 +305,26 @@ async fn run(
         start_us: Cell::new(None),
         end_us: Cell::new(None),
     };
-    let mut receiving = Receiving::default();
+    let mut receiving = Tallying::default();
     let mut sent = Sent::default();
     let ends = {
         // Each future built where it stays, as in `serve`.
-        let mut receiver = pin!(receive(&socket, start.run, tally, &mut receiving, &window));
+        let (mut receiver, mut sender) = socket.split();
+        let mut receiver = pin!(receive(
+            &mut receiver,
+            start.run,
+            tally,
+            &mut receiving,
+            &window
+        ));
         let mut measuring = pin!(measure(
-            &socket, &start, &window, &mut sent, net, hart0, hart1
+            &mut sender,
+            &start,
+            &window,
+            &mut sent,
+            net,
+            hart0,
+            hart1
         ));
         let mut activity = select(receiver.as_mut(), measuring.as_mut());
         loop {
@@ -379,29 +368,20 @@ async fn run(
 
 /// Count every datagram on the port and echo those that ask for it, at once.
 async fn receive(
-    socket: &Socket,
+    socket: &mut Receiving<'_>,
     run: u32,
     tally: &mut Tally<TALLY_WORDS>,
-    counts: &mut Receiving,
+    counts: &mut Tallying,
     window: &Window,
 ) -> Infallible {
     loop {
-        socket.wait_recv_ready().await;
-        loop {
-            let mut packet = match socket.try_recv() {
-                Ok(packet) => packet,
-                Err(TryError::WouldBlock) => break,
-                // Only a closed socket refuses: it receives nothing more.
-                Err(TryError::Other(_)) => return core::future::pending().await,
-            };
+        socket.ready().await;
+        while let Some(mut packet) = socket.take() {
             let now = now_us();
             match classify(packet.payload(), run) {
                 Datagram::Echo(header) => {
-                    let taken = echo(header).write(packet.payload_mut()).is_some()
-                        && socket
-                            .try_send_to(packet.payload(), packet.meta().remote_addr)
-                            .is_ok();
-                    counts.echo(taken);
+                    let written = echo(header).write(packet.payload_mut()).is_some();
+                    counts.echo(written && packet.reply());
                 }
                 Datagram::Load(header) => counts.load(
                     tally,
@@ -422,11 +402,11 @@ async fn receive(
 /// close it after `duration_ms`, read them again, stop sampling, then wait
 /// out the drain.
 async fn measure(
-    socket: &Socket,
+    socket: &mut Sending<'_>,
     start: &Start,
     window: &Window,
     sent: &mut Sent,
-    net: &Net<RX>,
+    net: &Network,
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
 ) -> Ends {
@@ -493,8 +473,8 @@ async fn measure(
 /// One end's counters: the boot hart's and the library's, read there, and
 /// the frames the IP stack took; with `start`, the cache's counters
 /// cleared first.
-async fn snapshot(hart0: &mut Client, start: bool, net: &Net<RX>) -> Snapshot {
-    let stack_received = net.stack().statistics().rx_frames;
+async fn snapshot(hart0: &mut Client, start: bool, net: &Network) -> Snapshot {
+    let stack_received = udp::received_frames(net);
     Snapshot {
         stack_received,
         ..relay::counters(hart0, start).await.unwrap_or_default()
@@ -527,14 +507,17 @@ fn millis(ms: u32) -> u64 {
 /// leaves: the header in place, the payload behind it as the packet buffer
 /// last held it, and the clock read once per batch.
 async fn send(
-    socket: &Socket,
+    socket: &mut Sending<'_>,
     run: u32,
     transmit: Transmit,
     begin: u64,
     end: u64,
     sent: &mut Sent,
 ) {
-    let peer = SocketAddr::from((Ipv4Addr::from(transmit.peer), transmit.peer_port));
+    let peer = Peer {
+        address: transmit.peer,
+        port: transmit.peer_port,
+    };
     let size = usize::from(transmit.payload);
     let schedule = Schedule::new(
         begin,
@@ -549,17 +532,17 @@ async fn send(
             let next = schedule.batch(now, || {
                 let sequence = sent.datagrams;
                 let header = |payload: &mut [u8]| write(payload, run, sequence, now);
-                match socket.try_send_to_with(size, peer, header) {
-                    Ok(Some(())) => {
+                match socket.try_send(size, peer, header) {
+                    Attempt::Taken => {
                         taken(sent, size, now);
                         true
                     }
-                    Err(TryError::WouldBlock) => {
+                    Attempt::NoRoom => {
                         sent.refused = sent.refused.saturating_add(1);
                         false
                     }
                     // The datagram is lost; its time passes.
-                    Ok(None) | Err(TryError::Other(_)) => {
+                    Attempt::Lost => {
                         sent.failed = sent.failed.saturating_add(1);
                         true
                     }
@@ -571,13 +554,15 @@ async fn send(
                 // The socket had no room: the due datagram waits for it,
                 // as an application's send does.
                 Next::Blocked => {
-                    let datagram = blocking(socket, size, peer, run, sent.datagrams, now);
+                    let sequence = sent.datagrams;
+                    let datagram = blocking(socket, size, peer, run, sequence, now);
                     match select(datagram, wait_until(end)).await {
-                        Either::First(result) => {
+                        Either::First(took) => {
                             let now = now_us();
-                            match result {
-                                Ok(Some(())) => taken(sent, size, now),
-                                Ok(None) | Err(_) => sent.failed = sent.failed.saturating_add(1),
+                            if took {
+                                taken(sent, size, now);
+                            } else {
+                                sent.failed = sent.failed.saturating_add(1);
                             }
                             schedule.taken(now);
                         }
@@ -599,17 +584,15 @@ async fn send(
 
 /// Datagram `sequence`, sent at `now`, once the socket has room for it.
 async fn blocking(
-    socket: &Socket,
+    socket: &mut Sending<'_>,
     size: usize,
-    peer: SocketAddr,
+    peer: Peer,
     run: u32,
     sequence: u64,
     now: u64,
-) -> Result<Option<()>, SendError> {
+) -> bool {
     socket
-        .send_to_with(size, peer, |payload| {
-            (size, write(payload, run, sequence, now))
-        })
+        .send(size, peer, |payload| write(payload, run, sequence, now))
         .await
 }
 
@@ -617,10 +600,10 @@ async fn blocking(
 /// around the whole loop, the clock read and a yield to the executor once
 /// per [`UNPACED_BATCH`]; after a failed send, wait the pacing granularity.
 async fn unpaced(
-    socket: &Socket,
+    socket: &mut Sending<'_>,
     run: u32,
     size: usize,
-    peer: SocketAddr,
+    peer: Peer,
     end: u64,
     sent: &mut Sent,
 ) {
@@ -628,12 +611,11 @@ async fn unpaced(
         let mut now = now_us();
         let mut batch = 0;
         loop {
-            match blocking(socket, size, peer, run, sent.datagrams, now).await {
-                Ok(Some(())) => taken(sent, size, now),
-                Ok(None) | Err(_) => {
-                    sent.failed = sent.failed.saturating_add(1);
-                    wait_until(now_us().saturating_add(GRANULARITY_US)).await;
-                }
+            if blocking(socket, size, peer, run, sent.datagrams, now).await {
+                taken(sent, size, now);
+            } else {
+                sent.failed = sent.failed.saturating_add(1);
+                wait_until(now_us().saturating_add(GRANULARITY_US)).await;
             }
             batch += 1;
             if batch == UNPACED_BATCH {

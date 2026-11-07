@@ -1,6 +1,8 @@
 extern crate std;
 
 use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::vec::Vec;
 
 use core::task::{Context, Poll, Waker};
@@ -13,7 +15,15 @@ use oer_protocols_network_port::{
 
 use super::{DevicePort, PortRefusal, TxBuffers};
 
-struct Lent(Vec<u8>);
+struct Lent(Vec<u8>, Option<Arc<AtomicU32>>);
+
+impl Drop for Lent {
+    fn drop(&mut self) {
+        if let Some(returned) = &self.1 {
+            returned.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
 
 impl FrameStorage for Lent {
     fn bytes(&self) -> &[u8] {
@@ -49,8 +59,11 @@ impl ReceivedFrame for Incoming {
 const FIELDS: [u8; 6] = [2, 0, 0, 0, 0, 1];
 
 fn lent(payload: &[u8]) -> Incoming {
-    let storage = Lent(payload.to_vec());
-    let range = 0..payload.len();
+    lent_from(Lent(payload.to_vec(), None))
+}
+
+fn lent_from(storage: Lent) -> Incoming {
+    let range = 0..storage.0.len();
     Incoming::Lent(
         LentFrame::new(storage, FIELDS, FIELDS, 0x0800, range)
             .ok()
@@ -114,7 +127,7 @@ impl NetDevice for Device {
 struct Written(Vec<u8>);
 
 impl EthernetFrame for Written {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
             destination: FIELDS,
             source: FIELDS,
@@ -409,4 +422,18 @@ fn a_bad_frame_waits_for_nothing() {
     port.transmit.refuse = Some(TransmitError::InvalidLength(FrameLengthError::TooLong));
     assert_eq!(port.publish(4, octets), Err(PortRefusal::BadFrame));
     assert!(!wakes_at_once(&mut port));
+}
+
+#[test]
+fn a_stop_gives_back_every_frame_the_queue_holds() {
+    let returned = Arc::new(AtomicU32::new(0));
+    let mut port = port();
+    for _ in 0..3 {
+        let storage = Lent(b"held".to_vec(), Some(returned.clone()));
+        port.device.incoming.push_back(lent_from(storage));
+    }
+    port.device.incoming.push_back(Incoming::Copied);
+    port.give_back_received();
+    assert_eq!(returned.load(Ordering::SeqCst), 3);
+    assert_eq!(port.device.incoming.len(), 0);
 }
