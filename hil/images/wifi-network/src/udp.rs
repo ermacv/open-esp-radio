@@ -125,12 +125,15 @@ impl Run<'_> {
     pub(crate) fn split(&mut self) -> (Receiving<'_>, Sending<'_>) {
         let [receiving, sending] = &mut *self.sockets;
         // What the last run could not give back: the lane has room by now.
-        let waiting = self
-            .parked
-            .try_borrow_mut()
-            .map(|mut parked| core::mem::take(&mut *parked));
-        if let Ok(waiting) = waiting {
-            for block in waiting {
+        // One pass: a block refused again goes back behind the rest.
+        let waiting = self.parked.try_borrow().map_or(0, |parked| parked.len());
+        for _ in 0..waiting {
+            let block = self
+                .parked
+                .try_borrow_mut()
+                .ok()
+                .and_then(|mut parked| parked.pop());
+            if let Some(block) = block {
                 home(receiving, self.parked, block);
             }
         }
