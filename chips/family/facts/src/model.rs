@@ -48,6 +48,27 @@ pub struct CoreStart {
     pub ipc: Vec<String>,
 }
 
+/// The `[interrupt-layout]` table of a chip: the levels of the application
+/// entry's contexts and the line, context and hart of each entry.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InterruptLayout {
+    /// Each context's name and level.
+    pub contexts: alloc::collections::BTreeMap<String, u8>,
+    pub entries: Vec<InterruptLayoutEntry>,
+}
+
+/// One entry of the interrupt table.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InterruptLayoutEntry {
+    /// The table row that names this entry.
+    pub name: String,
+    pub line: u8,
+    pub context: String,
+    pub hart: u8,
+}
+
 /// The `[pma]` table of the family: the vendor physical memory attribute
 /// CSRs a secondary hart's generated entry programs and their encodings.
 /// Vendor CSRs stay in the facts; `oer-portable-riscv` holds only architectural ones.

@@ -12,7 +12,7 @@ tools load.
 | --- | --- | --- |
 | ISA | `chips/family/facts/layers/isa/<isa>.toml` | the ISA of the harts and its bare-metal Rust target |
 | family | `chips/family/facts/layers/family.toml` | the boot flow, the CLIC's lines and levels, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract (MMU page, image headers, probe page), the reachability report's observed functions |
-| chip | `chips/<id>/facts/chip.toml` | the chip's properties, flash map, address map (internal SRAM, flash window, retained memory) with each region's attributes, what the boot chain keeps and requires (`[boot-chain]`), harts, core start, reset cause; the vendor comparison's probe list (`[[probe]]`) |
+| chip | `chips/<id>/facts/chip.toml` | the chip's properties, flash map, address map (internal SRAM, flash window, retained memory) with each region's attributes, what the boot chain keeps and requires (`[boot-chain]`), harts, core start, reset cause, the application entry's interrupt layout (`[interrupt-layout]`: each context's level, each entry's line and hart); the vendor comparison's probe list (`[[probe]]`) |
 | ROM | `chips/<id>/facts/rom-<revision>.toml` | the mask ROM of one chip revision: its pinned ELF, symbol script, sourced entry points (`[[rom.functions]]`), function summaries, forbidden code and what it uses of the internal SRAM (`[rom] sram`) |
 | module | `chips/<id>/facts/modules/<module>.toml` | the module that carries the chip: its flash and PSRAM |
 | board | `chips/<id>/facts/boards/<board>.toml` | the board that carries the module |

@@ -1,0 +1,39 @@
+// The image's interrupt table. The lines, contexts and harts come from
+// `[interrupt-layout]` in `chips/esp32s31/facts/chip.toml`; this file holds
+// what the facts cannot state: each entry's part, handler and class.
+oer_chips_family_platform_runtime::interrupt_table! {
+    @contexts
+    /// The application executor's wake (thread mode).
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, @layout(wake), Hardware;
+    /// The application executor's alarm (system timer comparator 1).
+    alarm: AppAlarmToken = SystimerAlarm1 => oer_chips_family_platform_executor::alarm_interrupt::<SdkTasks, 1, SystimerAlarm1>, @layout(alarm), Hardware;
+    #[cfg(feature = "wifi")]
+    /// The radio executor's alarm (system timer comparator 0).
+    radio_alarm: RadioAlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<wifi::RadioTasks, 0, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0>, @layout(radio_alarm), Hardware;
+    #[cfg(feature = "wifi")]
+    /// The SAR/PWDET pilot, between radio executor rounds.
+    phy: PhyToken = oer_chips_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => wifi::on_pilot, @layout(phy), Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    #[cfg(feature = "wifi")]
+    /// The radio executor (P2), polled in its handler.
+    radio: RadioToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_chips_family_platform_executor::Round<wifi::RadioTasks>, @layout(radio), Executor;
+    #[cfg(feature = "wifi")]
+    /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
+    wifi: WifiToken = wifi::WifiPart => wifi::on_wifi, @layout(wifi), Hardware;
+    #[cfg(feature = "console")]
+    /// The USB Serial/JTAG console: it raises the console endpoint's signal.
+    console_usb: ConsoleToken = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt => console::on_usb, @layout(console_usb), Hardware;
+    #[cfg(feature = "observe")]
+    /// The PC sampler (TIMG1 T0), above every other level of hart 0 so that
+    /// it sees what it interrupts; it ticks only while a session runs.
+    sampler: SamplerToken = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt => observed::on_sampler, @layout(sampler), Hardware;
+    #[cfg(all(feature = "observe", feature = "group"))]
+    /// Hart 1's PC sampler (TIMG1 T1), above every other level of hart 1;
+    /// it ticks only while a session runs.
+    sampler1: Sampler1Token = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Interrupt => observed::on_sampler1, @layout(sampler1), Hardware;
+    #[cfg(feature = "group")]
+    /// Hart 1's executor's wake (thread mode).
+    hart1_wake: Hart1WakeToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 1, oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, @layout(hart1_wake), Hardware;
+    #[cfg(feature = "group")]
+    /// Hart 1's executor's alarm (system timer comparator 2).
+    hart1_alarm: Hart1AlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2 => oer_chips_family_platform_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>, @layout(hart1_alarm), Hardware;
+}

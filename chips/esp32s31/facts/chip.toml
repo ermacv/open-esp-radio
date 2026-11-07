@@ -176,6 +176,85 @@ pma = [
     { name = "psram", region = "psram" },
 ]
 
+# The image's interrupt layout: which level each context takes and which line
+# and hart each entry of the application entry's table uses. The application
+# entry's build substitutes these into its table. All control bits are levels,
+# so equal-level lines arbitrate by the family's tie-break and never preempt.
+[interrupt-layout.contexts]
+app_wake = 1
+hart1_app = 1
+radio_executor = 2
+radio = 3
+profile = 4
+
+[[interrupt-layout.entries]]
+name = "wake"
+line = 40
+context = "app_wake"
+hart = 0
+
+[[interrupt-layout.entries]]
+name = "alarm"
+line = 41
+context = "app_wake"
+hart = 0
+
+[[interrupt-layout.entries]]
+name = "radio_alarm"
+line = 19
+context = "radio"
+hart = 0
+
+# SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
+# measures only this pair on the S31: FROM_CPU2 line 17 before TIMG0 line 16.
+[[interrupt-layout.entries]]
+name = "phy"
+line = 16
+context = "radio_executor"
+hart = 0
+
+[[interrupt-layout.entries]]
+name = "radio"
+line = 17
+context = "radio_executor"
+hart = 0
+
+[[interrupt-layout.entries]]
+name = "wifi"
+line = 21
+context = "radio"
+hart = 0
+
+[[interrupt-layout.entries]]
+name = "console_usb"
+line = 42
+context = "app_wake"
+hart = 0
+
+[[interrupt-layout.entries]]
+name = "sampler"
+line = 22
+context = "profile"
+hart = 0
+
+[[interrupt-layout.entries]]
+name = "sampler1"
+line = 22
+context = "profile"
+hart = 1
+
+[[interrupt-layout.entries]]
+name = "hart1_wake"
+line = 40
+context = "hart1_app"
+hart = 1
+
+[[interrupt-layout.entries]]
+name = "hart1_alarm"
+line = 41
+context = "hart1_app"
+hart = 1
+
 # The Rust probe images of the vendor comparison (hil/probes),
 # in build order: the artifact role each serves. The Bluetooth probe returns
 # with its hooks.

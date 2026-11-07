@@ -15,15 +15,8 @@
 //! service tasks and boot sequence behind the application entry's `entry!`
 //! (`oer`), which re-exports this crate for an image built for the ESP32-S31.
 //!
-//! Layout, fixed for every image (lines and levels from the chip's
-//! measured arbitration):
-//!
-//! | Context | Level | Entries |
-//! |---|---|---|
-//! | application | 1 | executor wake (line 40), its alarm (comparator 1, line 41), console (USB Serial/JTAG, line 42) |
-//! | radio executor | 2 | SAR/PWDET pilot (line 16), executor (line 17) |
-//! | radio | 3 | radio alarm (comparator 0, line 19), Wi-Fi MAC (line 21) |
-//! | profile (`observe`) | 4 | PC sampler (TIMG1 T0, line 22) |
+//! The layout, fixed for every image, comes from `[interrupt-layout]` in the
+//! chip facts: each entry's line, its context's level and its hart.
 //!
 //! The application executor runs in thread mode on hart 0; the library's
 //! service tasks ([`SdkTasks`]) and the image's tasks share it. The radio
@@ -134,44 +127,7 @@ pub use oer_chips_family_platform_runtime::panic::PanicRecord;
 /// The previous boot's exception as the trap left it.
 pub use oer_chips_family_platform_runtime::trap::PreviousException;
 
-oer_chips_family_platform_runtime::interrupt_table! {
-    contexts { app_wake: 1; radio_executor: 2; radio: 3; hart1_app: 1; profile: 4; }
-    /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
-    /// The application executor's alarm (system timer comparator 1).
-    alarm: AppAlarmToken = SystimerAlarm1 => oer_chips_family_platform_executor::alarm_interrupt::<SdkTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
-    #[cfg(feature = "wifi")]
-    /// The radio executor's alarm (system timer comparator 0).
-    radio_alarm: RadioAlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<wifi::RadioTasks, 0, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
-    // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
-    // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
-    #[cfg(feature = "wifi")]
-    /// The SAR/PWDET pilot, between radio executor rounds.
-    phy: PhyToken = oer_chips_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => wifi::on_pilot, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
-    #[cfg(feature = "wifi")]
-    /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_chips_family_platform_executor::Round<wifi::RadioTasks>, line 17, context radio_executor, hart 0, Executor;
-    #[cfg(feature = "wifi")]
-    /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
-    wifi: WifiToken = wifi::WifiPart => wifi::on_wifi, line 21, context radio, hart 0, Hardware;
-    #[cfg(feature = "console")]
-    /// The USB Serial/JTAG console: it raises the console endpoint's signal.
-    console_usb: ConsoleToken = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt => console::on_usb, line 42, context app_wake, hart 0, Hardware;
-    #[cfg(feature = "observe")]
-    /// The PC sampler (TIMG1 T0), above every other level of hart 0 so that
-    /// it sees what it interrupts; it ticks only while a session runs.
-    sampler: SamplerToken = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt => observed::on_sampler, line 22, context profile, hart 0, Hardware;
-    #[cfg(all(feature = "observe", feature = "group"))]
-    /// Hart 1's PC sampler (TIMG1 T1), above every other level of hart 1;
-    /// it ticks only while a session runs.
-    sampler1: Sampler1Token = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Interrupt => observed::on_sampler1, line 22, context profile, hart 1, Hardware;
-    #[cfg(feature = "group")]
-    /// Hart 1's executor's wake (thread mode).
-    hart1_wake: Hart1WakeToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 1, oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
-    #[cfg(feature = "group")]
-    /// Hart 1's executor's alarm (system timer comparator 2).
-    hart1_alarm: Hart1AlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2 => oer_chips_family_platform_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>, line 41, context hart1_app, hart 1, Hardware;
-}
+include!(concat!(env!("OUT_DIR"), "/interrupt_table.rs"));
 
 #[cfg(feature = "group")]
 mod hart1;

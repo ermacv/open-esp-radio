@@ -1398,6 +1398,7 @@ dependencies = [
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-app",
  "oer-chips-family-boot",
+ "oer-chips-family-facts",
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-runtime",
