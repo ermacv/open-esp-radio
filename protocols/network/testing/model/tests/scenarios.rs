@@ -652,7 +652,8 @@ fn an_exhausted_pool_evicts_nothing_while_all_can_move() {
     run.memory = MemoryPolicy {
         evict_after: Some(Duration::from_millis(50)),
     };
-    let report = run.run(owner::<Net, 2>(&medium), fair(&medium));
+    // Three blocks in two groups leave one group holding more, and a waiter.
+    let report = run.run(owner::<Net, 3>(&medium), fair(&medium));
     assert!(report.evicted.is_empty(), "{:?}", report.evicted);
     let air = airs(&medium.spent());
     assert!(air[0].abs_diff(air[1]) <= FAIR_TO, "{air:?}");

@@ -1523,6 +1523,97 @@ fn pressure_takes_the_oldest_and_leaves_the_younger() {
 }
 
 #[test]
+fn a_group_evicts_nothing_of_its_own_for_itself() {
+    brand!(Net);
+    let evict = MemoryPolicy {
+        evict_after: Some(oer_portable_time::Duration::from_micros(1)),
+    };
+    let (mut service, [mut first, _second], wire, stop) = pair::<Net>(usize::MAX, evict);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        wire.0.borrow_mut().full = true;
+        let blocks = [
+            first.reserve().await.unwrap(),
+            first.reserve().await.unwrap(),
+        ];
+        let [one, two] = blocks;
+        let one = first.send(peer(), one).ok().unwrap();
+        let two = first.send(peer(), two).ok().unwrap();
+        settle().await;
+        assert!(pin!(first.reserve()).poll(cx).is_pending());
+        clock
+            .advance(oer_portable_time::Duration::from_secs(1))
+            .unwrap();
+        settle().await;
+        let (one, two) = (one.take().err().unwrap(), two.take().err().unwrap());
+        stop.try_send(()).ok().unwrap();
+        (one, two)
+    };
+    let (_, (_one, _two)) = run_tasks(clock, service.run(clock, &mut events), drive);
+}
+
+#[test]
+fn pressure_spares_a_group_that_holds_less_however_old_its_work() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; 3]));
+    let (pool, brand) = claim::<Net, SIZE, 3>(memory).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let wire = WirePort::default();
+    wire.0.borrow_mut().full = true;
+    let owner: NetworkOwner<'static, Net, SIZE, 3, CREDITS, RECEIVED, 2, 3, WirePort> =
+        NetworkOwner::new(brand, interface, pool, wire.clone());
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let evict = MemoryPolicy {
+        evict_after: Some(oer_portable_time::Duration::from_millis(100)),
+    };
+    let mut service = Service::new(owner, Direct, evict, stopping);
+    let dscp = Dscp::default();
+    let mut few = service
+        .bind(5000, dscp, Share::unlimited(0), storage::<Net>())
+        .ok()
+        .unwrap();
+    let mut many = service
+        .bind(5001, dscp, Share::unlimited(1), storage::<Net>())
+        .ok()
+        .unwrap();
+    let mut waits = service
+        .bind(5002, dscp, Share::unlimited(2), storage::<Net>())
+        .ok()
+        .unwrap();
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let oldest = few.reserve().await.unwrap();
+        let oldest = few.send(peer(), oldest).ok().unwrap();
+        settle().await;
+        clock
+            .advance(oer_portable_time::Duration::from_secs(1))
+            .unwrap();
+        let [one, two] = [many.reserve().await.unwrap(), many.reserve().await.unwrap()];
+        let one = many.send(peer(), one).ok().unwrap();
+        let two = many.send(peer(), two).ok().unwrap();
+        settle().await;
+        assert!(pin!(waits.reserve()).poll(cx).is_pending());
+        let block = waits.reserve().await.unwrap();
+        let oldest = oldest.take().err().expect("its group holds less");
+        let evicted = Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure));
+        assert_eq!(
+            one.take().ok(),
+            Some(evicted),
+            "the oldest of the group holding most"
+        );
+        let two = two.take().err().unwrap();
+        stop.try_send(()).ok().unwrap();
+        (block, oldest, two)
+    };
+    let (_, (block, _oldest, _two)) = run_tasks(clock, service.run(clock, &mut events), drive);
+    drop(block);
+}
+
+#[test]
 fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
     brand!(Net);
     let (ended, _, _) = run(bench::<Net>(), async |socket, _| {
