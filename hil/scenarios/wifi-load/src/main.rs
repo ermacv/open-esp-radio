@@ -26,11 +26,12 @@ use std::{
 };
 
 use oer_hil_services_load::{
-    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectMac, CollectParts,
-    CollectPositions, CollectTracking, Collected, Counters, CountersCollected, DataBus,
-    InstructionBus, Link, LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected,
-    PartWindow, PartsCollected, Positions, PositionsCollected, Report, Start, Started,
-    StaticAddress, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected, Transmit,
+    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectHart1, CollectLink, CollectMac,
+    CollectParts, CollectPositions, CollectTracking, Collected, Counters, CountersCollected,
+    DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected, Load,
+    MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, PartWindow, PartsCollected, Positions,
+    PositionsCollected, Report, Start, Started, StaticAddress, TUNE_KNOBS, TUNE_UNSET, Tracking,
+    TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Ipv4, Join, Joined, Leave, Left, ScanVisit,
@@ -278,6 +279,7 @@ struct Ended {
     link: Link,
     mac: Mac,
     positions: Positions,
+    hart1: Hart1Window,
     tracking: Tracking,
 }
 
@@ -325,6 +327,10 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         PositionsCollected::Report(positions) => positions,
         other => return Err(Failure::Fail(format!("the image's positions: {other:?}"))),
     };
+    let hart1 = match cx.call(CollectHart1 { run }, CALL)? {
+        Hart1Collected::Report(hart1) => hart1,
+        other => return Err(Failure::Fail(format!("the image's hart 1: {other:?}"))),
+    };
     match cx.call(CollectTracking { run }, CALL)? {
         TrackingCollected::Report(tracking) => Ok(Ended {
             report,
@@ -333,6 +339,7 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             link,
             mac,
             positions,
+            hart1,
             tracking,
         }),
         other => Err(Failure::Fail(format!("the image's tracking: {other:?}"))),
@@ -558,6 +565,30 @@ fn polls(parts: &[PartWindow], window_us: u64) -> serde_json::Value {
             })
         })
         .collect()
+}
+
+/// Hart 1's counters over the window, read on hart 1 at its very ends:
+/// both ends, their differences, and those per microsecond (MHz) and per
+/// cycle. A counter that did not advance from `start` to `end` has no
+/// difference and `advanced` false: a broken reading, not a zero.
+fn hart1(hart1: &Hart1Window, window_us: u64) -> serde_json::Value {
+    let window = window_us.max(1) as f64;
+    let Hart1Window { start, end } = hart1;
+    let cycles = end.cycles.checked_sub(start.cycles);
+    let instructions = end.instructions.checked_sub(start.instructions);
+    serde_json::json!({
+        "start": start,
+        "end": end,
+        "advanced": cycles.is_some_and(|count| count != 0)
+            && instructions.is_some_and(|count| count != 0),
+        "cycles": cycles,
+        "instructions": instructions,
+        "cycles_per_us": cycles.map(|count| round(count as f64 / window)),
+        "instructions_per_cycle": cycles
+            .zip(instructions)
+            .filter(|(cycles, _)| *cycles != 0)
+            .map(|(cycles, instructions)| fine(instructions as f64 / cycles as f64)),
+    })
 }
 
 /// The window's counters: the image's measured hart's cycles and retired
@@ -926,6 +957,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     if let Some(object) = cpu.as_object_mut() {
         object.insert("parts".to_owned(), polls(&idle.parts, window));
         object.insert("counters".to_owned(), counters(&idle.counters, window));
+        object.insert("hart1".to_owned(), hart1(&idle.hart1, window));
     }
     cx.measure("idle cpu", cpu);
     cx.measure(
@@ -1482,6 +1514,7 @@ fn measurement(
         "counters": counters(&ended.counters, window_us(report)),
         "mac": mac_counts(&ended.mac),
         "positions": positions_counts(&ended.positions),
+        "hart1": hart1(&ended.hart1, window_us(report)),
     });
     let mut sides = serde_json::Map::new();
     if mode != Mode::Tx {
@@ -1532,7 +1565,33 @@ fn measurement(
     if let Some(object) = value.as_object_mut() {
         object.extend(sides);
     }
+    let datagrams = window_datagrams(mode, report);
+    value["hart1"]["datagrams"] = datagrams.into();
+    value["hart1"]["instructions_per_datagram"] = ended
+        .hart1
+        .end
+        .instructions
+        .checked_sub(ended.hart1.start.instructions)
+        .filter(|_| datagrams != 0)
+        .map(|instructions| round(instructions as f64 / datagrams as f64))
+        .into();
     value
+}
+
+/// The datagrams of `mode`'s directions that crossed the image within its
+/// window: hart 1's counters run over those.
+fn window_datagrams(mode: Mode, report: &Report) -> u64 {
+    let received = if mode == Mode::Tx {
+        0
+    } else {
+        report.received.window_datagrams
+    };
+    let sent = if mode == Mode::Rx {
+        0
+    } else {
+        report.sent.datagrams
+    };
+    received.saturating_add(sent)
 }
 
 fn percent(part: u64, whole: u64) -> f64 {
@@ -1654,6 +1713,7 @@ mod tests {
             link: Link::default(),
             mac: Mac::default(),
             positions: Positions::default(),
+            hart1: Hart1Window::default(),
             tracking: Tracking::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
@@ -1661,6 +1721,93 @@ mod tests {
         assert_eq!(value["window_s"], 5.0);
         assert_eq!(value["rx"]["device_received_mbps"], 13.0);
         assert!(value.get("tx").is_none());
+    }
+
+    /// Hart 1's window between two ends of (cycles, instructions).
+    fn window(start: (u64, u64), end: (u64, u64)) -> Hart1Window {
+        let at = |(cycles, instructions)| oer_hil_services_load::HartCount {
+            cycles,
+            instructions,
+        };
+        Hart1Window {
+            start: at(start),
+            end: at(end),
+        }
+    }
+
+    #[test]
+    fn hart_1_s_counters_give_its_clock_and_rate_over_the_window() {
+        let value = hart1(
+            &window(
+                (9_000_000_000, 700_000_000),
+                (10_600_000_000, 1_020_000_000),
+            ),
+            5_000_000,
+        );
+        assert_eq!(value["advanced"], true);
+        assert_eq!(value["cycles"], 1_600_000_000_u64);
+        assert_eq!(value["instructions"], 320_000_000_u64);
+        assert_eq!(value["cycles_per_us"], 320.0);
+        assert_eq!(value["instructions_per_cycle"], 0.2);
+        assert_eq!(value["start"]["instructions"], 700_000_000_u64);
+    }
+
+    #[test]
+    fn a_counter_of_hart_1_that_went_back_or_stood_still_is_no_count() {
+        let back = hart1(&window((100, 50), (90, 60)), 5_000_000);
+        assert_eq!(back["advanced"], false);
+        assert!(back["cycles"].is_null());
+        assert!(back["instructions_per_cycle"].is_null());
+        assert_eq!(back["instructions"], 10);
+
+        let stood = hart1(&window((100, 50), (200, 50)), 5_000_000);
+        assert_eq!(stood["advanced"], false);
+        assert_eq!(stood["instructions"], 0);
+
+        let none = hart1(&Hart1Window::default(), 5_000_000);
+        assert_eq!(none["advanced"], false);
+        assert!(none["instructions_per_cycle"].is_null());
+    }
+
+    #[test]
+    fn hart_1_s_instructions_are_rated_over_the_mode_s_window_datagrams() {
+        let report = Report {
+            received: oer_hil_services_load::Received {
+                window_datagrams: 300,
+                // Those after the window ran outside the counters' ends.
+                datagrams: 330,
+                ..Default::default()
+            },
+            sent: oer_hil_services_load::Sent {
+                datagrams: 100,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(window_datagrams(Mode::Rx, &report), 300);
+        assert_eq!(window_datagrams(Mode::Tx, &report), 100);
+        assert_eq!(window_datagrams(Mode::RxTx, &report), 400);
+
+        let sent = traffic::Sent {
+            datagrams: 300,
+            bytes: 0,
+            failed: 0,
+            elapsed: Duration::from_secs(1),
+        };
+        let ended = Ended {
+            report,
+            parts: Vec::new(),
+            counters: Counters::default(),
+            link: Link::default(),
+            mac: Mac::default(),
+            positions: Positions::default(),
+            hart1: window((0, 0), (320_000_000, 3_000_000)),
+            tracking: Tracking::default(),
+        };
+        let offer = Offer::level(Mode::Rx, 65, true).unwrap();
+        let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);
+        assert_eq!(value["hart1"]["datagrams"], 300);
+        assert_eq!(value["hart1"]["instructions_per_datagram"], 10_000.0);
     }
 
     #[test]

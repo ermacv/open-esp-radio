@@ -469,9 +469,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_ten_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_eleven_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 20);
+    assert_eq!(keys.len(), 22);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
@@ -538,4 +538,22 @@ fn a_positions_window_takes_wrapping_differences_and_fits_one_response() {
         interior: u32::MAX,
     });
     assert!(postcard::to_slice(&largest, &mut buffer).unwrap().len() <= 512);
+}
+
+#[test]
+fn hart_1_s_two_ends_round_trip_and_fit_one_response() {
+    let largest = HartCount {
+        cycles: u64::MAX,
+        instructions: u64::MAX,
+    };
+    let message = Hart1Collected::Report(Hart1Window {
+        start: largest,
+        end: largest,
+    });
+    let mut buffer = [0; 512];
+    let encoded = postcard::to_slice(&message, &mut buffer).unwrap();
+    assert_eq!(
+        postcard::from_bytes::<Hart1Collected>(encoded).unwrap(),
+        message
+    );
 }

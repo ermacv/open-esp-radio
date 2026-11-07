@@ -577,7 +577,8 @@ pub struct Hart0 {
     _hart: PhantomData<*mut ()>,
 }
 
-/// What hart 1 observes only there: its PC sampler. It stays on hart 1.
+/// What hart 1 observes only there: its cycle and retired instruction
+/// counters and its PC sampler. It stays on hart 1.
 #[cfg(feature = "group")]
 pub struct Hart1 {
     sampler: Hart1Sampler,
@@ -586,6 +587,14 @@ pub struct Hart1 {
 
 #[cfg(feature = "group")]
 impl Hart1 {
+    /// Hart 1's own counters now.
+    pub fn counters(&mut self) -> HartClock {
+        HartClock {
+            cycles: oer_portable_riscv::cycle64(),
+            instructions: oer_portable_riscv::instret64(),
+        }
+    }
+
     /// Hart 1's PC sampler.
     pub fn sampler(&mut self) -> &mut Hart1Sampler {
         &mut self.sampler
@@ -596,6 +605,14 @@ impl Hart1 {
 /// hart 1.
 #[cfg(feature = "group")]
 pub type Hart1Sampler = Sampler<Timer<super::Sampler1Token, sampler::Timer1>>;
+
+/// A hart's own cycle and retired instruction counters at one instant.
+#[cfg(feature = "group")]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct HartClock {
+    pub cycles: u64,
+    pub instructions: u64,
+}
 
 /// The boot hart's counters at one instant.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

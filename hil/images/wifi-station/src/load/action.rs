@@ -1,9 +1,9 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_hil_services_load::{
-    Collect, CollectCounters, CollectLink, CollectMac, CollectParts, CollectPositions,
-    CollectSamples, CollectTracking, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS,
-    MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Request, Start, Started, header,
+    Collect, CollectCounters, CollectHart1, CollectLink, CollectMac, CollectParts,
+    CollectPositions, CollectSamples, CollectTracking, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS,
+    MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Request, Start, Started, header,
 };
 
 /// The largest UDP payload the image sends or receives: one 1514-byte
@@ -46,6 +46,7 @@ pub(crate) enum Kept {
     Link,
     Mac,
     Positions,
+    Hart1,
     Tracking,
     /// Hart `hart`'s samples from the one numbered `from`.
     Samples {
@@ -93,6 +94,7 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
         (phase, Request::CollectPositions(CollectPositions { run })) => {
             collect(phase, run, Kept::Positions)
         }
+        (phase, Request::CollectHart1(CollectHart1 { run })) => collect(phase, run, Kept::Hart1),
     }
 }
 
@@ -268,7 +270,7 @@ mod tests {
     #[test]
     fn a_collect_answers_running_then_what_its_own_run_kept_only() {
         type Asks = fn(u32) -> Request;
-        let requests: [(Kept, Asks); 8] = [
+        let requests: [(Kept, Asks); 9] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
             (Kept::Parts { from: 12 }, |run| {
                 Request::CollectParts(CollectParts { run, from: 12 })
@@ -290,6 +292,9 @@ mod tests {
             }),
             (Kept::Tracking, |run| {
                 Request::CollectTracking(CollectTracking { run })
+            }),
+            (Kept::Hart1, |run| {
+                Request::CollectHart1(CollectHart1 { run })
             }),
         ];
         for (kind, collect) in requests {

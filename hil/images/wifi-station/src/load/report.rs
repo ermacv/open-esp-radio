@@ -292,18 +292,26 @@ pub(crate) fn samples<const N: usize>(
 }
 
 #[cfg(target_arch = "riscv32")]
-pub(crate) use chip::snapshot;
+pub(crate) use chip::{hart_count, snapshot};
 
 /// The chip's own types: the cache's, the driver's and the station's.
 #[cfg(target_arch = "riscv32")]
 mod chip {
     use oer::observe::{
-        CacheGeometry, CacheLevel, Counters, DataBus, HartCounters, InstructionBus,
+        CacheGeometry, CacheLevel, Counters, DataBus, HartClock, HartCounters, InstructionBus,
         StationRxCounts, StationRxKind, WifiRxReport,
     };
     use oer_hil_services_load as wire;
 
     use super::Snapshot;
+
+    /// A hart's `clock` as the wire names it.
+    pub(crate) fn hart_count(clock: HartClock) -> wire::HartCount {
+        wire::HartCount {
+            cycles: clock.cycles,
+            instructions: clock.instructions,
+        }
+    }
 
     /// One end of a window: the boot hart's `hart` and the library's
     /// `counters`, both read on the boot hart; the IP stack's frames are
