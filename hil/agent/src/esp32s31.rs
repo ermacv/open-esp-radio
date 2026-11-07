@@ -24,11 +24,11 @@ struct EarlyUsb;
 
 impl oer_protocols_hil_agent::console::Immediate for EarlyUsb {
     fn note(note: &oer_portable_diagnostics::Note<'_>) -> oer_portable_diagnostics::Written {
-        oer_chips_esp32s31_compose::console::early(note)
+        oer_chips_esp32s31_runtime::console::early(note)
     }
 
     fn take_lost() -> u32 {
-        oer_chips_esp32s31_compose::console::take_early_lost()
+        oer_chips_esp32s31_runtime::console::take_early_lost()
     }
 }
 

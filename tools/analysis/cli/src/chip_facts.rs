@@ -93,7 +93,7 @@ mod tests {
         let chip = tracked::ids()[0];
         for path in [
             oer_chips_family_facts::chip_file(chip),
-            "chips/family/platform/family.toml".to_owned(),
+            "chips/family/facts/layers/family.toml".to_owned(),
         ] {
             let built = tracked::text(&path).unwrap();
             write(
@@ -116,7 +116,7 @@ mod tests {
         let chip = tracked::ids()[0];
         write(
             directory.path(),
-            &format!("chips/{chip}/platform/boards/another.toml"),
+            &format!("chips/{chip}/facts/boards/another.toml"),
             b"schema = 2\n",
         );
         let error = check(directory.path(), chip).unwrap_err();
@@ -125,7 +125,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         write(
             directory.path(),
-            "chips/new-chip/platform/chip.toml",
+            "chips/new-chip/facts/chip.toml",
             b"schema = 2\n",
         );
         let error = check(directory.path(), "new-chip").unwrap_err();

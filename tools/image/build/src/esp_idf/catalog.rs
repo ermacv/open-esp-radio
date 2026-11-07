@@ -179,16 +179,16 @@ pub fn bundle(
 
 /// The file of a peer chip's flash map, below the repository root.
 pub fn peer_flash_file(chip: &str) -> String {
-    format!("chips/{chip}/platform/flash.toml")
+    format!("chips/{chip}/facts/flash.toml")
 }
 
-/// `chips/<chip>/platform/flash.toml`: what the image bundle of a chip
+/// `chips/<chip>/facts/flash.toml`: what the image bundle of a chip
 /// without a profile, an ESP-IDF peer, needs from the chip.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 struct PeerFlash {
     schema: u32,
-    /// The ISA layer (`chips/family/platform/isa/<isa>.toml`) whose
+    /// The ISA layer (`chips/family/facts/layers/isa/<isa>.toml`) whose
     /// `rust-target` the bundle records.
     isa: String,
     espflash_chip: String,
@@ -240,7 +240,7 @@ impl Chip {
         if peer.schema != 1 {
             return Err(format!("{}: unsupported schema {}", file.display(), peer.schema).into());
         }
-        let isa_file = root.join(format!("chips/family/platform/isa/{}.toml", peer.isa));
+        let isa_file = root.join(format!("chips/family/facts/layers/isa/{}.toml", peer.isa));
         let isa_text = std::fs::read_to_string(&isa_file)
             .map_err(|error| format!("{}: {error}", isa_file.display()))?;
         let isa: toml::Table = toml::from_str(&isa_text)

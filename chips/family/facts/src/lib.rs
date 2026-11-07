@@ -21,11 +21,11 @@
 //! The facts of the Espressif chips, in one layered model.
 //!
 //! Each fact has one layer (README): the ISA of the harts
-//! (`chips/family/platform/isa/`), the family
-//! (`chips/family/platform/family.toml`), the chip
-//! (`chips/<id>/platform/chip.toml`), the module that carries it
-//! (`chips/<id>/platform/modules/`) and the board that carries the module
-//! (`chips/<id>/platform/boards/`). A layer `extends` the layers below it
+//! (`chips/family/facts/layers/isa/`), the family
+//! (`chips/family/facts/layers/family.toml`), the chip
+//! (`chips/<id>/facts/chip.toml`), the module that carries it
+//! (`chips/<id>/facts/modules/`) and the board that carries the module
+//! (`chips/<id>/facts/boards/`). A layer `extends` the layers below it
 //! ([`resolve`]); [`load`] resolves a chip from its board and
 //! [`Facts::from_table`] reads the result, derives what follows from it
 //! (the PSRAM and flash sizes from the module, `runtime-psram`, the rules of
@@ -95,7 +95,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 /// chip layer, modules, boards, stack policy, partitions and ROM function
 /// summaries.
 pub fn platform_dir(id: &str) -> String {
-    format!("chips/{id}/platform")
+    format!("chips/{id}/facts")
 }
 
 /// The chip layer of `id`, relative to the root.
@@ -696,7 +696,7 @@ pub(crate) mod tests {
             );
             assert_eq!(
                 layers.files[3],
-                format!("chips/{id}/platform/rom-{revision}.toml")
+                format!("chips/{id}/facts/rom-{revision}.toml")
             );
             assert!(layers.top().contains("/boards/"), "{id}");
             let facts = tracked(id);
@@ -1068,12 +1068,12 @@ pub(crate) mod tests {
         let mut none = Boards(Vec::new());
         assert_eq!(
             top_layer(&mut none, "x").as_deref(),
-            Ok("chips/x/platform/chip.toml")
+            Ok("chips/x/facts/chip.toml")
         );
         let mut one = Boards(alloc::vec!["b.toml".into(), "README.md".into()]);
         assert_eq!(
             top_layer(&mut one, "x").as_deref(),
-            Ok("chips/x/platform/boards/b.toml")
+            Ok("chips/x/facts/boards/b.toml")
         );
         let mut two = Boards(alloc::vec!["b.toml".into(), "a.toml".into()]);
         let error = top_layer(&mut two, "x").expect_err("two boards");
@@ -1086,7 +1086,7 @@ pub(crate) mod tests {
         impl Source for Stray {
             fn read(&mut self, path: &str) -> Result<String> {
                 match path {
-                    "chips/x/platform/boards/b.toml" => Ok("schema = 2\n".into()),
+                    "chips/x/facts/boards/b.toml" => Ok("schema = 2\n".into()),
                     _ => Err(format!("no {path}").into()),
                 }
             }
@@ -1098,7 +1098,7 @@ pub(crate) mod tests {
         assert!(
             error
                 .to_string()
-                .contains("does not extend chips/x/platform/chip.toml"),
+                .contains("does not extend chips/x/facts/chip.toml"),
             "{error}"
         );
     }

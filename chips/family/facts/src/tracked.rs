@@ -13,40 +13,40 @@ use crate::{Result, Source};
 
 /// Every tracked layer file (the ROM's of each revision included) and each
 /// chip's stack policy
-/// (`chips/<id>/platform/stack.toml`, whose default task stack the layout
+/// (`chips/<id>/facts/stack.toml`, whose default task stack the layout
 /// takes): its path relative to the root and its text.
 pub const FILES: &[(&str, &str)] = &[
     (
-        "chips/family/platform/family.toml",
-        include_str!("../../platform/family.toml"),
+        "chips/family/facts/layers/family.toml",
+        include_str!("../layers/family.toml"),
     ),
     (
-        "chips/family/platform/isa/rv32imac.toml",
-        include_str!("../../platform/isa/rv32imac.toml"),
+        "chips/family/facts/layers/isa/rv32imac.toml",
+        include_str!("../layers/isa/rv32imac.toml"),
     ),
     (
-        "chips/family/platform/isa/rv32imafc.toml",
-        include_str!("../../platform/isa/rv32imafc.toml"),
+        "chips/family/facts/layers/isa/rv32imafc.toml",
+        include_str!("../layers/isa/rv32imafc.toml"),
     ),
     (
-        "chips/esp32s31/platform/chip.toml",
-        include_str!("../../../esp32s31/platform/chip.toml"),
+        "chips/esp32s31/facts/chip.toml",
+        include_str!("../../../esp32s31/facts/chip.toml"),
     ),
     (
-        "chips/esp32s31/platform/rom-rev0.toml",
-        include_str!("../../../esp32s31/platform/rom-rev0.toml"),
+        "chips/esp32s31/facts/rom-rev0.toml",
+        include_str!("../../../esp32s31/facts/rom-rev0.toml"),
     ),
     (
-        "chips/esp32s31/platform/stack.toml",
-        include_str!("../../../esp32s31/platform/stack.toml"),
+        "chips/esp32s31/facts/stack.toml",
+        include_str!("../../../esp32s31/facts/stack.toml"),
     ),
     (
-        "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",
-        include_str!("../../../esp32s31/platform/modules/esp32-s31-wroom.toml"),
+        "chips/esp32s31/facts/modules/esp32-s31-wroom.toml",
+        include_str!("../../../esp32s31/facts/modules/esp32-s31-wroom.toml"),
     ),
     (
-        "chips/esp32s31/platform/boards/esp32-s31-function-coreboard-1.toml",
-        include_str!("../../../esp32s31/platform/boards/esp32-s31-function-coreboard-1.toml"),
+        "chips/esp32s31/facts/boards/esp32-s31-function-coreboard-1.toml",
+        include_str!("../../../esp32s31/facts/boards/esp32-s31-function-coreboard-1.toml"),
     ),
 ];
 
@@ -64,7 +64,7 @@ pub fn ids() -> Vec<&'static str> {
         .iter()
         .filter_map(|(path, _)| {
             path.strip_prefix("chips/")?
-                .strip_suffix("/platform/chip.toml")
+                .strip_suffix("/facts/chip.toml")
         })
         .collect();
     ids.sort_unstable();
@@ -122,16 +122,16 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         let chips = root.join("chips");
         let mut found = Vec::new();
-        toml_files(&chips.join("family/platform"), &mut found);
+        toml_files(&chips.join("family/facts/layers"), &mut found);
         for entry in std::fs::read_dir(&chips).expect("chips/ is readable") {
             let entry = entry.expect("a readable entry").path();
-            let platform = entry.join("platform");
-            if platform.join("chip.toml").is_file() {
-                let chip = std::fs::read_to_string(platform.join("chip.toml"))
+            let facts = entry.join("facts");
+            if facts.join("chip.toml").is_file() {
+                let chip = std::fs::read_to_string(facts.join("chip.toml"))
                     .expect("a readable chip layer");
                 let chip: toml::Table = toml::from_str(&chip).expect("a TOML chip layer");
                 for revision in chip["revisions"].as_array().expect("revisions") {
-                    let rom = platform.join(format!(
+                    let rom = facts.join(format!(
                         "rom-{}.toml",
                         revision.as_str().expect("a revision name")
                     ));
@@ -139,10 +139,10 @@ mod tests {
                         found.push(rom);
                     }
                 }
-                found.push(platform.join("chip.toml"));
-                found.push(platform.join("stack.toml"));
-                toml_files(&platform.join("modules"), &mut found);
-                toml_files(&platform.join("boards"), &mut found);
+                found.push(facts.join("chip.toml"));
+                found.push(facts.join("stack.toml"));
+                toml_files(&facts.join("modules"), &mut found);
+                toml_files(&facts.join("boards"), &mut found);
             }
         }
         let mut found: Vec<String> = found

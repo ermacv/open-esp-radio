@@ -1,5 +1,6 @@
 [package]
 name = "oer-chips-esp32s31-board"
+description = "ESP32-S31-Function-CoreBoard-1: its PSRAM window, antenna gain and conducted-power limits"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

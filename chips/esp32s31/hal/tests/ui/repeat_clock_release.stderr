@@ -11,7 +11,7 @@ error[E0382]: use of moved value: `clocked`
   |                   ^^^^^^^ value used here after move
   |
 note: `WifiClocked::release_clocks` takes ownership of the receiver `self`, which moves `clocked`
- --> src/ieee80211/client.rs
+ --> src/radio/ieee80211/client.rs
   |
   |         mut self,
   |             ^^^^

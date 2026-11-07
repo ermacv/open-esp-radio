@@ -245,16 +245,16 @@ pub(crate) fn repository() -> tempfile::TempDir {
         .copied()
         .chain([
             (
-                "chips/esp32c5/platform/flash.toml",
-                include_str!("../../../../chips/esp32c5/platform/flash.toml"),
+                "chips/esp32c5/facts/flash.toml",
+                include_str!("../../../../chips/esp32c5/facts/flash.toml"),
             ),
             (
-                "chips/esp32c5/platform/partitions/applications.csv",
-                include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
+                "chips/esp32c5/facts/partitions/applications.csv",
+                include_str!("../../../../chips/esp32c5/facts/partitions/applications.csv"),
             ),
             (
-                "chips/esp32s31/platform/partitions/applications.csv",
-                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+                "chips/esp32s31/facts/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/facts/partitions/applications.csv"),
             ),
             (
                 "tools/lab/peers/esp32c5-ieee802154/firmware.toml",

@@ -27,7 +27,7 @@ cargo fw power-cycle --board <id|MAC>
 on the image's package: the stage-two runtime for
 `riscv32imafc-unknown-none-elf` with the `firmware` profile, packed and
 embedded in the bootstrap, and the flash contents encoded for the `[flash]`
-map of `chips/esp32s31/platform/chip.toml`. The bundle lands in
+map of `chips/esp32s31/facts/chip.toml`. The bundle lands in
 `target/fw/<image>/`, described by its `bundle.json`; `flash` and `run`
 write its flash files in `ImageBundle::segments` order, checked against the
 digests the manifest records.
@@ -38,7 +38,7 @@ large-assignments`), and through the image linker
 (`oer-tools-image-linker` of `tools/image/linker`), which refuses bytes in an input section
 the boot zeroes. The stack checks then bound the runtime's task and
 interrupt stacks and the bootstrap's stack under
-`chips/esp32s31/platform/stack.toml` (`runtime-stack.txt`,
+`chips/esp32s31/facts/stack.toml` (`runtime-stack.txt`,
 `interrupt-stack.txt`, `bootstrap-stack.txt`), and the placement check holds
 the runtime to the chip's `[placement]` contract (`placement.txt`).
 

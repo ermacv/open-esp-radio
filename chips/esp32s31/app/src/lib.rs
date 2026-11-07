@@ -38,8 +38,8 @@ use oer_chips_esp32s31_hal::{
         system_timer::{SystemTimer, SystimerAlarm1},
         watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
     },
-    platform::{InterruptController, Port},
-    root::Root,
+    system::platform::{InterruptController, Port},
+    system::root::Root,
 };
 use oer_chips_family_executor::{Executor, Spawner};
 use oer_chips_family_staged_runtime::{Adopted, Handoff};
@@ -50,7 +50,7 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_family_app::observe;
 use oer_chips_family_app::{boot, channel, net};
 
-pub use oer_chips_esp32s31_compose::Esp32s31;
+pub use oer_chips_esp32s31_runtime::Esp32s31;
 
 /// Time on the executors' clock: timers, timeouts, instants.
 pub use embassy_time as time;
@@ -120,11 +120,11 @@ mod console;
 #[cfg(feature = "console")]
 pub use console::{Console, ConsolePeripheral, UsbConsole};
 
-/// What the interrupt controller showed after the previous boot's
-/// exception trapped.
-pub use oer_chips_esp32s31_compose::exception::{LineView, Observed, Terminal, TrapIdentity};
 /// Why a hart left reset.
 pub use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
+/// What the interrupt controller showed after the previous boot's
+/// exception trapped.
+pub use oer_chips_esp32s31_runtime::exception::{LineView, Observed, Terminal, TrapIdentity};
 /// The record of the previous boot's panic.
 pub use oer_chips_family_staged_runtime::panic::PanicRecord;
 /// The previous boot's exception as the trap left it.
@@ -193,7 +193,7 @@ oer_chips_family_executor::tasks! {
 }
 
 oer_chips_family_executor::time_driver!(Esp32s31);
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_compose::phy_fault::reset);
+oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_runtime::phy_fault::reset);
 
 /// The peripherals an application may take, each once.
 pub struct Peripherals {
@@ -298,7 +298,7 @@ pub fn boot_id() -> u64 {
 
 /// A nonzero boot identity from `rng`.
 pub(crate) fn draw_boot_id(
-    rng: &mut oer_chips_esp32s31_compose::platform::Entropy,
+    rng: &mut oer_chips_esp32s31_runtime::platform::Entropy,
 ) -> Result<u64, oer_chips_esp32s31_hal::peripherals::entropy::EntropyError> {
     let mut bytes = [0; 8];
     rng.fill(&mut bytes)?;
@@ -690,7 +690,7 @@ pub fn start<S: Started, H: GroupStarted>(
                 trap,
                 // Only the observations of this trap: an earlier trap's
                 // record may outlive it.
-                observed: oer_chips_esp32s31_compose::exception::peek_previous()
+                observed: oer_chips_esp32s31_runtime::exception::peek_previous()
                     .filter(|observed| observed.follows(&trap)),
             }
         });
@@ -703,12 +703,12 @@ pub fn start<S: Started, H: GroupStarted>(
             root.into_runtime(),
             INTERRUPT_TABLE,
             oer_chips_esp32s31_board::BootstrapPsram,
-            oer_chips_esp32s31_compose::phy_fault::report_previous,
+            oer_chips_esp32s31_runtime::phy_fault::report_previous,
             |hardware| {
-                let causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
-                oer_chips_esp32s31_compose::wifi_fault::report_previous();
-                oer_chips_esp32s31_compose::radio_fault::report_previous();
-                oer_chips_esp32s31_compose::exception::report_previous();
+                let causes = oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
+                oer_chips_esp32s31_runtime::wifi_fault::report_previous();
+                oer_chips_esp32s31_runtime::radio_fault::report_previous();
+                oer_chips_esp32s31_runtime::exception::report_previous();
                 if let Some(record) = previous {
                     let mut console =
                         oer_chips_family_staged_runtime::diagnostics::Console::shared(whole);
@@ -718,7 +718,7 @@ pub fn start<S: Started, H: GroupStarted>(
                     );
                 }
                 Owned {
-                    reset_cause: causes.of(oer_chips_esp32s31_hal::platform::BOOT_HART),
+                    reset_cause: causes.of(oer_chips_esp32s31_hal::system::platform::BOOT_HART),
                     entropy: hardware.entropy,
                     aes: hardware.aes,
                     system_timer: hardware.system_timer,
@@ -748,7 +748,7 @@ pub fn start<S: Started, H: GroupStarted>(
             Ok(adopted) => adopted.into_parts(),
             Err(error) => fail(error.name()),
         };
-    oer_chips_esp32s31_compose::exception::report_stack_guard();
+    oer_chips_esp32s31_runtime::exception::report_stack_guard();
     let Some(interrupts) = Interrupts::take() else {
         fail(Error::InterruptTaken.name());
     };
@@ -842,7 +842,7 @@ pub fn start<S: Started, H: GroupStarted>(
         (Some(id), _) => id,
         (None, Some(registers)) => {
             let mut rng =
-                oer_chips_esp32s31_compose::platform::Entropy::new(registers, EmbassyClock);
+                oer_chips_esp32s31_runtime::platform::Entropy::new(registers, EmbassyClock);
             if !rng.is_healthy() {
                 fail(Error::Entropy.name());
             }
@@ -979,7 +979,7 @@ struct Owned {
     software: SoftwareInterrupts,
     watchdog: ArmedRtcWatchdog<RwdtRegisters>,
     #[cfg(feature = "group")]
-    hart1: oer_chips_esp32s31_hal::cores::LaunchPermit,
+    hart1: oer_chips_esp32s31_hal::system::cores::LaunchPermit,
     #[cfg(feature = "group")]
     causes: oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCauses,
     #[cfg(feature = "observe")]
@@ -997,7 +997,7 @@ struct Owned {
 #[doc(hidden)]
 #[cfg(feature = "group")]
 pub type GroupMailbox = &'static oer_chips_family_staged_runtime::Mailbox<
-    oer_chips_esp32s31_hal::platform::Hart1Grant,
+    oer_chips_esp32s31_hal::system::platform::Hart1Grant,
     Hart1Parts,
 >;
 #[doc(hidden)]
@@ -1032,7 +1032,7 @@ pub(crate) fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) ->
 }
 
 /// [`fail`] for a reason whose variant path the record keeps after it: the
-/// next boot prints `reason` and `path` ([`oer_chips_esp32s31_compose::diagnostic_text`]),
+/// next boot prints `reason` and `path` ([`oer_chips_esp32s31_runtime::diagnostic_text`]),
 /// cut to the record's payload.
 #[cfg(feature = "wifi")]
 pub(crate) fn fail_path<const B: usize>(
@@ -1040,7 +1040,7 @@ pub(crate) fn fail_path<const B: usize>(
     path: &oer_portable_diagnostics::DiagPath,
 ) -> ! {
     let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
-    let length = oer_chips_esp32s31_compose::diagnostic_text::write(
+    let length = oer_chips_esp32s31_runtime::diagnostic_text::write(
         reason.as_str().as_bytes(),
         path,
         &mut text,
@@ -1061,8 +1061,8 @@ pub(crate) fn fail_path<const B: usize>(
 #[doc(hidden)]
 pub mod __private {
     pub use super::{no_group, start};
-    pub use oer_chips_esp32s31_compose::exception::capture as exception;
-    pub use oer_chips_esp32s31_hal::platform::Port;
+    pub use oer_chips_esp32s31_hal::system::platform::Port;
+    pub use oer_chips_esp32s31_runtime::exception::capture as exception;
     pub use oer_chips_family_staged_runtime::{Handoff, entry};
     pub use oer_chips_family_staged_runtime::{SecondaryHandoff, secondary_entry};
 }

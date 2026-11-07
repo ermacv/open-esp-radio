@@ -359,7 +359,7 @@ a `stop` requires a question to the owner. The build README gives a radio-root e
 ## Reachability reports
 
 The family's `observed-functions`
-([`family.toml`](../../../chips/family/platform/family.toml)) and an
+([`family.toml`](../../../chips/family/facts/layers/family.toml)) and an
 image stack policy's `observed_functions` select demangled linked function
 names, examining every alias and the analysed ROM companions. `*` matches
 any substring; every other character is literal. An extending image policy

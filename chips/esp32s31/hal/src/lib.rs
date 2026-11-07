@@ -27,42 +27,22 @@ extern crate std;
 
 use core::future::Future;
 
-use crate::ieee80211::registers::{
+use crate::radio::ieee80211::registers::{
     MacInterruptRegisters as PacMacInterruptRegisters,
     MacPowerInterruptRegisters as PacMacPowerInterruptRegisters,
 };
-use crate::phy::RadioPhyRegisters;
+use crate::radio::phy::RadioPhyRegisters;
 
-pub mod bluetooth;
-pub mod boot;
-
-mod clock;
-
-mod coex_participation;
-
-pub mod coex;
-
-pub mod cores;
-
-pub mod domain;
-pub mod modem;
 pub mod power;
-pub mod root;
+pub mod radio;
+pub mod system;
 pub mod types;
 
-pub mod owner;
-
 #[cfg(target_arch = "riscv32")]
-pub(crate) use owner::phy_pac_mut;
-pub(crate) use owner::{phy_blocks, phy_blocks_mut, sealed};
-
-pub mod ieee80211;
-pub mod ieee802154;
+pub(crate) use system::owner::phy_pac_mut;
+pub(crate) use system::owner::{phy_blocks, phy_blocks_mut, sealed};
 
 /// The memory layouts the radio hardware reads and writes in RAM, from the
 /// PAC: the protocol layers above reach them through these types only.
 pub use oer_chips_esp32s31_pac::layouts;
-pub mod memory;
 pub mod peripherals;
-pub mod phy;
-pub mod platform;

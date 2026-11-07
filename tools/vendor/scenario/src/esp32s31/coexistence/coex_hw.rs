@@ -14,7 +14,7 @@ const EVENTS: &[u32] = &events::<49>(None);
 const EVENTS_AND_INVALID: &[u32] = &events::<50>(None);
 /// The PHY grant-protect event: vendor `coex_core_timer_idx_get` maps it to
 /// timer 5, which production reserves for the radio arbiter's
-/// `oer_chips_esp32s31_hal::coex::PhyGrantProtect` instead of the driver's policy
+/// `oer_chips_esp32s31_hal::radio::coex::PhyGrantProtect` instead of the driver's policy
 /// timers. The driver leaves compare every other event.
 const GRANT_PROTECT_EVENT: u32 = 48;
 /// The driver's events and the first event beyond them.
@@ -65,7 +65,7 @@ const fn output(length: u32) -> Domain {
 }
 
 // SOURCE: hil/probes/esp32s31-radio/src/coex.rs::with_domain lends
-// RadioHardware::for_probe().split(()) directly; hal/src/coex.rs::CoexPolicyTimerBank
+// RadioHardware::for_probe().split(()) directly; hal/src/radio/coex.rs::CoexPolicyTimerBank
 // borrows those owned registers without a lease or a release fence. These
 // leaves compare all effects exactly, including any unexpected fence.
 

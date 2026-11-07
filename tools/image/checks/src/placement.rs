@@ -45,7 +45,7 @@ pub fn bootstrap(sram: Region, flash: Region, path: &Path) -> Result<String> {
         // The S31 loader needs two mapped image records, not flash code:
         // payload and tuning reference are separate read-only sources.
         // SOURCE: ESP-IDF e9da155a bootloader_utility.c:802-851;
-        // chips/esp32s31/platform/chip.toml [boot-chain]. The staged encoder
+        // chips/esp32s31/facts/chip.toml [boot-chain]. The staged encoder
         // audits the actual ESP segment count after adjacent sections merge.
         let allowed_flash = flash.contains_range(section.address, end)
             && !section.executable

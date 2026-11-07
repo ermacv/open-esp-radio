@@ -18,7 +18,7 @@
 
 use core::marker::PhantomData;
 
-use crate::{modem::ModemClockDevice, phy::RadioPhyRegisters};
+use crate::{radio::modem::ModemClockDevice, radio::phy::RadioPhyRegisters};
 
 use super::Dependency;
 
@@ -362,7 +362,7 @@ pub(crate) trait ModemClockPort {
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool);
 }
 
-impl<P: crate::phy::registers::RadioPlacement> ModemClockPort for RadioPhyRegisters<P> {
+impl<P: crate::radio::phy::registers::RadioPlacement> ModemClockPort for RadioPhyRegisters<P> {
     fn prepare_power_state(&mut self) {
         self.prepare_modem_syscon_clock_map();
         self.prepare_shared_modem_clock_map();

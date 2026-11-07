@@ -10,22 +10,22 @@ help: the trait `tx_storage::sealed::Owner` is not implemented for `Forged`
  7 | pub struct Forged(DmaRef<WifiTxDmaDescriptor>);
    | ^^^^^^^^^^^^^^^^^
 help: the following other types implement trait `tx_storage::sealed::Owner`
-  --> src/ieee80211/dma/tx_storage.rs
+  --> src/radio/ieee80211/dma/tx_storage.rs
    |
    |   impl<L> sealed::Owner for TxDmaPublication<'_, L> {}
    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `TxDmaPublication<'_, L>`
    |
-  ::: src/ieee80211/dma/tx_ampdu_storage.rs
+  ::: src/radio/ieee80211/dma/tx_ampdu_storage.rs
    |
    | / impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize> CommitOwner
    | |     for RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
    | |__________________________________________________________________^ `RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>`
 note: required by a bound in `CommitTxDma`
-  --> src/ieee80211/dma/tx_storage.rs
+  --> src/radio/ieee80211/dma/tx_storage.rs
    |
    | pub trait CommitTxDma: PreparedTxDma<DmaRef<WifiTxDmaDescriptor>> + sealed::Owner {
    |                                                                     ^^^^^^^^^^^^^ required by this bound in `CommitTxDma`
-   = note: `CommitTxDma` is a "sealed trait", because to implement it you also need to implement `oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::sealed::Owner`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
+   = note: `CommitTxDma` is a "sealed trait", because to implement it you also need to implement `oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_storage::sealed::Owner`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
    = help: the following types implement the trait:
-             oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
-             oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaPublication<'_, L>
+             oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_ampdu_storage::RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
+             oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_storage::TxDmaPublication<'_, L>

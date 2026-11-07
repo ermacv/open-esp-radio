@@ -1,5 +1,5 @@
 //! Owned S31 register and reference adapter for the family power driver.
-use crate::{clock::PlatformClockRefs, phy::RadioPhyRegisters};
+use crate::{power::radio::PlatformClockRefs, radio::phy::RadioPhyRegisters};
 
 /// Power-sequence port over one route's shared PHY, its platform clock
 /// references and the platform clock owner.
@@ -69,6 +69,8 @@ impl<P: PlatformClockProvider> oer_chips_family_radio::power::PowerSequenceBacke
 
 mod chip_clocks;
 pub(crate) mod clock;
+pub(crate) mod radio;
+pub mod sleep;
 #[cfg(test)]
 pub(crate) mod test_clocks;
 pub use chip_clocks::{ChipClocks, PsramMpll};

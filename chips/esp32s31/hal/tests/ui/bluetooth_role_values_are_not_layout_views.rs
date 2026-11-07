@@ -1,6 +1,6 @@
 #![no_std]
 // ui-requires: bluetooth-engine
-use oer_chips_esp32s31_hal::bluetooth::engine::{DtmPool, SchedulerRoleInstance};
+use oer_chips_esp32s31_hal::radio::bluetooth::engine::{DtmPool, SchedulerRoleInstance};
 
 pub fn build<'pool, 'epoch>(
     pool: &mut DtmPool<'pool, 'epoch, 1>, lease: SchedulerRoleInstance<'pool, 'epoch>,

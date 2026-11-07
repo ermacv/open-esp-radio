@@ -1,23 +1,23 @@
 error[E0603]: struct `BlePhyEngineCpuOwned` is private
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:33:48
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:33:55
    |
-33 | use oer_chips_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned; // ui-error: E0603
-   |                                                ^^^^^^^^^^^^^^^^^^^^ private struct
+33 | use oer_chips_esp32s31_hal::radio::bluetooth::engine::BlePhyEngineCpuOwned; // ui-error: E0603
+   |                                                       ^^^^^^^^^^^^^^^^^^^^ private struct
    |
 note: the struct `BlePhyEngineCpuOwned` is defined here
-  --> src/bluetooth/engine/mod.rs
+  --> src/radio/bluetooth/engine/mod.rs
    |
    | pub(crate) use ble_phy_engine::{BlePhyEngineCpuOwned, BlePhyEngineStorage};
    |                                 ^^^^^^^^^^^^^^^^^^^^
 
 error[E0603]: struct `DirectionFindingWorkspaceCpuOwned` is private
-  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:35:48
+  --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:35:55
    |
-35 | use oer_chips_esp32s31_hal::bluetooth::engine::DirectionFindingWorkspaceCpuOwned; // ui-error: E0603
-   |                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private struct
+35 | use oer_chips_esp32s31_hal::radio::bluetooth::engine::DirectionFindingWorkspaceCpuOwned; // ui-error: E0603
+   |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private struct
    |
 note: the struct `DirectionFindingWorkspaceCpuOwned` is defined here
-  --> src/bluetooth/engine/mod.rs
+  --> src/radio/bluetooth/engine/mod.rs
    |
    |     DirectionFindingWorkspaceCpuOwned, DirectionFindingWorkspaceStorage,
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -28,10 +28,10 @@ error[E0624]: method `publish` is private
 11 |     table.publish(controller); // ui-error: E0624
    |           ^^^^^^^ private method
    |
-  ::: src/bluetooth/engine/le_device_table.rs
+  ::: src/radio/bluetooth/engine/le_device_table.rs
    |
-   |     pub(crate) fn publish(&self, controller: &mut crate::bluetooth::ControllerHal<'_>) {
-   |     ---------------------------------------------------------------------------------- private method defined here
+   |     pub(crate) fn publish(&self, controller: &mut crate::radio::bluetooth::ControllerHal<'_>) {
+   |     ----------------------------------------------------------------------------------------- private method defined here
 
 error[E0624]: method `publish_initial_head` is private
   --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:15:21
@@ -39,13 +39,13 @@ error[E0624]: method `publish_initial_head` is private
 15 |       let _ = receive.publish_initial_head(controller); // ui-error: E0624
    |                       ^^^^^^^^^^^^^^^^^^^^ private method
    |
-  ::: src/bluetooth/engine/le_rx_chain.rs
+  ::: src/radio/bluetooth/engine/le_rx_chain.rs
    |
    | /     pub(crate) fn publish_initial_head(
    | |         &self,
-   | |         controller: &mut crate::bluetooth::ControllerHal<'_>,
-   | |     ) -> crate::bluetooth::RxMemoryListPublished {
-   | |________________________________________________- private method defined here
+   | |         controller: &mut crate::radio::bluetooth::ControllerHal<'_>,
+   | |     ) -> crate::radio::bluetooth::RxMemoryListPublished {
+   | |_______________________________________________________- private method defined here
 
 error[E0624]: method `publication` is private
   --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:22:19
@@ -53,7 +53,7 @@ error[E0624]: method `publication` is private
 22 |     let _ = table.publication(); // ui-error: E0624
    |                   ^^^^^^^^^^^ private method
    |
-  ::: src/bluetooth/engine/le_device_table.rs
+  ::: src/radio/bluetooth/engine/le_device_table.rs
    |
    |     pub(crate) fn publication(&self) -> DeviceTablePublication {
    |     ---------------------------------------------------------- private method defined here
@@ -64,10 +64,10 @@ error[E0624]: method `publication_head` is private
 26 |     let _ = receive.publication_head(); // ui-error: E0624
    |                     ^^^^^^^^^^^^^^^^ private method
    |
-  ::: src/bluetooth/engine/le_rx_chain.rs
+  ::: src/radio/bluetooth/engine/le_rx_chain.rs
    |
-   |     pub(crate) fn publication_head(&self) -> crate::bluetooth::RxChainHead {
-   |     ---------------------------------------------------------------------- private method defined here
+   |     pub(crate) fn publication_head(&self) -> crate::radio::bluetooth::RxChainHead {
+   |     ----------------------------------------------------------------------------- private method defined here
 
 error[E0624]: method `head` is private
   --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:30:22
@@ -75,7 +75,7 @@ error[E0624]: method `head` is private
 30 |     let _ = scanning.head(); // ui-error: E0624
    |                      ^^^^ private method
    |
-  ::: src/bluetooth.rs
+  ::: src/radio/bluetooth.rs
    |
    |     pub(crate) const fn head(&self) -> crate::layouts::DmaRef<crate::layouts::BleBufferHeader> {
    |     ------------------------------------------------------------------------------------------ private method defined here
@@ -86,7 +86,7 @@ error[E0624]: method `publish_scheduler_hardware_list_head` is private
 38 |       let _ = controller.publish_scheduler_hardware_list_head( // ui-error: E0624
    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private method
    |
-  ::: src/bluetooth.rs
+  ::: src/radio/bluetooth.rs
    |
    | /     pub(crate) fn publish_scheduler_hardware_list_head(
    | |         &mut self,

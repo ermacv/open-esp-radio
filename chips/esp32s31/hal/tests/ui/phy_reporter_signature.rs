@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::domain::transaction::Fault;
+use oer_chips_esp32s31_hal::radio::domain::transaction::Fault;
 #[cfg(not(ui_reject))]
 fn report(_: Fault) -> ! { loop {} }
 #[cfg(ui_reject)]

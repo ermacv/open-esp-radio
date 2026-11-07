@@ -2,10 +2,10 @@
 //! opens, then the duplex endpoint of the core-0 executor and its interrupt,
 //! which raises the endpoint's static signal.
 
-use oer_chips_esp32s31_compose::Esp32s31;
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
+use oer_chips_esp32s31_runtime::Esp32s31;
 use oer_chips_family_executor::Executor;
 use oer_chips_family_interrupt_table::{Controller, Router};
 use oer_chips_family_usb_serial_jtag::{Endpoint, Interrupt};
@@ -57,7 +57,7 @@ pub(crate) fn open<const H: u8, C: Controller>(
         retire_early_writer().map_err(|_held: RetireError| OpenError::Retire)?;
     let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
         oer_chips_family_staged_runtime::interrupts::reset_binding::<
-            oer_chips_esp32s31_hal::platform::Port,
+            oer_chips_esp32s31_hal::system::platform::Port,
             _,
         >(error)
     });

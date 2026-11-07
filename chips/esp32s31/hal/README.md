@@ -24,17 +24,21 @@ handoff. Hart 0's level bits are set when the root splits the partition on
 the boot hart, hart 1's when hart 1 makes its controller. `fatal_view`
 observes hart 0's routes and lines in hart 0's fatal path only: hart 1's
 routes have no claimed observer and its lines are reachable only from it. Ordinary blocks are `peripherals::<block>`:
-`aes`, `cache_counters`, `efuse`, `entropy`, `reset_cause`, `sleep`, `software_interrupt`,
-`system_timer`, `timg0_alarm`, `timg1_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is
-the DMA memory core (`dma_address`, `dma_static`); the `dma_static!` macro is
-exported at the crate root. `boot` holds the bootstrap's owners; the radio modules are
-at the crate root.
+`aes`, `cache_counters`, `efuse`, `entropy`, `reset_cause`, `software_interrupt`,
+`system_timer`, `timg0_alarm`, `timg1_alarm`, `usb_serial_jtag` and `watchdog`. `system`
+holds what lies below every block: the reset root (`root`), ownership
+(`owner`), the harts (`cores`), the platform port (`platform`), the DMA memory
+core (`memory`: `dma_address`, `dma_static`; the `dma_static!` macro is exported
+at the crate root) and the bootstrap's owners (`boot`). `power` holds the
+platform clocks, common radio power and the PMU sleep (`sleep`). `radio` holds the shared domain
+(`domain`), the modem (`modem`), coexistence (`coex`), the PHY's registers
+(`phy`) and each protocol's hardware (`ieee80211`, `bluetooth`, `ieee802154`).
 
 Production files that wait, poll or run on deadlines are a per-file list
 with exact marker counts in `oer-tools-test-layers`
 ([layer tests](../../../tools/test/layers/README.md)): the Bluetooth
 controller engine, scheduler and modem timer, the boot policy and waits in
-`boot`, the Wi-Fi cold start in `ieee80211`, and the entropy read gap in
+`system::boot`, the Wi-Fi cold start in `radio::ieee80211`, and the entropy read gap in
 `peripherals/entropy.rs`. The list only shrinks; no
 new file joins it. The scan does not find driver code without such a marker.
 
@@ -60,7 +64,7 @@ request/reply exchange, terminal output release and role workers remain here.
 For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the
 permanent DMA static and projects each frame into the typed DMA window.
-`oer-chips-esp32s31-ieee802154-driver` implements the family engine's LL contract
+`oer-chips-esp32s31-radio-ieee802154-driver` implements the family engine's LL contract
 and owns its service/placement wrapper above HAL. HAL has no normal or test
 engine dependency.
 The family engine owns reset/foundation validation, static policy and
@@ -83,7 +87,7 @@ opening the timer clock or checking its latch. The family cold-start runner
 performs those steps through the S31 boot binding. `into_runtime` also returns
 unstarted owners without register access or installation. Its `RuntimePort`
 implements the family boot adoption driver's owned adapters. That driver owns
-clock adoption, installation order and watchdog arming; the compose binding
+clock adoption, installation order and watchdog arming; the runtime binding
 connects its `PlatformParts` to the staged runner. `PlatformParts` also serves
 isolated verifier sessions, without a staged handoff or runtime dependency.
 A ready staged `Runtime` exists only after driver arming and board/context adoption.
@@ -163,7 +167,7 @@ line17-before16 pair; other pairs, levels and sustained fairness are unqualified
 ## Platform clocks
 
 The bootstrap's `boot::LpFastClock` implements the family's LP-fast selector
-port. `oer-chips-esp32s31-boot` generates the selection from `lp-fast-source` in
+port. `oer-chips-esp32s31-bootstrap` generates the selection from `lp-fast-source` in
 tracked chip/profile facts (currently XTAL) and supplies its sourced 3 µs
 settle. `oer-chips-family-boot::drivers::clock` writes the selector, holds under
 the common boot deadline and rejects readback disagreement as
@@ -176,7 +180,7 @@ its part through the separate runtime root. RC_FAST has no startup profile.
 vendor write series, event enable, and individual word samples. Its owner
 lends that port and its analog bus together. Threshold transaction, timeout
 and readback policy live in `oer-chips-family-boot::drivers::brownout`; the
-chip's waits, thresholds and actions live in `oer-chips-esp32s31-boot`.
+chip's waits, thresholds and actions live in `oer-chips-esp32s31-bootstrap`.
 
 `boot::Soc` owns the core-control, access-filter and TRNG parts and implements
 `drivers::{cores,access_control,entropy}` ports. The family SoC-init driver
@@ -321,7 +325,7 @@ the generated ordinary-queue geometry. Raw input is admitted with `new`;
 fixed identities use `constant`, checked during monomorphization. Bank selection
 and event acknowledgement match that domain exhaustively.
 The reserved-TXOP-slot adjustment is a known vendor difference, documented in
-[the driver](../ieee80211/driver/README.md#tx-control-bit-22)
+[the driver](../radio/ieee80211/driver/README.md#tx-control-bit-22)
 (`VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS`).
 FE `+0x8d0[21:20]` remains opaque: its nonzero sample contributes diagnostic
 and RX-saturation observations, while estimator completion uses READY.

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::boot::PsramRegisters;
+use oer_chips_esp32s31_hal::system::boot::PsramRegisters;
 use oer_chips_family_boot::psram::MappedPsram;
 
 pub fn loan(mapped: MappedPsram<PsramRegisters>) {

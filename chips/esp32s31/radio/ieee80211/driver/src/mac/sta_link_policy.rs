@@ -1,0 +1,113 @@
+//! Hardware boundary for switching from scan to associated STA RX policy.
+
+use oer_chips_esp32s31_hal::{
+    radio::ieee80211::mac::WifiMacHal, system::owner::RadioAccess, types::MacStaPolicyMode,
+};
+
+pub trait StaLinkRxPolicyHardware {
+    fn apply_sta_link_policy(&mut self, bssid: [u8; 6]);
+}
+
+/// Hardware owner capable of admitting management frames with a foreign
+/// BSSID while retaining normal station filtering and hardware auto-ACK.
+pub trait StaEspNowRxPolicyHardware {
+    fn apply_sta_esp_now_policy(&mut self, bssid: [u8; 6]);
+}
+
+/// Hardware owner capable of a scan's reception outside a BSS: every BSS's
+/// management and the unicast frames addressed to the station.
+pub trait StaScanRxPolicyHardware {
+    fn apply_sta_scan_policy(&mut self);
+}
+
+/// Read-only PHY observation used by the STA layer to complete peer policy.
+pub trait StaNoiseFloorHardware {
+    fn read_noise_floor_dbm(&self) -> i8;
+}
+
+impl StaLinkRxPolicyHardware for WifiMacHal<'_> {
+    fn apply_sta_link_policy(&mut self, bssid: [u8; 6]) {
+        self.configure_station_receive_policy(bssid);
+    }
+}
+
+impl StaEspNowRxPolicyHardware for WifiMacHal<'_> {
+    fn apply_sta_esp_now_policy(&mut self, bssid: [u8; 6]) {
+        // Re-run the complete normal transition first. In particular this
+        // clears queue three's AUTOACK_DISABLE bit before policy six enables
+        // management admission without BSSID matching on queue zero.
+        self.configure_station_receive_policy(bssid);
+        self.configure_station_policy_six(bssid, MacStaPolicyMode::Mode2);
+    }
+}
+
+impl StaScanRxPolicyHardware for WifiMacHal<'_> {
+    fn apply_sta_scan_policy(&mut self) {
+        let bssid = oer_protocols_ieee80211_wire::management::BROADCAST_ADDRESS;
+        // As ESP-NOW's: the normal transition clears queue three's
+        // AUTOACK_DISABLE bit first.
+        self.configure_station_receive_policy(bssid);
+        self.configure_station_scan_policy(bssid);
+    }
+}
+
+impl StaNoiseFloorHardware for WifiMacHal<'_> {
+    fn read_noise_floor_dbm(&self) -> i8 {
+        self.read_noise_floor_dbm()
+    }
+}
+
+impl StaLinkRxPolicyHardware for RadioAccess {
+    fn apply_sta_link_policy(&mut self, bssid: [u8; 6]) {
+        self.wifi_mac_hal().configure_station_receive_policy(bssid);
+    }
+}
+
+impl StaEspNowRxPolicyHardware for RadioAccess {
+    fn apply_sta_esp_now_policy(&mut self, bssid: [u8; 6]) {
+        self.wifi_mac_hal().apply_sta_esp_now_policy(bssid);
+    }
+}
+
+impl StaScanRxPolicyHardware for RadioAccess {
+    fn apply_sta_scan_policy(&mut self) {
+        StaScanRxPolicyHardware::apply_sta_scan_policy(&mut self.wifi_mac_hal());
+    }
+}
+
+impl StaNoiseFloorHardware for RadioAccess {
+    fn read_noise_floor_dbm(&self) -> i8 {
+        RadioAccess::read_noise_floor_dbm(self)
+    }
+}
+
+/// Apply the reviewed BSSID/filter transaction after off-channel scan and
+/// before the first Authentication transmission.
+pub fn configure_sta_link_receive_policy<H: StaLinkRxPolicyHardware>(
+    hardware: &mut H,
+    bssid: [u8; 6],
+) {
+    hardware.apply_sta_link_policy(bssid);
+}
+
+/// Apply the reviewed normal-STA/auto-ACK transition followed by the exact
+/// policy-six Mode2 transaction needed to pass broadcast-BSSID Action frames.
+///
+/// The numeric submode name remains intentional: this API claims only the
+/// decoded management/BSSID filter fields, not simultaneous AP+STA behavior.
+pub fn configure_sta_esp_now_receive_policy<H: StaEspNowRxPolicyHardware>(
+    hardware: &mut H,
+    bssid: [u8; 6],
+) {
+    hardware.apply_sta_esp_now_policy(bssid);
+}
+
+/// Apply the reviewed normal-STA/auto-ACK policy for an unassociated
+/// station-address VIF, followed by the exact policy-six Mode2 leaf already
+/// used for connected ESP-NOW vendor Action admission.
+///
+/// The protocol-defined broadcast BSSID is supplied to the existing typed
+/// transaction; this function introduces no new register image or submode.
+pub fn configure_standalone_esp_now_receive_policy<H: StaEspNowRxPolicyHardware>(hardware: &mut H) {
+    hardware.apply_sta_esp_now_policy(oer_protocols_ieee80211_wire::management::BROADCAST_ADDRESS);
+}

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_esp32s31_hal::system::root::Root;
 
 #[cfg(ui_reject)]
 fn program<C: oer_chips_family_boot::clock::CpuClockRegisters>(_: C) {}

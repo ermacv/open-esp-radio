@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::CommitTxDma;
+use oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_storage::CommitTxDma;
 use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 

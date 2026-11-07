@@ -134,7 +134,7 @@ the checked entry uses the interrupt stack, and the exception bound is
 already included above every hart's interrupt levels.
 
 `analyze` also takes reviewed summaries (`Summary`, parsed from a
-`[[function]]` TOML such as `chips/esp32s31/platform/rom-functions.toml`) of
+`[[function]]` TOML such as `chips/esp32s31/facts/rom-functions.toml`) of
 companion functions the machine code alone does not bound: each names its
 function's address, which must carry that name. A summary of a function the
 image reaches applies: where the analysis bounds the function itself, the

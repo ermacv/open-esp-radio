@@ -2,13 +2,13 @@
 use super::{COUNT, NODES, Storage, WORDS, node, read_word, usb};
 use core::fmt::Write as _;
 use oer_chips_esp32s31_hal::{
-    ieee80211::{
+    radio::ieee80211::{
         dma::rx_ring::RxRingLive,
         registers::{MacInterruptMask, MacRxInterrupts},
     },
-    owner::{MacInterruptRegisters, RadioAccess},
+    system::owner::{MacInterruptRegisters, RadioAccess},
 };
-use oer_chips_esp32s31_ieee80211_driver::rx::receive::RELOAD_SETTLE_LIMIT;
+use oer_chips_esp32s31_radio_ieee80211_driver::rx::receive::RELOAD_SETTLE_LIMIT;
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::zeroed::ZeroedStatic;
 use oer_portable_time::{Clock, Duration, settle::Settle};

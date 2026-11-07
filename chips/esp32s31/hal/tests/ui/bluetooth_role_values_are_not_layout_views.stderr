@@ -4,7 +4,7 @@ error[E0624]: method `cpu` is private
 10 |       let _ = pool.cpu(&lease); // ui-error: E0624
    |                    ^^^ private method
    |
-  ::: src/bluetooth/engine/scheduler_pool.rs
+  ::: src/radio/bluetooth/engine/scheduler_pool.rs
    |
    | /     pub(crate) fn cpu(
    | |         &mut self,

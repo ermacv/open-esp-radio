@@ -1,7 +1,7 @@
 use oer_chips_esp32s31_hal::{
-    cores::{Cores, LaunchPermit, SecondaryEntry, SecondaryHart},
+    system::cores::{Cores, LaunchPermit, SecondaryEntry, SecondaryHart},
     peripherals::reset_cause::ResetCauses,
-    platform::core_control::CoreControlRegisters,
+    system::platform::core_control::CoreControlRegisters,
 };
 
 pub fn start(cores: &mut Cores, permit: LaunchPermit, causes: ResetCauses, entry: SecondaryEntry) {

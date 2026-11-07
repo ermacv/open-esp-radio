@@ -1,15 +1,15 @@
 use oer_chips_esp32s31_board as board;
-use oer_chips_esp32s31_compose::Esp32s31;
+use oer_chips_esp32s31_runtime::Esp32s31;
 use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCauses;
-use oer_chips_esp32s31_hal::peripherals::sleep::SleepRegisters;
+use oer_chips_esp32s31_hal::power::sleep::SleepRegisters;
 use oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
 use oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag;
 use oer_chips_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
 };
-use oer_chips_esp32s31_hal::platform::Port;
-use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_esp32s31_hal::system::platform::Port;
+use oer_chips_esp32s31_hal::system::root::Root;
 use oer_chips_family_executor::Executor;
 use oer_chips_family_power::sleep::{self, Outcome, SleepClocks, SleepError, SleepRequest, Slept};
 use oer_portable_embassy_time::EmbassyClock;
@@ -60,12 +60,12 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((timer, software, watchdogs, sleep, causes), _psram, mut adopted) =
-        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
+        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_runtime::Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
             board::BootstrapPsram,
-            oer_chips_esp32s31_compose::phy_fault::report_previous,
+            oer_chips_esp32s31_runtime::phy_fault::report_previous,
             |hardware| {
                 (
                     hardware.system_timer,
@@ -161,7 +161,7 @@ fn report_boot(sleep_registers: &mut SleepRegisters, causes: ResetCauses) {
     // before the host reads it.
     let mut line = Line::new();
     line.text("OER-PROBE ls boot");
-    for hart in oer_chips_esp32s31_hal::platform::Hart::ALL {
+    for hart in oer_chips_esp32s31_hal::system::platform::Hart::ALL {
         line.text(" reset")
             .number(hart.get() as u64)
             .text("=")

@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn the_size_source_names_where_the_size_came_from() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let policy = StackPolicy::load(&root.join("chips/esp32s31/platform/stack.toml")).unwrap();
+        let policy = StackPolicy::load(&root.join("chips/esp32s31/facts/stack.toml")).unwrap();
         assert_eq!(SizeSource::of(&policy, 0, None), SizeSource::PerHartDefault);
         assert_eq!(
             SizeSource::of(&policy, 0, Some(&planned())),

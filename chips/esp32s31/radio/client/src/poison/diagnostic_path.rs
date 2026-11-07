@@ -1,8 +1,8 @@
 //! The variant paths of a poison, for retained diagnostics that do not
 //! format. Each `match` is exhaustive: a new variant breaks the build.
 
-use oer_chips_esp32s31_hal::domain::{CommonRadioPowerError, RadioClient};
-use oer_chips_esp32s31_phy::{PhyRegisterBindingError, PhyRegisterStage};
+use oer_chips_esp32s31_hal::radio::domain::{CommonRadioPowerError, RadioClient};
+use oer_chips_esp32s31_radio_phy::{PhyRegisterBindingError, PhyRegisterStage};
 use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
 use super::{
@@ -206,8 +206,8 @@ impl DiagnosticPath for RegistrationFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
-    use oer_chips_esp32s31_phy::state::client::{PhyPllTrackClass, PhyTrackTimeError};
+    use oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_radio_phy::state::client::{PhyPllTrackClass, PhyTrackTimeError};
 
     #[test]
     fn a_tracking_poison_names_its_whole_path() {

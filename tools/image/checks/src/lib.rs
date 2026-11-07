@@ -273,7 +273,7 @@ impl Gates {
         let profile = &image_profile;
         let chip = |table: &str| {
             format!(
-                "chips/{}/platform/chip.toml names no {table}",
+                "chips/{}/facts/chip.toml names no {table}",
                 profile.facts.id
             )
         };
@@ -609,7 +609,7 @@ impl Gates {
         }
         if input.profile.facts.rom.is_none() {
             let missing = CheckResult::MissingContract(format!(
-                "chips/{}/platform names no ROM layer with a [rom] ELF",
+                "chips/{}/facts names no ROM layer with a [rom] ELF",
                 input.profile.facts.id
             ));
             for name in self.requested(CheckedElf::Bootstrap) {

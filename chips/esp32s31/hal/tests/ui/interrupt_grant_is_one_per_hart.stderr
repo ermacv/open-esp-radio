@@ -4,7 +4,7 @@ error[E0624]: associated function `new` is private
 25 |     InterruptGrant::new(bank, clic, None) // ui-error: E0624
    |                     ^^^ private associated function
    |
-  ::: src/platform/interrupt_controller.rs
+  ::: src/system/platform/interrupt_controller.rs
    |
    |     pub(crate) const fn new(bank: B, lines: Clic<C>, config: Option<ClicObserver<C>>) -> Self {
    |     ----------------------------------------------------------------------------------------- private associated function defined here
@@ -22,7 +22,7 @@ note: required because it appears within the type `PhantomData<*mut ()>`
    | pub struct PhantomData<T: PointeeSized>;
    |            ^^^^^^^^^^^
 note: required because it appears within the type `InterruptController<InterruptCore1, oer_portable_mmio::Fixed<276824064>>`
-  --> src/platform/interrupt_controller.rs
+  --> src/system/platform/interrupt_controller.rs
    |
    | pub struct InterruptController<
    |            ^^^^^^^^^^^^^^^^^^^
@@ -45,7 +45,7 @@ note: required because it appears within the type `PhantomData<*mut ()>`
    | pub struct PhantomData<T: PointeeSized>;
    |            ^^^^^^^^^^^
 note: required because it appears within the type `InterruptController<InterruptCore0, oer_portable_mmio::Fixed<276824064>>`
-  --> src/platform/interrupt_controller.rs
+  --> src/system/platform/interrupt_controller.rs
    |
    | pub struct InterruptController<
    |            ^^^^^^^^^^^^^^^^^^^

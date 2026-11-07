@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_esp32s31_hal::system::root::Root;
 
 pub fn split(root: Root) {
     let owners = root.into_runtime();

@@ -23,11 +23,11 @@
 //!   network: the station returns each received frame's buffer at once.
 
 use embassy_futures::select::{Either, select};
-use oer_chips_esp32s31_compose::{Esp32s31, pilot, platform::DeviceIdentity};
 use oer_chips_esp32s31_hal::peripherals::{
     efuse::EfuseRegisters, software_interrupt::FromCpu3Irq, timg0_alarm::Timg0AlarmParts,
 };
-use oer_chips_esp32s31_wifi::{self as wifi, InterruptTypes};
+use oer_chips_esp32s31_radio_ieee80211_station::{self as wifi, InterruptTypes};
+use oer_chips_esp32s31_runtime::{Esp32s31, pilot, platform::DeviceIdentity};
 use oer_chips_family_executor::{
     Doorbell, DoorbellLine, Executor, InterruptExecutor, ThreadContext, UrgentSource,
 };
@@ -77,13 +77,13 @@ pub type WifiPart = <wifi::Interrupts as InterruptTypes>::Part;
 pub(crate) fn on_wifi(part: &mut WifiPart) {
     match LINE.service(part) {
         Ok(_installed) => {}
-        Err(raw) => oer_chips_esp32s31_compose::wifi_fault::reset(raw),
+        Err(raw) => oer_chips_esp32s31_runtime::wifi_fault::reset(raw),
     }
 }
 
 /// The SAR/PWDET pilot's interrupt handler.
 pub(crate) fn on_pilot(
-    part: &mut <Esp32s31 as oer_chips_esp32s31_compose::platform::InterruptTypes>::Phy,
+    part: &mut <Esp32s31 as oer_chips_esp32s31_runtime::platform::InterruptTypes>::Phy,
 ) {
     PILOT.interrupt(part);
 }
@@ -107,7 +107,7 @@ pub(crate) struct StationStart {
     address: [u8; 6],
     nonces: &'static mut wifi::NonceSource,
     /// The accelerator the station unwraps its EAPOL-Key data with.
-    aes: oer_chips_esp32s31_compose::crypto::AesEngine,
+    aes: oer_chips_esp32s31_runtime::crypto::AesEngine,
 }
 
 /// The image keeps no trace observations.
@@ -158,7 +158,7 @@ pub fn restart_cause_text(restarts: &wifi::Restarts, out: &mut [u8]) -> usize {
         .as_ref()
         .map(oer_portable_diagnostics::DiagPath::of)
         .unwrap_or_default();
-    oer_chips_esp32s31_compose::diagnostic_text::write(b"wifi-restarted", &path, out)
+    oer_chips_esp32s31_runtime::diagnostic_text::write(b"wifi-restarted", &path, out)
 }
 
 /// The station restarted after `failure`, which stayed inside the radio: the
@@ -167,7 +167,7 @@ fn restarted(failure: &wifi::failure::LifecycleFailure) {
     let path = oer_portable_diagnostics::DiagPath::of(failure);
     let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
     let length =
-        oer_chips_esp32s31_compose::diagnostic_text::write(b"wifi-restarted", &path, &mut text);
+        oer_chips_esp32s31_runtime::diagnostic_text::write(b"wifi-restarted", &path, &mut text);
     // Once the application opened the console this line goes nowhere: the
     // cause stays readable through `Station::restarts`.
     if let Some(line) = text.get(..length) {
@@ -186,7 +186,7 @@ impl wifi::Events for ProductEvents {
 fn failure(error: wifi::InitializationError) -> ! {
     match error {
         wifi::InitializationError::Request(request) => {
-            oer_chips_esp32s31_compose::platform::reset_request(request)
+            oer_chips_esp32s31_runtime::platform::reset_request(request)
         }
         wifi::InitializationError::Phy(fault) => fault.reset(),
         wifi::InitializationError::MembershipUnavailable => {
@@ -333,10 +333,10 @@ pub(crate) async fn serve_station(start: StationStart) {
 
 /// The radio's owners: the station takes them all.
 pub struct WifiPeripheral {
-    pub(crate) radio: oer_chips_esp32s31_hal::root::RadioHardware,
+    pub(crate) radio: oer_chips_esp32s31_hal::system::root::RadioHardware,
     pub(crate) clocks: oer_chips_esp32s31_hal::power::ChipClocks,
     pub(crate) timg0_alarm: Timg0AlarmParts,
-    pub(crate) interrupts: oer_chips_esp32s31_hal::owner::WifiInterruptBanks,
+    pub(crate) interrupts: oer_chips_esp32s31_hal::system::owner::WifiInterruptBanks,
     pub(crate) efuse: EfuseRegisters,
 }
 
@@ -641,7 +641,7 @@ impl Station {
         let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
         // The radio executor writes the system timer; the application
         // executor publishes its deadlines to it.
-        let timers = oer_chips_esp32s31_compose::platform::timers(
+        let timers = oer_chips_esp32s31_runtime::platform::timers(
             timer,
             boot.router(),
             app_alarm,
@@ -662,7 +662,7 @@ impl Station {
             )
             .unwrap_or_else(|error| {
                 oer_chips_family_staged_runtime::interrupts::reset_binding::<
-                    oer_chips_esp32s31_hal::platform::Port,
+                    oer_chips_esp32s31_hal::system::platform::Port,
                     _,
                 >(error)
             });
@@ -672,7 +672,7 @@ impl Station {
             .start(hart, router, radio.radio, radio.irq2, urgent)
             .unwrap_or_else(|failure| failure.reset());
         let entropy = boot.entropy.take().ok_or(Error::Entropy)?;
-        let mut rng = oer_chips_esp32s31_compose::platform::Entropy::new(entropy, EmbassyClock);
+        let mut rng = oer_chips_esp32s31_runtime::platform::Entropy::new(entropy, EmbassyClock);
         if !rng.is_healthy() {
             return Err(Error::Entropy);
         }

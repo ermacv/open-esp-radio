@@ -68,7 +68,7 @@ notified radio; no runner is in this repository. A radio publishes its status
 through the schedule's `set_status_bits` and `clear_status_bits`; Wi-Fi
 reacts to its phases, while Bluetooth LE does not wait for its own.
 
-On the ESP32-S31, `oer_chips_esp32s31_hal::coex::CoexDomainPorts` lends one arbiter
+On the ESP32-S31, `oer_chips_esp32s31_hal::radio::coex::CoexDomainPorts` lends one arbiter
 lease's timer bank, event priorities and clock to `CoexCore` as its timer and
 clock ports.
 
@@ -159,4 +159,4 @@ A radio runtime runs this policy with exclusive access to the shared radio, as t
   reference, then closes RF when no client remains. Wi-Fi's modem sleep
   leaves the client set and closes RF when it was last; its wake wakes RF
   and re-enters the set (`wifi_rf_phy_enable`). The PHY transitions are the
-  PHY crate's ([first and last PHY client](../../esp32s31/phy/README.md#first-and-last-phy-client)).
+  PHY crate's ([first and last PHY client](../../esp32s31/radio/phy/README.md#first-and-last-phy-client)).

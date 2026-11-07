@@ -1,0 +1,1037 @@
+#![no_std]
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
+//! ESP32-S31 station composition. Installation owners stay in its runners.
+mod credentials;
+pub mod failure;
+pub mod observation;
+use core::sync::atomic::{AtomicBool, Ordering};
+use core::task::{Context, Poll};
+pub use credentials::{
+    Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
+    StationSettings,
+};
+use oer_portable_memory::{QueueNotify as _, WakingSpscQueue};
+use oer_protocols_ieee80211_runtime::station as runtime;
+use oer_protocols_network_port::{LinkSnapshot, NetDevice, NetTransmit, TransmitRefused};
+pub use runtime::StopPolicy;
+pub use runtime::{ControlError, OperationEnd};
+
+/// A station request's terminal ([`Control::connect`]).
+pub type Operation<'a, N = SameHart> = runtime::Operation<'a, <N as Notifies>::Channels>;
+
+/// Where the station's network end runs and how its ends tell each other,
+/// in one type the image's binding names: [`SameHart`], or
+/// [`AcrossHarts`] for a network on another hart than the station's. Every
+/// notify is a type, so every call across harts is direct.
+pub trait Notifies: 'static {
+    /// The station's network channels.
+    type Channels: runtime::Notifies;
+    /// The host build's receive buffer, which it never lends.
+    #[cfg(not(target_arch = "riscv32"))]
+    type LentRx: oer_protocols_ieee80211_contracts_port::LentRxBuffer + Send + 'static;
+    /// How a lent buffer's return tells the driver and the station's stop.
+    #[cfg(target_arch = "riscv32")]
+    type Lent: oer_chips_esp32s31_radio_ieee80211_driver::port::LentNotifies;
+}
+
+/// The station and its network end on one hart: local wakers throughout.
+pub struct SameHart;
+
+impl Notifies for SameHart {
+    type Channels = runtime::SameHart;
+    #[cfg(not(target_arch = "riscv32"))]
+    type LentRx = Unlent;
+    #[cfg(target_arch = "riscv32")]
+    type Lent = oer_chips_esp32s31_radio_ieee80211_driver::port::SameHart;
+}
+
+/// The network end on another hart: `N` raises the network task's executor
+/// signal, `A` the datapath actor's. The actor polls every station end of
+/// the network's channels, the network's stop answer and the lent units'
+/// returns; the station's lifecycle shares the actor's executor and talks
+/// to it in same-executor queues. No waker crosses harts; each signal wakes
+/// the one task that polls its ends.
+pub struct AcrossHarts<N, A>(core::marker::PhantomData<Two<N, A>>);
+/// The two notify types, named without owning a value of either.
+type Two<N, A> = fn() -> (N, A);
+
+impl<N, A> Notifies for AcrossHarts<N, A>
+where
+    N: oer_portable_memory::QueueNotify + Copy + 'static,
+    A: oer_portable_memory::QueueNotify + Copy + 'static,
+{
+    type Channels = runtime::AcrossHarts<N, A>;
+    #[cfg(not(target_arch = "riscv32"))]
+    type LentRx = Unlent;
+    #[cfg(target_arch = "riscv32")]
+    type Lent = oer_chips_esp32s31_radio_ieee80211_driver::port::NetworkPeers<A>;
+}
+
+/// The channels' notify types of `N`.
+type Ch<N> = <N as Notifies>::Channels;
+
+/// The station's received MSDUs waiting for the network: two receive Block
+/// Ack windows, so one window's burst fits while the network takes the
+/// previous one (a queue of one window dropped a 16-MPDU aggregate's tail).
+pub const RX_DEPTH: usize = 32;
+/// The network's MSDUs the station's transmit queue holds: the network
+/// fills a burst while the station is busy, and each end wakes the other
+/// once per burst.
+pub const TX_DEPTH: usize = 16;
+pub const FRAME_CAPACITY: usize = 1664;
+#[cfg(target_arch = "riscv32")]
+type Caps = oer_chips_esp32s31_radio_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
+#[cfg(not(target_arch = "riscv32"))]
+type Caps = ();
+/// The station's exit, as its runner publishes it.
+#[cfg(target_arch = "riscv32")]
+pub type Exit = chip::StationExit;
+#[cfg(not(target_arch = "riscv32"))]
+pub type Exit = core::convert::Infallible;
+
+/// The sole product command end. Its type carries no port identity or loan.
+pub struct Control<'a, N: Notifies = SameHart> {
+    start: &'a StartState,
+    restarts: &'a RestartState,
+    stop: &'a StopState<Exit>,
+    inner: runtime::Control<'a, Caps, 2, Ch<N>>,
+}
+impl<'a, N: Notifies> Control<'a, N> {
+    /// Wait for station construction before starting an image's workload.
+    pub async fn wait_started(&mut self) -> Result<(), StartError> {
+        core::future::poll_fn(|cx| {
+            self.start.waker.register(cx.waker());
+            match self.start.result.get() {
+                Some(result) => Poll::Ready(result),
+                None => Poll::Pending,
+            }
+        })
+        .await
+    }
+    pub fn status_reader(&self) -> StatusReader<'a, N> {
+        StatusReader {
+            inner: self.inner.status_reader(),
+        }
+    }
+    /// How often the station restarted and why it last did: whatever owns
+    /// the console, the application reads the cause here.
+    pub fn restarts(&self) -> Restarts {
+        self.restarts.read()
+    }
+    pub fn status(&self) -> runtime::Status {
+        self.inner.status()
+    }
+    pub fn link(&self) -> LinkSnapshot {
+        self.inner.status().link
+    }
+    pub fn stopped(&self) -> bool {
+        self.inner.status().stopped
+    }
+    /// Admit a connect to the network `credentials` name once the previous
+    /// connect's terminal returned its permission; the operation resolves
+    /// exactly once to this request's terminal. Dropping it detaches the
+    /// observer: the request continues. Only an idle station takes the
+    /// network; it keeps it for its reconnections. A refused, stopped or
+    /// cancelled connect drops the credentials, erasing the PMK.
+    pub async fn connect(
+        &mut self,
+        credentials: PreparedCredentials,
+    ) -> Result<Operation<'a, N>, ControlError> {
+        self.inner.connect(credentials.into_profile()).await
+    }
+    /// Admit a disconnect, as [`Self::connect`].
+    pub async fn disconnect(&mut self) -> Result<Operation<'a, N>, ControlError> {
+        self.inner.disconnect().await
+    }
+    /// Admit a background scan, as [`Self::connect`].
+    pub async fn scan(&mut self) -> Result<Operation<'a, N>, ControlError> {
+        self.inner.scan().await
+    }
+    /// Disconnect and stop by `deadline`. A stop the radio does not confirm
+    /// by then ends the station
+    /// ([`LifecycleFailure::StopUnconfirmed`](crate::failure::LifecycleFailure::StopUnconfirmed)).
+    pub fn stop(&mut self, deadline: oer_portable_time::Instant) {
+        self.inner.stop_gracefully(deadline);
+    }
+    /// The station's exit, published by its runner after the radio release
+    /// ended. The copy reports the result; the runner keeps every owner.
+    pub async fn wait_stopped(&mut self) -> Result<Exit, RunnerLost> {
+        self.stop.wait().await
+    }
+}
+/// The station runner ended without publishing its exit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RunnerLost;
+/// The one exit a runner publishes, and its waiter.
+struct StopState<E> {
+    result: core::cell::Cell<Option<Result<E, RunnerLost>>>,
+    waker: oer_portable_sync::PriorityWaker,
+}
+impl<E: Copy> StopState<E> {
+    const fn new() -> Self {
+        Self {
+            result: core::cell::Cell::new(None),
+            waker: oer_portable_sync::PriorityWaker::new(),
+        }
+    }
+    async fn wait(&self) -> Result<E, RunnerLost> {
+        core::future::poll_fn(|cx| {
+            self.waker.register(cx.waker());
+            match self.result.get() {
+                Some(result) => Poll::Ready(result),
+                None => Poll::Pending,
+            }
+        })
+        .await
+    }
+}
+/// The runner's affine duty to publish its exit; losing it publishes
+/// [`RunnerLost`].
+pub(crate) struct StopGuard<'a, E: Copy>(&'a StopState<E>);
+impl<E: Copy> StopGuard<'_, E> {
+    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    pub(crate) fn publish(self, exit: E) {
+        self.0.result.set(Some(Ok(exit)));
+        self.0.waker.wake();
+    }
+}
+impl<E: Copy> Drop for StopGuard<'_, E> {
+    fn drop(&mut self) {
+        if self.0.result.get().is_none() {
+            self.0.result.set(Some(Err(RunnerLost)));
+            self.0.waker.wake();
+        }
+    }
+}
+/// Read-only product state in the Control/Runner context.
+pub struct StatusReader<'a, N: Notifies = SameHart> {
+    inner: runtime::StatusReader<'a, Ch<N>>,
+}
+impl<N: Notifies> Clone for StatusReader<'_, N> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<N: Notifies> Copy for StatusReader<'_, N> {}
+impl<N: Notifies> StatusReader<'_, N> {
+    pub fn status(&self) -> runtime::Status {
+        self.inner.status()
+    }
+}
+/// A received buffer the station lends to the network: the S31 port's
+/// receive unit on the chip, whose return tells through `P`.
+#[cfg(target_arch = "riscv32")]
+type LentReceive<P> = oer_chips_esp32s31_radio_ieee80211_driver::port::LentReceive<
+    oer_chips_esp32s31_radio_ieee80211_driver::port::device::StagedReceive<
+        { chip::Q },
+        { chip::B },
+    >,
+    P,
+>;
+/// The lent buffer of `N`'s station.
+#[cfg(target_arch = "riscv32")]
+type LentRx<N> = LentReceive<<N as Notifies>::Lent>;
+#[cfg(not(target_arch = "riscv32"))]
+type LentRx<N> = <N as Notifies>::LentRx;
+/// The received buffers the station may lend the network at once: the
+/// bound for the network's packet slots of lent frames.
+#[cfg(target_arch = "riscv32")]
+pub const LENT_RX: usize = oer_chips_esp32s31_radio_ieee80211_driver::port::lent_rx(chip::Q);
+
+/// How long a stop must at least allow: a frame a foreign transmitter keeps
+/// off the air may end this late.
+#[cfg(target_arch = "riscv32")]
+pub const STOP_FLOOR: oer_portable_time::Duration =
+    oer_chips_esp32s31_radio_ieee80211_driver::port::COMMAND_BOUND;
+/// The host build has no receive buffer to lend.
+#[cfg(not(target_arch = "riscv32"))]
+pub enum Unlent {}
+#[cfg(not(target_arch = "riscv32"))]
+impl oer_protocols_ieee80211_contracts_port::LentRxBuffer for Unlent {
+    fn storage(&self) -> &[u8] {
+        match *self {}
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        match *self {}
+    }
+    fn mpdu_len(&self) -> usize {
+        match *self {}
+    }
+    fn advance(
+        &mut self,
+        _: usize,
+    ) -> Result<(), oer_protocols_ieee80211_contracts_port::AdvanceRefused> {
+        match *self {}
+    }
+}
+type Frame<N> = runtime::Received<LentRx<N>>;
+type EthernetCopy = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
+
+/// Affine neutral Ethernet link and receive end. The concrete station frame
+/// is private.
+pub struct Network<'a, N: Notifies> {
+    inner: runtime::Device<'a, LentRx<N>, RX_DEPTH, Ch<N>>,
+}
+/// Affine neutral Ethernet transmit end over the network stack's packets
+/// `P`, whose frames go into the network's transmit memory `S`.
+pub struct NetworkTransmit<'a, N: Notifies, P, S: runtime::TxSupply<P>> {
+    inner: runtime::DeviceTransmit<'a, P, S, TX_DEPTH, Ch<N>>,
+}
+impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSupply<P>> NetTransmit
+    for NetworkTransmit<'_, N, P, S>
+{
+    type Frame = P;
+    fn has_room(&mut self) -> bool {
+        self.inner.has_room()
+    }
+    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        self.inner.poll_room(cx)
+    }
+    fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
+        self.inner.try_transmit(frame)
+    }
+    fn flush(&mut self) {
+        self.inner.flush();
+    }
+}
+/// One received MSDU: in the station's receive buffer, or the mark of a
+/// copy [`Network`] keeps.
+pub struct Received<N: Notifies = SameHart> {
+    inner: Frame<N>,
+}
+/// What stands for a copied [`Received`] that [`Network`] keeps.
+pub struct Copied(runtime::CopiedMark);
+/// The receive buffer a lent [`Received`] keeps its frame in. Dropping it
+/// returns the buffer to the radio.
+pub struct ReceivedStorage<N: Notifies = SameHart>(runtime::NetworkRx<LentRx<N>>);
+impl<N: Notifies> oer_protocols_network_port::FrameStorage for ReceivedStorage<N> {
+    fn bytes(&self) -> &[u8] {
+        self.0.bytes()
+    }
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        self.0.bytes_mut()
+    }
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
+        self.0.advance(by)
+    }
+}
+impl<N: Notifies> oer_protocols_network_port::ReceivedFrame for Received<N> {
+    type Storage = ReceivedStorage<N>;
+    type Copied = Copied;
+    fn into_lent(
+        self,
+    ) -> Result<oer_protocols_network_port::LentFrame<ReceivedStorage<N>>, Copied> {
+        match self.inner {
+            runtime::Received::Lent(frame) => Ok(frame.map_storage(ReceivedStorage)),
+            runtime::Received::Copied(mark) => Err(Copied(mark)),
+        }
+    }
+}
+impl<N: Notifies> NetDevice for Network<'_, N> {
+    type RxFrame = Received<N>;
+    fn link(&self) -> LinkSnapshot {
+        self.inner.link()
+    }
+    fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
+        self.inner.poll_link(cx)
+    }
+    fn receive_queue_len(&self) -> usize {
+        self.inner.receive_queue_len()
+    }
+    fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        self.inner.poll_receive_ready(cx)
+    }
+    fn try_receive(&mut self) -> Option<Received<N>> {
+        self.inner.try_receive().map(|inner| Received { inner })
+    }
+    fn read_copied<R>(
+        &mut self,
+        copied: Copied,
+        read: impl FnOnce(oer_protocols_network_port::EthernetFrameView<'_>) -> R,
+    ) -> Result<R, oer_protocols_network_port::FrameLengthError> {
+        self.inner.read_copied(copied.0, read)
+    }
+}
+/// Caller-owned queues, valid before a port installation exists.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StartError {
+    Unavailable,
+}
+/// The station's restarts since its service began.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Restarts {
+    pub count: u32,
+    /// The last restart's cause, when it came from the port or the actor;
+    /// a restart for a command the lifecycle could not admit has none.
+    pub last: Option<failure::LifecycleFailure>,
+}
+
+/// [`Restarts`], in the one context of the station and its control: a read
+/// takes the whole value.
+struct RestartState(core::cell::Cell<Restarts>);
+impl RestartState {
+    const fn new() -> Self {
+        Self(core::cell::Cell::new(Restarts {
+            count: 0,
+            last: None,
+        }))
+    }
+    fn read(&self) -> Restarts {
+        self.0.get()
+    }
+    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    fn record(&self, cause: Option<failure::LifecycleFailure>) {
+        let Restarts { count, .. } = self.0.get();
+        self.0.set(Restarts {
+            count: count.saturating_add(1),
+            last: cause,
+        });
+    }
+}
+struct StartState {
+    result: core::cell::Cell<Option<Result<(), StartError>>>,
+    waker: oer_portable_sync::PriorityWaker,
+}
+impl StartState {
+    const fn new() -> Self {
+        Self {
+            result: core::cell::Cell::new(None),
+            waker: oer_portable_sync::PriorityWaker::new(),
+        }
+    }
+    fn complete(&self, result: Result<(), StartError>) {
+        self.result.set(Some(result));
+        self.waker.wake();
+    }
+}
+struct StartGuard<'a>(&'a StartState);
+impl StartGuard<'_> {
+    fn complete(&self, result: Result<(), StartError>) {
+        self.0.complete(result);
+    }
+}
+impl Drop for StartGuard<'_> {
+    fn drop(&mut self) {
+        if self.0.result.get().is_none() {
+            self.complete(Err(StartError::Unavailable));
+        }
+    }
+}
+/// The station's stop request to the network side and its answer. The two
+/// sides may run on different harts: the flags are atomic, and each side
+/// waits on its own notify (`N`'s wakers).
+struct NetworkStopState<N: Notifies> {
+    requested: AtomicBool,
+    stopped: AtomicBool,
+    lost: AtomicBool,
+    /// The composition has no network: the station delivers no frame.
+    absent: AtomicBool,
+    network: <Ch<N> as runtime::Notifies>::NetworkWaker,
+    station: <Ch<N> as runtime::Notifies>::StationWaker,
+}
+impl NetworkStopState<SameHart> {
+    const fn new() -> Self {
+        Self::with(
+            oer_portable_sync::PriorityWaker::new(),
+            oer_portable_sync::PriorityWaker::new(),
+        )
+    }
+}
+impl<N: Notifies> NetworkStopState<N> {
+    const fn with(
+        network: <Ch<N> as runtime::Notifies>::NetworkWaker,
+        station: <Ch<N> as runtime::Notifies>::StationWaker,
+    ) -> Self {
+        Self {
+            requested: AtomicBool::new(false),
+            stopped: AtomicBool::new(false),
+            lost: AtomicBool::new(false),
+            absent: AtomicBool::new(false),
+            network,
+            station,
+        }
+    }
+    fn reset(&self) {
+        for flag in [&self.requested, &self.stopped, &self.lost, &self.absent] {
+            flag.store(false, Ordering::Release);
+        }
+    }
+}
+impl<N: Notifies> runtime::NetworkStop for NetworkStopState<N> {
+    fn takes_frames(&self) -> bool {
+        !self.absent.load(Ordering::Acquire) && !self.requested.load(Ordering::Acquire)
+    }
+    fn request_stop(&self) {
+        self.requested.store(true, Ordering::Release);
+        self.network.notify();
+    }
+    fn poll_stopped(&self, cx: &mut Context<'_>) -> Poll<Result<(), runtime::NetworkStopLost>> {
+        self.station.register(cx);
+        if self.stopped.load(Ordering::Acquire) {
+            Poll::Ready(Ok(()))
+        } else if self.lost.load(Ordering::Acquire) {
+            Poll::Ready(Err(runtime::NetworkStopLost))
+        } else {
+            Poll::Pending
+        }
+    }
+}
+/// The network side's end of the station's stop: it stops the application
+/// and the IP service, which drop every frame they hold, then reports it.
+/// Dropping it unreported fails the station's stop as a lost participant.
+pub struct NetworkStopper<'a, N: Notifies = SameHart> {
+    state: &'a NetworkStopState<N>,
+}
+impl<N: Notifies> NetworkStopper<'_, N> {
+    /// Ready once the station asked the network to stop.
+    pub async fn requested(&self) {
+        core::future::poll_fn(|cx| {
+            self.state.network.register(cx);
+            if self.state.requested.load(Ordering::Acquire) {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await
+    }
+    /// The application and the IP service stopped and hold no frame of the
+    /// station. The station still waits for every lent buffer's return.
+    pub fn stopped(self) {
+        self.report(|state| &state.stopped);
+    }
+    /// The composition has no network side: it gives up the station's
+    /// network end, the station delivers no frame (each received MSDU's
+    /// buffer goes back at once), and its stop needs no answer.
+    pub fn no_network<P, S: runtime::TxSupply<P>>(
+        self,
+        network: Network<'_, N>,
+        transmit: NetworkTransmit<'_, N, P, S>,
+    ) {
+        drop((network, transmit));
+        self.state.absent.store(true, Ordering::Release);
+        self.report(|state| &state.stopped);
+    }
+    fn report(self, flag: impl FnOnce(&NetworkStopState<N>) -> &AtomicBool) {
+        let state = self.state;
+        core::mem::forget(self);
+        flag(state).store(true, Ordering::Release);
+        state.station.notify();
+    }
+}
+impl<N: Notifies> Drop for NetworkStopper<'_, N> {
+    fn drop(&mut self) {
+        self.state.lost.store(true, Ordering::Release);
+        self.state.station.notify();
+    }
+}
+/// The station's channels: its commands, its network's transmit (frames in
+/// the network's memory `M`, and the memory's way back), receive and
+/// copies, the network's stop and the link, with `N`'s notifies.
+pub struct Channels<N: Notifies, M> {
+    network_stop: NetworkStopState<N>,
+    start: StartState,
+    restarts: RestartState,
+    stop: StopState<Exit>,
+    commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
+    tx: oer_portable_memory::WakingSlotQueue<
+        Option<runtime::Outgoing<M>>,
+        TX_DEPTH,
+        Station<N>,
+        Net<N>,
+    >,
+    returned: oer_portable_memory::WakingSlotQueue<Option<M>, TX_DEPTH, Net<N>, Station<N>>,
+    rx: WakingSpscQueue<Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
+    rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }, Net<N>, Station<N>>,
+    state: runtime::State<Ch<N>>,
+}
+/// A network-side queue end's notify of `N`.
+type Net<N> = <Ch<N> as runtime::Notifies>::Network;
+/// A station-side queue end's notify of `N`.
+type Station<N> = <Ch<N> as runtime::Notifies>::Station;
+impl<M> Channels<SameHart, M> {
+    pub const fn new() -> Self {
+        Self {
+            network_stop: NetworkStopState::new(),
+            start: StartState::new(),
+            restarts: RestartState::new(),
+            stop: StopState::new(),
+            commands: WakingSpscQueue::new(),
+            tx: oer_portable_memory::WakingSlotQueue::new(),
+            returned: oer_portable_memory::WakingSlotQueue::new(),
+            rx: WakingSpscQueue::new(),
+            rx_copied: WakingSpscQueue::new(),
+            state: runtime::State::new(),
+        }
+    }
+}
+impl<NW, SW, M> Channels<AcrossHarts<NW, SW>, M>
+where
+    NW: oer_portable_memory::QueueNotify + Copy + 'static,
+    SW: oer_portable_memory::QueueNotify + Copy + 'static,
+{
+    /// Channels whose network end ([`Network`], [`NetworkStopper`]) runs
+    /// on another hart than the station: `network` raises the network
+    /// task's executor signal, `station` the datapath actor's, which polls
+    /// every station end. Each wakes the one task that polls that end.
+    pub const fn across_harts(network: NW, station: SW) -> Self {
+        Self {
+            network_stop: NetworkStopState::with(network, station),
+            start: StartState::new(),
+            restarts: RestartState::new(),
+            stop: StopState::new(),
+            commands: WakingSpscQueue::new(),
+            tx: oer_portable_memory::WakingSlotQueue::across_harts(station, network),
+            returned: oer_portable_memory::WakingSlotQueue::across_harts(network, station),
+            rx: WakingSpscQueue::across_harts(network, station),
+            rx_copied: WakingSpscQueue::across_harts(network, station),
+            state: runtime::State::across_harts(network),
+        }
+    }
+}
+impl<N: Notifies, M> Channels<N, M> {
+    /// The five ends, the network's transmit end over the free memory
+    /// `supply` and the stack's packets `P`.
+    #[allow(clippy::type_complexity, reason = "the five ends of one split")]
+    pub fn split<P, S: runtime::TxSupply<P, Memory = M>>(
+        &mut self,
+        supply: S,
+    ) -> Result<
+        (
+            Control<'_, N>,
+            Network<'_, N>,
+            NetworkTransmit<'_, N, P, S>,
+            NetworkStopper<'_, N>,
+            Connection<'_, N, M>,
+        ),
+        runtime::ControlCreateError,
+    > {
+        self.network_stop.reset();
+        let (send, commands) = self.commands.split();
+        let (tx, transmit) = self.tx.split(|| None);
+        let (returned, back) = self.returned.split(|| None);
+        let (receive, rx) = self.rx.split();
+        let (receive_copied, rx_copied) = self.rx_copied.split();
+        let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
+        let network = runtime::Device::new(rx, rx_copied, &self.state);
+        let transmit_end = runtime::DeviceTransmit::new(tx, back, supply, &self.state);
+        Ok((
+            Control {
+                inner: control,
+                start: &self.start,
+                restarts: &self.restarts,
+                stop: &self.stop,
+            },
+            Network { inner: network },
+            NetworkTransmit {
+                inner: transmit_end,
+            },
+            NetworkStopper {
+                state: &self.network_stop,
+            },
+            Connection {
+                service: ServiceConnection {
+                    start: StartGuard(&self.start),
+                    restarts: &self.restarts,
+                    commands,
+                    runner,
+                },
+                actor: ActorConnection {
+                    network_stop: &self.network_stop,
+                    transmit,
+                    returned,
+                    receive,
+                    receive_copied,
+                },
+                stop: StopGuard(&self.stop),
+            },
+        ))
+    }
+}
+impl<M> Default for Channels<SameHart, M> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+/// The runner's ends of the channels and its duty to publish the exit.
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+pub struct Connection<'a, N: Notifies, M> {
+    service: ServiceConnection<'a, N>,
+    actor: ActorConnection<'a, N, M>,
+    stop: StopGuard<'a, Exit>,
+}
+/// The station lifecycle's ends: its start, commands and control.
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+struct ServiceConnection<'a, N: Notifies> {
+    start: StartGuard<'a>,
+    restarts: &'a RestartState,
+    commands: oer_portable_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
+    runner: runtime::RunnerControl<'a, Ch<N>>,
+}
+/// The datapath actor's ends of the network's channels.
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+struct ActorConnection<'a, N: Notifies, M> {
+    network_stop: &'a NetworkStopState<N>,
+    transmit: oer_portable_memory::SlotReceiver<
+        'a,
+        Option<runtime::Outgoing<M>>,
+        TX_DEPTH,
+        Station<N>,
+        Net<N>,
+    >,
+    returned: oer_portable_memory::SlotSender<'a, Option<M>, TX_DEPTH, Net<N>, Station<N>>,
+    receive: oer_portable_memory::WakingSpscSender<'a, Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
+    receive_copied: oer_portable_memory::WakingSpscSender<
+        'a,
+        EthernetCopy,
+        { runtime::RX_COPIED_DEPTH },
+        Net<N>,
+        Station<N>,
+    >,
+}
+
+#[cfg(target_arch = "riscv32")]
+mod chip;
+#[cfg(target_arch = "riscv32")]
+mod dma;
+pub mod policy;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod supply;
+#[cfg(target_arch = "riscv32")]
+pub use supply::{
+    NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, TxMemory, TxPublishRefused, TxPublisher, TxSlot,
+};
+mod reconnect;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod release;
+#[cfg(oer_fault_injection)]
+pub use oer_chips_esp32s31_radio_ieee80211_driver::port::debug::refuse_next_publication;
+pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
+#[cfg(target_arch = "riscv32")]
+#[doc(hidden)]
+pub mod radio;
+#[cfg(target_arch = "riscv32")]
+#[doc(hidden)]
+pub mod station;
+#[cfg(target_arch = "riscv32")]
+pub use dma::{DmaError, DmaResources};
+/// One reading of the S31 receive driver's counters.
+#[cfg(target_arch = "riscv32")]
+pub use oer_chips_esp32s31_radio_ieee80211_driver::rx::counters::WifiRxReport;
+
+/// The receive driver's counters, once the station's receive path is bound:
+/// a trace build's diagnostic reading, never a product value.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) static RX_COUNTERS: oer_portable_memory::OnceValue<
+    &'static oer_chips_esp32s31_radio_ieee80211_driver::rx::counters::WifiRxCounters,
+> = oer_portable_memory::OnceValue::new();
+
+/// The receive driver's counters now; `None` before the station's receive
+/// path was first bound. Only a trace build reads them.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub fn rx_counters() -> Option<WifiRxReport> {
+    RX_COUNTERS.get().map(|counters| counters.report())
+}
+
+/// One reading of the MAC's statistics, and its frequency offset.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub type MacCounters = (
+    [u32; oer_chips_esp32s31_radio_ieee80211_driver::rx::counters::mac::COUNTS],
+    i32,
+);
+
+/// The MAC's statistics at the port's last sample and its frequency offset.
+/// Only a trace build samples them.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub fn mac_counters() -> MacCounters {
+    oer_chips_esp32s31_radio_ieee80211_driver::rx::counters::mac::MAC_COUNTS.read()
+}
+// The facade's own API, not aliases of backend or runtime modules.
+#[cfg(target_arch = "riscv32")]
+pub use chip::{
+    Bell, Binding, Config, Datapath, DriverExecutor, Event, Events, InitializationError,
+    InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner,
+    Storage, station,
+};
+
+/// Bind the facade's backing to this image's concrete interrupt entries.
+/// The image declares callbacks, collectors and terminal policy.
+#[cfg(target_arch = "riscv32")]
+#[macro_export]
+macro_rules! bind_station {
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail,restarted:$restarted}
+   notifies: $crate::SameHart, storage: $crate::Storage::new());
+ };
+ // The network end runs on another hart: `network` raises the network
+ // task's signal, `actor` the datapath actor's, each a notify of the type
+ // it names.
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path,across_harts:{network:$nt:ty=$network:expr,actor:$at:ty=$actor:expr $(,)?} $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail,restarted:$restarted}
+   notifies: $crate::AcrossHarts<$nt,$at>, storage: $crate::Storage::across_harts($network,$actor));
+ };
+ (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path} notifies: $notifies:ty, storage: $storage:expr)=>{
+  $vis mod $name {
+   use super::*;
+   pub struct Binding;
+   oer_chips_family_executor::declare_installations!(pub slot);
+   impl $crate::Binding for Binding {
+    type Id=slot::Id;type Wifi=$wifi;type DriverEntry=$driver_entry;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Events=$events;
+    type Notifies=$notifies;type TxSupply=$tx_supply;
+    fn take_installations()->Option<$crate::radio::Installations<Self>>{slot::take_static()}
+    fn fail(error:$crate::InitializationError)->!{$fail(error)}
+    fn restarted(failure:&$crate::failure::LifecycleFailure){$restarted(failure)}
+   }
+   pub fn storage()->&'static mut $crate::Storage<Binding>{
+    static STORAGE:static_cell::ConstStaticCell<$crate::Storage<Binding>>=static_cell::ConstStaticCell::new($storage);
+    STORAGE.try_take().unwrap_or_else(||<Binding as $crate::Binding>::fail($crate::InitializationError::Storage))
+   }
+  }
+ };
+}
+
+#[cfg(target_arch = "riscv32")]
+mod actor;
+#[cfg(target_arch = "riscv32")]
+pub use actor::{RadioActor, RadioResources, WifiHardware};
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_methods,
+    clippy::disallowed_macros
+)]
+mod tests {
+    extern crate std;
+    use self::std::{cell::Cell, rc::Rc};
+    use super::*;
+    #[test]
+    fn a_read_takes_the_count_and_the_cause_of_one_restart() {
+        let state = RestartState::new();
+        assert_eq!(state.read(), Restarts::default());
+        state.record(Some(failure::LifecycleFailure::Mailbox));
+        assert_eq!(
+            state.read(),
+            Restarts {
+                count: 1,
+                last: Some(failure::LifecycleFailure::Mailbox),
+            }
+        );
+        // A restart without a port cause does not keep the one before it.
+        state.record(None);
+        assert_eq!(
+            state.read(),
+            Restarts {
+                count: 2,
+                last: None,
+            }
+        );
+    }
+
+    struct Packet(Rc<Cell<usize>>);
+    impl Drop for Packet {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    impl oer_protocols_network_port::EthernetFrame for Packet {
+        fn view(
+            &self,
+        ) -> Result<
+            oer_protocols_network_port::EthernetFrameView<'_>,
+            oer_protocols_network_port::FrameLengthError,
+        > {
+            Ok(oer_protocols_network_port::EthernetFrameView {
+                destination: [2; 6],
+                source: [4; 6],
+                ether_type: 0x0800,
+                payload: &[7, 8],
+            })
+        }
+    }
+    /// No free memory: the tests' network sends nothing.
+    struct NoMemory;
+    impl<P> runtime::TxSupply<P> for NoMemory {
+        type Memory = ();
+        fn available(&self) -> bool {
+            false
+        }
+        fn write(&mut self, frame: P) -> Result<(), runtime::TxRefused<P>> {
+            Err(runtime::TxRefused::Kept(
+                oer_protocols_network_port::TransmitRefused {
+                    frame,
+                    reason: oer_protocols_network_port::TransmitError::QueueFull,
+                },
+            ))
+        }
+        fn give(&mut self, (): ()) {}
+    }
+    #[test]
+    fn a_stopper_reports_its_stop_and_a_dropped_one_is_a_lost_participant() {
+        use runtime::NetworkStop as _;
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        let state = NetworkStopState::new();
+        assert!(state.takes_frames());
+        state.request_stop();
+        assert!(
+            !state.takes_frames(),
+            "a stopping network takes no new frame"
+        );
+        let stopper = NetworkStopper { state: &state };
+        assert!(state.poll_stopped(&mut cx).is_pending());
+        stopper.stopped();
+        assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
+        state.reset();
+        let mut channels = Channels::<SameHart, ()>::new();
+        let (_, network, transmit, _, _) = channels.split::<Packet, _>(NoMemory).unwrap();
+        assert!(state.takes_frames());
+        NetworkStopper { state: &state }.no_network(network, transmit);
+        assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
+        assert!(!state.takes_frames(), "no network takes no frame");
+        state.reset();
+        // Losing the stopper proves no stop of the application.
+        drop(NetworkStopper { state: &state });
+        assert_eq!(
+            state.poll_stopped(&mut cx),
+            Poll::Ready(Err(runtime::NetworkStopLost))
+        );
+    }
+    #[test]
+    fn control_and_neutral_device_exist_before_installation_without_minting_a_link_or_consuming_refused_owners()
+     {
+        let mut channels = Channels::new();
+        let (mut control, mut net, mut transmit, _stopper, connection) =
+            channels.split(NoMemory).unwrap();
+        assert_eq!(control.link(), LinkSnapshot::DOWN);
+        assert_eq!(net.link(), LinkSnapshot::DOWN);
+        let dropped = Rc::new(Cell::new(0));
+        let refused = transmit
+            .try_transmit(Packet(dropped.clone()))
+            .err()
+            .unwrap();
+        assert_eq!(
+            refused.reason,
+            oer_protocols_network_port::TransmitError::LinkDown
+        );
+        assert!(Rc::ptr_eq(&refused.frame.0, &dropped));
+        assert_eq!(dropped.get(), 0);
+        let credentials =
+            embassy_futures::block_on(crate::StationSettings::open(b"lab").unwrap().prepare())
+                .unwrap();
+        let _connect = embassy_futures::block_on(control.connect(credentials)).unwrap();
+        let _disconnect = embassy_futures::block_on(control.disconnect()).unwrap();
+        {
+            // Both command cells are taken: the scan waits for room.
+            let mut scan = core::pin::pin!(control.scan());
+            assert!(
+                core::future::Future::poll(
+                    scan.as_mut(),
+                    &mut Context::from_waker(core::task::Waker::noop())
+                )
+                .is_pending()
+            );
+        }
+        let crate::Connection {
+            service:
+                crate::ServiceConnection {
+                    start,
+                    restarts: _,
+                    commands,
+                    runner,
+                },
+            actor: _,
+            stop,
+        } = connection;
+        assert!(matches!(
+            commands.try_receive(),
+            Some(runtime::ServiceCommand::Station(r)) if r.command() == runtime::contract::Command::Connect
+        ));
+        assert!(matches!(
+            commands.try_receive(),
+            Some(runtime::ServiceCommand::Station(r)) if r.command() == runtime::contract::Command::Disconnect
+        ));
+        assert!(commands.try_receive().is_none());
+        start.complete(Ok(()));
+        assert_eq!(embassy_futures::block_on(control.wait_started()), Ok(()));
+        assert_eq!(net.link(), LinkSnapshot::DOWN);
+        // Losing the uninstalled runner poisons its control connection, not a new
+        // backend installation or a replacement command producer.
+        drop(runner);
+        assert_eq!(
+            embassy_futures::block_on(control.scan()).err(),
+            Some(ControlError::Stopped)
+        );
+        // A runner that never published its exit reports its loss.
+        drop(stop);
+        assert_eq!(
+            embassy_futures::block_on(control.wait_stopped()),
+            Err(RunnerLost)
+        );
+        drop(refused.frame);
+        assert_eq!(dropped.get(), 1);
+    }
+    #[test]
+    fn the_published_exit_is_a_copy_waiters_read_once_it_exists() {
+        let state = StopState::<u8>::new();
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        {
+            let mut waiting = core::pin::pin!(state.wait());
+            assert!(core::future::Future::poll(waiting.as_mut(), &mut cx).is_pending());
+        }
+        StopGuard(&state).publish(7);
+        assert_eq!(embassy_futures::block_on(state.wait()), Ok(7));
+        assert_eq!(embassy_futures::block_on(state.wait()), Ok(7));
+    }
+    #[test]
+    fn start_wait_is_cancellation_safe_and_a_dropped_uninstalled_runner_wakes_it_with_a_typed_failure()
+     {
+        use self::std::{
+            sync::{
+                Arc,
+                atomic::{AtomicUsize, Ordering},
+            },
+            task::Wake,
+        };
+        use core::future::Future;
+        struct Wakes(AtomicUsize);
+        impl Wake for Wakes {
+            fn wake(self: Arc<Self>) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+        let waker = core::task::Waker::from(wakes.clone());
+        let mut channels = Channels::<SameHart, ()>::new();
+        let (mut control, _network, _transmit, _stopper, connection) =
+            channels.split::<Packet, _>(NoMemory).unwrap();
+        let mut cx = Context::from_waker(&waker);
+        {
+            let mut waiting = core::pin::pin!(control.wait_started());
+            assert!(waiting.as_mut().poll(&mut cx).is_pending());
+        }
+        let mut waiting = core::pin::pin!(control.wait_started());
+        assert!(waiting.as_mut().poll(&mut cx).is_pending());
+        drop(connection);
+        assert!(wakes.0.load(Ordering::Relaxed) > 0);
+        assert_eq!(
+            waiting.as_mut().poll(&mut cx),
+            Poll::Ready(Err(StartError::Unavailable))
+        );
+    }
+}

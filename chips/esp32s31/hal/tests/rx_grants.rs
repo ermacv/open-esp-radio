@@ -94,7 +94,7 @@ fn private_grants_follow_the_actual_ring_boundaries() {
     let source = scratch.path().join("src");
     copy_tree(&manifest.join("src"), &source).unwrap();
     let root = source.join("lib.rs");
-    let caller = source.join("ieee80211/dma/rx_storage.rs");
+    let caller = source.join("radio/ieee80211/dma/rx_storage.rs");
     let mut text = fs::read_to_string(&caller).unwrap();
     text.push_str("\nmod grant_fixture {\n");
     text.push_str(include_str!("internal/rx_grants.rs"));
@@ -197,7 +197,7 @@ fn private_grants_follow_the_actual_ring_boundaries() {
     }
     // Sensitivity control: relaxing the real methods' callback bounds must
     // make these same escape fixtures compile. This changes scratch only.
-    let ring = source.join("ieee80211/dma/rx_ring.rs");
+    let ring = source.join("radio/ieee80211/dma/rx_ring.rs");
     let strict = fs::read_to_string(&ring).unwrap();
     let relaxed = strict
         .replace(

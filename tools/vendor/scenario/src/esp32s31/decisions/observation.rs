@@ -68,7 +68,7 @@ pub const DECISIONS: &[Decision] = &[
         reason: "end of the low-power clock deselect wrapper, where the validation lease \
             drops: its release is software ownership whose release fence the leaf counts; \
             the deselect register writes are compared by the leaf",
-        places: &[("hal/src/bluetooth/validation.rs", "}")],
+        places: &[("hal/src/radio/bluetooth/validation.rs", "}")],
     },
     Decision {
         reason: "construction of the BLE PHY fixture's shared-radio register owner: no \
@@ -86,19 +86,19 @@ pub const DECISIONS: &[Decision] = &[
             sample that does not read exactly the runs of the selector in force",
         places: &[
             (
-                "hal/src/bluetooth/scheduler_execution_modify.rs",
+                "hal/src/radio/bluetooth/scheduler_execution_modify.rs",
                 "if !selected {",
             ),
             (
-                "hal/src/bluetooth/scheduler_execution_modify.rs",
+                "hal/src/radio/bluetooth/scheduler_execution_modify.rs",
                 "hw.select_progress();",
             ),
             (
-                "hal/src/bluetooth/scheduler_execution_modify.rs",
+                "hal/src/radio/bluetooth/scheduler_execution_modify.rs",
                 "hw.select_settle();",
             ),
             (
-                "hal/src/bluetooth/scheduler_execution_modify.rs",
+                "hal/src/radio/bluetooth/scheduler_execution_modify.rs",
                 ".select_scheduler_execution_modify_settle(self.interrupts);",
             ),
             (

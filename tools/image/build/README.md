@@ -121,7 +121,7 @@ The chip profile's boot kind selects the pipeline:
 | Boot | Module | Bootloader and partition table |
 | --- | --- | --- |
 | `staged` (esp32s31) | `staged` | The ROM-readable DIO bootloader from the `espflash` library's resources, the partition table of the flash map's CSV, the `ota_0` selection |
-| `esp-idf-bootloader` (an ESP-IDF catalog image) | `esp_idf` | The catalog project's own bootloader and partition table, built against the pinned ESP-IDF (`esp_idf::catalog`, `esp_idf::idf`); its `flasher_args.json` must place them at the flash map's offsets; the flash map is the chip profile's, or for an ESP-IDF peer chip without a profile (`esp32c5`) its `chips/<chip>/platform/flash.toml` |
+| `esp-idf-bootloader` (an ESP-IDF catalog image) | `esp_idf` | The catalog project's own bootloader and partition table, built against the pinned ESP-IDF (`esp_idf::catalog`, `esp_idf::idf`); its `flasher_args.json` must place them at the flash map's offsets; the flash map is the chip profile's, or for an ESP-IDF peer chip without a profile (`esp32c5`) its `chips/<chip>/facts/flash.toml` |
 
 An application package may declare instrumentation classes in its manifest,
 `[package.metadata.open-radio] instrumentation = ["trace"]`: `trace` (what
@@ -181,12 +181,12 @@ same way.
 
 ## Flash map
 
-Each chip's `chips/<chip>/platform/chip.toml` `[flash]` table
+Each chip's `chips/<chip>/facts/chip.toml` `[flash]` table
 ([`oer-chips-family-facts`](../../../chips/family/facts/README.md)' `FlashMap`,
 with the flash size of the chip's module) holds the
 bootloader, partition-table, application and OTA-data offsets and the
-partition-table CSV path (`chips/<chip>/platform/partitions/`). The S31
-uses staged boot; its profile supplies the staged flash map. An ESP-IDF peer chip without a profile (`esp32c5`) names the same map in `chips/<chip>/platform/flash.toml`; a chip has one or the other. The flash map is host data: no target code reads it (the
+partition-table CSV path (`chips/<chip>/facts/partitions/`). The S31
+uses staged boot; its profile supplies the staged flash map. An ESP-IDF peer chip without a profile (`esp32c5`) names the same map in `chips/<chip>/facts/flash.toml`; a chip has one or the other. The flash map is host data: no target code reads it (the
 bootstrap finds its payload through the flash MMU). The staged pipeline
 refuses a flash map whose application or OTA-data offset is not the
 partition table's.
@@ -243,7 +243,7 @@ The separate frame reports list counts, current frames, ceilings, spare bytes
 and reasons, including warnings or configuration errors. This report changes no compiler
 flags, frame coverage, IRQ guards, stack allocations or stack bounds.
 
-The policy is a chip's `chips/<chip>/platform/stack.toml` (schema 6), extended
+The policy is a chip's `chips/<chip>/facts/stack.toml` (schema 6), extended
 by the HIL target's policy. A secondary hart runs only in an image that
 declares it, from its launch template's root (the image's
 `secondary_entry!`), where it may run its own executor's tasks. Each stack names the function that

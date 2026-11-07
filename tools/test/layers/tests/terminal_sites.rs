@@ -38,7 +38,7 @@ const REASON_ENUMS: &[(&str, &str)] = &[
         "FaultReason",
     ),
     (
-        "chips/esp32s31/hal/src/domain/transaction.rs",
+        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
         "FaultReason",
     ),
 ];
@@ -46,7 +46,7 @@ const REASON_ENUMS: &[(&str, &str)] = &[
 // Numeric codecs without a reason enum: every numeric arm in their next-boot
 // name decoder is inventoried, including payload/operation subcodes.
 const REASON_DECODERS: &[(&str, &str)] = &[(
-    "chips/esp32s31/hal/src/domain/transaction/record.rs",
+    "chips/esp32s31/hal/src/radio/domain/transaction/record.rs",
     "report_fault",
 )];
 
@@ -820,7 +820,7 @@ fn admitted_owner(id: &str) -> Option<&str> {
     let (home, _) = file.split_once("/src/")?;
     if [
         "chips/esp32s31/hal",
-        "chips/esp32s31/compose",
+        "chips/esp32s31/runtime",
         "chips/family/staged-runtime",
         "chips/family/staged-bootstrap",
         "chips/family/executor",
@@ -1255,7 +1255,7 @@ fn common_retained_classes_match_the_registry_vocabulary() {
 
 #[test]
 fn free_function_codecs_keep_their_numeric_reason_inventory() {
-    let file = "chips/esp32s31/hal/src/domain/transaction/record.rs";
+    let file = "chips/esp32s31/hal/src/radio/domain/transaction/record.rs";
     let source = "fn report_fault() { match 2 { 1 => (), 2 => (), _ => () } }";
     let mut scanner = Scanner {
         file,

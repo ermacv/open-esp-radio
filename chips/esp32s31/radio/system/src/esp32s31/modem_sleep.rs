@@ -6,8 +6,8 @@
 
 use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
-use oer_chips_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocksOn};
-use oer_chips_esp32s31_phy::{
+use oer_chips_esp32s31_hal::{radio::domain::RadioDomain, radio::ieee80211::client::WifiClocksOn};
+use oer_chips_esp32s31_radio_phy::{
     concurrent::{ConcurrentAcquire, ConcurrentPhy, ConcurrentPhyError, phy_ready},
     wifi_client::{WifiPhyMembership, WifiPhySuspended, resume_wifi, set_wifi_rx, suspend_wifi},
 };

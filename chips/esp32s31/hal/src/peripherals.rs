@@ -20,7 +20,6 @@ pub mod cache_counters;
 pub mod efuse;
 pub mod entropy;
 pub mod reset_cause;
-pub mod sleep;
 pub mod software_interrupt;
 pub mod system_timer;
 pub mod timg0_alarm;

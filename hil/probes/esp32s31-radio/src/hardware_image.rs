@@ -1,5 +1,4 @@
 //! Staged, no-traffic executor for the comparison session's silicon sheets.
-use oer_chips_esp32s31_compose::Esp32s31;
 use oer_chips_esp32s31_hal::{
     peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
     peripherals::{
@@ -8,9 +7,10 @@ use oer_chips_esp32s31_hal::{
         system_timer::{SystimerAlarm0, SystimerAlarm1},
     },
     power::ChipClocks,
-    root::{RadioHardware, Root},
+    system::root::{RadioHardware, Root},
 };
-use oer_chips_esp32s31_phy::{PhyCalibrationIdentity, phy_get_rf_cal_version};
+use oer_chips_esp32s31_radio_phy::{PhyCalibrationIdentity, phy_get_rf_cal_version};
+use oer_chips_esp32s31_runtime::Esp32s31;
 use oer_chips_family_executor::{Executor, InterruptExecutor};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
@@ -39,10 +39,12 @@ struct Boot {
 static CALIBRATION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<[u128; 512]>> =
     static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
 
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_compose::phy_fault::reset);
-oer_chips_family_staged_runtime::entry!(main, oer_chips_esp32s31_hal::platform::Port);
+oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_runtime::phy_fault::reset);
+oer_chips_family_staged_runtime::entry!(main, oer_chips_esp32s31_hal::system::platform::Port);
 fn main(
-    handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal::platform::Port>,
+    handoff: oer_chips_family_staged_runtime::Handoff<
+        oer_chips_esp32s31_hal::system::platform::Port,
+    >,
 ) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_portable_diagnostics::name!("root"; 32));
@@ -59,7 +61,7 @@ fn main(
         _psram,
         mut adopted,
     ) = match oer_chips_family_staged_runtime::adoption::run::<
-        oer_chips_esp32s31_compose::Esp32s31,
+        oer_chips_esp32s31_runtime::Esp32s31,
         _,
         _,
     >(
@@ -67,10 +69,10 @@ fn main(
         root.into_runtime(),
         INTERRUPT_TABLE,
         oer_chips_esp32s31_board::BootstrapPsram,
-        oer_chips_esp32s31_compose::phy_fault::report_previous,
+        oer_chips_esp32s31_runtime::phy_fault::report_previous,
         |hardware| {
             let _reset_causes =
-                oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
             (
                 hardware.efuse,
                 hardware.system_timer,
@@ -145,14 +147,13 @@ fn main(
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
-    oer_chips_family_staged_runtime::fatal::boot_failure::<oer_chips_esp32s31_hal::platform::Port>(
-        reason.as_str(),
-        || {
-            let _ = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
-                &oer_portable_diagnostics::Note::runtime_fail(reason),
-            );
-        },
-    )
+    oer_chips_family_staged_runtime::fatal::boot_failure::<
+        oer_chips_esp32s31_hal::system::platform::Port,
+    >(reason.as_str(), || {
+        let _ = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
+            &oer_portable_diagnostics::Note::runtime_fail(reason),
+        );
+    })
 }
 async fn feed_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
     match watchdog
@@ -185,8 +186,8 @@ async fn sheets(boot: Boot) {
                 boot.clocks,
                 boot.identity,
                 &timer,
-                oer_chips_esp32s31_compose::phy_fault::identity(),
-                |fault| oer_chips_esp32s31_compose::phy_fault::reset(fault),
+                oer_chips_esp32s31_runtime::phy_fault::identity(),
+                |fault| oer_chips_esp32s31_runtime::phy_fault::reset(fault),
             )
         })
         .await;

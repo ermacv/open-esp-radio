@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::{PlacedRxDma, RxDmaStorage}};
+use oer_chips_esp32s31_hal::radio::ieee80211::dma::{rx_dma::RxDma, rx_storage::{PlacedRxDma, RxDmaStorage}};
 pub fn prepare<M: RxDma>(dma: &mut M, storage: &RxDmaStorage<2, 16, 16>, placed: PlacedRxDma<2, 16, 16>) {
     #[cfg(ui_reject)]
     let _ = storage.prepare_ring(dma); // ui-error: E0599

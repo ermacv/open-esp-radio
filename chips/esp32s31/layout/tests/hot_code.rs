@@ -58,12 +58,18 @@ fn every_hot_pattern_names_a_function_of_the_sources() {
         .filter_map(|line| line.strip_suffix(')'))
         .collect();
     assert!(!patterns.is_empty());
+    let lock = std::fs::read_to_string(root.join("Cargo.lock")).unwrap();
     for pattern in patterns {
         let names = identifiers(pattern);
         let (crate_name, _) = names.split_first().unwrap();
         assert!(
             crate_name.starts_with("oer_"),
             "`{pattern}` starts at a crate"
+        );
+        let package = format!("name = \"{}\"", crate_name.replace('_', "-"));
+        assert!(
+            lock.contains(&package),
+            "`{pattern}` names `{crate_name}`, no package of the workspace"
         );
         for name in names.iter().rev().take(1) {
             let wanted = format!("fn {name}");

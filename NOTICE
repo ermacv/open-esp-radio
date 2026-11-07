@@ -112,7 +112,7 @@ ESP32-C5).
 Translated and modified by Vladislav Ermachenkov; each function names the
 vendor function it follows:
 
-- chips/esp32s31/phy and the PHY modules of chips/esp32s31/hal and
+- chips/esp32s31/radio/phy and the PHY modules of chips/esp32s31/hal and
   chips/esp32s31/pac: libphy.a calibration, tracking and analog-bus
   algorithms
 - protocols/ieee80211/core/roles/sta/src/modem_sleep.rs: libpp.a [pm.o] and
@@ -134,7 +134,7 @@ License:   Apache-2.0 (the repository's LICENSE, which its README applies
 
 Translated and modified by Vladislav Ermachenkov: the ROM's PHY functions
 (`phy_linear_to_db`, `phy_chan_to_freq`, `phy_rxdc_est_min`,
-`phy_rxiq_cover_mg_mp` and others) in chips/esp32s31/phy and the PHY modules
+`phy_rxiq_cover_mg_mp` and others) in chips/esp32s31/radio/phy and the PHY modules
 of chips/esp32s31/hal; each names the ROM function it follows.
 
 

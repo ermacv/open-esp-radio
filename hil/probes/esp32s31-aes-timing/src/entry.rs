@@ -4,7 +4,7 @@ use oer_portable_crypto::block::{Aes128Blocks, Block, BlockCipher};
 use oer_portable_crypto::{Aes128Key, KeyData, KeyUnwrapRequest};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_board as board;
-use oer_chips_esp32s31_compose::Esp32s31;
+use oer_chips_esp32s31_runtime::Esp32s31;
 use oer_chips_esp32s31_hal::peripherals::aes::{
     AesInterrupt, BlockWords, DmaBlockMode, IDLE, InterruptingAes, KeyWords, Registers,
 };
@@ -15,8 +15,8 @@ use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag;
 use oer_chips_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
 };
-use oer_chips_esp32s31_hal::platform::Port;
-use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_esp32s31_hal::system::platform::Port;
+use oer_chips_esp32s31_hal::system::root::Root;
 use oer_chips_family_executor::Executor;
 use oer_protocols_ieee80211_core_security_cipher::aes::{SoftwareAes128, software_aes128_key_wrap};
 use oer_portable_time::Timer as _;
@@ -78,12 +78,12 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((timer, software, watchdogs, aes), _psram, mut adopted) =
-        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
+        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_runtime::Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
             board::BootstrapPsram,
-            oer_chips_esp32s31_compose::phy_fault::report_previous,
+            oer_chips_esp32s31_runtime::phy_fault::report_previous,
             |hardware| {
                 (
                     hardware.system_timer,

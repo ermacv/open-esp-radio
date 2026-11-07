@@ -1,5 +1,5 @@
 use core::mem::size_of;
-use oer_chips_esp32s31_hal::platform::Port;
+use oer_chips_esp32s31_hal::system::platform::Port;
 use oer_chips_esp32s31_layout::LAYOUT;
 use oer_chips_family_boot::flash;
 use oer_chips_family_staged_bootstrap::{self as staged, startup};
@@ -52,7 +52,7 @@ static FLASH_TUNING_SCRATCH: ConstStaticCell<[u32; flash::TUNING_SCRATCH_WORDS]>
 // SAFETY: the reset entry calls this symbol after stack/BSS initialization.
 #[unsafe(no_mangle)]
 extern "C" fn bootstrap_main() -> ! {
-    startup::run::<oer_chips_esp32s31_boot::S31, RUNTIME_ENTRY, RUNTIME_HARTS>(startup::Resources {
+    startup::run::<profile::S31, RUNTIME_ENTRY, RUNTIME_HARTS>(startup::Resources {
         layout: &LAYOUT,
         payload: &RUNTIME_PAYLOAD,
         tuning_reference: &FLASH_TUNING_REFERENCE,

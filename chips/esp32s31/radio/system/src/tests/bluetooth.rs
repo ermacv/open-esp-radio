@@ -5,7 +5,7 @@ use oer_chips_esp32s31_radio_client::bluetooth::{
 
 const fn ble_poison(request: RequestKind, cause: PoisonCause) -> Poison {
     Poison::request(
-        oer_chips_esp32s31_hal::domain::RadioClient::Bluetooth,
+        oer_chips_esp32s31_hal::radio::domain::RadioClient::Bluetooth,
         request,
         cause,
     )
@@ -575,9 +575,9 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
 fn a_tracking_deadline_the_clock_cannot_hold_ends_the_attached_run() {
     use core::pin::pin;
     let overflow = PoisonCause::TrackingRefused(
-        oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
-            oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
-                class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::BluetoothIeee802154,
+        oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError::Time(
+            oer_chips_esp32s31_radio_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                class: oer_chips_esp32s31_radio_phy::state::client::PhyPllTrackClass::BluetoothIeee802154,
             },
         ),
     );

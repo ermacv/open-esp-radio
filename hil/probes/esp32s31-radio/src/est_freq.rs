@@ -3,10 +3,10 @@
 #![deny(unsafe_code)]
 use core::sync::atomic::{AtomicU32, Ordering};
 use oer_chips_esp32s31_hal::{
-    owner::SharedPhyAccess,
-    phy::{clock, frequency as freq, iq_estimator as iq, pbus, rx_dco},
+    radio::phy::{clock, frequency as freq, iq_estimator as iq, pbus, rx_dco},
+    system::owner::SharedPhyAccess,
 };
-use oer_chips_esp32s31_phy::RomShortDelay;
+use oer_chips_esp32s31_radio_phy::RomShortDelay;
 
 oer_portable_memory::zeroed_static! {
     static EST_FREQ_OUTPUT: [AtomicU32; 2050] = zeroed in ".critical.bss.est_freq";
@@ -88,7 +88,7 @@ fn force(phy: &mut impl SharedPhyAccess, selector: u8, path: u8, value: u16) -> 
     pbus::start_force_test(phy, selector, path, value);
     for _ in 0..20 {
         if oer_chips_family_phy::pbus::try_finish_force_test(
-            &mut oer_chips_esp32s31_hal::phy::pbus::port(phy),
+            &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
         )
         .is_ok()
         {
@@ -96,9 +96,9 @@ fn force(phy: &mut impl SharedPhyAccess, selector: u8, path: u8, value: u16) -> 
         }
         settle()?;
     }
-    oer_chips_family_phy::pbus::try_finish_force_test(&mut oer_chips_esp32s31_hal::phy::pbus::port(
-        phy,
-    ))
+    oer_chips_family_phy::pbus::try_finish_force_test(
+        &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
+    )
     .map_err(|_| 6)
 }
 fn pairs(phy: &mut impl SharedPhyAccess, tag: u32) {
@@ -113,7 +113,9 @@ fn pairs(phy: &mut impl SharedPhyAccess, tag: u32) {
         );
     }
 }
-fn estimator(phy: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext) -> Result<(), u32> {
+fn estimator(
+    phy: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyContext,
+) -> Result<(), u32> {
     let saved = iq::capture_configuration(phy);
     let original = saved.fields();
     emit(
@@ -139,9 +141,9 @@ fn estimator(phy: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext) -> 
     phy.configure_calibration_tone(true, 0x80, 0);
     pbus::configure_rx_clock(phy, true);
     pbus::configure_tx_clock(phy, true);
-    oer_chips_family_phy::pbus::configure_debug_mode(&mut oer_chips_esp32s31_hal::phy::pbus::port(
-        phy,
-    ));
+    oer_chips_family_phy::pbus::configure_debug_mode(
+        &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
+    );
     let prepared = (|| {
         for (selector, path, value) in [
             (4, 1, 0),
@@ -222,13 +224,13 @@ fn estimator(phy: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext) -> 
     if bus_usable
         && cleanup.is_ok()
         && oer_chips_family_phy::pbus::configure_work_mode(
-            &mut oer_chips_esp32s31_hal::phy::pbus::port(phy),
+            &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
         )
     {
         cleanup = cleanup.and(settle());
-        oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(phy);
+        oer_chips_esp32s31_hal::radio::phy::agc::configure_pbus_work_mode_pulse(phy);
         cleanup = cleanup.and(settle());
-        oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(phy);
+        oer_chips_esp32s31_hal::radio::phy::agc::clear_pbus_work_mode_pulse(phy);
     }
     phy.set_phy_calibration_clock(calibration_clock);
     result
@@ -289,7 +291,7 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
             );
             observation(phy, tag)?;
             if tag == 0x1524 {
-                use oer_chips_esp32s31_hal::phy::i2c::analog_i2c;
+                use oer_chips_esp32s31_hal::radio::phy::i2c::analog_i2c;
                 let expected = analog_i2c::bbtop::shared_rx_gain_calibration_enable::ADDRESS;
                 // SOURCE: hw19-20261027-est-freq-01, freq/freq-repeat, tag1624;
                 // oer-notes/research/hw-est-freq.md. Mode0 returned 0x67 from

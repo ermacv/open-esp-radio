@@ -16,7 +16,7 @@ error[E0271]: type mismatch resolving `<impl PlatformClockProvider<Backend = B2>
    = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
    = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
 note: required by a bound in `RadioDomain::<B, T>::enable_phy_modem_clocks`
-  --> src/domain.rs
+  --> src/radio/domain.rs
    |
    |     pub fn enable_phy_modem_clocks(
    |            ----------------------- required by a bound in this associated function

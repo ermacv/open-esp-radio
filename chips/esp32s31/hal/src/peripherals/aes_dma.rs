@@ -20,7 +20,7 @@ use crate::layouts::{
     AxiDmaDescriptor, AxiDmaDescriptorBuffer, AxiDmaDescriptorControl, AxiDmaDescriptorNext,
     DmaRef, DmaWindowAddress,
 };
-use crate::memory::dma_address::ProjectionError;
+use crate::system::memory::dma_address::ProjectionError;
 
 /// AES blocks of the largest transfer: a CCMP-128 CBC-MAC over B0, two AAD
 /// blocks and a 1500-byte body.
@@ -193,8 +193,8 @@ impl AesDma {
     /// [`AesDmaError::Projection`] when a part lies outside the DMA window.
     pub fn claim() -> Result<Self, AesDmaError> {
         let placed = STORAGE.take().ok_or(AesDmaError::Claimed)?;
-        let projected = crate::memory::dma_address::PlacementProjection::try_with::<
-            crate::ieee80211::dma::space::NativeDma,
+        let projected = crate::system::memory::dma_address::PlacementProjection::try_with::<
+            crate::radio::ieee80211::dma::space::NativeDma,
             _,
             _,
         >(placed, |storage, projection| {

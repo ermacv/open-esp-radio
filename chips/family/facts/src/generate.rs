@@ -787,7 +787,7 @@ mod tests {
     fn defaults_cover_the_entire_geometry_and_preserve_explicit_zeroes() {
         for id in tracked_ids() {
             let policy =
-                crate::tracked::text(&format!("chips/{id}/platform/stack.toml")).expect("policy");
+                crate::tracked::text(&format!("chips/{id}/facts/stack.toml")).expect("policy");
             let harts = Vectors::of(&tracked(id)).unwrap().harts;
             let defaults = default_task_stack_bytes(policy, harts).unwrap();
             assert_eq!(defaults.len(), harts as usize);

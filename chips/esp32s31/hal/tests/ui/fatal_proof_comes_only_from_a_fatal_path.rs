@@ -1,5 +1,5 @@
 #![no_std]
-use oer_chips_esp32s31_hal::cores::{self, Fatal, StopTheWorld};
+use oer_chips_esp32s31_hal::system::cores::{self, Fatal, StopTheWorld};
 
 pub fn paths(_slot: &mut Option<Fatal<'static>>) -> ! {
     cores::fatal(|_path| {

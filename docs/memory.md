@@ -24,7 +24,7 @@ facts at build time; the host checks read the same facts.
 | SRAM | The complete bootstrap code and ordinary constants; runtime strict and hot code, interrupt stacks, critical state and DMA storage: [runtime sections](../chips/family/staged-layout/linker/runtime/sections.x). |
 | PSRAM | Ordinary runtime code, data and the per-hart task stacks: [runtime sections](../chips/family/staged-layout/linker/runtime/sections.x). |
 | Flash XIP | Explicit bootstrap metadata, stage-two payload and tuning-reference data: [bootstrap sections](../chips/family/staged-layout/linker/bootstrap/sections.x). |
-| ROM | Chip routines available to the images: [S31 ROM facts](../chips/esp32s31/platform/rom-rev0.toml) generate its ROM script in the layout build directory. |
+| ROM | Chip routines available to the images: [S31 ROM facts](../chips/esp32s31/facts/rom-rev0.toml) generate its ROM script in the layout build directory. |
 | RTC retained | Reset-retained records in `.rtc_fast.persistent`, below the reserved tail: [runtime sections](../chips/family/staged-layout/linker/runtime/sections.x). |
 
 ## Code placement
@@ -34,8 +34,8 @@ facts at build time; the host checks read the same facts.
   architecture](architecture.md#execution) and [image checks](../tools/image/checks/README.md).
 - `.hot.text` places code in SRAM for performance, from semantic
   `.hot.text.*` input sections written in code:
-  [`place_rx_hot_path!`](../chips/esp32s31/hal/src/ieee80211/dma.rs) for
-  the RX path and [the PHY engine](../chips/esp32s31/hal/src/phy.rs). The
+  [`place_rx_hot_path!`](../chips/esp32s31/hal/src/radio/ieee80211/dma.rs) for
+  the RX path and [the PHY engine](../chips/esp32s31/hal/src/radio/phy.rs). The
   Wi-Fi datapath's generic code carries no section of its own: the chip's
   [`hot-code.x`](../chips/esp32s31/layout/linker/hot-code.x) names its
   functions, because a turn reaches more code than the L1 instruction cache
@@ -92,7 +92,7 @@ contracts: [Hardware memory](hardware-memory.md).
   routes or storage that would use them. The bootstrap contains every
   secondary hart: it stalls them, gates their clocks, holds their resets and
   clears their ROM boot addresses
-  ([secondary boot](../chips/esp32s31/platform/README.md#secondary-hart-launch-and-containment)),
+  ([secondary boot](../chips/esp32s31/facts/README.md#secondary-hart-launch-and-containment)),
   and opens a declared hart's instruction bus after it published the
   runtime's code, with the ROM's suspension and resumption of that hart's
   instruction cache: the data cache keeps running and keeps the PSRAM lines
@@ -142,7 +142,7 @@ contracts: [Hardware memory](hardware-memory.md).
   A bound change above 64 bytes fails the build. See the
   [image linker](../tools/image/linker/README.md).
 - Task-stack roots, storage and free-space reserves are policy inputs:
-  [S31 policy](../chips/esp32s31/platform/stack.toml).
+  [S31 policy](../chips/esp32s31/facts/stack.toml).
 - Static bounds and their assumptions are described in [execution in the
   architecture](architecture.md#execution) and the
   [RV32 stack analyzer](../tools/image/stack/README.md).

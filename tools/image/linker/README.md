@@ -39,7 +39,7 @@ it never omits a handler to fit. Image budgets and limits are unchanged.
 
 The analysis-only first link uses the contract maximum with zero guards. A proven product bound selects
 `align16(ceil(bound * (100 + margin) / 100)) + guard`, with the 10% margin
-of the family layer (`chips/family/platform/family.toml`). The bound plus margin
+of the family layer (`chips/family/facts/layers/family.toml`). The bound plus margin
 must fit the contract maximum without guard bytes. When the full NAPOT guard
 does not fit beside it, the allocation keeps the contract maximum and omits the
 guard. Guard coverage and unknown reachable frames are reported, never gates.

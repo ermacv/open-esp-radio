@@ -1,7 +1,7 @@
 use oer_portable_diagnostics::radio_root::{self, RadioRoot};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_board as board;
-use oer_chips_esp32s31_compose::Esp32s31;
+use oer_chips_esp32s31_runtime::Esp32s31;
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag;
 use oer_chips_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
@@ -10,7 +10,7 @@ use oer_chips_esp32s31_hal::peripherals::{
     software_interrupt::FromCpu0Irq, system_timer::SystimerAlarm0,
 };
 use oer_chips_esp32s31_hal::power::{PlatformClock, PlatformClockError, PlatformClockProvider as _};
-use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_esp32s31_hal::system::root::Root;
 use oer_chips_family_executor::Executor;
 use oer_chips_family_staged_runtime::diagnostics::{self, Console};
 use oer_chips_family_staged_runtime::panic;
@@ -30,9 +30,9 @@ oer_chips_family_executor::tasks! {
     }
 }
 
-oer_chips_family_staged_runtime::entry!(main, oer_chips_esp32s31_hal::platform::Port);
+oer_chips_family_staged_runtime::entry!(main, oer_chips_esp32s31_hal::system::platform::Port);
 
-fn main(handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal::platform::Port>) -> ! {
+fn main(handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal::system::platform::Port>) -> ! {
     // Before anything can panic and overwrite it.
     let previous = panic::peek_previous();
     let Some(root) = Root::take() else {
@@ -49,14 +49,14 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal
         ),
         _psram,
         mut adopted,
-    ) = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
+    ) = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_runtime::Esp32s31, _, _>(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
         board::BootstrapPsram,
-        oer_chips_esp32s31_compose::phy_fault::report_previous,
+        oer_chips_esp32s31_runtime::phy_fault::report_previous,
         |hardware| {
-            let _reset_causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+            let _reset_causes = oer_chips_esp32s31_runtime::reset_causes::read(hardware.reset_cause);
             // The executor is not running yet: the early writer waits for room
             // within its budget and counts what it drops.
             // Every frame of this boot, the runtime's report of a previous
@@ -163,7 +163,7 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 
 /// Retain and report a failed boot step before explicitly resetting the image.
 fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
-    oer_chips_family_staged_runtime::fatal::boot_failure::<oer_chips_esp32s31_hal::platform::Port>(
+    oer_chips_family_staged_runtime::fatal::boot_failure::<oer_chips_esp32s31_hal::system::platform::Port>(
         reason.as_str(),
         || {
             let _note = usb_serial_jtag::fatal_note(&oer_portable_diagnostics::Note::runtime_fail(reason));

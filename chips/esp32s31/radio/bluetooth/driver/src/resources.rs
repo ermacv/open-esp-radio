@@ -1,0 +1,292 @@
+//! Task and interrupt owners of one powered Controller epoch.
+//!
+//! The HAL Engine consumes the clocked Bluetooth client and the placed arena,
+//! retaining the register token through reset. TaskResources joins that engine
+//! to the durable controller-time worker; the inactive IRQ bank follows the
+//! same lifecycle before stable interrupt publication.
+
+#[cfg(any(target_arch = "riscv32", test))]
+use oer_chips_esp32s31_hal::radio::bluetooth::engine::ControllerMemory;
+
+#[cfg(target_arch = "riscv32")]
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
+
+#[cfg(target_arch = "riscv32")]
+use oer_chips_esp32s31_hal::radio::bluetooth::BluetoothSchedulerHardwareListsCleared;
+
+#[cfg(target_arch = "riscv32")]
+use oer_chips_esp32s31_hal::radio::bluetooth::BluetoothControllerHalInitConfig;
+#[cfg(any(target_arch = "riscv32", test))]
+use oer_chips_esp32s31_hal::radio::bluetooth::InterruptSetupOwner as HalBluetoothInterruptSetupOwner;
+#[cfg(target_arch = "riscv32")]
+use oer_chips_esp32s31_hal::radio::bluetooth::TaskOwner as HalBluetoothTaskOwner;
+#[cfg(target_arch = "riscv32")]
+use {
+    oer_chips_esp32s31_hal::radio::bluetooth::BluetoothModemLpTimerOwnerError,
+    oer_chips_esp32s31_hal::radio::bluetooth::ControllerRandomAddress,
+    oer_chips_esp32s31_hal::radio::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
+    oer_chips_esp32s31_hal::radio::domain::RadioDomain,
+};
+
+#[cfg(any(target_arch = "riscv32", test))]
+use crate::controller_time::ControllerTimeWorker;
+#[cfg(any(target_arch = "riscv32", test))]
+use crate::controller_time::ControllerTimeWorkerPhase;
+#[cfg(target_arch = "riscv32")]
+use crate::controller_time::{
+    ControllerTimeEventError, ControllerTimeEventStep, ControllerTimeRequest,
+    ControllerTimeRequestError,
+};
+
+/// Separate the clocked HAL client into the controller lifecycle's task and
+/// IRQ owners without exposing either partition publicly.
+///
+/// This transition performs no MMIO. In particular it does not configure
+/// controller masks or a CPU interrupt route.
+#[cfg(any(target_arch = "riscv32", test))]
+pub(crate) fn separate_interrupt_owner<M: ControllerMemory>(
+    engine: oer_chips_esp32s31_hal::radio::bluetooth::engine::Engine<M>,
+    interrupts: HalBluetoothInterruptSetupOwner,
+) -> (TaskResources<M>, InterruptBankOwner) {
+    (
+        TaskResources {
+            engine,
+            controller_time: ControllerTimeWorker::new_idle(),
+        },
+        InterruptBankOwner {
+            _registers: interrupts,
+        },
+    )
+}
+
+/// Task-side custody of the owning HAL engine and its durable time worker.
+#[must_use = "the Bluetooth task owner must return to the clocked client"]
+#[cfg(any(target_arch = "riscv32", test))]
+pub struct TaskResources<M: ControllerMemory> {
+    engine: oer_chips_esp32s31_hal::radio::bluetooth::engine::Engine<M>,
+    controller_time: ControllerTimeWorker,
+}
+
+#[cfg(any(target_arch = "riscv32", test))]
+impl<M: ControllerMemory> TaskResources<M> {
+    pub const fn installation(&self) -> u32 {
+        self.engine.installation()
+    }
+
+    /// The HAL task owner, which proves the Bluetooth module clocks to the
+    /// shared PHY domain and BTBB.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) const fn hal(&self) -> &HalBluetoothTaskOwner {
+        self.engine.task_owner()
+    }
+
+    /// Reset the stopped Controller and await the timer its handler gives up
+    /// after the reset.
+    ///
+    /// The caller has released Controller output, had the timer's handler
+    /// stop its counter and both measured delivery lanes and left the
+    /// shared PHY domain and BTBB; the controller-time worker holds no request.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn shut_down<B: PlatformClockBackend, T>(
+        self,
+        radio: &mut RadioDomain<B, T>,
+        output: oer_chips_esp32s31_hal::radio::bluetooth::InterruptOutputReleasedOwner,
+        stopped: oer_chips_esp32s31_hal::radio::bluetooth::ModemLpTimerStopped,
+    ) -> Result<
+        oer_chips_esp32s31_hal::radio::bluetooth::engine::EngineResetTimerPending<M>,
+        oer_chips_esp32s31_hal::radio::bluetooth::engine::EngineShutdownFailure<M>,
+    > {
+        self.engine.shut_down(radio, output, stopped)
+    }
+
+    /// Preserve pending or faulted time ownership before any terminal extraction.
+    pub fn controller_time_retirement_ready(
+        &self,
+    ) -> Result<(), crate::controller_time::ControllerTimeRetirementError> {
+        self.controller_time.retirement_ready()
+    }
+
+    /// Release the controller output of the stopped epoch with the bank's
+    /// handler over the scheduler channel `bell` reaches.
+    ///
+    /// # Errors
+    ///
+    /// A refused step, with nothing written after it, or a failed exchange.
+    #[cfg(target_arch = "riscv32")]
+    pub async fn release_controller_output(
+        &mut self,
+        bell: &impl oer_chips_esp32s31_hal::radio::bluetooth::engine::scheduler::interrupt::SchedulerDoorbell,
+    ) -> Result<
+        oer_chips_esp32s31_hal::radio::bluetooth::BluetoothOutputReleased,
+        oer_chips_esp32s31_hal::radio::bluetooth::engine::EngineOutputReleaseError,
+    > {
+        self.engine.release_controller_output(bell).await
+    }
+}
+
+#[cfg(any(target_arch = "riscv32", test))]
+impl<M: ControllerMemory> TaskResources<M> {
+    /// Publish the selected random Controller identity while every radio role is idle.
+    ///
+    /// The HCI boundary owns validation and HCI byte order. The caller must
+    /// invoke this before transferring any advertising/scanning graph or
+    /// publishing scheduler `RUN`; the HAL fixes the destination address slot.
+    #[cfg(target_arch = "riscv32")]
+    pub fn program_random_device_address_while_idle(
+        &mut self,
+        address: ControllerRandomAddress,
+    ) -> Result<(), oer_chips_esp32s31_hal::radio::bluetooth::engine::EngineFault> {
+        self.engine
+            .program_random_device_address_while_idle(address)
+    }
+
+    /// Execute the source-127 register prefix and following complete low-power
+    /// hardware component while the upper lifecycle retains initialized
+    /// Controller software and an inactive route.
+    ///
+    /// The caller owns the matching powered scheduler/HCI epoch, has not
+    /// installed source 127, and retains the returned disjoint timer owner
+    /// until verified route teardown.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn initialize_modem_lp_timer_hardware(
+        &mut self,
+    ) -> Result<
+        (
+            ModemLpTimerLowPowerHardwareInitializedOwner,
+            oer_chips_esp32s31_hal::radio::bluetooth::BluetoothModemLpTimerPendingObservation,
+        ),
+        BluetoothModemLpTimerOwnerError,
+    > {
+        self.engine.initialize_modem_lp_timer_hardware()
+    }
+
+    /// Remove every scheduler hardware-list head through one finite HAL borrow.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn clear_scheduler_hardware_list_heads(
+        &mut self,
+    ) -> BluetoothSchedulerHardwareListsCleared {
+        self.engine.clear_scheduler_hardware_list_heads()
+    }
+
+    /// Durable logical phase paired with this unique task owner.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) const fn controller_time_phase(&self) -> ControllerTimeWorkerPhase {
+        self.controller_time.phase()
+    }
+
+    /// Whether the runner must retain a durable recheck event or deadline.
+    #[cfg(test)]
+    pub(crate) const fn controller_time_needs_recheck(&self) -> bool {
+        self.controller_time.needs_recheck()
+    }
+
+    /// Publish through the scheduler's exclusive idle-task capability.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn request_idle_controller_time(
+        &mut self,
+    ) -> Result<ControllerTimeRequest, ControllerTimeRequestError> {
+        let Self {
+            engine,
+            controller_time,
+        } = self;
+        if engine.is_quarantined() {
+            return Err(ControllerTimeRequestError::Faulted);
+        }
+        let idle = match core::mem::replace(controller_time, ControllerTimeWorker::Faulted) {
+            ControllerTimeWorker::Idle(idle) => idle,
+            active => {
+                *controller_time = active;
+                return Err(ControllerTimeRequestError::OwnershipCollision);
+            }
+        };
+        let (next, result) = idle.request(engine);
+        *controller_time = next;
+        result
+    }
+
+    /// Cancel only the matching logical request; a mismatch faults the worker.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn cancel_owned_controller_time(
+        &mut self,
+        request: ControllerTimeRequest,
+    ) -> Result<(), ControllerTimeEventError> {
+        self.controller_time.cancel_owned(request)
+    }
+
+    /// Recheck one exact request with a short HAL borrow.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn recheck_owned_controller_time(
+        &mut self,
+        request: ControllerTimeRequest,
+    ) -> Result<ControllerTimeEventStep, ControllerTimeEventError> {
+        let Self {
+            engine,
+            controller_time,
+        } = self;
+        controller_time.recheck_owned(request, engine)
+    }
+
+    /// Drain one abandoned request without creating a reusable sample.
+    #[cfg(target_arch = "riscv32")]
+    pub(crate) fn drain_orphan_controller_time(
+        &mut self,
+    ) -> Result<ControllerTimeEventStep, ControllerTimeEventError> {
+        let Self {
+            engine,
+            controller_time,
+        } = self;
+        controller_time.drain_orphan(engine)
+    }
+
+    /// Execute the complete reviewed controller HAL-init component.
+    ///
+    /// The owning lifecycle invokes this component after clocks and before
+    /// scheduler initialization. Later event/list, interrupt, PHY, BTBB and
+    /// BLE stages remain separate prerequisites for a running controller.
+    ///
+    /// The caller does not infer controller or HCI readiness from return.
+    #[cfg(target_arch = "riscv32")]
+    #[allow(
+        dead_code,
+        reason = "only the target lifecycle and isolated validation probes invoke this component"
+    )]
+    pub(crate) fn initialize_controller_hal(
+        &mut self,
+        config: BluetoothControllerHalInitConfig,
+    ) -> Result<(), oer_chips_esp32s31_hal::radio::bluetooth::engine::EngineInitError> {
+        self.engine.initialize_controller_hal(config)
+    }
+
+    /// The one engine holding this task's register token and complete arena.
+    pub fn engine(&mut self) -> &mut oer_chips_esp32s31_hal::radio::bluetooth::engine::Engine<M> {
+        &mut self.engine
+    }
+
+    /// Whether the physical scheduler is stopped (its channel may stay).
+    pub fn scheduler_stopped(&self) -> bool {
+        self.engine.scheduler_is_stopped()
+    }
+
+    pub fn engine_retirement_ready(&self) -> bool {
+        self.engine.retirement_ready()
+    }
+}
+
+/// Inactive owner of the Bluetooth controller interrupt bank.
+#[must_use = "the interrupt owner must be installed or reunited"]
+#[cfg(any(target_arch = "riscv32", test))]
+pub(crate) struct InterruptBankOwner {
+    _registers: HalBluetoothInterruptSetupOwner,
+}
+
+#[cfg(target_arch = "riscv32")]
+impl InterruptBankOwner {
+    /// The unprepared bank, for the gate of its interrupt handler, which
+    /// prepares the controller output when the epoch opens.
+    pub(crate) fn into_setup(self) -> HalBluetoothInterruptSetupOwner {
+        self._registers
+    }
+}
+
+#[cfg(test)]
+mod tests;

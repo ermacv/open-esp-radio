@@ -332,7 +332,7 @@ fn phy_and_calibration_publish_power_before_any_clock_edge() {
 #[test]
 fn prepare_power_state_selects_active_modem_on_host_registers() {
     for fill in [0, u32::MAX] {
-        crate::phy::registers::host::with_registers(fill, |registers| {
+        crate::radio::phy::registers::host::with_registers(fill, |registers| {
             assert!(
                 !registers
                     .platform_clock_power_observation()

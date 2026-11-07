@@ -2,13 +2,13 @@
 //! (`embedded_io_async::Read` and `Write`), its interrupt in the
 //! application's context.
 
-use oer_chips_esp32s31_compose::console::Binding;
 use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt;
+use oer_chips_esp32s31_runtime::console::Binding;
 
 use super::{Boot, ConsoleToken, Error, WakeToken};
 
 /// The console's byte stream.
-pub use oer_chips_esp32s31_compose::console::Console as UsbConsole;
+pub use oer_chips_esp32s31_runtime::console::Console as UsbConsole;
 
 oer_chips_family_staged_runtime::placed_static! {
     static BINDING: Binding = Binding::new::<ConsoleToken, WakeToken>(), in critical_data "sdk_console";

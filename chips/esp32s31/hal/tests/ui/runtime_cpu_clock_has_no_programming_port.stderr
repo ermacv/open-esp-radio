@@ -6,8 +6,8 @@ error[E0277]: the trait bound `RuntimeCpuClock: CpuClockRegisters` is not satisf
    |     |
    |     required by a bound introduced by this call
    |
-help: the trait `CpuClockRegisters` is implemented for `oer_chips_esp32s31_hal::boot::ClockRegisters<P, Q, R, S>`
-  --> src/boot/clock.rs
+help: the trait `CpuClockRegisters` is implemented for `oer_chips_esp32s31_hal::system::boot::ClockRegisters<P, Q, R, S>`
+  --> src/system/boot/clock.rs
    |
    | / impl<P: Placement, Q: Placement, R: Placement, S: Placement> CpuClockRegisters
    | |     for ClockRegisters<P, Q, R, S>

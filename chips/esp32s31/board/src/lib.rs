@@ -54,12 +54,12 @@ pub const fn wifi_power_limits(
 /// handoff adopts it:
 ///
 /// ```ignore
-/// let ready = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
+/// let ready = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_runtime::Esp32s31, _, _>(
 ///     handoff,
 ///     root.into_runtime(),
 ///     INTERRUPT_TABLE,
 ///     BootstrapPsram,
-///     oer_chips_esp32s31_compose::phy_fault::report_previous,
+///     oer_chips_esp32s31_runtime::phy_fault::report_previous,
 ///     core::convert::identity,
 /// ) {
 ///     Ok(adopted) => adopted,

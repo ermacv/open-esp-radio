@@ -190,11 +190,11 @@ pub enum PhyPreparation {
     Woke { micros: u64 },
     /// The domain was registered.
     Registered {
-        calibration_path: oer_chips_esp32s31_phy::PhyCalibrationPath,
+        calibration_path: oer_chips_esp32s31_radio_phy::PhyCalibrationPath,
         micros: u64,
         /// The registration's complete outcome, with its diagnostics.
         #[cfg(oer_trace)]
-        outcome: oer_chips_esp32s31_phy::PhyRegisterOutcome,
+        outcome: oer_chips_esp32s31_radio_phy::PhyRegisterOutcome,
     },
 }
 
@@ -218,11 +218,11 @@ pub enum Failure {
     ClientFailed,
     /// The PHY refused the client before any access; the client's own work
     /// was rolled back and the shared domain is healthy.
-    PhyRefused(oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError),
+    PhyRefused(oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError),
     /// The PHY refused the client, and closing the RF opened for it then
     /// poisoned the domain until reset by `poison`.
     PoisonedAfterRefusal {
-        refusal: oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError,
+        refusal: oer_chips_esp32s31_radio_phy::concurrent::ConcurrentPhyError,
         poison: Poison,
     },
     /// Shared hardware work failed, or had failed before: the PHY domain is

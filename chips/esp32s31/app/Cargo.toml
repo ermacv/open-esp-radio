@@ -37,14 +37,14 @@ oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-chips-family-boot = { path = "../../family/boot" }
 oer-chips-esp32s31-board = { path = "../board" }
-oer-chips-esp32s31-compose = { path = "../compose", features = ["wifi-fault", "radio-fault"] }
+oer-chips-esp32s31-runtime = { path = "../runtime", features = ["wifi-fault", "radio-fault"] }
 oer-chips-esp32s31-hal = { path = "../hal" }
 oer-chips-family-executor = { path = "../../family/executor", features = ["installations"] }
 oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }
 oer-chips-family-staged-runtime = { path = "../../family/staged-runtime" }
 oer-protocols-ieee80211-core-security-cipher = { path = "../../../protocols/ieee80211/core/security/cipher" }
 oer-protocols-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
-oer-chips-esp32s31-wifi = { path = "../wifi" }
+oer-chips-esp32s31-radio-ieee80211-station = { path = "../radio/ieee80211/station" }
 oer-portable-riscv = { path = "../../../portable/riscv" }
 oer-portable-trace = { path = "../../../portable/trace" }
 embassy-futures = "0.1.2"

@@ -871,7 +871,7 @@ mod tests {
     fn an_extension_adds_exceptions_without_changing_the_base_contract() {
         let directory = tempfile::tempdir().unwrap();
         let base_path = directory.path().join("base.toml");
-        let base_source = include_str!("../../../../chips/esp32s31/platform/stack.toml");
+        let base_source = include_str!("../../../../chips/esp32s31/facts/stack.toml");
         std::fs::write(&base_path, base_source).unwrap();
         let base = StackPolicy::load(&base_path).unwrap();
         let path = directory.path().join("stack.toml");
@@ -911,13 +911,13 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
         }
-        let platform = root.join("chips/esp32s31/platform");
+        let platform = root.join("chips/esp32s31/facts");
         let policy = platform.join("policy.toml");
         let base = platform.join("base.toml");
         std::fs::write(&policy, "schema = 6\nextends = 'base.toml'\n").unwrap();
         std::fs::write(
             &base,
-            include_str!("../../../../chips/esp32s31/platform/stack.toml"),
+            include_str!("../../../../chips/esp32s31/facts/stack.toml"),
         )
         .unwrap();
         let mut inputs = oer_tools_os_durable::inputs::Inputs::tracked();
@@ -925,14 +925,14 @@ mod tests {
         StackPolicy::load_with_inputs(&policy, &mut inputs).unwrap();
         let digests = inputs.into_digests();
         let layers = [
-            "chips/family/platform/isa/rv32imafc.toml",
-            "chips/family/platform/family.toml",
-            "chips/esp32s31/platform/chip.toml",
-            "chips/esp32s31/platform/rom-rev0.toml",
-            "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",
-            "chips/esp32s31/platform/boards/esp32-s31-function-coreboard-1.toml",
+            "chips/family/facts/layers/isa/rv32imafc.toml",
+            "chips/family/facts/layers/family.toml",
+            "chips/esp32s31/facts/chip.toml",
+            "chips/esp32s31/facts/rom-rev0.toml",
+            "chips/esp32s31/facts/modules/esp32-s31-wroom.toml",
+            "chips/esp32s31/facts/boards/esp32-s31-function-coreboard-1.toml",
             // The chip's stack policy sizes the default task stack.
-            "chips/esp32s31/platform/stack.toml",
+            "chips/esp32s31/facts/stack.toml",
         ]
         .map(|path| root.join(path));
         assert_eq!(digests.len(), layers.len() + 2);
@@ -1482,7 +1482,7 @@ mod launch_tests {
     #[test]
     fn the_chip_policy_holds_hart_1_as_a_template() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let policy = StackPolicy::load(&root.join("chips/esp32s31/platform/stack.toml")).unwrap();
+        let policy = StackPolicy::load(&root.join("chips/esp32s31/facts/stack.toml")).unwrap();
         assert_eq!(policy.used_harts(), 0b01);
         let template = policy.core[&1].task_stack.template().unwrap();
         assert_eq!(template.root, "runtime_secondary_main_h1");

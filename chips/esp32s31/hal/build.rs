@@ -40,11 +40,11 @@ fn pending_banks(harts: u32) -> Result<String, std::fmt::Error> {
     for hart in 0..harts {
         write!(rust, "P{hart},")?;
     }
-    rust.push_str("> {\nfn is_pending(&self, hart: crate::platform::Hart, source: u16) -> bool {\nmatch hart {\n");
+    rust.push_str("> {\nfn is_pending(&self, hart: crate::system::platform::Hart, source: u16) -> bool {\nmatch hart {\n");
     for hart in 0..harts {
         writeln!(
             rust,
-            "crate::platform::Hart::H{hart} => pending_in(&self.hart{hart}, source),"
+            "crate::system::platform::Hart::H{hart} => pending_in(&self.hart{hart}, source),"
         )?;
     }
     rust.push_str("}\n}\n}\n");
@@ -60,7 +60,7 @@ fn pending_banks(harts: u32) -> Result<String, std::fmt::Error> {
     for hart in 0..harts {
         write!(rust, "hart{hart},")?;
     }
-    rust.push_str("] = $words;\n$crate::platform::interrupt_controller::PendingBanks {\n");
+    rust.push_str("] = $words;\n$crate::system::platform::interrupt_controller::PendingBanks {\n");
     for hart in 0..harts {
         writeln!(
             rust,

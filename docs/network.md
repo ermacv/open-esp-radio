@@ -47,7 +47,7 @@ aliases and include optional and target-specific dependencies.
 | `oer-protocols-bridges-ieee80211-ethernet` (`protocols/bridges/ieee80211-ethernet`) | the requested WMM user priority of an outgoing frame from its VLAN PCP or IP DSCP | the final priority, which the station decides from its link |
 | `oer-portable-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, stack wake registration, RX copying into packet pools, a device's transmit memory parked as the stack's general packets (`ParkedTx`) | radio scheduling, DMA descriptors, a concrete physical allocator |
 | `oer-portable-embassy-net::ip` | final pool/stack storage, one `EthernetBridge` over `NetDevice`, DHCP/static IPv4, link epoch and typed configuration/stop/error status | radio installation, a second stack, a common TCP/UDP API |
-| `oer-chips-esp32s31-ieee80211-driver::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
+| `oer-chips-esp32s31-radio-ieee80211-driver::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
 | `oer-protocols-ieee80211-core-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |
 
@@ -96,7 +96,7 @@ station (P2)
 - `reserve`, `settle` and `cancel` report each grant, settlement and
   cancellation to the caller's `EventSink`; the ledger holds no sink.
 
-## TX cost model (`oer-chips-esp32s31-ieee80211-driver::mac`)
+## TX cost model (`oer-chips-esp32s31-radio-ieee80211-driver::mac`)
 
 - `PpduTiming` includes preamble, SERVICE and tail bits, whole-symbol rounding
   and the 2.4 GHz signal extension; HT uses the exact bits per symbol, not

@@ -23,7 +23,7 @@ pub fn derive<'m>(
         policy::{StackPolicy, Storage},
     };
     let profile = Profile::load(Path::new("."), "esp32s31").map_err(|e| e.to_string())?;
-    let policy = StackPolicy::load(Path::new("chips/esp32s31/platform/stack.toml"))
+    let policy = StackPolicy::load(Path::new("chips/esp32s31/facts/stack.toml"))
         .map_err(|e| e.to_string())?;
     let boot_hart = profile
         .facts

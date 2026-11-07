@@ -9,13 +9,13 @@
 //! cold initialization. It lends the clocked client, with the MAC stopped, to
 //! `leave` and gets it back cold.
 
-use oer_chips_esp32s31_hal::ieee80211::client::{
+use oer_chips_esp32s31_hal::radio::ieee80211::client::{
     ClockPoisoned, StoppedInstallation, WifiClocked, WifiCold, WifiPowered,
 };
-use oer_chips_esp32s31_hal::ieee80211::init::{
+use oer_chips_esp32s31_hal::radio::ieee80211::init::{
     MacCoexPti, MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
-use oer_chips_esp32s31_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
+use oer_chips_esp32s31_radio_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
 use oer_protocols_ieee80211_wire::channel::WifiChannel;
 use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
 

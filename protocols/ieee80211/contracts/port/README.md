@@ -406,7 +406,7 @@ keeps every owner the port holds. Hardware backends provide the same
 resource and terminal contract.
 
 The S31 driver implements this contract in its
-[`port` module](../../../../chips/esp32s31/ieee80211/driver/src/port.rs)
+[`port` module](../../../../chips/esp32s31/radio/ieee80211/driver/src/port.rs)
 (`Esp32s31Port`, statically dispatched). It drives `LowerMacCore`,
 cooperative registers and the RX ring; P3 posts only static typed signals.
 The image supplies the timer, entropy and opaque contexts. Ordinary MPDUs

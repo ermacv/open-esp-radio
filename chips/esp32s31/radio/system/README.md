@@ -67,7 +67,7 @@ transport and RX-gain drivers check admission between atoms; direct
 TXDC/PWDET paths do not. The 50 µs atom / 1 ms poll contracts are not universal
 elapsed-time cutoffs. `admit_maintenance` checks pending tracking state and
 the tracking graph programs grant-protect requests without waiting for an
-exclusive RF grant. See [PHY execution](../../phy/README.md#runtime-sequence-and-timing).
+exclusive RF grant. See [PHY execution](../phy/README.md#runtime-sequence-and-timing).
 
 `Esp32s31Radio` (chip only, `src/esp32s31.rs`) is the ESP32-S31 backend over
 the radio domain; its module documentation lists each request's steps. Its

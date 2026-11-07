@@ -50,7 +50,7 @@ pub(super) fn rate(s: &mut Session<'_>) {
 /// 0x4601: divider applied and the update's completion; 0x46ff: the
 /// restored divider and its completion.
 ///
-/// SOURCE: production `oer_chips_esp32s31_hal::boot::clock` (`stage`, then
+/// SOURCE: production `oer_chips_esp32s31_hal::system::boot::clock` (`stage`, then
 /// `ROOT_CLK_CTRL0.SOC_CLK_UPDATE` until it clears; ESP-IDF 4d80c1b2
 /// `clk_tree_ll.h:602-606`).
 pub(super) fn rate_halved(s: &mut Session<'_>) {

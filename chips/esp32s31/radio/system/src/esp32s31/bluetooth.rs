@@ -1,16 +1,8 @@
 //! Bluetooth's shared-domain steps, serialized with Wi-Fi by the one actor.
 
 use oer_chips_esp32s31_hal::{
-    bluetooth::{ClockedOwner, ColdOwner, PoweredOwner},
-    domain::{BluetoothClient, CoexAbsent, Coexisting, CommonPower, PlatformClockProvider},
-};
-use oer_chips_esp32s31_phy::executor::boundary::Boundary;
-use oer_chips_esp32s31_phy::{
-    PhyTargetObserver,
-    bluetooth_client::{
-        BluetoothPhyMembership, bluetooth_rf_ready, join_bluetooth, leave_bluetooth,
-    },
-    concurrent::{PhyClientAccess, phy_ready},
+    radio::bluetooth::{ClockedOwner, ColdOwner, PoweredOwner},
+    radio::domain::{BluetoothClient, CoexAbsent, Coexisting, CommonPower, PlatformClockProvider},
 };
 use oer_chips_esp32s31_radio_client::{
     DomainHealth, Failed, Failure, LpClock, PhyPreparation, Poison, PoisonCause, RcSlow,
@@ -19,6 +11,14 @@ use oer_chips_esp32s31_radio_client::{
         BluetoothJoin, BluetoothJoined, BluetoothLeft, Installation, Permission, RadioController,
     },
 };
+use oer_chips_esp32s31_radio_phy::executor::boundary::Boundary;
+use oer_chips_esp32s31_radio_phy::{
+    PhyTargetObserver,
+    bluetooth_client::{
+        BluetoothPhyMembership, bluetooth_rf_ready, join_bluetooth, leave_bluetooth,
+    },
+    concurrent::{PhyClientAccess, phy_ready},
+};
 
 use super::Esp32s31Radio;
 use crate::{Exit, Fault, PhyDomain};
@@ -26,7 +26,7 @@ use crate::{Exit, Fault, PhyDomain};
 /// Bluetooth's request `request` poisoned the domain with `cause`.
 const fn bluetooth_poison(request: RequestKind, cause: PoisonCause) -> Poison {
     Poison::request(
-        oer_chips_esp32s31_hal::domain::RadioClient::Bluetooth,
+        oer_chips_esp32s31_hal::radio::domain::RadioClient::Bluetooth,
         request,
         cause,
     )
@@ -112,7 +112,7 @@ where
     T: oer_portable_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
     R: oer_portable_trace::Observer,
-    S: oer_chips_esp32s31_phy::sar_pilot::Service,
+    S: oer_chips_esp32s31_radio_phy::sar_pilot::Service,
     H: RadioController<C::Backend>,
 {
     fn attached(&mut self, shared: &mut Esp32s31Radio<C, T, O, S, R>) {

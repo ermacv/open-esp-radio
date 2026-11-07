@@ -17,7 +17,7 @@ oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-chips-esp32s31-crypto = { path = "../../../chips/esp32s31/crypto" }
 oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-chips-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-chips-esp32s31-runtime = { path = "../../../chips/esp32s31/runtime" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-chips-family-executor = { path = "../../../chips/family/executor" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
