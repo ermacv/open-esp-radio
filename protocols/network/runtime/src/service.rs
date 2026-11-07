@@ -352,15 +352,12 @@ impl<
             return false;
         }
         let pool = &*pool;
-        let bound = self.bound.iter().flatten();
-        let source = bound
-            .clone()
-            .map(|socket| (pool.held(socket.group), socket.group))
-            .max_by_key(|(held, _)| *held);
-        let Some((most, source)) = source else {
+        // The pool's accounts, not the sockets': a group holds blocks with or
+        // without a socket here.
+        let Some((source, most)) = pool.heaviest() else {
             return false;
         };
-        let waiter = bound.clone().any(|socket| {
+        let waiter = self.bound.iter().flatten().any(|socket| {
             socket.reserving
                 && socket.group != source
                 && pool.held(socket.group) < most
