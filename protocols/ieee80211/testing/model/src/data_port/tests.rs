@@ -1040,7 +1040,10 @@ fn the_ring_limit_refuses_a_landing_frame_only() {
             })
             .unwrap();
         harness.start();
-        while harness.air.air_report().unwrap().ring_drops < 2 {
+        for _ in 0..100 {
+            if harness.air.air_report().unwrap().ring_drops >= 2 {
+                break;
+            }
             harness.advance_air();
         }
         let report = harness.air.air_report().unwrap();

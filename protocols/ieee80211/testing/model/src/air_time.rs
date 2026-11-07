@@ -112,6 +112,9 @@ pub enum AirTimeError {
     EmptyFrame,
     /// One frame of the access point exceeds its own limits.
     PeerFrameOutsideLimits,
+    /// An event came due and nothing happened: the medium broke its own
+    /// rules, and stops rather than spin.
+    Stalled,
 }
 
 /// What answers a PPDU.
@@ -804,7 +807,7 @@ impl Medium {
             spans: Vec::new(),
             report: AirReport::default(),
         };
-        medium.refresh_peer(at);
+        let _arrived: bool = medium.refresh_peer(at);
         medium
     }
 
@@ -923,27 +926,31 @@ impl Medium {
             if at > now {
                 break;
             }
-            self.fire(at, world)?;
+            if !self.fire(at, world)? {
+                return Err(AirTimeError::Stalled);
+            }
         }
         Ok(())
     }
 
-    fn fire(&mut self, at: u64, world: &impl AirWorld) -> Result<(), AirTimeError> {
+    /// Serve the event due at `at`; whether anything happened, which an
+    /// event always does unless the medium broke its own rules.
+    fn fire(&mut self, at: u64, world: &impl AirWorld) -> Result<bool, AirTimeError> {
         if let Some(on_air) = self.on_air.take() {
             self.serve_on_air(on_air, world);
-            return Ok(());
+            return Ok(true);
         }
-        self.refresh_peer(at);
+        let arrived = self.refresh_peer(at);
         if self.burst_due(at) {
             self.start_burst(at);
-            return Ok(());
+            return Ok(true);
         }
         let station = self.station_access() == Some(at);
         let peer = self.peer_access() == Some(at);
         if station || peer {
             self.start(at, station, peer, world)?;
         }
-        Ok(())
+        Ok(arrived || self.on_air.is_some())
     }
 
     fn burst_due(&self, at: u64) -> bool {
@@ -1261,14 +1268,15 @@ impl Medium {
                 None => state.contender.resume(end),
             }
         }
-        self.refresh_peer(end);
+        let _arrived: bool = self.refresh_peer(end);
         if self.burst_due(end) {
             self.start_burst(end);
         }
     }
 
     /// The access point begins to contend once it has a frame.
-    fn refresh_peer(&mut self, at: u64) {
+    /// Whether it began to.
+    fn refresh_peer(&mut self, at: u64) -> bool {
         let busy = self.on_air.is_some();
         if let Some(peer) = self.peer.as_mut()
             && peer.since.is_none()
@@ -1276,7 +1284,9 @@ impl Medium {
         {
             peer.since = Some(at);
             peer.contender.arrived(at, busy, &mut self.rng);
+            return true;
         }
+        false
     }
 }
 
