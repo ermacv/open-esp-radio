@@ -87,6 +87,15 @@ impl<D, T, X> DevicePort<D, T, X> {
     }
 }
 
+impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
+    /// Give back every frame the device's queue holds. Its queue outlives this
+    /// port, so dropping the port returns none of them: a stop calls this
+    /// before it tells the device it is over.
+    pub fn give_back_received(&mut self) {
+        while self.take_frame(|_| {}) {}
+    }
+}
+
 impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort<D, T, X> {
     type Refusal = PortRefusal;
     /// The device says nothing of a frame's end to this stack.

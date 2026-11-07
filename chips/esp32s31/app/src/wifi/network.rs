@@ -5,7 +5,8 @@
 //! [`Network::start`] takes the station's device in the group's boot. The
 //! address comes later, when the image has it: [`Network::configure`] builds
 //! the service with its sockets and hands it to the task, once. A stop ends the
-//! sockets and drops the port, so the station has its received buffers back.
+//! sockets and gives back every frame in the port's queue, so the station has
+//! its received buffers back.
 //! The other owners stay parked for the rest of the boot: nothing starts a
 //! second network, and no contract ends the first one.
 
@@ -405,7 +406,9 @@ async fn serve_network(start: NetworkStart) {
     let service = match select(configured(&mut placed), stopper.requested()).await {
         Either::First(service) => service,
         Either::Second(()) => {
-            drop(WAITING.take());
+            if let Ok(mut waiting) = WAITING.take() {
+                waiting.port.give_back_received();
+            }
             stopper.stopped();
             return;
         }
@@ -440,8 +443,10 @@ async fn serve_network(start: NetworkStart) {
             results,
             pool,
             brand,
-            port,
+            mut port,
         } = retired;
+        // The queue outlives the port, so dropping it returns no frame.
+        port.give_back_received();
         drop(port);
         // Memory, lanes and result places are all static, so what a late
         // socket or observer reaches stays.

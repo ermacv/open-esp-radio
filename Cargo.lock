@@ -1992,9 +1992,14 @@ dependencies = [
  "oer-hil-agent",
  "oer-hil-services-load",
  "oer-hil-services-wifi-station",
+ "oer-portable-time-virtual",
  "oer-portable-trace",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
+ "oer-protocols-network-core",
+ "oer-protocols-network-port",
+ "oer-protocols-network-runtime",
+ "oer-protocols-network-wire",
  "static_cell",
 ]
 

@@ -4,6 +4,7 @@
 
 use core::cell::{Cell, RefCell, RefMut};
 
+use heapless::Vec;
 use oer::wifi::{self, NetworkAddress, NetworkBlock, Received, Refusal, Refused, Remote, Socket};
 use oer_hil_services_load::{LoadError, Start};
 
@@ -32,6 +33,22 @@ pub(crate) enum Attempt {
     Lost,
 }
 
+/// The blocks a run's end can find in its hands: one reserved, one received
+/// and one waiting for the lane.
+const PARKED: usize = 3;
+type Parked = RefCell<Vec<NetworkBlock, PARKED>>;
+
+/// Give `block` back, or park it for the next run: a full lane or a stop
+/// refuses it, and a run's end has no time to wait.
+fn home(socket: &mut Socket, parked: &Parked, block: NetworkBlock) {
+    if let Err(Refused { block, .. }) = socket.release(block)
+        && let Ok(mut parked) = parked.try_borrow_mut()
+    {
+        // Three places for at most three blocks.
+        let _kept = parked.push(block);
+    }
+}
+
 /// The network the load server opens its runs on.
 pub(crate) struct Network {
     network: RefCell<wifi::Network>,
@@ -39,6 +56,9 @@ pub(crate) struct Network {
     address: Cell<Option<oer_hil_services_load::StaticAddress>>,
     /// Datagrams the sockets delivered: this core counts no frames.
     delivered: Cell<u32>,
+    /// Blocks an ended run could not give back. They outlive its adapters,
+    /// which a deadline cancels at any await.
+    parked: Parked,
 }
 
 impl Network {
@@ -48,6 +68,7 @@ impl Network {
             sockets: RefCell::new(None),
             address: Cell::new(None),
             delivered: Cell::new(0),
+            parked: RefCell::new(Vec::new()),
         }
     }
 }
@@ -84,6 +105,7 @@ pub(crate) fn open<'a>(net: &'a Network, start: &Start) -> Result<Run<'a>, LoadE
     Ok(Run {
         sockets,
         delivered: &net.delivered,
+        parked: &net.parked,
     })
 }
 
@@ -96,15 +118,27 @@ pub(crate) fn received_frames(net: &Network) -> u32 {
 pub(crate) struct Run<'a> {
     sockets: RefMut<'a, [Socket; wifi::SOCKETS]>,
     delivered: &'a Cell<u32>,
+    parked: &'a Parked,
 }
 
 impl Run<'_> {
     pub(crate) fn split(&mut self) -> (Receiving<'_>, Sending<'_>) {
         let [receiving, sending] = &mut *self.sockets;
+        // What the last run could not give back: the lane has room by now.
+        let waiting = self
+            .parked
+            .try_borrow_mut()
+            .map(|mut parked| core::mem::take(&mut *parked));
+        if let Ok(waiting) = waiting {
+            for block in waiting {
+                home(receiving, self.parked, block);
+            }
+        }
         (
             Receiving {
                 socket: receiving,
                 delivered: self.delivered,
+                parked: self.parked,
                 next: None,
                 returning: None,
                 closed: false,
@@ -112,6 +146,7 @@ impl Run<'_> {
             Sending {
                 socket: sending,
                 held: None,
+                parked: self.parked,
             },
         )
     }
@@ -121,11 +156,23 @@ impl Run<'_> {
 pub(crate) struct Receiving<'a> {
     socket: &'a mut Socket,
     delivered: &'a Cell<u32>,
+    parked: &'a Parked,
     /// A datagram [`Self::ready`] found.
     next: Option<Received>,
     /// A block that found the socket's lane full.
     returning: Option<NetworkBlock>,
     closed: bool,
+}
+
+impl Drop for Receiving<'_> {
+    fn drop(&mut self) {
+        if let Some(datagram) = self.next.take() {
+            home(self.socket, self.parked, datagram.block);
+        }
+        if let Some(block) = self.returning.take() {
+            home(self.socket, self.parked, block);
+        }
+    }
 }
 
 impl<'a> Receiving<'a> {
@@ -228,6 +275,15 @@ pub(crate) struct Sending<'a> {
     socket: &'a mut Socket,
     /// A block reserved and not sent.
     held: Option<NetworkBlock>,
+    parked: &'a Parked,
+}
+
+impl Drop for Sending<'_> {
+    fn drop(&mut self) {
+        if let Some(block) = self.held.take() {
+            home(self.socket, self.parked, block);
+        }
+    }
 }
 
 impl Sending<'_> {

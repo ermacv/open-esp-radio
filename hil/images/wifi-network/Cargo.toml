@@ -19,6 +19,14 @@ embassy-futures = "0.1.2"
 heapless = "0.9.3"
 static_cell.workspace = true
 
+[dev-dependencies]
+heapless = "0.9.3"
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
+oer-protocols-network-core = { path = "../../../protocols/network/core", features = ["test-support"] }
+oer-protocols-network-port = { path = "../../../protocols/network/port" }
+oer-protocols-network-runtime = { path = "../../../protocols/network/runtime" }
+oer-protocols-network-wire = { path = "../../../protocols/network/wire" }
+
 [lints]
 workspace = true
 
