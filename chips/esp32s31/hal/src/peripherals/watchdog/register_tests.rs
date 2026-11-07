@@ -219,6 +219,28 @@ fn arming_the_rtc_watchdog_writes_its_hold_stage_0_and_enable_then_feeds() {
 }
 
 #[test]
+fn the_rtc_watchdog_counts_through_sleep_keeping_its_other_fields() {
+    let mut words = memory(instances::lp_wdt::SIZE, 0);
+    let mut armed =
+        RtcWatchdog::new(RwdtRegisters::host(&mut words).expect("host memory holds it"))
+            .arm_rtc_reset(super::super::RTC_WATCHDOG_STAGE0_HOLD);
+    armed.pause_in_sleep(true);
+    armed.pause_in_sleep(false);
+    armed.stage0_action(oer_chips_family_watchdog::RtcStageAction::ResetSystem);
+    drop(armed);
+    let view = RwdtRegisters::host(&mut words).expect("host memory holds the block");
+    let config = view.0.read_config0();
+    assert!(!config.wdt_pause_in_slp());
+    assert!(config.wdt_en(), "the watchdog stays armed");
+    assert_eq!(
+        config.wdt_stg0().get(),
+        3,
+        "stage 0 resets the digital system"
+    );
+    assert_eq!(view.0.read_wprotect().wdt_wkey(), LOCK, "locked again");
+}
+
+#[test]
 fn the_super_watchdog_feeds_itself_and_keeps_its_signal_width() {
     let mut words = memory(instances::lp_wdt::SIZE, 0x12c0_0000);
     let before = words.clone();

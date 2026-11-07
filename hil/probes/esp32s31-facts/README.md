@@ -517,7 +517,9 @@ LP-CPU wake causes, compact wake/reject/LP-wake STATUS and their enables.
 Only SOC_WAKEUP and SOC_SLEEP_REJECT (2 of the 5 HP enable fields), and
 LP_CPU_WAKEUP (1 of the 12 LP enable fields) are sampled; other enables
 are unobserved.
-The separate read-only `PmuWakeStatus` capability reads these words; the
+The read-only `PmuWakeStatus` capability reads the interrupt status, enable
+and LP words; the raw HP status and the wake and reject causes are read,
+never written, through the sleep request's `PmuSleepControl`. The
 radio clock/power owner has no PMU wake enable or acknowledgement access. A change of a
 local sleep flag alone does not establish a PMU sleep/wake transition.
 

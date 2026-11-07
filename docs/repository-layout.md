@@ -65,14 +65,14 @@ chips/esp32s31/ieee802154/driver/
 chips/esp32s31/radio/{client, system}/
 chips/family/{analog, app, bluetooth-engine, boot, coex, efuse, executor, facts,
     ieee80211-policy, ieee802154-engine, ieee802154-mac-values, interrupt-table,
-    modem-clock, phy, platform-port, radio, staged-bootstrap, staged-layout,
+    modem-clock, phy, platform-port, power, radio, staged-bootstrap, staged-layout,
     staged-runtime, usb-serial-jtag, watchdog}/
 oer/
 examples/wifi-station/
 hil/agent/
 hil/images/{aes, wifi-station}/
 hil/probes/{esp32s31-aes-timing, esp32s31-boot-smoke, esp32s31-facts,
-    esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio, esp32s31-radio-root,
+    esp32s31-light-sleep, esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio, esp32s31-radio-root,
     esp32s31-register, esp32s31-rx-chain}/
 hil/scenarios/{aes, sdk-station, wifi-load, wifi-station}/
 hil/services/{aes, fault, load, sdk-station, wifi-station}/

@@ -190,6 +190,7 @@ impl<P: Placement> SwdRegisters<P> {
 /// reset).
 const fn rtc_stage(action: RtcStageAction) -> Bits<3> {
     match action {
+        RtcStageAction::ResetSystem => Bits::constant::<3>(),
         RtcStageAction::ResetRtc => Bits::constant::<4>(),
     }
 }
@@ -314,6 +315,14 @@ impl<P: Placement> RtcWatchdogArm for RwdtRegisters<P> {
     /// the one feed bit).
     fn feed(&mut self, _: Access<'_>) {
         self.0.trigger_feed_feed();
+    }
+
+    /// SOURCE: ESP-IDF 4d80c1b2 `rtc_wdt_reg.h` (`RTC_WDT_PAUSE_IN_SLP`,
+    /// `CONFIG0` bit 9).
+    fn set_pause_in_sleep(&mut self, _: Access<'_>, paused: bool) {
+        self.0.modify_config0(|w| {
+            w.set_wdt_pause_in_slp(paused);
+        });
     }
 }
 

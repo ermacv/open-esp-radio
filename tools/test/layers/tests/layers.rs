@@ -953,6 +953,7 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/family/bluetooth-engine", Role::HardwareDriver),
     ("chips/family/usb-serial-jtag", Role::HardwareDriver),
     ("chips/family/watchdog", Role::HardwareDriver),
+    ("chips/family/power", Role::HardwareDriver),
     ("chips/esp32s31/phy", Role::HardwareDriver),
     ("chips/esp32s31/crypto", Role::HardwareDriver),
     ("chips/esp32s31/bluetooth/driver", Role::ChipAdapter),

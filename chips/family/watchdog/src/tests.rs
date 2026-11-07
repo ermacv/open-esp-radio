@@ -28,6 +28,7 @@ enum Op {
     AutoFeed(bool),
     Hold(u32),
     Action(RtcStageAction),
+    PauseInSleep(bool),
 }
 
 /// The registers' writes, shared with the test that reads them.
@@ -102,6 +103,9 @@ impl RtcWatchdogArm for Recorder<'_> {
     }
     fn feed(&mut self, _: Access<'_>) {
         self.record(Op::Feed);
+    }
+    fn set_pause_in_sleep(&mut self, _: Access<'_>, paused: bool) {
+        self.record(Op::PauseInSleep(paused));
     }
 }
 
@@ -323,6 +327,40 @@ fn the_rtc_watchdog_arms_its_hold_before_the_feed_and_the_enable_last() {
     let mut watchdog = watchdog;
     watchdog.feed();
     assert_eq!(log.take(), [Op::Key(WRITE_KEY), Op::Feed, Op::Key(LOCK)]);
+}
+
+#[test]
+fn the_armed_rtc_watchdog_counts_through_sleep_only_when_asked_under_its_key() {
+    let log = Log::default();
+    let mut watchdog = RtcWatchdog::new(Recorder(&log)).arm_rtc_reset(1);
+    assert!(
+        !log.take()
+            .iter()
+            .any(|op| matches!(op, Op::PauseInSleep(_))),
+        "arming keeps the sleep pause"
+    );
+    watchdog.pause_in_sleep(false);
+    assert_eq!(
+        log.take(),
+        [Op::Key(WRITE_KEY), Op::PauseInSleep(false), Op::Key(LOCK)]
+    );
+}
+
+#[test]
+fn the_armed_rtc_watchdog_changes_its_stage_0_action_under_its_key() {
+    let log = Log::default();
+    let mut watchdog = RtcWatchdog::new(Recorder(&log)).arm_rtc_reset(1);
+    log.take();
+    watchdog.stage0_action(RtcStageAction::ResetSystem);
+    assert_eq!(
+        log.take(),
+        [
+            Op::Key(WRITE_KEY),
+            Op::Action(RtcStageAction::ResetSystem),
+            Op::Key(LOCK)
+        ]
+    );
+    assert_eq!(RtcStageAction::ResetSystem.code(), 3);
 }
 
 #[test]

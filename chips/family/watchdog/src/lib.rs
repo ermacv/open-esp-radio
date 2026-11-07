@@ -233,6 +233,9 @@ pub trait RtcWatchdogRegisters: WriteProtected {
 /// (the bootloader's backstop stage 0 resets the RTC domain).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RtcStageAction {
+    /// Reset the digital system, keeping the RTC domain: its PMU and LP
+    /// timer state survive for the next boot to read.
+    ResetSystem = 3,
     /// Reset the RTC domain and with it the whole chip.
     ResetRtc = 4,
 }
@@ -257,6 +260,9 @@ pub trait RtcWatchdogArm: RtcWatchdogRegisters {
     fn set_stage0_action(&mut self, access: Access<'_>, action: RtcStageAction);
     /// Restart the watchdog from stage 0.
     fn feed(&mut self, access: Access<'_>);
+    /// Write only whether the watchdog stops counting while the chip
+    /// sleeps.
+    fn set_pause_in_sleep(&mut self, access: Access<'_>, paused: bool);
 }
 
 /// The super watchdog's words.
@@ -546,6 +552,25 @@ impl<R: RtcWatchdogArm> ArmedRtcWatchdog<R> {
     pub fn feed(&mut self) {
         let unlocked = Unlocked::new(&mut self.0);
         unlocked.registers.feed(Access::new());
+    }
+
+    /// What stage 0 does when its hold expires: unlocked, the one field
+    /// written, locked.
+    pub fn stage0_action(&mut self, action: RtcStageAction) {
+        let unlocked = Unlocked::new(&mut self.0);
+        unlocked.registers.set_stage0_action(Access::new(), action);
+    }
+
+    /// Whether the watchdog stops counting while the chip sleeps: unlocked,
+    /// the one field written, locked. The field resets to paused; counting
+    /// through sleep makes a sleep whose wake never comes end in the
+    /// watchdog's reset.
+    ///
+    /// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/register/soc/rtc_wdt_reg.h`
+    /// (`RTC_WDT_PAUSE_IN_SLP`, R/W, reset one).
+    pub fn pause_in_sleep(&mut self, paused: bool) {
+        let unlocked = Unlocked::new(&mut self.0);
+        unlocked.registers.set_pause_in_sleep(Access::new(), paused);
     }
 
     /// Feed the watchdog now and then every `period` on `timer`, for good:

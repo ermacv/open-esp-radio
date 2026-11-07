@@ -1,7 +1,7 @@
 //! Isolated control4 and awake PMU-route observations. No sleep request.
 use super::{Bits, LOW_MAX, Session, ble_wave2, crossed, emit, init, mode, pac, quiet, window};
 
-fn int_raw(p: &pac::pmu::PmuWakeStatus) -> u32 {
+fn int_raw(p: &pac::pmu::PmuSleepControl) -> u32 {
     use pac::pmu::int_raw as f;
     let r = p.read_int_raw();
     (u32::from(r.lp_cpu_exc_int_raw()) * f::LP_CPU_EXC_INT_RAW_MASK)
@@ -119,15 +119,20 @@ fn state(s: &Session<'_>, tag: u32) {
         tag + 2,
         u32::from(t.read_word_002c_opaque().low_byte()),
         readable_mode,
-        p.read_slp_wakeup_status0().wakeup_cause(),
+        s.sleep_control.read_slp_wakeup_status0().wakeup_cause(),
     );
-    emit(tag + 3, int_raw(p), hp_int_st(p), hp_int_ena(p));
+    emit(
+        tag + 3,
+        int_raw(&s.sleep_control),
+        hp_int_st(p),
+        hp_int_ena(p),
+    );
     emit(tag + 4, lp_int_raw(p), lp_int_st(p), lp_int_ena(p));
     emit(
         tag + 5,
-        p.read_slp_wakeup_status1().reject_cause(),
+        s.sleep_control.read_slp_wakeup_status1().reject_cause(),
         p.read_lpcpu_wakeup_cause().lpcpu_wakeup_cause(),
-        p.read_slp_wakeup_cntl2().wakeup_ena(),
+        s.sleep_control.read_slp_wakeup_cntl2().wakeup_ena(),
     );
     let main = p.read_main_state();
     emit(

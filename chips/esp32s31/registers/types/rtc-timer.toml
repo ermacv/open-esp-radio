@@ -1,0 +1,451 @@
+# Written from the pinned ESP-IDF register header (rtc_timer_reg.h): names,
+# offsets, bit positions, access classes and defaults as the header states
+# them.
+schema = 3
+
+[type]
+name = "RTC_TIMER"
+description = "The LP main timer: a 48-bit counter on the slow clock, its two targets, the PMU's sleep wake and the LP CPU's interrupt."
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"]
+
+[review]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[registers]]
+name = "TAR0_LOW"
+offset = 0x0
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "MAIN_TIMER_TAR_LOW0"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TAR0_HIGH"
+offset = 0x4
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "MAIN_TIMER_TAR_HIGH0"
+bits = "15:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_TAR_EN0"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "TAR1_LOW"
+offset = 0x8
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "MAIN_TIMER_TAR_LOW1"
+bits = "31:0"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "TAR1_HIGH"
+offset = 0xc
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "MAIN_TIMER_TAR_HIGH1"
+bits = "15:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_TAR_EN1"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "UPDATE"
+offset = 0x10
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x3ffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICKUPDATE"
+bits = "26"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_UPDATE"
+bits = "27"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_REGDMA_WORK"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_XTAL_OFF"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_SYS_STALL"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_SYS_RST"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "MAIN_BUF0_LOW"
+offset = 0x14
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "MAIN_TIMER_BUF0_LOW"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "MAIN_BUF0_HIGH"
+offset = 0x18
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "MAIN_TIMER_BUF0_HIGH"
+bits = "15:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "MAIN_BUF1_LOW"
+offset = 0x1c
+description = "need_des"
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "MAIN_TIMER_BUF1_LOW"
+bits = "31:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "MAIN_BUF1_HIGH"
+offset = 0x20
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xffff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "MAIN_TIMER_BUF1_HIGH"
+bits = "15:0"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "MAIN_OVERFLOW"
+offset = 0x24
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0x7fffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "MAIN_TIMER_ALARM_LOAD"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "INT_RAW"
+offset = 0x28
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICK_INT_RAW"
+bits = "28"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDTAE_DONE_RAW"
+bits = "29"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "OVERFLOW_RAW"
+bits = "30"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_INT_RAW"
+bits = "31"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers]]
+name = "INT_ST"
+offset = 0x2c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICK_INT_ST"
+bits = "28"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDTAE_DONE_INT_ST"
+bits = "29"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "OVERFLOW_ST"
+bits = "30"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_INT_ST"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "INT_ENA"
+offset = 0x30
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICK_INT_ENA"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDTAE_DONE_INT_ENA"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "OVERFLOW_ENA"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_INT_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "INT_CLR"
+offset = 0x34
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICK_INT_CLR"
+bits = "28"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDTAE_DONE_INT_CLR"
+bits = "29"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "OVERFLOW_CLR"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "SOC_WAKEUP_INT_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "LP_INT_RAW"
+offset = 0x38
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICK_LP_INT_RAW"
+bits = "28"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDTAE_DONE_LP_INT_RAW"
+bits = "29"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_OVERFLOW_LP_INT_RAW"
+bits = "30"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_LP_INT_RAW"
+bits = "31"
+class = "write-one-to-clear"
+description = "need_des"
+
+[[registers]]
+name = "LP_INT_ST"
+offset = 0x3c
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICK_LP_INT_ST"
+bits = "28"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDTAE_DONE_INT_LP_ST"
+bits = "29"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_OVERFLOW_LP_INT_ST"
+bits = "30"
+class = "read-only"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_LP_INT_ST"
+bits = "31"
+class = "read-only"
+description = "need_des"
+
+[[registers]]
+name = "LP_INT_ENA"
+offset = 0x40
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICK_LP_INT_ENA"
+bits = "28"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDTAE_DONE_LP_INT_ENA"
+bits = "29"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_OVERFLOW_LP_INT_ENA"
+bits = "30"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_LP_INT_ENA"
+bits = "31"
+class = "plain"
+description = "need_des"
+
+[[registers]]
+name = "LP_INT_CLR"
+offset = 0x44
+description = "need_des"
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffff, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"] }
+
+[[registers.fields]]
+name = "TICK_LP_INT_CLR"
+bits = "28"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "UPDTAE_DONE_LP_INT_CLR"
+bits = "29"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_OVERFLOW_LP_INT_CLR"
+bits = "30"
+class = "write-trigger"
+description = "need_des"
+
+[[registers.fields]]
+name = "MAIN_TIMER_LP_INT_CLR"
+bits = "31"
+class = "write-trigger"
+description = "need_des"
+
+[[registers]]
+name = "DATE"
+offset = 0x3fc
+description = "need_des"
+reset = { value = 0x2508050 }
+
+[[registers.fields]]
+name = "DATE"
+bits = "30:0"
+class = "plain"
+description = "need_des"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "31"
+class = "plain"
+description = "need_des"
+

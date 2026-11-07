@@ -196,6 +196,9 @@ impl RtcWatchdogArm for Part<'_> {
     fn feed(&mut self, _: Access<'_>) {
         self.log.push(Op::Feed);
     }
+    fn set_pause_in_sleep(&mut self, _: Access<'_>, _: bool) {
+        panic!("adoption leaves the RTC watchdog's sleep pause unchanged");
+    }
 }
 impl SuperWatchdogRegisters for Part<'_> {
     fn set_auto_feed(&mut self, _: Access<'_>, _: bool) {
