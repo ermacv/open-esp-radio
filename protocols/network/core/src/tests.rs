@@ -12,8 +12,8 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Block, Brand, Class, CommandState, CoreBrand, FramePort, Interface, InterfaceError, NetEvent,
-    NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal, SlotTooShort, Unsent, brand,
+    Block, BrandRefusal, Class, CommandState, CoreBrand, FramePort, Interface, InterfaceError,
+    NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Remote, SendRefusal, SlotTooShort, Unsent,
     claim,
 };
 
@@ -89,14 +89,22 @@ fn best_effort() -> Dscp {
     Dscp::default()
 }
 
+/// A brand of the test's own.
+macro_rules! brand {
+    ($name:ident) => {
+        #[derive(Debug, Eq, PartialEq)]
+        struct $name;
+    };
+}
+
 /// The pool and the core's right of brand `B`, over storage of its own.
-fn claimed<B: Brand>() -> (Blocks<B>, CoreBrand<B>) {
+fn claimed<B: 'static>() -> (Blocks<B>, CoreBrand<B>) {
     let memory = std::boxed::Box::leak(std::boxed::Box::new([[0; SIZE]; BLOCKS]));
     claim(memory).unwrap()
 }
 
 /// A world of one owner of brand `B` on `interface`.
-fn run<B: Brand>(interface: Interface, test: impl FnOnce(&mut Stack<B>)) {
+fn run<B: 'static>(interface: Interface, test: impl FnOnce(&mut Stack<B>)) {
     let (pool, brand) = claimed::<B>();
     test(&mut NetworkOwner::new(
         brand,
@@ -107,7 +115,7 @@ fn run<B: Brand>(interface: Interface, test: impl FnOnce(&mut Stack<B>)) {
 }
 
 /// A world of one socket, one place, one receive slot and two neighbors.
-fn run_small<B: Brand>(test: impl FnOnce(&mut Small<B>)) {
+fn run_small<B: 'static>(test: impl FnOnce(&mut Small<B>)) {
     let (pool, brand) = claimed::<B>();
     test(&mut NetworkOwner::new(
         brand,
@@ -708,7 +716,8 @@ fn a_brand_claims_once() {
     brand!(Once);
     let _first = claimed::<Once>();
     let memory = std::boxed::Box::leak(std::boxed::Box::new([[0; SIZE]; BLOCKS]));
-    assert!(claim::<Once, SIZE, BLOCKS>(memory).is_err());
+    let refused = claim::<Once, SIZE, BLOCKS>(memory).err().unwrap();
+    assert_eq!(refused.reason, BrandRefusal::Claimed);
 }
 
 #[test]

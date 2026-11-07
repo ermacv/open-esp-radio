@@ -19,10 +19,12 @@ and a refusal moves nothing. A port that contradicts itself ends the work with
 `tick` comes first at every time `poll_deadline` names and at any later `now`
 before work is asked for: an address past its life is no work until then.
 
-`brand!` makes a type that `claim` takes once, giving one pool and the right to
-one core. Blocks are values lent from that pool, and they and every handle carry
-the brand. A brand is a type rather than a lifetime, so `'static` tasks and their
-queues can name a block, and another network's value does not compile. A block
+Any type can be a brand. `claim` lets it claim once, giving one pool and the right
+to one core, and this crate holds that record, so no code outside can claim a brand
+twice. An image has room for 64 brands. Blocks are values lent from that pool, and
+they and every handle carry the brand, invariantly. A brand is a type rather than a
+lifetime, so `'static` tasks and their queues can name a block, and another
+network's value does not compile. A block
 always has its place in its pool. A socket has `CREDITS` command places and a place of its own for its
 close. A place frees when its command finished and its result was read or its
 observer dropped; a dropped observer alone frees nothing, so a late end never
