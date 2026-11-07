@@ -749,6 +749,43 @@ pub fn rx_counters() -> Option<WifiRxReport> {
     RX_COUNTERS.get().map(|counters| counters.report())
 }
 
+/// The receive path's stall record, which the radio device serves: a
+/// trace build's diagnostic, never a product value.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) static RX_STALL:
+    oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::stall::RxStall =
+    oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::stall::RxStall::new();
+
+/// The MAC statistics bank a stall snapshot reads.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub use oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::mac::{MacBank, MacSample};
+/// One stall snapshot of the receive path, as [`rx_snapshot`] reads it.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub use oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::stall::{
+    RxDescriptorCounts, RxDeviceView, RxHardwareView, RxProgress, RxRingView, RxSessionView,
+    RxStallReading, RxStallResume, RxStallSnapshot, RxStallTicket, RxWalkerView,
+};
+
+/// Ask the radio device for a stall snapshot of its receive path, which it
+/// takes at its next turn, before that turn's receive service. Only a trace
+/// build serves it. Call it on the station's hart: the request wakes the
+/// device's task through that task's own waker.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub fn request_rx_snapshot() -> RxStallTicket {
+    RX_STALL.request()
+}
+
+/// The snapshot taken for `ticket`, with how the receive path went on after
+/// the turn's service once the device recorded it; `None` before the
+/// device took it. Its times are ages at this reading of the device's clock
+/// ([`RxStallReading::age`]).
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub fn rx_snapshot(ticket: RxStallTicket) -> Option<RxStallReading> {
+    use oer_portable_time::Clock as _;
+    let now = oer_portable_embassy_time::EmbassyClock.now().as_micros() as u32;
+    RX_STALL.read(ticket, now)
+}
+
 /// One reading of the MAC's statistics, and its frequency offset.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 pub type MacCounters = (

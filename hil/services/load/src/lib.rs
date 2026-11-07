@@ -79,6 +79,10 @@ oer_protocols_hil_protocol::messages! {
     topic PositionsCollected = "load/positions-report";
     endpoint CollectHart1 = "load/hart1" => Hart1Collected;
     topic Hart1Collected = "load/hart1-report";
+    endpoint CollectStall = "load/stall" => StallCollected;
+    topic StallCollected = "load/stall-report";
+    endpoint CollectStallMac = "load/stall-mac" => StallMacCollected;
+    topic StallMacCollected = "load/stall-mac-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -1144,6 +1148,214 @@ pub struct Hart1Window {
     pub end: HartCount,
 }
 
+/// How long the image waits, after it asked, for its radio owner's stall
+/// snapshot and for the turn after it ([`Stall`]).
+pub const STALL_WAIT_MS: u32 = 200;
+
+/// The receive path's stall snapshot of run `run`: the image asks its radio
+/// owner for one at the window's end, after the window's own readings.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectStall {
+    pub run: u32,
+}
+
+/// The answer to [`CollectStall`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the snapshot goes by value"
+)]
+pub enum StallCollected {
+    Report(Stall),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// Where the receive path last moved, by boundary, and what its owner read
+/// of it at the window's end. Times are the image's monotonic microseconds,
+/// the clock of [`Report::window_start_us`]. Only a trace build takes the
+/// snapshot; the images that serve this service are trace builds.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Stall {
+    /// When the image asked its radio owner.
+    pub requested_us: u64,
+    /// The socket boundary, which the load server stamps itself: the run's
+    /// latest load datagram before the request, and its first one at or
+    /// after the snapshot, until the drain's end.
+    pub socket_last_us: Option<u64>,
+    pub socket_after_us: Option<u64>,
+    /// The owner's snapshot; `None` when it took none within
+    /// [`STALL_WAIT_MS`] of the request: its task did not turn.
+    pub snapshot: Option<RxSnapshot>,
+}
+
+/// The radio owner's snapshot, taken at the turn the request woke, before
+/// that turn's receive service.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct RxSnapshot {
+    pub at_us: u64,
+    /// The DMA boundary (descriptors of completed units a service pass
+    /// observed) and the driver boundary (units the radio device handed to
+    /// the station), until the snapshot.
+    pub dma: StallBoundary,
+    pub driver: StallBoundary,
+    pub device: StallDevice,
+    /// What the owner read with its registers; `None` while it held none
+    /// (a retune in flight) or its receive session failed.
+    pub hardware: Option<StallHardware>,
+    /// The same boundaries at the owner's facts after the turn's receive
+    /// pull; `None` when the owner recorded none within [`STALL_WAIT_MS`]
+    /// of the request.
+    pub resume: Option<StallResume>,
+}
+
+/// How far one boundary went since the station's receive path was bound
+/// (wrapping), and when it last moved; `None` when it never moved.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StallBoundary {
+    pub count: u32,
+    pub last_us: Option<u64>,
+}
+
+/// The boundaries when the owner checked them after the snapshot: a
+/// boundary resumed when its count moved past the snapshot's. `serviced`
+/// says whether the turn's receive pull ran before the check; without it,
+/// the check is the latest the owner made within [`STALL_WAIT_MS`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StallResume {
+    pub checked_us: u64,
+    pub dma: StallBoundary,
+    pub driver: StallBoundary,
+    pub serviced: bool,
+}
+
+/// The radio device's own state: ring work it knows of, a continuation it
+/// waits for, a receive cut, a stop under way, a paused ring, and the units
+/// it staged and holds for the station.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StallDevice {
+    pub rx_pending: bool,
+    pub continuation: bool,
+    pub cut: bool,
+    pub pausing: bool,
+    pub paused: bool,
+    pub queued: u32,
+}
+
+/// What the owner read with its registers.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StallHardware {
+    pub walker: StallWalker,
+    /// `None` without a live ring.
+    pub ring: Option<StallRing>,
+    pub session: StallSession,
+}
+
+/// The RX descriptor walker's registers and the MAC's own state.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StallWalker {
+    /// `RX_CONTROL`: the walker enable and the reload doorbell.
+    pub enabled: bool,
+    pub reload_doorbell: bool,
+    /// `RX_NEXT_DESCRIPTOR`: the low address and whether its unassigned
+    /// upper field read nonzero.
+    pub next_low: u32,
+    pub next_upper: bool,
+    /// `RX_LAST_DESCRIPTOR`, low address.
+    pub last_low: u32,
+    /// `RX_DESCRIPTOR_BASE`, where the platform reads it.
+    pub base: Option<u32>,
+    /// The MAC's hardware starvation counter, where it has one.
+    pub buffer_full: Option<u16>,
+    /// The MAC runtime's active state; zero is idle.
+    pub runtime_state: u8,
+}
+
+/// The live ring's own view: its descriptor base, recycle frontier and
+/// accepted tail (indices), the descriptors returned to software in this
+/// generation, the newly completed ones at the frontier, the accepted list
+/// left from NEXT (`None` when NEXT lies outside the ring) and a reload it
+/// requested that is still pending.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StallRing {
+    pub base: u32,
+    pub recycle_start: u32,
+    pub accepted_tail: u32,
+    pub observed: u32,
+    pub completed: u32,
+    pub remaining: Option<u32>,
+    pub reload_pending: bool,
+}
+
+/// The receive session's owners and the software side of its interrupt
+/// line. The MAC's interrupt registers belong to the radio handler and are
+/// not read.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StallSession {
+    /// The ring's descriptors by their first word: all of them, `OWNER`
+    /// without `RX_DONE` (armed for the walker, or a filled descriptor of a
+    /// unit not done), `OWNER` with `RX_DONE` (a completed unit's last
+    /// descriptor), `OWNER` clear (its buffer with software); and the
+    /// reserved descriptor the walker starts an epoch from, by the same bits.
+    pub descriptors: u32,
+    pub armed: u32,
+    pub done: u32,
+    pub software: u32,
+    pub reserved_owner: bool,
+    pub reserved_done: bool,
+    /// Buffers released for rearm, buffers detached as staged leases (those
+    /// the station and the network hold included) and claimed staging slots.
+    pub released: u32,
+    pub detached: u32,
+    pub staged: u32,
+    /// The session masked both banks and froze ingress (a cut or a stop).
+    pub masked: bool,
+    pub frozen: bool,
+    /// A request to the interrupt line its handler has not applied.
+    pub line_request_pending: bool,
+    /// A receive fact the line posted that no poll took yet; `None` when
+    /// the owner could not look.
+    pub receive_fact_pending: Option<bool>,
+    /// Radio handler entries, RX unmasks it applied and ignored, and
+    /// service passes, since the receive path was bound (wrapping).
+    pub mac_irqs: u32,
+    pub doorbell_unmasks: u32,
+    pub ignored_unmasks: u32,
+    pub service_passes: u32,
+}
+
+/// The MAC statistics bank at run `run`'s stall snapshot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectStallMac {
+    pub run: u32,
+}
+
+/// The answer to [`CollectStallMac`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the banks go by value"
+)]
+pub enum StallMacCollected {
+    Report(StallMac),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// The MAC statistics bank, whole counts by [`MAC_COUNT_NAMES`], as the
+/// owner read it at the stall snapshot, beside the periodic sample of it its
+/// turn keeps: their difference is what the MAC counted since that sample.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StallMac {
+    /// `None` when the owner took no snapshot or has no bank.
+    pub fresh: Option<Mac>,
+    /// The periodic sample and when it was taken; `None` before the first.
+    pub periodic: Option<Mac>,
+    pub periodic_us: Option<u64>,
+}
+
 /// Why the image refused a request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum LoadError {
@@ -1179,6 +1391,8 @@ oer_protocols_hil_agent::service! {
         CollectMac(CollectMac) => mac,
         CollectPositions(CollectPositions) => positions,
         CollectHart1(CollectHart1) => hart1,
+        CollectStall(CollectStall) => stall,
+        CollectStallMac(CollectStallMac) => stall_mac,
     }
 }
 

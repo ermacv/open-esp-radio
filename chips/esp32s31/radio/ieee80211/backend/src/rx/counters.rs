@@ -1020,7 +1020,7 @@ impl WifiRxCounters {
 /// counted and its frequency offset, seen by nothing else.
 #[cfg(oer_trace)]
 pub mod mac {
-    use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
+    use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 
     use oer_chips_esp32s31_hal::{
         radio::ieee80211::mac::WifiMacHal,
@@ -1034,8 +1034,44 @@ pub mod mac {
     /// How often a turn reads them: the bank is forty-odd registers.
     const PERIOD_US: u32 = 50_000;
 
+    /// One reading of the bank: its counts, in the order of [`counts_of`],
+    /// and its frequency offset.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct MacBank {
+        pub counts: [u32; COUNTS],
+        pub frequency_offset: i32,
+    }
+
+    impl Default for MacBank {
+        fn default() -> Self {
+            Self {
+                counts: [0; COUNTS],
+                frequency_offset: 0,
+            }
+        }
+    }
+
+    /// The periodic sample: when it was read (the low word of the port's
+    /// microseconds) and what.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct MacSample {
+        pub at: u32,
+        pub bank: MacBank,
+    }
+
+    /// Read the bank now. Only reads: the counters keep counting.
+    pub fn bank(mac: &WifiMacHal<'_>) -> MacBank {
+        let rx = mac.receive_statistics_snapshot();
+        let tx = mac.transmit_statistics_snapshot();
+        MacBank {
+            counts: counts_of(&rx, &tx),
+            frequency_offset: rx.primary.cfo_scaled_40,
+        }
+    }
+
     /// One bank's last sample.
     pub struct MacCounts {
+        sampled: AtomicBool,
         sampled_at: AtomicU32,
         counts: [AtomicU32; COUNTS],
         frequency_offset: AtomicI32,
@@ -1043,6 +1079,7 @@ pub mod mac {
 
     /// The last sample.
     pub static MAC_COUNTS: MacCounts = MacCounts {
+        sampled: AtomicBool::new(false),
         sampled_at: AtomicU32::new(0),
         counts: [const { AtomicU32::new(0) }; COUNTS],
         frequency_offset: AtomicI32::new(0),
@@ -1052,17 +1089,17 @@ pub mod mac {
         /// Sample `mac` when the period since the last sample passed at `now_us`.
         pub fn sample(&self, mac: &WifiMacHal<'_>, now_us: u32) {
             let last = self.sampled_at.load(Ordering::Relaxed);
-            if now_us.wrapping_sub(last) < PERIOD_US {
+            if self.sampled.load(Ordering::Relaxed) && now_us.wrapping_sub(last) < PERIOD_US {
                 return;
             }
             self.sampled_at.store(now_us, Ordering::Relaxed);
-            let rx = mac.receive_statistics_snapshot();
-            let tx = mac.transmit_statistics_snapshot();
-            for (slot, count) in self.counts.iter().zip(counts_of(&rx, &tx)) {
+            let bank = bank(mac);
+            for (slot, count) in self.counts.iter().zip(bank.counts) {
                 slot.store(count, Ordering::Relaxed);
             }
             self.frequency_offset
-                .store(rx.primary.cfo_scaled_40, Ordering::Relaxed);
+                .store(bank.frequency_offset, Ordering::Relaxed);
+            self.sampled.store(true, Ordering::Relaxed);
         }
 
         /// The last sample's counts and frequency offset.
@@ -1073,6 +1110,23 @@ pub mod mac {
                     .map(|count| count.load(Ordering::Relaxed)),
                 self.frequency_offset.load(Ordering::Relaxed),
             )
+        }
+
+        /// The last sample and when it was taken; `None` before the first.
+        /// Its one writer is the port's turn, which also takes this reading
+        /// for a stall snapshot ([`super::stall`]).
+        pub fn last_sample(&self) -> Option<MacSample> {
+            if !self.sampled.load(Ordering::Relaxed) {
+                return None;
+            }
+            let (counts, frequency_offset) = self.read();
+            Some(MacSample {
+                at: self.sampled_at.load(Ordering::Relaxed),
+                bank: MacBank {
+                    counts,
+                    frequency_offset,
+                },
+            })
         }
     }
 
@@ -1125,6 +1179,9 @@ pub mod mac {
         ]
     }
 }
+
+#[cfg(oer_trace)]
+pub mod stall;
 
 #[cfg(test)]
 mod tests {

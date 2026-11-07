@@ -157,6 +157,25 @@ fn the_largest_reports_fit_one_response() {
     );
     let mac = MacCollected::Report(Mac::new([u32::MAX; MAC_COUNTS], i32::MIN));
     assert!(postcard::to_slice(&mac, &mut buffer).unwrap().len() <= 512);
+    let stall = StallCollected::Report(full_stall());
+    let encoded = postcard::to_slice(&stall, &mut buffer).unwrap();
+    assert!(encoded.len() <= 512, "{}", encoded.len());
+    assert_eq!(
+        postcard::from_bytes::<StallCollected>(encoded).unwrap(),
+        stall
+    );
+    let full = Mac::new([u32::MAX; MAC_COUNTS], i32::MIN);
+    let banks = StallMacCollected::Report(StallMac {
+        fresh: Some(full),
+        periodic: Some(full),
+        periodic_us: Some(u64::MAX),
+    });
+    let encoded = postcard::to_slice(&banks, &mut buffer).unwrap();
+    assert!(encoded.len() <= 512, "{}", encoded.len());
+    assert_eq!(
+        postcard::from_bytes::<StallMacCollected>(encoded).unwrap(),
+        banks
+    );
     let link = LinkCollected::Report(full_link());
     let encoded = postcard::to_slice(&link, &mut buffer).unwrap();
     assert!(encoded.len() <= 512, "{}", encoded.len());
@@ -164,6 +183,79 @@ fn the_largest_reports_fit_one_response() {
         postcard::from_bytes::<LinkCollected>(encoded).unwrap(),
         link
     );
+}
+
+/// A stall snapshot with every value at its largest.
+fn full_stall() -> Stall {
+    let all = u32::MAX;
+    let boundary = StallBoundary {
+        count: all,
+        last_us: Some(u64::MAX),
+    };
+    Stall {
+        requested_us: u64::MAX,
+        socket_last_us: Some(u64::MAX),
+        socket_after_us: Some(u64::MAX),
+        snapshot: Some(RxSnapshot {
+            at_us: u64::MAX,
+            dma: boundary,
+            driver: boundary,
+            device: StallDevice {
+                rx_pending: true,
+                continuation: true,
+                cut: true,
+                pausing: true,
+                paused: true,
+                queued: all,
+            },
+            hardware: Some(StallHardware {
+                walker: StallWalker {
+                    enabled: true,
+                    reload_doorbell: true,
+                    next_low: all,
+                    next_upper: true,
+                    last_low: all,
+                    base: Some(all),
+                    buffer_full: Some(u16::MAX),
+                    runtime_state: u8::MAX,
+                },
+                ring: Some(StallRing {
+                    base: all,
+                    recycle_start: all,
+                    accepted_tail: all,
+                    observed: all,
+                    completed: all,
+                    remaining: Some(all),
+                    reload_pending: true,
+                }),
+                session: StallSession {
+                    descriptors: all,
+                    armed: all,
+                    done: all,
+                    software: all,
+                    reserved_owner: true,
+                    reserved_done: true,
+                    released: all,
+                    detached: all,
+                    staged: all,
+                    masked: true,
+                    frozen: true,
+                    line_request_pending: true,
+                    receive_fact_pending: Some(true),
+                    mac_irqs: all,
+                    doorbell_unmasks: all,
+                    ignored_unmasks: all,
+                    service_passes: all,
+                },
+            }),
+            resume: Some(StallResume {
+                checked_us: u64::MAX,
+                dma: boundary,
+                driver: boundary,
+                serviced: true,
+            }),
+        }),
+    }
 }
 
 /// Every link count at its largest.
@@ -469,9 +561,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_eleven_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_thirteen_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 22);
+    assert_eq!(keys.len(), 26);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }

@@ -1,7 +1,8 @@
 //! What the load server on hart 1 needs from the boot hart: the PC
 //! sampler, which samples the boot hart, the boot hart's cycle,
 //! instruction and cache counters with the library's counts read beside
-//! them, and the console for a page of samples.
+//! them, the receive path's stall snapshot, which the station's radio
+//! device on the boot hart takes, and the console for a page of samples.
 //!
 //! The server sends one [`Command`] at a time over [`RELAY`] and waits for
 //! its [`Reply`] where it has one; the relay on the application executor
@@ -10,8 +11,9 @@
 use core::convert::Infallible;
 
 use oer::observe::{self, Hart0, Sampler};
+use oer::time::{Instant, Timer};
 use oer::{ApplicationEnd, Channel, GroupEnd};
-use oer_hil_services_load::{LoadError, SamplesCollected};
+use oer_hil_services_load::{LoadError, RxSnapshot, STALL_WAIT_MS, SamplesCollected, StallMac};
 use oer_protocols_hil_protocol::RequestIdentity;
 
 use super::report::Snapshot;
@@ -32,6 +34,9 @@ pub(crate) enum Command {
     /// Answer `RequestIdentity` with the last session's samples from the
     /// one numbered `from`: no reply.
     Page(RequestIdentity, u16),
+    /// Ask the radio device for a stall snapshot and wait for it and its
+    /// facts after the turn's receive pull, at most [`STALL_WAIT_MS`].
+    Stall,
 }
 
 /// The boot hart's reply to a command that has one.
@@ -44,6 +49,9 @@ pub(crate) enum Reply {
     /// One end of a window, without the IP stack's frames, which hart 1
     /// counts.
     Counters(Snapshot),
+    /// The radio device's stall snapshot, `None` when it took none in
+    /// time, and the MAC's banks it read.
+    Stall(Option<RxSnapshot>, StallMac),
 }
 
 /// The relay's channel: replies to hart 1, commands back.
@@ -85,9 +93,50 @@ pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
                 oer_hil_agent::answer(identity, &page(hart0.sampler(), from));
                 continue;
             }
+            Command::Stall => {
+                let (snapshot, mac) = stall(&mut hart0).await;
+                Reply::Stall(snapshot, mac)
+            }
         };
         relay.send(reply).await;
     }
+}
+
+/// How often the relay looks for the device's snapshot while it waits.
+const STALL_POLL_US: u64 = 500;
+
+/// Ask the radio device for a stall snapshot and take it once the device
+/// recorded its facts after the turn's receive pull, or as it stands when
+/// [`STALL_WAIT_MS`] passed; each time is read against this hart's clock
+/// beside the device's.
+async fn stall(hart0: &mut Hart0) -> (Option<RxSnapshot>, StallMac) {
+    let ticket = hart0.request_rx_snapshot();
+    let deadline = now_us().saturating_add(u64::from(STALL_WAIT_MS).saturating_mul(1000));
+    let mut taken = None;
+    loop {
+        if let Some(reading) = hart0.rx_snapshot(ticket) {
+            let now = now_us();
+            let served = reading.resume.is_some_and(|resume| resume.serviced);
+            taken = Some(super::report::stall(&reading, now));
+            if served {
+                break;
+            }
+        }
+        let now = now_us();
+        if now >= deadline {
+            break;
+        }
+        Timer::at(Instant::from_micros(now.saturating_add(STALL_POLL_US))).await;
+    }
+    match taken {
+        Some((snapshot, mac)) => (Some(snapshot), mac),
+        None => (None, StallMac::default()),
+    }
+}
+
+/// The image's monotonic microseconds: the library's clock.
+fn now_us() -> u64 {
+    Instant::now().as_micros()
 }
 
 fn available(sampler: &Sampler) -> Result<(), LoadError> {
@@ -151,7 +200,16 @@ pub(crate) async fn stop_sampler(client: &mut Client) -> Result<(), LoadError> {
 pub(crate) async fn counters(client: &mut Client, start: bool) -> Option<Snapshot> {
     match call(client, Command::Counters { start }).await {
         Reply::Counters(snapshot) => Some(snapshot),
-        Reply::Sampler(_) => None,
+        Reply::Sampler(_) | Reply::Stall(..) => None,
+    }
+}
+
+/// The radio device's stall snapshot, asked now, and the MAC's banks it
+/// read; `None` when the relay answered otherwise, which it does not.
+pub(crate) async fn stall_snapshot(client: &mut Client) -> Option<(Option<RxSnapshot>, StallMac)> {
+    match call(client, Command::Stall).await {
+        Reply::Stall(snapshot, mac) => Some((snapshot, mac)),
+        Reply::Sampler(_) | Reply::Counters(_) => None,
     }
 }
 
@@ -165,6 +223,6 @@ pub(crate) async fn page_of(client: &mut Client, identity: RequestIdentity, from
 fn sampler(reply: Reply) -> Result<(), LoadError> {
     match reply {
         Reply::Sampler(result) => result,
-        Reply::Counters(_) => Err(LoadError::NoSampler),
+        Reply::Counters(_) | Reply::Stall(..) => Err(LoadError::NoSampler),
     }
 }

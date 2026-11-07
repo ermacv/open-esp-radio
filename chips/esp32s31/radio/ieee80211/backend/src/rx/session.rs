@@ -470,4 +470,83 @@ where
     pub(crate) fn port_mask_all(&self, doorbell: &impl RadioDoorbell) {
         self.requests.ring(WifiIrqRequest::MaskAll, doorbell);
     }
+
+    /// The descriptors the service passes observed (admitted units' and the
+    /// reserved one's), since the session was bound.
+    #[cfg(oer_trace)]
+    pub(crate) const fn observed_descriptors(&self) -> u64 {
+        self.totals[0]
+    }
+
+    /// A trace build's stall snapshot of the walker, the ring and the
+    /// session's owners. Only reads: no register is written, no descriptor
+    /// or lease changes hands and no fact is taken.
+    #[cfg(oer_trace)]
+    pub(crate) fn stall_view(
+        &mut self,
+        registers: &mut impl ReceiveRegisters,
+    ) -> super::counters::stall::RxHardwareView {
+        use super::counters::stall::{
+            RxDescriptorCounts, RxHardwareView, RxRingView, RxSessionView, RxWalkerView,
+        };
+        use crate::mac::{
+            init::MacRuntimeStopHardware,
+            rx::{RxBufferFullCounter, RxDma},
+        };
+        let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        let (mut mac, dma) = registers.split_rx_dma();
+        let next = dma.next_descriptor();
+        let walker = RxWalkerView {
+            enabled: dma.walker_enabled(),
+            reload_doorbell: dma.reload_pending(),
+            next_low: next.address_low(),
+            next_upper: next.has_unknown_upper_state(),
+            last_low: dma.last_descriptor_low(),
+            base: dma.descriptor_base_register(),
+            buffer_full: mac.buffer_full_count(),
+            runtime_state: mac.mac_runtime_active_state(),
+        };
+        let ring = self.frontier.live_mut().ok().map(|ring| RxRingView {
+            base: ring.descriptor_base(),
+            recycle_start: narrow(ring.recycle_start().get()),
+            accepted_tail: narrow(ring.accepted_tail().get()),
+            observed: ring.observed_mask().count_ones(),
+            completed: narrow(ring.completed_frontier_len()),
+            remaining: ring.accepted_list_remaining_from_next(next).map(narrow),
+            reload_pending: ring.reload_pending(),
+        });
+        let mut descriptors = RxDescriptorCounts::default();
+        for descriptor in self.rx.descriptors() {
+            let word0 = descriptor.word0();
+            descriptors.total = descriptors.total.saturating_add(1);
+            let count = match (word0.owner(), word0.rx_done()) {
+                (true, false) => &mut descriptors.armed,
+                (true, true) => &mut descriptors.done,
+                (false, _) => &mut descriptors.software,
+            };
+            *count = count.saturating_add(1);
+        }
+        let reserved = self.rx.reserved_descriptor().word0();
+        descriptors.reserved_owner = reserved.owner();
+        descriptors.reserved_done = reserved.rx_done();
+        let counters = self.counters.report();
+        RxHardwareView {
+            walker,
+            ring,
+            session: RxSessionView {
+                descriptors,
+                released: narrow(self.rx.released_buffer_count()),
+                detached: narrow(self.rx.detached_buffer_count()),
+                staged: self.stage.claimed_slots(),
+                masked: self.port_masked,
+                frozen: self.port_frozen,
+                line_request_pending: self.requests.is_pending(),
+                receive_fact_pending: self.irq.has_received().ok(),
+                mac_irqs: counters.mac_irqs,
+                doorbell_unmasks: counters.doorbell_unmasks,
+                ignored_unmasks: counters.ignored_unmasks,
+                service_passes: counters.service_passes,
+            },
+        }
+    }
 }

@@ -826,6 +826,10 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
             doorbell: ModelDoorbell(line.clone()),
             domain: domain(),
             power_limits: LIMITS,
+            #[cfg(oer_trace)]
+            stall: leak(
+                oer_chips_esp32s31_radio_ieee80211_backend::rx::counters::stall::RxStall::new(),
+            ),
         }));
 
         // The port, as the facade's `install` builds its parts.

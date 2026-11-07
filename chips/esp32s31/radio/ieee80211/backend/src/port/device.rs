@@ -166,6 +166,27 @@ struct Active<F: Frontier> {
     context: F::Context,
 }
 
+/// A trace build's stall snapshots ([`RxStall`](crate::rx::counters::stall::RxStall)):
+/// the record a diagnostic reader asks through, the last ticket served,
+/// the ticket whose snapshot waits for its turn's receive pull and whether
+/// that pull ran, and how far the ring's descriptors and the units handed
+/// on went.
+#[cfg(oer_trace)]
+struct StallOwner {
+    record: &'static crate::rx::counters::stall::RxStall,
+    served: u32,
+    after: Option<crate::rx::counters::stall::RxStallTicket>,
+    pulled: bool,
+    dma: crate::rx::counters::stall::RxProgress,
+    driver: crate::rx::counters::stall::RxProgress,
+}
+
+/// The low word of `at`'s microseconds: a stall record's time.
+#[cfg(oer_trace)]
+fn low_micros(at: Instant) -> u32 {
+    at.as_micros() as u32
+}
+
 /// The image supplies one hardware partition, actor cell, static RX arena,
 /// the router's proof that the image binds the radio handler's part (`V`,
 /// a [`Bound`](oer_chips_family_platform_interrupt_table::Bound) of a
@@ -209,6 +230,8 @@ pub struct RadioDevice<
     /// The wait of the drain's recycled appends.
     recycled: RecycledProbe,
     returns: ReturnQuiet,
+    #[cfg(oer_trace)]
+    stall: StallOwner,
     marker: PhantomData<fn() -> C>,
 }
 
@@ -233,6 +256,10 @@ pub struct RadioParts<
     pub doorbell: D,
     pub domain: RegulatoryDomain,
     pub power_limits: PowerLimits,
+    /// A trace build's stall record, which a diagnostic reader asks
+    /// through.
+    #[cfg(oer_trace)]
+    pub stall: &'static crate::rx::counters::stall::RxStall,
 }
 impl<
     C: Composition,
@@ -312,7 +339,103 @@ impl<
             streak: 0,
             recycled: RecycledProbe::default(),
             returns: ReturnQuiet::default(),
+            #[cfg(oer_trace)]
+            stall: StallOwner {
+                record: parts.stall,
+                // A request older than this device was another's to serve.
+                served: parts.stall.requested(0).map_or(0, |ticket| ticket.get()),
+                after: None,
+                pulled: false,
+                dma: crate::rx::counters::stall::RxProgress::default(),
+                driver: crate::rx::counters::stall::RxProgress::default(),
+            },
             marker: PhantomData,
+        }
+    }
+
+    /// A staged unit leaves for the upper layer, at `now` when the caller
+    /// read the time.
+    fn hand_over(
+        &mut self,
+        frame: NetworkRxFrame<'static, Q, RB>,
+        now: Option<Instant>,
+    ) -> StagedReceive<Q, RB> {
+        self.returns.received();
+        #[cfg(oer_trace)]
+        {
+            let at = now.unwrap_or_else(|| self.timer.now());
+            self.stall.driver.advance(1, low_micros(at));
+        }
+        #[cfg(not(oer_trace))]
+        let _ = now;
+        StagedReceive(frame)
+    }
+
+    /// Serve a trace build's stall record at the start of the port's facts:
+    /// register the task a request wakes; record how far the boundaries
+    /// went since the last snapshot, for the last time once its turn's
+    /// receive pull ran; take the snapshot a reader asked for, before any
+    /// receive service of this turn. Whether it took one: the turn then runs
+    /// as for a receive fact, with the device's own ring work as it was.
+    #[cfg(oer_trace)]
+    #[inline(never)]
+    fn serve_stall(&mut self, cx: &Context<'_>) -> bool {
+        use crate::rx::counters::stall::RxStallResume;
+        self.stall.record.register(cx.waker());
+        if let Some(ticket) = self.stall.after {
+            let serviced = self.stall.pulled;
+            let resume = RxStallResume {
+                at: low_micros(self.timer.now()),
+                dma: self.stall.dma,
+                driver: self.stall.driver,
+                serviced,
+            };
+            self.stall.record.record_resume(ticket, &resume);
+            if serviced {
+                self.stall.after = None;
+            }
+        }
+        let Some(ticket) = self.stall.record.requested(self.stall.served) else {
+            return false;
+        };
+        self.stall.served = ticket.get();
+        let snapshot = self.stall_snapshot();
+        self.stall.record.record_snapshot(ticket, &snapshot);
+        self.stall.after = Some(ticket);
+        self.stall.pulled = false;
+        true
+    }
+
+    /// What the owner reads of its receive path now. Only reads.
+    #[cfg(oer_trace)]
+    fn stall_snapshot(&mut self) -> crate::rx::counters::stall::RxStallSnapshot {
+        use crate::rx::counters::stall::{RxDeviceView, RxStallSnapshot};
+        let at = low_micros(self.timer.now());
+        let (hardware, (mac, periodic)) = match self.active.as_mut() {
+            Some(active) => (
+                self.session
+                    .as_mut()
+                    .ok()
+                    .map(|session| session.stall_view(&mut active.registers)),
+                active.registers.mac_banks(),
+            ),
+            None => (None, (None, None)),
+        };
+        RxStallSnapshot {
+            at,
+            dma: self.stall.dma,
+            driver: self.stall.driver,
+            device: RxDeviceView {
+                rx_pending: self.rx_pending,
+                continuation: self.continuation.is_some(),
+                cut: self.cut,
+                pausing: self.pausing,
+                paused: self.paused,
+                queued: u32::try_from(self.received.0.get_mut().len()).unwrap_or(u32::MAX),
+            },
+            hardware,
+            mac,
+            periodic,
         }
     }
 
@@ -558,12 +681,15 @@ where
         receive_room: usize,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<Self::Receive>, Fault>> {
+        #[cfg(oer_trace)]
+        {
+            self.stall.pulled = true;
+        }
         self.cut = true;
         self.cut_blocked = false;
         if receive_room != 0 {
             if let Some(frame) = self.received.0.get_mut().pop_front() {
-                self.returns.received();
-                return Poll::Ready(Ok(Some(StagedReceive(frame))));
+                return Poll::Ready(Ok(Some(self.hand_over(frame, None))));
             }
         }
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
@@ -583,6 +709,8 @@ where
             return Poll::Pending;
         }
         self.continuation = None;
+        #[cfg(oer_trace)]
+        let observed = session.observed_descriptors();
         let progress = session
             .port_service(
                 &mut active.registers,
@@ -592,9 +720,14 @@ where
                 &self.received,
             )
             .map_err(Fault::Receive)?;
+        #[cfg(oer_trace)]
+        self.stall.dma.advance(
+            u32::try_from(session.observed_descriptors().saturating_sub(observed))
+                .unwrap_or(u32::MAX),
+            low_micros(self.timer.now()),
+        );
         if let Some(frame) = self.received.0.get_mut().pop_front() {
-            self.returns.received();
-            return Poll::Ready(Ok(Some(StagedReceive(frame))));
+            return Poll::Ready(Ok(Some(self.hand_over(frame, None))));
         }
         if matches!(
             progress,
@@ -629,8 +762,14 @@ where
         whole || self.continuation.is_some()
     }
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
+        // A trace build's stall snapshot goes before any of this turn's
+        // receive work, the receive facts' take included.
+        #[cfg(oer_trace)]
+        let diagnosed = self.serve_stall(cx);
+        #[cfg(not(oer_trace))]
+        let diagnosed = false;
         if self.cut || self.pausing {
-            return Ok(false);
+            return Ok(diagnosed);
         }
         #[cfg(oer_trace)]
         if let Some(active) = self.active.as_mut() {
@@ -647,7 +786,8 @@ where
         }
         // Ring work that waits for its continuation is the caller's alarm's
         // (the pull answered `Later`): it is no fact before then.
-        Ok(!self.received.0.get_mut().is_empty()
+        Ok(diagnosed
+            || !self.received.0.get_mut().is_empty()
             || (self.rx_pending && self.continuation.is_none()))
     }
     fn pull_unit(
@@ -655,13 +795,16 @@ where
         receive_room: usize,
         now: Instant,
     ) -> Result<DevicePull<Self::Receive>, Fault> {
+        #[cfg(oer_trace)]
+        {
+            self.stall.pulled = true;
+        }
         suspend_rx_continuation(receive_room, &mut self.continuation);
         if receive_room == 0 || self.cut || self.pausing {
             return Ok(DevicePull::Empty);
         }
         if let Some(frame) = self.received.0.get_mut().pop_front() {
-            self.returns.received();
-            return Ok(DevicePull::Unit(StagedReceive(frame)));
+            return Ok(DevicePull::Unit(self.hand_over(frame, Some(now))));
         }
         if !self.rx_pending {
             return Ok(DevicePull::Empty);
@@ -677,6 +820,8 @@ where
             now,
             timer: &self.timer,
         };
+        #[cfg(oer_trace)]
+        let observed = session.observed_descriptors();
         let progress = session
             .port_service(
                 &mut active.registers,
@@ -686,6 +831,12 @@ where
                 &self.received,
             )
             .map_err(Fault::Receive)?;
+        #[cfg(oer_trace)]
+        self.stall.dma.advance(
+            u32::try_from(session.observed_descriptors().saturating_sub(observed))
+                .unwrap_or(u32::MAX),
+            low_micros(now),
+        );
         use crate::datapath::DatapathRxProgress as Progress;
         let mut again = false;
         match progress {
@@ -699,10 +850,7 @@ where
             progress => again = self.keep_masked(progress, now),
         }
         Ok(match self.received.0.get_mut().pop_front() {
-            Some(frame) => {
-                self.returns.received();
-                DevicePull::Unit(StagedReceive(frame))
-            }
+            Some(frame) => DevicePull::Unit(self.hand_over(frame, Some(now))),
             None if again => DevicePull::Again,
             None => self
                 .continuation
@@ -756,3 +904,6 @@ impl<T: Timer> Timer for TurnClock<'_, T> {
         self.timer.wait_until(deadline)
     }
 }
+
+#[cfg(all(test, oer_trace))]
+mod tests;
