@@ -2144,10 +2144,48 @@ fn an_adopted_socket_goes_on_through_a_second_service() {
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let mut last: TestPair<Net, 2> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
     last.adopt(late).ok().unwrap();
-    drop(first);
-    stop.try_send(()).ok().unwrap();
-    run_tasks(clock, last.run(clock, &mut events), async {});
-    assert_eq!(last.retire().retired.pool.outstanding(), 0);
+    let mut socket = last
+        .bind(5002, Dscp::default(), Group::shared(), storage::<Net>())
+        .ok()
+        .unwrap();
+    let drive = async {
+        let held = socket.reserve().await.unwrap();
+        assert!(pin!(socket.reserve()).poll(cx).is_pending());
+        settle().await;
+        drop(first);
+        // Only the dropped socket can free the second block, and the service
+        // is running.
+        let returned = socket.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        (held, returned)
+    };
+    let (_, (one, two)) = run_tasks(clock, last.run(clock, &mut events), drive);
+    let mut ended = last.retire();
+    assert_eq!(ended.retired.pool.outstanding(), 2);
+    ended.retired.pool.give(one);
+    ended.retired.pool.give(two);
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+/// A limit, not a promise: with nobody keeping the pool and the receiver, a block
+/// sent home is stranded and `give` cannot tell. The fate of owners at the end of
+/// a whole network has no contract yet.
+#[test]
+fn with_the_receiver_dropped_a_returned_block_is_stranded_unnoticed() {
+    brand!(Net);
+    let (service, sockets, stop, returner) = returning::<Net>(1);
+    let mut events = ();
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let [mut other, _limited] = sockets;
+    let mut service = service;
+    let drive = async {
+        let block = other.reserve().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        block
+    };
+    let (_, block) = run_tasks(clock, service.run(clock, &mut events), drive);
+    drop(service);
+    assert!(returner.give(block).is_ok());
 }
 
 #[test]
