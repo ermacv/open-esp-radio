@@ -268,10 +268,8 @@ including aliases, optional entries and target-specific entries:
   `embassy-time-driver` belongs to `chips/family/platform/executor`.
 - `embassy-net`, `xarxa` and `xarxa-driver` belong to
   `portable/embassy/net`, the S31 application entry (`chips/esp32s31/app`)
-  and the images; `trouble-host` belongs to `portable/embassy/trouble` and
-  the images.
-- `bt-hci` belongs to `oer-protocols-bluetooth-hci`, `portable/embassy/trouble` and
-  `tools/`. The HCI codec exports selected packet, command and event values,
+  and the images.
+- `bt-hci` belongs to `oer-protocols-bluetooth-hci` and `tools/`. The HCI codec exports selected packet, command and event values,
   without re-exporting the crate. Protocol sources never use
   `bt_hci::controller`.
 
@@ -1248,7 +1246,7 @@ its model and conformance case.
 
 ## Protocols
 
-- **Wi-Fi** (`protocols/ieee80211`, driver `chips/esp32s31/ieee80211`). The
+- **Wi-Fi** (`protocols/ieee80211`, backend `chips/esp32s31/radio/ieee80211`). The
   driver owns the four EDCA queues and executes caller-selected single
   attempts, or a fixed-rate `ManagementTxPlan`;
   EDCA parameters belong to a VIF. Rate selection is its own portable
@@ -1263,7 +1261,7 @@ its model and conformance case.
   the actor at connection and takes it back at disconnection. A station
   failure restarts the station on the next installation without a reset. A STA+AP pair keeps
   the access point running when the upstream cannot rejoin.
-- **Bluetooth LE** (`protocols/bluetooth`, driver `chips/esp32s31/bluetooth`).
+- **Bluetooth LE** (`protocols/bluetooth`, backend `chips/esp32s31/radio/bluetooth`).
   Wire formats carry no protocol state or clock domain. The port owns radio
   vocabulary and the shared DTM window calculation; backends autonomously
   progress the admitted test with the Core Part F interval grid and 5 ms RX
