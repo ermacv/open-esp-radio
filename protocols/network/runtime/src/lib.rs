@@ -35,12 +35,12 @@
 //! }
 //! ```
 
+mod returns;
 mod service;
 mod socket;
 
-pub use service::{
-    BindRefused, Direct, EndCause, Ended, MemoryPolicy, ReturnLane, Returner, Service, StopLane,
-};
+pub use returns::{NotHome, ReturnEnd, ReturnLane, ReturnRefusal, Returner};
+pub use service::{BindRefused, Direct, EndCause, Ended, MemoryPolicy, Service, StopLane};
 pub use socket::{LateSocket, Observer, Refusal, Refused, Sent, Socket, SocketClosed, SocketLanes};
 
 #[cfg(test)]

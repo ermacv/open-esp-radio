@@ -27,8 +27,8 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Direct, EndCause, Ended, MemoryPolicy, Observer, Refusal, ReturnLane, Returner, Sent, Service,
-    Socket, SocketClosed, SocketLanes, StopLane,
+    Direct, EndCause, Ended, MemoryPolicy, Observer, Refusal, ReturnLane, ReturnRefusal, Returner,
+    Sent, Service, Socket, SocketClosed, SocketLanes, StopLane,
 };
 
 /// A brand of the test's own.
@@ -1903,9 +1903,9 @@ fn returning<B: 'static>(
     Returner<'static, 'static, B, SIZE, 2>,
 ) {
     let (mut service, sockets, _, stop) = pair::<B>(limit, MemoryPolicy::KEEP);
-    let (sender, receiver) = Box::leak(Box::new(ReturnLane::new())).split();
-    service.attach_returns(receiver).ok().unwrap();
-    (service, sockets, stop, Returner::new(sender))
+    let (returner, end) = Box::leak(Box::new(ReturnLane::new())).split();
+    service.attach_returns(end).ok().unwrap();
+    (service, sockets, stop, returner)
 }
 
 #[test]
@@ -2167,25 +2167,78 @@ fn an_adopted_socket_goes_on_through_a_second_service() {
     assert_eq!(ended.retired.pool.outstanding(), 0);
 }
 
-/// A limit, not a promise: with nobody keeping the pool and the receiver, a block
-/// sent home is stranded and `give` cannot tell. The fate of owners at the end of
-/// a whole network has no contract yet.
 #[test]
-fn with_the_receiver_dropped_a_returned_block_is_stranded_unnoticed() {
+fn a_dropped_service_closes_the_lane_and_what_it_accepted_stays_within_reach() {
     brand!(Net);
-    let (service, sockets, stop, returner) = returning::<Net>(1);
-    let mut events = ();
+    let (mut service, [mut other, _limited], stop, returner) = returning::<Net>(1);
     let clock = Box::leak(Box::new(VirtualClock::new()));
-    let [mut other, _limited] = sockets;
-    let mut service = service;
+    let mut events = ();
     let drive = async {
-        let block = other.reserve().await.unwrap();
+        let blocks = [
+            other.reserve().await.unwrap(),
+            other.reserve().await.unwrap(),
+        ];
         stop.try_send(()).ok().unwrap();
-        block
+        blocks
     };
-    let (_, block) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let (_, [accepted, refused]) = run_tasks(clock, service.run(clock, &mut events), drive);
+    assert!(returner.give(accepted).is_ok());
     drop(service);
-    assert!(returner.give(block).is_ok());
+    let not_home = returner.give(refused).err().unwrap();
+    assert_eq!(not_home.reason, ReturnRefusal::Closed);
+    assert!(
+        returner.reclaim().is_some(),
+        "what it accepted is reachable"
+    );
+}
+
+#[test]
+fn a_cancelled_run_closes_no_lane() {
+    brand!(Net);
+    let (mut service, [mut other, _limited], _, returner) = returning::<Net>(1);
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let block = {
+        let mut run = pin!(service.run(clock, &mut events));
+        let mut reserve = pin!(other.reserve());
+        let cx = &mut Context::from_waker(Waker::noop());
+        loop {
+            if let Poll::Ready(block) = reserve.as_mut().poll(cx) {
+                break block.unwrap();
+            }
+            assert!(run.as_mut().poll(cx).is_pending());
+        }
+    };
+    assert!(
+        returner.give(block).is_ok(),
+        "the run is gone, its service is not"
+    );
+    assert_eq!(service.retire().retired.pool.outstanding(), 0);
+}
+
+#[test]
+fn a_close_at_the_end_of_all_keeps_what_was_accepted_and_refuses_the_rest() {
+    brand!(Net);
+    let (mut service, [mut other, _limited], stop, returner) = returning::<Net>(1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let drive = async {
+        let blocks = [
+            other.reserve().await.unwrap(),
+            other.reserve().await.unwrap(),
+        ];
+        stop.try_send(()).ok().unwrap();
+        blocks
+    };
+    let (_, [accepted, refused]) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let mut ended = service.retire();
+    assert!(returner.give(accepted).is_ok());
+    ended.close_returns();
+    assert_eq!(ended.retired.pool.outstanding(), 1);
+    let not_home = returner.give(refused).err().unwrap();
+    assert_eq!(not_home.reason, ReturnRefusal::Closed);
+    ended.retired.pool.give(not_home.block);
+    assert_eq!(ended.retired.pool.outstanding(), 0);
 }
 
 #[test]
