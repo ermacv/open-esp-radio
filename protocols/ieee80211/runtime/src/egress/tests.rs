@@ -7,10 +7,12 @@ use core::num::NonZeroU32;
 use oer_protocols_ieee80211_core_upper_mac::airtime::{AirtimeCandidate, AirtimeStorage};
 use oer_protocols_network_port::{Candidate, Class, Egress, Ready};
 
-use super::{AirtimeEgress, AirtimeFault, Exchange, PeerAir};
+use super::{AirtimeEgress, AirtimeFault, Exchange, PeerAir, RadioNotice};
 
 const QUANTUM: u32 = 1_000;
 const COST: u32 = 400;
+/// The most a frame costs, every retry included.
+const CEILING: u32 = 4 * COST;
 
 fn micros(value: u32) -> NonZeroU32 {
     NonZeroU32::new(value).unwrap()
@@ -61,6 +63,10 @@ impl PeerAir for Air {
             minimum_micros: micros(COST),
         })
     }
+
+    fn ceiling(&self, _ready: &Ready) -> NonZeroU32 {
+        micros(CEILING)
+    }
 }
 
 type Policy<'o> = AirtimeEgress<'o, Air, u32, 4, 2>;
@@ -77,7 +83,7 @@ fn exchange(policy: &mut Policy<'_>, ready: &[Work], ticket: u32, charged: u32) 
         ticket,
         charged: Some(micros(charged)),
     };
-    policy.completed(exchange).unwrap();
+    policy.notice(RadioNotice::Ended(exchange)).unwrap();
     work
 }
 
@@ -110,7 +116,7 @@ fn a_peer_that_costs_more_waits_longer() {
             ticket,
             charged: Some(micros(charged)),
         };
-        policy.completed(done).unwrap();
+        policy.notice(RadioNotice::Ended(done)).unwrap();
     }
     assert!(air[1].abs_diff(air[2]) <= 2 * 4 * COST, "{air:?}");
 }
@@ -190,7 +196,7 @@ fn a_full_horizon_waits_for_a_completion() {
         ticket: 0,
         charged: Some(micros(COST)),
     };
-    policy.completed(done).unwrap();
+    policy.notice(RadioNotice::Ended(done)).unwrap();
     assert!(policy.choose(ready.iter().copied()).unwrap().is_some());
 }
 
@@ -224,8 +230,9 @@ fn an_unknown_cost_keeps_the_whole_reservation() {
         ticket: 7,
         charged: None,
     };
-    policy.completed(unknown).unwrap();
-    assert_eq!(policy.balance_micros(1), Some(0));
+    policy.notice(RadioNotice::Ended(unknown)).unwrap();
+    let left = i64::from(QUANTUM) - i64::from(CEILING);
+    assert_eq!(policy.balance_micros(1), Some(left));
 }
 
 #[test]
@@ -235,7 +242,8 @@ fn a_frame_of_unknown_end_is_charged_and_not_refunded() {
     let ready = [data(1, 0)];
     let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
     policy.unknown(held).unwrap();
-    assert_eq!(policy.balance_micros(1), Some(0));
+    let left = i64::from(QUANTUM) - i64::from(CEILING);
+    assert_eq!(policy.balance_micros(1), Some(left));
     assert_eq!(policy.in_flight(), 0);
 }
 
@@ -247,7 +255,10 @@ fn a_completion_of_no_frame_is_a_fault() {
         ticket: 9,
         charged: None,
     };
-    assert_eq!(policy.completed(stray), Err(AirtimeFault::UnknownTicket));
+    assert_eq!(
+        policy.notice(RadioNotice::Ended(stray)),
+        Err(AirtimeFault::UnknownTicket)
+    );
 }
 
 #[test]
@@ -262,7 +273,7 @@ fn a_retired_peers_frame_settles_on_its_old_account() {
         ticket: 3,
         charged: Some(micros(COST)),
     };
-    policy.completed(done).unwrap();
+    policy.notice(RadioNotice::Ended(done)).unwrap();
     assert_eq!(policy.balance_micros(1), None, "the account ended with it");
 }
 
@@ -277,7 +288,7 @@ fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
             ticket,
             charged: Some(micros(COST)),
         };
-        policy.completed(done).unwrap();
+        policy.notice(RadioNotice::Ended(done)).unwrap();
         work.0.flow.unwrap()
     };
     go(&mut policy, &[data(1, 5)], 0);
@@ -287,4 +298,51 @@ fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
         .map(|ticket| go(&mut policy, &ready, ticket))
         .collect();
     assert_eq!(flows, [0, 1, 0, 1]);
+}
+
+#[test]
+fn an_unknown_cost_buys_no_air_when_the_estimate_is_low() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0), data(2, 1)];
+    // Each exchange really costs its ceiling, four times the estimate.
+    let mut actual = [0_u32; 3];
+    for ticket in 0..1000 {
+        let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let peer = work.0.peer[5];
+        actual[usize::from(peer)] += CEILING;
+        policy.accepted(held, ticket).unwrap();
+        let done = Exchange {
+            ticket,
+            charged: (peer == 2).then(|| micros(CEILING)),
+        };
+        policy.notice(RadioNotice::Ended(done)).unwrap();
+    }
+    assert!(actual[1] <= actual[2] + 2 * CEILING, "{actual:?}");
+}
+
+#[test]
+fn a_peer_that_left_frees_its_account() {
+    let mut storage = AirtimeStorage::<u8, 1, 2>::new(micros(QUANTUM));
+    let mut policy = AirtimeEgress::<'_, Air, u32, 1, 2>::new(&mut storage, Air::default());
+    let mut go = |policy: &mut AirtimeEgress<'_, Air, u32, 1, 2>, peer, ticket| {
+        let ready = [data(peer, 0)];
+        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        policy.accepted(held, ticket).unwrap();
+    };
+    go(&mut policy, 1, 0);
+    // Its frame is in flight when it leaves: the account stays until it ends.
+    policy.notice(RadioNotice::Left(1)).unwrap();
+    let ended = Exchange {
+        ticket: 0,
+        charged: Some(micros(CEILING)),
+    };
+    policy.notice(RadioNotice::Ended(ended)).unwrap();
+    assert_eq!(policy.balance_micros(1), None);
+    go(&mut policy, 2, 1);
+    assert_eq!(
+        policy.in_flight(),
+        1,
+        "the next peer has the account's place"
+    );
 }

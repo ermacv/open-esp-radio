@@ -32,7 +32,7 @@ const TURN_FRAMES: usize = 8;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Direct;
 
-impl<Ticket, Completion> Egress<Ticket, Completion> for Direct {
+impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
     type Reservation = ();
     type Fault = Infallible;
 
@@ -55,7 +55,7 @@ impl<Ticket, Completion> Egress<Ticket, Completion> for Direct {
         Ok(())
     }
 
-    fn completed(&mut self, _completion: Completion) -> Result<(), Infallible> {
+    fn notice(&mut self, _notice: Notice) -> Result<(), Infallible> {
         Ok(())
     }
 }
@@ -146,7 +146,7 @@ pub struct Service<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-    E: Egress<P::Ticket, P::Completion>,
+    E: Egress<P::Ticket, P::Notice>,
 > {
     owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
     egress: E,
@@ -174,7 +174,7 @@ impl<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-    E: Egress<P::Ticket, P::Completion>,
+    E: Egress<P::Ticket, P::Notice>,
 > Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E>
 {
     /// Own `owner`. A service keeps its owners until [`Self::retire`] hands
@@ -282,11 +282,11 @@ impl<
             moved = true;
         }
         for _ in 0..TURN_FRAMES {
-            let Some(completion) = self.owner.take_completion() else {
+            let Some(notice) = self.owner.take_notice() else {
                 break;
             };
             moved = true;
-            let answer = self.egress.completed(completion);
+            let answer = self.egress.notice(notice);
             self.note(answer);
             if self.fault.is_some() {
                 return true;
@@ -347,16 +347,14 @@ impl<
         moved
     }
 
-    /// Give waiting sockets a block each, in turn. This comes after all
-    /// commands, so a socket's release gives it no place ahead of another.
+    /// Give waiting sockets a block each, in turn, the next pass starting after
+    /// the last one served. This comes after all commands, so a socket's release
+    /// gives it no place ahead of another.
     fn give_blocks(&mut self) -> bool {
+        let first = self.next_block;
         let mut gave = false;
         for offset in 0..SOCKETS {
-            let index = self
-                .next_block
-                .wrapping_add(offset)
-                .checked_rem(SOCKETS)
-                .unwrap_or(0);
+            let index = first.wrapping_add(offset).checked_rem(SOCKETS).unwrap_or(0);
             let Some(bound) = self.bound.get_mut(index).and_then(Option::as_mut) else {
                 continue;
             };

@@ -104,9 +104,9 @@ impl FramePort for WirePort {
 }
 
 impl FrameSource for WirePort {
-    type Completion = u32;
+    type Notice = u32;
 
-    fn take_completion(&mut self) -> Option<u32> {
+    fn take_notice(&mut self) -> Option<u32> {
         self.0.borrow_mut().ended.pop_front()
     }
 
@@ -1285,6 +1285,49 @@ fn sockets_waiting_for_blocks_take_turns() {
 }
 
 #[test]
+fn three_sockets_waiting_for_two_blocks_all_take_turns() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; 2]));
+    let (pool, brand) = claim::<Net, SIZE, 2>(memory).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner: NetworkOwner<'static, Net, SIZE, 3, CREDITS, RECEIVED, 2, 2, WirePort> =
+        NetworkOwner::new(brand, interface, pool, WirePort::default());
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service = Service::new(owner, Direct, stopping);
+    let dscp = Dscp::default();
+    let mut first = service.bind(5000, dscp, storage::<Net>()).ok().unwrap();
+    let mut second = service.bind(5001, dscp, storage::<Net>()).ok().unwrap();
+    let mut third = service.bind(5002, dscp, storage::<Net>()).ok().unwrap();
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let mut got = [0_usize; 3];
+        for _ in 0..99 {
+            // Every request is in before a turn of the service.
+            for socket in [&mut first, &mut second, &mut third] {
+                assert!(pin!(socket.reserve()).poll(cx).is_pending());
+            }
+            settle().await;
+            for (index, socket) in [&mut first, &mut second, &mut third]
+                .into_iter()
+                .enumerate()
+            {
+                let ready = pin!(socket.reserve()).poll(cx);
+                if let Poll::Ready(Ok(block)) = ready {
+                    got[index] += 1;
+                    socket.release(block).ok().unwrap();
+                }
+            }
+        }
+        assert_eq!(got, [66, 66, 66]);
+        stop.try_send(()).ok().unwrap();
+    };
+    let (cause, ()) = run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(cause, EndCause::Stopped);
+}
+
+#[test]
 fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
     brand!(Net);
     let (ended, _, _) = run(bench::<Net>(), async |socket, _| {
@@ -1381,7 +1424,7 @@ impl Egress<u32, u32> for Policy {
         Ok(())
     }
 
-    fn completed(&mut self, ticket: u32) -> Result<(), &'static str> {
+    fn notice(&mut self, ticket: u32) -> Result<(), &'static str> {
         let mut account = self.0.borrow_mut();
         account.completed.push(ticket);
         if account.fails_completing {
