@@ -50,15 +50,24 @@ counts toward the group holding the most, and more than the waiter's. It ends
 application's blocks. This is pressure, not a deadline: nothing is evicted while none
 waits. A block a received datagram cannot have is dropped, and counted as an event.
 
-A block always has a way home, whichever service holds its pool by then. A `Returner`
-takes it there through a `ReturnLane`, which holds a pool's every block and goes from
-service to service with `Ended::returns`, so a block needs no socket and no live
-service of its own. An earlier service's `LateSocket` can be adopted by the next one
-with `adopt`, whose pool it could not reach alone. With no service to come,
-`Ended::collect` brings home what has arrived. A charge lifts when the block arrives.
-Groups belong to the pool and outlive services: a next service binds the same `Group`
-values, as a pool keeps `GROUPS` of them and never frees one. Dropping `Ended`, or a
-`Service`, strands what is on its way home: that fate has no contract yet.
+A block has a way home whichever service holds its pool by then. A `ReturnLane` has a
+slot for each block of the pool, so `Returner::give` needs no socket and no live
+service of its own, and any number of `Returner` copies share it. `give` and closing
+have one order: `Ok` means the lane accepted the block, and a refusal hands it back,
+with no third end. The lane closes when its `ReturnEnd` ends, and only then: that end
+moves through `Ended::returns` to the next service, and neither that nor a cancelled
+`run` closes it. `Ended::close_returns` brings what was accepted to the pool first. If
+the end is dropped without that, its blocks stay in the lane, and `Returner::reclaim`
+reaches them, as the pool is no more. `Closed` is final.
+
+An earlier service's `LateSocket` can be adopted by the next one with `adopt`, whose
+pool it could not reach alone. With no service to come, `Ended::collect` brings home
+what has arrived. A charge lifts when the block arrives. Groups belong to the pool and
+outlive services: a next service binds the same `Group` values, as a pool keeps
+`GROUPS` of them and never frees one.
+
+Dropping a `LateSocket` or a `Service` with commands in a request lane still strands
+what those hold: that has no contract yet.
 
 A turn takes commands, received frames and the port's notices, then, once it has
 read them all, chooses work and publishes it, then hands results and datagrams back. Each part is bounded, so no lane and no
