@@ -77,6 +77,8 @@ oer_protocols_hil_protocol::messages! {
     topic MacCollected = "load/mac-report";
     endpoint CollectPositions = "load/positions" => PositionsCollected;
     topic PositionsCollected = "load/positions-report";
+    endpoint CollectHart1 = "load/hart1" => Hart1Collected;
+    topic Hart1Collected = "load/hart1-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -341,10 +343,9 @@ pub enum CountersCollected {
 /// Counts within one run's measuring window.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Counters {
-    /// Machine cycles of the image's measured hart, wait-for-interrupt
-    /// time included.
+    /// Machine cycles of the boot hart, wait-for-interrupt time included.
     pub cycles: u64,
-    /// Instructions that hart retired.
+    /// Instructions the boot hart retired.
     pub instructions: u64,
     /// Frames the image's network bridge took from the station, those it
     /// then had refused included.
@@ -1109,6 +1110,40 @@ pub struct Sample {
     pub ra: Option<u32>,
 }
 
+/// Hart 1's own counters at run `run`'s window's two ends.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectHart1 {
+    pub run: u32,
+}
+
+/// The answer to [`CollectHart1`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Hart1Collected {
+    Report(Hart1Window),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// A hart's machine counters at one instant, from its reset, read on that
+/// hart.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct HartCount {
+    /// Machine cycles, wait-for-interrupt time included.
+    pub cycles: u64,
+    /// Instructions retired.
+    pub instructions: u64,
+}
+
+/// Hart 1's counters at a window's very ends. Both travel, not their
+/// difference, so that the host sees them advance within a window and from
+/// one window to the next.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Hart1Window {
+    pub start: HartCount,
+    pub end: HartCount,
+}
+
 /// Why the image refused a request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum LoadError {
@@ -1143,6 +1178,7 @@ oer_protocols_hil_agent::service! {
         CollectTracking(CollectTracking) => tracking,
         CollectMac(CollectMac) => mac,
         CollectPositions(CollectPositions) => positions,
+        CollectHart1(CollectHart1) => hart1,
     }
 }
 

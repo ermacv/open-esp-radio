@@ -7,9 +7,9 @@
 //! just before its start), sampling the boot hart between them when it
 //! asks, and hart 1 beside it; after its drain it ends its socket and
 //! keeps what it read until the next run starts. The boot hart's counters
-//! and sampler come through its relay ([`super::relay`]); hart 1's sampler
-//! is the server's own. The answers go back to the worker, which publishes
-//! them.
+//! and sampler come through its relay ([`super::relay`]); hart 1's counters
+//! and sampler are the server's own, its counters read at the window's very
+//! ends. The answers go back to the worker, which publishes them.
 
 use core::cell::Cell;
 use core::convert::Infallible;
@@ -25,9 +25,9 @@ use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
-    Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError, Mac,
-    MacCollected, PartsCollected, Positions, PositionsCollected, Report, Request, SamplesCollected,
-    Sent, Start, Started, Tracking, TrackingCollected, Transmit,
+    Collected, Counters, CountersCollected, Hart1Collected, Hart1Window, Link, LinkCollected, Load,
+    LoadError, Mac, MacCollected, PartsCollected, Positions, PositionsCollected, Report, Request,
+    SamplesCollected, Sent, Start, Started, Tracking, TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
@@ -71,6 +71,7 @@ pub(crate) enum Answer {
     Tracking(TrackingCollected),
     Mac(MacCollected),
     Positions(PositionsCollected),
+    Hart1(Hart1Collected),
     Samples(SamplesCollected),
     Cpu(Load),
     /// The boot hart's relay answers it: a page of samples.
@@ -90,6 +91,7 @@ impl Answer {
             Self::Tracking(tracking) => answer(identity, &tracking),
             Self::Mac(mac) => answer(identity, &mac),
             Self::Positions(positions) => answer(identity, &positions),
+            Self::Hart1(hart1) => answer(identity, &hart1),
             Self::Samples(samples) => answer(identity, &samples),
             Self::Cpu(load) => answer(identity, &load),
             Self::Relayed => {}
@@ -98,7 +100,8 @@ impl Answer {
 }
 
 /// Serve the load requests until the chip resets, sampling and reading
-/// the boot hart through `hart0` and sampling hart 1 with `hart1`.
+/// the boot hart through `hart0` and reading and sampling hart 1 with
+/// `hart1`.
 pub(crate) async fn serve(
     net: &Network,
     mut requests: Requests,
@@ -168,6 +171,7 @@ async fn kept_answer(
         Kept::Link => Answer::Link(LinkCollected::Report(ended.link)),
         Kept::Mac => Answer::Mac(MacCollected::Report(ended.mac)),
         Kept::Positions => Answer::Positions(PositionsCollected::Report(ended.positions)),
+        Kept::Hart1 => Answer::Hart1(Hart1Collected::Report(ended.hart1)),
         Kept::Tracking => Answer::Tracking(TrackingCollected::Report(ended.tracking)),
         Kept::Samples { from, hart } => match ended.sampled.get(usize::from(hart)) {
             // Hart 0's samples are in the boot hart's buffer: its relay
@@ -219,6 +223,7 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::Running(Kept::Link) => Answer::Link(LinkCollected::Running),
         Decided::Running(Kept::Mac) => Answer::Mac(MacCollected::Running),
         Decided::Running(Kept::Positions) => Answer::Positions(PositionsCollected::Running),
+        Decided::Running(Kept::Hart1) => Answer::Hart1(Hart1Collected::Running),
         Decided::Running(Kept::Tracking) => Answer::Tracking(TrackingCollected::Running),
         Decided::Running(Kept::Samples { .. }) => Answer::Samples(SamplesCollected::Running),
         Decided::UnknownRun(Kept::Report) => Answer::Collected(Collected::Refused(unknown)),
@@ -231,6 +236,7 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::UnknownRun(Kept::Positions) => {
             Answer::Positions(PositionsCollected::Refused(unknown))
         }
+        Decided::UnknownRun(Kept::Hart1) => Answer::Hart1(Hart1Collected::Refused(unknown)),
         Decided::UnknownRun(Kept::Tracking) => {
             Answer::Tracking(TrackingCollected::Refused(unknown))
         }
@@ -266,6 +272,7 @@ struct Ends {
     link: Link,
     mac: Mac,
     positions: Positions,
+    hart1: Hart1Window,
     tracking: Tracking,
     sampled: Sampled,
 }
@@ -283,6 +290,7 @@ struct Ended {
     link: Link,
     mac: Mac,
     positions: Positions,
+    hart1: Hart1Window,
     tracking: Tracking,
     sampled: Sampled,
 }
@@ -361,6 +369,7 @@ async fn run(
         link: ends.link,
         mac: ends.mac,
         positions: ends.positions,
+        hart1: ends.hart1,
         tracking: ends.tracking,
         sampled: ends.sampled,
     }
@@ -417,6 +426,7 @@ async fn measure(
     let cpu_start = cpu_load().await;
     let (parts_start, tracking_start) = readings(true).await;
     let counters_start = snapshot(hart0, true, net).await;
+    let hart1_start = report::hart_count(hart1.counters());
     let start_us = now_us();
     window.start_us.set(Some(start_us));
     let sampling = match start.profile {
@@ -434,6 +444,7 @@ async fn measure(
     }
     wait_until(planned_end).await;
     let end_us = now_us();
+    let hart1_end = report::hart_count(hart1.counters());
     window.end_us.set(Some(end_us));
     relay::request_stop(hart0).await;
     hart1.sampler().request_stop();
@@ -465,6 +476,10 @@ async fn measure(
         link: report::link_window(&counters_start, &counters_end),
         mac: report::mac_window(&counters_start, &counters_end),
         positions: report::positions_window(&counters_start, &counters_end),
+        hart1: Hart1Window {
+            start: hart1_start,
+            end: hart1_end,
+        },
         tracking: report::tracking(&tracking_start, &tracking_end),
         sampled: [sampled, sampled1],
     }

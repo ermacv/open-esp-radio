@@ -108,8 +108,9 @@ Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
   `turn`, `transmit`, `receive`, `intake`, `messages`) and the
   image's two, `relay` on the boot hart and `load` on hart 1, twelve an
   answer.
-- **Counters, link, tracking:** the window's differences of the boot
-  hart's counters, the bridge's frames, the frames the IP stack took, the
+- **Counters, link, tracking:** hart 1's cycles and retired instructions
+  at the window's two ends, read on hart 1, and the window's differences of
+  the boot hart's counters, the bridge's frames, the frames the IP stack took, the
   cache's counts (cleared just before the window) and geometry, the
   receive driver's and the station's receive counts, the transmit
   agreements', the link's rates and the PHY tracking ticks.
