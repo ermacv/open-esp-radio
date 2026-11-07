@@ -1355,26 +1355,29 @@ fn three_sockets_waiting_for_two_blocks_all_take_turns() {
     assert_eq!(cause, EndCause::Stopped);
 }
 
+/// A service of two sockets over `N` blocks, by hand.
+type TestPair<B, const N: usize> = Service<
+    'static,
+    'static,
+    B,
+    SIZE,
+    2,
+    CREDITS,
+    RECEIVED,
+    2,
+    N,
+    DEPTH,
+    RECEIVED,
+    WirePort,
+    Direct,
+>;
+
 /// Two sockets, the second's group limited to `limit` and the pool to `BLOCKS`.
 fn pair<B: 'static>(
     limit: usize,
     memory: MemoryPolicy,
 ) -> (
-    Service<
-        'static,
-        'static,
-        B,
-        SIZE,
-        2,
-        CREDITS,
-        RECEIVED,
-        2,
-        2,
-        DEPTH,
-        RECEIVED,
-        WirePort,
-        Direct,
-    >,
+    TestPair<B, 2>,
     [TestSocket<B>; 2],
     WirePort,
     WakingSpscSender<'static, (), 1>,
@@ -1420,8 +1423,7 @@ fn a_group_past_its_limit_waits_with_blocks_free() {
         stop.try_send(()).ok().unwrap();
         again
     };
-    let (_, block) = run_tasks(clock, service.run(clock, &mut events), drive);
-    drop(block);
+    run_tasks(clock, service.run(clock, &mut events), drive);
 }
 
 #[test]
@@ -1482,8 +1484,7 @@ fn a_received_datagram_counts_toward_its_group() {
         stop.try_send(()).ok().unwrap();
         block
     };
-    let (_, block) = run_tasks(clock, service.run(clock, &mut events), drive);
-    drop(block);
+    run_tasks(clock, service.run(clock, &mut events), drive);
 }
 
 #[test]
@@ -1515,12 +1516,13 @@ fn pressure_takes_the_oldest_and_leaves_the_younger() {
             older.take().ok(),
             Some(Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure)))
         );
-        let younger = younger.take().err().expect("the younger stays");
+        let Err(younger) = younger.take() else {
+            panic!("the younger stays");
+        };
         stop.try_send(()).ok().unwrap();
         (block, younger)
     };
-    let (_, (block, _younger)) = run_tasks(clock, service.run(clock, &mut events), drive);
-    drop(block);
+    let _kept = run_tasks(clock, service.run(clock, &mut events), drive);
 }
 
 #[test]
@@ -1552,7 +1554,7 @@ fn a_group_evicts_nothing_of_its_own_for_itself() {
         stop.try_send(()).ok().unwrap();
         (one, two)
     };
-    let (_, (_one, _two)) = run_tasks(clock, service.run(clock, &mut events), drive);
+    let _kept = run_tasks(clock, service.run(clock, &mut events), drive);
 }
 
 #[test]
@@ -1603,7 +1605,9 @@ fn pressure_spares_a_group_that_holds_less_however_old_its_work() {
         settle().await;
         assert!(pin!(waits.reserve()).poll(cx).is_pending());
         let block = waits.reserve().await.unwrap();
-        let oldest = oldest.take().err().expect("its group holds less");
+        let Err(oldest) = oldest.take() else {
+            panic!("its group holds less");
+        };
         let evicted = Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure));
         assert_eq!(
             one.take().ok(),
@@ -1614,8 +1618,7 @@ fn pressure_spares_a_group_that_holds_less_however_old_its_work() {
         stop.try_send(()).ok().unwrap();
         (block, oldest, two)
     };
-    let (_, (block, _oldest, _two)) = run_tasks(clock, service.run(clock, &mut events), drive);
-    drop(block);
+    let _kept = run_tasks(clock, service.run(clock, &mut events), drive);
 }
 
 /// Runs `client` beside a pair's service until it stops the service.
@@ -1801,6 +1804,93 @@ fn a_policy_chooses_only_after_every_notice_was_read() {
         settle().await;
         assert_eq!(policy.0.borrow().completed.len(), NOTICES as usize);
     });
+}
+
+type BeforeTheService<B> = (
+    TestPair<B, 3>,
+    [TestSocket<B>; 2],
+    Vec<Block<'static, B, SIZE>>,
+    WirePort,
+    WakingSpscSender<'static, (), 1>,
+);
+
+/// Three blocks of which `held` of `group` were taken before the service, with
+/// one socket in the shared group and a waiting one in a group of its own.
+fn before_the_service<B: 'static>(held: usize) -> BeforeTheService<B> {
+    let memory = Box::leak(Box::new([[0; SIZE]; 3]));
+    let (mut pool, brand) = claim::<B, SIZE, 3>(memory).unwrap();
+    let absent = pool.group(usize::MAX).unwrap();
+    let blocks = (0..held).map(|_| pool.take_as(absent).unwrap()).collect();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let wire = WirePort::default();
+    wire.0.borrow_mut().full = true;
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let evict = MemoryPolicy {
+        evict_after: Some(oer_portable_time::Duration::from_millis(100)),
+    };
+    let mut service = Service::new(owner, Direct, evict, stopping);
+    let dscp = Dscp::default();
+    let sender = service
+        .bind(5000, dscp, Group::shared(), storage::<B>())
+        .ok()
+        .unwrap();
+    let group = service.group(usize::MAX).unwrap();
+    let waiter = service
+        .bind(5001, dscp, group, storage::<B>())
+        .ok()
+        .unwrap();
+    (service, [sender, waiter], blocks, wire, stop)
+}
+
+#[test]
+fn pressure_reaches_a_group_with_no_socket_here() {
+    brand!(Net);
+    let (mut service, [mut sender, mut waiter], mut blocks, _, stop) = before_the_service::<Net>(3);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let older = sender.send(peer(), blocks.pop().unwrap()).ok().unwrap();
+        let younger = sender.send(peer(), blocks.pop().unwrap()).ok().unwrap();
+        let held = blocks.pop().unwrap();
+        settle().await;
+        assert!(pin!(waiter.reserve()).poll(cx).is_pending());
+        let block = waiter.reserve().await.unwrap();
+        let evicted = Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure));
+        assert_eq!(older.take().ok(), Some(evicted));
+        stop.try_send(()).ok().unwrap();
+        (block, held, younger)
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive);
+}
+
+#[test]
+fn pressure_leaves_a_lighter_group_alone_when_the_heaviest_is_in_hands() {
+    brand!(Net);
+    let (mut service, [mut sender, mut waiter], blocks, _, stop) = before_the_service::<Net>(2);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let drive = async {
+        let own = sender.reserve().await.unwrap();
+        let queued = sender.send(peer(), own).ok().unwrap();
+        settle().await;
+        assert!(pin!(waiter.reserve()).poll(cx).is_pending());
+        settle().await;
+        clock
+            .advance(oer_portable_time::Duration::from_secs(5))
+            .unwrap();
+        settle().await;
+        let queued = queued.take().err().unwrap();
+        assert!(
+            pin!(waiter.reserve()).poll(cx).is_pending(),
+            "the source holds them"
+        );
+        stop.try_send(()).ok().unwrap();
+        (blocks, queued)
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive);
 }
 
 #[test]
