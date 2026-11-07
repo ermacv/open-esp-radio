@@ -17,7 +17,13 @@ const _: () = assert!(
     ),
     "one receive unit could span the whole ring"
 );
-/// Platform settle edge between stopped-ring publication and walker enable.
+/// A wait between stopped-ring publication and walker enable, as policy: no
+/// source states it, and nothing confirms that the hardware needs it. The
+/// vendor neither waits nor polls there. SOURCE: pinned
+/// libnet80211[ieee80211_ioctl.o]::wifi_hw_start +0xea..+0xf6: hal_init +0x94
+/// mac_rxbuf_init publishes RX_DESCRIPTOR_BASE, chip_enable +0x2a ic_enable_rx
+/// sets WALKER_ENABLE; no delay or poll between them, and that interval has no
+/// stated length.
 pub const ESP32S31_RX_WALKER_ENABLE_SETTLE_US: u32 = 5;
 
 /// Wait the walker-enable settle on `timer`. A settle past the timer's range
