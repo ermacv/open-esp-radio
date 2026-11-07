@@ -1284,6 +1284,8 @@ struct Account {
     fails: bool,
     /// `accepted` cannot go on.
     fails_late: bool,
+    /// `completed` cannot go on.
+    fails_completing: bool,
     /// Reservations not yet answered.
     open: usize,
     accepted: Vec<u32>,
@@ -1345,8 +1347,13 @@ impl Egress<u32, u32> for Policy {
     }
 
     fn completed(&mut self, ticket: u32) -> Result<(), &'static str> {
-        self.0.borrow_mut().completed.push(ticket);
-        Ok(())
+        let mut account = self.0.borrow_mut();
+        account.completed.push(ticket);
+        if account.fails_completing {
+            Err("completed")
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -1470,6 +1477,36 @@ fn a_fault_in_an_answer_ends_the_service_with_its_result_kept() {
     assert_eq!(ended.fault, Some("accepted"));
     // The ARP request was what the port took: the datagram never went.
     assert_eq!(sent, Sent::Ended(Outcome::Retired));
+}
+
+#[test]
+fn a_fault_in_a_completion_stops_the_turn_at_once() {
+    brand!(Net);
+    let policy = Policy::default();
+    let bench = bench_with::<Net, _>(policy.clone());
+    let (ended, _, ()) = run(bench, async |socket, wire| {
+        send_one(socket, b"sent").await;
+        settle().await;
+        let block = fill(socket, b"ready").await;
+        {
+            let mut account = policy.0.borrow_mut();
+            account.fails_completing = true;
+            // Should the turn go on to choose, this replaces the first fault.
+            account.fails = true;
+        }
+        drop(socket.send(peer(), block).ok().unwrap());
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.ended.extend([1, 2]);
+            wire.wake();
+        }
+        while !socket.closed() {
+            yield_now().await;
+        }
+    });
+    assert_eq!(ended.cause, EndCause::Egress);
+    assert_eq!(ended.fault, Some("completed"));
+    assert_eq!(policy.0.borrow().completed, [1], "the turn stopped there");
 }
 
 #[test]

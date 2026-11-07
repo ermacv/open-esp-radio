@@ -283,6 +283,9 @@ impl<
             moved = true;
             let answer = self.egress.completed(completion);
             self.note(answer);
+            if self.fault.is_some() {
+                return true;
+            }
         }
         moved |= self.publish(now);
         for bound in self.bound.iter_mut().flatten() {
