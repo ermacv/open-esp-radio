@@ -46,15 +46,26 @@ pub enum Class {
 /// and no later work in its place.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Work {
-    Reply { serial: u64 },
-    Request { neighbor: u8, address: [u8; 4] },
-    Datagram { socket: u8, place: u8, serial: u64 },
+    Reply {
+        serial: u64,
+    },
+    Request {
+        neighbor: u8,
+        serial: u64,
+    },
+    Datagram {
+        socket: u8,
+        place: u8,
+        serial: u64,
+        /// The station address it was chosen for: another is other work.
+        peer: [u8; 6],
+    },
 }
 
 /// Work that is ready, before any frame of it exists: what a scheduler needs
 /// to choose it.
 #[derive(Debug, Eq, PartialEq)]
-pub struct Demand {
+pub struct Demand<'id> {
     pub class: Class,
     /// The frame's length: what a slot must hold.
     pub length: usize,
@@ -65,55 +76,60 @@ pub struct Demand {
     /// Its priority.
     pub dscp: Dscp,
     work: Work,
+    brand: Brand<'id>,
 }
 
-impl Demand {
+impl<'id> Demand<'id> {
     /// Choose this work.
-    pub const fn grant(self) -> Grant {
-        Grant { work: self.work }
+    pub const fn grant(self) -> Grant<'id> {
+        Grant {
+            work: self.work,
+            brand: self.brand,
+        }
     }
 }
 
 /// The right to send one piece of work, and no other.
 #[derive(Debug, Eq, PartialEq)]
-pub struct Grant {
+pub struct Grant<'id> {
     work: Work,
+    brand: Brand<'id>,
 }
 
-/// A frame's way out. One call writes the frame and is the port's answer, so
-/// a frame the port accepted is always one the core knows it accepted.
-pub trait FramePort {
-    /// Why the port took nothing, which names what it waits for.
-    type Refusal;
+/// A frame ready to write, as values.
+#[derive(Debug)]
+pub(crate) enum Frame<'a> {
+    Arp([u8; ARP_FRAME]),
+    Datagram {
+        headers: [u8; HEADERS],
+        data: &'a [u8],
+    },
+}
 
-    /// Take room for `length` octets, let `fill` write the frame there and
-    /// accept it. `Ok` says the frame is the port's.
-    ///
-    /// # Errors
-    /// The port accepted nothing: it did not have the room, or `fill` failed.
-    fn publish(
-        &mut self,
-        length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<(), Self::Refusal>;
+impl Frame<'_> {
+    pub(crate) fn length(&self) -> usize {
+        match self {
+            Self::Arp(frame) => frame.len(),
+            Self::Datagram { headers, data } => headers.len().saturating_add(data.len()),
+        }
+    }
+
+    /// Write the frame into `slot`.
+    pub(crate) fn write(&self, slot: &mut [u8]) -> Result<(), SlotTooShort> {
+        let mut writer = Writer::new(slot);
+        match self {
+            Self::Arp(frame) => writer.write(frame),
+            Self::Datagram { headers, data } => {
+                writer.write(headers).and_then(|()| writer.write(data))
+            }
+        }
+        .map_err(|_| SlotTooShort)
+    }
 }
 
 /// The room a port gave does not hold the frame.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SlotTooShort;
-
-/// Why a grant sent nothing. The work stays as it was.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Unsent<R> {
-    /// The granted work ended, or no longer holds: a final refusal of this
-    /// grant, not of the work's successor.
-    Stale,
-    /// The port refused.
-    Port(R),
-    /// The port answered `Ok` though the frame was not written, which breaks
-    /// [`FramePort::publish`]. Nothing is known to have gone out.
-    NotFilled,
-}
 
 /// A socket. Its handle is not a copy: closing consumes it.
 #[derive(Debug, Eq, PartialEq)]
@@ -143,6 +159,20 @@ pub enum Outcome {
     Closed,
     /// The socket's close finished.
     SocketClosed,
+    /// The port contradicted itself, so whether the datagram went out is not
+    /// known. It is not sent again.
+    Unknown,
+}
+
+/// What became of a command.
+#[derive(Debug, Eq, PartialEq)]
+pub enum CommandState<'id> {
+    /// It ended; its place freed.
+    Finished(Outcome),
+    /// It runs; the right to its result comes back.
+    Running(CommandId<'id>),
+    /// Its core retired, so no result will come.
+    Gone,
 }
 
 /// A datagram that was received.
@@ -176,7 +206,8 @@ pub enum SendRefusal {
     TooLong,
     /// No route leads there. A final refusal for this configuration.
     NoRoute,
-    /// Every neighbor entry is being asked for, until one answers or gives up.
+    /// Every neighbor entry is asked for or holds a neighbor a datagram
+    /// needs, until one answers, gives up or that datagram ends.
     NeighborsFull,
 }
 
@@ -298,6 +329,13 @@ impl<'id, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>
                 .any(|place| !matches!(place.run, Run::Free))
     }
 
+    /// Whether a datagram here goes through `address`.
+    fn needs(&self, address: [u8; 4]) -> bool {
+        self.places.iter().any(|place| {
+            matches!(&place.run, Run::Sending(Sending { hop: Some(hop), .. }) if *hop == address)
+        })
+    }
+
     /// A command's place by its number: `CREDITS` is the close's.
     fn place_mut(&mut self, place: u8) -> Option<&mut Place<'id, SIZE>> {
         let place = usize::from(place);
@@ -329,8 +367,9 @@ pub struct Core<
 > {
     interface: Interface,
     neighbors: Neighbors<NEIGHBORS>,
-    /// Replies owed. Bounded by the table: an asker past it asks again.
-    replies: heapless::Deque<Reply, NEIGHBORS>,
+    /// Replies owed, oldest first. Bounded by the table: an asker past it
+    /// asks again.
+    replies: heapless::Vec<Reply, NEIGHBORS>,
     sockets: [Socket<'id, SIZE, CREDITS, RECEIVED>; SOCKETS],
     /// Where the next look for a datagram starts, so sockets take turns.
     cursor: usize,
@@ -364,11 +403,11 @@ impl<
         Self {
             interface,
             neighbors: Neighbors::new(),
-            replies: heapless::Deque::new(),
+            replies: heapless::Vec::new(),
             sockets: [const { Socket::new() }; SOCKETS],
             cursor: 0,
             identification: 0,
-            serial: 0,
+            serial: brand.serial,
             brand: brand.brand,
         }
     }
@@ -457,7 +496,12 @@ impl<
             let Some(hop) = self.interface.next_hop(remote.address) else {
                 return refused(SendRefusal::NoRoute, block);
             };
-            if self.neighbors.resolve(now, hop) == Lookup::Full {
+            let serial = self.next_serial();
+            let sockets = &self.sockets;
+            let lookup = self.neighbors.resolve(now, hop, serial, |address| {
+                sockets.iter().any(|socket| socket.needs(address))
+            });
+            if lookup == Lookup::Full {
                 return refused(SendRefusal::NeighborsFull, block);
             }
             Some(hop)
@@ -480,25 +524,22 @@ impl<
         })
     }
 
-    /// The command's result, once it ended: its place frees. A command still
-    /// running gives its right back.
-    ///
-    /// # Errors
-    /// The command runs; the right comes back.
-    pub fn take_result(&mut self, command: CommandId<'id>) -> Result<Outcome, CommandId<'id>> {
-        let finished = self
+    /// The command's result, once it ended: its place frees.
+    pub fn take_result(&mut self, command: CommandId<'id>) -> CommandState<'id> {
+        let Some(place) = self
             .sockets
             .get_mut(usize::from(command.socket))
             .and_then(|socket| socket.place_mut(command.place))
             .filter(|place| place.serial == command.serial)
-            .and_then(|place| match place.run {
-                Run::Finished(outcome) => {
-                    place.free();
-                    Some(outcome)
-                }
-                _ => None,
-            });
-        finished.ok_or(command)
+        else {
+            return CommandState::Gone;
+        };
+        if let Run::Finished(outcome) = place.run {
+            place.free();
+            CommandState::Finished(outcome)
+        } else {
+            CommandState::Running(command)
+        }
     }
 
     /// Nobody will read this command's result. A finished command's place
@@ -617,7 +658,7 @@ impl<
                 hardware: packet.sender_hardware,
                 address: packet.sender_protocol,
             };
-            if self.replies.push_back(reply).is_err() {
+            if self.replies.push(reply).is_err() {
                 report(events, || NetEvent::ReplyDropped);
             }
         }
@@ -716,9 +757,22 @@ impl<
         }
     }
 
-    /// Ask neighbors again, and end what waited for one that never answered.
+    /// Advance to `now`: ask again for neighbors that expired under a waiting
+    /// datagram, and end what waited for one that never answered. This comes
+    /// first at every time [`Self::poll_deadline`] names, and before
+    /// [`Self::demands`] at a later `now`: an address past its life is no work
+    /// until this has asked for it again.
     pub fn tick<const BLOCKS: usize>(&mut self, now: Instant, pool: &mut Pool<'id, SIZE, BLOCKS>) {
-        self.ask_for_hops(now);
+        let mut serial = self.serial;
+        for place in self.sockets.iter().flat_map(|socket| socket.places.iter()) {
+            if let Run::Sending(Sending { hop: Some(hop), .. }) = place.run {
+                let next = serial.wrapping_add(1);
+                if self.neighbors.reask(now, hop, next) {
+                    serial = next;
+                }
+            }
+        }
+        self.serial = serial;
         let sockets = &mut self.sockets;
         self.neighbors.tick(now, |address| {
             for socket in sockets.iter_mut() {
@@ -738,27 +792,20 @@ impl<
         });
     }
 
-    /// A datagram's neighbor may have expired while it waited: ask again, so
-    /// it either goes or ends unreachable.
-    fn ask_for_hops(&mut self, now: Instant) {
-        let neighbors = &mut self.neighbors;
-        for place in self.sockets.iter().flat_map(|socket| socket.places.iter()) {
-            if let Run::Sending(Sending { hop: Some(hop), .. }) = place.run {
-                let _resolved = neighbors.resolve(now, hop);
-            }
-        }
-    }
-
-    /// When [`Self::tick`] has work.
+    /// When [`Self::tick`] has work: a request's time, or the end of the life
+    /// of a neighbor a datagram needs. Nothing else makes demand appear.
     pub fn poll_deadline(&self) -> Option<Instant> {
-        self.neighbors.deadline()
+        let sockets = &self.sockets;
+        self.neighbors
+            .deadline(|address| sockets.iter().any(|socket| socket.needs(address)))
     }
 
     /// Every piece of work ready now, with no frame built: control first,
     /// then datagrams from the socket whose turn it is. A scheduler chooses
     /// among these; a direct interface takes [`Self::poll_demand`].
-    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand> + '_ {
-        let reply = self.replies.front().map(|reply| Demand {
+    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<'id>> + '_ {
+        let brand = self.brand;
+        let replies = self.replies.iter().map(move |reply| Demand {
             class: Class::Control,
             length: ARP_FRAME,
             peer: reply.hardware,
@@ -767,17 +814,19 @@ impl<
             work: Work::Reply {
                 serial: reply.serial,
             },
+            brand,
         });
         let requests = self
             .neighbors
             .owed_requests()
-            .map(|(neighbor, address)| Demand {
+            .map(move |(neighbor, _, serial)| Demand {
                 class: Class::Control,
                 length: ARP_FRAME,
                 peer: BROADCAST_HARDWARE,
                 flow: None,
                 dscp: BEST_EFFORT,
-                work: Work::Request { neighbor, address },
+                work: Work::Request { neighbor, serial },
+                brand,
             });
         let datagrams = (0..SOCKETS)
             .filter_map(|offset| self.cursor.wrapping_add(offset).checked_rem(SOCKETS))
@@ -791,7 +840,7 @@ impl<
                         self.datagram_demand(now, index, socket, number, place)
                     })
             });
-        reply.into_iter().chain(requests).chain(datagrams)
+        replies.chain(requests).chain(datagrams)
     }
 
     fn datagram_demand(
@@ -801,7 +850,7 @@ impl<
         socket: &Socket<'id, SIZE, CREDITS, RECEIVED>,
         number: usize,
         place: &Place<'id, SIZE>,
-    ) -> Option<Demand> {
+    ) -> Option<Demand<'id>> {
         let Run::Sending(sending) = &place.run else {
             return None;
         };
@@ -819,14 +868,15 @@ impl<
                 socket: u8::try_from(index).ok()?,
                 place: u8::try_from(number).ok()?,
                 serial: place.serial,
+                peer,
             },
+            brand: self.brand,
         })
     }
 
     /// The next ready work, and the next socket's turn. A direct interface
-    /// grants this at once; the port's refusal leaves it ready.
-    pub fn poll_demand(&mut self, now: Instant) -> Option<Demand> {
-        self.ask_for_hops(now);
+    /// grants this at once; a port's refusal leaves it ready.
+    pub fn poll_demand(&mut self, now: Instant) -> Option<Demand<'id>> {
         let demand = self.demands(now).next()?;
         if let Work::Datagram { socket, .. } = demand.work {
             self.cursor = usize::from(socket).wrapping_add(1);
@@ -834,77 +884,53 @@ impl<
         Some(demand)
     }
 
-    /// Send the granted work: the port writes the frame in its own room and
-    /// answers in one call, and what it accepted is committed here, so no
-    /// frame leaves unknown to the core. A refusal moves nothing.
-    ///
-    /// # Errors
-    /// [`Unsent`]: the work stays as it was.
-    pub fn transmit<P: FramePort, const BLOCKS: usize>(
-        &mut self,
-        now: Instant,
-        grant: Grant,
-        port: &mut P,
-        pool: &mut Pool<'id, SIZE, BLOCKS>,
-    ) -> Result<(), Unsent<P::Refusal>> {
+    /// The granted work as a frame, while it still is that work: another
+    /// neighbor address, a later reply or a retired command is `None`. Only
+    /// [`NetworkOwner`](crate::NetworkOwner) reaches this, so the port's
+    /// answer is always committed.
+    pub(crate) fn frame(&self, now: Instant, grant: &Grant<'id>) -> Option<Frame<'_>> {
         match grant.work {
             Work::Reply { serial } => {
-                let reply = self
-                    .replies
-                    .front()
-                    .filter(|reply| reply.serial == serial)
-                    .copied()
-                    .ok_or(Unsent::Stale)?;
-                let frame = self.arp_frame(
+                let reply = self.replies.iter().find(|reply| reply.serial == serial)?;
+                self.arp_frame(
                     Operation::Reply,
                     reply.hardware,
                     reply.hardware,
                     reply.address,
-                )?;
-                publish_frame(port, &frame)?;
-                let _sent = self.replies.pop_front();
-                Ok(())
+                )
             }
-            Work::Request { neighbor, address } => {
-                if !self
+            Work::Request { neighbor, serial } => {
+                let (_, address, _) = self
                     .neighbors
                     .owed_requests()
-                    .any(|owed| owed == (neighbor, address))
-                {
-                    return Err(Unsent::Stale);
-                }
-                let frame =
-                    self.arp_frame(Operation::Request, BROADCAST_HARDWARE, [0; 6], address)?;
-                publish_frame(port, &frame)?;
-                self.neighbors.request_accepted(neighbor, now);
-                Ok(())
+                    .find(|owed| (owed.0, owed.2) == (neighbor, serial))?;
+                self.arp_frame(Operation::Request, BROADCAST_HARDWARE, [0; 6], address)
             }
             Work::Datagram {
                 socket,
                 place,
                 serial,
-            } => self.transmit_datagram(now, socket, place, serial, port, pool),
+                peer,
+            } => self.datagram_frame(now, socket, place, serial, peer),
         }
     }
 
-    fn arp_frame<R>(
+    fn arp_frame(
         &self,
         operation: Operation,
         destination: [u8; 6],
         target_hardware: [u8; 6],
         target_protocol: [u8; 4],
-    ) -> Result<[u8; ARP_FRAME], Unsent<R>> {
+    ) -> Option<Frame<'_>> {
         let mut frame = [0; ARP_FRAME];
-        let (head, rest) = frame
-            .split_at_mut_checked(ethernet::HEADER_LEN)
-            .ok_or(Unsent::Stale)?;
+        let (head, rest) = frame.split_at_mut_checked(ethernet::HEADER_LEN)?;
         EthernetHeader {
             destination,
             source: self.interface.hardware(),
             ether_type: EtherType::ARP,
         }
         .write(&mut Writer::new(head))
-        .map_err(|_| Unsent::Stale)?;
+        .ok()?;
         Arp {
             operation,
             sender_hardware: self.interface.hardware(),
@@ -913,51 +939,37 @@ impl<
             target_protocol,
         }
         .write(rest)
-        .map_err(|_| Unsent::Stale)?;
-        Ok(frame)
+        .ok()?;
+        Some(Frame::Arp(frame))
     }
 
-    fn transmit_datagram<P: FramePort, const BLOCKS: usize>(
-        &mut self,
+    fn datagram_frame(
+        &self,
         now: Instant,
         socket: u8,
         place: u8,
         serial: u64,
-        port: &mut P,
-        pool: &mut Pool<'id, SIZE, BLOCKS>,
-    ) -> Result<(), Unsent<P::Refusal>> {
-        let open = self.sockets.get(usize::from(socket)).ok_or(Unsent::Stale)?;
-        let source_port = open.port.ok_or(Unsent::Stale)?;
+        peer: [u8; 6],
+    ) -> Option<Frame<'_>> {
+        let open = self.sockets.get(usize::from(socket))?;
+        let source_port = open.port?;
         let entry = open
             .places
             .get(usize::from(place))
-            .filter(|entry| entry.serial == serial)
-            .ok_or(Unsent::Stale)?;
+            .filter(|entry| entry.serial == serial)?;
         let Run::Sending(sending) = &entry.run else {
-            return Err(Unsent::Stale);
+            return None;
         };
         let next_hop = match sending.hop {
-            Some(hop) => self.neighbors.hardware(now, hop).ok_or(Unsent::Stale)?,
+            Some(hop) => self.neighbors.hardware(now, hop)?,
             None => BROADCAST_HARDWARE,
         };
+        if next_hop != peer {
+            return None;
+        }
         let data = sending.block.octets();
         let udp_length = UDP_HEADER_LEN.saturating_add(data.len());
-        let wire_length = u16::try_from(udp_length).map_err(|_| Unsent::Stale)?;
-        let header = EthernetHeader {
-            destination: next_hop,
-            source: self.interface.hardware(),
-            ether_type: EtherType::IPV4,
-        };
-        let ipv4 = Ipv4Fields {
-            services: open.dscp.field(),
-            total_length: u16::try_from(IPV4_HEADER_LEN.saturating_add(udp_length))
-                .map_err(|_| Unsent::Stale)?,
-            identification: self.identification,
-            time_to_live: TIME_TO_LIVE,
-            protocol: PROTOCOL_UDP,
-            source: self.interface.address(),
-            destination: sending.remote.address,
-        };
+        let wire_length = u16::try_from(udp_length).ok()?;
         let unfilled = UdpHeader {
             ports: Ports {
                 source: source_port,
@@ -979,57 +991,96 @@ impl<
                 .with(data)
                 .finish(),
         );
-        let udp = UdpHeader {
-            checksum,
-            ..unfilled
-        };
-        let total = HEADERS.saturating_add(data.len());
-        publish(port, total, |slot| {
-            let mut writer = Writer::new(slot);
-            header
-                .write(&mut writer)
-                .and_then(|()| writer.write(&ipv4.to_bytes()))
-                .and_then(|()| writer.write(&udp.to_bytes()))
-                .and_then(|()| writer.write(data))
-                .map_err(|_| SlotTooShort)
-        })?;
-        self.identification = self.identification.wrapping_add(1);
-        if let Some(entry) = self
-            .sockets
-            .get_mut(usize::from(socket))
-            .and_then(|open| open.places.get_mut(usize::from(place)))
-            && let Run::Sending(_) = entry.run
-            && let Run::Sending(sending) = core::mem::replace(&mut entry.run, Run::Free)
-        {
-            pool.give(sending.block);
-            entry.finish(Outcome::Accepted);
+        let mut headers = [0; HEADERS];
+        let mut writer = Writer::new(&mut headers);
+        EthernetHeader {
+            destination: next_hop,
+            source: self.interface.hardware(),
+            ether_type: EtherType::IPV4,
         }
-        Ok(())
+        .write(&mut writer)
+        .ok()?;
+        writer
+            .write(
+                &Ipv4Fields {
+                    services: open.dscp.field(),
+                    total_length: u16::try_from(IPV4_HEADER_LEN.saturating_add(udp_length)).ok()?,
+                    identification: self.identification,
+                    time_to_live: TIME_TO_LIVE,
+                    protocol: PROTOCOL_UDP,
+                    source: self.interface.address(),
+                    destination: sending.remote.address,
+                }
+                .to_bytes(),
+            )
+            .ok()?;
+        writer
+            .write(
+                &UdpHeader {
+                    checksum,
+                    ..unfilled
+                }
+                .to_bytes(),
+            )
+            .ok()?;
+        Some(Frame::Datagram { headers, data })
     }
-}
 
-/// Publish through `port`, and tell a port that said `Ok` without writing.
-fn publish<P: FramePort>(
-    port: &mut P,
-    length: usize,
-    fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-) -> Result<(), Unsent<P::Refusal>> {
-    let mut filled = false;
-    port.publish(length, |slot| {
-        let written = fill(slot);
-        filled = written.is_ok();
-        written
-    })
-    .map_err(Unsent::Port)?;
-    if filled {
-        Ok(())
-    } else {
-        Err(Unsent::NotFilled)
+    /// The port took the granted work, or said it did without a written
+    /// frame: then its datagram ends `Unknown`, and nothing is sent again.
+    pub(crate) fn commit<const BLOCKS: usize>(
+        &mut self,
+        now: Instant,
+        grant: Grant<'id>,
+        written: bool,
+        pool: &mut Pool<'id, SIZE, BLOCKS>,
+    ) {
+        match grant.work {
+            Work::Reply { serial } => {
+                self.replies.retain(|reply| reply.serial != serial);
+            }
+            Work::Request { neighbor, .. } => self.neighbors.request_accepted(neighbor, now),
+            Work::Datagram { socket, place, .. } => {
+                self.identification = self.identification.wrapping_add(1);
+                if let Some(entry) = self
+                    .sockets
+                    .get_mut(usize::from(socket))
+                    .and_then(|open| open.places.get_mut(usize::from(place)))
+                    && let Run::Sending(_) = entry.run
+                    && let Run::Sending(sending) = core::mem::replace(&mut entry.run, Run::Free)
+                {
+                    pool.give(sending.block);
+                    entry.finish(if written {
+                        Outcome::Accepted
+                    } else {
+                        Outcome::Unknown
+                    });
+                }
+            }
+        }
     }
-}
 
-fn publish_frame<P: FramePort>(port: &mut P, frame: &[u8]) -> Result<(), Unsent<P::Refusal>> {
-    publish(port, frame.len(), |slot| {
-        Writer::new(slot).write(frame).map_err(|_| SlotTooShort)
-    })
+    /// End this core: every block it holds returns to `pool`, and the brand
+    /// comes back for the next core. What applications hold stays out
+    /// ([`Pool::outstanding`]) and returns whenever they give it. Old handles
+    /// and grants find nothing: the next core goes on from this one's serials.
+    pub fn retire<const BLOCKS: usize>(self, pool: &mut Pool<'id, SIZE, BLOCKS>) -> CoreBrand<'id> {
+        let Self {
+            sockets,
+            serial,
+            brand,
+            ..
+        } = self;
+        for mut socket in sockets {
+            while let Some(datagram) = socket.received.pop_front() {
+                pool.give(datagram.block);
+            }
+            for place in socket.places {
+                if let Run::Sending(sending) = place.run {
+                    pool.give(sending.block);
+                }
+            }
+        }
+        CoreBrand { brand, serial }
+    }
 }

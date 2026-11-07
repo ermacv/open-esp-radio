@@ -43,6 +43,19 @@
 //! # }
 //! ```
 //!
+//! Nor does another core's grant:
+//!
+//! ```compile_fail
+//! # use oer_portable_time::Instant;
+//! # use oer_protocols_network_core::{Core, Interface, scope};
+//! # fn f(a: &mut [[u8; 64]; 1], interface: Interface, now: Instant) {
+//! let grant = scope(a, |_, brand| {
+//!     let mut core: Core<'_, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//!     core.poll_demand(now).unwrap().grant()
+//! });
+//! # }
+//! ```
+//!
 //! Nor does another pool's block:
 //!
 //! ```compile_fail
@@ -77,13 +90,15 @@ mod block;
 mod interface;
 mod machine;
 mod neighbor;
+mod owner;
 
-pub use block::{Block, BlockTooShort, CoreBrand, Pool, scope};
+pub use block::{Block, BlockTooShort, CoreBrand, Pool, scope, scope_async};
 pub use interface::{Interface, InterfaceError};
 pub use machine::{
-    Class, CommandId, Core, Datagram, Demand, FramePort, Grant, NetEvent, OpenRefused, Outcome,
-    Remote, SendRefusal, SendRefused, SlotTooShort, SocketId, StaleSocket, Unsent,
+    Class, CommandId, CommandState, Core, Datagram, Demand, Grant, NetEvent, OpenRefused, Outcome,
+    Remote, SendRefusal, SendRefused, SlotTooShort, SocketId, StaleSocket,
 };
+pub use owner::{FramePort, NetworkOwner, Unsent};
 
 #[cfg(test)]
 mod tests;
