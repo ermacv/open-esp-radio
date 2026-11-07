@@ -10,9 +10,10 @@ use oer_portable_events::EventSink;
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, FramePort, FrameSource, NetEvent, NetworkOwner, OpenRefused, Outcome,
-    Pool, Retired, SocketId, Unsent,
+    CommandId, CommandState, NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId,
+    Unsent,
 };
+use oer_protocols_network_port::{FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::socket::{

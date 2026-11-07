@@ -139,9 +139,9 @@ pub use block::{
 pub use interface::{Interface, InterfaceError};
 pub use machine::{
     Class, CommandId, CommandState, Core, Datagram, Demand, Grant, NetEvent, OpenRefused, Outcome,
-    Remote, RetiredResults, SendRefusal, SendRefused, SlotTooShort, SocketId, StaleSocket,
+    Remote, RetiredResults, SendRefusal, SendRefused, SocketId, StaleSocket,
 };
-pub use owner::{FramePort, FrameSource, NetworkOwner, Retired, Unsent};
+pub use owner::{NetworkOwner, Retired, Unsent};
 
 #[cfg(test)]
 mod tests;

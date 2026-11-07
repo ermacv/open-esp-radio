@@ -16,9 +16,9 @@ use embassy_futures::yield_now;
 use oer_portable_memory::WakingSpscSender;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, FramePort, FrameSource, Interface, NetworkOwner, OpenRefused, Outcome, Remote,
-    SendRefusal, SlotTooShort, claim,
+    Block, Interface, NetworkOwner, OpenRefused, Outcome, Remote, SendRefusal, claim,
 };
+use oer_protocols_network_port::{FramePort, FrameSource, SlotTooShort};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};

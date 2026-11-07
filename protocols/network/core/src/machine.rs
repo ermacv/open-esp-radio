@@ -7,6 +7,7 @@ use core::marker::PhantomData;
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
+use oer_protocols_network_port::SlotTooShort;
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{self, EtherType, EthernetHeader};
@@ -126,10 +127,6 @@ impl Frame<'_> {
         .map_err(|_| SlotTooShort)
     }
 }
-
-/// The room a port gave does not hold the frame.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SlotTooShort;
 
 /// A socket. Its handle is not a copy: closing consumes it.
 #[derive(Debug, Eq, PartialEq)]
