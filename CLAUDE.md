@@ -271,6 +271,28 @@ system these rules serve.
 - **Do what the task asks and check what it names.** No stand run,
   comparison or measurement series the task does not ask for. A question the
   task does not answer goes to whoever set it.
+- **Ownership and shutdown contracts.** These rules govern every change to such
+  a contract; a local fix needs no table for form's sake.
+  - **State the property first.** Before changing an ownership or shutdown
+    contract, name its acceptance point, owners, obligations and terminal
+    outcomes. State the assumptions and the cases outside the change.
+  - **Trace every transition and consumer.** List creation, transfer,
+    cancellation, return, destruction, retirement and reuse, together with every
+    reader and policy decision. When ownership moves, inspect consumers that did
+    not change too.
+  - **Check the public contract independently.** Exercise adverse event orders
+    and lifecycle boundaries through the public API. Keep expected ownership and
+    results separate from the implementation being checked. Test counts and
+    mutations cover the scenarios written; they do not establish missing
+    scenarios.
+  - **Review before integration.** Such a change needs independent review of the
+    exact revision before merge and before dependent work builds on it. Record
+    unresolved findings. After a revision changes, recheck the affected property;
+    previous review does not automatically cover the new revision.
+  - **Report what the evidence establishes.** Distinguish observed results, type
+    guarantees, assumptions and untested boundaries. Do not turn passing checks
+    into a broader guarantee or close a milestone while its agreed acceptance
+    conditions remain open.
 - **Evidence is short.** A pull request lists the checks it ran with their
   exit codes, run IDs and a short table. Longer text goes to the notes
   repository outside this one, unhashed. A binary kept outside git (a vendor
