@@ -1005,6 +1005,26 @@ fn a_service_dropped_unrun_ends_what_its_sockets_wait_for() {
 }
 
 #[test]
+fn a_waiting_receive_hears_its_service_end() {
+    brand!(Net);
+    let Bench {
+        service,
+        mut socket,
+        ..
+    } = bench::<Net>();
+    let (count, waker) = counter();
+    let cx = &mut Context::from_waker(&waker);
+    let mut receive = pin!(socket.receive());
+    assert!(receive.as_mut().poll(cx).is_pending());
+    drop(service);
+    assert!(count.0.load(Ordering::SeqCst) >= 1);
+    assert!(matches!(
+        receive.as_mut().poll(cx),
+        Poll::Ready(Err(SocketClosed))
+    ));
+}
+
+#[test]
 fn a_cancelled_service_task_ends_an_observer_and_a_full_lane_wait() {
     brand!(Net);
     let Bench {
