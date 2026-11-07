@@ -58,7 +58,7 @@ oer-portable-memory = { path = "../../../../../portable/memory", features = ["ho
 oer-portable-time-virtual = { path = "../../../../../portable/time-virtual" }
 oer-protocols-ieee80211-core-roles-sta = { path = "../../../../../protocols/ieee80211/core/roles/sta", features = ["test-support"] }
 oer-protocols-ieee80211-runtime = { path = "../../../../../protocols/ieee80211/runtime", features = ["placement", "test-support"] }
-oer-protocols-network-core = { path = "../../../../../protocols/network/core" }
+oer-protocols-network-core = { path = "../../../../../protocols/network/core", features = ["test-support"] }
 oer-protocols-network-runtime = { path = "../../../../../protocols/network/runtime" }
 oer-protocols-network-wire = { path = "../../../../../protocols/network/wire" }
 

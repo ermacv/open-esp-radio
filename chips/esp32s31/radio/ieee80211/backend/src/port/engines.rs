@@ -787,13 +787,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             PortState::Stopped | PortState::Running | PortState::Recovering => {}
         }
+        // Settings wait for a port that runs: the start applies them, so `now`
+        // here would hide what the start itself waits for.
+        let settings_due = self.settings.dirty()
+            && !matches!(self.state, PortState::Stopped | PortState::Starting { .. });
         // Work a turn owes at once: a stop's withdrawals, an opened gate,
         // settings to apply.
-        if (self.stopping() && !self.stop_served)
-            || self.reopen
-            || self.cut_due
-            || self.settings.dirty()
-        {
+        if (self.stopping() && !self.stop_served) || self.reopen || self.cut_due || settings_due {
             add(Some(self.now));
         }
         if let Some(since) = self.group_since {
