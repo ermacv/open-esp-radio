@@ -1,6 +1,6 @@
 extern crate std;
 
-use super::header::{Header, LENGTH};
+use super::header::{FILLER, Header, LENGTH};
 use super::*;
 
 #[test]
@@ -25,6 +25,43 @@ fn a_header_reads_back_what_was_written_and_refuses_other_payloads() {
     let mut unknown_flag = payload;
     unknown_flag[4] = 4;
     assert!(Header::read(&unknown_flag).is_none());
+}
+
+#[test]
+fn a_datagram_writes_every_octet_as_header_and_filler() {
+    const SENTINEL: u8 = 0xa5;
+    let header = Header {
+        run: 7,
+        sequence: 0x0102_0304_0506_0708,
+        sent_us: 42,
+        echo_request: false,
+        echo_reply: false,
+    };
+    let mut expected_header = [0; LENGTH];
+    header.write(&mut expected_header).unwrap();
+    // The header-only datagram, the largest the image sends (1472) and sizes
+    // between them; the buffer is larger, as a packet buffer is.
+    for size in [LENGTH, LENGTH + 1, 64, 1400, 1471, 1472] {
+        let mut buffer = [SENTINEL; 1600];
+        header.write_datagram(&mut buffer[..size]).unwrap();
+        let (written, beyond) = buffer.split_at(size);
+        assert_eq!(&written[..LENGTH], &expected_header, "size {size}");
+        assert!(
+            written[LENGTH..].iter().all(|&octet| octet == FILLER),
+            "size {size}: the filler fills the rest"
+        );
+        assert!(
+            !written.contains(&SENTINEL),
+            "size {size}: no octet is left unwritten"
+        );
+        assert!(
+            beyond.iter().all(|&octet| octet == SENTINEL),
+            "size {size}: nothing past the payload changes"
+        );
+        assert_eq!(Header::read(written), Some(header));
+    }
+    let mut short = [SENTINEL; LENGTH - 1];
+    assert!(header.write_datagram(&mut short).is_none());
 }
 
 #[test]

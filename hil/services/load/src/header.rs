@@ -1,5 +1,6 @@
 //! The header of a load datagram, big-endian, at the start of its UDP
-//! payload; the rest of the payload is filler.
+//! payload; the rest of the payload is filler, [`FILLER`] in every octet.
+//! The receivers read the header only and never check the filler.
 //!
 //! | Bytes | Field |
 //! | --- | --- |
@@ -12,6 +13,9 @@
 
 /// The header's length; a load datagram is at least this long.
 pub const LENGTH: usize = 28;
+/// The octet in every place of a load datagram behind its header: both
+/// stacks' generators and the host's sender put the same content on air.
+pub const FILLER: u8 = 0x5a;
 const MAGIC: [u8; 4] = *b"OERL";
 const ECHO_REQUEST: u8 = 1;
 const ECHO_REPLY: u8 = 2;
@@ -48,6 +52,16 @@ impl Header {
         for (slot, byte) in header.iter_mut().zip(bytes) {
             *slot = byte;
         }
+        Some(())
+    }
+
+    /// Write the whole datagram into `payload`: the header in its first
+    /// [`LENGTH`] bytes and [`FILLER`] in every octet behind it, so nothing an
+    /// earlier use of the buffer left goes on air; `None` when it is shorter
+    /// than the header.
+    pub fn write_datagram(&self, payload: &mut [u8]) -> Option<()> {
+        self.write(payload)?;
+        payload.get_mut(LENGTH..)?.fill(FILLER);
         Some(())
     }
 
