@@ -6,3 +6,8 @@
 image = "ble-scan-vendor-reference"
 chip = "esp32s31"
 pins = "esp32s31"
+# Files outside this directory its build reads: they take part in its
+# build recipe.
+shared = [
+    "../../../../../chips/esp32s31/facts/partitions/applications.csv",
+]

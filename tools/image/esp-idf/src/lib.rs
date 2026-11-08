@@ -343,9 +343,8 @@ pub fn output(root: &Path, project: &Project) -> PathBuf {
 /// `pins` follows from: the pinned ESP-IDF tree (the IDF
 /// revision and every pinned source) and each file below the project
 /// directory with its contents, and each of its [`Project::shared`] files
-/// with its contents; a shared file that cannot be read is an error. Other
-/// files the project names outside its directory, such as a shared
-/// partition table, are not part of it.
+/// (such as another project's source or the shared partition table) with
+/// its contents; a shared file that cannot be read is an error.
 pub fn recipe(root: &Path, pins: &str, project: &Project) -> Result<String> {
     project_recipe(
         &oer_tools_pins_artifacts::git_pins(root, pins)?,

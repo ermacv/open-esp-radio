@@ -22,9 +22,10 @@ with the HIL partition table (the application in `ota_0`) and the stand's
 | `wifi-udp-rx-fast-peer` | [`../esp32s31-wifi-udp-rx-fast`](../esp32s31-wifi-udp-rx-fast) | `fast`: lwIP's thread counts each datagram through the raw UDP API and frees its buffer at once, without the socket queue, the task switch and the copy (`OER_UDP_RX_FAST`) |
 
 The fast project builds from this directory's `sdkconfig.defaults` and
-sources and names each of them in its `firmware.toml`'s `shared`, so they
-take part in its build recipe: a change to one makes both entries not
-current until they are built again.
+sources and names each of them in its `firmware.toml`'s `shared`, and both
+entries name the HIL partition table there, so they take part in the build
+recipes: a change to one makes every entry that reads it not current until
+it is built again.
 
 ## Build and run
 
