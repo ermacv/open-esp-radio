@@ -57,6 +57,10 @@ fn a_failed_connect_numbers_its_reason_and_the_access_points_code() {
         0x0105_0001
     );
     assert_eq!(
+        code(connect_failed(&DisconnectReason::HeNotGranted)),
+        0x0111_0000
+    );
+    assert_eq!(
         code(connect_failed(&DisconnectReason::Sae(
             SaeFailure::Rejected { status_code: 0x7b }
         ))),

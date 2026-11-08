@@ -493,7 +493,8 @@ pub enum ConnectError {
     /// connecting).
     Refused(CommandRefusal),
     /// The attempt ended with this cause: `NotFound`, `AuthenticationFailed`,
-    /// `AssociationFailed`, `HandshakeFailed` (the four-way handshake failed
+    /// `AssociationFailed`, `HeNotGranted` (an HE20 request the access point
+    /// did not set up), `HandshakeFailed` (the four-way handshake failed
     /// or timed out), a peer's reason code and the others.
     Failed(DisconnectReason),
     /// The station's command queue is full.

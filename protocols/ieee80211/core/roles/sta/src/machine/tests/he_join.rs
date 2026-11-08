@@ -237,9 +237,97 @@ fn an_access_point_that_does_not_grant_he_is_no_link() {
             );
             assert!(world.completed.iter().any(|terminal| matches!(
                 terminal.outcome,
-                StaCommandOutcome::ConnectFailed(StaDisconnectReason::AssociationFailed)
+                StaCommandOutcome::ConnectFailed(StaDisconnectReason::HeNotGranted)
             )));
         });
+    }
+}
+
+/// The station asked for HE20 from the HE access point and its response
+/// carried `elements`: whether it connected, and its peer when it did.
+fn answered(elements: &[&[u8]]) -> (bool, Option<StaAssociatedPeer>, Option<StaCommandOutcome>) {
+    installed(|mint| {
+        let (mut world, _) = associating(
+            mint,
+            StaPhyRequest::PreferHe20 {
+                ht40: false,
+                power: power(),
+            },
+            &access_point_beacon(true),
+        );
+        world.receive(at(31), &response(elements));
+        world.run(at(31));
+        (
+            world.station.is_connected(),
+            world.station.peer().map(|peer| peer.associated),
+            world.completed.last().map(|terminal| terminal.outcome),
+        )
+    })
+}
+
+fn refused_he(
+    connected: bool,
+    peer: Option<StaAssociatedPeer>,
+    outcome: Option<StaCommandOutcome>,
+) {
+    assert!(!connected);
+    assert!(peer.is_none());
+    assert_eq!(
+        outcome,
+        Some(StaCommandOutcome::ConnectFailed(
+            StaDisconnectReason::HeNotGranted
+        ))
+    );
+}
+
+#[test]
+fn he_elements_without_bodies_are_no_he_link() {
+    // The HE Element ID Extensions alone: presence is not an HE setup.
+    let (connected, peer, outcome) = answered(&[&[255, 1, 35], &[255, 1, 36]]);
+    refused_he(connected, peer, outcome);
+}
+
+#[test]
+fn the_response_s_bss_color_is_the_link_s() {
+    // The beacon announced BSS color 27; the association answers with 5.
+    let mut operation = HE_OPERATION;
+    operation[6] = 5;
+    let (connected, peer, _) = answered(&[&HE_CAPABILITY, &operation]);
+    assert!(connected);
+    let peer = peer.unwrap();
+    assert_eq!(peer.phy, PhyMode::He20);
+    assert_eq!(peer.he_bss_color, 5);
+    assert_eq!(peer.he_peer_state.unwrap().bss_color, 5);
+    // Its other HE Operation parameters are the response's too: default PE
+    // 2 and ER-SU permitted where the beacon said 4 and disabled.
+    let mut operation = HE_OPERATION;
+    operation[3] = 0x02;
+    operation[5] = 0x00;
+    let (_, peer, _) = answered(&[&HE_CAPABILITY, &operation]);
+    let state = peer.unwrap().he_peer_state.unwrap();
+    assert_eq!(state.default_packet_extension_duration, 2);
+    assert!(state.extended_range_single_user_permitted());
+}
+
+#[test]
+fn a_response_that_no_longer_admits_he20_is_refused() {
+    // HE-MCS 0..7 only: not the HE20 the scan admitted.
+    let mut capability = HE_CAPABILITY;
+    capability[20..24].copy_from_slice(&[0xfc, 0xff, 0xfc, 0xff]);
+    let (connected, peer, outcome) = answered(&[&capability, &HE_OPERATION]);
+    refused_he(connected, peer, outcome);
+}
+
+#[test]
+fn malformed_or_repeated_he_elements_are_refused() {
+    let short_operation: &[u8] = &[255, 4, 36, 0, 0, 0];
+    for elements in [
+        &[&HE_CAPABILITY[..], short_operation][..],
+        &[&HE_CAPABILITY[..], &HE_OPERATION[..], &HE_OPERATION[..]][..],
+        &[&HE_CAPABILITY[..], &HE_CAPABILITY[..], &HE_OPERATION[..]][..],
+    ] {
+        let (connected, peer, outcome) = answered(elements);
+        refused_he(connected, peer, outcome);
     }
 }
 

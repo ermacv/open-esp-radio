@@ -27,6 +27,9 @@ pub enum DisconnectReason {
     Sae(SaeFailure),
     /// The access point refused or never answered the association.
     AssociationFailed,
+    /// The access point answered the station's HE20 request without setting
+    /// up the HE association; the station kept no other link.
+    HeNotGranted,
     /// No access point of the network answered the scan; `partial` when the
     /// scan ended early after cancelled absences.
     NotFound {
@@ -298,6 +301,7 @@ fn disconnect(reason: StaDisconnectReason) -> DisconnectReason {
         R::AuthenticationFailed => W::AuthenticationFailed,
         R::Sae(failure) => W::Sae(sae(failure)),
         R::AssociationFailed => W::AssociationFailed,
+        R::HeNotGranted => W::HeNotGranted,
         R::DeadlineOverflow => W::DeadlineOverflow,
         R::Peer { reason_code } => W::Peer { reason_code },
         R::Encode => W::Encode,

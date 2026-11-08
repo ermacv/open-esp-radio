@@ -504,7 +504,7 @@ fn replace<const N: usize>(
 
 /// Copy an element's value to the front of `buffer`: its length, or `None`
 /// when it does not fit and `buffer` is unchanged.
-fn store_value<const N: usize>(
+pub(crate) fn store_value<const N: usize>(
     buffer: &mut [u8; N],
     value: &[u8],
 ) -> Option<oer_portable_wire::PrefixLength<N>> {

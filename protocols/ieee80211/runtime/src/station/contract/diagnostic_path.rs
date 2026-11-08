@@ -57,6 +57,7 @@ impl DiagnosticPath for DisconnectReason {
                 failure.push_path(path);
             }
             Self::AssociationFailed => path.name("AssociationFailed"),
+            Self::HeNotGranted => path.name("HeNotGranted"),
             Self::NotFound { partial } => {
                 path.name("NotFound");
                 path.word(u32::from(*partial));

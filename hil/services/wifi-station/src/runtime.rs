@@ -95,6 +95,7 @@ pub fn connect_failed(reason: &DisconnectReason) -> StationError {
         DisconnectReason::NoAdmittedAccessCategory => (14, 0),
         DisconnectReason::InvalidEapol(_) => (15, 0),
         DisconnectReason::RetainedSecurityIes(_) => (16, 0),
+        DisconnectReason::HeNotGranted => (17, 0),
     };
     StationError::failed(class::CONNECT_FAILED, kind, detail)
 }

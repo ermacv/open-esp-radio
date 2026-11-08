@@ -990,6 +990,11 @@ pub enum StaDisconnectReason {
     Sae(StaSaeFailure),
     /// The access point refused or never answered the association.
     AssociationFailed,
+    /// The access point answered an HE20 request without setting up the HE
+    /// association: its Association Response lacks, repeats or malforms an
+    /// HE element, or no longer admits HE20. The station keeps no other
+    /// link in its place.
+    HeNotGranted,
     /// The complete monotonic deadline of an operation cannot be represented.
     DeadlineOverflow,
     /// The access point deauthenticated or disassociated the station.
@@ -5534,7 +5539,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                                         };
                                         Change::Keep
                                     }
-                                    Err(_) => leave_unkeyed(StaDisconnectReason::AssociationFailed),
+                                    Err(error) => leave_unkeyed(if error.he() {
+                                        StaDisconnectReason::HeNotGranted
+                                    } else {
+                                        StaDisconnectReason::AssociationFailed
+                                    }),
                                 }
                             }
                             StaAssociationEvent::Failed { failure, .. } => {
