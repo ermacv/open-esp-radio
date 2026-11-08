@@ -27,6 +27,10 @@ fn an_association_keeps_the_peer_values_it_was_made_of() {
     assert_eq!(association.packet_padding_eight_us(), 2);
     assert_eq!(association.default_packet_extension(), 4);
     assert_eq!(association.max_co_hosted_bssid_indicator(), Some(3));
+    assert_eq!(
+        association.color().get(),
+        (BssColor::new(42).unwrap(), true, true)
+    );
     assert!(association.extended_range_single_user_disabled());
 }
 
@@ -75,6 +79,12 @@ fn values_outside_their_fields_make_no_association() {
     assert_eq!(
         He20Association::new(&extended, 1, 0),
         Err(He20AssociationError::DefaultPacketExtension(8))
+    );
+    let mut colored = peer();
+    colored.bss_color = 64;
+    assert_eq!(
+        He20Association::new(&colored, 1, 0),
+        Err(He20AssociationError::BssColor(64))
     );
     let mut hosted = peer();
     hosted.max_co_hosted_bssid_indicator = Some(9);

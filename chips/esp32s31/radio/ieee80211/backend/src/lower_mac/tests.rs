@@ -441,6 +441,13 @@ impl crate::lower_mac::StaHeHardware for Hardware {
         &mut self,
         association: oer_chips_esp32s31_hal::types::MacHe20Association,
     ) {
+        // The association writes the response's color.
+        let peer = association.peer;
+        self.he_bss = Some((
+            peer.bss_color.get(),
+            peer.bss_color_enabled,
+            peer.partial_bss_color,
+        ));
         self.he_association = Some(association);
     }
     fn clear_he20_association(&mut self) {
@@ -2954,15 +2961,20 @@ fn the_station_s_he_bss_color_is_installed() {
     });
 }
 
-/// An HE20 association: default PE 4, 16 us padding, ER-SU disabled, no
-/// co-hosted BSS, AID 42 and MMSS code 5.
+/// An HE20 association whose response names color 27: default PE 4, 16 us
+/// padding, ER-SU disabled, no co-hosted BSS, AID 42 and MMSS code 5.
 fn he20_association() -> oer_protocols_ieee80211_contracts_port::He20Association {
+    he20_association_colored(27)
+}
+
+/// [`he20_association`] whose response names `color`.
+fn he20_association_colored(color: u8) -> oer_protocols_ieee80211_contracts_port::He20Association {
     oer_protocols_ieee80211_contracts_port::He20Association::new(
         &oer_protocols_ieee80211_wire::he::He20PeerState {
             capability_prefix: [0; 24],
             packet_padding_eight_us: 2,
             default_packet_extension_duration: 4,
-            bss_color: 27,
+            bss_color: color,
             bss_color_enabled: true,
             partial_bss_color: false,
             basic_mcs_nss_map: 0xfffc,
@@ -3021,6 +3033,30 @@ fn an_he_connection_and_its_association_program_the_mac_and_color_he_transmissio
             .unwrap();
         // A disabled BSS color is no transmit color.
         assert_eq!(core.tx.policy().he_bss_color(), 0);
+    });
+}
+
+#[test]
+fn the_response_s_color_replaces_the_scan_s_before_the_link_s_data() {
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    // The owner's counterexample: the scan heard color 27, the Association
+    // Response names 5. The MAC and the HE transmissions take 5.
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        core.set_checked_he(&mut hardware, StationHe::Bss(he_bss(true)))
+            .unwrap();
+        assert_eq!(core.tx.policy().he_bss_color(), 27);
+        core.set_checked_he(&mut hardware, StationHe::He20(he20_association_colored(5)))
+            .unwrap();
+        assert_eq!(hardware.he_bss, Some((5, true, false)));
+        assert_eq!(
+            hardware
+                .he_association
+                .map(|association| association.peer.bss_color.get()),
+            Some(5)
+        );
+        assert_eq!(core.tx.policy().he_bss_color(), 5);
     });
 }
 

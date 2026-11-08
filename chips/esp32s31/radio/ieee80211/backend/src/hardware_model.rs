@@ -831,7 +831,16 @@ impl crate::lower_mac::StaHeHardware for ModelRegisters {
         &mut self,
         association: oer_chips_esp32s31_hal::types::MacHe20Association,
     ) {
-        self.atoms.with(|state| state.he = Some(association));
+        self.atoms.with(|state| {
+            // The association writes the response's color.
+            let peer = association.peer;
+            state.he_bss = Some((
+                peer.bss_color,
+                peer.bss_color_enabled,
+                peer.partial_bss_color,
+            ));
+            state.he = Some(association);
+        });
     }
     fn clear_he20_association(&mut self) {
         self.atoms.with(|state| {

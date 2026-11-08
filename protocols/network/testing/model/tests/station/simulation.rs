@@ -196,7 +196,7 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     ht40: [0; 28],
     he20_ht: [0; 28],
     he20: [0; 24],
-    he20_extended: [0; 14],
+    he20_extended: None,
     wmm: [0; 9],
 };
 
@@ -240,6 +240,7 @@ fn profile(protected: bool, pmk: [u8; 32]) -> StaProfile {
         } else {
             StaSecurity::Open
         },
+        prefer_he20: false,
     }
 }
 

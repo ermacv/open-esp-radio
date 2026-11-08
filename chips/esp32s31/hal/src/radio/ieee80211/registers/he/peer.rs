@@ -18,6 +18,11 @@ use crate::radio::ieee80211::registers::{
 pub struct MacHe20PeerConfig {
     pub packet_padding_duration: MacHePacketPaddingDuration,
     pub default_packet_extension_duration: MacHeDefaultPacketExtensionDuration,
+    /// The Association Response's BSS color, whether it is enabled and
+    /// whether it is partial.
+    pub bss_color: MacHeBssColor,
+    pub bss_color_enabled: bool,
+    pub partial_bss_color: bool,
     /// The HE Operation's Max Co-Hosted BSSID Indicator of a co-hosted BSS;
     /// `None` when it announces none.
     pub max_co_hosted_bssid_indicator: Option<u8>,
@@ -172,13 +177,19 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// Install the interface-zero HE20 association after its Association
     /// Response, in the vendor's order: the capabilities' packet padding
-    /// (`ieee80211_parse_hecap`), the operation's default PE, co-hosted BSS,
-    /// HE RTS threshold and ER-SU (`ieee80211_parse_heopr` +0xc4..0x27a; its
-    /// BSS color is written only to a connected station), then the node's
-    /// setup (`libnet80211.a[wl_cnx.o]::ic_set_sta` +0x13c..0x170: MMSS and
-    /// AID, packet padding, BSR initialization). The BSS's color and HE
-    /// BSSID matching are [`Self::connect_he20_bss`]'s, before
-    /// authentication.
+    /// (`ieee80211_parse_hecap`), the operation's BSS color, default PE,
+    /// co-hosted BSS, HE RTS threshold and ER-SU (`ieee80211_parse_heopr`
+    /// +0x3c..0x27a), then the node's setup
+    /// (`libnet80211.a[wl_cnx.o]::ic_set_sta` +0x13c..0x170: MMSS and AID,
+    /// packet padding, BSR initialization). HE BSSID matching is
+    /// [`Self::connect_he20_bss`]'s, before authentication.
+    ///
+    /// The color is the response's, always: `ieee80211_parse_heopr`
+    /// +0x3c..0x62 writes it (`hal_he_set_bss_color(0, !b7, b5:0, b6)`)
+    /// only for a connected station whose color byte is not zero but for
+    /// bit 6, so the vendor keeps the scan's color written at the connect
+    /// when the response names another; this station's association takes
+    /// the response's (its peer state's) before any of its data.
     ///
     /// The HE RTS threshold is always disabled: the transmitter protects
     /// every individually addressed HE PPDU while the access point
@@ -195,6 +206,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             minimum_mpdu_start_spacing,
         } = association;
         self.set_he_packet_padding(peer.packet_padding_duration);
+        self.set_interface_zero_he_bss_color(
+            peer.bss_color_enabled,
+            peer.bss_color.get(),
+            peer.partial_bss_color,
+        );
         // SOURCE: complete pinned `hal_he_set_default_pe` (size `0x14`):
         // one RMW of bits 2:0 of `0x2010_4c80`.
         self.mac

@@ -23,8 +23,10 @@ pub enum StationHe {
     /// color bitmap cleared and the BSS color the scan heard, which the
     /// station's HE transmissions carry.
     Bss(HeBssColor),
-    /// After the HE BSS's Association Response: its HE parameters, the AID
-    /// and the minimum MPDU start spacing.
+    /// After the HE BSS's Association Response: its HE parameters (its BSS
+    /// color included, which replaces the scan's for the MAC and the
+    /// station's HE transmissions), the AID and the minimum MPDU start
+    /// spacing.
     He20(He20Association),
 }
 
@@ -71,6 +73,7 @@ impl HeBssColor {
 /// lies within its field's range.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct He20Association {
+    color: HeBssColor,
     association_id: u16,
     minimum_mpdu_start_spacing: u8,
     packet_padding_eight_us: u8,
@@ -93,6 +96,8 @@ pub enum He20AssociationError {
     /// The default PE duration code is above 7 (IEEE Std 802.11ax-2021,
     /// 9.4.2.249, clause number as Linux cites it).
     DefaultPacketExtension(u8),
+    /// The BSS color is above 63.
+    BssColor(u8),
     /// The Max Co-Hosted BSSID Indicator is above 8: a co-hosted set of
     /// more than 2^8 BSSIDs, whose mask the MAC's eight-bit field cannot
     /// hold.
@@ -141,7 +146,15 @@ impl He20Association {
         {
             return Err(He20AssociationError::MaxCoHostedBssidIndicator(indicator));
         }
+        let Some(color) = BssColor::new(peer.bss_color) else {
+            return Err(He20AssociationError::BssColor(peer.bss_color));
+        };
         Ok(Self {
+            color: HeBssColor {
+                color,
+                enabled: peer.bss_color_enabled,
+                partial: peer.partial_bss_color,
+            },
             association_id,
             minimum_mpdu_start_spacing,
             packet_padding_eight_us: peer.packet_padding_eight_us,
@@ -149,6 +162,11 @@ impl He20Association {
             max_co_hosted_bssid_indicator: peer.max_co_hosted_bssid_indicator,
             extended_range_single_user_disabled: peer.extended_range_single_user_disabled,
         })
+    }
+
+    /// The BSS color of the Association Response's HE Operation.
+    pub const fn color(&self) -> HeBssColor {
+        self.color
     }
 
     /// The station's AID, 1 to 2007.

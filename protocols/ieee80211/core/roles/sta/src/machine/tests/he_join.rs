@@ -604,3 +604,27 @@ fn an_he_response_with_an_aid_outside_its_field_is_no_link() {
         )));
     });
 }
+
+#[test]
+fn the_association_carries_the_response_s_color_over_the_scan_s() {
+    use oer_protocols_ieee80211_contracts_port::{BssColor, StationHe};
+    // The owner's counterexample: the beacon names color 27, the
+    // Association Response 5. The BSS goes with the scan's 27 before
+    // authentication; the association carries the response's 5.
+    installed(|mint| {
+        let (mut world, _) = associating(mint, prefer(), &access_point_beacon(true));
+        let mut operation = HE_OPERATION;
+        operation[6] = 5;
+        world.receive(at(31), &response(&[&HE_CAPABILITY, &operation]));
+        let settings = he_settings(&world.take());
+        let [StationHe::Bss(scanned), StationHe::He20(association)] = settings[..] else {
+            panic!("the BSS and the association: {settings:?}");
+        };
+        assert_eq!(scanned.get().0, BssColor::new(27).unwrap());
+        assert_eq!(
+            association.color().get(),
+            (BssColor::new(5).unwrap(), true, false)
+        );
+        assert_eq!(world.station.peer().unwrap().associated.he_bss_color, 5);
+    });
+}

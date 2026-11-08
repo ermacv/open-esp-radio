@@ -461,14 +461,14 @@ pub struct HeAssociationRange;
 
 /// The MAC's form of `association`.
 ///
-/// The contract's AID (1..=2007), MMSS code (0..=7), padding (0..=16 us)
-/// and default PE code (0..=7) lie within the MAC's fields, which the
+/// The contract's AID (1..=2007), MMSS code (0..=7), padding (0..=16 us),
+/// default PE code (0..=7) and color (0..=63) lie within the MAC's fields, which the
 /// inline check below proves for each maximum.
 pub fn mac_he20_association(
     association: &oer_protocols_ieee80211_contracts_port::He20Association,
 ) -> Result<MacHe20Association, HeAssociationRange> {
     use oer_chips_esp32s31_hal::types::{
-        MacAssociationId, MacHe20PeerConfig, MacHeDefaultPacketExtensionDuration,
+        MacAssociationId, MacHe20PeerConfig, MacHeBssColor, MacHeDefaultPacketExtensionDuration,
         MacHePacketPaddingDuration, MacMinimumMpduStartSpacing,
     };
     use oer_protocols_ieee80211_contracts_port::He20Association;
@@ -481,10 +481,12 @@ pub fn mac_he20_association(
                 > MacHePacketPaddingDuration::MAX
             || (He20Association::MAX_DEFAULT_PACKET_EXTENSION as u32)
                 > MacHeDefaultPacketExtensionDuration::MAX
+            || MacHeBssColor::MAX < 63
         {
             panic!("the HE association's ranges lie within the MAC's fields");
         }
     }
+    let (color, color_enabled, partial_color) = association.color().get();
     Ok(MacHe20Association {
         peer: MacHe20PeerConfig {
             packet_padding_duration: MacHePacketPaddingDuration::new(
@@ -495,6 +497,9 @@ pub fn mac_he20_association(
                 association.default_packet_extension(),
             ))
             .ok_or(HeAssociationRange)?,
+            bss_color: MacHeBssColor::new(u32::from(color.get())).ok_or(HeAssociationRange)?,
+            bss_color_enabled: color_enabled,
+            partial_bss_color: partial_color,
             max_co_hosted_bssid_indicator: association.max_co_hosted_bssid_indicator(),
             extended_range_single_user_disabled: association.extended_range_single_user_disabled(),
         },
@@ -1825,6 +1830,10 @@ where
             StationHe::He20(association) => {
                 let mac = mac_he20_association(&association)?;
                 hardware.install_he20_association(mac);
+                // The response's color, before any of the link's data.
+                self.tx
+                    .policy_mut()
+                    .install_he_bss_color(association.color().transmit_color().get());
             }
         }
         Ok(())

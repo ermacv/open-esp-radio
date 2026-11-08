@@ -11,6 +11,9 @@ fn peer(extended_range_single_user_disabled: bool) -> MacHe20PeerConfig {
         packet_padding_duration: MacHePacketPaddingDuration::new(16).expect("in range"),
         default_packet_extension_duration: MacHeDefaultPacketExtensionDuration::new(4)
             .expect("in range"),
+        bss_color: color(),
+        bss_color_enabled: true,
+        partial_bss_color: false,
         max_co_hosted_bssid_indicator: None,
         extended_range_single_user_disabled,
     }
@@ -124,36 +127,29 @@ fn a_disabled_color_is_published_as_zero() {
 }
 
 #[test]
-fn the_association_leaves_the_connection_s_color_and_bssid_matching() {
-    // The color is the connection's, before authentication; the
-    // association after the response writes neither it nor HE BSSID
-    // matching (`ieee80211_parse_heopr` writes the color of a connected
-    // station only).
-    let mut connected = HostWords::filled(0);
-    connected
-        .owners()
+fn the_association_writes_the_response_s_color_over_the_scan_s() {
+    // The owner's counterexample: the connection wrote the scan's color 27;
+    // the response names 5, disabled-partial clear. The association's color
+    // is the response's; HE BSSID matching stays the connection's.
+    let mut words = HostWords::filled(0);
+    let mut owners = words.owners();
+    owners
         .registers
-        .connect_he20_bss(color(), true, true);
-    let mut associated = connected.clone();
-    associated
-        .owners()
+        .connect_he20_bss(MacHeBssColor::new(27).unwrap(), true, true);
+    let mut response = peer(false);
+    response.bss_color = MacHeBssColor::new(5).unwrap();
+    response.partial_bss_color = false;
+    owners
         .registers
-        .install_he20_association(association(peer(false)));
-    let multi = |words: &mut HostWords| {
-        let owners = words.owners();
-        let multi = owners
-            .registers
-            .mac
-            .wifi_mac_he_init_suffix
-            .read_multi_bssid_control();
-        (
-            multi.he_bssid_enable(),
-            multi.bss_color().get(),
-            multi.bss_color_enable(),
-            multi.partial_bss_color_enable(),
-        )
-    };
-    assert_eq!(multi(&mut connected), multi(&mut associated));
+        .install_he20_association(association(response));
+    let multi = owners
+        .registers
+        .mac
+        .wifi_mac_he_init_suffix
+        .read_multi_bssid_control();
+    assert_eq!(multi.bss_color().get(), 5);
+    assert!(multi.bss_color_enable() && !multi.partial_bss_color_enable());
+    assert!(multi.he_bssid_enable());
 }
 
 #[test]
