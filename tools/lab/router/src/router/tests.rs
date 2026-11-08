@@ -492,6 +492,55 @@ fn station_wpa2_refuses_incorrect_committed_security_width_and_rekey() {
 }
 
 #[test]
+fn an_he20_station_profile_turns_he_on_and_verifies_it() {
+    assert_eq!(ChannelWidth::He20.htmode(6), "HE20");
+    let profile = station_wpa2_profile().width(ChannelWidth::He20);
+    let script = profile.apply_script().unwrap();
+    assert!(
+        script.contains("'wireless.radio9.htmode=HE20'"),
+        "{}",
+        script.as_str()
+    );
+    assert!(
+        script.contains("'wireless.radio9.ieee80211ax=1'"),
+        "{}",
+        script.as_str()
+    );
+    assert!(
+        profile.describe().contains("HE20"),
+        "{}",
+        profile.describe()
+    );
+    let he = show_station_wpa2()
+        .replace("htmode='HT20'", "htmode='HE20'")
+        .replace("ieee80211ax='0'", "ieee80211ax='1'");
+    let wireless = Wireless::parse(&he, SSID).unwrap();
+    assert!(wireless.check_after(&profile).is_ok());
+    // HE off, or the HT20 htmode, is not the HE20 profile; HE on is not
+    // the HT20 one.
+    for broken in [
+        he.replace("ieee80211ax='1'", "ieee80211ax='0'"),
+        he.replace("htmode='HE20'", "htmode='HT20'"),
+    ] {
+        assert!(
+            Wireless::parse(&broken, SSID)
+                .unwrap()
+                .check_after(&profile)
+                .is_err()
+        );
+    }
+    assert!(wireless.check_after(&station_wpa2_profile()).is_err());
+}
+
+#[test]
+fn an_he20_ap_is_20_mhz_wide() {
+    let narrow = parse_iw_info(&iw(6, "20 MHz", SSID), SSID).unwrap();
+    assert_eq!(narrow.mismatch(6, ChannelWidth::He20), None);
+    let wide = parse_iw_info(&iw40(13, 2462), SSID).unwrap();
+    assert!(wide.mismatch(13, ChannelWidth::He20).is_some());
+}
+
+#[test]
 fn station_wpa2_remote_failures_never_repeat_the_key_in_errors_or_debug() {
     for prefix in [
         CHANGES_PREFIX,

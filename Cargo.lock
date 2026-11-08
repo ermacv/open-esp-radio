@@ -2884,15 +2884,28 @@ name = "oer-protocols-network-testing-model"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
+ "heapless",
+ "oer-chips-family-radio-ieee80211-policy",
+ "oer-portable-events",
  "oer-portable-memory",
  "oer-portable-time",
  "oer-portable-time-virtual",
+ "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-core-arbiter",
+ "oer-protocols-ieee80211-core-roles-sta",
+ "oer-protocols-ieee80211-core-security-cipher",
+ "oer-protocols-ieee80211-core-security-rsn",
  "oer-protocols-ieee80211-core-upper-mac",
  "oer-protocols-ieee80211-runtime",
+ "oer-protocols-ieee80211-testing-model",
+ "oer-protocols-ieee80211-wire",
  "oer-protocols-network-core",
  "oer-protocols-network-port",
  "oer-protocols-network-runtime",
  "oer-protocols-network-wire",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
 ]
 
 [[package]]

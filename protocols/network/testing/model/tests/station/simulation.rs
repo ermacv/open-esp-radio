@@ -1,0 +1,1098 @@
+//! One host composition of the station and the network, as the
+//! `hil-wifi-network` image composes them (`chips/esp32s31/app` over the
+//! S31 station facade), minus the hardware: the real station lifecycle,
+//! station and arbiter cores, the datapath actor, the station's neutral
+//! network end, the network core, its service and a channel socket, over
+//! the model's data port (`oer-protocols-ieee80211-testing-model`), under
+//! one virtual clock. A simulated access point ([`access_point`]) answers on
+//! the model's air, with a router that leases the address by DHCP and a
+//! peer host behind it ([`wired`]).
+//!
+//! What stands in for the product: the model's port for the S31 backend,
+//! the software AES for the accelerator, a one-channel scan of the test
+//! domain, no transmit Block Ack, and the facade's network stop and the
+//! application's transmit memory ([`composition`]) without their statics.
+//!
+//! A case is a script over [`World`]: the application's control, its
+//! socket and the address watch, the access point and the clock. Tasks run
+//! only once woken; with nothing woken the script's waits look again, and
+//! then time moves to the next deadline. After the script, the harness
+//! stops the station gracefully and runs every task to its end, then
+//! accounts for the network's blocks and transmit memory ([`Report`]).
+
+pub mod access_point;
+pub mod composition;
+pub mod wired;
+
+use std::cell::{Cell, RefCell, RefMut};
+use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::task::{Context, Poll, Wake, Waker};
+
+use embassy_futures::select::{Either, select};
+use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
+use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
+use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_contracts_port::{RegulatedChannel, SupportedChannel};
+use oer_protocols_ieee80211_core_arbiter::ArbiterPolicy;
+use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame as StationFrame;
+use oer_protocols_ieee80211_core_roles_sta::machine::{
+    GroupCapacity, StaCallbacks, StaConfig, StaProfile, StaSecurity, Station, StationResources,
+};
+use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_core_security_rsn::Pmk;
+use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep;
+use oer_protocols_ieee80211_runtime::datapath::{
+    Actor, ActorEnd, ActorEpochPath, ActorLink, FromActor, GroupPending, LifecycleEnds,
+    NetworkEnds, PARCELS, Parcel, Returned, ToActor,
+};
+use oer_protocols_ieee80211_runtime::lifecycle::{
+    ActorEnds, Lifecycle, LifecycleArbiter, LifecycleEnd, LifecycleIo, LifecycleTxContext,
+};
+use oer_protocols_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
+use oer_protocols_ieee80211_runtime::station::{
+    self as runtime, Control, DeviceTransmit, OperationEnd, Outgoing, RX_COPIED_DEPTH,
+    Received as StationReceived, ReconnectPolicy, RxBlockAckStorage, ServiceCommand, ServiceOutput,
+    State, StopPolicy,
+};
+use oer_protocols_ieee80211_testing_model::{
+    MODEL_PUBLICATION_BOUND, MODEL_TICKETS, ModelAir, ModelCaps24, ModelCommands, ModelInstall,
+    ModelLentRx, ModelPort, ModelPortFault, ModelResources,
+};
+use oer_protocols_ieee80211_wire::address::{IndividualAddress, OwnAddress};
+use oer_protocols_ieee80211_wire::station::AssociationCapabilities;
+use oer_protocols_network_core::{
+    Configuration, Datagram, Group, Interface, NetworkOwner, Remote, claim,
+};
+use oer_protocols_network_port::{
+    EthernetFrameView, FramePort, FrameSource, LinkSnapshot, NetTransmit, TransmitRefused,
+    Unpublished,
+};
+use oer_protocols_network_runtime::{
+    ConfigurationWatch, DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, PortRefusal,
+    Sent, Service, Socket, SocketLanes, StopLane,
+};
+use oer_protocols_network_wire::ip::Dscp;
+use oer_protocols_radio_port::{Installations, LocalId, with_local_slot};
+
+use access_point::{AccessPoint, ApConfig, PMK, SSID};
+use composition::{
+    Buffers, Counts, FreeMemory, Memory, NetworkStopState, Observed, StationPort, Supply,
+    WrittenFrame,
+};
+use wired::{DhcpServer, Wired};
+
+/// The station's own address.
+pub const STATION: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
+/// The address of the model's access point interface beside the station,
+/// which this composition never starts.
+const LOCAL_ACCESS_POINT: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x57];
+/// The port the application's socket holds.
+pub const PORT: u16 = 5001;
+
+/// The lifecycle's and the actor's queues, as the lifecycle's own tests
+/// size them on the model.
+const TO: usize = 24;
+const FROM: usize = 64;
+const RETURNS: usize = 40;
+/// The facade's network queues and command depth.
+pub const TX_DEPTH: usize = 16;
+pub const RX_DEPTH: usize = 32;
+const COMMANDS: usize = 2;
+/// The facade's group key slots.
+const GROUPS: usize = 1;
+
+/// The application's network geometry (`chips/esp32s31/app/src/wifi/network.rs`),
+/// with the channel socket alone.
+pub const BLOCK: usize = 1472;
+pub const BLOCKS: usize = 64;
+const SOCKETS: usize = 1;
+pub const CREDITS: usize = 32;
+const RECEIVED: usize = 8;
+pub const LANE: usize = 32;
+pub const DEPTH: usize = 32;
+const NEIGHBORS: usize = 4;
+const MTU: u16 = 1500;
+/// The network's transmit memory: this composition's choice, fewer buffers
+/// than the S31 pool gives the network.
+pub const NETWORK_BUFFERS: usize = 32;
+
+/// Executor passes before a run counts as spinning.
+const PASSES: usize = 5_000_000;
+
+type P<'s> = StationPort<'s>;
+type Issuer<'s> = ModelCommands<'s, LocalId<'s>, ModelCaps24, composition::Contexts>;
+type TxContexts<'s> = [Option<LifecycleTxContext<'s, P<'s>>>; MODEL_TICKETS];
+type StationLifecycle<'s> =
+    Lifecycle<'s, P<'s>, Callbacks, Issuer<'s>, TxContexts<'s>, GROUPS, Observed>;
+pub type StationControl<'c> = Control<'c, ModelCaps24, COMMANDS>;
+type Device<'c> = runtime::Device<'c, ModelLentRx, RX_DEPTH>;
+type StationTransmit<'c> = DeviceTransmit<'c, WrittenFrame, Supply, TX_DEPTH>;
+type Inner<'c> = DevicePort<Device<'c>, Transmit<'c>, Buffers>;
+type NetService<'c, T> = Service<
+    'static,
+    'static,
+    T,
+    BLOCK,
+    SOCKETS,
+    CREDITS,
+    RECEIVED,
+    NEIGHBORS,
+    BLOCKS,
+    DEPTH,
+    LANE,
+    Held<Inner<'c>>,
+    Direct,
+>;
+type NetEnded<'c, T> = Ended<
+    'static,
+    'static,
+    T,
+    BLOCK,
+    SOCKETS,
+    CREDITS,
+    BLOCKS,
+    DEPTH,
+    LANE,
+    Held<Inner<'c>>,
+    Direct,
+    core::convert::Infallible,
+>;
+/// The application's socket.
+pub type Sock<T> = Socket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS>;
+/// A datagram the application received.
+pub type NetDatagram<T> = Datagram<'static, T, BLOCK>;
+
+/// The station's callbacks: nonces from a counter, the software AES.
+struct Callbacks {
+    aes: SoftwareAes128,
+    nonces: u8,
+}
+
+impl StaCallbacks for Callbacks {
+    type AesEngine = SoftwareAes128;
+    fn nonce(&mut self) -> [u8; 32] {
+        self.nonces = self.nonces.wrapping_add(1);
+        [self.nonces.max(1); 32]
+    }
+    fn aes_engine(&mut self) -> &mut SoftwareAes128 {
+        &mut self.aes
+    }
+    fn he_packet_padding(
+        &self,
+        _: &[u8],
+    ) -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding {
+        oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding::None
+    }
+}
+
+/// A legacy station: no HT, HE or WMM advertisement.
+static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
+    ht20: [0; 28],
+    ht40: [0; 28],
+    he20_ht: [0; 28],
+    he20: [0; 24],
+    he20_extended: [0; 14],
+    wmm: [0; 9],
+};
+
+/// The station's configuration: the facade's values on the test domain's
+/// channel 6.
+fn station_config() -> StaConfig<ModelCaps24, Callbacks> {
+    let channel = SupportedChannel::new(
+        oer_protocols_radio_regulatory::TEST_DOMAIN
+            .permit(RegulatedChannel::from(access_point::channel()))
+            .expect("channel 6 is permitted"),
+    )
+    .expect("the model supports channel 6");
+    StaConfig {
+        address: OwnAddress::new(IndividualAddress::new(STATION).expect("an individual address")),
+        channels: heapless::Vec::from_slice(&[channel]).expect("one channel"),
+        wide_channels: heapless::Vec::new(),
+        dwell: Duration::from_millis(250),
+        skipped_absences: 3,
+        access_point_margin_db: 6,
+        supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
+        association: &CAPABILITIES,
+        listen_interval:
+            oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
+        phy: oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::Legacy,
+        tx_block_ack: None,
+        callbacks: Callbacks {
+            aes: SoftwareAes128,
+            nonces: 0,
+        },
+    }
+}
+
+/// The network a case's connect names.
+fn profile(protected: bool, pmk: [u8; 32]) -> StaProfile {
+    StaProfile {
+        ssid: heapless::Vec::from_slice(SSID).expect("an SSID"),
+        security: if protected {
+            StaSecurity::Wpa2Personal {
+                pmk: Pmk::from_bytes(pmk),
+            }
+        } else {
+            StaSecurity::Open
+        },
+    }
+}
+
+/// What the application heard of the station.
+#[derive(Default)]
+pub struct Heard {
+    pub notices: RefCell<Vec<(Instant, Notice)>>,
+    pub refused_transmissions: Cell<usize>,
+}
+
+impl Heard {
+    /// How many Connected notices came.
+    pub fn connections(&self) -> usize {
+        self.notices
+            .borrow()
+            .iter()
+            .filter(|(_, notice)| matches!(notice, Notice::Connected { .. }))
+            .count()
+    }
+
+    pub fn disconnections(&self) -> usize {
+        self.notices
+            .borrow()
+            .iter()
+            .filter(|(_, notice)| matches!(notice, Notice::Disconnected(_)))
+            .count()
+    }
+}
+
+/// A case's setup.
+pub struct Setup {
+    pub access_point: ApConfig,
+    pub dhcp: DhcpServer,
+    /// The station's reconnect interval; `None` keeps the facade's default,
+    /// disabled.
+    pub reconnect: Option<Duration>,
+    /// The DHCP client's seed.
+    pub seed: u64,
+    /// The PMK the station's profile names: the network's by default.
+    pub pmk: [u8; 32],
+}
+
+impl Default for Setup {
+    fn default() -> Self {
+        Self {
+            access_point: ApConfig::default(),
+            dhcp: DhcpServer::default(),
+            reconnect: None,
+            seed: 0x5eed,
+            pmk: PMK,
+        }
+    }
+}
+
+/// A case's script.
+pub type Script<'a> = Pin<Box<dyn Future<Output = ()> + 'a>>;
+
+/// How a run ended, and what came home.
+pub struct Report {
+    pub lifecycle: Option<LifecycleEnd<ModelPortFault>>,
+    pub actor: Option<ActorEnd<ModelPortFault>>,
+    /// Why the network's service ended.
+    pub network: Option<EndCause>,
+    /// The network's blocks in its pool after the run.
+    pub blocks_free: usize,
+    /// The network's transmit memory free after the run, once the harness
+    /// took back what the station returned, of its total.
+    pub memory_free: usize,
+    /// The network's memory left in the station's transmit queue: MSDUs the
+    /// station never took.
+    pub memory_queued: usize,
+    pub memory: usize,
+    pub counts: Counts,
+    pub heard: Rc<Heard>,
+    pub access_point: Rc<RefCell<AccessPoint>>,
+}
+
+impl Report {
+    /// The station stopped as the application asked, and every owner the
+    /// network and the station hold came home.
+    pub fn assert_stopped_with_every_owner(&self) {
+        self.assert_stopped();
+        self.assert_transmit_memory_home();
+    }
+
+    /// The station stopped as the application asked: the lifecycle ended,
+    /// the actor retired, the network's service stopped with every block in
+    /// its pool, and no station token was lost.
+    pub fn assert_stopped(&self) {
+        assert!(
+            matches!(self.lifecycle, Some(LifecycleEnd::Stopped)),
+            "the lifecycle stopped: {:?}",
+            self.lifecycle
+        );
+        assert!(
+            matches!(self.actor, Some(ActorEnd::Retired)),
+            "the actor retired: {:?}",
+            self.actor
+        );
+        assert_eq!(self.network, Some(EndCause::Stopped), "the network stopped");
+        assert_eq!(self.blocks_free, BLOCKS, "every block is in the pool");
+        assert_eq!(self.counts.tokens_lost, 0, "no station token is lost");
+    }
+
+    /// Every transmit buffer of the network is free again.
+    pub fn assert_transmit_memory_home(&self) {
+        assert_eq!(
+            (self.memory_free, self.memory_queued),
+            (self.memory, 0),
+            "every transmit buffer is free, none left in the station's queue"
+        );
+    }
+}
+
+/// A wake that marks its task to poll.
+#[derive(Default)]
+struct Flag(AtomicBool);
+
+impl Wake for Flag {
+    fn wake(self: Arc<Self>) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+/// One task of the executor.
+struct Task<'t> {
+    name: &'static str,
+    future: Pin<&'t mut dyn Future<Output = ()>>,
+    flag: Arc<Flag>,
+    waker: Waker,
+    done: bool,
+    polls: u64,
+}
+
+impl<'t> Task<'t> {
+    fn new(name: &'static str, future: Pin<&'t mut dyn Future<Output = ()>>) -> Self {
+        let flag = Arc::new(Flag(AtomicBool::new(true)));
+        let waker = Waker::from(flag.clone());
+        Self {
+            name,
+            future,
+            flag,
+            waker,
+            done: false,
+            polls: 0,
+        }
+    }
+
+    /// Poll once if woken: whether it ran.
+    fn run(&mut self) -> bool {
+        if self.done || !self.flag.0.swap(false, Ordering::SeqCst) {
+            return false;
+        }
+        self.polls += 1;
+        let mut cx = Context::from_waker(&self.waker);
+        if self.future.as_mut().poll(&mut cx).is_ready() {
+            self.done = true;
+        }
+        true
+    }
+}
+
+/// The script's wait for the rest of the world to settle at this instant.
+#[derive(Default)]
+struct Idle {
+    waiter: Cell<Option<Waker>>,
+    /// Counts the settles the executor announced.
+    rounds: Cell<u64>,
+}
+
+impl Idle {
+    async fn settled(&self) {
+        let start = self.rounds.get();
+        std::future::poll_fn(|cx| {
+            if self.rounds.get() != start {
+                return Poll::Ready(());
+            }
+            self.waiter.set(Some(cx.waker().clone()));
+            Poll::Pending
+        })
+        .await;
+    }
+
+    /// Wake the waiter: whether there was one.
+    fn announce(&self) -> bool {
+        match self.waiter.take() {
+            Some(waker) => {
+                self.rounds.set(self.rounds.get() + 1);
+                waker.wake();
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+/// The station's transmit end, held beside the port so that the harness
+/// still takes back what the station gives back after the network ended.
+#[derive(Clone)]
+pub struct Transmit<'c>(Rc<RefCell<StationTransmit<'c>>>);
+
+impl NetTransmit for Transmit<'_> {
+    type Frame = WrittenFrame;
+    fn has_room(&mut self) -> bool {
+        self.0.borrow_mut().has_room()
+    }
+    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        self.0.borrow_mut().poll_room(cx)
+    }
+    fn try_transmit(&mut self, frame: WrittenFrame) -> Result<(), TransmitRefused<WrittenFrame>> {
+        self.0.borrow_mut().try_transmit(frame)
+    }
+    fn flush(&mut self) {
+        self.0.borrow_mut().flush();
+    }
+}
+
+/// The service's port, which the network's task drops at its end while the
+/// rest of the retired service stays for the harness's account.
+pub struct Held<I>(Option<I>);
+
+impl<I: FramePort<Refusal = PortRefusal>> FramePort for Held<I> {
+    type Refusal = PortRefusal;
+    type Ticket = I::Ticket;
+    fn publish<E>(
+        &mut self,
+        length: usize,
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<I::Ticket, Unpublished<PortRefusal, E>> {
+        self.0
+            .as_mut()
+            .ok_or(Unpublished::Port(PortRefusal::LinkDown))?
+            .publish(length, fill)
+    }
+    fn is_final(refusal: &PortRefusal) -> bool {
+        I::is_final(refusal)
+    }
+    fn flush(&mut self) {
+        if let Some(inner) = &mut self.0 {
+            inner.flush();
+        }
+    }
+}
+
+impl<I: FrameSource> FrameSource for Held<I> {
+    type Notice = I::Notice;
+    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
+        self.0.as_mut().is_some_and(|inner| inner.take_frame(read))
+    }
+    fn take_notice(&mut self) -> Option<I::Notice> {
+        self.0.as_mut().and_then(FrameSource::take_notice)
+    }
+    fn link(&self) -> LinkSnapshot {
+        self.0
+            .as_ref()
+            .map_or(LinkSnapshot::DOWN, FrameSource::link)
+    }
+    fn register(&mut self, cx: &mut Context<'_>) {
+        if let Some(inner) = &mut self.0 {
+            inner.register(cx);
+        }
+    }
+}
+
+/// What a script works with.
+pub struct World<'b, T: 'static> {
+    pub clock: Rc<VirtualClock>,
+    pub air: Rc<ModelAir>,
+    pub access_point: Rc<RefCell<AccessPoint>>,
+    pub heard: Rc<Heard>,
+    control: RefCell<Option<StationControl<'b>>>,
+    socket: RefCell<Option<Sock<T>>>,
+    /// Datagrams the application still holds at its end, for the pool's
+    /// holder.
+    held: RefCell<Vec<NetDatagram<T>>>,
+    watch: &'static ConfigurationWatch,
+    idle: Rc<Idle>,
+    free: Rc<FreeMemory>,
+    observed: Observed,
+    protected: bool,
+    pmk: [u8; 32],
+    stopping: Cell<bool>,
+}
+
+impl<'b, T: 'static> World<'b, T> {
+    pub fn now(&self) -> Instant {
+        self.clock.now()
+    }
+
+    /// The access point and the wired side.
+    pub fn ap(&self) -> RefMut<'_, AccessPoint> {
+        self.access_point.borrow_mut()
+    }
+
+    pub fn counts(&self) -> Counts {
+        self.observed.counts()
+    }
+
+    /// The network's transmit memory free now.
+    pub fn memory_free(&self) -> usize {
+        self.free.free()
+    }
+
+    /// Wait until `done` holds, looking again whenever the world settled,
+    /// for at most `within` of virtual time.
+    pub async fn until(&self, what: &str, within: Duration, mut done: impl FnMut(&Self) -> bool) {
+        let deadline = self.now().saturating_add(within);
+        loop {
+            if done(self) {
+                return;
+            }
+            assert!(
+                self.now() < deadline,
+                "{what}: not within {} ms",
+                within.as_micros() / 1000
+            );
+            self.idle.settled().await;
+        }
+    }
+
+    /// Run `f` on the application's control.
+    pub fn with_control<R>(&self, f: impl FnOnce(&mut StationControl<'b>) -> R) -> R {
+        let mut control = self.control.borrow_mut();
+        f(control.as_mut().expect("the control"))
+    }
+
+    pub fn link(&self) -> LinkSnapshot {
+        self.with_control(|control| control.status().link)
+    }
+
+    /// Ask the station to connect to the access point's network; the
+    /// connect's terminal.
+    pub async fn connect(&self) -> OperationEnd {
+        let mut control = self.control.borrow_mut().take().expect("the control");
+        let operation = control.connect(profile(self.protected, self.pmk)).await;
+        *self.control.borrow_mut() = Some(control);
+        operation.expect("the connect is admitted").await
+    }
+
+    /// Connect and wait for the address: the lease the network holds.
+    pub async fn join(&self) -> Configuration {
+        let end = self.connect().await;
+        assert!(
+            matches!(
+                end,
+                OperationEnd::Completed(CommandOutcome::Connected { .. })
+            ),
+            "the connect links: {end:?}"
+        );
+        self.leased().await
+    }
+
+    /// The network's configuration as the service last published it.
+    pub fn configuration(&self) -> Option<Configuration> {
+        self.watch
+            .read()
+            .expect("the network's hart publishes between reads")
+            .configuration
+    }
+
+    pub fn address(&self) -> Option<[u8; 4]> {
+        self.configuration()
+            .and_then(|configuration| configuration.ipv4)
+            .map(|ipv4| ipv4.address())
+    }
+
+    /// Wait for a leased address.
+    pub async fn leased(&self) -> Configuration {
+        self.until("the address is leased", Duration::from_secs(30), |world| {
+            world.address().is_some()
+        })
+        .await;
+        self.configuration().expect("a configuration")
+    }
+
+    /// Run `f` on the application's socket.
+    pub fn with_socket<R>(&self, f: impl FnOnce(&mut Sock<T>) -> R) -> R {
+        let mut socket = self.socket.borrow_mut();
+        f(socket.as_mut().expect("the socket"))
+    }
+
+    /// The socket's next datagram, waited for.
+    pub async fn receive(&self) -> NetDatagram<T> {
+        let mut socket = self.socket.borrow_mut().take().expect("the socket");
+        let datagram = socket.receive().await;
+        *self.socket.borrow_mut() = Some(socket);
+        datagram.expect("the socket is open")
+    }
+
+    /// Give a received datagram's block back to the network.
+    pub fn release(&self, datagram: NetDatagram<T>) {
+        self.with_socket(|socket| socket.release(datagram.block))
+            .map_err(|refused| refused.reason)
+            .expect("the lane takes the block");
+    }
+
+    /// Send `payload` to `to`: the command's observer, once the socket took
+    /// it.
+    pub async fn send(&self, to: Remote, payload: &[u8]) -> Observer<'static> {
+        let mut socket = self.socket.borrow_mut().take().expect("the socket");
+        let mut block = socket.reserve().await.expect("a block");
+        block.fill(payload).expect("the block holds it");
+        socket.credit().await.expect("a credit");
+        let observer = socket
+            .send(to, block)
+            .map_err(|refused| refused.reason)
+            .expect("the socket takes the datagram");
+        *self.socket.borrow_mut() = Some(socket);
+        observer
+    }
+
+    /// The result of `observer`'s command.
+    pub async fn result(&self, mut observer: Observer<'static>) -> Sent {
+        observer.finished().await;
+        let Ok(sent) = observer.take() else {
+            panic!("a finished command has a result");
+        };
+        sent
+    }
+
+    /// Stop the station gracefully, by `within` from now.
+    /// Keep `datagram` in the application's hands to its end.
+    pub fn hold(&self, datagram: NetDatagram<T>) {
+        self.held.borrow_mut().push(datagram);
+    }
+
+    /// Whether the station's service stopped.
+    pub fn stopped(&self) -> bool {
+        self.with_control(|control| control.status().stopped)
+    }
+
+    pub fn stop(&self, within: Duration) {
+        self.stopping.set(true);
+        let deadline = self.now().saturating_add(within);
+        self.with_control(|control| control.stop_gracefully(deadline));
+    }
+
+    /// Stop the station's service at once, without the graceful stop's
+    /// Disconnect, by `within` from now.
+    pub fn stop_now(&self, within: Duration) {
+        self.stopping.set(true);
+        let deadline = self.now().saturating_add(within);
+        self.with_control(|control| control.stop(deadline));
+    }
+}
+
+/// Run the station and the network of `setup` on a fresh model with
+/// `script` as the application, the access point and the peer, then stop
+/// gracefully. `T` names the network: each case brings its own type.
+pub fn simulate<T: 'static>(
+    setup: Setup,
+    script: impl for<'a, 'b> FnOnce(&'a World<'b, T>) -> Script<'a>,
+) -> Report {
+    embassy_futures::block_on(with_local_slot(async |slot| {
+        run::<T>(slot, setup, script).await
+    }))
+}
+
+#[allow(clippy::too_many_lines, reason = "one composition, built in order")]
+async fn run<'s, T: 'static>(
+    slot: oer_protocols_radio_port::SlotClaim<LocalId<'s>>,
+    setup: Setup,
+    script: impl for<'a, 'b> FnOnce(&'a World<'b, T>) -> Script<'a>,
+) -> Report {
+    let clock = Rc::new(VirtualClock::new());
+    let mut installations = Installations::claim(slot);
+    let (install, air) = ModelPort::install(
+        &mut installations,
+        access_point::channel(),
+        [
+            IndividualAddress::new(STATION).expect("an individual address"),
+            IndividualAddress::new(LOCAL_ACCESS_POINT).expect("an individual address"),
+        ],
+        clock.clone(),
+    )
+    .expect("the first installation");
+    let ModelInstall {
+        port,
+        commands: issuer,
+        resources,
+    } = install;
+
+    // The station's lifecycle on the installation's tokens, as the facade's
+    // `initialize` builds it.
+    let ModelResources {
+        shared:
+            oer_protocols_ieee80211_testing_model::ModelShared {
+                block_acks,
+                terminal_access,
+                tickets,
+                small,
+                gate,
+                arbiter_authority,
+                ..
+            },
+        station:
+            oer_protocols_ieee80211_testing_model::ModelStationPermissions {
+                connection_epoch,
+                commands: station_commands,
+                association: station_association,
+                pairwise: station_pairwise,
+                group: station_group,
+                group_permission: station_group_permission,
+            },
+        ..
+    } = resources;
+    let mut tickets = tickets.into_iter();
+    let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().expect("a ticket"));
+    let Ok(small) = <[_; 4]>::try_from(small) else {
+        panic!("four station buffers");
+    };
+    let config = station_config();
+    let channel = config.channels[0];
+    let (arbiter, place, absence) = LifecycleArbiter::<P<'s>>::new(
+        ArbiterPolicy::DEFAULT
+            .checked(MODEL_PUBLICATION_BOUND)
+            .expect("the arbiter's policy"),
+        channel,
+        arbiter_authority,
+        gate,
+    );
+    let station_resources = StationResources::<_, 4, 4, GROUPS> {
+        configure: station_commands.configure,
+        epochs: oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(
+            connection_epoch,
+        ),
+        tickets: station_tickets,
+        buffers: small,
+        place,
+        absence_place: absence,
+        keys: oer_protocols_ieee80211_contracts_port::association::reunite_vacant(
+            station_association,
+            oer_protocols_ieee80211_contracts_port::association::VacantKeyBank::new(
+                station_pairwise,
+                station_group,
+            ),
+        ),
+        group_permission: station_group_permission,
+    };
+    let observed = Observed::default();
+    let station = Station::new(config, station_resources, GroupCapacity::new());
+    let lifecycle: StationLifecycle<'s> = Lifecycle::new(
+        station,
+        arbiter,
+        issuer,
+        CcmpPacketNumberStep::ONE,
+        channel,
+        terminal_access,
+        observed.clone(),
+    );
+    let block_ack_storage = Box::leak(Box::new(RxBlockAckStorage::<_, 2, 4>::new(
+        block_acks,
+        Duration::from_millis(100),
+    )));
+    let mut actor = Actor::<P<'s>, _, _>::new(
+        port,
+        EspressifRateSelection::<ModelCaps24>::new(),
+        block_ack_storage.view(),
+        observed.clone(),
+    );
+
+    // The queues between the lifecycle and the actor.
+    let mut to_queue = WakingSpscQueue::<ToActor<'s, P<'s>>, TO>::new();
+    let mut parcel_queue = WakingSpscQueue::<Parcel<'s, P<'s>>, PARCELS>::new();
+    let mut from_queue = WakingSpscQueue::<FromActor<'s, P<'s>>, FROM>::new();
+    let mut return_queue = WakingSpscQueue::<Returned<'s, P<'s>>, RETURNS>::new();
+    let mut link_queue = WakingSpscQueue::<ActorLink<'s, P<'s>>, 1>::new();
+    let mut group_queue = WakingSpscQueue::<GroupPending<'s, ActorEpochPath<'s, P<'s>>>, 1>::new();
+    let mut link_return_queue =
+        WakingSpscQueue::<oer_protocols_ieee80211_core_roles_sta::link::LinkReturn, 1>::new();
+    let (to_actor, to_actor_end) = to_queue.split();
+    let (parcels, parcels_end) = parcel_queue.split();
+    let (from_actor_end, from_actor) = from_queue.split();
+    let (returns_end, returns) = return_queue.split();
+    let (link, link_end) = link_queue.split();
+    let (groups_end, groups) = group_queue.split();
+    let (link_return_end, link_return) = link_return_queue.split();
+    let mut actor_ends = LifecycleEnds {
+        to_actor: to_actor_end,
+        parcels: parcels_end,
+        from_actor: from_actor_end,
+        returns: returns_end,
+        groups: groups_end,
+        link: link_end,
+        link_return: link_return_end,
+    };
+    let mut lifecycle_ends = ActorEnds {
+        to_actor,
+        parcels,
+        from_actor,
+        returns,
+        groups,
+        link,
+        link_return,
+    };
+
+    // The station's channels to the network, as the facade's `Channels`
+    // split them.
+    let mut transmit_queue = WakingSlotQueue::<Option<Outgoing<Memory>>, TX_DEPTH>::new();
+    let mut returned_queue = WakingSlotQueue::<Option<Memory>, TX_DEPTH>::new();
+    let mut receive_queue = WakingSpscQueue::<StationReceived<ModelLentRx>, RX_DEPTH>::new();
+    let mut copies_queue = WakingSpscQueue::<StationFrame, RX_COPIED_DEPTH>::new();
+    let mut command_queue = WakingSpscQueue::<ServiceCommand<ModelCaps24>, COMMANDS>::new();
+    let (stack, transmit_end) = transmit_queue.split(|| None);
+    let (returned_end, returned) = returned_queue.split(|| None);
+    let (receive_end, delivered) = receive_queue.split();
+    let (copies_end, copies) = copies_queue.split();
+    let (application, commands) = command_queue.split();
+    let state = State::new();
+    let (mut control, runner) = Control::new(application, &state)
+        .map_err(|refused| refused.reason)
+        .expect("the control");
+    if let Some(interval) = setup.reconnect {
+        control.configure_reconnect(ReconnectPolicy::every(interval).expect("an interval"));
+    }
+    let network_stop = NetworkStopState::default();
+    let mut network_ends = NetworkEnds::<_, _, _, TX_DEPTH, RX_DEPTH, runtime::SameHart> {
+        transmit: transmit_end,
+        returned: returned_end,
+        receive: receive_end,
+        receive_copied: copies_end,
+        network: &network_stop,
+    };
+    let free = FreeMemory::new(NETWORK_BUFFERS);
+    let device = Device::new(delivered, copies, &state);
+    let transmit = Transmit(Rc::new(RefCell::new(DeviceTransmit::new(
+        stack,
+        returned,
+        Supply(free.clone()),
+        &state,
+    ))));
+
+    // The network, as the application's `Network::start` builds it.
+    let memory = Box::leak(Box::new([[0_u8; BLOCK]; BLOCKS]));
+    let (pool, brand) = claim::<T, BLOCK, BLOCKS>(memory)
+        .map_err(|refused| refused.reason)
+        .expect("the network's brand");
+    let interface = Interface::dhcp(STATION, MTU, setup.seed).expect("the interface");
+    let port_end = Held(Some(DevicePort::new(
+        device,
+        transmit.clone(),
+        Buffers(free.clone()),
+    )));
+    let owner = NetworkOwner::new(brand, interface, pool, port_end);
+    let (stop_lane, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service: NetService<'_, T> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
+    service.watch(watch).expect("the first publication");
+    let socket = service
+        .bind(
+            PORT,
+            Dscp::default(),
+            Group::shared(),
+            Box::leak(Box::new(SocketLanes::new())),
+        )
+        .map_err(|refused| refused.reason)
+        .expect("the socket opens");
+
+    // What the application hears.
+    let heard = Rc::new(Heard::default());
+    let record = {
+        let heard = heard.clone();
+        let clock = clock.clone();
+        move |output: ServiceOutput<ModelCaps24>| match output {
+            ServiceOutput::Notice(notice) => heard.notices.borrow_mut().push((clock.now(), notice)),
+            ServiceOutput::TxRefused { .. } => {
+                heard
+                    .refused_transmissions
+                    .set(heard.refused_transmissions.get() + 1);
+            }
+            _ => {}
+        }
+    };
+    let mut output = control.events(record);
+    let mut io = LifecycleIo {
+        commands,
+        output: &mut output,
+        control: runner,
+        stop: StopPolicy {
+            drain: Duration::from_secs(1),
+        },
+    };
+
+    let access_point = Rc::new(RefCell::new(AccessPoint::new(
+        air.clone(),
+        clock.clone(),
+        setup.access_point,
+        Wired::new(setup.dhcp),
+    )));
+    let idle = Rc::new(Idle::default());
+    let world = World {
+        clock: clock.clone(),
+        air: air.clone(),
+        access_point: access_point.clone(),
+        heard: heard.clone(),
+        control: RefCell::new(Some(control)),
+        socket: RefCell::new(Some(socket)),
+        watch,
+        idle: idle.clone(),
+        free: free.clone(),
+        observed: observed.clone(),
+        protected: setup.access_point.protected,
+        pmk: setup.pmk,
+        held: RefCell::new(Vec::new()),
+        stopping: Cell::new(false),
+    };
+
+    // The four tasks.
+    let actor_end = RefCell::new(None);
+    let lifecycle_end = RefCell::new(None);
+    let network_end: RefCell<Option<NetEnded<'_, T>>> = RefCell::new(None);
+    {
+        let actor_task = async {
+            let end = actor.run(&mut actor_ends, &mut network_ends, &*clock).await;
+            *actor_end.borrow_mut() = Some(end);
+        };
+        let lifecycle_task = async {
+            let completed = lifecycle.run(&mut lifecycle_ends, &mut io, &*clock).await;
+            *lifecycle_end.borrow_mut() = Some(completed.end);
+        };
+        let network_task = async {
+            let cause = {
+                let mut events = ();
+                let mut run = core::pin::pin!(service.run(&*clock, &mut events));
+                match select(run.as_mut(), network_stop.requested()).await {
+                    Either::First(cause) => cause,
+                    Either::Second(()) => {
+                        // The lane holds this one word.
+                        let _sent = stop_lane.try_send(());
+                        run.await
+                    }
+                }
+            };
+            let mut ended = service.retire();
+            // The queue outlives the port, so its frames go back first, as the
+            // application's stop gives them.
+            if let Some(port) = ended.retired.port.0.as_mut() {
+                port.give_back_received();
+            }
+            ended.retired.port.0 = None;
+            assert_eq!(ended.cause, cause);
+            *network_end.borrow_mut() = Some(ended);
+            network_stop.stopped();
+        };
+        let script_task = async {
+            script(&world).await;
+            if !world.stopping.get() {
+                world.stop(Duration::from_secs(10));
+            }
+        };
+        let mut actor_task = core::pin::pin!(actor_task);
+        let mut lifecycle_task = core::pin::pin!(lifecycle_task);
+        let mut network_task = core::pin::pin!(network_task);
+        let mut script_task = core::pin::pin!(script_task);
+        let mut tasks = [
+            Task::new("actor", actor_task.as_mut()),
+            Task::new("lifecycle", lifecycle_task.as_mut()),
+            Task::new("network", network_task.as_mut()),
+            Task::new("script", script_task.as_mut()),
+        ];
+        execute(&mut tasks, &clock, &air, &access_point, &idle);
+    }
+    // The network's memory the station never took from its queue.
+    let mut queued = 0;
+    while let Ok(Some(_memory)) = network_ends.transmit.try_receive_with(Option::take) {
+        queued += 1;
+    }
+
+    // The account: what the station gave back, and every block.
+    let mut ended = network_end.borrow_mut().take().expect("the network ended");
+    let mut socket = world.socket.borrow_mut().take().expect("the socket");
+    for datagram in world.held.borrow_mut().drain(..) {
+        ended.retired.pool.give(datagram.block);
+    }
+    while let Some(block) = socket.reclaim() {
+        ended.retired.pool.give(block);
+    }
+    ended.collect();
+    ended.close_returns();
+    let _room = transmit.0.borrow_mut().has_room();
+    Report {
+        lifecycle: lifecycle_end.borrow_mut().take(),
+        actor: actor_end.borrow_mut().take(),
+        network: Some(ended.cause),
+        blocks_free: ended.retired.pool.free(),
+        memory_free: free.free(),
+        memory_queued: queued,
+        memory: free.total(),
+        counts: observed.counts(),
+        heard,
+        access_point,
+    }
+}
+
+/// Run `tasks` to their ends: woken tasks are polled, the access point
+/// answers what the station sent, a waiting script (the last task) looks
+/// again once the others settled, and only then time moves to the next
+/// deadline.
+fn execute(
+    tasks: &mut [Task<'_>],
+    clock: &VirtualClock,
+    air: &ModelAir,
+    access_point: &RefCell<AccessPoint>,
+    idle: &Idle,
+) {
+    let mut announced = false;
+    for _ in 0..PASSES {
+        let mut progress = false;
+        let script = tasks.len() - 1;
+        for (index, task) in tasks.iter_mut().enumerate() {
+            let ran = task.run();
+            // The script's own look after a settle is no progress of the
+            // world's.
+            progress |= ran && !(announced && index == script);
+        }
+        progress |= access_point.borrow_mut().serve();
+        if tasks.iter().all(|task| task.done) {
+            return;
+        }
+        if progress {
+            announced = false;
+            continue;
+        }
+        if tasks
+            .iter()
+            .any(|task| !task.done && task.flag.0.load(Ordering::SeqCst))
+        {
+            continue;
+        }
+        if !announced && idle.announce() {
+            announced = true;
+            continue;
+        }
+        announced = false;
+        if clock.advance_to_next_deadline().is_none() {
+            let running: Vec<_> = tasks
+                .iter()
+                .filter(|task| !task.done)
+                .map(|task| task.name)
+                .collect();
+            panic!("nothing is woken and no time is due: {running:?} wait for a lost wake");
+        }
+        air.clock_advanced();
+    }
+    let polls: Vec<_> = tasks
+        .iter()
+        .map(|task| (task.name, task.polls, task.done))
+        .collect();
+    panic!(
+        "{PASSES} passes without an end at {:?}: a task spins: {polls:?}",
+        clock.now()
+    );
+}

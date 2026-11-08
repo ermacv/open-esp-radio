@@ -216,7 +216,7 @@ wireless radio/BSS. These are the complete settings it owns:
 | `firewall.oer_station_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
 | `firewall.oer_station_out`, `firewall.oer_station_in` | Reject all forwarding out of and into station, placed first among configured rules |
 | `firewall.oer_station_host_out`, `firewall.oer_station_host_in` | Only when the run names a host (`forward_host`): accept IPv4 UDP, TCP and ICMP from station to that host and back, placed before the rejections |
-| Selected radio | Stand channel at the run's width (HT20 or HT40), beacon interval 100 TU, enabled, HE disabled |
+| Selected radio | Stand channel at the run's width (HT20 or HT40 with HE disabled, or HE20 with `ieee80211ax=1`), beacon interval 100 TU, enabled |
 | Selected BSS | Generated SSID, enabled, visible, WPA2-CCMP encryption, station network, client isolation enabled |
 
 There are no forwarding sections, NAT, LAN/WAN bridge ports or external DNS
@@ -248,7 +248,10 @@ configuration](https://openwrt.org/docs/guide-user/base-system/dhcp_configuratio
 only the selected BSS to `encryption=psk2+ccmp`, `ieee80211r=0` and
 `ieee80211w=0`: WPA2-Personal with CCMP, no SAE/transition, FT or PMF. The
 radio runs the width the run asks for (`RouterOperation::ApplyStationProfile`'s
-`width`: HT20, or HT40 for the load scenario) with HE disabled. A radio whose
+`width`: HT20, or HT40 for the load scenario) with HE disabled, or the HE20
+station profile (`htmode=HE20`, `ieee80211ax=1`, both verified after the
+commit; the AP interface at 20 MHz). The lower-MAC profile leaves
+`ieee80211ax` as it is. A radio whose
 20/40 MHz coexistence scan finds an overlapping BSS may stay at 20 MHz; the
 interface check of step 6 refuses the run. It sets `wpa_group_rekey=30` seconds
 for the run's GTK-change gate. These lab settings are committed without
