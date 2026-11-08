@@ -396,6 +396,9 @@ pub enum RouterChannelWidth {
     /// HT 40 MHz, the secondary channel below the primary on channels 5 to
     /// 13 and above it on 1 to 4.
     Ht40,
+    /// HE 20 MHz, 802.11ax on: the HE20 station profile. Every other width
+    /// runs with HE off.
+    He20,
 }
 
 /// An access category of the AP radio's airtime queue limits.

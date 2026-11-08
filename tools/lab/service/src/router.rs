@@ -107,6 +107,7 @@ pub(crate) fn run(
             .width(match width {
                 RouterChannelWidth::Ht20 => ChannelWidth::Ht20,
                 RouterChannelWidth::Ht40 => ChannelWidth::Ht40,
+                RouterChannelWidth::He20 => ChannelWidth::He20,
             });
             let profile = match forward_host {
                 Some(host) => profile.forwarding_host(*host),
