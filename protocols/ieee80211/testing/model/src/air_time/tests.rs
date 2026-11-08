@@ -582,12 +582,10 @@ fn frames_land_while_the_ppdu_is_on_the_air_and_the_last_with_its_last_symbol() 
     assert!(instants.windows(2).all(|pair| pair[0].0 < pair[1].0));
     let psdu = ampdu_psdu_octets([STAND_MPDU; 4], stand_rate(), 0).unwrap();
     let ppdu = stand_rate().max_ppdu_duration_micros(psdu).unwrap();
-    // The last symbol ends before the 6-us signal extension.
-    assert_eq!(
-        instants[3].0,
-        u64::from(ppdu - 6),
-        "the last with its symbol"
-    );
+    // The last octet's symbol ends 370.8 us in, before the tail's rounding
+    // and the 6-us signal extension that end the PPDU at 378.
+    assert_eq!(ppdu, 378);
+    assert_eq!(instants[3].0, 371, "the last with its symbol");
     // Each lands at the end of the symbol of its last octet: one subframe
     // of delimiter, MPDU and padding is 1560 octets, 23.1 symbols of 540
     // bits, so landings lie 22 or 23 symbols of 3.6 us apart on a 4-us grid.
@@ -621,9 +619,48 @@ fn no_subframe_lands_before_the_preamble_ends() {
     assert_eq!(landings[0], 36 + 4);
     assert!(landings.iter().all(|at| *at >= 36 + 4));
     assert!(landings.windows(2).all(|pair| pair[0] <= pair[1]));
+    // The last of 3072 octets: 24,592 bits with SERVICE, symbol 46 of 540
+    // bits, 36 + 46 * 3.6 = 201.6 us; the tail's rounding and the signal
+    // extension come after it.
     let psdu = ampdu_psdu_octets([44; 64], stand_rate(), 0).unwrap();
+    assert_eq!(psdu, 63 * 48 + 48);
+    assert_eq!(*landings.last().unwrap(), 202);
     let end = stand_rate().max_ppdu_duration_micros(psdu).unwrap();
-    assert_eq!(*landings.last().unwrap(), u64::from(end - 6));
+    assert!(*landings.last().unwrap() <= u64::from(end - 6));
+}
+
+#[test]
+fn a_lone_mpdu_lands_with_its_own_last_symbol_not_a_delimiters() {
+    // Review counterexample: one subframe at HT20 MCS 0 landed at 84 us,
+    // with a delimiter it never carried, inside the signal extension after
+    // the last data symbol ended at 80 us.
+    let ht20 =
+        PhyRate::Ht(HtRate::new(HtMcs::new(0).unwrap(), PpduBandwidth::Mhz20, false).unwrap());
+    let world = roomy();
+    let mut air_peer = peer(
+        PeerWindow::Assumed(16),
+        Offered::FramesPerSecond(NonZeroU32::new(1).unwrap()),
+    );
+    air_peer.frame = frames(28);
+    air_peer.rate = ht20;
+    let mut medium = medium(1, Some(air_peer));
+    let arrival = medium.next_event().unwrap();
+    medium.advance(arrival, &world).unwrap();
+    let on_air = medium.on_air.as_ref().unwrap();
+    let ppdu = on_air.peer.as_ref().unwrap();
+    assert_eq!(ppdu.frames.len(), 1);
+    assert_eq!(ppdu.frames[0].at - on_air.started, 80);
+    // Its PPDU ends 6 us later, with the signal extension: the 278 bits of
+    // SERVICE, PSDU and tail still fit the 11 symbols.
+    let exchange = AirExchange::new(
+        AirTiming::HT_2_4_GHZ,
+        ht20,
+        32,
+        Protection::None,
+        AirResponse::Ack,
+    )
+    .unwrap();
+    assert_eq!(exchange.ppdu_micros, 86);
 }
 
 #[test]

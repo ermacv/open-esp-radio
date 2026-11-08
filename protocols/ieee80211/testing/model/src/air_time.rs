@@ -11,8 +11,9 @@
 //! Every duration comes from [`PhyRate::max_ppdu_duration_micros`], the
 //! production TXTIME, and the delimiters and padding of an A-MPDU from
 //! [`oer_protocols_ieee80211_wire::ampdu`]. A subframe lands at the end of
-//! the data symbol that carries its last octet, at its offset in that
-//! layout, after the preamble. A TXOP limit holds the protection exchange,
+//! the data symbol that carries its last octet
+//! ([`PhyRate::psdu_octet_sent_nanos`]), at its offset in the layout the
+//! PPDU goes in: an A-MPDU's, or one MPDU without a delimiter. A TXOP limit holds the protection exchange,
 //! the PPDU and its response, as ns-3 counts them. Only control-frame
 //! lengths, SIFS, the slot and the backoff rules are written here, each
 //! with its source.
@@ -763,33 +764,21 @@ struct Bursts {
 
 /// One aggregate the access point built.
 struct Built {
-    /// Each frame's Sequence Number, image and landing time after the
-    /// protection exchange.
+    /// Each frame's Sequence Number, image and the time its last octet has
+    /// been sent after the protection exchange, in the layout the PPDU went
+    /// in: an A-MPDU's subframe offsets, or one MPDU without a delimiter.
     frames: Vec<(SequenceNumber, Vec<u8>, u32)>,
     exchange: AirExchange,
 }
 
-/// What a PPDU of `rate` carries after its last data symbol, as
-/// [`PhyRate::max_ppdu_duration_micros`] counts it: the 6 us signal
-/// extension of an OFDM PPDU at 2.4 GHz, and for HE the longest packet
-/// extension (16 us) before it.
-const fn trailer_micros(rate: PhyRate) -> u32 {
-    match rate {
-        PhyRate::Legacy(legacy) if !legacy.is_ofdm() => 0,
-        PhyRate::Legacy(_) | PhyRate::Ht(_) => 6,
-        PhyRate::He(_) => 16 + 6,
-    }
-}
-
-/// When the octet `end` of a PSDU of `rate` has arrived, from the PPDU's
-/// start: the end of the data symbol that carries it, as a PPDU ending at
-/// that octet would end before its trailer. That symbol also carries the
-/// BCC tail bits such a PPDU would add, so the instant lies at most one
-/// symbol, and the 4-us grid of a short guard interval, after the octet's
-/// own symbol; never before the preamble's end.
-fn arrival_micros(rate: PhyRate, end: u32) -> Result<u32, AirTimeError> {
-    rate.max_ppdu_duration_micros(end)
-        .map(|micros| micros.saturating_sub(trailer_micros(rate)))
+/// When the PSDU's first `octets` at `rate` have been sent, from the PPDU's
+/// start: the end of the data symbol carrying the last of them
+/// ([`PhyRate::psdu_octet_sent_nanos`]), rounded up to a microsecond.
+fn sent_micros(rate: PhyRate, octets: u32) -> Result<u32, AirTimeError> {
+    let last = octets.checked_sub(1).ok_or(AirTimeError::EmptyFrame)?;
+    rate.psdu_octet_sent_nanos(last)
+        .map(|nanos| ceil_div(nanos, 1_000))
+        .and_then(|micros| u32::try_from(micros).ok())
         .ok_or(AirTimeError::Unrepresentable)
 }
 
@@ -1085,9 +1074,7 @@ impl Medium {
             .map(|(sequence, image, arrival)| PeerFrame {
                 sequence,
                 image,
-                // A lone subframe goes without its delimiter: no later
-                // than the PPDU's last symbol.
-                at: first.saturating_add(u64::from(arrival.min(exchange.ppdu_micros))),
+                at: first.saturating_add(u64::from(arrival)),
                 landed: false,
             })
             .collect();
@@ -1197,8 +1184,9 @@ impl Medium {
             if frames.is_empty() {
                 single_octets = octets;
             }
-            let end = run.map_or(octets, |run| run.length);
-            frames.push((sequence, image, arrival_micros(rate, end)?));
+            // Its end in the A-MPDU's layout; a lone frame's is decided
+            // below, once the layout is.
+            frames.push((sequence, image, run.map_or(octets, |run| run.length)));
             if retry.is_none() {
                 peer.unacked.push_back(sequence);
                 peer.next_sequence = SequenceNumber::from_low_bits(sequence.get().wrapping_add(1));
@@ -1220,8 +1208,17 @@ impl Medium {
         *count = count.saturating_add(1);
         let psdu = match run.filter(|_| frames.len() > 1) {
             Some(run) => run.length,
-            None => single_octets,
+            None => {
+                // One MPDU goes without a delimiter: it ends with itself.
+                for (_, _, end) in &mut frames {
+                    *end = single_octets;
+                }
+                single_octets
+            }
         };
+        for (_, _, end) in &mut frames {
+            *end = sent_micros(rate, *end)?;
+        }
         let response = if frames.len() > 1 {
             AirResponse::BlockAck
         } else {

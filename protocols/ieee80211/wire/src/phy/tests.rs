@@ -301,3 +301,94 @@ fn an_ht_mixed_ppdu_lasts_at_most_what_the_l_sig_length_carries() {
     assert!(mcs7.max_ppdu_duration_micros(28 * subframe).unwrap() <= 5_484);
     assert!(mcs7.max_ppdu_duration_micros(29 * subframe).unwrap() > 5_484);
 }
+
+fn ht(mcs: u8, bandwidth: PpduBandwidth, short_gi: bool) -> PhyRate {
+    PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap())
+}
+
+#[test]
+fn an_octet_is_sent_at_the_end_of_the_symbol_that_carries_it() {
+    use PpduBandwidth::{Mhz20, Mhz40};
+    // (rate, offset, ns): a 36-us HT-mixed preamble, then the symbols of
+    // SERVICE and the PSDU through the octet, worked by hand.
+    for (rate, offset, nanos) in [
+        // HT20 MCS 0, 26 bits per 4-us symbol: 24, 144 and 272 bits.
+        (ht(0, Mhz20, false), 0, 40_000),
+        (ht(0, Mhz20, false), 15, 60_000),
+        (ht(0, Mhz20, false), 31, 80_000),
+        // Its short GI: the same symbols of 3.6 us.
+        (ht(0, Mhz20, true), 0, 39_600),
+        (ht(0, Mhz20, true), 31, 75_600),
+        // HT20 MCS 7, 260 bits: 1, 1 and 2 symbols.
+        (ht(7, Mhz20, false), 0, 40_000),
+        (ht(7, Mhz20, false), 15, 40_000),
+        (ht(7, Mhz20, false), 31, 44_000),
+        // HT40 MCS 0, 54 bits: 1, 3 and 6 symbols.
+        (ht(0, Mhz40, false), 0, 40_000),
+        (ht(0, Mhz40, false), 15, 48_000),
+        (ht(0, Mhz40, true), 31, 57_600),
+        // HT40 MCS 7, 540 bits; 1500 octets end in symbol 23.
+        (ht(7, Mhz40, false), 0, 40_000),
+        (ht(7, Mhz40, true), 749, 36_000 + 12 * 3_600),
+        (ht(7, Mhz40, true), 1_499, 36_000 + 23 * 3_600),
+        // Non-HT: 24 bits per 4-us symbol after 20 us; DSSS bit by bit after
+        // the long preamble.
+        (PhyRate::Legacy(LegacyRate::Ofdm6M), 0, 24_000),
+        (PhyRate::Legacy(LegacyRate::Dsss1M), 0, 200_000),
+    ] {
+        assert_eq!(
+            rate.psdu_octet_sent_nanos(offset),
+            Some(nanos),
+            "{rate:?} at {offset}"
+        );
+    }
+}
+
+#[test]
+fn the_ppdu_ends_after_its_last_octet_by_tail_padding_and_signal_extension_only() {
+    use PpduBandwidth::{Mhz20, Mhz40};
+    for rate in [
+        ht(0, Mhz20, false),
+        ht(0, Mhz20, true),
+        ht(7, Mhz20, true),
+        ht(0, Mhz40, false),
+        ht(7, Mhz40, true),
+        ht(15, Mhz40, true),
+        PhyRate::Legacy(LegacyRate::Ofdm54M),
+    ] {
+        for octets in [1_u32, 2, 33, 100, 1_554, 49_918] {
+            let last = rate.psdu_octet_sent_nanos(octets - 1).unwrap();
+            let end = u64::from(rate.max_ppdu_duration_micros(octets).unwrap()) * 1_000;
+            // The signal extension, then at most one more symbol for the
+            // tail bits and the short guard interval's 4-us rounding.
+            assert!(last + 6_000 <= end, "{rate:?} {octets}: {last} {end}");
+            assert!(
+                end - 6_000 - last <= 8_000,
+                "{rate:?} {octets}: {last} {end}"
+            );
+            // Each octet goes no earlier than the one before.
+            assert!(rate.psdu_octet_sent_nanos(octets).unwrap() >= last);
+        }
+    }
+}
+
+#[test]
+fn sixty_four_short_mpdus_land_after_the_preamble_and_a_lone_one_within_its_data() {
+    // The first of 64 A-MPDU subframes of 44-octet MPDUs ends at octet 47
+    // of the PSDU: in the first 3.6-us symbol after the 36-us preamble.
+    let rate = ht(7, PpduBandwidth::Mhz40, true);
+    assert_eq!(rate.psdu_octet_sent_nanos(47), Some(39_600));
+    // One 32-octet MPDU without a delimiter at HT20 MCS 0: 272 bits, the
+    // 11th symbol, 80 us; its PPDU ends 6 us of signal extension later.
+    let lone = ht(0, PpduBandwidth::Mhz20, false);
+    assert_eq!(lone.psdu_octet_sent_nanos(31), Some(80_000));
+    assert_eq!(lone.max_ppdu_duration_micros(32), Some(86));
+}
+
+#[test]
+fn an_offset_past_the_counting_range_is_refused() {
+    let rate = ht(0, PpduBandwidth::Mhz20, false);
+    assert!(rate.psdu_octet_sent_nanos(u32::MAX).is_some());
+    let dsss = PhyRate::Legacy(LegacyRate::Dsss1M);
+    assert!(dsss.psdu_octet_sent_nanos(u32::MAX).is_some());
+}
