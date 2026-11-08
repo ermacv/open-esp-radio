@@ -108,11 +108,14 @@ fn only_a_bound_client_over_an_up_link_holds_the_address_a_wait_ends_with() {
         assert_eq!(waits::leased(&published(bound, LinkSnapshot::DOWN)), None);
     }
     // Still asking: an INIT-REBOOT keeps the address in use, but no server
-    // confirmed it on this link yet.
+    // confirmed it on this link yet; an offered address is probed, or
+    // declined.
     for asking in [
         DhcpState::Selecting,
         DhcpState::Requesting,
         DhcpState::Rebooting,
+        DhcpState::Probing,
+        DhcpState::Declining,
     ] {
         assert_eq!(waits::leased(&published(Some(asking), up(2))), None);
     }

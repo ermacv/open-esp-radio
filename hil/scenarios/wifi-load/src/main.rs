@@ -1058,11 +1058,14 @@ const COMBINED_MBPS: u64 = 65;
 /// Each way of the `overload` case: more than the air holds either way
 /// (the archive's network comparison).
 const OVERLOAD_MBPS: u64 = 130;
-/// The requests of the `ping` case: 12 s at [`ping::PERIOD`], the archive's.
+/// The requests of the `ping` case: some 13.6 s at [`ping::PERIOD`].
 const PING_COUNT: u32 = 120;
 /// The longest median round trip of a ping over an unloaded link, the
 /// owner's limit: host, wire, router, one hop over the air and back.
 const PING_MEDIAN_LIMIT_US: u64 = 3000;
+/// The replies a ping's median needs to decide a case: fewer leave it
+/// incomplete, as a median of a few depends on where they fell.
+const PING_REPLIES_LEAST: usize = 30;
 
 /// One sparse traffic shape, the same each way.
 #[derive(Clone, Copy)]
@@ -1131,8 +1134,16 @@ fn ping_idle(cx: &mut Cx<'_>) -> Result<(), Failure> {
     ping_within_limit("idle", &echoes)
 }
 
-/// Whether the ping's median is within [`PING_MEDIAN_LIMIT_US`].
+/// Whether the ping's median is within [`PING_MEDIAN_LIMIT_US`]; with
+/// fewer than [`PING_REPLIES_LEAST`] replies the case is incomplete.
 fn ping_within_limit(name: &str, echoes: &traffic::Echoes) -> Result<(), Failure> {
+    if echoes.rtt_us.len() < PING_REPLIES_LEAST {
+        return Err(Failure::Incomplete(format!(
+            "ping {name}: {} replies of {} requests, fewer than the {PING_REPLIES_LEAST} a median needs",
+            echoes.rtt_us.len(),
+            echoes.sent
+        )));
+    }
     let median = ping::median_us(echoes);
     check(
         median.is_some_and(|median| median <= PING_MEDIAN_LIMIT_US),
@@ -1637,6 +1648,31 @@ fn percent(part: u64, whole: u64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_ping_period_meets_every_sparse_shape_at_as_many_phases_as_its_replies_need() {
+        let period = u32::try_from(ping::PERIOD.as_millis()).unwrap();
+        for shape in SPARSE {
+            let phases: std::collections::BTreeSet<u32> = (0..PING_REPLIES_LEAST as u32)
+                .map(|request| request * period % shape.every_ms)
+                .collect();
+            let least = (shape.every_ms as usize).min(PING_REPLIES_LEAST);
+            assert_eq!(phases.len(), least, "{}", shape.name());
+        }
+    }
+
+    #[test]
+    fn a_ping_verdict_needs_its_least_replies_and_then_its_median_decides() {
+        let echoes = |rtt_us: Vec<u64>| traffic::Echoes { sent: 44, rtt_us };
+        let few = ping_within_limit("few", &echoes(vec![1000; PING_REPLIES_LEAST - 1]));
+        assert!(matches!(few, Err(Failure::Incomplete(_))), "{few:?}");
+        // Few and slow is incomplete too, not a failure.
+        let slow_few = ping_within_limit("slow", &echoes(vec![9000; 10]));
+        assert!(matches!(slow_few, Err(Failure::Incomplete(_))));
+        assert!(ping_within_limit("quick", &echoes(vec![2000; PING_REPLIES_LEAST])).is_ok());
+        let slow = ping_within_limit("slow", &echoes(vec![3001; PING_REPLIES_LEAST]));
+        assert!(matches!(slow, Err(Failure::Fail(_))), "{slow:?}");
+    }
+
     use super::*;
 
     #[test]
@@ -1678,13 +1714,24 @@ mod tests {
 
     #[test]
     fn the_ping_limit_holds_a_median_and_needs_replies() {
-        let echoes = |rtt_us: &[u64]| traffic::Echoes {
-            sent: 3,
-            rtt_us: rtt_us.to_vec(),
+        // Fifteen quick, the median, and fourteen slow.
+        let echoes = |median: u64| traffic::Echoes {
+            sent: 30,
+            rtt_us: [vec![900; 15], vec![median], vec![9000; 14]].concat(),
         };
-        assert!(ping_within_limit("x", &echoes(&[900, 2900, 9000])).is_ok());
-        assert!(ping_within_limit("x", &echoes(&[900, 3100, 9000])).is_err());
-        assert!(ping_within_limit("x", &echoes(&[])).is_err());
+        assert!(ping_within_limit("x", &echoes(2900)).is_ok());
+        assert!(matches!(
+            ping_within_limit("x", &echoes(3100)),
+            Err(Failure::Fail(_))
+        ));
+        let none = traffic::Echoes {
+            sent: 30,
+            rtt_us: Vec::new(),
+        };
+        assert!(matches!(
+            ping_within_limit("x", &none),
+            Err(Failure::Incomplete(_))
+        ));
     }
 
     #[test]

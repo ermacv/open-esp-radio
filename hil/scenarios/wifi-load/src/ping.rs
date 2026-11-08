@@ -6,9 +6,13 @@ use std::{net::Ipv4Addr, process::Command, time::Duration};
 
 use crate::traffic::Echoes;
 
-/// The time between two requests, the shortest an unprivileged `ping` need
-/// not justify.
-pub const PERIOD: Duration = Duration::from_millis(100);
+/// The time between two requests: above the 100 ms an unprivileged `ping`
+/// need not justify, and a prime number of milliseconds, so no traffic
+/// shape's period in whole milliseconds is a divisor or multiple of it.
+/// Consecutive requests meet a shape at another phase of its period (13 ms
+/// further in a 20, 50 or 100 ms one): the requests cover its phases, not
+/// one of them.
+pub const PERIOD: Duration = Duration::from_millis(113);
 /// How long a request waits for its reply.
 const REPLY_TIMEOUT_S: &str = "1";
 

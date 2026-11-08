@@ -1650,6 +1650,20 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
             .borrow_mut()
             .incoming
             .push_back(dhcp_reply(MessageType::Ack, xid, 600));
+        line.open(false);
+        settle(&mut run, &count, &waker);
+        let requested = clock.now();
+        // The client probes the new address with ARP before it binds it,
+        // RFC 2131, 4.4.1: no address meanwhile, then the binding.
+        for _ in 0..8 {
+            if watch.read().unwrap().configuration.unwrap().ipv4.is_some() {
+                break;
+            }
+            assert_eq!(script.calls().len(), 2, "the hold stays while probing");
+            clock.advance_to_next_deadline().unwrap();
+            settle(&mut run, &count, &waker);
+        }
+        // The peer asks for the bound address, so its own is known.
         line.0.borrow_mut().incoming.push_back(peer_asks());
         line.open(false);
         settle(&mut run, &count, &waker);
@@ -1671,10 +1685,10 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
         );
         // T1 is half of 600 s from the REQUEST.
         let lease = watch.read().unwrap().configuration.unwrap().lease.unwrap();
-        assert_eq!(lease.obtained, clock.now());
+        assert_eq!(lease.obtained, requested);
         assert_eq!(
             lease.renew,
-            clock.now().saturating_add(Duration::from_secs(300))
+            requested.saturating_add(Duration::from_secs(300))
         );
     }
     let ended = service.retire();

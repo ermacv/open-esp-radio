@@ -54,11 +54,12 @@ publishes within its own turn: it ends the group, which records it.
   rejoins it every second after a lost association; a connect without a
   link leaves it idle for the next one.
 - **WaitIpv4** waits, bounded by the request's timeout, for an address
-  over an up link while the DHCP client holds it bound: a lease the server
-  granted or extended, or one an INIT-REBOOT no server answered keeps for
-  its time (RFC 2131, 3.2 (3)). A client still selecting, requesting or
-  rebooting holds none yet, so across a link loss the wait goes on to the
-  next bound lease. `Stopped` once the network ended.
+  over an up link while the DHCP client holds it bound: a lease a server
+  granted, confirmed or extended. A client still selecting, requesting,
+  probing an offered address or rebooting holds none yet: after a link loss
+  the client's INIT-REBOOT keeps the old address in use but unconfirmed
+  until a server's ACK, so the wait goes on to that ACK or the next lease.
+  `Stopped` once the network ended.
 - **WaitLinkDown** waits, bounded by the request's timeout, until the link
   up at its start is down or up in a later epoch, as the network saw it; a
   link down at the start ends it at once.

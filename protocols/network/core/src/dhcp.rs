@@ -10,7 +10,14 @@
 //! counts from its REQUEST's first acceptance by the port, RFC 2131, 4.4.1 and
 //! 4.4.5; a renewal goes to the server identifier, RFC 2131, 4.1; an ACK
 //! without a lease time or subnet mask is refused, not given a default; a link
-//! that comes back with a lease runs INIT-REBOOT, RFC 2131, 3.2 and 4.4.2.
+//! that comes back with a lease runs INIT-REBOOT, RFC 2131, 3.2 and 4.4.2,
+//! its REQUEST at once and repeated after 4 s, doubling to 64 s, each wait
+//! randomized by up to a second either way (RFC 2131, 4.1), for as long as the
+//! lease lasts: the address stays in use meanwhile (RFC 2131, 3.7), and only
+//! an ACK ends REBOOTING. A new address is probed with ARP before it is bound
+//! (RFC 2131, 2.2 and 4.4.1, with RFC 5227, 2.1's probe and its times); one
+//! in use is declined, and discovery starts over no sooner than ten seconds
+//! later (RFC 2131, 3.1 (5)).
 
 use oer_portable_time::{Duration, Instant};
 use oer_portable_wire::{Error, Writer};
@@ -31,9 +38,25 @@ const DISCOVER_MOST: Duration = Duration::from_secs(10);
 const REQUEST_FIRST: Duration = Duration::from_secs(5);
 /// REQUESTs to an OFFER before discovery starts again.
 const REQUEST_TRIES: u8 = 5;
-/// REQUESTs of an INIT-REBOOT before the client keeps its lease, RFC 2131,
-/// 3.2 (3). They start at [`DISCOVER_FIRST`]: the link just came up.
-const REBOOT_TRIES: u8 = 5;
+/// RFC 2131, 4.1: the first wait for an answer to an INIT-REBOOT's REQUEST;
+/// it doubles with each retransmission up to [`RETRANSMIT_MOST`].
+const REBOOT_FIRST: Duration = Duration::from_secs(4);
+/// RFC 2131, 4.1: the longest retransmission wait.
+const RETRANSMIT_MOST: Duration = Duration::from_secs(64);
+/// RFC 2131, 4.1: each INIT-REBOOT wait moves by a uniform draw of up to this
+/// either way.
+const RANDOMIZE: Duration = Duration::from_secs(1);
+/// RFC 2131, 3.1 (5): the least wait after a DECLINE before discovery
+/// starts over.
+const DECLINE_WAIT: Duration = Duration::from_secs(10);
+/// RFC 5227, 1.1: the first probe goes a uniform draw of up to PROBE_WAIT
+/// after the ACK, PROBE_NUM probes go PROBE_MIN to PROBE_MAX apart, and the
+/// address is bound ANNOUNCE_WAIT after the last one without a conflict.
+const PROBE_WAIT: Duration = Duration::from_secs(1);
+const PROBE_NUM: u8 = 3;
+const PROBE_MIN: Duration = Duration::from_secs(1);
+const PROBE_MAX: Duration = Duration::from_secs(2);
+const ANNOUNCE_WAIT: Duration = Duration::from_secs(2);
 /// RFC 2131, 4.4.5: the shortest wait between renewal or rebinding REQUESTs.
 const RENEW_LEAST: Duration = Duration::from_secs(60);
 /// RFC 2132, 9.8: the subnet mask, router and domain name servers.
@@ -67,6 +90,12 @@ pub enum DhcpState {
     /// INIT-REBOOT and REBOOTING: the link came back, and a REQUEST asks to
     /// keep the lease; the address stays in use meanwhile, RFC 2131, 3.7.
     Rebooting,
+    /// A server's ACK granted a new address, which ARP probes before it is
+    /// used (RFC 2131, 4.4.1; RFC 5227, 2.1).
+    Probing,
+    /// The probed address is another host's: a DECLINE is owed (RFC 2131,
+    /// 4.4.1).
+    Declining,
 }
 
 /// The domain name servers of a lease, in the server's order.
@@ -188,15 +217,26 @@ pub(crate) struct Outgoing {
 impl Outgoing {
     /// The message's octets.
     pub(crate) const fn length(&self) -> usize {
-        /// Message type, client identifier, maximum size, parameters, end.
-        const ALWAYS: usize = HEADER_LEN + 3 + 9 + 4 + (2 + PARAMETERS.len()) + 1;
+        /// Message type, client identifier, end.
+        const ALWAYS: usize = HEADER_LEN + 3 + 9 + 1;
+        /// Maximum size and parameters, which a DECLINE MUST NOT carry.
+        const ASKS: usize = 4 + (2 + PARAMETERS.len());
         /// An address option.
         const ADDRESS: usize = 6;
-        match (self.requested.is_some(), self.server.is_some()) {
-            (false, false) => ALWAYS,
-            (true, false) | (false, true) => ALWAYS + ADDRESS,
-            (true, true) => ALWAYS + 2 * ADDRESS,
+        match (self.asks(), self.requested.is_some(), self.server.is_some()) {
+            (true, false, false) => ALWAYS + ASKS,
+            (true, true, false) | (true, false, true) => ALWAYS + ASKS + ADDRESS,
+            (true, true, true) => ALWAYS + ASKS + 2 * ADDRESS,
+            (false, false, false) => ALWAYS,
+            (false, true, false) | (false, false, true) => ALWAYS + ADDRESS,
+            (false, true, true) => ALWAYS + 2 * ADDRESS,
         }
+    }
+
+    /// Whether it carries the maximum message size and the parameter request
+    /// list: RFC 2131, Table 5 has a DECLINE carry neither.
+    const fn asks(&self) -> bool {
+        !matches!(self.kind, MessageType::Decline)
     }
 
     /// Write it at the front of `writer`, RFC 2131, Table 5.
@@ -231,12 +271,14 @@ impl Outgoing {
         if let Some(server) = self.server {
             dhcp::write_option(writer, option::SERVER_IDENTIFIER, &server)?;
         }
-        dhcp::write_option(
-            writer,
-            option::MAXIMUM_MESSAGE_SIZE,
-            &self.largest.to_be_bytes(),
-        )?;
-        dhcp::write_option(writer, option::PARAMETER_REQUEST_LIST, &PARAMETERS)?;
+        if self.asks() {
+            dhcp::write_option(
+                writer,
+                option::MAXIMUM_MESSAGE_SIZE,
+                &self.largest.to_be_bytes(),
+            )?;
+            dhcp::write_option(writer, option::PARAMETER_REQUEST_LIST, &PARAMETERS)?;
+        }
         dhcp::write_end(writer)
     }
 }
@@ -253,6 +295,22 @@ impl Random {
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^ (z >> 31)
+    }
+
+    /// A uniform draw from `least` up to `least` and `span`: the draw's high
+    /// half scales the span, so no 64-bit division runs.
+    fn uniform(&mut self, least: Duration, span: Duration) -> Duration {
+        let span = u32::try_from(span.as_micros()).unwrap_or(u32::MAX);
+        let draw = u32::try_from(self.next() >> 32).unwrap_or(0);
+        let offset = u64::from(draw).saturating_mul(u64::from(span)) >> 32;
+        Duration::from_micros(least.as_micros().saturating_add(offset))
+    }
+
+    /// `wait` moved by a uniform draw of up to [`RANDOMIZE`] either way,
+    /// RFC 2131, 4.1.
+    fn spread(&mut self, wait: Duration) -> Duration {
+        let span = Duration::from_micros(RANDOMIZE.as_micros().saturating_mul(2));
+        self.uniform(wait.saturating_sub(RANDOMIZE), span)
     }
 
     /// `wait` less up to a quarter of it: the draw's high half scales the
@@ -288,7 +346,17 @@ enum Phase {
     Rebooting {
         next: Option<Instant>,
         wait: Duration,
-        tries: u8,
+    },
+    /// The ACK's lease, not yet in use: `probes` went, the next at `next`.
+    Probing {
+        candidate: Lease,
+        next: Option<Instant>,
+        probes: u8,
+    },
+    /// The DECLINE of `address`, leased by `server`, is owed.
+    Declining {
+        server: [u8; 4],
+        address: [u8; 4],
     },
 }
 
@@ -352,6 +420,8 @@ impl Client {
             Phase::Renewing { .. } => DhcpState::Renewing,
             Phase::Rebinding { .. } => DhcpState::Rebinding,
             Phase::Rebooting { .. } => DhcpState::Rebooting,
+            Phase::Probing { .. } => DhcpState::Probing,
+            Phase::Declining { .. } => DhcpState::Declining,
         }
     }
 
@@ -394,8 +464,7 @@ impl Client {
             self.new_transaction(now);
             self.phase = Phase::Rebooting {
                 next: None,
-                wait: DISCOVER_FIRST,
-                tries: 0,
+                wait: REBOOT_FIRST,
             };
             self.owe(serial);
         } else {
@@ -424,15 +493,16 @@ impl Client {
                 self.restart(now, serial);
                 change = Some(Change::Lost);
             }
-            if !self.step(now, serial) {
+            if !self.step(now, serial, &mut change) {
                 break;
             }
         }
         change
     }
 
-    /// One transition `now` asks for; whether one happened.
-    fn step(&mut self, now: Instant, serial: &mut u64) -> bool {
+    /// One transition `now` asks for, with what it did to the address in
+    /// `change`; whether one happened.
+    fn step(&mut self, now: Instant, serial: &mut u64, change: &mut Option<Change>) -> bool {
         let due = |next: Option<Instant>| next.is_some_and(|next| now >= next);
         match self.phase {
             Phase::Selecting { next, .. } if due(next) => {
@@ -451,12 +521,30 @@ impl Client {
                 }
                 true
             }
-            Phase::Rebooting { next, tries, .. } if due(next) => {
-                if tries >= REBOOT_TRIES {
-                    // RFC 2131, 3.2 (3): no answer, so the client MAY use the
-                    // lease for the rest of its time.
+            // Retransmitted until an answer, or the lease's end, which the
+            // tick takes before this.
+            Phase::Rebooting { next, .. } if due(next) => {
+                self.owe(serial);
+                self.set_next(None);
+                true
+            }
+            // A lease over before its probing ended grants nothing.
+            Phase::Probing { candidate, .. } if now >= candidate.expires => {
+                self.restart(now, serial);
+                true
+            }
+            Phase::Probing {
+                candidate,
+                next,
+                probes,
+            } if due(next) => {
+                if probes >= PROBE_NUM {
+                    // RFC 5227, 2.1.1: no conflict ANNOUNCE_WAIT after the
+                    // last probe, so the address is this host's.
+                    self.lease = Some(candidate);
                     self.owed = None;
                     self.phase = Phase::Bound;
+                    *change = Some(Change::Leased(candidate.ipv4));
                 } else {
                     self.owe(serial);
                     self.set_next(None);
@@ -506,8 +594,9 @@ impl Client {
             | Phase::Requesting { next, .. }
             | Phase::Renewing { next }
             | Phase::Rebinding { next }
-            | Phase::Rebooting { next, .. } => *next = at,
-            Phase::Bound => {}
+            | Phase::Rebooting { next, .. }
+            | Phase::Probing { next, .. } => *next = at,
+            Phase::Bound | Phase::Declining { .. } => {}
         }
     }
 
@@ -519,7 +608,11 @@ impl Client {
             | Phase::Renewing { next }
             | Phase::Rebinding { next }
             | Phase::Rebooting { next, .. } => next,
-            Phase::Bound => None,
+            // The probing ends at its candidate's end at the latest.
+            Phase::Probing {
+                next, candidate, ..
+            } => [next, Some(candidate.expires)].into_iter().flatten().min(),
+            Phase::Bound | Phase::Declining { .. } => None,
         };
         let lease = self.lease.map(|lease| {
             let step = match self.phase {
@@ -561,10 +654,20 @@ impl Client {
             }
             // RFC 2131, 3.2 (1): 'ciaddr' MUST NOT be filled in.
             Phase::Rebooting { .. } => (MessageType::Request, None, address, None),
-            Phase::Bound => return None,
+            // RFC 2131, Table 5: the address declined and its server.
+            Phase::Declining { server, address } => {
+                (MessageType::Decline, None, Some(address), Some(server))
+            }
+            // A probe is ARP's, not a message ([`Self::probe`]).
+            Phase::Bound | Phase::Probing { .. } => return None,
         };
-        let secs = u16::try_from(now.saturating_duration_since(self.began).as_micros() / 1_000_000)
-            .unwrap_or(u16::MAX);
+        // RFC 2131, Table 5: a DECLINE's 'secs' is 0.
+        let secs = if kind == MessageType::Decline {
+            0
+        } else {
+            u16::try_from(now.saturating_duration_since(self.began).as_micros() / 1_000_000)
+                .unwrap_or(u16::MAX)
+        };
         let destination = match self.destination() {
             Destination::Broadcast => BROADCAST,
             Destination::Server(server) => server,
@@ -585,6 +688,46 @@ impl Client {
         })
     }
 
+    /// The address the owed ARP probe of `serial` asks for, RFC 5227, 2.1.1,
+    /// while it is owed.
+    pub(crate) fn probe(&self, serial: u64) -> Option<[u8; 4]> {
+        match self.phase {
+            Phase::Probing { candidate, .. } if self.owed() == Some(serial) => {
+                Some(candidate.ipv4.address())
+            }
+            _ => None,
+        }
+    }
+
+    /// An ARP packet the interface received, while an address is probed: a
+    /// conflict when its sender is that address, or when it is another
+    /// host's probe for it (RFC 5227, 2.1.1). The client owes a DECLINE of
+    /// it then, RFC 2131, 4.4.1; whether it does now.
+    pub(crate) fn arp(
+        &mut self,
+        sender_hardware: [u8; 6],
+        sender_protocol: [u8; 4],
+        target_protocol: [u8; 4],
+        request: bool,
+        serial: &mut u64,
+    ) -> bool {
+        let Phase::Probing { candidate, .. } = self.phase else {
+            return false;
+        };
+        let address = candidate.ipv4.address();
+        let conflict = sender_hardware != self.hardware
+            && (sender_protocol == address
+                || (request && sender_protocol == UNSPECIFIED && target_protocol == address));
+        if conflict {
+            self.phase = Phase::Declining {
+                server: candidate.server,
+                address,
+            };
+            self.owe(serial);
+        }
+        conflict
+    }
+
     /// The port took the message of `serial`, or refused it for good: its
     /// retransmission time starts now.
     pub(crate) fn sent(&mut self, now: Instant, serial: u64) {
@@ -592,6 +735,16 @@ impl Client {
             return;
         }
         self.owed = None;
+        if matches!(self.phase, Phase::Declining { .. }) {
+            // RFC 2131, 3.1 (5): discovery starts over, no sooner than ten
+            // seconds from the DECLINE.
+            self.new_transaction(now);
+            self.phase = Phase::Selecting {
+                next: Some(now.saturating_add(DECLINE_WAIT)),
+                wait: DISCOVER_FIRST,
+            };
+            return;
+        }
         let random = &mut self.random;
         let lease = self.lease;
         match &mut self.phase {
@@ -612,11 +765,23 @@ impl Client {
                 *tries = tries.saturating_add(1);
                 self.sent.get_or_insert(now);
             }
-            Phase::Rebooting { next, wait, tries } => {
-                *next = Some(now.saturating_add(random.jitter(*wait)));
-                *wait = Duration::from_micros(wait.as_micros().saturating_mul(2));
-                *tries = tries.saturating_add(1);
+            Phase::Rebooting { next, wait } => {
+                *next = Some(now.saturating_add(random.spread(*wait)));
+                *wait = Duration::from_micros(
+                    wait.as_micros()
+                        .saturating_mul(2)
+                        .min(RETRANSMIT_MOST.as_micros()),
+                );
                 self.sent.get_or_insert(now);
+            }
+            Phase::Probing { next, probes, .. } => {
+                *probes = probes.saturating_add(1);
+                let wait = if *probes < PROBE_NUM {
+                    random.uniform(PROBE_MIN, PROBE_MAX.saturating_sub(PROBE_MIN))
+                } else {
+                    ANNOUNCE_WAIT
+                };
+                *next = Some(now.saturating_add(wait));
             }
             // RFC 2131, 4.4.5: half the time left to T2, or to the end, no
             // less than 60 s; a renewal never waits past T2.
@@ -635,7 +800,7 @@ impl Client {
                 *next = Some(now.saturating_add(half(left).max(RENEW_LEAST)));
                 self.sent.get_or_insert(now);
             }
-            Phase::Bound => {}
+            Phase::Bound | Phase::Declining { .. } => {}
         }
     }
 
@@ -696,9 +861,21 @@ impl Client {
                 if now >= lease.expires {
                     return Err(DhcpDrop::Lease(LeaseFault::Expired));
                 }
+                self.owed = None;
+                // A new address is probed before it is used, RFC 2131,
+                // 4.4.1; one the client holds already is its own.
+                if matches!(self.phase, Phase::Requesting { .. }) {
+                    self.phase = Phase::Probing {
+                        candidate: lease,
+                        next: Some(now.saturating_add(
+                            self.random.uniform(Duration::from_micros(0), PROBE_WAIT),
+                        )),
+                        probes: 0,
+                    };
+                    return Ok(None);
+                }
                 self.lease = Some(lease);
                 self.phase = Phase::Bound;
-                self.owed = None;
                 Ok(Some(Change::Leased(lease.ipv4)))
             }
             (

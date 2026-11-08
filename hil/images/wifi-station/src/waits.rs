@@ -8,10 +8,10 @@
 use oer::wifi::{Configuration, DhcpState, Ipv4, LinkSnapshot, LinkState, WatchRefused};
 
 /// The address a wait for one ends with: the interface's over an up link,
-/// while the DHCP client holds it bound: a lease the server granted or
-/// extended, one an INIT-REBOOT no server answered keeps for its time
-/// (RFC 2131, 3.2 (3)), or an address the owner gave. A client still asking
-/// (SELECTING, REQUESTING, REBOOTING) holds none yet.
+/// while the DHCP client holds it bound: a lease a server granted, confirmed
+/// or extended, or an address the owner gave. A client still asking
+/// (SELECTING, REQUESTING, an INIT-REBOOT no server answered yet), probing
+/// an offered address or declining it holds none yet.
 pub(crate) fn leased(configuration: &Configuration) -> Option<Ipv4> {
     if configuration.link.state != LinkState::Up {
         return None;
@@ -20,7 +20,13 @@ pub(crate) fn leased(configuration: &Configuration) -> Option<Ipv4> {
         None | Some(DhcpState::Bound | DhcpState::Renewing | DhcpState::Rebinding) => {
             configuration.ipv4
         }
-        Some(DhcpState::Selecting | DhcpState::Requesting | DhcpState::Rebooting) => None,
+        Some(
+            DhcpState::Selecting
+            | DhcpState::Requesting
+            | DhcpState::Rebooting
+            | DhcpState::Probing
+            | DhcpState::Declining,
+        ) => None,
     }
 }
 
