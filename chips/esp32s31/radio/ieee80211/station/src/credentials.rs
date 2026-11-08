@@ -241,6 +241,23 @@ mod tests {
             protected.security,
             StaSecurity::Wpa2Personal { .. }
         ));
+        assert!(!open.prefer_he20 && !protected.prefer_he20);
+    }
+    #[test]
+    fn only_settings_that_ask_for_he20_prefer_it() {
+        let he = embassy_futures::block_on(
+            StationSettings::wpa2_passphrase(b"lab", b"password")
+                .unwrap()
+                .with_he20()
+                .prepare(),
+        )
+        .unwrap()
+        .into_profile();
+        assert!(he.prefer_he20);
+        assert!(matches!(
+            he.security,
+            oer_protocols_ieee80211_core_roles_sta::machine::StaSecurity::Wpa2Personal { .. }
+        ));
     }
     #[test]
     fn passphrase_and_provisioned_pmk_have_the_same_ieee_key_material() {

@@ -570,22 +570,15 @@ fn power_limits(cap_dbm: i8) -> oer_protocols_radio_regulatory::PowerLimits {
 }
 
 /// The power elements of an HE20 Association Request on `channel` of
-/// `domain` at `cap_dbm`: the Power Capability (the MAC's minimum and the
-/// MCS 0 power) and the HE UL-MU power capability (the powers of MAC rates
-/// 16 to 25, HE-MCS 0 to 9), each rate's PHY target power bounded by the
-/// transmit ceiling the port's transmissions take.
-///
-/// SOURCE(esp32s31): complete pinned `libnet80211.a[ieee80211_he.o]::
-/// ieee80211_add_power_cap` (`hal_get_tx_min_pwr`, `hal_get_tx_pwr(16, 1)`)
-/// and `ieee80211_add_ulmu_pwrcap` (`phy_get_max_pwr` of rates 16..=25); the
-/// rates' powers are those [`PhyTxTargetPowerProfile::pair`] gives the MAC's
-/// power table, capped as [`CappedTxPowerProfile`] caps them.
+/// `domain` at `cap_dbm` ([`crate::he::he_power`]): each HE-MCS's PHY
+/// target power ([`PhyTxTargetPowerProfile::pair`], the MAC's power table)
+/// bounded by the transmit ceiling the port's transmissions take
+/// ([`CappedTxPowerProfile`]), and the MAC's minimum.
 pub(crate) fn he_power(
     domain: &RegulatoryDomain,
     channel: u8,
     cap_dbm: i8,
 ) -> Result<oer_protocols_ieee80211_core_roles_sta::association::StaHePower, InitializationError> {
-    use oer_protocols_ieee80211_wire::station::{HeUlMuPowerCapability, StaPowerCapability};
     let channel = WifiChannel::new_2_4_ghz(channel, WifiChannelWidth::Mhz20)
         .map_err(|_| InitializationError::Channel)?;
     let ceiling = domain
@@ -594,20 +587,11 @@ pub(crate) fn he_power(
         .tx_ceiling(power_limits(cap_dbm))
         .dbm();
     let targets = PhyConfig::production().tx_target_power_profile();
-    let power = |rate: u8| targets.pair(rate).primary.min(ceiling);
-    let rates: [i8; 10] = core::array::from_fn(|index| power(16_u8.saturating_add(index as u8)));
-    let [mcs0, ..] = rates;
-    Ok(
-        oer_protocols_ieee80211_core_roles_sta::association::StaHePower {
-            power_capability: StaPowerCapability::new(
-                oer_chips_esp32s31_hal::types::MAC_MINIMUM_TX_POWER_DBM,
-                mcs0,
-            )
-            .map_err(|_| InitializationError::HePower)?,
-            ul_mu_power: HeUlMuPowerCapability::from_rate_power_indices(rates)
-                .map_err(|_| InitializationError::HePower)?,
-        },
+    crate::he::he_power(
+        oer_chips_esp32s31_hal::types::MAC_MINIMUM_TX_POWER_DBM,
+        |rate| targets.pair(rate).primary.min(ceiling),
     )
+    .map_err(|_| InitializationError::HePower)
 }
 
 async fn install<W: Binding>(

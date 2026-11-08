@@ -119,7 +119,9 @@ Association also retains every advertised legacy rate from Supported and
 Extended Supported Rates in `StaAssociatedPeer::rate_peer`, alongside the
 separate basic-rate set for protection. A response cannot create a peer from
 an advertisement containing no usable legacy rate.
-The station asks for the PHY of `StaConfig::phy` (`association::StaPhyRequest`).
+The station asks for the PHY of `StaConfig::phy` (`association::StaPhyRequest`)
+for a connection whose profile sets `StaProfile::prefer_he20`; another
+connection takes the request without HE20 (`StaPhyRequest::without_he20`).
 `PreferHe20` asks an access point that admits HE20 (`association::he20_admitted`:
 HT Capabilities, HE-MCS 0..9 both ways on one stream and an HE Operation that
 parses) for HE20, with its Power Capability and HE UL-MU power elements; any
@@ -129,8 +131,15 @@ Response's HE Capabilities and HE Operation, which must parse and still admit
 HE20; the scan's elements chose the request only. A response that lacks,
 repeats or malforms an HE element, or no longer admits HE20, makes no link:
 the station leaves with `HeNotGranted` and never keeps an HT link in its
-place. The connection notice and the Connect outcome name the PHY mode the
-station associated in.
+place; so does a response whose AID or HE parameters lie outside the port's
+`He20Association`. The connection notice and the Connect outcome name the PHY
+mode the station associated in. An HE20 association goes to the port as
+`StaAction::SetHe` after its EDCA parameters and before the link starts (the
+4-way handshake's frames included); the station records it and sets
+`StationHe::Off` before its leave's receive-off configuration, and before a
+join's receive configuration should one be left. An HT or legacy link sets
+no HE state. A restart runs on the next installation, whose MAC starts
+without an HE association.
 Authentication TX contexts also retain the attempt ordinal inside their link
 epoch. A late terminal or preparation refusal returns its credit and buffer
 but cannot end a later RX-driven retry or arm that retry's response timer.

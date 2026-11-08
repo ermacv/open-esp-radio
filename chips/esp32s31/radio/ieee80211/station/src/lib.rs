@@ -707,6 +707,8 @@ struct ActorConnection<'a, N: Notifies, M> {
 mod chip;
 #[cfg(target_arch = "riscv32")]
 mod dma;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod he;
 #[cfg(test)]
 mod joined;
 pub mod policy;
