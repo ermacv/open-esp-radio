@@ -623,6 +623,10 @@ pub struct Configuration {
     pub lease: Option<Lease>,
     /// The DHCP client's state; `None` for an address given by its owner.
     pub dhcp: Option<DhcpState>,
+    /// The port's link as the core last observed it: an application that
+    /// waits for an address over an up link, or for that link's loss, reads
+    /// both from one publication.
+    pub link: LinkSnapshot,
 }
 
 #[derive(Debug)]
@@ -797,11 +801,12 @@ impl<
             version: self.version,
             lease: self.dhcp.as_ref().and_then(Client::lease).copied(),
             dhcp: self.dhcp.as_ref().map(Client::state),
+            link: self.link,
         }
     }
 
     /// A wrapping count that moves whenever [`Self::configuration`] may have
-    /// changed: an address, a lease's times, the client's state.
+    /// changed: an address, a lease's times, the client's state, the link.
     pub const fn configuration_changes(&self) -> u32 {
         self.configuration_changes
     }
@@ -1667,13 +1672,13 @@ impl<
                 pool.give(owed.block);
                 report(events, || NetEvent::Icmp(IcmpDrop::Unreachable));
             });
-            // RFC 2131, 4.4.4: no answer from a known server; the renewal
-            // counts as sent, and its next try comes at its time.
+            // The server's neighbor never answered: the renewal never went,
+            // so it counts as refused, and its next try comes at its time.
             if dhcp == Some(address)
                 && let Some(client) = client
                 && let Some(owed) = client.owed()
             {
-                client.sent(now, owed);
+                client.refused(now, owed);
             }
             changes = changes.wrapping_add(1);
         });
@@ -2108,13 +2113,18 @@ impl<
                         && let Some(client) = &mut self.dhcp
                         && let Some(owed) = client.owed()
                     {
-                        client.sent(now, owed);
+                        client.refused(now, owed);
                     }
                     self.neighbors_moved();
                 }
             }
             Work::Datagram { .. } => self.end_published(grant, Outcome::Rejected, pool),
-            Work::Dhcp { serial, .. } => self.dhcp_sent(now, serial),
+            Work::Dhcp { serial, .. } => {
+                if let Some(client) = &mut self.dhcp {
+                    client.refused(now, serial);
+                }
+                self.forget_unneeded();
+            }
             Work::Echo { serial, .. } => self.end_echo(serial, pool),
         }
     }
@@ -2130,9 +2140,8 @@ impl<
         self.forget_unneeded();
     }
 
-    /// The port took the client's message of `serial`, or refused it for
-    /// good, which would meet the same again: its next try comes at its
-    /// time.
+    /// The port took the client's message of `serial`: its next try comes at
+    /// its time.
     fn dhcp_sent(&mut self, now: Instant, serial: u64) {
         if let Some(client) = &mut self.dhcp {
             client.sent(now, serial);

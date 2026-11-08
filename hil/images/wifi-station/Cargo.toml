@@ -5,10 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
 publish.workspace = true
-description = "The HIL image of the SDK station scenario: an oer Wi-Fi station and IP service served over the HIL console"
+description = "The HIL image of the station scenarios: an oer Wi-Fi station and the network core served over the HIL console"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer = { path = "../../../oer", features = ["wifi", "console", "group", "observe", "udp"] }
+oer = { path = "../../../oer", features = ["wifi", "console", "group", "observe", "network"] }
 oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-agent = { path = "../../agent" }
 oer-protocols-hil-protocol = { workspace = true }
@@ -27,8 +27,17 @@ oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-featu
 oer-protocols-hil-protocol = { workspace = true }
 oer-hil-services-load = { path = "../../services/load" }
 oer-hil-services-sdk-station = { path = "../../services/sdk-station" }
-oer-portable-trace = { path = "../../../portable/trace" }
 oer-hil-services-wifi-station = { path = "../../services/wifi-station" }
+oer-portable-events = { path = "../../../portable/events" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
+oer-portable-trace = { path = "../../../portable/trace" }
+oer-protocols-network-core = { path = "../../../protocols/network/core", features = ["test-support"] }
+oer-protocols-network-port = { path = "../../../protocols/network/port" }
+oer-protocols-network-runtime = { path = "../../../protocols/network/runtime" }
+oer-protocols-network-wire = { path = "../../../protocols/network/wire" }
+embassy-futures = "0.1.2"
 heapless = "0.9.3"
 postcard = { version = "1.1.3", default-features = false }
 
@@ -40,7 +49,9 @@ critical-section-hart = "boot"
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
 # The SDK's observations (`observe`) report through the executors', the
-# station's and the RF actor's observers, which only `oer_trace` builds call.
+# station's, the RF actor's and the network's observers, which only
+# `oer_trace` builds call; the fault service refuses one publication under
+# `oer_fault_injection`.
 instrumentation = ["trace", "fault-injection"]
 
 [package.metadata.open-radio.panic-budget]

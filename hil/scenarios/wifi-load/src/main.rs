@@ -50,29 +50,19 @@ use oer_tools_hil_harness::{
     Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
 };
 
-/// The image the scenario runs.
+/// The image the scenario runs: the station on the network core.
 const IMAGE: &str = "hil-wifi-station";
-/// The same image on the network core, chosen by [`STACK_ENV`].
-const NETWORK_IMAGE: &str = "hil-wifi-network";
-/// `network` runs the scenario on the network core, which leases its address
-/// as the station's IP service does.
-const STACK_ENV: &str = "OER_WIFI_LOAD_STACK";
 
-const fn scenario(image: &'static str) -> Scenario {
-    Scenario::new(
-        "wifi-load",
-        image,
-        &[
-            oer_hil_services_wifi_station::Request::KEYS,
-            oer_hil_services_load::Request::KEYS,
-        ],
-    )
-    .using_router()
-    .using_air_exclusively()
-}
-
-const SCENARIO: Scenario = scenario(IMAGE);
-const NETWORK_SCENARIO: Scenario = scenario(NETWORK_IMAGE);
+const SCENARIO: Scenario = Scenario::new(
+    "wifi-load",
+    IMAGE,
+    &[
+        oer_hil_services_wifi_station::Request::KEYS,
+        oer_hil_services_load::Request::KEYS,
+    ],
+)
+.using_router()
+.using_air_exclusively();
 
 const CASES: [Case; 9] = [
     Case {
@@ -152,17 +142,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     }
-    let scenario = if network_core() {
-        &NETWORK_SCENARIO
-    } else {
-        &SCENARIO
-    };
-    oer_tools_hil_harness::main(scenario, &CASES)
-}
-
-/// Whether the scenario runs on the network core.
-fn network_core() -> bool {
-    std::env::var(STACK_ENV).as_deref() == Ok("network")
+    oer_tools_hil_harness::main(&SCENARIO, &CASES)
 }
 
 /// The route the host takes to an address of the station network, as
@@ -653,8 +633,8 @@ fn hart1(hart1: &Hart1Window, window_us: u64) -> serde_json::Value {
 
 /// The window's counters: the image's measured hart's cycles and retired
 /// instructions with their rate per microsecond (MHz) and per cycle, what
-/// the network bridge did with the station's frames, the frames the IP
-/// stack took with the hart's instructions over them, and the L1 cache's
+/// the network bridge did with the station's frames, the datagrams the
+/// network delivered with the hart's instructions over them, and the L1 cache's
 /// accesses by bus ([`cache`]), and the receive path's counts as the image
 /// took them: the S31 driver's and the station service's receive
 /// decisions, each the window's difference. The hart's counts include all
@@ -729,7 +709,7 @@ impl Per {
 /// The L1 cache's counts of each bus within the window, with each bus's
 /// misses as a share of its hits and misses, and its misses and next-level
 /// reads (and a data bus's next-level writes) per 1000 of the serving
-/// hart's instructions and per frame the IP stack took. An overflowed
+/// hart's instructions and per datagram the network delivered. An overflowed
 /// bus's counts are not exact: its derived values are null.
 fn cache(counters: &Counters) -> serde_json::Value {
     let per = Per {
@@ -1078,11 +1058,14 @@ const COMBINED_MBPS: u64 = 65;
 /// Each way of the `overload` case: more than the air holds either way
 /// (the archive's network comparison).
 const OVERLOAD_MBPS: u64 = 130;
-/// The requests of the `ping` case: 12 s at [`ping::PERIOD`], the archive's.
+/// The requests of the `ping` case: some 13.6 s at [`ping::PERIOD`].
 const PING_COUNT: u32 = 120;
 /// The longest median round trip of a ping over an unloaded link, the
 /// owner's limit: host, wire, router, one hop over the air and back.
 const PING_MEDIAN_LIMIT_US: u64 = 3000;
+/// The replies a ping's median needs to decide a case: fewer leave it
+/// incomplete, as a median of a few depends on where they fell.
+const PING_REPLIES_LEAST: usize = 30;
 
 /// One sparse traffic shape, the same each way.
 #[derive(Clone, Copy)]
@@ -1151,8 +1134,16 @@ fn ping_idle(cx: &mut Cx<'_>) -> Result<(), Failure> {
     ping_within_limit("idle", &echoes)
 }
 
-/// Whether the ping's median is within [`PING_MEDIAN_LIMIT_US`].
+/// Whether the ping's median is within [`PING_MEDIAN_LIMIT_US`]; with
+/// fewer than [`PING_REPLIES_LEAST`] replies the case is incomplete.
 fn ping_within_limit(name: &str, echoes: &traffic::Echoes) -> Result<(), Failure> {
+    if echoes.rtt_us.len() < PING_REPLIES_LEAST {
+        return Err(Failure::Incomplete(format!(
+            "ping {name}: {} replies of {} requests, fewer than the {PING_REPLIES_LEAST} a median needs",
+            echoes.rtt_us.len(),
+            echoes.sent
+        )));
+    }
     let median = ping::median_us(echoes);
     check(
         median.is_some_and(|median| median <= PING_MEDIAN_LIMIT_US),
@@ -1213,7 +1204,7 @@ const STOP_AFTER: Duration = Duration::from_secs(2);
 const LEAVE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Leave while the host offers RX load the image receives and its socket
-/// holds: the stop closes the socket and stops the IP service, every lent
+/// holds: the stop closes the socket and stops the network, every lent
 /// buffer returns and the radio retires, so the station reports `Down`.
 fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let device = device_address(cx)?;
@@ -1523,7 +1514,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         object.insert("addba".to_owned(), addba_measurement(name, &ended));
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
-        let elf = profile::elf(if network_core() { NETWORK_IMAGE } else { IMAGE });
+        let elf = profile::elf(IMAGE);
         let sites = elf
             .as_ref()
             .map_err(Clone::clone)
@@ -1657,6 +1648,31 @@ fn percent(part: u64, whole: u64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_ping_period_meets_every_sparse_shape_at_as_many_phases_as_its_replies_need() {
+        let period = u32::try_from(ping::PERIOD.as_millis()).unwrap();
+        for shape in SPARSE {
+            let phases: std::collections::BTreeSet<u32> = (0..PING_REPLIES_LEAST as u32)
+                .map(|request| request * period % shape.every_ms)
+                .collect();
+            let least = (shape.every_ms as usize).min(PING_REPLIES_LEAST);
+            assert_eq!(phases.len(), least, "{}", shape.name());
+        }
+    }
+
+    #[test]
+    fn a_ping_verdict_needs_its_least_replies_and_then_its_median_decides() {
+        let echoes = |rtt_us: Vec<u64>| traffic::Echoes { sent: 44, rtt_us };
+        let few = ping_within_limit("few", &echoes(vec![1000; PING_REPLIES_LEAST - 1]));
+        assert!(matches!(few, Err(Failure::Incomplete(_))), "{few:?}");
+        // Few and slow is incomplete too, not a failure.
+        let slow_few = ping_within_limit("slow", &echoes(vec![9000; 10]));
+        assert!(matches!(slow_few, Err(Failure::Incomplete(_))));
+        assert!(ping_within_limit("quick", &echoes(vec![2000; PING_REPLIES_LEAST])).is_ok());
+        let slow = ping_within_limit("slow", &echoes(vec![3001; PING_REPLIES_LEAST]));
+        assert!(matches!(slow, Err(Failure::Fail(_))), "{slow:?}");
+    }
+
     use super::*;
 
     #[test]
@@ -1698,13 +1714,24 @@ mod tests {
 
     #[test]
     fn the_ping_limit_holds_a_median_and_needs_replies() {
-        let echoes = |rtt_us: &[u64]| traffic::Echoes {
-            sent: 3,
-            rtt_us: rtt_us.to_vec(),
+        // Fifteen quick, the median, and fourteen slow.
+        let echoes = |median: u64| traffic::Echoes {
+            sent: 30,
+            rtt_us: [vec![900; 15], vec![median], vec![9000; 14]].concat(),
         };
-        assert!(ping_within_limit("x", &echoes(&[900, 2900, 9000])).is_ok());
-        assert!(ping_within_limit("x", &echoes(&[900, 3100, 9000])).is_err());
-        assert!(ping_within_limit("x", &echoes(&[])).is_err());
+        assert!(ping_within_limit("x", &echoes(2900)).is_ok());
+        assert!(matches!(
+            ping_within_limit("x", &echoes(3100)),
+            Err(Failure::Fail(_))
+        ));
+        let none = traffic::Echoes {
+            sent: 30,
+            rtt_us: Vec::new(),
+        };
+        assert!(matches!(
+            ping_within_limit("x", &none),
+            Err(Failure::Incomplete(_))
+        ));
     }
 
     #[test]

@@ -57,6 +57,10 @@ pub fn holding(address: [u8; 4]) -> Option<Configuration> {
         version: 1,
         lease: None,
         dhcp: None,
+        link: oer_protocols_network_port::LinkSnapshot {
+            state: oer_protocols_network_port::LinkState::Up,
+            epoch: 1,
+        },
     })
 }
 

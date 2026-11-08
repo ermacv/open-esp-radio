@@ -37,6 +37,7 @@ fn a_run_waits_for_the_network_s_lease_and_names_its_bound_port() {
         version: 0,
         lease: None,
         dhcp: Some(oer_protocols_network_core::DhcpState::Selecting),
+        link: oer_protocols_network_port::LinkSnapshot::DOWN,
     }));
     assert!(matches!(
         udp::open(&net, &start()),

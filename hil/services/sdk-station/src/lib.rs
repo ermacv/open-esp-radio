@@ -117,6 +117,8 @@ pub enum Exchanged {
     TimedOut,
     /// The station holds no IPv4 address.
     NoAddress,
+    /// The image's network has no TCP: no connection was opened.
+    NoTcp,
 }
 
 /// Wait up to `timeout_ms` until the link that is up now goes down or is

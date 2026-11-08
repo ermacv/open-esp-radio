@@ -2,9 +2,10 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::panic, clippy::todo, clippy::unimplemented)]
 
-//! The HIL image of the SDK station scenario: the `oer` Wi-Fi
-//! station and IP service with the library's defaults, the HIL base module
-//! and the SDK station service over the USB Serial/JTAG console.
+//! The HIL image of the station scenarios: the `oer` Wi-Fi station with the
+//! network core in place of the IP service, the HIL base module and the SDK
+//! station, Wi-Fi station, fault and load services over the USB Serial/JTAG
+//! console.
 
 #[cfg(target_arch = "riscv32")]
 include!("entry.rs");
@@ -19,3 +20,6 @@ mod load;
 
 #[cfg(target_arch = "riscv32")]
 mod udp;
+
+#[cfg(target_arch = "riscv32")]
+mod waits;
