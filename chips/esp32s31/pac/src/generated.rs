@@ -324488,13 +324488,13 @@ pub mod layouts {
         pub const SIG_MODE_WIDTH: u32 = 2;
         /// Greatest unsigned image of `SIG_MODE`.
         pub const SIG_MODE_MAX: u32 = 0x3;
-        /// SOURCE: BLOB_LIBPP_RX_SIG_MODE_20261108.
+        /// SOURCE: BLOB_LIBPP_RX_SIG_MODE_20261108, ESP_WIFI_SYS_S31_RXCTRL.
         /// Named image of `SIG_MODE`.
         pub const SIG_MODE_HT: u8 = 1;
-        /// Project-assigned name. Project-assigned name. The received PPDU's signal mode, as the libpp sig_mode diagnostic names it: one for an HT PPDU, whose HE_SIGA1 word is its HT-SIG. Which of two and three an HE PPDU reports is not established; BB_FORMAT names the HE formats.
+        /// Project-assigned name. Project-assigned name. The received PPDU's signal mode, as the libpp sig_mode diagnostic names it: one for an HT PPDU, whose HE_SIGA1 word is its HT-SIG. Which of two and three an HE PPDU reports is not established; BB_FORMAT names the HE formats. The public esp_wifi_rxctrl_t comments these bits reserved for its interface; the pinned libpp reads them.
         ///
         /// `SIG_MODE`, bits 7:6; written by the hardware.
-        /// SOURCE: BLOB_LIBPP_RX_SIG_MODE_20261108.
+        /// SOURCE: BLOB_LIBPP_RX_SIG_MODE_20261108, ESP_WIFI_SYS_S31_RXCTRL.
         pub const fn sig_mode(self) -> u8 {
             self.0 >> 6
         }
