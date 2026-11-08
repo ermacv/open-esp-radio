@@ -65,8 +65,8 @@ mod turn;
 
 pub use messages::{
     ActorEnd, ActorEvent, ActorEvents, ActorFault, ActorViolation, FromActor, GroupPending,
-    LifecycleEnds, NetworkEnd, NetworkEnds, Parcel, RetuneFailed, Returned, StationTx,
-    StopObserved, StopOutcome, ToActor, from_actor_depth, returns_depth,
+    LifecycleEnds, NetworkEnd, NetworkEnds, Parcel, RetuneFailed, ReturnObserved, Returned,
+    StationTx, StopObserved, StopOutcome, ToActor, from_actor_depth, returns_depth,
 };
 
 use core::future::{Future, poll_fn};
@@ -272,6 +272,10 @@ enum Radio<K> {
     /// Stopped already: a retiring stop waits for the network by the
     /// deadline.
     Draining { deadline: Instant },
+    /// Stopped, and the stop answered at its deadline while the network
+    /// still owed its return ([`StopOutcome::Returning`]): the return goes
+    /// on without a deadline, and a retirement waits for it.
+    Returning,
     /// The stop was answered; the radio takes a start or the retirement.
     Halted,
 }
@@ -293,13 +297,21 @@ impl<K> Radio<K> {
 enum NetworkStopping {
     /// No stop asked it to stop.
     NotAsked,
+    /// A stop owes it its stop once the station holds none of the
+    /// network's transmit memory: the stopped radio's ended frames and the
+    /// MSDUs left in the transmit queue went back through `returned`.
+    Owed,
     /// Asked, and it has not reported.
     Asked,
     /// It reported its stop; lent units are still out.
     Stopped,
     /// It reported its stop and holds no unit.
     Returned,
-    /// Its participant was lost.
+    /// Its participant was lost: its stop will not be confirmed. The
+    /// station still returns what it holds of the network through the
+    /// existing ways (the return queue, the lent units' own return); the
+    /// stop settles once nothing of the network is left with the station,
+    /// looked at after the data's settlement.
     Lost,
 }
 
@@ -407,6 +419,15 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     frames_out: u8,
     /// The network side's stop.
     network_stopping: NetworkStopping,
+    /// The network's MSDUs a stop found left in the transmit queue, at its
+    /// last count: what a stop still holds of the network's memory beside
+    /// the ended frames' (`DataTx::freed`).
+    queued: usize,
+    /// The lifecycle retired the actor while the network's return went on:
+    /// the actor ends once it came.
+    retiring: bool,
+    /// Every unit lent to the network came back, at the last poll.
+    lent_home: bool,
     /// The reply offered to the lifecycle, until it answers.
     reply_out: Option<ReplyPlace>,
     owed: Owed<'id, D>,
@@ -492,6 +513,9 @@ where
             },
             frames_out: 0,
             network_stopping: NetworkStopping::NotAsked,
+            queued: 0,
+            retiring: false,
+            lent_home: false,
             reply_out: None,
             owed: Owed::new(),
             facts: Facts::default(),
@@ -556,6 +580,9 @@ where
                 },
                 frames_out: 0,
                 network_stopping: NetworkStopping::NotAsked,
+                queued: 0,
+                retiring: false,
+            lent_home: false,
                 reply_out: None,
                 owed: Owed::new(),
                 facts: Facts::default(),
@@ -583,6 +610,14 @@ where
     /// The port, for its owner's checks between runs.
     pub const fn port(&self) -> &D::Port {
         &self.port
+    }
+
+    /// Whether the last stop's network participant was lost: the station
+    /// returned everything it held of the network, but the network never
+    /// confirmed its stop. The composition records it; the radio's stop
+    /// was confirmed.
+    pub const fn network_lost(&self) -> bool {
+        matches!(self.network_stopping, NetworkStopping::Lost)
     }
 
     /// The port, for its owner once the run retired it: the actor no
@@ -653,6 +688,12 @@ where
         self.radio = Radio::Stopped;
         self.end = None;
         self.recovering = false;
+        // A stop that stopped the network ended with its installation: the
+        // next stop asks the network of the next installation again.
+        self.network_stopping = NetworkStopping::NotAsked;
+        self.queued = 0;
+        self.retiring = false;
+        self.lent_home = false;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract

@@ -227,7 +227,9 @@ pub trait NetTransmit {
     /// The stack's packet owner a transmission hands over.
     type Frame: EthernetFrame;
     /// Whether the next [`Self::try_transmit`] finds room, without
-    /// registering anything: the sending path asks at every frame.
+    /// registering anything: the sending path asks at every frame. It takes
+    /// back the memory the device returned first, so a call returns that
+    /// memory to the stack whether or not a frame follows.
     fn has_room(&mut self) -> bool;
     /// As [`Self::has_room`], registering `cx` for the next room or returned
     /// memory before observing them.

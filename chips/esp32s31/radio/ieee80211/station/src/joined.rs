@@ -811,7 +811,7 @@ async fn serve_network<T: 'static>(
     // The queue outlives the port, so its frames are given back first, as the
     // application's stop does.
     if let Some(port) = ended.retired.port.inner.as_mut() {
-        port.give_back_received();
+        port.give_back();
     }
     ended.retired.port.inner = None;
     {

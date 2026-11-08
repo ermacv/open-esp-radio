@@ -54,6 +54,11 @@ impl Policy {
             disconnect_sent: false,
         }
     }
+    /// The policy of a new control epoch: the same configuration, no stop
+    /// and no network yet, as a new epoch's application connects first.
+    pub const fn next_epoch(&self) -> Self {
+        Self::new(self.config)
+    }
     pub fn admitted(&mut self, command: Command) {
         match command {
             Command::Connect => {
@@ -113,6 +118,16 @@ impl Policy {
         } else {
             (self.active && !linked).then_some(Command::Connect)
         }
+    }
+    /// Whether [`Self::command`] at `now` gives a command: the check a
+    /// lifecycle makes after it registered for the policy, so that a
+    /// change the lifecycle's own step made is not left for a wake that
+    /// came before the registration.
+    pub fn pending(&self, now: Instant, linked: bool) -> bool {
+        if self.stopping {
+            return !self.disconnect_sent || !linked;
+        }
+        self.ready(now, linked) && self.retry && self.ready && !linked
     }
     pub fn deadline(&self) -> Option<Instant> {
         if self.active { self.next } else { None }

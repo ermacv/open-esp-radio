@@ -398,6 +398,53 @@ where
             .map_err(ActorFault::Port)
     }
 
+    /// While a stop owes the network its stop
+    /// ([`NetworkStopping::Owed`]): hand back the MSDUs the network left in
+    /// the transmit queue, each as data left behind, one at a time through
+    /// the ended frames' way home while that way is clear; and once the
+    /// stopped radio holds none of the network's memory, ask the network to
+    /// stop. The network's last turn then takes back all its memory.
+    pub(super) fn return_network_memory<
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) {
+        if !matches!(
+            self.network_stopping,
+            NetworkStopping::Owed | NetworkStopping::Lost
+        ) {
+            return;
+        }
+        while self.data.freed.is_empty() && network.returned.free_capacity() != 0 {
+            let Ok(Some(Outgoing { memory, .. })) = network.transmit.try_receive_with(Option::take)
+            else {
+                break;
+            };
+            report(&mut self.events, || {
+                oer_protocols_ieee80211_core_roles_sta::events::StaEvent::DataLost(
+                    oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
+                )
+            });
+            // The deque is empty, so it holds this one memory.
+            free(&mut self.data.freed, memory);
+            self.return_freed(network);
+        }
+        self.queued = network.transmit.len();
+        if self.network_stopping == NetworkStopping::Owed
+            && matches!(self.radio, Radio::Draining { .. } | Radio::Returning)
+            && self.data_settled()
+            && self.data.freed.is_empty()
+            && self.queued == 0
+        {
+            network.network.request_stop();
+            self.network_stopping = NetworkStopping::Asked;
+        }
+    }
+
     /// Give the network the memory of ended frames while its queue has
     /// room.
     pub(super) fn return_freed<

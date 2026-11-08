@@ -43,4 +43,19 @@ A case is a script over the application's control, socket and address watch, the
 access point and the clock. Tasks are polled only once woken; with nothing woken the
 script looks again, then time moves to the next deadline, so a lost wake ends a case.
 After the script the harness stops the station gracefully, runs every task to its
-end and accounts for the network's blocks and transmit memory.
+end and accounts for the network's blocks, its transmit buffers and the MSDUs left in
+the station's transmit queue. A case of several sessions starts each after the first
+from the owners the last stop returned: the actor reinstalls the model's port, a
+station on the new installation's tokens takes the retired station's configuration,
+the control opens a new epoch over the same command queue and state, and the network's
+core takes the retired pool and brand, the same device port and transmit memory.
+
+A case may drop the network service's `run` future mid-traffic: the harness's
+network task, which outlives that future, then keeps the service, retires it and
+serves the port's returns (`DevicePort::serve_returns`). That shows a host
+composition with such an owner recovering; it does not cancel the S31
+application's network task, which today is never cancelled.
+
+What it shows is the protocol composition over the model's port: the real handshake,
+DHCP, UDP, echo and the tasks' interaction under virtual time. The S31 hardware's
+wakes, its HE path and transmit timing are outside it.

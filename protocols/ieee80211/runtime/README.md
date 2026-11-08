@@ -152,8 +152,40 @@ The policy never connects first: it becomes active at the application's
 first admitted connect, which named the network, and its reconnections use
 the profile the station kept; they publish none.
 Explicit Disconnect pauses the policy and Connect resumes it. Graceful Stop
-has its own wake, admits one disconnect and retires after link-down. The raw
+has its own wake, admits one disconnect and retires after link-down; a
+station without a link refuses that disconnect and the lifecycle then takes
+the stop. The lifecycle looks at the policy again after it registers for it,
+so a policy change its own step made needs no later wake. The raw
 runtime `Control::stop` still requests immediate cooperative retirement.
+
+A stop that stops the network returns the network's transmit memory before
+it asks the network to stop: once the radio stopped and its arenas settled,
+the ended frames' memory and every MSDU left in the transmit queue (each as
+data left behind) go back through the return queue, as its room allows, and
+only then does the actor ask the network to stop. The network takes that
+memory back before its port ends, so a confirmed stop leaves none of it with
+the station. The radio's stop and the network's return are separate: a
+network that has not returned its memory, its stop or its lent units by the
+deadline ends the stop's wait there as `StopOutcome::Returning` (the
+lifecycle's `LifecycleEnd::StoppedReturning`), never as an unconfirmed stop.
+The return goes on without a deadline, the memory stays the station's until
+the network took it, and a retirement ends the actor only once the return
+came. A lost network participant (its stop never reported) is a software
+error, not a fault of the radio: the station still returns its share of the
+network through the return queue and waits for its lent units, and once
+they are home, looked at after every arena's end settled, the stop ends
+with `StopOutcome::NetworkLost`
+(`LifecycleEnd::StoppedNetworkLost`) before the deadline, or the late return
+completes after it; `Actor::network_lost` tells the composition, which
+records it. Neither end is terminal. That share comes home only while an
+owner of the network's side still takes the return queue and gives back the
+lent units; without one the stop stays returning. The deadline ends the
+lifecycle's wait; the facade's public stop waits for the actual return and
+the radio's release.
+A stop for the next installation keeps the network and its MSDUs. An actor
+reinstalled after a stop that stopped the network asks the next network to
+stop again at its own stop. A new control epoch's reconnect policy keeps its
+configuration and forgets the ended epoch's stop and network.
 Policy deadline exhaustion is a typed station failure. No policy timer
 exists when reconnect is disabled.
 
