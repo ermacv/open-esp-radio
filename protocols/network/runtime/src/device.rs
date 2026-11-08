@@ -4,7 +4,7 @@ use core::task::{Context, Poll};
 
 use oer_protocols_network_port::{
     EthernetFrame, EthernetFrameView, FramePort, FrameSource, NetDevice, NetTransmit,
-    ReceivedFrame, SlotTooShort, TransmitError,
+    ReceivedFrame, TransmitError, Unpublished,
 };
 
 /// The memory frames are written in, in the device's own transmit buffers, so a
@@ -22,12 +22,13 @@ pub trait TxBuffers {
     /// Write a frame of `length` octets by `fill` in a free buffer.
     ///
     /// # Errors
-    /// [`PortRefusal`]; the buffer stays free.
-    fn write(
+    /// [`Unpublished`]: a [`PortRefusal`], or the error `fill` returned; the
+    /// buffer stays free.
+    fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<Self::Frame, PortRefusal>;
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<Self::Frame, Unpublished<PortRefusal, E>>;
 
     /// A frame the device did not take: its buffer is free again.
     fn restore(&mut self, frame: Self::Frame);
@@ -101,30 +102,34 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
     /// The device says nothing of a frame's end to this stack.
     type Ticket = ();
 
-    fn publish(
+    fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<(), PortRefusal> {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<(), Unpublished<PortRefusal, E>> {
         // The queue first: asking it is where a device takes back what it
         // finished, which may be the buffer asked for next.
         if !self.transmit.has_room() {
             self.waiting = Waiting::Room;
-            return Err(PortRefusal::NoRoom);
+            return Err(Unpublished::Port(PortRefusal::NoRoom));
         }
         if !self.buffers.available() {
             self.waiting = Waiting::Buffer;
-            return Err(PortRefusal::NoRoom);
+            return Err(Unpublished::Port(PortRefusal::NoRoom));
         }
         let frame = match self.buffers.write(length, fill) {
             Ok(frame) => frame,
-            Err(refusal) => {
-                self.waiting = match refusal {
-                    PortRefusal::NoRoom => Waiting::Buffer,
-                    PortRefusal::LinkDown => Waiting::Link,
-                    PortRefusal::BadFrame => Waiting::Nothing,
+            Err(unpublished) => {
+                // A failed fill is the frame's, not the port's: it waits for
+                // nothing.
+                self.waiting = match unpublished {
+                    Unpublished::Port(PortRefusal::NoRoom) => Waiting::Buffer,
+                    Unpublished::Port(PortRefusal::LinkDown) => Waiting::Link,
+                    Unpublished::Port(PortRefusal::BadFrame) | Unpublished::Fill(_) => {
+                        Waiting::Nothing
+                    }
                 };
-                return Err(refusal);
+                return Err(unpublished);
             }
         };
         match self.transmit.try_transmit(frame) {
@@ -140,7 +145,7 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
                     TransmitError::InvalidLength(_) => (Waiting::Nothing, PortRefusal::BadFrame),
                 };
                 self.waiting = waiting;
-                Err(refusal)
+                Err(Unpublished::Port(refusal))
             }
         }
     }

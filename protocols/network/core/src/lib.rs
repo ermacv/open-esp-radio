@@ -142,7 +142,8 @@ pub use interface::{Interface, InterfaceError};
 pub use loans::{Loan, Loans, LoansRefused, NotLent};
 pub use machine::{
     CommandId, CommandState, Core, Datagram, Demand, Eviction, Grant, NetEvent, OpenRefused,
-    Outcome, Queued, Remote, RetiredResults, SendRefusal, SendRefused, SocketId, StaleSocket,
+    Outcome, Queued, Remote, RetiredResults, SendRefusal, SendRefused, SlotTooShort, SocketId,
+    StaleSocket,
 };
 pub use owner::{NetworkOwner, Retired, Unsent};
 

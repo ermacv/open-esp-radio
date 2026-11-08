@@ -7,7 +7,7 @@ use core::future::Future;
 use core::task::{Context, Waker};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{Group, Interface, NetworkOwner, claim};
-use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, SlotTooShort};
+use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Unpublished};
 use oer_protocols_network_runtime::{Direct, MemoryPolicy, Service, SocketLanes, StopLane};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
@@ -70,12 +70,12 @@ struct Port(Rc<RefCell<VecDeque<Vec<u8>>>>);
 impl FramePort for Port {
     type Refusal = ();
     type Ticket = ();
-    fn publish(
+    fn publish<E>(
         &mut self,
         _: usize,
-        _: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<(), ()> {
-        Err(())
+        _: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<(), Unpublished<(), E>> {
+        Err(Unpublished::Port(()))
     }
 }
 impl FrameSource for Port {

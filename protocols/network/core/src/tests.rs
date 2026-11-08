@@ -16,7 +16,7 @@ use crate::{
     Interface, InterfaceError, LoansRefused, NetEvent, NetworkOwner, NotLent, OpenRefused, Outcome,
     Pool, Remote, SendRefusal, Unsent, claim,
 };
-use oer_protocols_network_port::{Class, FramePort, SlotTooShort};
+use oer_protocols_network_port::{Class, FramePort, Unpublished};
 
 const SIZE: usize = 1536;
 const BLOCKS: usize = 8;
@@ -52,6 +52,10 @@ struct Port {
     rejects: bool,
     /// Gives less room than was asked for.
     room: Option<usize>,
+    /// Answers a failed fill with a refusal of its own.
+    misreports: bool,
+    /// Refuses a frame once it is written.
+    after_fill: Option<&'static str>,
     sent: Vec<Vec<u8>>,
 }
 
@@ -63,16 +67,16 @@ impl FramePort for Port {
         *refusal == "rejected"
     }
 
-    fn publish(
+    fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<(), &'static str> {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<(), Unpublished<&'static str, E>> {
         if self.full {
-            return Err("full");
+            return Err(Unpublished::Port("full"));
         }
         if self.rejects {
-            return Err("rejected");
+            return Err(Unpublished::Port("rejected"));
         }
         if self.lazy {
             return Ok(());
@@ -82,7 +86,16 @@ impl FramePort for Port {
         if self.careless {
             return Ok(());
         }
-        written.map_err(|_| "short")?;
+        if let Err(error) = written {
+            return Err(if self.misreports {
+                Unpublished::Port("misreported")
+            } else {
+                Unpublished::Fill(error)
+            });
+        }
+        if let Some(refusal) = self.after_fill {
+            return Err(Unpublished::Port(refusal));
+        }
         self.sent.push(slot);
         Ok(())
     }
@@ -439,15 +452,87 @@ fn a_port_that_says_yes_after_a_failed_write_ends_the_work_unrepeated() {
 }
 
 #[test]
-fn room_that_is_too_short_sends_nothing() {
+fn a_failed_fill_is_its_own_cause_and_the_port_goes_on() {
     world!(|stack| {
         knows_peer(stack);
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"hello");
-        let _command = stack.send(at(1), &socket, peer(), block).unwrap();
+        let command = stack.send(at(1), &socket, peer(), block).unwrap();
         stack.port_mut().room = Some(10);
-        assert_eq!(send_next(stack, at(1)), Err(Unsent::Port("short")));
+        assert_eq!(send_next(stack, at(1)), Err(Unsent::SlotTooShort));
+        assert_eq!(finished(stack.take_result(command)), Outcome::Rejected);
+        assert!(stack.poll_demand(at(1)).is_none(), "not offered again");
+        assert_eq!(stack.pool().free(), BLOCKS);
+        assert!(!stack.port_broken());
+        stack.port_mut().room = None;
+        let block = filled(stack.pool(), b"after");
+        let command = stack.send(at(1), &socket, peer(), block).unwrap();
+        send_next(stack, at(1)).unwrap();
+        assert_eq!(finished(stack.take_result(command)), Outcome::Accepted);
+    });
+}
+
+#[test]
+fn a_port_refusal_after_a_failed_fill_is_the_port_s_fault() {
+    world!(|stack| {
+        knows_peer(stack);
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"hello");
+        let command = stack.send(at(1), &socket, peer(), block).unwrap();
+        stack.port_mut().room = Some(10);
+        stack.port_mut().misreports = true;
+        assert_eq!(
+            send_next(stack, at(1)),
+            Err(Unsent::FillMisreported("misreported"))
+        );
+        assert_eq!(
+            finished(stack.take_result(command)),
+            Outcome::Rejected,
+            "the fill's cause: the port says it took nothing"
+        );
+        assert!(stack.port_broken());
+        assert_eq!(stack.pool().free(), BLOCKS);
+        stack.port_mut().room = None;
+        stack.port_mut().misreports = false;
+        let block = filled(stack.pool(), b"after");
+        let _command = stack.send(at(1), &socket, peer(), block).unwrap();
+        assert_eq!(send_next(stack, at(1)), Err(Unsent::PortContract));
+        assert!(stack.port().sent.is_empty());
+    });
+}
+
+#[test]
+fn a_yes_after_a_failed_fill_wins_over_the_fill_s_cause() {
+    world!(|stack| {
+        knows_peer(stack);
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"hello");
+        let command = stack.send(at(1), &socket, peer(), block).unwrap();
+        stack.port_mut().room = Some(10);
+        stack.port_mut().misreports = true;
+        stack.port_mut().careless = true;
+        assert_eq!(send_next(stack, at(1)), Err(Unsent::PortContract));
+        assert_eq!(finished(stack.take_result(command)), Outcome::Unknown);
+        assert!(stack.port_broken());
+    });
+}
+
+#[test]
+fn a_refusal_after_a_written_frame_is_the_port_s_own() {
+    world!(|stack| {
+        knows_peer(stack);
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"hello");
+        let command = stack.send(at(1), &socket, peer(), block).unwrap();
+        stack.port_mut().after_fill = Some("full");
+        assert_eq!(send_next(stack, at(1)), Err(Unsent::Port("full")));
+        let command = running(stack.take_result(command));
         assert_eq!(stack.poll_demand(at(1)).unwrap().ready.class, Class::Data);
+        stack.port_mut().after_fill = Some("rejected");
+        assert_eq!(send_next(stack, at(1)), Err(Unsent::Rejected("rejected")));
+        assert_eq!(finished(stack.take_result(command)), Outcome::Rejected);
+        assert!(!stack.port_broken());
+        assert_eq!(stack.pool().free(), BLOCKS);
     });
 }
 
@@ -1113,17 +1198,7 @@ fn sockets_take_turns() {
         while stack.demands(at(1)).next().is_some() {
             send_next(stack, at(1)).unwrap();
         }
-        let order: Vec<_> = stack
-            .port()
-            .sent
-            .iter()
-            .map(|frame| {
-                let (_, payload) = EthernetHeader::parse(frame).unwrap();
-                let packet = Ipv4Header::parse(payload).unwrap();
-                UdpHeader::parse(packet.payload()).unwrap().0.ports.source
-            })
-            .collect();
-        assert_eq!(order, [5000, 5001, 5000, 5001]);
+        assert_eq!(senders(stack), [5000, 5001, 5000, 5001]);
     });
 }
 
@@ -1156,6 +1231,56 @@ fn a_time_past_a_neighbors_life_asks_again() {
             Class::Control
         );
     });
+}
+
+/// The source port of each datagram the port took, in order.
+fn senders<B>(stack: &Stack<B>) -> Vec<u16> {
+    stack
+        .port()
+        .sent
+        .iter()
+        .map(|frame| {
+            let (_, payload) = EthernetHeader::parse(frame).unwrap();
+            let packet = Ipv4Header::parse(payload).unwrap();
+            UdpHeader::parse(packet.payload()).unwrap().0.ports.source
+        })
+        .collect()
+}
+
+/// Two datagrams of the first socket and one of the second are ready, with
+/// the first's turn; the first frame meets a final refusal.
+fn refused_first<B: core::fmt::Debug>(stack: &mut Stack<B>, port: bool) {
+    knows_peer(stack);
+    let first = stack.open(5000, best_effort()).unwrap();
+    let second = stack.open(5001, best_effort()).unwrap();
+    for socket in [&first, &first, &second] {
+        let block = filled(stack.pool(), b"x");
+        let _command = stack.send(at(1), socket, peer(), block).unwrap();
+    }
+    stack.port_mut().rejects = port;
+    stack.port_mut().room = (!port).then_some(10);
+    let expected = if port {
+        Unsent::Rejected("rejected")
+    } else {
+        Unsent::SlotTooShort
+    };
+    assert_eq!(send_next(stack, at(1)), Err(expected));
+    stack.port_mut().rejects = false;
+    stack.port_mut().room = None;
+    while stack.demands(at(1)).next().is_some() {
+        send_next(stack, at(1)).unwrap();
+    }
+    assert_eq!(senders(stack), [5001, 5000], "the second socket's turn");
+}
+
+#[test]
+fn a_final_refusal_by_the_port_passes_the_turn_to_the_next_socket() {
+    world!(|stack| refused_first(stack, true));
+}
+
+#[test]
+fn a_failed_fill_passes_the_turn_to_the_next_socket() {
+    world!(|stack| refused_first(stack, false));
 }
 
 #[test]

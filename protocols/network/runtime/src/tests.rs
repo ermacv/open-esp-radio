@@ -20,7 +20,7 @@ use oer_protocols_network_core::{
     claim,
 };
 use oer_protocols_network_port::{
-    Candidate, Egress, EthernetFrameView, FramePort, FrameSource, SlotTooShort,
+    Candidate, Egress, EthernetFrameView, FramePort, FrameSource, Unpublished,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
@@ -64,6 +64,12 @@ struct Wire {
     contradicts: bool,
     /// The port refuses every frame for good.
     rejects: bool,
+    /// The next frames the port refuses for good.
+    rejections: usize,
+    /// The port gives less room than a frame needs.
+    room: Option<usize>,
+    /// What the port answers to a fill that failed.
+    after_failed_fill: AfterFailedFill,
     /// Tickets given.
     tickets: u32,
     /// Ended frames, by ticket.
@@ -79,6 +85,18 @@ impl Wire {
     }
 }
 
+/// A port's answer to a fill that failed.
+#[derive(Clone, Copy, Default)]
+enum AfterFailedFill {
+    /// The fill's own error, as the contract says.
+    #[default]
+    Fill,
+    /// A refusal of its own.
+    Refusal,
+    /// `Ok`.
+    Yes,
+}
+
 #[derive(Clone, Default)]
 struct WirePort(Rc<RefCell<Wire>>);
 
@@ -91,23 +109,33 @@ impl FramePort for WirePort {
         *refusal
     }
 
-    fn publish(
+    fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<u32, bool> {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<u32, Unpublished<bool, E>> {
         let mut wire = self.0.borrow_mut();
         if wire.full {
-            return Err(false);
+            return Err(Unpublished::Port(false));
         }
         if wire.rejects {
-            return Err(true);
+            return Err(Unpublished::Port(true));
+        }
+        if wire.rejections > 0 {
+            wire.rejections -= 1;
+            return Err(Unpublished::Port(true));
         }
         if wire.contradicts {
             return Ok(0);
         }
-        let mut frame = std::vec![0; length];
-        fill(&mut frame).map_err(|_| false)?;
+        let mut frame = std::vec![0; wire.room.unwrap_or(length)];
+        if let Err(error) = fill(&mut frame) {
+            return match wire.after_failed_fill {
+                AfterFailedFill::Fill => Err(Unpublished::Fill(error)),
+                AfterFailedFill::Refusal => Err(Unpublished::Port(false)),
+                AfterFailedFill::Yes => Ok(0),
+            };
+        }
         let reply = wire.answers.then(|| answer_of(&frame)).flatten();
         wire.sent.push(frame);
         wire.incoming.extend(reply);
@@ -2298,6 +2326,84 @@ fn a_frame_the_port_rejects_for_good_ends_and_the_service_goes_on() {
 }
 
 #[test]
+fn a_final_refusal_passes_the_turn_to_the_next_socket() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; 4]));
+    let (pool, brand) = claim::<Net, SIZE, 4>(memory).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let wire = WirePort::default();
+    wire.0.borrow_mut().answers = true;
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service: TestPair<Net, 4> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let dscp = Dscp::default();
+    let mut first = service
+        .bind(5000, dscp, Group::shared(), storage::<Net>())
+        .ok()
+        .unwrap();
+    let mut second = service
+        .bind(5001, dscp, Group::shared(), storage::<Net>())
+        .ok()
+        .unwrap();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let ends = {
+        let mut run = pin!(service.run(clock, &mut events));
+        // The second resolves the peer, so the first has the next turn.
+        let mut block = blocks_by_hand(&mut second, &mut run, 1).pop().unwrap();
+        block.fill(b"resolved").unwrap();
+        let mut resolved = second.send(peer(), block).ok().unwrap();
+        while pin!(resolved.finished()).poll(cx).is_pending() {
+            assert!(run.as_mut().poll(cx).is_pending());
+        }
+        assert_eq!(resolved.take().ok(), Some(Sent::Ended(Outcome::Accepted)));
+        let firsts = blocks_by_hand(&mut first, &mut run, 2);
+        let seconds = blocks_by_hand(&mut second, &mut run, 1);
+        let mut observers = Vec::new();
+        for (block, data) in firsts.into_iter().zip([b"first 0", b"first 1"]) {
+            let mut block = block;
+            block.fill(data).unwrap();
+            observers.push(first.send(peer(), block).ok().unwrap());
+        }
+        for mut block in seconds {
+            block.fill(b"second0").unwrap();
+            observers.push(second.send(peer(), block).ok().unwrap());
+        }
+        // All three are ready in one turn, and the first frame is refused
+        // for good.
+        wire.0.borrow_mut().rejections = 1;
+        let mut ends = Vec::new();
+        for mut observer in observers {
+            while pin!(observer.finished()).poll(cx).is_pending() {
+                assert!(run.as_mut().poll(cx).is_pending());
+            }
+            ends.push(observer.take().ok().unwrap());
+        }
+        ends
+    };
+    assert_eq!(
+        ends,
+        [
+            Sent::Ended(Outcome::Rejected),
+            Sent::Ended(Outcome::Accepted),
+            Sent::Ended(Outcome::Accepted),
+        ]
+    );
+    assert_eq!(
+        datagrams(&wire.0.borrow()),
+        [
+            b"resolved".to_vec(),
+            b"second0".to_vec(),
+            b"first 1".to_vec()
+        ],
+        "after the first socket's final refusal, the second socket's turn"
+    );
+    let ended = service.retire();
+    assert_eq!(ended.retired.pool.outstanding(), 0);
+}
+
+#[test]
 fn a_block_asked_without_waiting_comes_on_a_later_call() {
     brand!(Net);
     let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, _| {
@@ -2627,6 +2733,82 @@ fn a_frame_of_unknown_end_is_not_a_refusal() {
     assert_eq!(ended.cause, EndCause::PortContract);
     let account = policy.0.borrow();
     assert_eq!((account.unknown, account.refused, account.open), (1, 0, 0));
+}
+
+/// What became of a datagram whose fill failed, as the port then answered.
+struct FailedFill {
+    sent: Sent,
+    /// The next datagram's end, while the service goes on.
+    next: Option<Sent>,
+    cause: EndCause,
+    /// The policy's refused, unknown and open reservations.
+    account: (usize, usize, usize),
+}
+
+/// A datagram whose fill fails, as the port then answers `after`. A port
+/// that keeps its contract is asked for one more datagram; after a fault,
+/// the client waits for the service's end.
+fn a_failed_fill<B: 'static>(after: AfterFailedFill) -> FailedFill {
+    let policy = Policy::default();
+    let bench = bench_with::<B, _>(policy.clone());
+    let (mut ended, mut socket, (sent, next)) = run(bench, async |socket, wire| {
+        send_one(socket, b"resolved").await;
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.room = Some(10);
+            wire.after_failed_fill = after;
+        }
+        let sent = send_one(socket, b"too long for its room").await;
+        wire.0.borrow_mut().room = None;
+        let next = match after {
+            AfterFailedFill::Fill => Some(send_one(socket, b"after").await),
+            AfterFailedFill::Refusal | AfterFailedFill::Yes => {
+                while !socket.closed() {
+                    yield_now().await;
+                }
+                None
+            }
+        };
+        (sent, next)
+    });
+    returned(&mut ended, &mut socket);
+    let account = policy.0.borrow();
+    FailedFill {
+        sent,
+        next,
+        cause: ended.cause,
+        account: (account.refused, account.unknown, account.open),
+    }
+}
+
+#[test]
+fn a_failed_fill_ends_its_datagram_rejected_and_the_service_goes_on() {
+    brand!(Net);
+    let end = a_failed_fill::<Net>(AfterFailedFill::Fill);
+    assert_eq!(end.sent, Sent::Ended(Outcome::Rejected));
+    assert_eq!(end.next, Some(Sent::Ended(Outcome::Accepted)));
+    assert_eq!(end.cause, EndCause::Stopped, "the port kept its contract");
+    assert_eq!(end.account, (1, 0, 0), "nothing went out");
+}
+
+#[test]
+fn a_port_refusal_after_a_failed_fill_ends_the_service_with_the_port_s_fault() {
+    brand!(Net);
+    let end = a_failed_fill::<Net>(AfterFailedFill::Refusal);
+    assert_eq!(end.sent, Sent::Ended(Outcome::Rejected), "the fill's cause");
+    assert_eq!(end.next, None);
+    assert_eq!(end.cause, EndCause::PortContract);
+    assert_eq!(end.account, (1, 0, 0), "the port says it took nothing");
+}
+
+#[test]
+fn a_yes_after_a_failed_fill_is_unknown_and_the_port_s_fault() {
+    brand!(Net);
+    let end = a_failed_fill::<Net>(AfterFailedFill::Yes);
+    assert_eq!(end.sent, Sent::Ended(Outcome::Unknown));
+    assert_eq!(end.next, None);
+    assert_eq!(end.cause, EndCause::PortContract);
+    assert_eq!(end.account, (0, 1, 0));
 }
 
 #[test]

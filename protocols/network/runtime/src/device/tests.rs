@@ -9,8 +9,8 @@ use core::task::{Context, Poll, Waker};
 
 use oer_protocols_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource, FrameStorage,
-    LentFrame, LinkSnapshot, LinkState, NetDevice, NetTransmit, ReceivedFrame, SlotTooShort,
-    StorageAdvanceRefused, TransmitError, TransmitRefused,
+    LentFrame, LinkSnapshot, LinkState, NetDevice, NetTransmit, ReceivedFrame,
+    StorageAdvanceRefused, TransmitError, TransmitRefused, Unpublished,
 };
 
 use super::{DevicePort, PortRefusal, TxBuffers};
@@ -193,19 +193,22 @@ impl TxBuffers for Buffers {
             Poll::Ready(())
         }
     }
-    fn write(
+    fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<Written, PortRefusal> {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<Written, Unpublished<PortRefusal, E>> {
         if let Some(refusal) = self.refuse {
-            return Err(refusal);
+            return Err(Unpublished::Port(refusal));
         }
         if self.free == 0 {
-            return Err(PortRefusal::NoRoom);
+            return Err(Unpublished::Port(PortRefusal::NoRoom));
         }
-        let mut bytes = std::vec![0; length.min(self.room)];
-        fill(&mut bytes).map_err(|_| PortRefusal::BadFrame)?;
+        if length > self.room {
+            return Err(Unpublished::Port(PortRefusal::BadFrame));
+        }
+        let mut bytes = std::vec![0; length];
+        fill(&mut bytes).map_err(Unpublished::Fill)?;
         self.free -= 1;
         Ok(Written(bytes))
     }
@@ -229,9 +232,18 @@ fn port() -> Port {
     )
 }
 
-fn octets(slot: &mut [u8]) -> Result<(), SlotTooShort> {
+/// A fill's own error.
+#[derive(Debug, Eq, PartialEq)]
+struct Declined;
+
+fn octets(slot: &mut [u8]) -> Result<(), Declined> {
     slot.fill(7);
     Ok(())
+}
+
+/// A fill no port may call.
+fn unreachable_fill(why: &'static str) -> impl FnOnce(&mut [u8]) -> Result<(), Declined> {
+    move |_| panic!("{why}")
 }
 
 /// Whether registering wakes at once.
@@ -287,16 +299,16 @@ fn a_frame_goes_to_the_device_in_a_buffer() {
 fn no_buffer_refuses_before_the_frame_is_written() {
     let mut port = port();
     port.buffers.free = 0;
-    let refused = port.publish(4, |_| panic!("no buffer to write"));
-    assert_eq!(refused, Err(PortRefusal::NoRoom));
+    let refused = port.publish(4, unreachable_fill("no buffer to write"));
+    assert_eq!(refused, Err(Unpublished::Port(PortRefusal::NoRoom)));
 }
 
 #[test]
 fn a_full_device_refuses_before_the_frame_is_written() {
     let mut port = port();
     port.transmit.full = true;
-    let refused = port.publish(4, |_| panic!("no room"));
-    assert_eq!(refused, Err(PortRefusal::NoRoom));
+    let refused = port.publish(4, unreachable_fill("no room"));
+    assert_eq!(refused, Err(Unpublished::Port(PortRefusal::NoRoom)));
 }
 
 #[test]
@@ -311,7 +323,7 @@ fn a_frame_the_device_refuses_frees_its_buffer() {
     ] {
         let mut port = port();
         port.transmit.refuse = Some(reason);
-        assert_eq!(port.publish(4, octets), Err(expected));
+        assert_eq!(port.publish(4, octets), Err(Unpublished::Port(expected)));
         assert_eq!(port.buffers.free, 2);
     }
 }
@@ -319,15 +331,22 @@ fn a_frame_the_device_refuses_frees_its_buffer() {
 #[test]
 fn a_frame_too_long_for_its_buffer_keeps_the_buffer() {
     let mut port = port();
-    let refused = port.publish(100, |slot| {
-        if slot.len() < 100 {
-            Err(SlotTooShort)
-        } else {
-            Ok(())
-        }
-    });
-    assert_eq!(refused, Err(PortRefusal::BadFrame));
+    let refused = port.publish(100, unreachable_fill("no buffer holds it"));
+    assert_eq!(refused, Err(Unpublished::Port(PortRefusal::BadFrame)));
     assert_eq!(port.buffers.free, 2);
+}
+
+#[test]
+fn a_failed_fill_comes_back_as_the_fill_s_and_keeps_the_buffer() {
+    let mut port = port();
+    let refused = port.publish(4, |_| Err(Declined));
+    assert_eq!(refused, Err(Unpublished::Fill(Declined)));
+    assert_eq!(port.buffers.free, 2);
+    assert!(port.transmit.sent.is_empty());
+    assert!(
+        !wakes_at_once(&mut port),
+        "it waits for nothing of the port"
+    );
 }
 
 #[test]
@@ -363,7 +382,10 @@ fn a_received_frame_and_a_link_change_wake_at_once() {
 fn a_down_link_with_a_free_queue_wakes_nobody_until_it_changes() {
     let mut port = port();
     port.transmit.refuse = Some(TransmitError::LinkDown);
-    assert_eq!(port.publish(4, octets), Err(PortRefusal::LinkDown));
+    assert_eq!(
+        port.publish(4, octets),
+        Err(Unpublished::Port(PortRefusal::LinkDown))
+    );
     assert!(!wakes_at_once(&mut port), "room is not what it waits for");
     assert_eq!(port.transmit.room_polls, 0);
     port.device.link_changed = true;
@@ -374,7 +396,10 @@ fn a_down_link_with_a_free_queue_wakes_nobody_until_it_changes() {
 fn no_buffer_with_a_free_queue_wakes_nobody_until_one_is_free() {
     let mut port = port();
     port.buffers.free = 0;
-    assert_eq!(port.publish(4, octets), Err(PortRefusal::NoRoom));
+    assert_eq!(
+        port.publish(4, octets),
+        Err(Unpublished::Port(PortRefusal::NoRoom))
+    );
     assert!(!wakes_at_once(&mut port), "room is not what it waits for");
     assert_eq!(port.buffers.free_polls, 1, "it asked for a buffer");
     port.buffers.free = 1;
@@ -385,7 +410,10 @@ fn no_buffer_with_a_free_queue_wakes_nobody_until_one_is_free() {
 fn a_full_queue_is_watched_after_the_device_refused() {
     let mut port = port();
     port.transmit.refuse = Some(TransmitError::QueueFull);
-    assert_eq!(port.publish(4, octets), Err(PortRefusal::NoRoom));
+    assert_eq!(
+        port.publish(4, octets),
+        Err(Unpublished::Port(PortRefusal::NoRoom))
+    );
     assert!(wakes_at_once(&mut port));
     assert_eq!(port.transmit.room_polls, 1);
 }
@@ -394,7 +422,10 @@ fn a_full_queue_is_watched_after_the_device_refused() {
 fn a_write_refused_for_room_watches_for_a_buffer() {
     let mut port = port();
     port.buffers.refuse = Some(PortRefusal::NoRoom);
-    assert_eq!(port.publish(4, octets), Err(PortRefusal::NoRoom));
+    assert_eq!(
+        port.publish(4, octets),
+        Err(Unpublished::Port(PortRefusal::NoRoom))
+    );
     port.buffers.free = 0;
     assert!(!wakes_at_once(&mut port));
     assert_eq!(port.buffers.free_polls, 1);
@@ -404,7 +435,10 @@ fn a_write_refused_for_room_watches_for_a_buffer() {
 fn a_write_refused_for_the_link_waits_for_the_link() {
     let mut port = port();
     port.buffers.refuse = Some(PortRefusal::LinkDown);
-    assert_eq!(port.publish(4, octets), Err(PortRefusal::LinkDown));
+    assert_eq!(
+        port.publish(4, octets),
+        Err(Unpublished::Port(PortRefusal::LinkDown))
+    );
     assert!(!wakes_at_once(&mut port));
     assert_eq!(port.transmit.room_polls + port.buffers.free_polls, 0);
 }
@@ -420,7 +454,10 @@ fn only_a_bad_frame_is_final() {
 fn a_bad_frame_waits_for_nothing() {
     let mut port = port();
     port.transmit.refuse = Some(TransmitError::InvalidLength(FrameLengthError::TooLong));
-    assert_eq!(port.publish(4, octets), Err(PortRefusal::BadFrame));
+    assert_eq!(
+        port.publish(4, octets),
+        Err(Unpublished::Port(PortRefusal::BadFrame))
+    );
     assert!(!wakes_at_once(&mut port));
 }
 
