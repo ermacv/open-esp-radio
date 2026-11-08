@@ -86,6 +86,7 @@ fn an_airtime_limit_names_its_category_and_both_limits() {
         ac: RouterAccessCategory::Be,
         low_us: 5000,
         high_us: 18000,
+        station: None,
     };
     let text = serde_json::to_string(&operation).unwrap();
     assert_eq!(

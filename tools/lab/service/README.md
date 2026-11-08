@@ -125,9 +125,10 @@ the air, shared at least.
   (`iwinfo nl80211 phyname`). Both views must answer; one that fails
   leaves the router unavailable, never parked. Its radio's airtime queue
   limits (mac80211's AQL, `aql_txq_limit`) are back at mac80211's defaults
-  of 5000/12000 µs in every access category, written and read back, and
-  each category that changed is journaled; a radio without that debugfs
-  file has none to restore. The quiet radio and the limits are both
+  of 5000/12000 µs in every access category. The restore reads first;
+  categories away from the defaults are journaled as intended, written,
+  read back and journaled as confirmed or unconfirmed. A radio without that
+  debugfs file has none to restore. The quiet radio and the limits are both
   attempted, and the router is ready only when both are confirmed. A run's
   profile enables the section again. Its operations are the logic of
   `oer-tools-lab-router`: the AP profile on a channel the stand file allows (its
@@ -135,10 +136,15 @@ the air, shared at least.
   it), the station, DHCP and ping views, the station network's DHCP server
   stopped or serving, the WPA2 checks, a deauthentication, the
   routed network's check, the echo and departure observers, and the radio's
-  airtime limits read back or set for one access category. A set needs the
-  router held exclusively, is journaled with the lease's owner, and lasts
-  until the lease ends (`cargo stand router set-airtime` inside `cargo stand
-  lease --stand`). The service
+  airtime limits read back or set for one access category, on the radio and
+  optionally on one station's own limits (mac80211 keeps a station's limits
+  that differ from the radio's old ones). A set needs the router held
+  exclusively and lasts until the lease ends (`cargo stand router
+  set-airtime` inside `cargo stand lease --stand`). The journal takes its
+  intent under the lease's owner before anything is written, then the
+  confirmed or unconfirmed result; an intent the journal refuses writes
+  nothing, and an unconfirmed change is never retried. A station's own
+  limits end with the station. The service
   probes the equipment it reaches over SSH (the router, the air observer)
   under a lease that holds the router; the host's own radios are probed by
   `cargo stand fixtures` itself and run by their fixture launchers.

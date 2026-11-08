@@ -160,35 +160,49 @@ pub fn check(limit: Limit) -> Result<()> {
 }
 
 /// Set access category `ac`'s limits on the radio `radio` (its UCI name),
-/// then read every limit back. Result: what the router reads after the
-/// write; an error when the written category does not read back as
-/// written.
+/// and on station `station`'s own limits when given, then read every limit
+/// back. Result: what the router reads after the write; an error when a
+/// written limit does not read back as written. Nothing is journaled here:
+/// [`set_recorded`] journals around it.
 pub fn set(
     remote: &mut dyn Remote,
     radio: &str,
     ac: AccessCategory,
     limit: Limit,
+    station: Option<(&str, Mac)>,
 ) -> Result<Airtime> {
     check(limit)?;
     let write = format!("{} {} {}", ac.number(), limit.low_us, limit.high_us);
-    let read = parse(&remote.run(&script(radio, &[write], None)?)?)?;
-    if read.radio.get(ac) != limit {
-        return Err(format!(
-            "the radio's {} airtime limits read {}/{} us after writing {}/{} us",
-            ac.label(),
-            read.radio.get(ac).low_us,
-            read.radio.get(ac).high_us,
-            limit.low_us,
-            limit.high_us
-        ));
+    let station_write = station.map(|_| format!("limit {write}"));
+    let read = parse(&remote.run(&script(radio, &[write], station_write.as_slice(), station)?)?)?;
+    confirm("radio's", ac, read.radio.get(ac), limit)?;
+    if station.is_some() {
+        let own = read
+            .station
+            .ok_or("the router printed no station limits after writing them")?;
+        confirm("station's own", ac, own.limits.get(ac), limit)?;
     }
     Ok(read)
+}
+
+fn confirm(whose: &str, ac: AccessCategory, read: Limit, written: Limit) -> Result<()> {
+    if read != written {
+        return Err(format!(
+            "the {whose} {} airtime limits read {}/{} us after writing {}/{} us",
+            ac.label(),
+            read.low_us,
+            read.high_us,
+            written.low_us,
+            written.high_us
+        ));
+    }
+    Ok(())
 }
 
 /// Read the radio's limits and threshold, and station `station`'s own
 /// limits and pending airtime on the AP interface when given.
 pub fn read(remote: &mut dyn Remote, radio: &str, station: Option<(&str, Mac)>) -> Result<Airtime> {
-    parse(&remote.run(&script(radio, &[], station)?)?)
+    parse(&remote.run(&script(radio, &[], &[], station)?)?)
 }
 
 /// Whether `radio`'s PHY has mac80211's `aql_txq_limit` debugfs file. A
@@ -207,13 +221,14 @@ pub fn present(remote: &mut dyn Remote, radio: &str) -> Result<bool> {
 }
 
 /// Write [`DEFAULT`] to every access category of `radio` and confirm it
-/// reads back for each: the router's end state.
+/// reads back for each. Nothing is journaled here: [`restore_recorded`]
+/// journals around it.
 pub fn restore_defaults(remote: &mut dyn Remote, radio: &str) -> Result<Airtime> {
     let writes = AccessCategory::ALL
         .iter()
         .map(|ac| format!("{} {} {}", ac.number(), DEFAULT.low_us, DEFAULT.high_us))
         .collect::<Vec<_>>();
-    let read = parse(&remote.run(&script(radio, &writes, None)?)?)?;
+    let read = parse(&remote.run(&script(radio, &writes, &[], None)?)?)?;
     for ac in AccessCategory::ALL {
         if read.radio.get(ac) != DEFAULT {
             return Err(format!(
@@ -229,25 +244,176 @@ pub fn restore_defaults(remote: &mut dyn Remote, radio: &str) -> Result<Airtime>
     Ok(read)
 }
 
-/// The router's script: `writes` into the PHY's `aql_txq_limit` in order,
-/// then three sections, each after its `[name]` line.
-fn script(radio: &str, writes: &[String], station: Option<(&str, Mac)>) -> Result<String> {
+/// How far a journaled change got.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Phase {
+    /// About to write: nothing written yet.
+    Intended,
+    /// Written and read back as written.
+    Confirmed,
+    /// Written, or partly written, and not confirmed: the write or its
+    /// read-back failed, with `reason`.
+    Unconfirmed,
+}
+
+/// One access category's radio limits before and after a change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Change {
+    pub ac: AccessCategory,
+    pub before: Limit,
+    pub after: Limit,
+}
+
+/// What a journaled change hands its journal at each phase.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Record<'a> {
+    pub phase: Phase,
+    pub changes: &'a [Change],
+    /// The station's own limits were written too.
+    pub station: bool,
+    /// The router's end state restoring the defaults, not a lease's set.
+    pub restored: bool,
+    pub reason: Option<&'a str>,
+}
+
+/// Journals each phase of a change; an error refuses the phase.
+pub type Recorder<'a> = &'a mut dyn FnMut(&Record<'_>) -> Result<()>;
+
+/// [`set`], journaled: read the limits, journal the intent, write, then
+/// journal the confirmed or unconfirmed result. When the intent cannot be
+/// journaled nothing is written. A failed write or read-back is journaled
+/// as unconfirmed before its error returns; the change is never retried.
+pub fn set_recorded(
+    remote: &mut dyn Remote,
+    radio: &str,
+    ac: AccessCategory,
+    limit: Limit,
+    station: Option<(&str, Mac)>,
+    record: Recorder<'_>,
+) -> Result<Airtime> {
+    check(limit)?;
+    let before = read(remote, radio, station)?;
+    let changes = [Change {
+        ac,
+        before: before.radio.get(ac),
+        after: limit,
+    }];
+    let entry = |phase, reason| Record {
+        phase,
+        changes: &changes,
+        station: station.is_some(),
+        restored: false,
+        reason,
+    };
+    record(&entry(Phase::Intended, None)).map_err(|error| {
+        format!("the change was not journaled, so nothing was written: {error}")
+    })?;
+    finish(set(remote, radio, ac, limit, station), &entry, record)
+}
+
+/// [`restore_defaults`], journaled the same way. A radio already at the
+/// defaults, as read, is left unwritten and unjournaled.
+pub fn restore_recorded(
+    remote: &mut dyn Remote,
+    radio: &str,
+    record: Recorder<'_>,
+) -> Result<Airtime> {
+    let before = read(remote, radio, None)?;
+    let changes = AccessCategory::ALL
+        .into_iter()
+        .filter(|ac| before.radio.get(*ac) != DEFAULT)
+        .map(|ac| Change {
+            ac,
+            before: before.radio.get(ac),
+            after: DEFAULT,
+        })
+        .collect::<Vec<_>>();
+    if changes.is_empty() {
+        return Ok(before);
+    }
+    let entry = |phase, reason| Record {
+        phase,
+        changes: &changes,
+        station: false,
+        restored: true,
+        reason,
+    };
+    record(&entry(Phase::Intended, None)).map_err(|error| {
+        format!("the restore was not journaled, so nothing was written: {error}")
+    })?;
+    finish(restore_defaults(remote, radio), &entry, record)
+}
+
+/// Journal the write's outcome: confirmed with its read-back, or
+/// unconfirmed with its error, which is returned either way.
+fn finish<'a>(
+    outcome: Result<Airtime>,
+    entry: &dyn Fn(Phase, Option<&'a str>) -> Record<'a>,
+    record: Recorder<'_>,
+) -> Result<Airtime> {
+    match outcome {
+        Ok(read) => {
+            record(&entry(Phase::Confirmed, None)).map_err(|error| {
+                format!(
+                    "the write is confirmed, but the journal did not take the confirmation: {error}"
+                )
+            })?;
+            Ok(read)
+        }
+        Err(error) => {
+            // The reason outlives the entry only inside this call.
+            let reason: &str = &error;
+            let journaled = record(&Record {
+                reason: Some(reason),
+                ..entry(Phase::Unconfirmed, None)
+            });
+            Err(match journaled {
+                Ok(()) => format!("the change is unconfirmed (journaled): {error}"),
+                Err(journal) => format!(
+                    "the change is unconfirmed and the journal did not take it ({journal}): {error}"
+                ),
+            })
+        }
+    }
+}
+
+/// The router's script: `writes` into the PHY's `aql_txq_limit` and
+/// `station_writes` into the station's `aql`, in order, then the sections,
+/// each after its `[name]` line.
+fn script(
+    radio: &str,
+    writes: &[String],
+    station_writes: &[String],
+    station: Option<(&str, Mac)>,
+) -> Result<String> {
     let mut text = format!(
         "set -e\nphy=$(iwinfo nl80211 phyname {})\nd=/sys/kernel/debug/ieee80211/$phy\n",
         quote(radio)?
     );
+    let station_file = match station {
+        Some((interface, mac)) => Some(format!(
+            "\"$d/netdev:\"{}\"/stations/\"{}\"/aql\"",
+            quote(interface)?,
+            quote(&mac_text(mac))?
+        )),
+        None => None,
+    };
     for write in writes {
         text.push_str(&format!("echo {} > \"$d/aql_txq_limit\"\n", quote(write)?));
+    }
+    if !station_writes.is_empty() {
+        let file = station_file
+            .as_deref()
+            .ok_or("a station write names no station")?;
+        for write in station_writes {
+            text.push_str(&format!("echo {} > {file}\n", quote(write)?));
+        }
     }
     text.push_str(
         "echo '[limits]'\ncat \"$d/aql_txq_limit\"\necho '[threshold]'\ncat \"$d/aql_threshold\"\n",
     );
-    if let Some((interface, mac)) = station {
-        text.push_str(&format!(
-            "echo '[station]'\ncat \"$d/netdev:\"{}\"/stations/\"{}\"/aql\"\n",
-            quote(interface)?,
-            quote(&mac_text(mac))?
-        ));
+    if let Some(file) = station_file {
+        text.push_str(&format!("echo '[station]'\ncat {file}\n"));
     }
     Ok(text)
 }

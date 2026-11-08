@@ -463,16 +463,22 @@ pub enum RouterOperation {
     /// operation stops. Result: what it saw.
     Departure { mac: String },
     /// Set access category `ac`'s airtime queue limits (mac80211's AQL) on
-    /// the AP radio to `low_us`/`high_us` of estimated airtime. A station
-    /// whose limits equal the old ones follows, and a station associating
-    /// later starts with them. Needs the router held exclusively; the
-    /// service journals the change. The router's end state after the lease
-    /// has every category at mac80211's defaults again. Result: the
-    /// router's `station::airtime::Airtime`, read back after the write.
+    /// the AP radio to `low_us`/`high_us` of estimated airtime, and station
+    /// `station`'s own limits too when given: mac80211 keeps a station's
+    /// limits that differ from the radio's old ones. A station associating
+    /// later starts with the radio's. Needs the router held exclusively.
+    /// The service journals the intent before anything is written, then the
+    /// confirmed or unconfirmed result; an intent it cannot journal writes
+    /// nothing. The router's end state after the lease has every category
+    /// at mac80211's defaults again; a station's own limits end with the
+    /// station. Result: the router's `station::airtime::Airtime`, read back
+    /// after the write.
     SetAirtimeLimit {
         ac: RouterAccessCategory,
         low_us: u32,
         high_us: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        station: Option<String>,
     },
     /// The AP radio's airtime limits and total threshold, and station
     /// `mac`'s own limits and pending airtime when given. Result: the

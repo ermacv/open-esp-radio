@@ -8,7 +8,7 @@
 
 use std::{sync::atomic::Ordering, time::Duration};
 
-use oer_tools_lab_arbiter::journal::{BoardEventKind, Journal};
+use oer_tools_lab_arbiter::journal::{AirtimeChange, AirtimePhase, BoardEventKind, Journal};
 use oer_tools_lab_client::protocol::{RouterAccessCategory, RouterChannelWidth, RouterOperation};
 use oer_tools_lab_model::Stand;
 use oer_tools_lab_router::{
@@ -185,24 +185,21 @@ pub(crate) fn run(
             ac,
             low_us,
             high_us,
+            station,
         } => {
-            let ac = category(*ac);
-            let limit = Limit {
-                low_us: *low_us,
-                high_us: *high_us,
-            };
-            airtime::check(limit)?;
-            let before = airtime::read(&mut router.ssh, &router.radio, None)?
-                .radio
-                .get(ac);
-            let after = airtime::set(&mut router.ssh, &router.radio, ac, limit)?;
-            record(journal, io.owner.clone(), ac, before, limit, false).map_err(|error| {
-                format!(
-                    "the router's airtime limits are set and its end state restores them, \
-                     but the journal did not take the change: {error}"
-                )
-            })?;
-            json(after)
+            let station = station.as_deref().map(mac).transpose()?;
+            let owner = io.owner.clone();
+            json(airtime::set_recorded(
+                &mut router.ssh,
+                &router.radio,
+                category(*ac),
+                Limit {
+                    low_us: *low_us,
+                    high_us: *high_us,
+                },
+                station.map(|station| (router.interface.as_str(), station)),
+                &mut |entry| record(journal, owner.clone(), entry),
+            )?)
         }
         RouterOperation::AirtimeLimits { mac: station } => {
             let station = station.as_deref().map(mac).transpose()?;
@@ -224,25 +221,31 @@ fn category(ac: RouterAccessCategory) -> AccessCategory {
     }
 }
 
-/// Journal that `owner` changed `ac`'s airtime limits from `before` to
-/// `after`, or that the router's end state restored them (`restored`).
-fn record(
-    journal: &Journal,
-    owner: String,
-    ac: AccessCategory,
-    before: Limit,
-    after: Limit,
-    restored: bool,
-) -> Result<()> {
+/// Journal one phase of a change of the router's airtime limits under
+/// `owner`.
+fn record(journal: &Journal, owner: String, entry: &airtime::Record<'_>) -> Result<()> {
     journal
         .record_by(
             owner,
             None,
             BoardEventKind::RouterAirtimeLimit {
-                ac: ac.label().to_ascii_lowercase(),
-                before: [before.low_us, before.high_us],
-                after: [after.low_us, after.high_us],
-                restored,
+                phase: match entry.phase {
+                    airtime::Phase::Intended => AirtimePhase::Intended,
+                    airtime::Phase::Confirmed => AirtimePhase::Confirmed,
+                    airtime::Phase::Unconfirmed => AirtimePhase::Unconfirmed,
+                },
+                changes: entry
+                    .changes
+                    .iter()
+                    .map(|change| AirtimeChange {
+                        ac: change.ac.label().to_ascii_lowercase(),
+                        before: [change.before.low_us, change.before.high_us],
+                        after: [change.after.low_us, change.after.high_us],
+                    })
+                    .collect(),
+                station: entry.station,
+                restored: entry.restored,
+                reason: entry.reason.map(str::to_owned),
             },
         )
         .map_err(|error| error.to_string())
@@ -258,23 +261,9 @@ fn restore_airtime(router: &mut Fixture, journal: &Journal) -> Result<()> {
     if !airtime::present(&mut router.ssh, &router.radio)? {
         return Ok(());
     }
-    let before = airtime::read(&mut router.ssh, &router.radio, None)?.radio;
-    airtime::restore_defaults(&mut router.ssh, &router.radio)?;
-    for ac in AccessCategory::ALL {
-        if before.get(ac) != airtime::DEFAULT {
-            record(
-                journal,
-                END_STATE.to_owned(),
-                ac,
-                before.get(ac),
-                airtime::DEFAULT,
-                true,
-            )
-            .map_err(|error| {
-                format!("the airtime limits are restored, but the journal did not take it: {error}")
-            })?;
-        }
-    }
+    airtime::restore_recorded(&mut router.ssh, &router.radio, &mut |entry| {
+        record(journal, END_STATE.to_owned(), entry)
+    })?;
     Ok(())
 }
 

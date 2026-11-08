@@ -134,6 +134,7 @@
     ],
     "subcommands": [],
     "flags": [
+      "--station",
       "--ac",
       "--low-us",
       "--high-us"

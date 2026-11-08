@@ -27,10 +27,13 @@ enum RouterCommand {
         #[arg(long, value_name = "MAC")]
         station: Option<String>,
     },
-    /// Set one access category's airtime limits on the AP radio and print
-    /// what the router reads back as JSON. Needs the router exclusively;
-    /// the lease's end returns every category to mac80211's defaults.
+    /// Set one access category's airtime limits on the AP radio, and with
+    /// `--station` that station's own limits too, and print what the router
+    /// reads back as JSON. Needs the router exclusively; the lease's end
+    /// returns every category to mac80211's defaults.
     SetAirtime {
+        #[arg(long, value_name = "MAC")]
+        station: Option<String>,
         #[arg(long, value_enum)]
         ac: Category,
         #[arg(long, value_name = "MICROSECONDS")]
@@ -55,6 +58,7 @@ pub(crate) fn router(owner: String, cli: RouterCli) -> Result<std::process::Exit
             Claim::shared(ROUTER),
         ),
         RouterCommand::SetAirtime {
+            station,
             ac,
             low_us,
             high_us,
@@ -76,6 +80,7 @@ pub(crate) fn router(owner: String, cli: RouterCli) -> Result<std::process::Exit
                     },
                     low_us,
                     high_us,
+                    station,
                 },
                 Claim::exclusive(ROUTER),
             )
