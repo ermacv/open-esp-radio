@@ -133,13 +133,20 @@ repeats or malforms an HE element, or no longer admits HE20, makes no link:
 the station leaves with `HeNotGranted` and never keeps an HT link in its
 place; so does a response whose AID or HE parameters lie outside the port's
 `He20Association`. The connection notice and the Connect outcome name the PHY
-mode the station associated in. An HE20 association goes to the port as
-`StaAction::SetHe` after its EDCA parameters and before the link starts (the
-4-way handshake's frames included); the station records it and sets
-`StationHe::Off` before its leave's receive-off configuration, and before a
-join's receive configuration should one be left. An HT or legacy link sets
-no HE state. A restart runs on the next installation, whose MAC starts
-without an HE association.
+mode the station associated in. The port's HE state follows the pinned
+vendor station's two stages (`StaAction::SetHe`): before authentication
+(and before the BSS's receive configuration) an HE20 join sets the HE BSS
+with the color the scan heard and any other join sets `StationHe::Off`;
+after the Association Response, its EDCA parameters and before the link
+starts (the 4-way handshake's frames included) an HE20 association sets
+`StationHe::He20`. The leave of an HE BSS sets `Off` before its receive-off
+configuration. A restart runs on the next installation, whose MAC starts
+without an HE association. The data plane's publications and their retry
+stages follow the BSS's HE TXOP Duration RTS Threshold: while the access
+point advertises one, every individually addressed HE PPDU, an A-MPDU
+included, goes behind RTS/CTS (`ProtectionPolicy::every_he_txop_protection`,
+no duration estimate); the ERP, HT and length rules are not applied to
+data.
 Authentication TX contexts also retain the attempt ordinal inside their link
 epoch. A late terminal or preparation refusal returns its credit and buffer
 but cannot end a later RX-driven retry or arm that retry's response timer.

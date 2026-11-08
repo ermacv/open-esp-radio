@@ -1769,6 +1769,9 @@ pub struct ModelAir {
     rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<u8>,
+    /// The HE20 associations (`SetHe` after an Association Response) the
+    /// port refuses next.
+    refuse_he_association: Cell<u8>,
     group_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
@@ -1836,6 +1839,7 @@ impl ModelAir {
             rx: Default::default(),
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
+            refuse_he_association: Default::default(),
             group_held: Default::default(),
             key_installations: Default::default(),
             associations: Default::default(),
@@ -2304,6 +2308,20 @@ impl ModelAir {
     pub(crate) fn take_enable_refusal(&self) -> bool {
         let left = self.refuse_enable.get();
         self.refuse_enable.set(left.saturating_sub(1));
+        left > 0
+    }
+
+    /// Refuse the next `count` HE20 associations (`SetHe(He20)`), as a
+    /// backend that cannot apply them: each comes back refused, `Busy`.
+    pub fn refuse_he_associations(&self, count: u8) {
+        self.refuse_he_association.set(count);
+    }
+
+    /// Whether this HE20 association is refused: one of the refusals asked
+    /// for.
+    pub(crate) fn take_he_association_refusal(&self) -> bool {
+        let left = self.refuse_he_association.get();
+        self.refuse_he_association.set(left.saturating_sub(1));
         left > 0
     }
 

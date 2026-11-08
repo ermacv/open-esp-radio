@@ -1,5 +1,5 @@
-//! The interface-zero HE20 association: its installation after a
-//! successful Association Response and its removal.
+//! The interface-zero HE20 association: its BSS before authentication, its
+//! installation after a successful Association Response and its removal.
 
 use oer_portable_mmio::{Bits, Index};
 
@@ -18,9 +18,9 @@ use crate::radio::ieee80211::registers::{
 pub struct MacHe20PeerConfig {
     pub packet_padding_duration: MacHePacketPaddingDuration,
     pub default_packet_extension_duration: MacHeDefaultPacketExtensionDuration,
-    pub bss_color: MacHeBssColor,
-    pub bss_color_enabled: bool,
-    pub partial_bss_color: bool,
+    /// The HE Operation's Max Co-Hosted BSSID Indicator of a co-hosted BSS;
+    /// `None` when it announces none.
+    pub max_co_hosted_bssid_indicator: Option<u8>,
     pub extended_range_single_user_disabled: bool,
 }
 
@@ -94,6 +94,42 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
     }
 
+    /// The co-hosted BSS of an HE Operation that announces one with its Max
+    /// Co-Hosted BSSID Indicator, or none.
+    ///
+    /// SOURCE: complete pinned `libpp.a[hal_mac_ctl.o]::hal_he_set_co_hosted_bss`
+    /// (size `0x7a`): nothing while MULTI_BSSID_ENABLE (bit 8 of
+    /// `0x2010_4020`) is set; else, co-hosted, set CO_HOSTED_ENABLE (bit 18)
+    /// and replace MULTI_BSSID_MASK (bits 16:9) by `(-1 << indicator) & 0xff`
+    /// (`sll` takes the shift modulo 32); not co-hosted, clear bit 18 and
+    /// set every mask bit. Two fresh-read RMWs either way, as the cold
+    /// init's `hal_he_set_co_hosted_bss(0, 0)` keeps its guard read.
+    fn set_co_hosted_bss(&mut self, max_co_hosted_bssid_indicator: Option<u8>) {
+        let control = &mut self.mac.wifi_mac_he_init_suffix;
+        if control.read_multi_bssid_control().multi_bssid_enable() {
+            return;
+        }
+        match max_co_hosted_bssid_indicator {
+            Some(indicator) => {
+                let mask = u32::MAX.wrapping_shl(u32::from(indicator)).to_le_bytes()[0];
+                control.modify_multi_bssid_control(|w| {
+                    w.set_co_hosted_enable(true);
+                });
+                control.modify_multi_bssid_control(|w| {
+                    w.set_multi_bssid_mask(mask);
+                });
+            }
+            None => {
+                control.modify_multi_bssid_control(|w| {
+                    w.set_co_hosted_enable(false);
+                });
+                control.modify_multi_bssid_control(|w| {
+                    w.set_multi_bssid_mask(0xff);
+                });
+            }
+        }
+    }
+
     /// Every constellation's packet padding.
     ///
     /// SOURCE: complete pinned `libpp.a[hal_mac_ctl.o]::hal_he_set_packet_padding_us`
@@ -119,38 +155,45 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
     }
 
-    /// Install the interface-zero HE20 association, in the vendor's order:
-    /// the connect's HE BSSID, color bitmap and BSS color
-    /// (`libnet80211.a[wl_cnx.o]::cnx_connect_to_bss` +0x10c..0x150), the
-    /// Association Response's capabilities and operation
-    /// (`ieee80211_parse_hecap`: packet padding; `ieee80211_parse_heopr`:
-    /// default PE, HE RTS threshold, ER-SU) and the node's setup
-    /// (`libnet80211.a[wl_cnx.o]::ic_set_sta` +0x13c..0x170: MMSS and AID,
-    /// packet padding, BSR initialization).
+    /// Begin an HE BSS's connection before authentication: HE BSSID
+    /// matching for interface zero, the color bitmap cleared and the BSS
+    /// color the scan heard.
     ///
-    /// The HE RTS threshold is always disabled: the transmitter's planner
-    /// applies the access point's HE TXOP duration RTS threshold before
-    /// publication, and the vendor's threshold table
-    /// (`ic_set_he_rts_threshold_bytes_tab`) is not ported. The co-hosted
-    /// BSS setting keeps the cold init's (`hal_he_set_co_hosted_bss(0, 0)`).
-    /// The broadcast RU index is zero, an access point outside a Multiple
-    /// BSSID set (`ic_set_sta` passes node byte 899; the station never
-    /// enables Multiple BSSID, so `hal_he_set_mmss_and_aid` passes 0 for the
-    /// low value).
+    /// SOURCE: complete pinned `libnet80211.a[wl_cnx.o]::cnx_connect_to_bss`
+    /// HE path +0x12a..0x150: `hal_he_bssid_init(0)`,
+    /// `hal_mac_color_clr_bitmap()`, then `hal_he_set_bss_color(0, enabled,
+    /// color, partial)` from the scanned HE Operation's BSS Color
+    /// Information.
+    pub fn connect_he20_bss(&mut self, color: MacHeBssColor, enabled: bool, partial: bool) {
+        self.initialize_interface_zero_he_bssid();
+        self.clear_he_color_bitmap();
+        self.set_interface_zero_he_bss_color(enabled, color.get(), partial);
+    }
+
+    /// Install the interface-zero HE20 association after its Association
+    /// Response, in the vendor's order: the capabilities' packet padding
+    /// (`ieee80211_parse_hecap`), the operation's default PE, co-hosted BSS,
+    /// HE RTS threshold and ER-SU (`ieee80211_parse_heopr` +0xc4..0x27a; its
+    /// BSS color is written only to a connected station), then the node's
+    /// setup (`libnet80211.a[wl_cnx.o]::ic_set_sta` +0x13c..0x170: MMSS and
+    /// AID, packet padding, BSR initialization). The BSS's color and HE
+    /// BSSID matching are [`Self::connect_he20_bss`]'s, before
+    /// authentication.
+    ///
+    /// The HE RTS threshold is always disabled: the transmitter protects
+    /// every individually addressed HE PPDU while the access point
+    /// advertises a threshold, and the vendor's threshold table
+    /// (`ic_set_he_rts_threshold_bytes_tab`) is not ported. The broadcast
+    /// RU index is zero, an access point outside a Multiple BSSID set
+    /// (`ic_set_sta` passes node byte 899; the station never enables
+    /// Multiple BSSID, so `hal_he_set_mmss_and_aid` passes 0 for the low
+    /// value).
     pub fn install_he20_association(&mut self, association: MacHe20Association) {
         let MacHe20Association {
             peer,
             association_id,
             minimum_mpdu_start_spacing,
         } = association;
-        self.initialize_interface_zero_he_bssid();
-        self.clear_he_color_bitmap();
-        self.set_interface_zero_he_bss_color(
-            peer.bss_color_enabled,
-            peer.bss_color.get(),
-            peer.partial_bss_color,
-        );
-
         self.set_he_packet_padding(peer.packet_padding_duration);
         // SOURCE: complete pinned `hal_he_set_default_pe` (size `0x14`):
         // one RMW of bits 2:0 of `0x2010_4c80`.
@@ -159,9 +202,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_he_default_control(|w| {
                 w.set_default_pe_duration(bits(peer.default_packet_extension_duration.get()));
             });
+        self.set_co_hosted_bss(peer.max_co_hosted_bssid_indicator);
         // SOURCE: complete pinned `hal_he_disable_rts_threshold`
         // (size `0x32`): bit 17 of each ordinary queue's HE RTS word, queue
-        // 0 first.
+        // 0 first; `ieee80211_parse_heopr` +0x19e..0x1a4 calls it for a
+        // threshold of 0 or 1023, and `ic_set_sta` +0x2ca for a node without
+        // HE.
         crate::radio::ieee80211::registers::tx::queue::disable_he_rts_threshold(
             &mut self.mac.wifi_mac_tx_queue_vector,
         );

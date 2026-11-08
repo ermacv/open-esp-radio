@@ -46,10 +46,8 @@ fn the_he20_element_is_one_stream_mcs9_both_ways_with_no_optional_capability() {
 }
 
 #[test]
-fn the_extended_capabilities_beside_he20_claim_none() {
-    let [id, length, capabilities @ ..] = HE20_EXTENDED;
-    assert_eq!((id, length), (127, 12));
-    assert_eq!(capabilities, [0; 12]);
+fn no_extended_capabilities_go_beside_he20() {
+    assert_eq!(HE20_EXTENDED, None);
 }
 
 #[test]

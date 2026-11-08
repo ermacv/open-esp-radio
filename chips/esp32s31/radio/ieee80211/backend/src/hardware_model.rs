@@ -196,8 +196,9 @@ struct State {
     station_tsf: u64,
     tbtt: Option<StaTbttSchedule>,
     tx_blocked: bool,
-    /// The HE20 association the MAC holds, `None` after a removal or
-    /// before any.
+    /// The HE BSS the MAC matches (its color, enabled, partial) and the
+    /// HE20 association it holds; `None` after a removal or before any.
+    he_bss: Option<(oer_chips_esp32s31_hal::types::MacHeBssColor, bool, bool)>,
     he: Option<oer_chips_esp32s31_hal::types::MacHe20Association>,
     cca_forced: bool,
     breaks: Vec<RuleBreak>,
@@ -224,12 +225,18 @@ impl Atoms {
             station_tsf: 0,
             tbtt: None,
             tx_blocked: false,
+            he_bss: None,
             he: None,
             cca_forced: false,
             breaks: Vec::new(),
             counts: AtomCounts::default(),
             clock,
         })))
+    }
+
+    /// The HE BSS the MAC matches now.
+    pub fn he_bss(&self) -> Option<(oer_chips_esp32s31_hal::types::MacHeBssColor, bool, bool)> {
+        self.0.borrow().he_bss
     }
 
     /// The HE20 association the MAC holds now.
@@ -811,6 +818,15 @@ impl TxGateHardware for ModelRegisters {
 }
 
 impl crate::lower_mac::StaHeHardware for ModelRegisters {
+    fn connect_he20_bss(
+        &mut self,
+        color: oer_chips_esp32s31_hal::types::MacHeBssColor,
+        enabled: bool,
+        partial: bool,
+    ) {
+        self.atoms
+            .with(|state| state.he_bss = Some((color, enabled, partial)));
+    }
     fn install_he20_association(
         &mut self,
         association: oer_chips_esp32s31_hal::types::MacHe20Association,
@@ -818,7 +834,10 @@ impl crate::lower_mac::StaHeHardware for ModelRegisters {
         self.atoms.with(|state| state.he = Some(association));
     }
     fn clear_he20_association(&mut self) {
-        self.atoms.with(|state| state.he = None);
+        self.atoms.with(|state| {
+            state.he_bss = None;
+            state.he = None;
+        });
     }
 }
 

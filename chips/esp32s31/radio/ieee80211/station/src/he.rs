@@ -73,11 +73,15 @@ pub(crate) const HE20: [u8; 24] = he20_capability_ie(He20LocalCapabilities {
     receive: HeMcsNssSupport::Mcs0To9,
     transmit: HeMcsNssSupport::Mcs0To9,
 });
-// Extended Capabilities beside HE20 (Element ID 127, twelve octets): no
-// capability. The vendor's HE station path sets Event, Multiple BSSID and
-// TWT Requester (`libnet80211.a[ieee80211_output.o]::ieee80211_add_extcap`
-// +0x6c..0x13c); this station implements none of them.
-pub(crate) const HE20_EXTENDED: [u8; 14] = [127, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+// No Extended Capabilities element beside HE20: this station claims none
+// of its capabilities. The vendor's HE station path sets Event, Multiple
+// BSSID and TWT Requester (`libnet80211.a[ieee80211_output.o]::
+// ieee80211_add_extcap` +0x6c..0x13c), none of which this station
+// implements, and an element with every bit clear is not sent: as
+// wpa_supplicant trims an Extended Capabilities element's zero tail and
+// skips an empty one (implementation precedent, not a requirement of the
+// standard).
+pub(crate) const HE20_EXTENDED: Option<[u8; 14]> = None;
 /// Why the PHY's powers give no HE power elements.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum HePowerError {

@@ -292,6 +292,7 @@ fn link<'s>(qos: bool, key: Option<ActorLinkKey<'s, P<'s>>>) -> ActorLink<'s, P<
         retry: None,
         ht: None,
         windows: [None; 8],
+        protection: Default::default(),
     };
     LinkHandover::for_test(1, address, bssid, key.is_some(), qos, key, Some(data))
 }

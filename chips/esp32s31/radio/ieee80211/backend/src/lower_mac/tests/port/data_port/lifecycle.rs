@@ -1059,8 +1059,8 @@ fn he_after(
 }
 
 #[test]
-fn the_port_installs_an_he_association_and_ends_it() {
-    use oer_protocols_ieee80211_contracts_port::{He20Association, StationHe};
+fn the_port_installs_an_he_connection_and_association_and_ends_them() {
+    use oer_protocols_ieee80211_contracts_port::{He20Association, HeBssColor, StationHe};
     let peer = oer_protocols_ieee80211_wire::he::He20PeerState {
         capability_prefix: [0; 24],
         packet_padding_eight_us: 1,
@@ -1070,25 +1070,27 @@ fn the_port_installs_an_he_association_and_ends_it() {
         partial_bss_color: true,
         basic_mcs_nss_map: 0xfffc,
         rts_threshold: Some(100),
+        max_co_hosted_bssid_indicator: Some(2),
         extended_range_single_user_disabled: false,
     };
-    let association = He20Association::new(&peer, 7, 0).expect("in range");
-    let installed = he_after(&[StationHe::He20(association)]).expect("installed");
+    let bss = StationHe::Bss(
+        HeBssColor::of(&oer_protocols_ieee80211_wire::he::He20Operation {
+            bss_color: 9,
+            bss_color_enabled: true,
+            partial_bss_color: true,
+            basic_mcs_nss_map: 0xfffc,
+        })
+        .expect("a color"),
+    );
+    let association = StationHe::He20(He20Association::new(&peer, 7, 0).expect("in range"));
+    let installed = he_after(&[bss, association]).expect("installed");
     assert_eq!(installed.association_id.get(), 7);
     assert_eq!(installed.peer.packet_padding_duration.get(), 8);
-    assert_eq!(installed.peer.bss_color.get(), 9);
-    assert!(installed.peer.partial_bss_color);
+    assert_eq!(installed.peer.max_co_hosted_bssid_indicator, Some(2));
     // HE, then its end, then HE again: each command's state, in order.
+    assert_eq!(he_after(&[bss, association, StationHe::Off]), None);
     assert_eq!(
-        he_after(&[StationHe::He20(association), StationHe::Off]),
-        None
-    );
-    assert_eq!(
-        he_after(&[
-            StationHe::He20(association),
-            StationHe::Off,
-            StationHe::He20(association)
-        ]),
+        he_after(&[bss, association, StationHe::Off, bss, association]),
         Some(installed)
     );
 }

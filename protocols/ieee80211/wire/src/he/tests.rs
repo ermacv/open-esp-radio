@@ -589,3 +589,29 @@ fn the_named_fields_reproduce_the_archive_station_element() {
     assert!(!capability.non_triggered_cqi_feedback);
     assert!(capability.supports_bidirectional_mcs9());
 }
+
+#[test]
+fn a_co_hosted_bss_names_its_max_co_hosted_bssid_indicator() {
+    let capability = [
+        0xff, 0x16, 0x23, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x80, 0x00, 0xfd, 0xff, 0xfd, 0xff,
+    ];
+    // Not co-hosted: no indicator.
+    let plain = [255, 7, 36, 0x04, 0x00, 0x00, 0x1b, 0xfc, 0xff];
+    let state = parse_he20_peer_state(&capability, &plain).unwrap();
+    assert_eq!(state.max_co_hosted_bssid_indicator, None);
+    // Co-Hosted BSS (parameters bit 15): the octet after the fixed fields.
+    let co_hosted = [255, 8, 36, 0x04, 0x80, 0x00, 0x1b, 0xfc, 0xff, 3];
+    let state = parse_he20_peer_state(&capability, &co_hosted).unwrap();
+    assert_eq!(state.max_co_hosted_bssid_indicator, Some(3));
+    // With VHT Operation Information (bit 14): after its three octets.
+    let with_vht = [255, 11, 36, 0x04, 0xc0, 0x00, 0x1b, 0xfc, 0xff, 0, 42, 0, 5];
+    let state = parse_he20_peer_state(&capability, &with_vht).unwrap();
+    assert_eq!(state.max_co_hosted_bssid_indicator, Some(5));
+    // Announced but absent: the element is too short.
+    let missing = [255, 7, 36, 0x04, 0x80, 0x00, 0x1b, 0xfc, 0xff];
+    assert_eq!(
+        parse_he20_peer_state(&capability, &missing),
+        Err(HeElementError::TooShort)
+    );
+}

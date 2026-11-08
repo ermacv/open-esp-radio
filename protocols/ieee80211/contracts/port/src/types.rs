@@ -1371,6 +1371,19 @@ impl<R> RetryPlan<R> {
         }
     }
 
+    /// The plan with each stage protected by the exchange `protection`
+    /// names for its rate; rates, counts and order unchanged.
+    pub fn with_protection(self, mut protection: impl FnMut(&R) -> Protection) -> Self {
+        let mut stage = |stage: RetryStage<R>| RetryStage {
+            protection: protection(&stage.rate),
+            ..stage
+        };
+        Self {
+            first: stage(self.first),
+            rest: self.rest.map(|cell| cell.map(&mut stage)),
+        }
+    }
+
     /// Keep the stages whose rates `rate` accepts, in their original order.
     /// Each retained stage keeps its exact transmission count and protection;
     /// `None` means every stage was refused.

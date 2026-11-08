@@ -518,6 +518,16 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac_mut().set_tx_pti(queue, program);
     }
 
+    /// Begin an HE BSS's connection before authentication.
+    pub fn connect_he20_bss(
+        &mut self,
+        color: crate::types::MacHeBssColor,
+        enabled: bool,
+        partial: bool,
+    ) {
+        self.pac_mut().connect_he20_bss(color, enabled, partial)
+    }
+
     /// Install the interface-zero HE20 association in the vendor's order.
     pub fn install_he20_association(&mut self, association: MacHe20Association) {
         self.pac_mut().install_he20_association(association)

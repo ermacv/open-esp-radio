@@ -716,6 +716,7 @@ fn the_latest_he_setting_is_the_station_interface_s() {
             partial_bss_color: false,
             basic_mcs_nss_map: 0xfffc,
             rts_threshold: None,
+            max_co_hosted_bssid_indicator: None,
             extended_range_single_user_disabled: false,
         };
         let he = StationHe::He20(He20Association::new(&peer, 1, 0).unwrap());

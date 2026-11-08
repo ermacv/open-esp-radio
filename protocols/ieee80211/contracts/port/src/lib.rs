@@ -99,7 +99,7 @@ pub use layout::{
 pub mod control;
 pub mod extensions;
 pub mod he;
-pub use he::{He20Association, He20AssociationError, StationHe};
+pub use he::{He20Association, He20AssociationError, HeBssColor, StationHe};
 pub mod operation;
 pub mod owner;
 pub mod regulated;

@@ -1260,6 +1260,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
             retry: None,
             ht: None,
             windows: [None; 8],
+            protection: Default::default(),
         };
         let link: ActorLink<'s, P<'s>> =
             LinkHandover::for_test(1, address, bssid, false, false, None, Some(data));

@@ -119,10 +119,12 @@ pub enum PortCommand<'id, T: CommandTypes<'id>, K: Ieee80211Capabilities> {
     SetEdca(SupportedEdca<K>),
     /// The BSS color of the station's HE BSS.
     SetBssColor(BssColor),
-    /// The station interface's HE association, from the next publication
-    /// on: installed after the Association Response and before the link's
-    /// data, [`StationHe::Off`] once the association ends. It also sets the
-    /// color the station's HE transmissions carry, as
+    /// The station interface's HE state, from the next publication on: an
+    /// HE BSS's ([`StationHe::Bss`]) before authentication, its
+    /// association's ([`StationHe::He20`]) after the Association Response
+    /// and before the link's data, [`StationHe::Off`] at a join of a BSS
+    /// without HE and once an HE association ends. `Bss` and `Off` also set
+    /// the color the station's HE transmissions carry, as
     /// [`Self::SetBssColor`] does.
     SetHe(StationHe),
 }
