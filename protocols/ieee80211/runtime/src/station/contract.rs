@@ -114,6 +114,8 @@ pub enum TransmitRefusal {
     NoRate,
     Preparation(PreparationError),
     Layout(LayoutError),
+    /// The port refused the frame: its key is of an earlier installation.
+    StaleKey,
 }
 
 /// Why the TX pool refused a preparation.
@@ -327,6 +329,7 @@ fn transmit(refusal: TxRefusal) -> TransmitRefusal {
             CoreLayoutError::BodyOverlap => LayoutError::BodyOverlap,
             CoreLayoutError::BufferUnavailable => LayoutError::BufferUnavailable,
         }),
+        TxRefusal::StaleKey => TransmitRefusal::StaleKey,
     }
 }
 

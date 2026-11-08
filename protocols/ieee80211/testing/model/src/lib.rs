@@ -130,9 +130,9 @@
 //! receive rules and TSF. A confirmed stop leaves its interface receiving
 //! nothing and its TSF stopped. [`ModelResources`] groups the shared tokens
 //! and each role's own permissions. Every token of its pools, its group
-//! permissions included, names its installation; the access point's
-//! commands and its beacons and keyed attempts at `submit` refuse a token of
-//! an earlier installation with its owners.
+//! permissions included, names its installation; both roles' commands, and
+//! beacons and keyed attempts at `submit`, refuse a token of an earlier
+//! installation with its owners.
 
 pub mod air_time;
 pub use air_time::{

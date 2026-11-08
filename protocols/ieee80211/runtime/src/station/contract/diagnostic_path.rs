@@ -156,6 +156,7 @@ impl DiagnosticPath for TransmitRefusal {
                 path.name("Layout");
                 error.push_path(path);
             }
+            Self::StaleKey => path.name("StaleKey"),
         }
     }
 }

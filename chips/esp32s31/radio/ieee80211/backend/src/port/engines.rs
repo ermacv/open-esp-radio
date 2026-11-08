@@ -52,10 +52,16 @@ pub struct PairwiseInstall<Id: SlotIdentity> {
     identity: RawKeyIdentity,
     installation: Installation<'static, Id>,
     material: Ccmp128Key,
+    /// The installations that issued its association and its slot.
+    issued: [u32; 2],
 }
 
 /// An accepted group installation. Only [`Esp32s31Commands`] makes one.
-pub struct GroupInstall<Id: SlotIdentity>(GroupCommand<'static, Id>);
+pub struct GroupInstall<Id: SlotIdentity> {
+    command: GroupCommand<'static, Id>,
+    /// The installation that issued its association.
+    association: u32,
+}
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> CommandTypes<'id>
     for Types<Id, D, B, O>
@@ -117,6 +123,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.serials.take(),
             self.key_live,
         );
+        let issued = [association.generation(), slot.generation()];
         let installation =
             <Station as Role<'id, Id>>::pairwise(association, slot, peer).into_owned(&self.loan);
         (
@@ -124,6 +131,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 identity,
                 installation,
                 material: key,
+                issued,
             }),
             KeyIdentity {
                 owned: identity,
@@ -140,10 +148,75 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         key_id: GroupKeyId,
         key: Ccmp128Key,
     ) -> PortCommand<'id, Self::Types, Self::Caps> {
-        PortCommand::InstallGroup(GroupInstall(
-            <Station as Role<'id, Id>>::group(association, slot, permission, key_id, key)
+        PortCommand::InstallGroup(GroupInstall {
+            association: association.generation(),
+            command: <Station as Role<'id, Id>>::group(association, slot, permission, key_id, key)
                 .into_owned(&self.loan),
-        ))
+        })
+    }
+}
+
+/// The generations of the installation tokens a station command names:
+/// its permission, association, key slot or installed key.
+fn station_generations<
+    'id,
+    Id: SlotIdentity + 'id,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+>(
+    command: &Cmd<'id, Id, D, B, O>,
+) -> [Option<u32>; 3] {
+    match command {
+        PortCommand::InstallPairwise(install) => {
+            let [association, slot] = install.issued;
+            [Some(association), Some(slot), None]
+        }
+        PortCommand::InstallGroup(install) => match &install.command {
+            GroupCommand::InstallStation {
+                slot, permission, ..
+            } => [
+                Some(install.association),
+                Some(slot.generation()),
+                Some(permission.generation()),
+            ],
+            GroupCommand::InstallAccessPoint {
+                slot, permission, ..
+            } => [
+                Some(install.association),
+                Some(slot.generation()),
+                Some(permission.generation()),
+            ],
+            // The issuer makes installations only.
+            _ => [Some(install.association), None, None],
+        },
+        PortCommand::ReplaceGroup {
+            permission,
+            installed,
+            ..
+        }
+        | PortCommand::SelectGroup {
+            permission,
+            installed,
+        } => [
+            Some(permission.generation()),
+            Some(installed.identity.generation()),
+            None,
+        ],
+        PortCommand::RemoveGroup { permission, key } => [
+            Some(permission.generation()),
+            Some(key.identity.generation()),
+            None,
+        ],
+        PortCommand::RemovePairwise { association, key } => [
+            Some(association.generation()),
+            Some(key.identity.generation()),
+            None,
+        ],
+        PortCommand::Configure { permission, .. } => [Some(permission.generation()), None, None],
+        PortCommand::CloseGate(_) | PortCommand::SetEdca(_) | PortCommand::SetBssColor(_) => {
+            [None, None, None]
+        }
     }
 }
 
@@ -1164,14 +1237,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             Poll::Ready(Ok(None)) => {
                 let owned = match command {
-                    PortCommand::InstallGroup(GroupInstall(command)) => command,
+                    PortCommand::InstallGroup(GroupInstall { command, .. }) => command,
                     PortCommand::ReplaceGroup {
                         permission,
                         installed,
                         key_id,
                         key,
                     } => GroupCommand::Replace {
-                        permission: self.loan.reclaim_slot(permission),
+                        permission: permission.into_owned(&self.loan),
                         key: installed.into_owned(),
                         key_id,
                         material: key,
@@ -1180,7 +1253,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         permission,
                         installed,
                     } => GroupCommand::Select {
-                        permission: self.loan.reclaim_slot(permission),
+                        permission: permission.into_owned(&self.loan),
                         key: installed.into_owned(),
                     },
                     PortCommand::RemoveGroup { permission, key } => GroupCommand::Remove {
@@ -1299,6 +1372,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 identity,
                 installation,
                 material,
+                issued: _,
             }) => {
                 self.driver
                     .install(self.device, identity, installation, &material)?;
@@ -1386,8 +1460,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             (tickets, terminal_access),
             buffers,
             [connection_epoch],
-            [station_group_permission],
-            [access_point_group_permission],
+            station_group_permission,
+            access_point_group_permission,
             block_acks,
             station_commands,
             access_point_commands,
@@ -1427,8 +1501,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             station_commands: station_commands.issue(generation).lend(&loan),
             access_point_commands: access_point_commands.issue(generation).lend(&loan),
             block_acks: block_acks.map(|slot| slot.lend(&loan)),
-            station_group_permission: loan.lend_slot(station_group_permission),
-            access_point_group_permission: loan.lend_slot(access_point_group_permission),
+            station_group_permission: {
+                let [permission] = station_group_permission.issue(generation);
+                permission.lend(&loan)
+            },
+            access_point_group_permission: {
+                let [permission] = access_point_group_permission.issue(generation);
+                permission.lend(&loan)
+            },
             access_point_beacon: beacon.issue(generation).lend(&loan),
             gate: gate.lend(&loan),
             arbiter_authority: arbiter_authority.lend(&loan),
@@ -1611,14 +1691,38 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             PortState::Stopping { .. } | PortState::Recovering => Some(SubmitRefusal::Stopping),
             _ => Some(SubmitRefusal::NotEnabled),
         };
-        if let Some(reason) = reason {
+        let installation = self.serials.generation;
+        // An attempt under a key of an earlier installation is refused for
+        // good; it is checked before the radio's state.
+        let stale = attempt
+            .operation
+            .payload()
+            .key
+            .as_ref()
+            .map(RawKeyIdentity::generation)
+            .filter(|issued| *issued != installation);
+        let refusal = match (stale, reason) {
+            (Some(issued), _) => Some((
+                SubmitRefusal::StalePermission {
+                    issued,
+                    installation,
+                },
+                oer_protocols_ieee80211_contracts_port::WithdrawCause::StalePermission,
+            )),
+            (None, Some(reason)) => Some((
+                reason,
+                oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
+            )),
+            (None, None) => None,
+        };
+        if let Some((reason, cause)) = refusal {
             // The attempt ends at once, withdrawn and never published: its
             // terminal returns every owner.
-            let completed = brand::OwnedTxCompleted::Single(attempt.operation.complete(
-                oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(
-                    oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
-                ),
-            ));
+            let completed = brand::OwnedTxCompleted::Single(
+                attempt
+                    .operation
+                    .complete(oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(cause)),
+            );
             sink.terminal(completed.lend(&self.loan));
             return Err(reason);
         }
@@ -1825,6 +1929,22 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.now = now;
         if let Some(arena) = self.driver.arena.as_mut() {
             arena.forget_program();
+        }
+        // A token of an earlier installation is refused for good, before
+        // the radio's own state is asked.
+        let installation = self.serials.generation;
+        if let Some(issued) = station_generations::<Id, D, B, O>(&command)
+            .into_iter()
+            .flatten()
+            .find(|issued| *issued != installation)
+        {
+            return Ok(CommandProgress::Refused(
+                command,
+                CommandRefusal::StalePermission {
+                    issued,
+                    installation,
+                },
+            ));
         }
         if !self.running() {
             return Ok(CommandProgress::Refused(

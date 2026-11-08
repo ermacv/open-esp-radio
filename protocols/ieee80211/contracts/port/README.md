@@ -345,7 +345,10 @@ an earlier permission or key (`SubmitRefusal::StalePermission`, terminal
 `Withdrawn(StalePermission)`), and `access_point_command` refuses a command
 naming an earlier permission, association, slot or key
 (`AccessPointRefusal::StalePermission`, the command back). The station's
-operations do not check yet.
+operations refuse the same way: `command` with
+`CommandRefusal::StalePermission`, `submit` a frame under an earlier key.
+Tokens without a generation (the gate, transmit tickets and buffers, receive
+Block Ack slots, the epoch slot) are not checked.
 
 | Operation | Accepted at | Refused before | Ends with |
 | --- | --- | --- | --- |
