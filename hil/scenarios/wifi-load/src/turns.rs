@@ -9,6 +9,18 @@ use serde_json::{Value, json};
 
 /// The names of the accepted-per-turn bins.
 const BINS: [&str; 7] = ["0", "1", "2", "3", "4", "5-8", "9+"];
+/// The names of the reservation-size bins, in blocks.
+const SIZES: [&str; 5] = ["1", "2", "3-4", "5-8", "9-16"];
+
+/// `names` paired with `counts`, as `name:count` words.
+fn binned(names: &[&str], counts: &[u32]) -> String {
+    names
+        .iter()
+        .zip(counts)
+        .map(|(name, count)| format!("{name}:{count}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
 
 /// `part` over `whole`, none without a whole.
 fn ratio(part: u32, whole: u32) -> Option<f64> {
@@ -22,6 +34,11 @@ pub fn window(turns: &NetworkTurns) -> Value {
         .zip(turns.accepted_by_turn)
         .map(|(name, count)| ((*name).to_owned(), count.into()))
         .collect();
+    let sizes: serde_json::Map<_, _> = SIZES
+        .iter()
+        .zip(turns.reserve_by_size)
+        .map(|(name, count)| ((*name).to_owned(), count.into()))
+        .collect();
     json!({
         "available": turns.available,
         "turns": turns.turns,
@@ -32,6 +49,9 @@ pub fn window(turns: &NetworkTurns) -> Value {
             "close": turns.closes,
         },
         "reserve_per_send": ratio(turns.reserves, turns.sends),
+        "reserve_blocks": turns.reserve_blocks,
+        "blocks_per_reserve": ratio(turns.reserve_blocks, turns.reserves),
+        "reserve_by_size": sizes,
         "budget_spent": turns.budget_spent,
         "budget_turns": turns.budget_turns,
         "budget_turn_share": ratio(turns.budget_turns, turns.turns),
@@ -63,14 +83,11 @@ pub fn summary(turns: &NetworkTurns) -> String {
         return "not counted (a trace image on the network core counts the turns)".to_owned();
     }
     let fixed = |value: Option<f64>| value.map_or("-".to_owned(), |value| format!("{value:.2}"));
-    let bins = BINS
-        .iter()
-        .zip(turns.accepted_by_turn)
-        .map(|(name, count)| format!("{name}:{count}"))
-        .collect::<Vec<_>>()
-        .join(" ");
+    let bins = binned(&BINS, &turns.accepted_by_turn);
+    let sizes = binned(&SIZES, &turns.reserve_by_size);
     format!(
         "{} turns; reserve {} send {} release {} close {} (reserve/send {}); \
+         reserved blocks {} ({} per reserve; {sizes}); \
          budget spent in {} turns ({} sockets, share {}); intake full {}; \
          accepted {} ({} per turn; {bins}); publish chose {} refused {} budget {} \
          deferred {} fault {}; out at end: blocks {} credits {}; yields {} \
@@ -81,6 +98,8 @@ pub fn summary(turns: &NetworkTurns) -> String {
         turns.releases,
         turns.closes,
         fixed(ratio(turns.reserves, turns.sends)),
+        turns.reserve_blocks,
+        fixed(ratio(turns.reserve_blocks, turns.reserves)),
         turns.budget_turns,
         turns.budget_spent,
         fixed(ratio(turns.budget_turns, turns.turns)),
@@ -110,8 +129,10 @@ mod tests {
         let turns = NetworkTurns {
             available: true,
             turns: 8,
-            reserves: 16,
+            reserves: 4,
             sends: 16,
+            reserve_blocks: 50,
+            reserve_by_size: [1, 0, 0, 0, 3],
             budget_spent: 7,
             budget_turns: 7,
             accepted: 16,
@@ -122,8 +143,11 @@ mod tests {
             ..NetworkTurns::default()
         };
         let value = window(&turns);
-        assert_eq!(value["requests"]["reserve"], 16);
-        assert_eq!(value["reserve_per_send"], 1.0);
+        assert_eq!(value["requests"]["reserve"], 4);
+        assert_eq!(value["reserve_per_send"], 0.25);
+        assert_eq!(value["reserve_blocks"], 50);
+        assert_eq!(value["blocks_per_reserve"], 12.5);
+        assert_eq!(value["reserve_by_size"]["9-16"], 3);
         assert_eq!(value["budget_turn_share"], 0.875);
         assert_eq!(value["accepted_per_turn"], 2.0);
         assert_eq!(value["accepted_by_turn"]["4"], 4);
@@ -132,7 +156,8 @@ mod tests {
         assert_eq!(value["out_at_turn_end"]["blocks"], 0);
         assert_eq!(
             summary(&turns),
-            "8 turns; reserve 16 send 16 release 0 close 0 (reserve/send 1.00); \
+            "8 turns; reserve 4 send 16 release 0 close 0 (reserve/send 0.25); \
+             reserved blocks 50 (12.50 per reserve; 1:1 2:0 3-4:0 5-8:0 9-16:3); \
              budget spent in 7 turns (7 sockets, share 0.88); intake full 0; \
              accepted 16 (2.00 per turn; 0:4 1:0 2:0 3:0 4:4 5-8:0 9+:0); publish chose 8 \
              refused 0 budget 0 deferred 0 fault 0; out at end: blocks 0 credits 0; \

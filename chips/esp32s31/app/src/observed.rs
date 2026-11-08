@@ -538,6 +538,14 @@ pub fn network_turns() -> crate::observe::network::NetworkTurns {
     NETWORK.read()
 }
 
+// The last bin of a reservation's size ends at the look-ahead.
+#[cfg(feature = "network")]
+const _: () = {
+    if oer_protocols_network_runtime::RESERVE_AHEAD > 16 {
+        panic!("a reservation's bins end at 16 blocks");
+    }
+};
+
 /// The network service's sink: its turns go to [`network_turns`], and the
 /// core's drops go nowhere, as without `observe`.
 #[cfg(feature = "network")]
@@ -558,7 +566,7 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
             ServiceEvent::Took(kind) => tally.took(
                 &NETWORK,
                 match kind {
-                    RequestKind::Reserve => Request::Reserve,
+                    RequestKind::Reserve { blocks } => Request::Reserve { blocks },
                     RequestKind::Release => Request::Release,
                     RequestKind::Send => Request::Send,
                     RequestKind::Close => Request::Close,

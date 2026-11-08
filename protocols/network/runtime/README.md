@@ -34,9 +34,14 @@ A socket's lanes wake through waker cells, so today a socket and its service
 share a hart.
 
 A block comes from the service, which takes a turn. `reserve_ahead` lets a socket hold
-up to `RESERVE_AHEAD` ready, so a sender runs a batch on one turn. They count toward
-its group and stay out of other sockets' reach while they wait, and a stop or a dropped
-socket brings them home with the rest of its lanes.
+up to `RESERVE_AHEAD` ready, so a sender runs a batch on one turn. A socket asks for
+what it lacks in one request, of at most `RESERVE_AHEAD` blocks. The service grants
+them one by one as blocks come free, each chosen anew among the waiting sockets, so a
+larger request gains no place. A block counts toward its group from its grant, not
+from the request. Granted blocks stay out of other sockets' reach while they wait, and
+a stop or a dropped socket brings them home with the rest of its lanes. A cancelled
+`reserve` leaves its request in place for the next one. A close ends what the socket
+was still owed, and what it was granted stays its own.
 
 A service's `Egress` policy chooses what goes out, among all ready work and before
 any frame exists, and keeps its own account: `Direct` is the first ready work and no

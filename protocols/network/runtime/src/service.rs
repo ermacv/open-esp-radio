@@ -170,6 +170,14 @@ pub struct BindRefused<'a, T> {
     pub storage: &'a mut T,
 }
 
+/// A socket while it is open: only an open socket is owed blocks, so its
+/// close ends what it was owed with it.
+struct Open<B> {
+    id: SocketId<B>,
+    /// Blocks asked for and not yet granted.
+    reserving: usize,
+}
+
 /// One socket as the service holds it.
 struct Bound<
     'a,
@@ -181,11 +189,9 @@ struct Bound<
     const CREDITS: usize,
 > {
     end: ServiceEnd<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>,
-    socket: Option<SocketId<B>>,
+    open: Option<Open<B>>,
     commands: [Option<CommandId<B>>; CREDITS],
     closing: Option<CommandId<B>>,
-    /// A reservation waits for a free block.
-    reserving: usize,
     /// A received datagram waits for room in the lane.
     blocked: bool,
     /// What this socket's reserved blocks count toward.
@@ -359,10 +365,9 @@ impl<
         *place = Some(Bound {
             end,
             group,
-            socket: Some(id),
+            open: Some(Open { id, reserving: 0 }),
             commands: [const { None }; CREDITS],
             closing: None,
-            reserving: 0,
             blocked: false,
             abandoned: false,
         });
@@ -463,7 +468,7 @@ impl<
                 .bound
                 .iter()
                 .flatten()
-                .filter(|bound| bound.socket.is_some() && !bound.abandoned)
+                .filter(|bound| bound.open.is_some() && !bound.abandoned)
                 .all(|bound| bound.end.credits.any_free());
             Some(ServiceEvent::TurnEnded(TurnEnd {
                 blocks_free,
@@ -491,7 +496,7 @@ impl<
             return false;
         };
         let waiter = self.bound.iter().flatten().any(|socket| {
-            socket.reserving != 0
+            socket.waiting()
                 && socket.group != source
                 && pool.held(socket.group) < most
                 && pool.may_take(socket.group)
@@ -538,10 +543,16 @@ impl<
             moved = true;
             report(events, || ServiceEvent::Took(request.kind()));
             match request {
-                Request::Reserve => bound.reserving = bound.reserving.saturating_add(1),
+                // Demand only: each block is granted on its own, and counts
+                // toward the group when it is.
+                Request::Reserve(batch) => {
+                    if let Some(open) = &mut bound.open {
+                        open.reserving = open.reserving.saturating_add(batch.blocks());
+                    }
+                }
                 Request::Release(block) => self.owner.pool().give(block),
                 Request::Send { tag, remote, block } => {
-                    let Some(socket) = &bound.socket else {
+                    let Some(Open { id: socket, .. }) = &bound.open else {
                         self.owner.pool().give(block);
                         bound.unsent(tag, Sent::Ended(Outcome::Closed));
                         continue;
@@ -558,9 +569,11 @@ impl<
                         }
                     }
                 }
+                // What the socket was owed ends with it; what it was
+                // granted stays its own.
                 Request::Close => {
-                    if let Some(socket) = bound.socket.take() {
-                        match self.owner.close(socket) {
+                    if let Some(Open { id, .. }) = bound.open.take() {
+                        match self.owner.close(id) {
                             Ok(close) => bound.closing = Some(close),
                             Err(_) => bound.closed(),
                         }
@@ -576,8 +589,9 @@ impl<
 
     /// Give waiting sockets a block each: the group holding least first, and
     /// in turn within a group, the next pass starting after the last one served.
-    /// This comes after all commands, so a socket's release gives it no place
-    /// ahead of another.
+    /// Each block is chosen anew, so how many a socket asked for gives it no
+    /// place ahead of another. This comes after all commands, so a socket's
+    /// release gives it no place ahead of another either.
     fn give_blocks(&mut self) -> bool {
         let first = self.next_block;
         let mut gave = false;
@@ -589,7 +603,7 @@ impl<
                 .filter_map(|offset| {
                     let index = first.wrapping_add(offset).checked_rem(SOCKETS)?;
                     let socket = bound.get(index)?.as_ref()?;
-                    (socket.reserving != 0 && pool.may_take(socket.group)).then_some((
+                    (socket.waiting() && pool.may_take(socket.group)).then_some((
                         pool.held(socket.group),
                         offset,
                         index,
@@ -754,12 +768,21 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         let _room_is_proven = self.end.answers.try_send(answer);
     }
 
-    /// Answer a reservation, if a block is free.
+    /// Whether the open socket is owed a block.
+    fn waiting(&self) -> bool {
+        self.open.as_ref().is_some_and(|open| open.reserving != 0)
+    }
+
+    /// Grant the open socket one block it is owed, if one is free: only now
+    /// does the block count toward the group.
     fn reserve<const BLOCKS: usize>(&mut self, pool: &mut Pool<'m, B, SIZE, BLOCKS>) -> bool {
+        let Some(open) = self.open.as_mut().filter(|open| open.reserving != 0) else {
+            return false;
+        };
         let Some(block) = pool.take_as(self.group) else {
             return false;
         };
-        self.reserving = self.reserving.saturating_sub(1);
+        open.reserving = open.reserving.saturating_sub(1);
         self.answer(Answer::Reserved(block));
         true
     }
@@ -808,11 +831,10 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         drain_requests(&this.end.requests, owner.pool(), |tag| {
             this.ended(tag, Sent::Ended(Outcome::Closed));
         });
-        if let Some(socket) = self.socket.take() {
-            self.closing = owner.close(socket).ok();
+        if let Some(Open { id, .. }) = self.open.take() {
+            self.closing = owner.close(id).ok();
         }
         inbound.drain(owner.pool());
-        self.reserving = 0;
         self.blocked = false;
         self.abandoned = true;
     }
@@ -860,7 +882,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             }
         }
         self.blocked = false;
-        if let Some(socket) = &self.socket {
+        if let Some(Open { id: socket, .. }) = &self.open {
             while let Some(permit) = self.end.datagrams.try_reserve() {
                 let Ok(Some(datagram)) = owner.receive(socket) else {
                     return moved;

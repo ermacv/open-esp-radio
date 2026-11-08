@@ -12,7 +12,11 @@ use oer_portable_events::EventSink;
 /// A request a turn takes from a socket's lane.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RequestKind {
-    Reserve,
+    /// A reservation of `blocks`, one to
+    /// [`RESERVE_AHEAD`](crate::RESERVE_AHEAD), granted one by one later.
+    Reserve {
+        blocks: u8,
+    },
     Release,
     Send,
     Close,

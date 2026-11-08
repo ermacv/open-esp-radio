@@ -146,6 +146,8 @@ const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::N
     yields_with_work: 0,
     waits_pending: 0,
     waits_ready: 0,
+    reserve_blocks: 0,
+    reserve_by_size: [0; oer_hil_services_load::RESERVE_BINS],
 };
 
 /// The network core's turns at the open window's start, and the last closed
@@ -234,6 +236,8 @@ fn network_turns() -> oer_hil_services_load::NetworkTurns {
         yields_with_work: turns.yields_with_work,
         waits_pending: turns.waits_pending,
         waits_ready: turns.waits_ready,
+        reserve_blocks: turns.reserve_blocks,
+        reserve_by_size: turns.reserve_by_size,
     }
 }
 

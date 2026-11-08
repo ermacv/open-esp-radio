@@ -1009,6 +1009,10 @@ pub enum NetworkCollected {
 /// 1, 2, 3, 4, 5 to 8, and 9 or more frames.
 pub const ACCEPTED_BINS: usize = 7;
 
+/// The bins of [`NetworkTurns::reserve_by_size`]: reservations asking for
+/// 1, 2, 3 to 4, 5 to 8, and 9 to 16 blocks.
+pub const RESERVE_BINS: usize = 5;
+
 /// The network core's turns within one window: the requests they took from
 /// the sockets' lanes, the sockets they left with requests when their
 /// budget ran out, the frames the port accepted, how each turn's publishing
@@ -1058,6 +1062,10 @@ pub struct NetworkTurns {
     /// and those that found something and turn again in the same poll.
     pub waits_pending: u32,
     pub waits_ready: u32,
+    /// The blocks the reservations asked for, and the reservations by how
+    /// many ([`RESERVE_BINS`]): with `reserves`, the mean request size.
+    pub reserve_blocks: u32,
+    pub reserve_by_size: [u32; RESERVE_BINS],
 }
 
 impl NetworkTurns {
@@ -1091,6 +1099,11 @@ impl NetworkTurns {
             yields_with_work: count(|turns| turns.yields_with_work),
             waits_pending: count(|turns| turns.waits_pending),
             waits_ready: count(|turns| turns.waits_ready),
+            reserve_blocks: count(|turns| turns.reserve_blocks),
+            reserve_by_size: core::array::from_fn(|bin| {
+                let at = |turns: &Self| turns.reserve_by_size.get(bin).copied().unwrap_or(0);
+                at(end).wrapping_sub(at(start))
+            }),
         }
     }
 }

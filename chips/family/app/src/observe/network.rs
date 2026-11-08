@@ -13,7 +13,10 @@ use super::bump;
 /// A request a turn took from a socket's lane.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Request {
-    Reserve,
+    /// A reservation asking for `blocks`.
+    Reserve {
+        blocks: u8,
+    },
     Release,
     Send,
     Close,
@@ -37,6 +40,11 @@ pub enum Publish {
 /// The bins of [`NetworkTurns::accepted_by_turn`]: turns whose port took
 /// 0, 1, 2, 3, 4, 5 to 8, and 9 or more frames.
 pub const ACCEPTED_BINS: usize = 7;
+
+/// The bins of [`NetworkTurns::reserve_by_size`]: reservations asking for
+/// 1, 2, 3 to 4, 5 to 8, and 9 to 16 blocks (a socket asks for at most its
+/// look-ahead, 16).
+pub const RESERVE_BINS: usize = 5;
 
 /// What the network's turns did since boot.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -79,6 +87,10 @@ pub struct NetworkTurns {
     /// those that found something, whose next turn runs in the same poll.
     pub waits_pending: u32,
     pub waits_ready: u32,
+    /// The blocks the reservations asked for, and the reservations by how
+    /// many ([`RESERVE_BINS`]).
+    pub reserve_blocks: u32,
+    pub reserve_by_size: [u32; RESERVE_BINS],
 }
 
 /// The words of [`NetworkCounter`], by what they count.
@@ -105,12 +117,18 @@ mod word {
     pub const YIELDS_WITH_WORK: usize = 24;
     pub const WAITS_PENDING: usize = 25;
     pub const WAITS_READY: usize = 26;
-    pub const COUNT: usize = 27;
+    pub const RESERVE_BLOCKS: usize = 27;
+    /// [`super::RESERVE_BINS`] words.
+    pub const RESERVE_BY_SIZE: usize = 28;
+    pub const COUNT: usize = 33;
 }
 
 const _: () = {
     if word::ACCEPTED_BY_TURN + ACCEPTED_BINS != word::PUBLISH_CHOSE {
         panic!("the histogram's words lie between the accepted count and the publish ends");
+    }
+    if word::RESERVE_BY_SIZE + RESERVE_BINS != word::COUNT {
+        panic!("the reservations' histogram is the last of the words");
     }
 };
 
@@ -165,6 +183,10 @@ impl NetworkCounter {
             yields_with_work: at(word::YIELDS_WITH_WORK),
             waits_pending: at(word::WAITS_PENDING),
             waits_ready: at(word::WAITS_READY),
+            reserve_blocks: at(word::RESERVE_BLOCKS),
+            reserve_by_size: core::array::from_fn(|bin| {
+                at(word::RESERVE_BY_SIZE.saturating_add(bin))
+            }),
         }
     }
 }
@@ -181,6 +203,17 @@ const fn accepted_bin(accepted: u32) -> usize {
         0..=4 => accepted as usize,
         5..=8 => 5,
         _ => 6,
+    }
+}
+
+/// The bin of a reservation asking for `blocks`.
+const fn reserve_bin(blocks: u8) -> usize {
+    match blocks {
+        0..=1 => 0,
+        2 => 1,
+        3..=4 => 2,
+        5..=8 => 3,
+        _ => 4,
     }
 }
 
@@ -209,9 +242,13 @@ impl TurnTally {
 
     /// The turn took `request`.
     pub fn took(&mut self, counter: &NetworkCounter, request: Request) {
+        if let Request::Reserve { blocks } = request {
+            counter.bump(word::RESERVE_BLOCKS, u32::from(blocks));
+            counter.bump(word::RESERVE_BY_SIZE.saturating_add(reserve_bin(blocks)), 1);
+        }
         counter.bump(
             match request {
-                Request::Reserve => word::RESERVES,
+                Request::Reserve { .. } => word::RESERVES,
                 Request::Release => word::RELEASES,
                 Request::Send => word::SENDS,
                 Request::Close => word::CLOSES,
