@@ -7,7 +7,9 @@
 //! decide a case, only a path or an exchange that does not work does.
 //! Each window also records what the link ran ([`link`]): the access
 //! point's view of the station and the image's rates each way, and what
-//! the image's periodic PHY tracking did ([`tracking`]).
+//! the image's periodic PHY tracking did ([`tracking`]), and where its
+//! receive path last moved by boundary, with its radio owner's snapshot at
+//! the window's end ([`stall`]).
 //! With `OER_WIFI_LOAD_PROFILE_US` each level also samples where the
 //! image's hart spends its window ([`profile`]).
 #![forbid(unsafe_code)]
@@ -15,6 +17,7 @@
 mod link;
 mod ping;
 mod profile;
+mod stall;
 mod tracking;
 mod traffic;
 mod turns;
@@ -28,11 +31,12 @@ use std::{
 
 use oer_hil_services_load::{
     CacheGeometry, CacheLevel, Collect, CollectCounters, CollectHart1, CollectLink, CollectMac,
-    CollectNetwork, CollectParts, CollectPositions, CollectTracking, Collected, Counters,
-    CountersCollected, DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected,
-    Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns,
-    PartWindow, PartsCollected, Positions, PositionsCollected, Report, Start, Started,
-    StaticAddress, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected, Transmit,
+    CollectNetwork, CollectParts, CollectPositions, CollectStall, CollectStallMac, CollectTracking,
+    Collected, Counters, CountersCollected, DataBus, Hart1Collected, Hart1Window, InstructionBus,
+    Link, LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected,
+    NetworkTurns, PartWindow, PartsCollected, Positions, PositionsCollected, Report, Stall,
+    StallCollected, StallMac, StallMacCollected, Start, Started, StaticAddress, TUNE_KNOBS,
+    TUNE_UNSET, Tracking, TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Ipv4, Join, Joined, Leave, Left, ScanVisit,
@@ -282,6 +286,8 @@ struct Ended {
     positions: Positions,
     hart1: Hart1Window,
     tracking: Tracking,
+    stall: Stall,
+    stall_mac: StallMac,
     network: NetworkTurns,
 }
 
@@ -337,6 +343,14 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         TrackingCollected::Report(tracking) => tracking,
         other => return Err(Failure::Fail(format!("the image's tracking: {other:?}"))),
     };
+    let stall = match cx.call(CollectStall { run }, CALL)? {
+        StallCollected::Report(stall) => stall,
+        other => return Err(Failure::Fail(format!("the image's stall: {other:?}"))),
+    };
+    let stall_mac = match cx.call(CollectStallMac { run }, CALL)? {
+        StallMacCollected::Report(stall_mac) => stall_mac,
+        other => return Err(Failure::Fail(format!("the image's stall MAC: {other:?}"))),
+    };
     match cx.call(CollectNetwork { run }, CALL)? {
         NetworkCollected::Report(network) => Ok(Ended {
             report,
@@ -347,6 +361,8 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             positions,
             hart1,
             tracking,
+            stall,
+            stall_mac,
             network,
         }),
         other => Err(Failure::Fail(format!(
@@ -384,6 +400,14 @@ fn positions_counts(positions: &Positions) -> serde_json::Value {
 fn tracking_measurement(name: &str, ended: &Ended) -> serde_json::Value {
     println!("  tracking {name}: {}", tracking::summary(&ended.tracking));
     tracking::window(&ended.tracking)
+}
+
+/// Where the receive path last moved and the radio owner's snapshot at the
+/// window's end; its one-line summary is printed as `name`'s.
+fn stall_measurement(name: &str, ended: &Ended) -> serde_json::Value {
+    let (report, stall, mac) = (&ended.report, &ended.stall, &ended.stall_mac);
+    println!("  stall {name}: {}", stall::summary(report, stall, mac));
+    stall::window(report, stall, mac)
 }
 
 /// What the network core's turns did over a window; its one-line summary
@@ -1476,6 +1500,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         object.insert("link".to_owned(), link);
         let tracking = tracking_measurement(name, &ended);
         object.insert("tracking".to_owned(), tracking);
+        object.insert("stall".to_owned(), stall_measurement(name, &ended));
         let turns = turns_measurement(name, &ended);
         object.insert("network_turns".to_owned(), turns);
     }
@@ -1733,6 +1758,8 @@ mod tests {
             positions: Positions::default(),
             hart1: Hart1Window::default(),
             tracking: Tracking::default(),
+            stall: Stall::default(),
+            stall_mac: StallMac::default(),
             network: NetworkTurns::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
@@ -1822,6 +1849,8 @@ mod tests {
             positions: Positions::default(),
             hart1: window((0, 0), (320_000_000, 3_000_000)),
             tracking: Tracking::default(),
+            stall: Stall::default(),
+            stall_mac: StallMac::default(),
             network: NetworkTurns::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();

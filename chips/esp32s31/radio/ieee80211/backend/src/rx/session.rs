@@ -13,16 +13,17 @@ use super::{
     sink::CountingAdmission,
     transaction::Publisher,
 };
+use crate::cooperative_hardware::ReceiveRegisters;
 use crate::irq::{RadioDoorbell, WifiIrqActivation, WifiIrqLine, WifiIrqRequest, WifiIrqRequests};
 use crate::mac::{
-    init::{MacRuntimeStopHardware, activate_promiscuous_receive},
+    init::{MacRuntimeStartHardware, MacRuntimeStopHardware, activate_promiscuous_receive},
     irq::consumer::{IrqBatch, IrqConsumer, PowerIrqConsumer},
     rx::pool::RxStagePool,
 };
 use core::task::{Context, Poll};
-use oer_chips_esp32s31_hal::{
-    radio::ieee80211::dma::{rx_storage::RxDmaStorage, space::ChipDma},
-    system::owner::RadioAccess,
+use oer_chips_esp32s31_hal::radio::ieee80211::dma::{
+    rx_storage::RxDmaStorage,
+    space::{ChipDma, DmaSpace},
 };
 use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 use oer_portable_memory::HandlerCell;
@@ -33,7 +34,8 @@ use oer_portable_time::{Instant, Timer};
 /// `V` is the router's proof that the image binds the radio handler's part
 /// ([`Bound`](oer_chips_family_platform_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)); the session holds it, and
-/// every activation takes it.
+/// every activation takes it. `A` is the DMA space of the ring: the chip's,
+/// or a host model's.
 pub struct ReceiveSession<
     const N: usize,
     const B: usize,
@@ -41,8 +43,9 @@ pub struct ReceiveSession<
     const Q: usize,
     X: SignalExecutor,
     V: WifiIrqActivation,
+    A: DmaSpace = ChipDma,
 > {
-    rx: &'static RxDmaStorage<N, B, S>,
+    rx: &'static RxDmaStorage<N, B, S, A>,
     stage: &'static RxStagePool<Q, B>,
     irq: IrqConsumer<'static, X>,
     power: PowerIrqConsumer<'static, X>,
@@ -61,10 +64,11 @@ pub struct ReceiveSession<
     port_close_started: Option<Instant>,
 }
 
-impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalExecutor, V>
-    ReceiveSession<N, B, S, Q, X, V>
+impl<const N: usize, const B: usize, const S: usize, const Q: usize, X: SignalExecutor, V, A>
+    ReceiveSession<N, B, S, Q, X, V, A>
 where
     V: WifiIrqActivation,
+    A: DmaSpace,
 {
     /// Bind once while the role is stopped: install the interrupt line in
     /// the radio handler's `cell`, keep `bound`, the proof that the image's
@@ -72,9 +76,9 @@ where
     /// this arena; the caller retains its role/register owners for
     /// quarantine or reset.
     pub fn new(
-        parts: WifiRxParts<'static, N, B, S, Q, ChipDma, X>,
+        parts: WifiRxParts<'static, N, B, S, Q, A, X>,
         bound: V,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         cell: &'static HandlerCell<WifiIrqLine<X>>,
     ) -> Result<Self, WifiRxCause> {
         let WifiRxParts {
@@ -125,8 +129,7 @@ where
     /// starts.
     pub async fn start(
         &mut self,
-        registers: &mut RadioAccess,
-        timer: &impl Timer,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
     ) -> Result<(), WifiRxCause> {
         let (mut mac, dma) = registers.split_rx_dma();
@@ -135,7 +138,6 @@ where
             .map_err(WifiRxCause::Start)?;
         activate_promiscuous_receive(&mut mac);
         self.requests.activate(&self.bound, doorbell);
-        super::storage::walker_enable_settle(timer).await;
         self.frontier
             .start_prepared(dma)
             .map_err(WifiRxCause::Start)?;
@@ -171,7 +173,7 @@ where
     /// affine leases in the supplied publisher until its receiver drops them.
     pub async fn drain<P: Publisher<'static, B, Q>>(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
         publisher: &P,
@@ -205,7 +207,7 @@ where
     /// receiver before awaiting this boundary; no held frame is discarded.
     pub async fn pause<P: Publisher<'static, B, Q>>(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
         publisher: &P,
@@ -283,50 +285,28 @@ where
     /// the executor waits for the walker-enable settle.
     pub(crate) fn port_start(
         &mut self,
-        registers: &mut RadioAccess,
-        timer: &impl Timer,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
     ) -> Poll<Result<(), WifiRxCause>> {
-        use super::storage::ESP32S31_RX_WALKER_ENABLE_SETTLE_US;
         if self.frontier.phase() == super::frontier::RxFrontierPhase::Live {
             return Poll::Ready(Ok(()));
         }
-        let deadline = match self.port_settle {
-            Some(deadline) => deadline,
-            None => {
-                let (mut mac, dma) = registers.split_rx_dma();
-                self.frontier
-                    .prepare_with_storage(dma, self.rx)
-                    .map_err(WifiRxCause::Start)?;
-                activate_promiscuous_receive(&mut mac);
-                self.requests.activate(&self.bound, doorbell);
-                let deadline = timer
-                    .now()
-                    .checked_add(oer_portable_time::Duration::from_micros(u64::from(
-                        ESP32S31_RX_WALKER_ENABLE_SETTLE_US,
-                    )))
-                    .ok_or(WifiRxCause::Start(
-                        super::frontier::RxFrontierError::OwnerUnavailable,
-                    ))?;
-                self.port_settle = Some(deadline);
-                deadline
-            }
-        };
-        if timer.now() < deadline {
-            return Poll::Pending;
-        }
         let (mut mac, dma) = registers.split_rx_dma();
+        self.frontier
+            .prepare_with_storage(dma, self.rx)
+            .map_err(WifiRxCause::Start)?;
+        activate_promiscuous_receive(&mut mac);
+        self.requests.activate(&self.bound, doorbell);
         self.frontier
             .start_prepared(dma)
             .map_err(WifiRxCause::Start)?;
         mac.start_mac_runtime(self.frontier.live_mut().map_err(WifiRxCause::Start)?);
-        self.port_settle = None;
         Poll::Ready(Ok(()))
     }
 
     pub(crate) fn port_service<P: Publisher<'static, B, Q>>(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
         live: &impl oer_portable_time::Clock,
@@ -376,7 +356,7 @@ where
     pub(crate) fn port_freeze(
         &mut self,
         cx: &mut Context<'_>,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
     ) -> Poll<Result<(), WifiRxCause>> {
@@ -406,13 +386,13 @@ where
                 }
                 return Poll::Pending;
             }
-            let mut mac = registers.wifi_mac_hal();
+            let mut mac = registers.mac();
             deactivate_promiscuous_receive(&mut mac);
             mac.request_mac_runtime_stop();
             self.port_stop_deadline =
                 Some(timer.now().saturating_add(super::receive::DRAIN_TIMEOUT));
         }
-        if registers.wifi_mac_hal().mac_runtime_active_state() != 0 {
+        if registers.mac().mac_runtime_active_state() != 0 {
             if self
                 .port_stop_deadline
                 .is_some_and(|deadline| timer.now() >= deadline)
@@ -436,7 +416,7 @@ where
     /// resumes.
     pub(crate) fn port_resume_cut(
         &mut self,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
     ) -> Result<(), WifiRxCause> {
         if !self.port_frozen {
@@ -444,8 +424,8 @@ where
         }
         self.reattach();
         self.requests.activate(&self.bound, doorbell);
-        activate_promiscuous_receive(&mut registers.wifi_mac_hal());
-        registers.wifi_mac_hal().resume_mac_runtime();
+        activate_promiscuous_receive(&mut registers.mac());
+        registers.mac().resume_mac_runtime();
         Ok(())
     }
 
@@ -455,7 +435,7 @@ where
     pub(crate) fn port_pause(
         &mut self,
         cx: &mut Context<'_>,
-        registers: &mut RadioAccess,
+        registers: &mut impl ReceiveRegisters,
         doorbell: &impl RadioDoorbell,
         timer: &impl Timer,
     ) -> Poll<Result<(), WifiRxCause>> {
@@ -489,5 +469,84 @@ where
     /// Ask the radio handler to mask both banks; latched events stay.
     pub(crate) fn port_mask_all(&self, doorbell: &impl RadioDoorbell) {
         self.requests.ring(WifiIrqRequest::MaskAll, doorbell);
+    }
+
+    /// The descriptors the service passes observed (admitted units' and the
+    /// reserved one's), since the session was bound.
+    #[cfg(oer_trace)]
+    pub(crate) const fn observed_descriptors(&self) -> u64 {
+        self.totals[0]
+    }
+
+    /// A trace build's stall snapshot of the walker, the ring and the
+    /// session's owners. Only reads: no register is written, no descriptor
+    /// or lease changes hands and no fact is taken.
+    #[cfg(oer_trace)]
+    pub(crate) fn stall_view(
+        &mut self,
+        registers: &mut impl ReceiveRegisters,
+    ) -> super::counters::stall::RxHardwareView {
+        use super::counters::stall::{
+            RxDescriptorCounts, RxHardwareView, RxRingView, RxSessionView, RxWalkerView,
+        };
+        use crate::mac::{
+            init::MacRuntimeStopHardware,
+            rx::{RxBufferFullCounter, RxDma},
+        };
+        let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        let (mut mac, dma) = registers.split_rx_dma();
+        let next = dma.next_descriptor();
+        let walker = RxWalkerView {
+            enabled: dma.walker_enabled(),
+            reload_doorbell: dma.reload_pending(),
+            next_low: next.address_low(),
+            next_upper: next.has_unknown_upper_state(),
+            last_low: dma.last_descriptor_low(),
+            base: dma.descriptor_base_register(),
+            buffer_full: mac.buffer_full_count(),
+            runtime_state: mac.mac_runtime_active_state(),
+        };
+        let ring = self.frontier.live_mut().ok().map(|ring| RxRingView {
+            base: ring.descriptor_base(),
+            recycle_start: narrow(ring.recycle_start().get()),
+            accepted_tail: narrow(ring.accepted_tail().get()),
+            observed: ring.observed_mask().count_ones(),
+            completed: narrow(ring.completed_frontier_len()),
+            remaining: ring.accepted_list_remaining_from_next(next).map(narrow),
+            reload_pending: ring.reload_pending(),
+        });
+        let mut descriptors = RxDescriptorCounts::default();
+        for descriptor in self.rx.descriptors() {
+            let word0 = descriptor.word0();
+            descriptors.total = descriptors.total.saturating_add(1);
+            let count = match (word0.owner(), word0.rx_done()) {
+                (true, false) => &mut descriptors.armed,
+                (true, true) => &mut descriptors.done,
+                (false, _) => &mut descriptors.software,
+            };
+            *count = count.saturating_add(1);
+        }
+        let reserved = self.rx.reserved_descriptor().word0();
+        descriptors.reserved_owner = reserved.owner();
+        descriptors.reserved_done = reserved.rx_done();
+        let counters = self.counters.report();
+        RxHardwareView {
+            walker,
+            ring,
+            session: RxSessionView {
+                descriptors,
+                released: narrow(self.rx.released_buffer_count()),
+                detached: narrow(self.rx.detached_buffer_count()),
+                staged: self.stage.claimed_slots(),
+                masked: self.port_masked,
+                frozen: self.port_frozen,
+                line_request_pending: self.requests.is_pending(),
+                receive_fact_pending: self.irq.has_received().ok(),
+                mac_irqs: counters.mac_irqs,
+                doorbell_unmasks: counters.doorbell_unmasks,
+                ignored_unmasks: counters.ignored_unmasks,
+                service_passes: counters.service_passes,
+            },
+        }
     }
 }

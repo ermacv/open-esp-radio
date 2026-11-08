@@ -6,10 +6,8 @@ use crate::mac::{
     rx::pool::NetworkRxFrame,
 };
 use crate::{
+    cooperative_hardware::ReceiveRegisters,
     irq::{RadioDoorbell, WifiIrqActivation, WifiIrqLine},
-    runtime::{
-        WifiRetuneFailure, WifiRetunePending, WifiRuntimeContext, WifiRuntimeParts, WifiStopped,
-    },
     rx::{
         arena::WifiRxParts,
         receive::{CONTINUATION_WAIT, IMMEDIATE_CONTINUATIONS, RecycledProbe, ReturnQuiet},
@@ -18,14 +16,13 @@ use crate::{
         transaction::{CompletedUnit, Preview, Publisher},
         upper::W1_INGRESS,
     },
-    startup::WifiMacPlatform,
 };
 use core::cell::RefCell;
-use oer_chips_esp32s31_hal::{radio::ieee80211::dma::space::ChipDma, system::owner::RadioAccess};
-use oer_chips_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
+use oer_chips_esp32s31_hal::radio::ieee80211::dma::space::DmaSpace;
 use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 use oer_portable_memory::HandlerCell;
-use oer_protocols_radio_regulatory::{PowerLimits, RegulatoryDomain};
+use oer_protocols_ieee80211_wire::channel::WifiChannel;
+use oer_protocols_radio_regulatory::{Permitted, PowerLimits, RegulatoryDomain, TxCeiling};
 
 /// Image-owned policy and opaque operation contexts. No executor is selected.
 pub trait Composition: 'static {
@@ -40,8 +37,67 @@ pub trait Composition: 'static {
         + 'p;
 }
 
-pub type Power =
-    crate::tx::CappedTxPowerProfile<oer_chips_esp32s31_radio_phy::PhyTxTargetPowerProfile>;
+/// The transmit power of a device over the frontier `F`.
+pub type Power<F> = crate::tx::CappedTxPowerProfile<<F as Frontier>::Calibrated>;
+
+/// The stopped radio's owner a device runs from and returns to: what it
+/// splits into while the device runs and how it moves between channels. The
+/// chip's is [`WifiStopped`](crate::runtime::WifiStopped).
+pub trait Frontier: Sized + 'static {
+    /// The registers, while the device holds them.
+    type Registers: LowerMacHardware + ReceiveRegisters + 'static;
+    /// The DMA space of the receive ring.
+    type Space: DmaSpace;
+    /// The calibrated transmit power a retune reports.
+    type Calibrated: WifiTxPowerProfile;
+    /// What stays beside the registers while the device runs.
+    type Context;
+    /// The device's cell of the radio's actor.
+    type Cell;
+    /// A retune in flight, kept in the device across polls.
+    type Retune: Unpin;
+    /// The owner of a retune that left the radio poisoned.
+    type Failed;
+    fn into_running(self) -> (Self::Registers, Self::Context);
+    /// The stopped owner of the registers `context` went with.
+    fn into_stopped(registers: Self::Registers, context: Self::Context) -> Self;
+    /// The channel the radio is tuned to.
+    fn current_channel(context: &Self::Context) -> WifiChannel;
+    /// Ask the radio's actor to retune; the stopped owner goes with the
+    /// request.
+    fn start_retune(
+        self,
+        cell: Self::Cell,
+        channel: Permitted<RegulatedChannel<WifiChannel>>,
+        ceiling: TxCeiling,
+    ) -> Self::Retune;
+    fn poll_retune(retune: &mut Self::Retune, cx: &mut Context<'_>) -> Poll<RetuneEnd<Self>>;
+}
+
+/// How a retune ended ([`Frontier::poll_retune`]).
+pub enum RetuneEnd<F: Frontier> {
+    /// The radio is on the new channel.
+    Moved {
+        stopped: F,
+        cell: F::Cell,
+        tx_power: F::Calibrated,
+    },
+    /// The retune failed and the radio changed nothing: the owner stays on
+    /// its channel.
+    Unchanged {
+        stopped: F,
+        cell: F::Cell,
+        cause: WifiRetuneError,
+    },
+    /// The retune failed and only a release remains.
+    Poisoned {
+        failed: F::Failed,
+        cell: F::Cell,
+        cause: WifiRetuneError,
+    },
+    /// The radio's actor never answered; what it held stays quarantined.
+    Abandoned,
+}
 
 /// A blocked receive pull needs the caller to return a unit. Its
 /// continuation must not keep the caller's alarm at an already reached
@@ -105,10 +161,30 @@ impl<const Q: usize, const RB: usize> Publisher<'static, RB, Q> for Received<Q, 
     }
 }
 
-struct Active<W> {
-    registers: RadioAccess,
-    platform: W,
-    context: WifiRuntimeContext,
+struct Active<F: Frontier> {
+    registers: F::Registers,
+    context: F::Context,
+}
+
+/// A trace build's stall snapshots ([`RxStall`](crate::rx::counters::stall::RxStall)):
+/// the record a diagnostic reader asks through, the last ticket served,
+/// the ticket whose snapshot waits for its turn's receive pull and whether
+/// that pull ran, and how far the ring's descriptors and the units handed
+/// on went.
+#[cfg(oer_trace)]
+struct StallOwner {
+    record: &'static crate::rx::counters::stall::RxStall,
+    served: u32,
+    after: Option<crate::rx::counters::stall::RxStallTicket>,
+    pulled: bool,
+    dma: crate::rx::counters::stall::RxProgress,
+    driver: crate::rx::counters::stall::RxProgress,
+}
+
+/// The low word of `at`'s microseconds: a stall record's time.
+#[cfg(oer_trace)]
+fn low_micros(at: Instant) -> u32 {
+    at.as_micros() as u32
 }
 
 /// The image supplies one hardware partition, actor cell, static RX arena,
@@ -119,7 +195,7 @@ struct Active<W> {
 pub struct RadioDevice<
     C: Composition,
     T: Timer,
-    W,
+    F: Frontier,
     V: WifiIrqActivation,
     D,
     const N: usize,
@@ -128,20 +204,20 @@ pub struct RadioDevice<
     const Q: usize,
     X: SignalExecutor,
 > {
-    active: Option<Active<W>>,
-    session: Result<ReceiveSession<N, RB, RS, Q, X, V>, Fault>,
+    active: Option<Active<F>>,
+    session: Result<ReceiveSession<N, RB, RS, Q, X, V, F::Space>, Fault>,
     /// The receive session is paused and its interrupt epoch closed.
     paused: bool,
-    actor: Option<MembershipCell<Wifi>>,
-    retune: Option<WifiRetunePending<W>>,
-    failed_retune: Option<WifiRetuneFailure<W>>,
+    actor: Option<F::Cell>,
+    retune: Option<F::Retune>,
+    failed_retune: Option<F::Failed>,
     received: Received<Q, RB>,
     timer: T,
     doorbell: D,
     domain: RegulatoryDomain,
     limits: PowerLimits,
     timeline: MacTimeline,
-    power: Option<Power>,
+    power: Option<Power<F>>,
     rx_pending: bool,
     tx_pending: u32,
     tbtt_pending: bool,
@@ -154,12 +230,14 @@ pub struct RadioDevice<
     /// The wait of the drain's recycled appends.
     recycled: RecycledProbe,
     returns: ReturnQuiet,
+    #[cfg(oer_trace)]
+    stall: StallOwner,
     marker: PhantomData<fn() -> C>,
 }
 
 pub struct RadioParts<
     T,
-    W,
+    F: Frontier,
     V: WifiIrqActivation,
     D,
     const N: usize,
@@ -168,21 +246,25 @@ pub struct RadioParts<
     const Q: usize,
     X: SignalExecutor,
 > {
-    pub wifi: WifiStopped<W>,
-    pub rx: WifiRxParts<'static, N, RB, RS, Q, ChipDma, X>,
+    pub wifi: F,
+    pub rx: WifiRxParts<'static, N, RB, RS, Q, F::Space, X>,
     pub interrupt_cell: &'static HandlerCell<WifiIrqLine<X>>,
     /// The router's proof that the image binds the radio handler's part.
     pub bound: V,
-    pub actor: MembershipCell<Wifi>,
+    pub actor: F::Cell,
     pub timer: T,
     pub doorbell: D,
     pub domain: RegulatoryDomain,
     pub power_limits: PowerLimits,
+    /// A trace build's stall record, which a diagnostic reader asks
+    /// through.
+    #[cfg(oer_trace)]
+    pub stall: &'static crate::rx::counters::stall::RxStall,
 }
 impl<
     C: Composition,
     T: Timer,
-    W,
+    F: Frontier,
     V: WifiIrqActivation,
     D,
     const N: usize,
@@ -190,7 +272,7 @@ impl<
     const RS: usize,
     const Q: usize,
     X: SignalExecutor,
-> RadioDevice<C, T, W, V, D, N, RB, RS, Q, X>
+> RadioDevice<C, T, F, V, D, N, RB, RS, Q, X>
 {
     /// RX stays masked after a pass that left `progress`: whether the ring
     /// runs again at once, or else its continuation. Out of line: a turn
@@ -223,26 +305,18 @@ impl<
         }
     }
 
-    pub fn new(parts: RadioParts<T, W, V, D, N, RB, RS, Q, X>) -> Self {
+    pub fn new(parts: RadioParts<T, F, V, D, N, RB, RS, Q, X>) -> Self {
         const {
             if ReturnQuiet::LIMIT as usize > Q {
                 panic!("a pass blocked on staging capacity hears its returns");
             }
         }
-        let WifiRuntimeParts {
-            platform,
-            mut registers,
-            context,
-        } = parts.wifi.into_runtime_parts();
+        let (mut registers, context) = parts.wifi.into_running();
         let session =
             ReceiveSession::new(parts.rx, parts.bound, &mut registers, parts.interrupt_cell)
                 .map_err(Fault::Receive);
         Self {
-            active: Some(Active {
-                registers,
-                platform,
-                context,
-            }),
+            active: Some(Active { registers, context }),
             session,
             paused: false,
             actor: Some(parts.actor),
@@ -265,13 +339,109 @@ impl<
             streak: 0,
             recycled: RecycledProbe::default(),
             returns: ReturnQuiet::default(),
+            #[cfg(oer_trace)]
+            stall: StallOwner {
+                record: parts.stall,
+                // A request older than this device was another's to serve.
+                served: parts.stall.requested(0).map_or(0, |ticket| ticket.get()),
+                after: None,
+                pulled: false,
+                dma: crate::rx::counters::stall::RxProgress::default(),
+                driver: crate::rx::counters::stall::RxProgress::default(),
+            },
             marker: PhantomData,
+        }
+    }
+
+    /// A staged unit leaves for the upper layer, at `now` when the caller
+    /// read the time.
+    fn hand_over(
+        &mut self,
+        frame: NetworkRxFrame<'static, Q, RB>,
+        now: Option<Instant>,
+    ) -> StagedReceive<Q, RB> {
+        self.returns.received();
+        #[cfg(oer_trace)]
+        {
+            let at = now.unwrap_or_else(|| self.timer.now());
+            self.stall.driver.advance(1, low_micros(at));
+        }
+        #[cfg(not(oer_trace))]
+        let _ = now;
+        StagedReceive(frame)
+    }
+
+    /// Serve a trace build's stall record at the start of the port's facts:
+    /// register the task a request wakes; record how far the boundaries
+    /// went since the last snapshot, for the last time once its turn's
+    /// receive pull ran; take the snapshot a reader asked for, before any
+    /// receive service of this turn. Whether it took one: the turn then runs
+    /// as for a receive fact, with the device's own ring work as it was.
+    #[cfg(oer_trace)]
+    #[inline(never)]
+    fn serve_stall(&mut self, cx: &Context<'_>) -> bool {
+        use crate::rx::counters::stall::RxStallResume;
+        self.stall.record.register(cx.waker());
+        if let Some(ticket) = self.stall.after {
+            let serviced = self.stall.pulled;
+            let resume = RxStallResume {
+                at: low_micros(self.timer.now()),
+                dma: self.stall.dma,
+                driver: self.stall.driver,
+                serviced,
+            };
+            self.stall.record.record_resume(ticket, &resume);
+            if serviced {
+                self.stall.after = None;
+            }
+        }
+        let Some(ticket) = self.stall.record.requested(self.stall.served) else {
+            return false;
+        };
+        self.stall.served = ticket.get();
+        let snapshot = self.stall_snapshot();
+        self.stall.record.record_snapshot(ticket, &snapshot);
+        self.stall.after = Some(ticket);
+        self.stall.pulled = false;
+        true
+    }
+
+    /// What the owner reads of its receive path now. Only reads.
+    #[cfg(oer_trace)]
+    fn stall_snapshot(&mut self) -> crate::rx::counters::stall::RxStallSnapshot {
+        use crate::rx::counters::stall::{RxDeviceView, RxStallSnapshot};
+        let at = low_micros(self.timer.now());
+        let (hardware, (mac, periodic)) = match self.active.as_mut() {
+            Some(active) => (
+                self.session
+                    .as_mut()
+                    .ok()
+                    .map(|session| session.stall_view(&mut active.registers)),
+                active.registers.mac_banks(),
+            ),
+            None => (None, (None, None)),
+        };
+        RxStallSnapshot {
+            at,
+            dma: self.stall.dma,
+            driver: self.stall.driver,
+            device: RxDeviceView {
+                rx_pending: self.rx_pending,
+                continuation: self.continuation.is_some(),
+                cut: self.cut,
+                pausing: self.pausing,
+                paused: self.paused,
+                queued: u32::try_from(self.received.0.get_mut().len()).unwrap_or(u32::MAX),
+            },
+            hardware,
+            mac,
+            periodic,
         }
     }
 
     /// Recover the exact Wi-Fi frontier after the port's normal uninstall.
     /// A live or failed device retains all its owners and returns `None`.
-    pub fn take_stopped(&mut self) -> Option<(WifiStopped<W>, MembershipCell<Wifi>)> {
+    pub fn take_stopped(&mut self) -> Option<(F, F::Cell)> {
         if self.failed_retune.is_some() || self.retune.is_some() {
             return None;
         }
@@ -280,14 +450,9 @@ impl<
         }
         // Both owners leave together, or neither does.
         match (self.active.take(), self.actor.take()) {
-            (
-                Some(Active {
-                    registers,
-                    platform,
-                    context,
-                }),
-                Some(actor),
-            ) => Some((context.into_stopped(platform, registers), actor)),
+            (Some(Active { registers, context }), Some(actor)) => {
+                Some((F::into_stopped(registers, context), actor))
+            }
             (active, actor) => {
                 self.active = active;
                 self.actor = actor;
@@ -300,7 +465,7 @@ impl<
 impl<
     C,
     T,
-    W,
+    F,
     V,
     D,
     const N: usize,
@@ -309,19 +474,19 @@ impl<
     const Q: usize,
     const B: usize,
     X: SignalExecutor,
-> Device<B> for RadioDevice<C, T, W, V, D, N, RB, RS, Q, X>
+> Device<B> for RadioDevice<C, T, F, V, D, N, RB, RS, Q, X>
 where
     C: Composition,
     T: Timer + Clone + 'static,
-    W: WifiMacPlatform + 'static,
+    F: Frontier,
     V: WifiIrqActivation + 'static,
     D: RadioDoorbell + 'static,
 {
-    type Power = Power;
+    type Power = Power<F>;
     type Coex = C::Coex;
     type Entropy = C::Entropy;
     type Timer = T;
-    type Hardware = RadioAccess;
+    type Hardware = F::Registers;
     type Receive = StagedReceive<Q, RB>;
     /// The composition wrapping this device names where its network runs.
     type Lent = super::SameHart;
@@ -331,7 +496,7 @@ where
     type Context<'p, Id: SlotIdentity + 'p> = C::Context<'p, Id>;
     type OwnedConfigureContext<Id: SlotIdentity> = C::OwnedConfigureContext<Id>;
     type ConfigureContext<'p, Id: SlotIdentity + 'p> = C::ConfigureContext<'p, Id>;
-    fn hardware(&mut self) -> Result<&mut RadioAccess, Fault> {
+    fn hardware(&mut self) -> Result<&mut F::Registers, Fault> {
         self.active
             .as_mut()
             .map(|active| &mut active.registers)
@@ -355,81 +520,68 @@ where
     fn event_waiting(&self) -> bool {
         self.session.as_ref().is_ok_and(ReceiveSession::has_event)
     }
-    fn take_power_profile(&mut self) -> Option<Power> {
+    fn take_power_profile(&mut self) -> Option<Power<F>> {
         self.power.take()
     }
     fn radio_now(&mut self) -> Result<Ieee80211Instant, ClockError> {
         let active = self.active.as_mut().ok_or(ClockError::Unavailable)?;
         Ok(Ieee80211Instant::from_micros(
-            self.timeline
-                .advance(active.registers.wifi_mac_hal().mac_local_time()),
+            self.timeline.advance(active.registers.mac_local_time()),
         ))
     }
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
-        channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
+        channel: WifiChannel,
     ) -> Poll<Result<(), Fault>> {
         self.pausing = false;
         if let Some(retune) = self.retune.as_mut() {
-            let (cell, result) = match core::task::ready!(Pin::new(retune).poll(cx)) {
-                Ok(answer) => answer,
-                Err(quarantine) => {
-                    self.retune = None;
-                    drop(quarantine);
-                    return Poll::Ready(Err(Fault::Abandoned));
-                }
-            };
+            let end = core::task::ready!(F::poll_retune(retune, cx));
             self.retune = None;
-            self.actor = Some(cell);
-            match result {
-                Ok((wifi, report)) => {
-                    let WifiRuntimeParts {
-                        platform,
-                        registers,
-                        context,
-                    } = wifi.into_runtime_parts();
+            match end {
+                RetuneEnd::Abandoned => return Poll::Ready(Err(Fault::Abandoned)),
+                RetuneEnd::Moved {
+                    stopped,
+                    cell,
+                    tx_power,
+                } => {
+                    self.actor = Some(cell);
+                    let (registers, context) = stopped.into_running();
                     let permit = self
                         .domain
-                        .permit(
-                            oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel),
-                        )
+                        .permit(RegulatedChannel::from(channel))
                         .map_err(|_| Fault::ChannelNotPermitted)?;
-                    self.power = Some(Power::new(report.tx_power, permit.tx_ceiling(self.limits)));
-                    self.active = Some(Active {
-                        registers,
-                        platform,
-                        context,
-                    });
+                    self.power = Some(Power::<F>::new(tx_power, permit.tx_ceiling(self.limits)));
+                    self.active = Some(Active { registers, context });
                     self.paused = true;
                 }
-                Err(failure) => {
-                    let cause = failure.cause;
-                    match failure.resume() {
-                        Ok(wifi) => {
-                            // The radio changed nothing: the port stays on
-                            // its channel for the caller's next start.
-                            let WifiRuntimeParts {
-                                platform,
-                                registers,
-                                context,
-                            } = wifi.into_runtime_parts();
-                            self.active = Some(Active {
-                                registers,
-                                platform,
-                                context,
-                            });
-                            self.paused = true;
-                        }
-                        Err(failure) => self.failed_retune = Some(failure),
-                    }
+                RetuneEnd::Unchanged {
+                    stopped,
+                    cell,
+                    cause,
+                } => {
+                    self.actor = Some(cell);
+                    // The radio changed nothing: the port stays on its
+                    // channel for the caller's next start.
+                    let (registers, context) = stopped.into_running();
+                    self.active = Some(Active { registers, context });
+                    self.paused = true;
+                    return Poll::Ready(Err(Fault::Retune(cause)));
+                }
+                RetuneEnd::Poisoned {
+                    failed,
+                    cell,
+                    cause,
+                } => {
+                    self.actor = Some(cell);
+                    self.failed_retune = Some(failed);
                     return Poll::Ready(Err(Fault::Retune(cause)));
                 }
             }
         }
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
         let session = self.session.as_mut().map_err(|e| *e)?;
-        if active.context.current_channel() != channel {
+        if F::current_channel(&active.context) != channel {
             if !self.paused {
                 core::task::ready!(session.port_pause(
                     cx,
@@ -442,28 +594,20 @@ where
             }
             let permit = self
                 .domain
-                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
+                .permit(RegulatedChannel::from(channel))
                 .map_err(|_| Fault::ChannelNotPermitted)?;
             let ceiling = permit.tx_ceiling(self.limits);
             // The paused radio and its actor cell leave together, or the
             // device keeps both and reports the missing owner.
-            let (registers, platform, context, actor) =
-                match (self.active.take(), self.actor.take()) {
-                    (
-                        Some(Active {
-                            registers,
-                            platform,
-                            context,
-                        }),
-                        Some(actor),
-                    ) => (registers, platform, context, actor),
-                    (active, actor) => {
-                        self.active = active;
-                        self.actor = actor;
-                        return Poll::Ready(Err(Fault::HardwareUnavailable));
-                    }
-                };
-            let wifi = context.into_stopped(platform, registers);
+            let (registers, context, actor) = match (self.active.take(), self.actor.take()) {
+                (Some(Active { registers, context }), Some(actor)) => (registers, context, actor),
+                (active, actor) => {
+                    self.active = active;
+                    self.actor = actor;
+                    return Poll::Ready(Err(Fault::HardwareUnavailable));
+                }
+            };
+            let wifi = F::into_stopped(registers, context);
             self.retune = Some(wifi.start_retune(actor, permit, ceiling));
             // Poll the retune at once: its future registers `cx` itself.
             return <Self as Device<B>>::poll_start(self, cx, channel);
@@ -472,7 +616,7 @@ where
             session.reattach();
         }
         session
-            .port_start(&mut active.registers, &self.timer, &self.doorbell)
+            .port_start(&mut active.registers, &self.doorbell)
             .map(|r| r.map_err(Fault::Receive))
     }
     fn poll_stop(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>> {
@@ -537,12 +681,15 @@ where
         receive_room: usize,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<Self::Receive>, Fault>> {
+        #[cfg(oer_trace)]
+        {
+            self.stall.pulled = true;
+        }
         self.cut = true;
         self.cut_blocked = false;
         if receive_room != 0 {
             if let Some(frame) = self.received.0.get_mut().pop_front() {
-                self.returns.received();
-                return Poll::Ready(Ok(Some(StagedReceive(frame))));
+                return Poll::Ready(Ok(Some(self.hand_over(frame, None))));
             }
         }
         let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
@@ -562,6 +709,8 @@ where
             return Poll::Pending;
         }
         self.continuation = None;
+        #[cfg(oer_trace)]
+        let observed = session.observed_descriptors();
         let progress = session
             .port_service(
                 &mut active.registers,
@@ -571,9 +720,14 @@ where
                 &self.received,
             )
             .map_err(Fault::Receive)?;
+        #[cfg(oer_trace)]
+        self.stall.dma.advance(
+            u32::try_from(session.observed_descriptors().saturating_sub(observed))
+                .unwrap_or(u32::MAX),
+            low_micros(self.timer.now()),
+        );
         if let Some(frame) = self.received.0.get_mut().pop_front() {
-            self.returns.received();
-            return Poll::Ready(Ok(Some(StagedReceive(frame))));
+            return Poll::Ready(Ok(Some(self.hand_over(frame, None))));
         }
         if matches!(
             progress,
@@ -608,15 +762,20 @@ where
         whole || self.continuation.is_some()
     }
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
+        // A trace build's stall snapshot goes before any of this turn's
+        // receive work, the receive facts' take included.
+        #[cfg(oer_trace)]
+        let diagnosed = self.serve_stall(cx);
+        #[cfg(not(oer_trace))]
+        let diagnosed = false;
         if self.cut || self.pausing {
-            return Ok(false);
+            return Ok(diagnosed);
         }
         #[cfg(oer_trace)]
         if let Some(active) = self.active.as_mut() {
-            crate::rx::counters::mac::MAC_COUNTS.sample(
-                &active.registers.wifi_mac_hal(),
-                self.timer.now().as_micros() as u32,
-            );
+            active
+                .registers
+                .sample_mac_counts(self.timer.now().as_micros() as u32);
         }
         let session = self.session.as_mut().map_err(|e| *e)?;
         if let Poll::Ready(facts) = session.poll_received(cx) {
@@ -627,7 +786,8 @@ where
         }
         // Ring work that waits for its continuation is the caller's alarm's
         // (the pull answered `Later`): it is no fact before then.
-        Ok(!self.received.0.get_mut().is_empty()
+        Ok(diagnosed
+            || !self.received.0.get_mut().is_empty()
             || (self.rx_pending && self.continuation.is_none()))
     }
     fn pull_unit(
@@ -635,13 +795,16 @@ where
         receive_room: usize,
         now: Instant,
     ) -> Result<DevicePull<Self::Receive>, Fault> {
+        #[cfg(oer_trace)]
+        {
+            self.stall.pulled = true;
+        }
         suspend_rx_continuation(receive_room, &mut self.continuation);
         if receive_room == 0 || self.cut || self.pausing {
             return Ok(DevicePull::Empty);
         }
         if let Some(frame) = self.received.0.get_mut().pop_front() {
-            self.returns.received();
-            return Ok(DevicePull::Unit(StagedReceive(frame)));
+            return Ok(DevicePull::Unit(self.hand_over(frame, Some(now))));
         }
         if !self.rx_pending {
             return Ok(DevicePull::Empty);
@@ -657,6 +820,8 @@ where
             now,
             timer: &self.timer,
         };
+        #[cfg(oer_trace)]
+        let observed = session.observed_descriptors();
         let progress = session
             .port_service(
                 &mut active.registers,
@@ -666,6 +831,12 @@ where
                 &self.received,
             )
             .map_err(Fault::Receive)?;
+        #[cfg(oer_trace)]
+        self.stall.dma.advance(
+            u32::try_from(session.observed_descriptors().saturating_sub(observed))
+                .unwrap_or(u32::MAX),
+            low_micros(now),
+        );
         use crate::datapath::DatapathRxProgress as Progress;
         let mut again = false;
         match progress {
@@ -679,10 +850,7 @@ where
             progress => again = self.keep_masked(progress, now),
         }
         Ok(match self.received.0.get_mut().pop_front() {
-            Some(frame) => {
-                self.returns.received();
-                DevicePull::Unit(StagedReceive(frame))
-            }
+            Some(frame) => DevicePull::Unit(self.hand_over(frame, Some(now))),
             None if again => DevicePull::Again,
             None => self
                 .continuation
@@ -736,3 +904,6 @@ impl<T: Timer> Timer for TurnClock<'_, T> {
         self.timer.wait_until(deadline)
     }
 }
+
+#[cfg(all(test, oer_trace))]
+mod tests;

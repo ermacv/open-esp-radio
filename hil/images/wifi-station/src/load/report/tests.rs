@@ -296,3 +296,24 @@ fn the_link_window_takes_the_rates_differences() {
     assert_eq!(window.rx.mpdus.ht20_long_gi[3], 6);
     assert_eq!(window.tx.delivered, 4);
 }
+
+#[test]
+fn an_owner_stamp_is_its_age_before_the_image_s_reading() {
+    assert_eq!(stamped(10_000, 2_500), 7_500);
+    assert_eq!(stamped(100, 2_500), 0, "never before the clock's start");
+    assert_eq!(
+        boundary(10_000, 3, 400),
+        StallBoundary {
+            count: 3,
+            last_us: Some(9_600)
+        }
+    );
+    assert_eq!(
+        boundary(10_000, 0, 400),
+        StallBoundary {
+            count: 0,
+            last_us: None
+        },
+        "a boundary that never moved has no time"
+    );
+}

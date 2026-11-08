@@ -51,10 +51,16 @@ oer-chips-family-radio-power = { path = "../../../../family/radio/power" }
 oer-chips-esp32s31-hal = { path = "../../../hal", features = ["test-support"] }
 oer-chips-esp32s31-radio-phy = { path = "../../phy" }
 oer-chips-esp32s31-radio-client = { path = "../../client" }
-oer-chips-esp32s31-radio-ieee80211-backend = { path = "../backend" }
+oer-chips-esp32s31-radio-ieee80211-backend = { path = "../backend", features = ["test-support"] }
+oer-chips-family-platform-interrupt-table = { path = "../../../../family/platform/interrupt-table", features = ["host-signal"] }
 
 oer-portable-memory = { path = "../../../../../portable/memory", features = ["host-context"] }
 oer-portable-time-virtual = { path = "../../../../../portable/time-virtual" }
+oer-protocols-ieee80211-core-roles-sta = { path = "../../../../../protocols/ieee80211/core/roles/sta", features = ["test-support"] }
+oer-protocols-ieee80211-runtime = { path = "../../../../../protocols/ieee80211/runtime", features = ["placement", "test-support"] }
+oer-protocols-network-core = { path = "../../../../../protocols/network/core", features = ["test-support"] }
+oer-protocols-network-runtime = { path = "../../../../../protocols/network/runtime" }
+oer-protocols-network-wire = { path = "../../../../../protocols/network/wire" }
 
 [lints]
 workspace = true

@@ -82,6 +82,14 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   Trigger-response or beamformee service. The chip MAC and HAL contain
   Trigger queue primitives; their presence does not advertise those
   services through the port.
+- **Host model.** `hardware_model` (feature `test-support`) stands under the
+  real port, device, receive session and DMA owners, where the chip has its
+  registers, so a host test runs them joined; the station facade's `joined`
+  tests run a socket through them. Each behaviour is a named rule with its
+  evidence, listed in the module; what has none (an abort's end under forced
+  CCA, the collision bit, the tail's `rx_state`, the key at capture) is a
+  test's input, never a claim about the chip. Passing proves the logic above
+  the rules, not the rules.
 - **Host tests.** The shared data-port cases
   (`oer-protocols-ieee80211-testing-conformance::data_port`) run against
   `Esp32s31Port` over the host device model, beside the port's own tests in
@@ -269,6 +277,25 @@ before it stops the walker, and queued frames are staged: the actor keeps
 receiving and dropping frames after it requests the stop, until the exit
 is published; otherwise the epoch ends quarantined with `DrainTimeout`.
 
+A trace build (`cfg(oer_trace)`) keeps a stall record beside the device
+(`rx::counters::stall::RxStall`, lent through `RadioParts::stall`; the
+station facade holds one static). The device stamps two boundaries with the
+turn's instant: the descriptors a service pass observed (DMA) and the units
+it hands to the port (driver). A diagnostic reader on the device's hart asks
+for a snapshot (`RxStall::request`), which wakes the actor's task through
+the waker the device registers at every `poll_rx_work`. At the first port
+facts after the request, before the receive facts are taken and before the
+turn's receive pull, the device reads, without writing a register, moving a
+descriptor or taking a fact: both stamps, its own ring work, the walker's
+registers, the ring's view, every descriptor's `OWNER` and `RX_DONE`, the
+session's buffers and the software side of the interrupt line, and the
+MAC statistics bank beside its last periodic sample. The request counts as
+a receive fact, so the turn runs, and leaves `rx_pending` as it was: the
+turn's pull serves only what the device already knew of. At each facts
+after the snapshot the device records the stamps again, and for the last
+time once the turn's receive pull ran. A product build has neither the
+record nor the stamps.
+
 ## Lower-MAC core
 
 The driver core `LowerMacCore` lives in [`src/lower_mac.rs`](src/lower_mac.rs).
@@ -293,7 +320,9 @@ place on the same device, driver state and allocations, and `release`
 hands the device back. The P3 handlers own only their interrupt epoch and
 static typed signals. The task-side `RadioDevice` retains the cooperative
 registers, PHY actor transaction and RX ring. No ISR accesses its
-task-only `RefCell` state.
+task-only `RefCell` state. It names what it needs of the stopped radio's
+owner (`Frontier`) and of the registers (`ReceiveRegisters`); on the chip
+those are `WifiStopped` and `RadioAccess`, on a host the model below.
 
 Eight shared TX tickets feed four hardware queues; an MPDU takes one, and
 the station's two data arenas hold one each. Every MPDU is written into one

@@ -9,7 +9,10 @@
 //! keeps what it read until the next run starts. The boot hart's counters
 //! and sampler come through its relay ([`super::relay`]); hart 1's counters
 //! and sampler are the server's own, its counters read at the window's very
-//! ends. The answers go back to the worker, which publishes them.
+//! ends. After the window's end readings the server asks the station's radio
+//! device, through the relay, for a stall snapshot of the receive path; the
+//! socket boundary it stamps itself. The answers go back to the worker,
+//! which publishes them.
 
 use core::cell::Cell;
 use core::convert::Infallible;
@@ -27,14 +30,15 @@ use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
     Collected, Counters, CountersCollected, Hart1Collected, Hart1Window, Link, LinkCollected, Load,
     LoadError, Mac, MacCollected, NetworkCollected, PartsCollected, Positions, PositionsCollected,
-    Report, Request, SamplesCollected, Sent, Start, Started, Tracking, TrackingCollected, Transmit,
+    Report, Request, SamplesCollected, Sent, Stall, StallCollected, StallMac, StallMacCollected,
+    Start, Started, Tracking, TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
 
 use super::action::{Action, Answer as Decided, Kept, Phase, action};
 use super::pace::{GRANULARITY_US, Next, Schedule, UNPACED_BATCH};
-use super::receive::{Datagram, Receiving as Tallying, classify, echo};
+use super::receive::{Datagram, Receiving as Tallying, SocketStamps, classify, echo};
 use super::relay::{self, Client};
 use super::report::{self, Snapshot, Windows};
 use crate::udp::{self, Attempt, Network, Peer, Receiving, Run, Sending};
@@ -72,6 +76,8 @@ pub(crate) enum Answer {
     Mac(MacCollected),
     Positions(PositionsCollected),
     Hart1(Hart1Collected),
+    Stall(StallCollected),
+    StallMac(StallMacCollected),
     Network(NetworkCollected),
     Samples(SamplesCollected),
     Cpu(Load),
@@ -93,6 +99,8 @@ impl Answer {
             Self::Mac(mac) => answer(identity, &mac),
             Self::Positions(positions) => answer(identity, &positions),
             Self::Hart1(hart1) => answer(identity, &hart1),
+            Self::Stall(stall) => answer(identity, &stall),
+            Self::StallMac(mac) => answer(identity, &mac),
             Self::Network(network) => answer(identity, &network),
             Self::Samples(samples) => answer(identity, &samples),
             Self::Cpu(load) => answer(identity, &load),
@@ -176,6 +184,8 @@ async fn kept_answer(
         Kept::Positions => Answer::Positions(PositionsCollected::Report(ended.positions)),
         Kept::Hart1 => Answer::Hart1(Hart1Collected::Report(ended.hart1)),
         Kept::Tracking => Answer::Tracking(TrackingCollected::Report(ended.tracking)),
+        Kept::Stall => Answer::Stall(StallCollected::Report(ended.stall)),
+        Kept::StallMac => Answer::StallMac(StallMacCollected::Report(ended.stall_mac)),
         // The kept run's window, which the network holds until the next one
         // closes.
         Kept::Network => Answer::Network(NetworkCollected::Report(udp::network_window(net))),
@@ -231,6 +241,8 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::Running(Kept::Positions) => Answer::Positions(PositionsCollected::Running),
         Decided::Running(Kept::Hart1) => Answer::Hart1(Hart1Collected::Running),
         Decided::Running(Kept::Tracking) => Answer::Tracking(TrackingCollected::Running),
+        Decided::Running(Kept::Stall) => Answer::Stall(StallCollected::Running),
+        Decided::Running(Kept::StallMac) => Answer::StallMac(StallMacCollected::Running),
         Decided::Running(Kept::Network) => Answer::Network(NetworkCollected::Running),
         Decided::Running(Kept::Samples { .. }) => Answer::Samples(SamplesCollected::Running),
         Decided::UnknownRun(Kept::Report) => Answer::Collected(Collected::Refused(unknown)),
@@ -247,6 +259,10 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::UnknownRun(Kept::Tracking) => {
             Answer::Tracking(TrackingCollected::Refused(unknown))
         }
+        Decided::UnknownRun(Kept::Stall) => Answer::Stall(StallCollected::Refused(unknown)),
+        Decided::UnknownRun(Kept::StallMac) => {
+            Answer::StallMac(StallMacCollected::Refused(unknown))
+        }
         Decided::UnknownRun(Kept::Network) => Answer::Network(NetworkCollected::Refused(unknown)),
         Decided::UnknownRun(Kept::Samples { .. }) => {
             Answer::Samples(SamplesCollected::Refused(unknown))
@@ -254,10 +270,12 @@ fn decided_answer(decided: Decided) -> Answer {
     }
 }
 
-/// The measuring window's ends as the image kept them.
+/// The measuring window's ends as the image kept them, and the run's socket
+/// boundary.
 struct Window {
     start_us: Cell<Option<u64>>,
     end_us: Cell<Option<u64>>,
+    socket: SocketStamps,
 }
 
 impl Window {
@@ -282,6 +300,8 @@ struct Ends {
     positions: Positions,
     hart1: Hart1Window,
     tracking: Tracking,
+    stall: Stall,
+    stall_mac: StallMac,
     sampled: Sampled,
 }
 
@@ -300,6 +320,8 @@ struct Ended {
     positions: Positions,
     hart1: Hart1Window,
     tracking: Tracking,
+    stall: Stall,
+    stall_mac: StallMac,
     sampled: Sampled,
 }
 
@@ -320,6 +342,7 @@ async fn run(
     let window = Window {
         start_us: Cell::new(None),
         end_us: Cell::new(None),
+        socket: SocketStamps::default(),
     };
     let mut receiving = Tallying::default();
     let mut sent = Sent::default();
@@ -379,6 +402,8 @@ async fn run(
         positions: ends.positions,
         hart1: ends.hart1,
         tracking: ends.tracking,
+        stall: ends.stall,
+        stall_mac: ends.stall_mac,
         sampled: ends.sampled,
     }
 }
@@ -400,13 +425,16 @@ async fn receive(
                     let written = echo(header).write(packet.payload_mut()).is_some();
                     counts.echo(written && packet.reply());
                 }
-                Datagram::Load(header) => counts.load(
-                    tally,
-                    header.sequence,
-                    packet.payload().len(),
-                    now,
-                    window.contains(now),
-                ),
+                Datagram::Load(header) => {
+                    window.socket.datagram(now);
+                    counts.load(
+                        tally,
+                        header.sequence,
+                        packet.payload().len(),
+                        now,
+                        window.contains(now),
+                    );
+                }
                 Datagram::Foreign => counts.foreign(),
             }
         }
@@ -416,8 +444,8 @@ async fn receive(
 /// The run's window and drain: open the window `delay_ms` after now, read
 /// the CPU and the parts, clear the cache's counters and read the counters
 /// (both on the boot hart), sample both harts when asked, send within it,
-/// close it after `duration_ms`, read them again, stop sampling, then wait
-/// out the drain.
+/// close it after `duration_ms`, read them again, stop sampling, ask the
+/// radio device for its stall snapshot, then wait out the drain.
 async fn measure(
     socket: &mut Sending<'_>,
     start: &Start,
@@ -476,7 +504,23 @@ async fn measure(
         ),
         other => other,
     };
+    // After every reading of the window: the snapshot's own turn must not
+    // move them.
+    let socket_last_us = window.socket.last();
+    let requested_us = now_us();
+    window.socket.watch_from(requested_us);
+    // The relay answers each command in order: another reply does not
+    // arise, and would leave the run without a snapshot.
+    let (snapshot, stall_mac) = relay::stall_snapshot(hart0)
+        .await
+        .unwrap_or((None, StallMac::default()));
     wait_until(end_us.saturating_add(millis(start.drain_ms))).await;
+    let stall = Stall {
+        requested_us,
+        socket_last_us,
+        socket_after_us: window.socket.first_after(),
+        snapshot,
+    };
     Ends {
         start_us,
         end_us,
@@ -492,6 +536,8 @@ async fn measure(
             end: hart1_end,
         },
         tracking: report::tracking(&tracking_start, &tracking_end),
+        stall,
+        stall_mac,
         sampled: [sampled, sampled1],
     }
 }

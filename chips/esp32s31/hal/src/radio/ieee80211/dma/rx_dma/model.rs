@@ -104,6 +104,8 @@ pub struct RxWalkerModel {
     reload_resumes_in_place: bool,
     /// A stop request leaves the walker running and reads back as enabled.
     pub refuse_stop: bool,
+    /// What an enable of a stopped walker does.
+    pub start: RxWalkerStart,
     log: [RxWalkerOperation; RX_WALKER_LOG_CAPACITY],
     logged: usize,
     overflowed: bool,
@@ -133,6 +135,7 @@ impl RxWalkerModel {
             stopped_on_owner: false,
             reload_resumes_in_place: false,
             refuse_stop: false,
+            start: RxWalkerStart::Confirmed,
             log: [RxWalkerOperation::Fence; RX_WALKER_LOG_CAPACITY],
             logged: 0,
             overflowed: false,
@@ -180,6 +183,20 @@ impl RxWalkerModel {
     pub fn clear_operations(&mut self) {
         self.logged = 0;
         self.overflowed = false;
+    }
+
+    /// The descriptor [`Self::land`] writes next: enabled, on NEXT, its
+    /// owner bit set. `None` when a landing writes nothing.
+    pub(crate) fn armed_next<'storage>(
+        &self,
+        table: RxWalkerTable<'storage>,
+    ) -> Option<&'storage crate::radio::ieee80211::dma::descriptor::RxDescriptor> {
+        if !self.walker_enabled || self.next_descriptor_low == 0 || self.stopped_on_owner {
+            return None;
+        }
+        table
+            .descriptor_at_low(self.next_descriptor_low)
+            .filter(|descriptor| descriptor.word0().owner())
     }
 
     /// Play the DMA engine: write one frame of `length` bytes where NEXT
@@ -365,8 +382,17 @@ impl RxDma for RxWalkerModel {
         if self.walker_enabled {
             return None;
         }
-        self.start_walker();
-        Some(enabled(RxDmaWalkerEnabled::confirmed()))
+        match self.start {
+            RxWalkerStart::Confirmed => {
+                self.start_walker();
+                Some(enabled(RxDmaWalkerEnabled::confirmed()))
+            }
+            RxWalkerStart::Refused => None,
+            RxWalkerStart::Unconfirmed => {
+                self.start_walker();
+                None
+            }
+        }
     }
 
     fn try_with_walker_stopped<R>(
@@ -385,6 +411,17 @@ impl RxDma for RxWalkerModel {
     fn fence(&mut self) {
         self.record(RxWalkerOperation::Fence);
     }
+}
+
+/// What [`RxWalkerModel`]'s enable of a stopped walker does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RxWalkerStart {
+    /// The walker starts and the enable reads back confirmed.
+    Confirmed,
+    /// The walker stays stopped and reads so; no proof comes back.
+    Refused,
+    /// The walker starts, yet no proof comes back.
+    Unconfirmed,
 }
 
 /// A walker model shared between the code under test and the test that

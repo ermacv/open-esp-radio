@@ -612,14 +612,24 @@ Compiler fixtures build internal callers against the actual HAL source;
 weakened-bound controls confirm every callback escape case detects a regression.
 
 The Wi-Fi DMA storage also exposes the host model of the DMA engine's
-memory port under `test-support` and in unit tests: `RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in
+memory port under `test-support` and in unit tests: `RxDmaStorage<…, HostDma>::{dma_write, land_unit, dma_read}` in
 `ieee80211/dma/rx_storage/host_dma.rs`, a child of the byte-storage module.
 Its two unsafe copy operations reach one buffer's `UnsafeCell` at a published
 `HostDma` address (a ring buffer or the reserved descriptor's buffer),
 refusing any range outside a single buffer and any buffer detached to an
-upper owner. Its caller lends the arena's live ring shared:
-completed-descriptor views borrow that ring mutably, and the ring is not
-`Sync`, so no CPU view of the bytes is live meanwhile.
+upper owner. Under test support a `HostDma` arena is not `Sync`: the
+storage's `Sync` impl requires the sealed `SharedArena`, which `HostDma`
+lacks there, so every reference to the arena, and with it every modelled
+access and the creation of every CPU view, stays on one thread and runs one
+after another. Both writers pass one write boundary, which refuses a buffer
+the CPU may hold a view of, judged by trusted ownership records and never by
+descriptor words: the live ring's observed mask, whose one mutator shows the
+arena every change, maps taken descriptors to buffers through the fixed
+binding; R's buffer is refused from the `reserved_frame` that lends it until
+an exclusive ring loan, which ends that view, or a new epoch. The records
+are published with release and read with acquire, so a view sent to another
+thread has ended before a record lets a write pass. The read meets only
+these writers and `cpu_owned_mut`, which borrows the storage mutably.
 
 The HAL's owned PHY transaction adds no unsafe code. A permanently claimed
 `TransactionSeat` supplies one affine domain identity. `RadioTransaction`

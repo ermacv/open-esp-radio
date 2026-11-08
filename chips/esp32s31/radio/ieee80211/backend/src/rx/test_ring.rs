@@ -3,10 +3,10 @@
 //! prefix builder, and [`CountingSink`], the publisher that counts and
 //! releases each lease at once.
 
-use std::{boxed::Box, vec, vec::Vec};
+use std::boxed::Box;
 
 use crate::mac::rx::{
-    PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxRingLive,
+    RxBufferFullCounter, RxRingLive,
     pool::{NetworkRxFrame, RxStagePool},
 };
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::{
@@ -197,54 +197,7 @@ impl Ring {
     }
 }
 
-/// An S31 RX-control prefix: the fixed 0x38 bytes and the dynamic tail
-/// before the MPDU at 0x40.
-#[derive(Clone, Copy)]
-pub(crate) struct S31Prefix {
-    pub(crate) rssi: i8,
-    /// The raw MAC local time at 0x0c.
-    pub(crate) stamp: u32,
-    /// The RXEND state at 0x08.
-    pub(crate) rxend_state: u8,
-    /// The tail's RX state: `0xf5` MIC failure, `0xc6` quarantined.
-    pub(crate) rx_state: u8,
-    /// `sig_len` instead of the MPDU length plus the FCS.
-    pub(crate) signal_length: Option<u16>,
-    /// The dump length instead of `sig_len` plus the FCS.
-    pub(crate) dump_length: Option<u16>,
-}
-
-impl S31Prefix {
-    /// A legacy OFDM prefix of a cleanly received frame.
-    pub(crate) const fn new() -> Self {
-        Self {
-            rssi: -50,
-            stamp: 0x1000_0000,
-            rxend_state: 0,
-            rx_state: 0,
-            signal_length: None,
-            dump_length: None,
-        }
-    }
-
-    /// The received bytes of a unit carrying `mpdu` behind this prefix.
-    pub(crate) fn unit(&self, mpdu: &[u8]) -> Vec<u8> {
-        let mut bytes = vec![0; PUBLIC_HEADER_SIZE + mpdu.len()];
-        bytes[0] = self.rssi as u8;
-        bytes[8] = self.rxend_state;
-        bytes[0x0c..0x10].copy_from_slice(&self.stamp.to_le_bytes());
-        bytes[0x25] = 1 << 4;
-        let signal_length = self
-            .signal_length
-            .unwrap_or((mpdu.len() + 4).try_into().unwrap());
-        let dump_length = self.dump_length.unwrap_or(signal_length + 4);
-        bytes[0x38..0x3a].copy_from_slice(&signal_length.to_le_bytes());
-        bytes[0x3a..0x3c].copy_from_slice(&dump_length.to_le_bytes());
-        bytes[0x3c] = self.rx_state;
-        bytes[PUBLIC_HEADER_SIZE..].copy_from_slice(mpdu);
-        bytes
-    }
-}
+pub(crate) use crate::hardware_model::RxPrefix as S31Prefix;
 
 /// A 24-byte management header of `subtype` (8 beacon, 5 probe response).
 pub(crate) fn management_header(subtype: u8) -> [u8; 24] {

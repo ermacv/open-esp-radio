@@ -70,7 +70,7 @@ use static_cell::StaticCell;
 type Inner<W> = RadioDevice<
     ImageComposition<W>,
     EmbassyClock,
-    Platform,
+    oer_chips_esp32s31_radio_ieee80211_backend::runtime::WifiStopped<Platform>,
     oer_chips_family_platform_interrupt_table::Bound<<W as Binding>::Wifi>,
     irq::Bell<<W as Binding>::Wifi, <W as Binding>::DriverEntry>,
     N,
@@ -628,6 +628,8 @@ async fn install<W: Binding>(
                 doorbell: boot.bell,
                 domain,
                 power_limits: limits,
+                #[cfg(oer_trace)]
+                stall: &crate::RX_STALL,
             }))
         })
         .ok_or(InitializationError::Storage)?;

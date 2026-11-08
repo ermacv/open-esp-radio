@@ -1,6 +1,8 @@
 //! What the image counts of the datagrams on a run's port: the run's load
 //! in the shared [`Tally`], and beside it what the tally does not count.
 
+use core::cell::Cell;
+
 use oer_hil_services_load::Received;
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::{Arrival, Tally};
@@ -32,6 +34,43 @@ pub(crate) fn echo(header: Header) -> Header {
         echo_request: false,
         echo_reply: true,
         ..header
+    }
+}
+
+/// The socket boundary of one run, which the server stamps itself: the
+/// latest load datagram the socket delivered, and the first one at or after
+/// the time the server watches from (its stall request).
+#[derive(Debug, Default)]
+pub(crate) struct SocketStamps {
+    last_us: Cell<Option<u64>>,
+    since_us: Cell<Option<u64>>,
+    after_us: Cell<Option<u64>>,
+}
+
+impl SocketStamps {
+    /// The socket delivered a load datagram at `now_us`.
+    pub(crate) fn datagram(&self, now_us: u64) {
+        self.last_us.set(Some(now_us));
+        if self.after_us.get().is_none() && self.since_us.get().is_some_and(|since| now_us >= since)
+        {
+            self.after_us.set(Some(now_us));
+        }
+    }
+
+    /// The latest load datagram's time.
+    pub(crate) fn last(&self) -> Option<u64> {
+        self.last_us.get()
+    }
+
+    /// Watch for the first datagram at or after `since_us`.
+    pub(crate) fn watch_from(&self, since_us: u64) {
+        self.since_us.set(Some(since_us));
+        self.after_us.set(None);
+    }
+
+    /// The first datagram since the watch began.
+    pub(crate) fn first_after(&self) -> Option<u64> {
+        self.after_us.get()
     }
 }
 
@@ -156,6 +195,24 @@ mod tests {
         );
         assert_eq!(counts.window_datagrams, 1);
         assert_eq!(counts.last_us, Some(1000));
+    }
+
+    #[test]
+    fn the_socket_stamps_its_latest_datagram_and_its_first_after_the_watch() {
+        let socket = SocketStamps::default();
+        assert_eq!((socket.last(), socket.first_after()), (None, None));
+        socket.datagram(100);
+        assert_eq!(socket.first_after(), None, "no watch yet");
+        socket.watch_from(150);
+        socket.datagram(140);
+        assert_eq!(socket.last(), Some(140));
+        assert_eq!(socket.first_after(), None, "before the watch");
+        socket.datagram(150);
+        socket.datagram(170);
+        assert_eq!(socket.last(), Some(170));
+        assert_eq!(socket.first_after(), Some(150), "the first, not the latest");
+        socket.watch_from(200);
+        assert_eq!(socket.first_after(), None, "a new watch starts afresh");
     }
 
     #[test]

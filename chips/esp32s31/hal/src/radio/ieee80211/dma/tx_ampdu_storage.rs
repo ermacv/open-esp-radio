@@ -1083,7 +1083,12 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         // publication (not only the first one) must re-establish visibility.
         self.prepare_backings_for_dma_read()?;
 
-        let dma = self.dma_mut()?;
+        #[cfg(any(test, feature = "test-support"))]
+        let retention = self
+            .retention
+            .as_deref_mut()
+            .ok_or(AmpduDmaStorageError::Retired)?;
+        let dma = self.dma.as_mut().ok_or(AmpduDmaStorageError::Retired)?;
         let arena = dma.storage.as_ref().get_ref();
         for (logical_index, (descriptor, slot)) in descriptors
             .iter()
@@ -1110,6 +1115,8 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
 
         Ok(RetainedAmpduDmaPublication {
             dma,
+            #[cfg(any(test, feature = "test-support"))]
+            retention,
             _owner: PhantomData,
         })
     }
@@ -1212,6 +1219,9 @@ pub struct RetainedAmpduDmaPublication<
 > {
     /// The arena of the owner this token mutably borrows for its life.
     dma: &'owner mut PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>,
+    /// The leases the chain names: a host model's table of its buffers.
+    #[cfg(any(test, feature = "test-support"))]
+    retention: &'owner mut RetainedAmpduDmaStorage<B, SLOTS>,
     _owner: PhantomData<&'owner mut RetainedAmpduDma<'retention, B, SLOTS, BUFFER_SIZE>>,
 }
 
@@ -1261,6 +1271,58 @@ impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize> CommitTxDma
 
     fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>)) {
         RetainedAmpduDmaPublication::commit(self, start);
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    fn read_chain(
+        &mut self,
+        read: &mut dyn FnMut(&[u8]),
+    ) -> Result<(), super::tx_storage::TxChainUnreadable> {
+        use super::tx_storage::TxChainUnreadable as Unreadable;
+        let arena = self.dma.storage.as_ref().get_ref();
+        for (index, slot) in arena.descriptors.iter().enumerate() {
+            let word0 = slot.word0();
+            if !word0.tx_owned() {
+                return Err(Unreadable::NotOwned);
+            }
+            let address = slot.buffer_address();
+            let length = usize::from(word0.length());
+            // Host leases may share addresses: the table is by position.
+            let RetainedAmpduDmaStorage {
+                backings,
+                backing_identities,
+                active_backing_indices,
+                ..
+            } = &mut *self.retention;
+            let lease = active_backing_indices
+                .get(index)
+                .map(|lease| usize::from(*lease))
+                .ok_or(Unreadable::OutsideBuffers)?;
+            let offset = backing_identities
+                .get(lease)
+                .copied()
+                .flatten()
+                .and_then(|identity| address.checked_sub(identity.dma_region.start().get()))
+                .ok_or(Unreadable::OutsideBuffers)?;
+            let bytes = backings
+                .get_mut(lease)
+                .and_then(Option::as_mut)
+                .ok_or(Unreadable::OutsideBuffers)?
+                .stable_dma_region()
+                .into_mut_slice()
+                .get(usize::try_from(offset).map_err(|_| Unreadable::OutsideBuffers)?..)
+                .and_then(|bytes| bytes.get(..length))
+                .ok_or(Unreadable::OutsideBuffers)?;
+            read(bytes);
+            if word0.tx_last() {
+                return Ok(());
+            }
+            let next = self.dma.binding.descriptor_address(index.saturating_add(1));
+            if next != Some(slot.next_address()) {
+                return Err(Unreadable::BadLink);
+            }
+        }
+        Err(Unreadable::NoLast)
     }
 }
 

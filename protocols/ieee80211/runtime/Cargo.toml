@@ -10,6 +10,8 @@ description = "Wi-Fi async glue between the lower-MAC port and the sans-IO cores
 [features]
 # Placed lifecycle construction, running and retirement for firmware tasks.
 placement = ["oer-protocols-ieee80211-core-roles-sta/placement"]
+# A host composition without the lifecycle publishes the link itself.
+test-support = []
 
 [dependencies]
 oer-portable-events = { path = "../../../portable/events" }
