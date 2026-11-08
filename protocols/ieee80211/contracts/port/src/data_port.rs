@@ -196,6 +196,15 @@ pub enum CommandRefusal {
     EdcaUnsupported,
     /// The radio is not running.
     NotEnabled,
+    /// A permission, association, key slot or installed key of the command
+    /// was issued by an earlier installation of the port: final for that
+    /// token.
+    StalePermission {
+        /// The token's installation.
+        issued: u32,
+        /// The port's installation.
+        installation: u32,
+    },
 }
 
 /// Why [`DataPort::submit`] refused an attempt.
@@ -205,8 +214,8 @@ pub enum SubmitRefusal {
     NotEnabled,
     /// The radio is stopping.
     Stopping,
-    /// The attempt's beacon permission or access-point key was issued by
-    /// an earlier installation of the port: final for that token. Its
+    /// The attempt's beacon permission or key was issued by an earlier
+    /// installation of the port: final for that token. Its
     /// terminal ends it withdrawn for that cause
     /// ([`WithdrawCause::StalePermission`](crate::WithdrawCause::StalePermission)).
     StalePermission {

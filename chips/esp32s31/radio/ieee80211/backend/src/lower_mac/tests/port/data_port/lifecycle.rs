@@ -346,7 +346,7 @@ fn encrypted(tag: u8) -> Box<WriteFrame> {
 /// Retire the stopped fixture's port and install its next installation:
 /// the fixture's transmit buffers and terminals go home first. A refusal
 /// names its reason and the port's fault.
-fn reinstall<'id, Id: radio::SlotIdentity + 'id>(
+pub(super) fn reinstall<'id, Id: radio::SlotIdentity + 'id>(
     fixture: Fixture<'id, Id>,
     installations: &mut Installations<Id, InstallationPools>,
 ) -> Result<Fixture<'id, Id>, (ReinstallRefused, Option<Fault>)> {

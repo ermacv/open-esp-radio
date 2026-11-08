@@ -200,6 +200,11 @@ pub enum TxRefusal {
     Preparation(oer_protocols_ieee80211_contracts_port::PreparationError),
     /// Portable placement failed before entering the backend.
     Layout(oer_protocols_ieee80211_contracts_port::LayoutError),
+    /// The port refused the frame: its key was issued by an earlier
+    /// installation of the port
+    /// ([`WithdrawCause::StalePermission`](oer_protocols_ieee80211_contracts_port::WithdrawCause::StalePermission)).
+    /// The link cannot send under it again.
+    StaleKey,
 }
 
 /// The tokens a station holds: the port's, or a host test's.
@@ -4901,6 +4906,24 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             }
         ) {
             return leave_disabled(connected);
+        }
+        // A key of an earlier installation is refused for good: every later
+        // frame under it would be refused too, so the link ends, without a
+        // Deauthentication under that key.
+        if matches!(
+            done,
+            Done::Tx {
+                completion: TxOutcome::Withdrawn(
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::StalePermission
+                ),
+                ..
+            }
+        ) {
+            return leave_connected(
+                connected,
+                StaDisconnectReason::TransmitRefused(TxRefusal::StaleKey),
+                None,
+            );
         }
         match self.update_connected(connected, now, done) {
             Ok(()) => Change::Keep,

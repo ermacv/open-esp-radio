@@ -1243,9 +1243,10 @@ its model and conformance case.
   stops the shared owner for both. A beacon contends as voice, one at a
   time; who writes its Timestamp and the TSF control are backend
   declarations, absent until sourced. The port's tokens name the
-  installation that issued them (`IssuedSlot`); the access point's
-  operations refuse an earlier installation's token at their acceptance
-  point with its owners. The station's do not check yet.
+  installation that issued them (`IssuedSlot`); both roles' operations
+  refuse an earlier installation's token at their acceptance point with
+  its owners. The gate, tickets, buffers and Block Ack slots carry no
+  generation.
 - A caller that drops an admitted request detaches only its waker; the port
   keeps the registration and buffer lease until the terminal event and
   reclaims exactly once. Event streams end with the uninstall.

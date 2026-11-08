@@ -20,6 +20,13 @@ impl RawKeyIdentity {
     pub(super) fn active(&self) -> bool {
         self.activity.matches(self.serial)
     }
+
+    /// The generation of the installation that issued the key: the high
+    /// word of its serial ([`Serials`](super::engines)).
+    pub(super) fn generation(&self) -> u32 {
+        let [a, b, c, d, ..] = self.serial.to_be_bytes();
+        u32::from_be_bytes([a, b, c, d])
+    }
 }
 /// A read-only identity bound to both the slot and its installation's brand.
 #[derive(Debug)]
@@ -61,9 +68,9 @@ pub struct PortKeys<Id: SlotIdentity, R>(PhantomData<fn(Id) -> (Id, R)>);
 pub(super) type StaPath<Id: SlotIdentity> = Child<CorePath<Id>, 2>;
 pub(super) type ApPath<Id: SlotIdentity> = Child<CorePath<Id>, 3>;
 pub(super) type StaPermission<'id, Id: SlotIdentity> =
-    Slot<'id, GroupPermission<Station>, Part<Id, 5>>;
+    IssuedSlot<'id, GroupPermission<Station>, Part<Id, 5>>;
 pub(super) type ApPermission<'id, Id: SlotIdentity> =
-    Slot<'id, GroupPermission<AccessPoint>, Part<Id, 6>>;
+    IssuedSlot<'id, GroupPermission<AccessPoint>, Part<Id, 6>>;
 
 macro_rules! keys {
     ($role:ty, $p:literal, $g:literal, $path:ty, $permission:ty) => {

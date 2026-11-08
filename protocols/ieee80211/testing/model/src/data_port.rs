@@ -259,6 +259,61 @@ pub enum ModelPortCall {
     Stop,
 }
 
+/// The generations of the installation tokens a station command names:
+/// its permission, association and key slots, as their issuer recorded
+/// them.
+fn station_generations<'id, B: ModelComposition + 'id, C: Ieee80211Capabilities>(
+    command: &PortCommand<'id, ModelTypes<B>, C>,
+) -> [Option<u32>; 3] {
+    let group = |install: &GroupInstallationCommand<'_, B>| match install {
+        GroupInstallationCommand::Station(pending) => [
+            Some(pending.association),
+            Some(pending.slot.generation()),
+            Some(pending.permission.generation()),
+        ],
+        GroupInstallationCommand::AccessPoint(pending) => [
+            Some(pending.association),
+            Some(pending.slot.generation()),
+            Some(pending.permission.generation()),
+        ],
+    };
+    match command {
+        PortCommand::InstallPairwise(install) => [
+            Some(install.association),
+            Some(install.key.0.generation),
+            None,
+        ],
+        PortCommand::InstallGroup(ModelGroupInstall(install)) => group(install),
+        PortCommand::ReplaceGroup {
+            permission,
+            installed,
+            ..
+        }
+        | PortCommand::SelectGroup {
+            permission,
+            installed,
+        } => [
+            Some(permission.generation()),
+            Some(installed.slot.generation()),
+            None,
+        ],
+        PortCommand::RemoveGroup { permission, key } => [
+            Some(permission.generation()),
+            Some(key.slot.generation()),
+            None,
+        ],
+        PortCommand::RemovePairwise { association, key } => [
+            Some(association.owner.generation()),
+            Some(key.slot.generation()),
+            None,
+        ],
+        PortCommand::Configure { permission, .. } => [Some(permission.generation()), None, None],
+        PortCommand::CloseGate(_) | PortCommand::SetEdca(_) | PortCommand::SetBssColor(_) => {
+            [None, None, None]
+        }
+    }
+}
+
 /// The model's completion event in [`TxFacts`].
 const MODEL_TX_COMPLETION: u32 = 1;
 
@@ -1308,25 +1363,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<(), SubmitRefusal> {
-        let refusal = match self.radio {
-            Radio::Stopped => Some(SubmitRefusal::NotEnabled),
-            Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
-            Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
-                Some(SubmitRefusal::Stopping)
-            }
-            // The admission instant projects into radio time; without the
-            // relation the radio does not run for this attempt.
-            Radio::Running if self.air.project_time(now).is_err() => {
-                Some(SubmitRefusal::NotEnabled)
-            }
-            Radio::Running => None,
-        };
-        if let Some(reason) = refusal {
-            return Err(self.withdraw(attempt, reason, WithdrawCause::Disabled, sink));
-        }
-        // An access-point attempt under a key or beacon permission of an
-        // earlier installation is refused for good, with its owners.
-        if attempt.execution.role == VifRole::AccessPoint {
+        // An attempt under a key or beacon permission of an earlier
+        // installation is refused for good, with its owners, before the
+        // radio's own state is asked.
+        {
             let installation = self.installation.generation();
             let named = [
                 attempt
@@ -1352,6 +1392,22 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     sink,
                 ));
             }
+        }
+        let refusal = match self.radio {
+            Radio::Stopped => Some(SubmitRefusal::NotEnabled),
+            Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
+            Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
+                Some(SubmitRefusal::Stopping)
+            }
+            // The admission instant projects into radio time; without the
+            // relation the radio does not run for this attempt.
+            Radio::Running if self.air.project_time(now).is_err() => {
+                Some(SubmitRefusal::NotEnabled)
+            }
+            Radio::Running => None,
+        };
+        if let Some(reason) = refusal {
+            return Err(self.withdraw(attempt, reason, WithdrawCause::Disabled, sink));
         }
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
@@ -1567,6 +1623,22 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if let Err(fault) = self.check(ModelPortCall::Command) {
             self.retained.push(command);
             return Err(fault);
+        }
+        // A token of an earlier installation is refused for good, before
+        // the radio's own state is asked.
+        let named: Vec<u32> = station_generations(&command)
+            .into_iter()
+            .flatten()
+            .collect();
+        let installation = self.installation.generation();
+        if let Some(issued) = first_stale(installation, &named) {
+            return Ok(CommandProgress::Refused(
+                command,
+                CommandRefusal::StalePermission {
+                    issued,
+                    installation,
+                },
+            ));
         }
         if self.radio != Radio::Running {
             return Ok(CommandProgress::Refused(
