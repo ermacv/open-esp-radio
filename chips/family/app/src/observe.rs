@@ -1,7 +1,7 @@
 //! What the library observes of its own work for an image that measures it
 //! (`observe` feature): the executors' CPU, the polls of named parts, the
-//! station's and the network bridge's counts, the ADDBA Requests the
-//! station took, a connect's timeline, the shared RF actor's PHY
+//! station's and the network bridge's counts, the network core's turns,
+//! the ADDBA Requests the station took, a connect's timeline, the shared RF actor's PHY
 //! tracking ticks and, on the boot hart, its cycle, instruction and cache
 //! counters and a PC sampler.
 //!
@@ -24,6 +24,7 @@ pub mod addba;
 pub mod connect;
 pub mod cpu;
 pub mod link;
+pub mod network;
 pub mod parts;
 pub mod tracking;
 

@@ -155,6 +155,13 @@ fn the_largest_reports_fit_one_response() {
         postcard::from_bytes::<TrackingCollected>(encoded).unwrap(),
         tracking
     );
+    let network = NetworkCollected::Report(full_network());
+    let encoded = postcard::to_slice(&network, &mut buffer).unwrap();
+    assert!(encoded.len() <= 512, "{}", encoded.len());
+    assert_eq!(
+        postcard::from_bytes::<NetworkCollected>(encoded).unwrap(),
+        network
+    );
     let mac = MacCollected::Report(Mac::new([u32::MAX; MAC_COUNTS], i32::MIN));
     assert!(postcard::to_slice(&mac, &mut buffer).unwrap().len() <= 512);
     let stall = StallCollected::Report(full_stall());
@@ -561,9 +568,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_fourteen_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_fifteen_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 28);
+    assert_eq!(keys.len(), 30);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
@@ -694,4 +701,80 @@ fn the_addba_requests_round_trip_every_outcome_and_fit_one_response() {
         postcard::from_bytes::<AddbaCollected>(encoded).unwrap(),
         requested_zero
     );
+}
+
+/// Every turn count at its largest.
+fn full_network() -> NetworkTurns {
+    let all = u32::MAX;
+    NetworkTurns {
+        available: true,
+        turns: all,
+        reserves: all,
+        releases: all,
+        sends: all,
+        closes: all,
+        budget_spent: all,
+        budget_turns: all,
+        intake_full: all,
+        accepted: all,
+        accepted_by_turn: [all; ACCEPTED_BINS],
+        publish_chose: all,
+        publish_refused: all,
+        publish_budget: all,
+        publish_deferred: all,
+        publish_fault: all,
+        blocks_out: all,
+        credits_out: all,
+        yields: all,
+        yields_with_work: all,
+        waits_pending: all,
+        waits_ready: all,
+    }
+}
+
+#[test]
+fn a_network_window_is_each_count_s_difference_and_the_end_s_availability() {
+    let start = NetworkTurns {
+        available: true,
+        turns: u32::MAX,
+        sends: 10,
+        accepted_by_turn: [1, 2, 3, 4, 5, 6, u32::MAX],
+        ..NetworkTurns::default()
+    };
+    let end = NetworkTurns {
+        available: true,
+        turns: 4,
+        sends: 18,
+        accepted_by_turn: [1, 3, 6, 4, 5, 6, 0],
+        waits_pending: 2,
+        ..NetworkTurns::default()
+    };
+    let window = NetworkTurns::window(&start, &end);
+    assert_eq!(window.turns, 5, "a count wraps at 2^32");
+    assert_eq!(window.sends, 8);
+    assert_eq!(window.accepted_by_turn, [0, 1, 3, 0, 0, 0, 1]);
+    assert_eq!(window.waits_pending, 2);
+    assert!(window.available);
+    assert!(!NetworkTurns::window(&start, &NetworkTurns::default()).available);
+}
+
+#[test]
+fn a_network_request_round_trips() {
+    let mut buffer = [0; 64];
+    let request = CollectNetwork { run: u32::MAX };
+    let encoded = postcard::to_slice(&request, &mut buffer).unwrap();
+    assert_eq!(
+        postcard::from_bytes::<CollectNetwork>(encoded).unwrap(),
+        request
+    );
+    for answer in [
+        NetworkCollected::Running,
+        NetworkCollected::Refused(LoadError::UnknownRun),
+    ] {
+        let encoded = postcard::to_slice(&answer, &mut buffer).unwrap();
+        assert_eq!(
+            postcard::from_bytes::<NetworkCollected>(encoded).unwrap(),
+            answer
+        );
+    }
 }

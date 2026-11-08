@@ -59,6 +59,11 @@ pub(crate) struct Network {
     /// Blocks an ended run could not give back. They outlive its adapters,
     /// which a deadline cancels at any await.
     parked: Parked,
+    /// Where the network core's turns are kept ([`Turns`]), once the group
+    /// gave it. The chip counts them; the host's tests of this facade have
+    /// none.
+    #[cfg(target_arch = "riscv32")]
+    turns: Cell<Option<&'static mut Turns>>,
 }
 
 impl Network {
@@ -69,6 +74,8 @@ impl Network {
             address: Cell::new(None),
             delivered: Cell::new(0),
             parked: RefCell::new(Vec::new()),
+            #[cfg(target_arch = "riscv32")]
+            turns: Cell::new(None),
         }
     }
 }
@@ -112,6 +119,122 @@ pub(crate) fn open<'a>(net: &'a Network, start: &Start) -> Result<Run<'a>, LoadE
 /// The datagrams the sockets delivered.
 pub(crate) fn received_frames(net: &Network) -> u32 {
     net.delivered.get()
+}
+
+/// No window of the network core's turns.
+#[cfg(target_arch = "riscv32")]
+const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::NetworkTurns {
+    available: false,
+    turns: 0,
+    reserves: 0,
+    releases: 0,
+    sends: 0,
+    closes: 0,
+    budget_spent: 0,
+    budget_turns: 0,
+    intake_full: 0,
+    accepted: 0,
+    accepted_by_turn: [0; oer_hil_services_load::ACCEPTED_BINS],
+    publish_chose: 0,
+    publish_refused: 0,
+    publish_budget: 0,
+    publish_deferred: 0,
+    publish_fault: 0,
+    blocks_out: 0,
+    credits_out: 0,
+    yields: 0,
+    yields_with_work: 0,
+    waits_pending: 0,
+    waits_ready: 0,
+};
+
+/// The network core's turns at the open window's start, and the last closed
+/// window, kept until the next one closes: in a static the group takes once,
+/// as neither a run's futures, whose polls would copy them, nor the group's
+/// stack should hold them.
+#[cfg(target_arch = "riscv32")]
+pub(crate) struct Turns {
+    start: oer_hil_services_load::NetworkTurns,
+    window: oer_hil_services_load::NetworkTurns,
+}
+
+/// The one place of the turns.
+#[cfg(target_arch = "riscv32")]
+pub(crate) static TURNS: static_cell::ConstStaticCell<Turns> =
+    static_cell::ConstStaticCell::new(Turns {
+        start: TURNS_NONE,
+        window: TURNS_NONE,
+    });
+
+#[cfg(target_arch = "riscv32")]
+impl Network {
+    /// Keep the network core's turns in `turns`.
+    pub(crate) fn keep_turns(&self, turns: &'static mut Turns) {
+        self.turns.set(Some(turns));
+    }
+
+    /// Lend the place of the turns to `use_turns`, if the group gave one.
+    fn turns<R: Default>(&self, use_turns: impl FnOnce(&mut Turns) -> R) -> R {
+        let Some(turns) = self.turns.take() else {
+            return R::default();
+        };
+        let result = use_turns(turns);
+        self.turns.set(Some(turns));
+        result
+    }
+}
+
+/// Open a window of the network core's turns.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn open_turns(net: &Network) {
+    net.turns(|turns| turns.start = network_turns());
+}
+
+/// Close the open window of the network core's turns, which
+/// [`network_window`] answers from here on.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn close_turns(net: &Network) {
+    net.turns(|turns| {
+        turns.window = oer_hil_services_load::NetworkTurns::window(&turns.start, &network_turns());
+    });
+}
+
+/// The last closed window of the network core's turns; none before one
+/// closed.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn network_window(net: &Network) -> oer_hil_services_load::NetworkTurns {
+    net.turns(|turns| turns.window)
+}
+
+/// What the network core's turns did since boot, as the load service names
+/// it: the chip's observation, which the host's tests of this facade lack.
+#[cfg(target_arch = "riscv32")]
+fn network_turns() -> oer_hil_services_load::NetworkTurns {
+    let turns = oer::observe::network_turns();
+    oer_hil_services_load::NetworkTurns {
+        available: true,
+        turns: turns.turns,
+        reserves: turns.reserves,
+        releases: turns.releases,
+        sends: turns.sends,
+        closes: turns.closes,
+        budget_spent: turns.budget_spent,
+        budget_turns: turns.budget_turns,
+        intake_full: turns.intake_full,
+        accepted: turns.accepted,
+        accepted_by_turn: turns.accepted_by_turn,
+        publish_chose: turns.publish_chose,
+        publish_refused: turns.publish_refused,
+        publish_budget: turns.publish_budget,
+        publish_deferred: turns.publish_deferred,
+        publish_fault: turns.publish_fault,
+        blocks_out: turns.blocks_out,
+        credits_out: turns.credits_out,
+        yields: turns.yields,
+        yields_with_work: turns.yields_with_work,
+        waits_pending: turns.waits_pending,
+        waits_ready: turns.waits_ready,
+    }
 }
 
 /// A run's sockets, the network's again when it ends.

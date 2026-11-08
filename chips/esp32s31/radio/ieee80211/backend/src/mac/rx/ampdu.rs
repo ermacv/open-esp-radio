@@ -5,15 +5,26 @@ use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use crate::mac::rx::PUBLIC_HEADER_SIZE;
 
-// SOURCE: complete `libnet80211.a[ieee80211_ht.o]::
-// ampdu_rx_start.constprop.0`. The vendor agreement owner selects the smaller
-// of the peer request and `g_wifi_menuconfig+0x30`, whose normal configured
-// value is 64. Its later ordinary activation path passes the constant 64 to
-// `ic_add_rx_ba`; complete `libpp.a[hal_ampdu.o]::
-// hal_agreement_add_rx_ba` publishes that value in the seven-bit hardware
-// window. Keep the protocol/reorder window independent of the number of RX DMA
-// descriptors: descriptors are recycled while this sequence window remains
-// active.
+// SOURCE: BLOB_LIBNET80211_RX_BLOCK_ACK. The vendor keeps three values apart:
+// - Hardware entry: `libnet80211[ieee80211_ht.o]::ht_recv_action_ba_addba_request`
+//   loads the constant 64 at +0x356 and passes it as the sixth argument of
+//   `ic_add_rx_ba` at +0x36e..+0x372, whatever window was negotiated; complete
+//   `libpp[hal_ampdu.o]::hal_agreement_add_rx_ba` publishes it in the seven-bit
+//   hardware window. This backend instead programs the negotiated window.
+// - Negotiated window: the same function (+0x154..+0x172) and
+//   `ampdu_rx_start.constprop.0` take min(request, `g_wifi_menuconfig+0x30`),
+//   or the configured limit when the request is 0.
+// - Configured limit: `libnet80211[ieee80211_ioctl.o]::wifi_menuconfig_init`
+//   copies `wifi_init_config_t` offset 112 (`rx_ba_win`) to
+//   `g_wifi_menuconfig+0x30` and refuses values outside 2..64 when AMPDU RX is
+//   enabled; the library holds no default. Each build chooses it: ESP-IDF
+//   4d80c1b2 `components/esp_wifi/Kconfig:199-205` (`ESP_WIFI_RX_BA_WIN`)
+//   defaults to 6, or 16 when Wi-Fi memory goes to PSRAM first; the S31 iperf
+//   example sets 64 (`examples/wifi/iperf/sdkconfig.defaults.esp32s31:11`).
+// This constant is the largest window the hardware entry is known to run
+// with: the vendor's installed 64. Keep the protocol/reorder window
+// independent of the number of RX DMA descriptors: descriptors are recycled
+// while this sequence window remains active.
 pub const RX_BLOCK_ACK_MAX_WINDOW: u16 = 64;
 use oer_protocols_ieee80211_wire::{
     frame::{FrameControlFields, FrameType, QosControl},

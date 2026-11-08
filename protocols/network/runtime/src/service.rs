@@ -7,7 +7,7 @@ use core::task::{Context, Poll};
 
 use embassy_futures::select::select;
 use embassy_futures::yield_now;
-use oer_portable_events::EventSink;
+use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
@@ -17,6 +17,7 @@ use oer_protocols_network_core::{
 use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
+use crate::observation::{PublishEnd, ServiceEvent, TurnEnd, seen};
 use crate::returns::ReturnEnd;
 use crate::socket::{
     Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, Socket, SocketLanes, drain_requests,
@@ -372,11 +373,12 @@ impl<
     /// [`Self::retire`] then ends the sockets and hands every owner on. This
     /// only drives the service, so cancelling it leaves all as a wait left it:
     /// `run` may start again, or the owner may retire. Once this ended, it
-    /// serves no more.
+    /// serves no more. `events` hears the core's drops and the service's turns
+    /// ([`ServiceEvent`]).
     pub async fn run<T: Timer>(
         &mut self,
         clock: &T,
-        events: &mut impl EventSink<NetEvent>,
+        events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> EndCause {
         loop {
             if let Some(cause) = self.ended {
@@ -392,28 +394,36 @@ impl<
             } else if self.fault.is_some() {
                 self.ended = Some(EndCause::Egress);
             } else if moved {
+                report(events, || ServiceEvent::Yielded);
                 yield_now().await;
             } else {
-                self.wait(clock).await;
+                self.wait(clock, events).await;
             }
         }
     }
 
     /// One bounded pass over everything; whether anything moved.
-    fn turn(&mut self, now: Instant, events: &mut impl EventSink<NetEvent>) -> bool {
+    fn turn(
+        &mut self,
+        now: Instant,
+        events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
+    ) -> bool {
         let mut moved = false;
         self.owner.tick(now);
         for index in 0..SOCKETS {
-            moved |= self.commands(now, index);
+            moved |= self.commands(now, index, events);
         }
         moved |= self.take_home();
         moved |= self.give_blocks();
+        let mut intake_full = true;
         for _ in 0..TURN_FRAMES {
             if !self.owner.take_frame(now, events) {
+                intake_full = false;
                 break;
             }
             moved = true;
         }
+        seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
         let mut told_all = false;
         for _ in 0..TURN_FRAMES {
             let Some(notice) = self.owner.take_notice() else {
@@ -424,21 +434,42 @@ impl<
             let answer = self.egress.notice(notice);
             self.note(answer);
             if self.fault.is_some() {
+                report(events, || ServiceEvent::Published(PublishEnd::Fault));
+                self.turn_ended(events);
                 return true;
             }
         }
         // A policy chooses knowing all the port has said: a later notice may
         // free what the choice needs. So publishing waits for the next turn.
         if told_all {
-            moved |= self.publish(now);
+            moved |= self.publish(now, events);
         } else {
+            report(events, || ServiceEvent::Published(PublishEnd::Deferred));
             moved = true;
         }
         for bound in self.bound.iter_mut().flatten() {
             moved |= bound.hand_back(&mut self.owner);
         }
         moved |= self.relieve(now);
+        self.turn_ended(events);
         moved
+    }
+
+    /// Tell `events` what was free when the turn ended.
+    fn turn_ended(&mut self, events: &mut impl EventSink<ServiceEvent>) {
+        seen(events, || {
+            let blocks_free = self.owner.pool().free() != 0;
+            let credits_free = self
+                .bound
+                .iter()
+                .flatten()
+                .filter(|bound| bound.socket.is_some() && !bound.abandoned)
+                .all(|bound| bound.end.credits.any_free());
+            Some(ServiceEvent::TurnEnded(TurnEnd {
+                blocks_free,
+                credits_free,
+            }))
+        });
     }
 
     /// With none free and a socket waiting, evict the oldest queued datagram
@@ -484,7 +515,12 @@ impl<
         self.owner.evict(oldest, Eviction::MemoryPressure)
     }
 
-    fn commands(&mut self, now: Instant, index: usize) -> bool {
+    fn commands(
+        &mut self,
+        now: Instant,
+        index: usize,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
         let Some(bound) = self.bound.get_mut(index).and_then(Option::as_mut) else {
             return false;
         };
@@ -493,18 +529,21 @@ impl<
             return true;
         }
         let mut moved = false;
+        let mut spent = true;
         for _ in 0..TURN_COMMANDS {
             let Some(request) = bound.end.requests.try_receive() else {
+                spent = false;
                 break;
             };
             moved = true;
+            report(events, || ServiceEvent::Took(request.kind()));
             match request {
                 Request::Reserve => bound.reserving = bound.reserving.saturating_add(1),
                 Request::Release(block) => self.owner.pool().give(block),
                 Request::Send { tag, remote, block } => {
                     let Some(socket) = &bound.socket else {
                         self.owner.pool().give(block);
-                        bound.ended(tag, Sent::Ended(Outcome::Closed));
+                        bound.unsent(tag, Sent::Ended(Outcome::Closed));
                         continue;
                     };
                     match self.owner.send(now, socket, remote, block) {
@@ -515,7 +554,7 @@ impl<
                         }
                         Err(refused) => {
                             self.owner.pool().give(refused.block);
-                            bound.ended(tag, Sent::Refused(refused.reason));
+                            bound.unsent(tag, Sent::Refused(refused.reason));
                         }
                     }
                 }
@@ -523,12 +562,15 @@ impl<
                     if let Some(socket) = bound.socket.take() {
                         match self.owner.close(socket) {
                             Ok(close) => bound.closing = Some(close),
-                            Err(_) => bound.answer(Answer::Closed),
+                            Err(_) => bound.closed(),
                         }
                     }
                 }
             }
         }
+        seen(events, || {
+            (spent && !bound.end.requests.is_empty()).then_some(ServiceEvent::BudgetSpent)
+        });
         moved
     }
 
@@ -576,22 +618,26 @@ impl<
     /// Publish what the policy chooses, until it or the port has no room. No
     /// await falls between a choice and its answer, so no cancellation can
     /// leave a reservation unanswered.
-    fn publish(&mut self, now: Instant) -> bool {
+    fn publish(&mut self, now: Instant, events: &mut impl EventSink<ServiceEvent>) -> bool {
         let mut moved = false;
+        let mut end = PublishEnd::Budget;
         for _ in 0..TURN_FRAMES {
             let chosen = match self.egress.choose(self.owner.demands(now)) {
                 Ok(chosen) => chosen,
                 Err(fault) => {
                     self.note(Err(fault));
+                    end = PublishEnd::Fault;
                     break;
                 }
             };
             let Some((demand, reservation)) = chosen else {
+                end = PublishEnd::Chose;
                 break;
             };
             match self.owner.transmit(now, demand.grant()) {
                 Ok(ticket) => {
                     moved = true;
+                    report(events, || ServiceEvent::Accepted);
                     let answer = self.egress.accepted(reservation, ticket);
                     self.note(answer);
                 }
@@ -603,18 +649,22 @@ impl<
                 Err(Unsent::Port(_)) => {
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
+                    end = PublishEnd::Refused;
                     break;
                 }
                 Err(Unsent::PortContract) => {
                     let answer = self.egress.unknown(reservation);
                     self.note(answer);
+                    end = PublishEnd::Fault;
                     break;
                 }
             }
             if self.fault.is_some() {
+                end = PublishEnd::Fault;
                 break;
             }
         }
+        report(events, || ServiceEvent::Published(end));
         if moved {
             self.owner.flush();
         }
@@ -622,7 +672,7 @@ impl<
     }
 
     /// Wait for anything to do: the port, a lane, a stop or a time wakes this.
-    async fn wait<T: Timer>(&mut self, clock: &T) {
+    async fn wait<T: Timer>(&mut self, clock: &T, events: &mut impl EventSink<ServiceEvent>) {
         let deadline = match (self.owner.poll_deadline(), self.pressure_at) {
             (Some(core), Some(pressure)) => Some(core.min(pressure)),
             (core, pressure) => core.or(pressure),
@@ -652,6 +702,7 @@ impl<
             if let Some(returns) = returns {
                 ready |= returns.poll_waiting(cx);
             }
+            report(events, || ServiceEvent::Waited { ready });
             if ready {
                 Poll::Ready(())
             } else {
@@ -711,6 +762,26 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         self.reserving = self.reserving.saturating_sub(1);
         self.answer(Answer::Reserved(block));
         true
+    }
+
+    /// The socket's close ended.
+    ///
+    /// Out of line, as [`Self::unsent`]: inlined into a turn, its wake and
+    /// another ending's were merged into one call whose debug scope no
+    /// longer names the waker method the image's stack proof needs.
+    #[cold]
+    #[inline(never)]
+    fn closed(&mut self) {
+        self.answer(Answer::Closed);
+    }
+
+    /// A datagram of `tag` the core never took ended with `sent`.
+    ///
+    /// Out of line, as [`Self::closed`].
+    #[cold]
+    #[inline(never)]
+    fn unsent(&self, tag: u8, sent: Sent) {
+        self.ended(tag, sent);
     }
 
     /// The command of `tag` ended.
@@ -784,7 +855,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
                 CommandState::Running(close) => self.closing = Some(close),
                 CommandState::Finished(_) | CommandState::Gone => {
                     moved = true;
-                    self.answer(Answer::Closed);
+                    self.closed();
                 }
             }
         }

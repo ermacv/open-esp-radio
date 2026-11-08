@@ -2,8 +2,8 @@
 //! ([`crate::udp`]), on hart 1 beside the network.
 //!
 //! A run receives and echoes from its start, sends within its window and
-//! reads the CPU, the named parts, the counters, the link's rates and the
-//! PHY tracking ticks at the window's ends (the cache's counters cleared
+//! reads the CPU, the named parts, the counters, the link's rates, the
+//! PHY tracking ticks and the network core's turns at the window's ends (the cache's counters cleared
 //! just before its start), sampling the boot hart between them when it
 //! asks, and hart 1 beside it; after its drain it ends its socket and
 //! keeps what it read until the next run starts. The boot hart's counters
@@ -29,9 +29,9 @@ use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
     Addba, AddbaCollected, Collected, Counters, CountersCollected, Hart1Collected, Hart1Window,
-    Link, LinkCollected, Load, LoadError, Mac, MacCollected, PartsCollected, Positions,
-    PositionsCollected, Report, Request, SamplesCollected, Sent, Stall, StallCollected, StallMac,
-    StallMacCollected, Start, Started, Tracking, TrackingCollected, Transmit,
+    Link, LinkCollected, Load, LoadError, Mac, MacCollected, NetworkCollected, PartsCollected,
+    Positions, PositionsCollected, Report, Request, SamplesCollected, Sent, Stall, StallCollected,
+    StallMac, StallMacCollected, Start, Started, Tracking, TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
@@ -78,6 +78,7 @@ pub(crate) enum Answer {
     Hart1(Hart1Collected),
     Stall(StallCollected),
     StallMac(StallMacCollected),
+    Network(NetworkCollected),
     Addba(AddbaCollected),
     Samples(SamplesCollected),
     Cpu(Load),
@@ -101,6 +102,7 @@ impl Answer {
             Self::Hart1(hart1) => answer(identity, &hart1),
             Self::Stall(stall) => answer(identity, &stall),
             Self::StallMac(mac) => answer(identity, &mac),
+            Self::Network(network) => answer(identity, &network),
             Self::Addba(addba) => answer(identity, &addba),
             Self::Samples(samples) => answer(identity, &samples),
             Self::Cpu(load) => answer(identity, &load),
@@ -155,7 +157,7 @@ pub(crate) async fn serve(
             Action::Cpu => Answer::Cpu(cpu_load().await),
             Action::Kept(kind) => match &kept {
                 Some((_, ended)) => {
-                    kept_answer(ended, kind, identity, &mut hart0, &mut hart1).await
+                    kept_answer(ended, kind, identity, net, &mut hart0, &mut hart1).await
                 }
                 None => decided_answer(Decided::UnknownRun(kind)),
             },
@@ -169,6 +171,7 @@ async fn kept_answer(
     ended: &Ended,
     kind: Kept,
     identity: RequestIdentity,
+    net: &Network,
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
 ) -> Answer {
@@ -185,6 +188,9 @@ async fn kept_answer(
         Kept::Tracking => Answer::Tracking(TrackingCollected::Report(ended.tracking)),
         Kept::Stall => Answer::Stall(StallCollected::Report(ended.stall)),
         Kept::StallMac => Answer::StallMac(StallMacCollected::Report(ended.stall_mac)),
+        // The kept run's window, which the network holds until the next one
+        // closes.
+        Kept::Network => Answer::Network(NetworkCollected::Report(udp::network_window(net))),
         Kept::Addba => Answer::Addba(AddbaCollected::Report(ended.addba)),
         Kept::Samples { from, hart } => match ended.sampled.get(usize::from(hart)) {
             // Hart 0's samples are in the boot hart's buffer: its relay
@@ -240,6 +246,7 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::Running(Kept::Tracking) => Answer::Tracking(TrackingCollected::Running),
         Decided::Running(Kept::Stall) => Answer::Stall(StallCollected::Running),
         Decided::Running(Kept::StallMac) => Answer::StallMac(StallMacCollected::Running),
+        Decided::Running(Kept::Network) => Answer::Network(NetworkCollected::Running),
         Decided::Running(Kept::Addba) => Answer::Addba(AddbaCollected::Running),
         Decided::Running(Kept::Samples { .. }) => Answer::Samples(SamplesCollected::Running),
         Decided::UnknownRun(Kept::Report) => Answer::Collected(Collected::Refused(unknown)),
@@ -260,6 +267,7 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::UnknownRun(Kept::StallMac) => {
             Answer::StallMac(StallMacCollected::Refused(unknown))
         }
+        Decided::UnknownRun(Kept::Network) => Answer::Network(NetworkCollected::Refused(unknown)),
         Decided::UnknownRun(Kept::Addba) => Answer::Addba(AddbaCollected::Refused(unknown)),
         Decided::UnknownRun(Kept::Samples { .. }) => {
             Answer::Samples(SamplesCollected::Refused(unknown))
@@ -463,6 +471,7 @@ async fn measure(
     let cpu_start = cpu_load().await;
     let (parts_start, tracking_start) = readings(true).await;
     let counters_start = snapshot(hart0, true, net).await;
+    udp::open_turns(net);
     let hart1_start = report::hart_count(hart1.counters());
     let start_us = now_us();
     window.start_us.set(Some(start_us));
@@ -483,6 +492,8 @@ async fn measure(
     let end_us = now_us();
     let hart1_end = report::hart_count(hart1.counters());
     window.end_us.set(Some(end_us));
+    // Before the first await: the service keeps turning while it runs.
+    udp::close_turns(net);
     relay::request_stop(hart0).await;
     hart1.sampler().request_stop();
     let cpu_end = cpu_load().await;

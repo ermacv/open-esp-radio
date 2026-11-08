@@ -25,6 +25,22 @@ impl<'id, Path: PoolPath> PendingRxBlockAck<'id, Path> {
             supported,
         }
     }
+    /// A request of the association `epoch`, for a host test that plays the
+    /// station ahead of the receive agreements.
+    #[cfg(any(test, feature = "test-support"))]
+    pub const fn for_test(
+        epoch: LinkEpoch<'id, Path>,
+        bssid: Bssid,
+        action: BlockAckAction,
+        supported: bool,
+    ) -> Self {
+        Self {
+            epoch,
+            bssid,
+            action,
+            supported,
+        }
+    }
     pub const fn supported(&self) -> bool {
         self.supported
     }

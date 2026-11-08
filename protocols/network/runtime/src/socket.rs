@@ -30,6 +30,18 @@ pub(crate) enum Request<'m, B, const SIZE: usize> {
     Close,
 }
 
+impl<B, const SIZE: usize> Request<'_, B, SIZE> {
+    /// The request's kind, as a turn reports it.
+    pub(crate) const fn kind(&self) -> crate::RequestKind {
+        match self {
+            Self::Reserve => crate::RequestKind::Reserve,
+            Self::Release(_) => crate::RequestKind::Release,
+            Self::Send { .. } => crate::RequestKind::Send,
+            Self::Close => crate::RequestKind::Close,
+        }
+    }
+}
+
 /// What the service tells a socket.
 pub(crate) enum Answer<'a, 'm, B, const SIZE: usize, const DEPTH: usize> {
     Reserved(Block<'m, B, SIZE>),
@@ -131,6 +143,11 @@ pub(crate) struct Credits {
 }
 
 impl Credits {
+    /// Whether a tag is free for a command.
+    pub(crate) fn any_free(&self) -> bool {
+        self.free.load(Ordering::Acquire) != 0
+    }
+
     /// Free `tag`, and tell who waits for one.
     fn give(&self, tag: u8) {
         self.free.fetch_or(tag_bit(tag), Ordering::AcqRel);

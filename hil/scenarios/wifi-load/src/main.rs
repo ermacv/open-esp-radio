@@ -21,6 +21,7 @@ mod profile;
 mod stall;
 mod tracking;
 mod traffic;
+mod turns;
 
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
@@ -31,12 +32,13 @@ use std::{
 
 use oer_hil_services_load::{
     Addba, AddbaCollected, CacheGeometry, CacheLevel, Collect, CollectAddba, CollectCounters,
-    CollectHart1, CollectLink, CollectMac, CollectParts, CollectPositions, CollectStall,
-    CollectStallMac, CollectTracking, Collected, Counters, CountersCollected, DataBus,
-    Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected, Load, MAC_COUNT_NAMES,
-    MAX_PARTS, Mac, MacCollected, PartWindow, PartsCollected, Positions, PositionsCollected,
-    Report, Stall, StallCollected, StallMac, StallMacCollected, Start, Started, StaticAddress,
-    TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected, Transmit,
+    CollectHart1, CollectLink, CollectMac, CollectNetwork, CollectParts, CollectPositions,
+    CollectStall, CollectStallMac, CollectTracking, Collected, Counters, CountersCollected,
+    DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected, Load,
+    MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns, PartWindow,
+    PartsCollected, Positions, PositionsCollected, Report, Stall, StallCollected, StallMac,
+    StallMacCollected, Start, Started, StaticAddress, TUNE_KNOBS, TUNE_UNSET, Tracking,
+    TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Ipv4, Join, Joined, Leave, Left, ScanVisit,
@@ -288,6 +290,7 @@ struct Ended {
     tracking: Tracking,
     stall: Stall,
     stall_mac: StallMac,
+    network: NetworkTurns,
     addba: Addba,
 }
 
@@ -351,6 +354,14 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         StallMacCollected::Report(stall_mac) => stall_mac,
         other => return Err(Failure::Fail(format!("the image's stall MAC: {other:?}"))),
     };
+    let network = match cx.call(CollectNetwork { run }, CALL)? {
+        NetworkCollected::Report(network) => network,
+        other => {
+            return Err(Failure::Fail(format!(
+                "the image's network turns: {other:?}"
+            )));
+        }
+    };
     match cx.call(CollectAddba { run }, CALL)? {
         AddbaCollected::Report(addba) => Ok(Ended {
             report,
@@ -363,6 +374,7 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             tracking,
             stall,
             stall_mac,
+            network,
             addba,
         }),
         other => Err(Failure::Fail(format!(
@@ -415,6 +427,13 @@ fn stall_measurement(name: &str, ended: &Ended) -> serde_json::Value {
     let (report, stall, mac) = (&ended.report, &ended.stall, &ended.stall_mac);
     println!("  stall {name}: {}", stall::summary(report, stall, mac));
     stall::window(report, stall, mac)
+}
+
+/// What the network core's turns did over a window; its one-line summary
+/// is printed as `name`'s.
+fn turns_measurement(name: &str, ended: &Ended) -> serde_json::Value {
+    println!("  network turns {name}: {}", turns::summary(&ended.network));
+    turns::window(&ended.network)
 }
 
 /// What the link ran over a window: the access point's view between
@@ -1502,6 +1521,8 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         let tracking = tracking_measurement(name, &ended);
         object.insert("tracking".to_owned(), tracking);
         object.insert("stall".to_owned(), stall_measurement(name, &ended));
+        let turns = turns_measurement(name, &ended);
+        object.insert("network_turns".to_owned(), turns);
         object.insert("addba".to_owned(), addba_measurement(name, &ended));
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
@@ -1760,6 +1781,7 @@ mod tests {
             tracking: Tracking::default(),
             stall: Stall::default(),
             stall_mac: StallMac::default(),
+            network: NetworkTurns::default(),
             addba: Addba::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
@@ -1851,6 +1873,7 @@ mod tests {
             tracking: Tracking::default(),
             stall: Stall::default(),
             stall_mac: StallMac::default(),
+            network: NetworkTurns::default(),
             addba: Addba::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
