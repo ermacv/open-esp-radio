@@ -327,6 +327,10 @@ pub struct Project {
     pub name: String,
     pub source: PathBuf,
     pub chip: String,
+    /// Files outside the project directory its build reads (a shared
+    /// source or configuration), relative to that directory: each takes part
+    /// in the project's [`recipe`].
+    pub shared: Vec<PathBuf>,
 }
 
 /// Output directory of `project`, holding `build/`, `sdkconfig` and
@@ -338,16 +342,18 @@ pub fn output(root: &Path, project: &Project) -> PathBuf {
 /// SHA-256 of what a build of `project` against the `artifacts.toml` of
 /// `pins` follows from: the pinned ESP-IDF tree (the IDF
 /// revision and every pinned source) and each file below the project
-/// directory with its contents. Files the project names outside its
-/// directory, such as a shared partition table, are not part of it.
+/// directory with its contents, and each of its [`Project::shared`] files
+/// (such as another project's source or the shared partition table) with
+/// its contents; a shared file that cannot be read is an error.
 pub fn recipe(root: &Path, pins: &str, project: &Project) -> Result<String> {
     project_recipe(
         &oer_tools_pins_artifacts::git_pins(root, pins)?,
         &project.source,
+        &project.shared,
     )
 }
 
-fn project_recipe(pins: &[GitPin], source: &Path) -> Result<String> {
+fn project_recipe(pins: &[GitPin], source: &Path, shared: &[PathBuf]) -> Result<String> {
     let revision = &pins
         .iter()
         .find(|pin| pin.id == IDF_SOURCE)
@@ -360,6 +366,14 @@ fn project_recipe(pins: &[GitPin], source: &Path) -> Result<String> {
     for file in files {
         let digest = oer_tools_os_durable::sha256_file(&source.join(&file))?;
         text.push_str(&format!("{digest} {}\n", file.display()));
+    }
+    let mut shared = shared.to_vec();
+    shared.sort();
+    for file in shared {
+        let path = source.join(&file);
+        let digest = oer_tools_os_durable::sha256_file(&path)
+            .map_err(|error| format!("shared file {}: {error}", path.display()))?;
+        text.push_str(&format!("{digest} shared {}\n", file.display()));
     }
     Ok(oer_tools_os_durable::sha256_bytes(text.as_bytes()))
 }
@@ -654,15 +668,44 @@ mod tests {
         std::fs::create_dir(project.path().join("main")).unwrap();
         std::fs::write(project.path().join("main/main.c"), "a").unwrap();
         let pins = [pin("esp-idf", "aa")];
-        let recipe = project_recipe(&pins, project.path()).unwrap();
-        assert_eq!(project_recipe(&pins, project.path()).unwrap(), recipe);
+        let recipe = project_recipe(&pins, project.path(), &[]).unwrap();
+        assert_eq!(project_recipe(&pins, project.path(), &[]).unwrap(), recipe);
         assert_ne!(
-            project_recipe(&[pin("esp-idf", "bb")], project.path()).unwrap(),
+            project_recipe(&[pin("esp-idf", "bb")], project.path(), &[]).unwrap(),
             recipe
         );
         std::fs::write(project.path().join("main/main.c"), "b").unwrap();
-        assert_ne!(project_recipe(&pins, project.path()).unwrap(), recipe);
-        assert!(project_recipe(&[pin("esp32-wifi-lib", "cc")], project.path()).is_err());
+        assert_ne!(project_recipe(&pins, project.path(), &[]).unwrap(), recipe);
+        assert!(project_recipe(&[pin("esp32-wifi-lib", "cc")], project.path(), &[]).is_err());
+    }
+
+    #[test]
+    fn a_shared_file_takes_part_in_the_recipe() {
+        let pins = [GitPin {
+            id: "esp-idf".into(),
+            repository: "https://example.invalid/esp-idf".into(),
+            revision: "aa".into(),
+            artifacts: vec![],
+        }];
+        let tree = tempfile::tempdir().unwrap();
+        let (a, b) = (tree.path().join("a"), tree.path().join("b"));
+        std::fs::create_dir_all(a.join("main")).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(a.join("main/main.c"), "a").unwrap();
+        std::fs::write(b.join("CMakeLists.txt"), "b").unwrap();
+        let shared = [PathBuf::from("../a/main/main.c")];
+        let own = project_recipe(&pins, &b, &[]).unwrap();
+        let with = project_recipe(&pins, &b, &shared).unwrap();
+        assert_ne!(own, with, "the shared file is part of the recipe");
+        std::fs::write(a.join("main/main.c"), "changed").unwrap();
+        assert_ne!(project_recipe(&pins, &b, &shared).unwrap(), with);
+        let missing = [PathBuf::from("../a/main/gone.c")];
+        assert!(
+            project_recipe(&pins, &b, &missing)
+                .unwrap_err()
+                .to_string()
+                .contains("shared file")
+        );
     }
 
     #[test]

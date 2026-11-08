@@ -2251,6 +2251,7 @@ dependencies = [
 name = "oer-hil-scenarios-wifi-load"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "heapless",
  "oer-hil-services-load",
  "oer-hil-services-wifi-station",
@@ -2259,6 +2260,9 @@ dependencies = [
  "oer-tools-hil-harness",
  "oer-tools-image-build",
  "oer-tools-image-checks",
+ "oer-tools-image-esp-idf",
+ "oer-tools-lab-arbiter",
+ "oer-tools-lab-client",
  "oer-tools-lab-model",
  "oer-tools-os-process",
  "serde_json",

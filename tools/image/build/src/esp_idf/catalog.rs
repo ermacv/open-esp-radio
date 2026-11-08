@@ -8,7 +8,10 @@
 //! images that do not boot staged. The manifest names the image (its name in
 //! the board journal), the target chip and the chip whose `artifacts.toml`
 //! pins the ESP-IDF; every entry builds against that one pin through
-//! `oer_tools_image_esp_idf`.
+//! `oer_tools_image_esp_idf`. A project that builds from files outside its
+//! directory (another entry's source or configuration) names them in its
+//! manifest's `shared`, so they take part in its build recipe: a change to
+//! one makes every entry that reads it not current.
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -31,6 +34,10 @@ struct Manifest {
     /// Why the image must not be flashed now; flashing it is refused.
     #[serde(default)]
     hold: Option<String>,
+    /// Files outside the project directory its build reads, relative to
+    /// it: they take part in its build recipe.
+    #[serde(default)]
+    shared: Vec<PathBuf>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -42,6 +49,8 @@ pub struct Entry {
     pub hold: Option<String>,
     /// Project directory, relative to the repository root.
     pub directory: PathBuf,
+    /// Files outside the project directory its build reads, relative to it.
+    pub shared: Vec<PathBuf>,
 }
 
 impl Entry {
@@ -55,6 +64,7 @@ impl Entry {
                 .unwrap_or_default(),
             source: root.join(&self.directory),
             chip: self.chip.clone(),
+            shared: self.shared.clone(),
         }
     }
 }
@@ -85,6 +95,7 @@ pub fn entries(root: &Path) -> Result<Vec<Entry>> {
             pins: manifest.pins,
             hold: manifest.hold,
             directory: directory.strip_prefix(root)?.to_owned(),
+            shared: manifest.shared,
         });
     }
     entries.sort_by(|a, b| a.image.cmp(&b.image));
@@ -293,6 +304,103 @@ mod tests {
         std::fs::write(directory.join(MANIFEST), manifest).unwrap();
     }
 
+    /// Record a build of `entry` that followed its current recipe.
+    fn record_current_build(root: &Path, entry: &Entry) {
+        let project = entry.project(root);
+        let output = idf::output(root, &project);
+        std::fs::create_dir_all(&output).unwrap();
+        let recipe = idf::recipe(root, &entry.pins, &project).unwrap();
+        let build: idf::Build = serde_json::from_value(serde_json::json!({
+            "chip": entry.chip,
+            "project": project.name,
+            "idf_revision": "aa",
+            "overrides": [],
+            "application": "",
+            "application_sha256": "",
+            "elf": "",
+            "recipe": recipe,
+        }))
+        .unwrap();
+        std::fs::write(
+            output.join("build.json"),
+            serde_json::to_vec(&build).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_shared_file_makes_every_entry_that_reads_it_not_current_when_it_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path();
+        let pins = root.join("chips/chip-a/vendor/artifacts.toml");
+        std::fs::create_dir_all(pins.parent().unwrap()).unwrap();
+        std::fs::write(
+            &pins,
+            "schema = 1\nartifact = []\n\n[[source]]\nid = \"esp-idf\"\nkind = \"git\"\n\
+             repository = \"https://example.invalid/esp-idf\"\nrevision = \"aa\"\n",
+        )
+        .unwrap();
+        const TABLE: &str = "../../../../chips/chip-a/facts/partitions/applications.csv";
+        project(
+            root,
+            "tools/lab/peers/socket",
+            &format!(
+                "image = \"socket-peer\"\nchip = \"chip-a\"\npins = \"chip-a\"\n\
+                 shared = [\"{TABLE}\"]\n"
+            ),
+        );
+        project(
+            root,
+            "tools/lab/peers/fast",
+            &format!(
+                "image = \"fast-peer\"\nchip = \"chip-a\"\npins = \"chip-a\"\n\
+                 shared = [\"../socket/main/peer.c\", \"../socket/sdkconfig.defaults\", \"{TABLE}\"]\n"
+            ),
+        );
+        let socket = root.join("tools/lab/peers/socket");
+        std::fs::create_dir_all(socket.join("main")).unwrap();
+        std::fs::write(socket.join("main/peer.c"), "#define PROTOCOL_VERSION 2\n").unwrap();
+        std::fs::write(
+            socket.join("sdkconfig.defaults"),
+            format!("CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"{TABLE}\"\n"),
+        )
+        .unwrap();
+        let table = root.join("chips/chip-a/facts/partitions/applications.csv");
+        std::fs::create_dir_all(table.parent().unwrap()).unwrap();
+        std::fs::write(&table, "ota_0, app, ota_0, 0x20000, 0x400000,\n").unwrap();
+        let entries = entries(root).unwrap();
+        for entry in &entries {
+            record_current_build(root, entry);
+        }
+        let current = |image: &str| super::current(root, image).is_ok();
+        assert!(current("socket-peer") && current("fast-peer"));
+        for (path, changed) in [
+            (socket.join("main/peer.c"), "#define PROTOCOL_VERSION 3\n"),
+            (socket.join("sdkconfig.defaults"), "CONFIG_A=n\n"),
+            (table.clone(), "ota_0, app, ota_0, 0x20000, 0x300000,\n"),
+        ] {
+            let file = path.display();
+            let before = std::fs::read(&path).unwrap();
+            std::fs::write(&path, changed).unwrap();
+            assert!(!current("socket-peer"), "{file} changed: socket current");
+            assert!(!current("fast-peer"), "{file} changed: fast current");
+            std::fs::write(&path, &before).unwrap();
+            assert!(
+                current("socket-peer") && current("fast-peer"),
+                "{file} restored"
+            );
+            std::fs::remove_file(&path).unwrap();
+            assert!(!current("socket-peer"), "{file} removed: socket current");
+            let error = super::current(root, "fast-peer").err().unwrap().to_string();
+            assert!(error.contains("shared file"), "{file} removed: {error}");
+            std::fs::write(&path, &before).unwrap();
+            assert!(
+                current("socket-peer") && current("fast-peer"),
+                "{file} restored"
+            );
+        }
+    }
+
     #[test]
     fn peers_and_vendor_references_form_one_catalog() {
         let root = tempfile::tempdir().unwrap();
@@ -317,6 +425,7 @@ mod tests {
                     pins: "chip-a".into(),
                     hold: None,
                     directory: "tools/lab/peers/chip-b-ieee802154".into(),
+                    shared: vec![],
                 },
                 Entry {
                     image: "vendor-calibration".into(),
@@ -324,6 +433,7 @@ mod tests {
                     pins: "chip-a".into(),
                     hold: None,
                     directory: "tools/vendor/references/chip-a/calibration".into(),
+                    shared: vec![],
                 },
             ]
         );
@@ -350,6 +460,172 @@ mod tests {
         }
     }
 
+    /// The paths a CMake file names in quotes and starting with `..`, and
+    /// the `SDKCONFIG_DEFAULTS` files it sets.
+    fn cmake_paths(cmake: &str) -> (Vec<String>, Vec<String>) {
+        let quoted = |line: &str| -> Vec<String> {
+            line.split('"')
+                .skip(1)
+                .step_by(2)
+                .filter(|quoted| quoted.starts_with("../") || quoted.contains("}/../"))
+                .map(|quoted| {
+                    quoted
+                        .split_once("}/")
+                        .map_or(quoted, |(_, path)| path)
+                        .to_owned()
+                })
+                .collect()
+        };
+        let defaults = cmake
+            .lines()
+            .filter(|line| line.contains("SDKCONFIG_DEFAULTS"))
+            .flat_map(quoted)
+            .collect();
+        (quoted(cmake), defaults)
+    }
+
+    /// The paths an sdkconfig defaults file names as quoted `CONFIG_`
+    /// values starting with `..`, relative to the project directory (as
+    /// ESP-IDF resolves `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME`).
+    fn sdkconfig_paths(defaults: &str) -> Vec<String> {
+        defaults
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("CONFIG_")?.split_once('='))
+            .filter_map(|(_, value)| value.strip_prefix('"')?.strip_suffix('"'))
+            .filter(|value| value.starts_with("../"))
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// Each file outside `entry`'s directory its CMake files or sdkconfig
+    /// defaults read that its `shared` does not name, or that cannot be
+    /// found.
+    fn unnamed_outside_files(root: &Path, entry: &Entry) -> Vec<String> {
+        let project = root.join(&entry.directory).canonicalize().unwrap();
+        let mut problems = Vec::new();
+        let shared = entry
+            .shared
+            .iter()
+            .filter_map(|file| match project.join(file).canonicalize() {
+                Ok(path) => Some(path),
+                Err(error) => {
+                    problems.push(format!("shared {}: {error}", file.display()));
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let mut reads = Vec::new();
+        let mut defaults = vec![project.join("sdkconfig.defaults")];
+        for (directory, file) in [
+            (project.clone(), "CMakeLists.txt"),
+            (project.join("main"), "main/CMakeLists.txt"),
+        ] {
+            let Ok(cmake) = std::fs::read_to_string(project.join(file)) else {
+                continue;
+            };
+            let (paths, defaults_files) = cmake_paths(&cmake);
+            for path in paths {
+                reads.push((format!("{file} names {path}"), directory.join(&path)));
+            }
+            defaults.extend(defaults_files.iter().map(|path| directory.join(path)));
+        }
+        for file in defaults {
+            let Ok(text) = std::fs::read_to_string(&file) else {
+                continue;
+            };
+            for path in sdkconfig_paths(&text) {
+                reads.push((
+                    format!("{} names {path}", file.display()),
+                    project.join(&path),
+                ));
+            }
+        }
+        for (origin, path) in reads {
+            let resolved = match path.canonicalize() {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    problems.push(format!("{origin}: {error}"));
+                    continue;
+                }
+            };
+            if resolved.is_file() && !resolved.starts_with(&project) && !shared.contains(&resolved)
+            {
+                problems.push(format!("{origin}, which `shared` does not name"));
+            }
+        }
+        problems
+    }
+
+    #[test]
+    fn every_tracked_entry_names_the_outside_files_its_build_reads() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = root.canonicalize().unwrap();
+        for entry in entries(&root).unwrap() {
+            let problems = unnamed_outside_files(&root, &entry);
+            assert!(problems.is_empty(), "{}: {problems:#?}", entry.image);
+        }
+    }
+
+    #[test]
+    fn the_outside_check_follows_sources_and_sdkconfig_references() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path();
+        let table = root.join("chips/chip-a/facts/partitions/applications.csv");
+        std::fs::create_dir_all(table.parent().unwrap()).unwrap();
+        std::fs::write(&table, "ota_0, app, ota_0, 0x20000, 0x400000,\n").unwrap();
+        let reference = "\"../../../../chips/chip-a/facts/partitions/applications.csv\"";
+        let check = |manifest: &str, cmake: &str, main: &str| {
+            let directory = root.join("tools/lab/peers/peer");
+            let _ = std::fs::remove_dir_all(&directory);
+            project(root, "tools/lab/peers/peer", manifest);
+            std::fs::create_dir_all(directory.join("main")).unwrap();
+            std::fs::write(directory.join("CMakeLists.txt"), cmake).unwrap();
+            std::fs::write(directory.join("main/CMakeLists.txt"), main).unwrap();
+            std::fs::write(
+                directory.join("sdkconfig.defaults"),
+                format!("CONFIG_PARTITION_TABLE_CUSTOM_FILENAME={reference}\n"),
+            )
+            .unwrap();
+            let entries = entries(root).unwrap();
+            unnamed_outside_files(root, &entries[0])
+        };
+        let plain = "image = \"peer\"\nchip = \"chip-a\"\npins = \"chip-a\"\n";
+        let problems = check(plain, "", "");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("applications.csv"), "{problems:?}");
+        let named = format!("{plain}shared = [{reference}]\n");
+        assert!(check(&named, "", "").is_empty());
+        // A source outside the project, named or not.
+        std::fs::create_dir_all(root.join("tools/lab/peers/other/main")).unwrap();
+        std::fs::write(root.join("tools/lab/peers/other/main/x.c"), "x").unwrap();
+        let main = "idf_component_register(SRCS \"../../other/main/x.c\")\n";
+        assert_eq!(check(&named, "", main).len(), 1);
+        let both = format!("{plain}shared = [{reference}, \"../other/main/x.c\"]\n");
+        assert!(check(&both, "", main).is_empty());
+        // A defaults file another project's CMake file names is read too.
+        std::fs::write(
+            root.join("tools/lab/peers/other/sdkconfig.defaults"),
+            format!("CONFIG_PARTITION_TABLE_CUSTOM_FILENAME={reference}\n"),
+        )
+        .unwrap();
+        let cmake =
+            "set(SDKCONFIG_DEFAULTS \"${CMAKE_CURRENT_LIST_DIR}/../other/sdkconfig.defaults\")\n";
+        let problems = check(&both, cmake, main);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("sdkconfig.defaults"), "{problems:?}");
+        let all = format!(
+            "{plain}shared = [{reference}, \"../other/main/x.c\", \"../other/sdkconfig.defaults\"]\n"
+        );
+        assert!(check(&all, cmake, main).is_empty());
+        // A shared file that does not exist is a problem too.
+        let missing = format!("{plain}shared = [{reference}, \"../other/gone.c\"]\n");
+        assert!(
+            check(&missing, "", "")
+                .iter()
+                .any(|problem| problem.contains("gone.c"))
+        );
+    }
+
     /// The catalog entry `image` of the fixture tree and a finished ESP-IDF
     /// build of it holding the files `flasher_args.json` names.
     fn built_peer(root: &Path, image: &str) -> (Entry, idf::Build) {
@@ -361,6 +637,7 @@ mod tests {
             pins: entry.pins.clone(),
             hold: None,
             directory: entry.directory.clone(),
+            shared: entry.shared.clone(),
         };
         let build = idf::output(root, &entry.project(root)).join("build");
         std::fs::create_dir_all(&build).unwrap();

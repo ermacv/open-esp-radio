@@ -224,7 +224,11 @@ system these rules serve.
   no external program, process-wide state, fixed path, network port or real
   time. The one exception is the pinned toolchain (`cargo`, `rustc`, `lld`)
   run into the test's own build directory for compile-fail and
-  compiler-driven cases.
+  compiler-driven cases, and the vendor UDP receiver's link host test
+  (`hil/scenarios/wifi-load/tests/peer_link.rs`): it runs a host C11
+  compiler (`$OER_HOST_CC`, else `cc`) and the program it builds in its own
+  temporary directory, logs the compiler's path and `--version` line, and
+  fails when no compiler runs.
 - **Generated files.** `chips/*/pac/src/generated.rs`,
   and `chips/*/vendor/facts/**/*.toml` (including TOML files directly in
   `facts/`) are never read whole or edited by hand: grep them by path, regenerate them. `cargo registers generate

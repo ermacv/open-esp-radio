@@ -298,6 +298,40 @@ nothing: a case fails only when the path or an exchange does not work. Each meas
 release the run's results, its cleanup and verdict go to
 `target/hil/results/wifi-load-<time in ns>.json`.
 
+`OER_WIFI_LOAD_VENDOR=socket|fast` runs the RX levels against the vendor
+receiver instead of the cases: the stand's ESP-IDF
+[UDP receiver peer](../../../tools/lab/peers/esp32s31-wifi-udp-rx/README.md)
+in that variant (`cargo fw idf build wifi-udp-rx-peer` or
+`wifi-udp-rx-fast-peer` first), on the board `--board` names (or the one
+ESP32-S31 board with the `dut` role), under a lease of the board, the router
+and the air exclusively. `--list` and `--case path|rx` work as for the cases
+and are read, with the environment, before anything reaches the stand;
+`rx` joins first. The program writes the peer unless the board runs it,
+applies the same station profile with a generated network and hands it to
+the peer on its console, then offers each level as `rx` does
+(`OER_WIFI_LOAD_MBPS`, `OER_WIFI_LOAD_SECONDS`, `OER_WIFI_LOAD_PROBES` and
+`OER_WIFI_LOAD_WIDTH` apply). Each level records the same `rx` counts by the
+load header, `rtt` and the access point's `link.router` view, and in `vendor`
+the peer's report of that run: its counts, its IP stack's and driver's
+counters over the window (`window`, snapshots at the window's start and end,
+as the image's device counts) and over the run (`run`, from its RX command
+to its drain's end, the span of the access point's readings), the MAC's
+counters over the window, and `balance`, the access point's MPDUs to the
+station against the driver's count over the run, with what it leaves
+`unclosed`, with no place of loss named. The peer's report is measured whole
+or not at all: every line the protocol names for the run once and of that
+run, nothing else, each with exactly its fields, counts unsigned, the window
+and the run's boundaries as the host asked, and the counts consistent with
+each other and with what the host sent (no more distinct datagrams or bytes
+than it sent, every byte in its datagrams, no sequence it did not send)
+(`src/vendor/report.rs`); anything else ends the run as incomplete. The loss
+is the host's datagrams less the peer's distinct ones, exact (`lost`) only
+when the peer tracked every arrival; with untracked arrivals `lost` is null
+and `lost_at_most` bounds it. The peer's link state machine is tested on the
+host by `tests/peer_link.rs`, which needs a C compiler (`$OER_HOST_CC`, else
+`cc`) and fails without one. Its results go to
+`target/hil/results/wifi-load-vendor-<time in ns>.json`.
+
 The host needs, once, a route to the station network through the router's
 LAN address: `ip route add 10.231.0.0/24 via <router LAN address>` (or the
 same as a permanent route of the wired connection), and the stand file names
