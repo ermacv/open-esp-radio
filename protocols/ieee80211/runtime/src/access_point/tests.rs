@@ -231,7 +231,7 @@ fn the_runner_beacons_answers_a_probe_and_stops_with_every_owner() {
             supported(),
             [0x55; 16],
             end,
-            || (),
+            (),
             Nonces,
         );
         let shared = ApShared::new();

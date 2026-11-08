@@ -497,7 +497,7 @@ impl<W: Binding> AccessPointRunner<W> {
             channel,
             gtk,
             network,
-            || (),
+            (),
             nonces,
         );
         match runner.run(shared, &EmbassyClock).await {

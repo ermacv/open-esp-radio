@@ -421,7 +421,7 @@ where
     policy: ApPolicy,
     channel: SupportedChannel<Caps<'id, P>>,
     network: ApNetworkEnd<'n>,
-    context: fn() -> <Ty<'id, P> as PortTypes<'id>>::Context,
+    context: <Ty<'id, P> as PortTypes<'id>>::Context,
     nonces: X,
     tickets: heapless::Vec<Ticket<'id, P>, AP_TICKETS>,
     access: TerminalAccess<
@@ -471,11 +471,11 @@ where
     X: ApNonces,
     <Keys<'id, P> as KeyTypes<'id>>::GroupSlotIdentity: PartialEq,
     <Keys<'id, P> as KeyTypes<'id>>::Identity: PartialEq,
+    <Ty<'id, P> as PortTypes<'id>>::Context: Clone,
 {
     /// A runner over `port` and the access point's `resources` of its
     /// installation, serving the BSS of `engine` on `channel` with the
-    /// group key `group_key`. Each attempt carries the context `context`
-    /// makes.
+    /// group key `group_key`. Each attempt carries a copy of `context`.
     #[expect(
         clippy::too_many_arguments,
         reason = "each owner of the run moves in once, by value"
@@ -489,7 +489,7 @@ where
         channel: SupportedChannel<Caps<'id, P>>,
         group_key: [u8; 16],
         network: ApNetworkEnd<'n>,
-        context: fn() -> <Ty<'id, P> as PortTypes<'id>>::Context,
+        context: <Ty<'id, P> as PortTypes<'id>>::Context,
         nonces: X,
     ) -> Self {
         let ApResources {
@@ -692,13 +692,18 @@ where
         }
         self.terminals(now)?;
         self.receive(now)?;
+        self.terminals(now)?;
         if self.phase == Phase::Running {
             self.due(now)?;
+            self.terminals(now)?;
             self.transmit_network(now)?;
+            self.terminals(now)?;
         }
         self.send_teardowns(now)?;
+        self.terminals(now)?;
         self.key_commands()?;
         self.run_commands(now)?;
+        self.terminals(now)?;
         if self.stop {
             self.advance_stop(now)?;
         }
@@ -784,7 +789,8 @@ where
         Ok(())
     }
 
-    /// Take every terminal the last port call left in the sink.
+    /// Take every terminal the port calls left in the sink, and the ones
+    /// handling them left.
     fn terminals(&mut self, now: Instant) -> Result<(), Halt> {
         if self.sink.overflow {
             return Err(Halt::Contract(ApContract::UnknownTicket(u8::MAX)));
@@ -1488,9 +1494,11 @@ where
         };
         *place = Some(purpose);
         // A refused submission ends at once, withdrawn: its terminal in the
-        // sink returns the owners and ends the purpose.
+        // sink returns the owners and ends the purpose when the turn takes
+        // the sink's terminals. Handling a terminal never takes them
+        // itself, so a terminal that submits a frame does not recurse.
         let _refused = self.port.submit(admitted, now, &mut self.sink);
-        self.terminals(now)
+        Ok(())
     }
 
     /// Seal the frame `buffer` holds as the port's admitted attempt, or
@@ -1619,7 +1627,7 @@ where
                 };
                 Ok(self.port.admit_beacon(
                     BeaconAttempt {
-                        context: (self.context)(),
+                        context: self.context.clone(),
                         ticket,
                         source: prepared,
                         power,
@@ -1632,7 +1640,7 @@ where
             }
             _ => Ok(self.port.admit_access_point(
                 Attempt {
-                    context: (self.context)(),
+                    context: self.context.clone(),
                     ticket,
                     source: prepared,
                     access_category: category,
