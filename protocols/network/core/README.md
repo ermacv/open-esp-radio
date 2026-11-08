@@ -1,7 +1,7 @@
 # oer-protocols-network-core
 
-A sans-IO network core with one owner: IPv4, ARP and UDP over one Ethernet
-interface. It takes frames, commands and the current time as values and gives
+A sans-IO network core with one owner: IPv4, ARP, UDP, a DHCPv4 client and
+ICMP echo replies over one Ethernet interface. It takes frames, commands and the current time as values and gives
 work back as values. It awaits nothing, holds no waker and places no memory.
 
 The core takes values and gives values. Work is chosen before it exists:
@@ -38,6 +38,47 @@ neighbor, so a waiter for `NeighborsFull` keeps the value it saw.
 
 `tick` comes first at every time `poll_deadline` names and at any later `now`
 before work is asked for: an address past its life is no work until then.
+
+## Addressing
+
+An interface's address is its owner's (`Interface::new`) or leased by the
+core's DHCP client (`Interface::dhcp`, RFC 2131), whose seed the image draws
+from its entropy. The core alone holds the address, its version and the
+client; `configuration` is a snapshot of them, and `configuration_changes`
+moves whenever it may have changed. Any change of address, prefix or gateway
+moves `address_version`: every datagram and echo reply accepted under the
+old one ends `Outcome::Readdressed` with its block home, and neighbors and
+owed ARP replies are forgotten, as they were the old network's. Sockets stay
+open: they hold a port on the interface, not an address. A send without an
+address is refused `SendRefusal::NoAddress` until the version moves.
+
+The client's messages are the core's own control work: no socket, block or
+command place. A message is owed while the link is up (`link`, which the
+owner reads from its port each turn), and built in the port's slot when it is
+chosen. It is sent when the port takes it, or refuses it for good; its
+retransmission time starts then, and a lease counts from its transaction's
+first accepted REQUEST. A first DISCOVER is repeated after 250 ms, doubling to
+10 s in one transaction, as a lost first one cost 10 s on the stand
+(Xarxa fbebde5); each wait is jittered down by up to a quarter. A REQUEST to
+an OFFER is repeated after 5 s, doubling every two, five in all, then
+discovery starts over. At T1 the client renews by unicast to the server
+identifier, at T2 it rebinds by broadcast, each after half the time left and
+no less than 60 s, and at the lease's end the address goes. A NAK starts
+discovery over. A link that comes back at a new epoch runs INIT-REBOOT with a
+lease, keeping the address meanwhile, and five unanswered REQUESTs keep the
+lease for its time (RFC 2131, 3.2); without one, discovery starts over at
+once. While a client runs, data and echo replies hold at most all neighbor
+entries but one, so a renewal always finds one. Messages the client does not
+take are counted (`NetEvent::Dhcp`) and change nothing.
+
+An echo request for the interface's own address owes a reply from that
+address with all its data (RFC 792, RFC 1122, 3.2.2.6): its ICMP message is
+copied into a block, never the pool's last free one, at most `ECHOES` owed
+and `ECHO_RATE` accepted a second. A reply waits for its neighbor as a
+datagram does, and ends with its block home when the port takes it, its
+neighbor never answers, the address changes or the core retires. Everything
+else (broadcast echoes, other types, malformed, too long, over a bound) is
+counted (`NetEvent::Icmp`) and never answered.
 
 Any type can be a brand. `claim` lets it claim once, giving one pool and the right
 to one core, and this crate holds that record, so no code outside can claim a brand

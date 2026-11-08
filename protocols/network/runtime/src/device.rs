@@ -3,7 +3,7 @@
 use core::task::{Context, Poll};
 
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FramePort, FrameSource, NetDevice, NetTransmit,
+    EthernetFrame, EthernetFrameView, FramePort, FrameSource, LinkSnapshot, NetDevice, NetTransmit,
     ReceivedFrame, TransmitError, Unpublished,
 };
 
@@ -178,6 +178,10 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
 
     fn take_notice(&mut self) -> Option<()> {
         None
+    }
+
+    fn link(&self) -> LinkSnapshot {
+        self.device.link()
     }
 
     fn register(&mut self, cx: &mut Context<'_>) {

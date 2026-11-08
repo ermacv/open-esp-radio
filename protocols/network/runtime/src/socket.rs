@@ -115,7 +115,7 @@ pub enum Sent {
 }
 
 /// Every [`Sent`], at the word [`word_of`] gives it, less [`FIRST_RESULT`].
-const RESULTS: [Sent; 14] = [
+const RESULTS: [Sent; 16] = [
     Sent::Refused(SendRefusal::Stale),
     Sent::Refused(SendRefusal::NoPlace),
     Sent::Refused(SendRefusal::TooLong),
@@ -130,6 +130,8 @@ const RESULTS: [Sent; 14] = [
     Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure)),
     Sent::Ended(Outcome::Rejected),
     Sent::Ended(Outcome::Declined),
+    Sent::Refused(SendRefusal::NoAddress),
+    Sent::Ended(Outcome::Readdressed),
 ];
 
 /// A place's command runs, and its observer may wait.
@@ -157,6 +159,8 @@ const fn word_of(sent: Sent) -> u32 {
         Sent::Ended(Outcome::Rejected) => 14,
         // A channel's command never ends so: only a producer's work does.
         Sent::Ended(Outcome::Declined) => 15,
+        Sent::Refused(SendRefusal::NoAddress) => 16,
+        Sent::Ended(Outcome::Readdressed) => 17,
     }
 }
 

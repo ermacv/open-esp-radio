@@ -427,7 +427,7 @@ fn the_neighbor_counter_moves_on_every_release_of_protection() {
         while let Some(demand) = stack.poll_demand(now) {
             stack.transmit(now, demand.grant(), unproduced).unwrap();
             now = stack.poll_deadline().unwrap();
-            stack.tick(now);
+            stack.tick(now, &mut ());
         }
         assert_eq!(finished(stack.take_result(work)), Outcome::Unreachable);
         moved(stack, "a resolution given up");

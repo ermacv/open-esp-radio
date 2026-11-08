@@ -24,6 +24,7 @@ use crate::socket::{
     Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, Socket, SocketLanes, drain_requests,
     lanes,
 };
+use crate::watch::{ConfigurationWatch, WatchRefused, Watched};
 
 /// Commands one turn takes from a lane.
 const TURN_COMMANDS: usize = 4;
@@ -246,6 +247,9 @@ pub struct Service<
     adopted: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
     returns: Option<ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
     local: L,
+    /// Where the interface's address is published, and the core's count of
+    /// changes at the last publication.
+    watch: Option<(&'a ConfigurationWatch, u32)>,
 }
 
 impl<
@@ -384,6 +388,7 @@ impl<
             adopted: [const { None }; SOCKETS],
             returns: None,
             local,
+            watch: None,
         }
     }
 }
@@ -437,6 +442,42 @@ impl<
                 Ok(())
             }
             None => Err(late),
+        }
+    }
+
+    /// Publish the interface's address to `watch` from now on: at once, then
+    /// at the end of each turn that changed it, and at the service's end.
+    ///
+    /// # Errors
+    /// [`WatchRefused::Taken`]: this service or another publishes already.
+    pub fn watch(&mut self, watch: &'a ConfigurationWatch) -> Result<(), WatchRefused> {
+        if self.watch.is_some() {
+            return Err(WatchRefused::Taken);
+        }
+        let changes = self.owner.configuration_changes();
+        watch.begin(Watched {
+            configuration: Some(self.owner.configuration()),
+        })?;
+        self.watch = Some((watch, changes));
+        Ok(())
+    }
+
+    /// Publish the address if the turn changed it.
+    fn publish_configuration(&mut self) {
+        let changes = self.owner.configuration_changes();
+        if let Some((watch, seen)) = &mut self.watch
+            && *seen != changes
+        {
+            // Only this service lends the cell, and readers lend it for a
+            // copy: a refusal leaves the count, and the next turn tries again.
+            if watch
+                .publish(Watched {
+                    configuration: Some(self.owner.configuration()),
+                })
+                .is_ok()
+            {
+                *seen = changes;
+            }
         }
     }
 
@@ -545,7 +586,8 @@ impl<
     ) -> bool {
         let mut moved = false;
         self.local.turn_begins();
-        self.owner.tick(now);
+        self.owner.observe_link(now);
+        self.owner.tick(now, events);
         for index in 0..SOCKETS {
             moved |= self.commands(now, index, events);
         }
@@ -592,6 +634,7 @@ impl<
             moved |= self.relieve(now);
         }
         moved |= self.deliver(events);
+        self.publish_configuration();
         self.turn_ended(events);
         moved
     }
@@ -922,6 +965,14 @@ impl<
     {
         let cause = self.ended.unwrap_or(EndCause::Stopped);
         let mut this = self;
+        if let Some((watch, _)) = this.watch.take() {
+            // The lease leaves with the core. A reader holding the cell now
+            // finds the last address until its next read; nothing else
+            // publishes here.
+            let _published = watch.publish(Watched {
+                configuration: None,
+            });
+        }
         while this.take_home() {}
         let adopted = this.adopted;
         let returns = this.returns;

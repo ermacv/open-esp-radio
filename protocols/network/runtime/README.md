@@ -86,7 +86,8 @@ outlive services: a next service binds the same `Group` values, as a pool keeps
 Dropping a `LateSocket` or a `Service` with commands in a request lane still strands
 what those hold: that has no contract yet.
 
-A turn takes commands, received frames and the port's notices, then, once it has
+A turn first reads the port's link into the core, then takes commands,
+received frames and the port's notices, then, once it has
 read them all, asks its producer for offers, chooses work and publishes it,
 evicts under memory pressure, then hands results and datagrams back. Each part is bounded, so no lane and no port
 starves the others, and sockets waiting for blocks take turns. Every exit of a
@@ -111,10 +112,11 @@ UDP checksum over it there. Generated data so needs no copy at all.
 
 Progress within one turn is bounded by eight offers and the hold rules. A final
 refusal (`TooLong`, `NoRoute`, `Stale`) moves on to the next offer in the same
-turn, with no wake. `NoPlace` and `NeighborsFull` hold the producer's offers, the
-hold belonging to the refused offer: it lasts until one of the producer's places
-frees, or the core's `neighbors_changed` counter moves (an ARP answer or expiry,
-a resolution given up, every end of work that held a neighbor), or until it is
+turn, with no wake. `NoPlace`, `NeighborsFull` and `NoAddress` hold the
+producer's offers, the hold belonging to the refused offer: it lasts until one
+of the producer's places frees, or the core's `neighbors_changed` counter moves
+(an ARP answer or expiry, a resolution given up, every end of work that held a
+neighbor), or its `address_version` moves (a lease, its end), or until it is
 stale: the source's generation moved, or `current(tag)` is false. A stale hold
 gives way to a new offer, which meets `NoPlace` again while the places are taken.
 At most eight declared works are open at once. A waiting service registers its
@@ -138,6 +140,16 @@ each open work `Retired`, tells the producer, returns it in `Ended::producers`
 and only then sets the `LocalEnd` flag the image lent. Dropping the service drops
 the producer, calls nothing, and its guard sets the flag: every outcome was
 delivered before the last await, so every work still open never went out.
+
+## The interface's address
+
+`Service::watch` gives the service a `ConfigurationWatch` to publish the
+core's `Configuration` to: at once, then at the end of each turn in which the
+core's `configuration_changes` moved, and once more, empty, at `retire`, as the
+lease leaves with its core. `changes` counts publications, and `changed` waits
+for the next; one task waits at a time. A read meets a publication in progress
+only from another hart, and is refused for it, never handed an old value as
+new.
 
 The sink lent to `run` hears the core's drops and the service's `ServiceEvent`s:
 each request a turn takes by kind, each socket whose lane still holds requests once

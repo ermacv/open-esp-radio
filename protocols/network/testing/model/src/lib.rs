@@ -438,6 +438,14 @@ impl FrameSource for Medium {
         self.0.borrow_mut().notices.pop_front()
     }
 
+    /// The model's medium is up from the start, at one epoch.
+    fn link(&self) -> oer_protocols_network_port::LinkSnapshot {
+        oer_protocols_network_port::LinkSnapshot {
+            state: oer_protocols_network_port::LinkState::Up,
+            epoch: 1,
+        }
+    }
+
     fn register(&mut self, cx: &mut Context<'_>) {
         let mut state = self.0.borrow_mut();
         state.waker = Some(cx.waker().clone());

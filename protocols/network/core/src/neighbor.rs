@@ -123,6 +123,31 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
+    /// Whether `address` has an entry a send can use or wait for: known and
+    /// alive, or asked for.
+    pub(crate) fn holds(&self, now: Instant, address: [u8; 4]) -> bool {
+        self.entries.iter().any(|entry| match *entry {
+            Entry::Known {
+                address: known,
+                expires,
+                ..
+            } => known == address && now < expires,
+            Entry::Asking { address: asked, .. } => asked == address,
+            Entry::Free => false,
+        })
+    }
+
+    /// The entries whose address `needed` names.
+    pub(crate) fn count(&self, needed: impl Fn([u8; 4]) -> bool) -> usize {
+        self.entries
+            .iter()
+            .filter(|entry| match **entry {
+                Entry::Known { address, .. } | Entry::Asking { address, .. } => needed(address),
+                Entry::Free => false,
+            })
+            .count()
+    }
+
     /// Forget requests no datagram needs any more. An entry is asked for only
     /// while one does, so a refused port holds no entry for a closed socket.
     pub(crate) fn forget_unneeded(&mut self, needed: impl Fn([u8; 4]) -> bool) {

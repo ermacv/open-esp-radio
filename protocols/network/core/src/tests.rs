@@ -57,6 +57,35 @@ struct Port {
     /// Refuses a frame once it is written.
     after_fill: Option<&'static str>,
     sent: Vec<Vec<u8>>,
+    /// The link's epoch while it is up.
+    up: Option<u64>,
+}
+
+impl oer_protocols_network_port::FrameSource for Port {
+    type Notice = ();
+
+    fn take_frame(
+        &mut self,
+        _: impl FnOnce(oer_protocols_network_port::EthernetFrameView<'_>),
+    ) -> bool {
+        false
+    }
+
+    fn take_notice(&mut self) -> Option<()> {
+        None
+    }
+
+    fn link(&self) -> oer_protocols_network_port::LinkSnapshot {
+        self.up
+            .map_or(oer_protocols_network_port::LinkSnapshot::DOWN, |epoch| {
+                oer_protocols_network_port::LinkSnapshot {
+                    state: oer_protocols_network_port::LinkState::Up,
+                    epoch,
+                }
+            })
+    }
+
+    fn register(&mut self, _: &mut core::task::Context<'_>) {}
 }
 
 impl FramePort for Port {
@@ -613,7 +642,7 @@ fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
             Err(Unsent::Stale),
             "no frame to an address that expired"
         );
-        stack.tick(later);
+        stack.tick(later, &mut ());
         assert_eq!(
             stack.poll_demand(later).unwrap().ready.class,
             Class::Control
@@ -623,7 +652,7 @@ fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
         while let Some(demand) = stack.poll_demand(now) {
             stack.transmit(now, demand.grant(), unproduced).unwrap();
             now = stack.poll_deadline().unwrap();
-            stack.tick(now);
+            stack.tick(now, &mut ());
         }
         assert_eq!(finished(stack.take_result(command)), Outcome::Unreachable);
         assert_eq!(stack.pool().free(), BLOCKS);
@@ -738,7 +767,7 @@ fn a_datagram_never_asks_anothers_neighbor_away() {
             .send(at(2), &second, remote(hops[2]), block)
             .unwrap_err();
         assert_eq!(refused.reason, SendRefusal::NeighborsFull);
-        stack.tick(at(2));
+        stack.tick(at(2), &mut ());
         send_next(stack, at(2)).unwrap();
         send_next(stack, at(2)).unwrap();
         assert_eq!(finished(stack.take_result(one)), Outcome::Accepted);
@@ -765,7 +794,7 @@ fn a_grant_of_a_request_cannot_serve_a_later_resolution() {
         while let Some(demand) = stack.poll_demand(now) {
             stack.transmit(now, demand.grant(), unproduced).unwrap();
             now = stack.poll_deadline().unwrap();
-            stack.tick(now);
+            stack.tick(now, &mut ());
         }
         assert_eq!(finished(stack.take_result(first)), Outcome::Unreachable);
         let block = filled(stack.pool(), b"y");
@@ -805,7 +834,7 @@ fn a_neighbor_expiring_under_a_datagram_names_its_time() {
         let expiry = at(0).saturating_add(Duration::from_secs(60));
         assert_eq!(stack.poll_deadline(), Some(expiry));
         assert!(stack.demands(expiry).next().is_none(), "past its life");
-        stack.tick(expiry);
+        stack.tick(expiry, &mut ());
         assert_eq!(
             stack.demands(expiry).next().unwrap().ready.class,
             Class::Control
@@ -969,7 +998,7 @@ fn a_port_that_contradicted_itself_publishes_nothing_more() {
     assert!(stack.port_broken());
     stack.port_mut().lazy = false;
     let now = stack.poll_deadline().unwrap();
-    stack.tick(now);
+    stack.tick(now, &mut ());
     assert_eq!(send_next(&mut stack, now), Err(Unsent::PortContract));
     assert!(stack.port().sent.is_empty(), "no later ARP request");
     let retired = stack.retire();
@@ -990,7 +1019,7 @@ fn a_neighbor_that_never_answers_ends_its_datagrams_after_its_requests() {
             requests += 1;
             command = running(stack.take_result(command));
             now = stack.poll_deadline().unwrap();
-            stack.tick(now);
+            stack.tick(now, &mut ());
         }
         assert_eq!(requests, 3);
         assert_eq!(now, at(3000), "one request per second");
@@ -1549,7 +1578,7 @@ fn walk_blocks<B: core::fmt::Debug + 'static>(seed: u64) {
                 stack = NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
                 sockets = [Some(open(&mut stack, 0)), Some(open(&mut stack, 1))];
             }
-            _ => stack.tick(now),
+            _ => stack.tick(now, &mut ()),
         }
         ledger.harvest(&mut stack);
         let mut sum = 0;
@@ -1692,12 +1721,12 @@ fn a_rejected_arp_request_leaves_another_neighbor_waiting() {
         stack.port_mut().rejects = false;
         assert!(send_next(stack, at(0)).is_ok(), "the other is still asked");
         let waiting = running(stack.take_result(waiting));
-        stack.tick(at(4000));
-        stack.tick(at(5000));
+        stack.tick(at(4000), &mut ());
+        stack.tick(at(5000), &mut ());
         send_next(stack, at(5000)).ok();
-        stack.tick(at(6000));
+        stack.tick(at(6000), &mut ());
         send_next(stack, at(6000)).ok();
-        stack.tick(at(7000));
+        stack.tick(at(7000), &mut ());
         assert_eq!(finished(stack.take_result(waiting)), Outcome::Unreachable);
     });
 }
@@ -1709,7 +1738,7 @@ fn a_request_refused_after_one_went_out_ends_rejected() {
         let block = filled(stack.pool(), b"waits");
         let command = stack.send(at(0), &socket, peer(), block).unwrap();
         send_next(stack, at(0)).unwrap();
-        stack.tick(at(1000));
+        stack.tick(at(1000), &mut ());
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(at(1000)).unwrap();
         assert!(
@@ -1739,4 +1768,6 @@ fn a_new_datagram_after_a_rejected_request_asks_anew() {
     });
 }
 
+mod dhcp;
+mod echo;
 mod produced;

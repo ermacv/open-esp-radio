@@ -18,6 +18,7 @@ oer-protocols-network-port = { path = "../port" }
 oer-protocols-network-wire = { path = "../wire" }
 
 [dev-dependencies]
+oer-portable-wire = { path = "../../../portable/wire" }
 oer-protocols-network-core = { path = "../core", features = ["test-support"] }
 oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
 
