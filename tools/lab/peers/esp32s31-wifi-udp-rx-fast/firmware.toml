@@ -1,0 +1,6 @@
+# Firmware catalog entry: `cargo fw idf build wifi-udp-rx-fast-peer`.
+# The vendor UDP receiver of `../esp32s31-wifi-udp-rx` with its fast
+# consumer: the load is counted in lwIP's thread through the raw UDP API.
+image = "wifi-udp-rx-fast-peer"
+chip = "esp32s31"
+pins = "esp32s31"
