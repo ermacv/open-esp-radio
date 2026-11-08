@@ -209,3 +209,8 @@ and a generator keeps these rules:
 - The generator also refuses a received frame it cannot parse and an ACK it
   cannot generate (`generate_enhanced_ack` fails) or secure. A refused ACK
   leaves the engine to deliver the frame unacknowledged.
+- Transmit security validates the PHR-bounded MAC fields through
+  `oer-protocols-ieee802154-wire` before every security setter; a refusal
+  leaves every security register unchanged. A malformed generated secured
+  ACK is handled API input
+  ([docs/unsafe.md](../../../../../docs/unsafe.md)).
