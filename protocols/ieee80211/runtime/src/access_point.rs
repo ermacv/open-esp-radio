@@ -56,7 +56,7 @@ use core::future::poll_fn;
 use core::num::NonZeroU8;
 use core::task::{Context, Poll};
 
-use embassy_futures::select::{Either4, select4};
+use embassy_futures::select::{Either, Either4, select, select4};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AccessPointCommand, AccessPointCommands, AccessPointPort, AccessPointProgress,
@@ -399,7 +399,6 @@ struct Mark {
     status: ApStatus,
     owners: [usize; 8],
     network: bool,
-    deadlines: [Option<Instant>; 2],
     /// Units, terminals and commands the runner took from the port.
     taken: u32,
 }
@@ -672,13 +671,10 @@ where
             }
             // A turn that moved something may have left work for an earlier
             // stage of the next one (a terminal it took last queues a frame):
-            // the runner yields to the executor once and turns again.
-            if before != self.mark() {
-                idle = 0;
-                embassy_futures::yield_now().await;
-                continue;
-            }
-            idle = idle.saturating_add(1);
+            // the runner polls its sources, which registers its waker with
+            // the port, yields to the executor once and turns again.
+            let moved = before != self.mark();
+            idle = if moved { 0 } else { idle.saturating_add(1) };
             // A port may owe the next call more than this one took (a cut, a
             // repost): an idle turn yields and the sources decide, up to
             // IDLE_REPEATS turns in a row. Then the runner has settled: a
@@ -686,9 +682,7 @@ where
             // just served stay held for the next turn, never dropped, until a
             // wake of any source.
             let settled = idle >= IDLE_REPEATS;
-            if !settled {
-                embassy_futures::yield_now().await;
-            }
+            let again = moved || !settled;
             let deadline = [self.port.deadline(), self.engine_deadline()]
                 .into_iter()
                 .flatten()
@@ -744,10 +738,18 @@ where
                     shared.poll_stop(cx)
                 }
             });
-            let woke = select4(polled, timer, frames, stop).await;
+            // An unsettled runner turns again after one yield.
+            let yielded = async {
+                if again {
+                    embassy_futures::yield_now().await;
+                } else {
+                    core::future::pending::<()>().await;
+                }
+            };
+            let woke = select(select4(polled, timer, frames, stop), yielded).await;
             facts = match woke {
-                Either4::First(taken) => union(held, taken),
-                Either4::Second(()) | Either4::Third(()) | Either4::Fourth(()) => held,
+                Either::First(Either4::First(taken)) => union(held, taken),
+                Either::First(_) | Either::Second(()) => held,
             };
         }
         let stopped = poll_fn(|cx| {
@@ -804,7 +806,6 @@ where
                 self.removals.len(),
             ],
             network: self.network.waiting(),
-            deadlines: [self.port.deadline(), self.engine.deadline()],
             taken: self.taken.wrapping_add(self.sink.cut_units),
         }
     }
