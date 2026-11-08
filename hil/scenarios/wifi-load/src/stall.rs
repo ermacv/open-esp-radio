@@ -6,7 +6,10 @@
 //! server received). Every time is printed relative to the image's window:
 //! milliseconds from its start, negative before it. A boundary resumed when
 //! it moved after the snapshot, which the owner took before its turn's
-//! receive service; the socket's is its first datagram after the request.
+//! receive service. The socket shows only its first datagram after the
+//! request, which may precede the snapshot, so it proves no resumption.
+//! "Serviced" says the turn called its receive pull, not that the ring
+//! moved.
 
 use oer_hil_services_load::{
     MAC_COUNT_NAMES, Mac, Report, RxSnapshot, Stall, StallBoundary, StallMac,
@@ -230,7 +233,7 @@ pub fn summary(report: &Report, stall: &Stall, mac: &StallMac) -> String {
                 }
             };
             line.push_str(&format!(
-                "; resumed{}: DMA {}, driver {}, socket {}",
+                "; resumed{}: DMA {}, driver {}; socket after request {}",
                 if resume.serviced {
                     ""
                 } else {
@@ -320,7 +323,7 @@ mod tests {
         );
         assert!(
             summary(&report(), &stall, &StallMac::default())
-                .ends_with("resumed: DMA no, driver no, socket no")
+                .ends_with("resumed: DMA no, driver no; socket after request no")
         );
         if let Some(taken) = stall.snapshot.as_mut() {
             taken.resume = Some(StallResume {
