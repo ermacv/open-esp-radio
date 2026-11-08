@@ -69,26 +69,20 @@ the way from a lone T1, T1 half the lease or half a lone T2 when T2 comes
 first, else half and seven eighths. An ACK whose lease, counted from its
 REQUEST, is already over is dropped (`LeaseFault::Expired`), and no send
 or frame uses an address past its lease's end, before any tick too. A NAK starts
-discovery over. An ACK to a REQUEST that answers an OFFER does not bind the
-address at once: the client probes it with ARP first (RFC 2131, 2.2 and
-4.4.1; RFC 5227, 2.1.1), the first probe up to a second after the ACK, three
-in all one to two seconds apart, and binds it two seconds after the last
-(`DhcpState::Probing`, no address meanwhile). An ARP packet from the probed
-address, or another station's probe for it, is a conflict
-(`NetEvent::AddressInUse`): the client broadcasts a DECLINE naming the
-address and its server (`DhcpState::Declining`) and starts discovery over
-ten seconds later in a new transaction (RFC 2131, 3.1 (5)); a lease that
-ends while it is probed grants nothing. A link that comes back at a new
-epoch runs INIT-REBOOT with a lease: its broadcast REQUEST names the held
-address with no server identifier at once, and is repeated on the
-DISCOVER's schedule, 250 ms doubling to 10 s, each wait jittered down by up
-to a quarter, as a rejoin's first message meets the same race with the
-access point's key as a first join's. The address
-stays in use meanwhile (RFC 2131, 3.7) but the client stays REBOOTING until
-an ACK confirms the lease, which binds it without a probe; a NAK takes the
-address away and starts discovery over, and with no answer the client asks
-until the lease's own end, when the address goes. Without a lease, a new
-link starts discovery over at once. While a client runs, data and echo replies protect at most all
+discovery over. A link that comes back at a new epoch runs INIT-REBOOT with a
+lease: its broadcast REQUEST names the held address with no server
+identifier at once, and repeats on the DISCOVER's schedule, as a rejoin's
+first message meets the same race with the access point's key as a first
+join's, until an ACK, a NAK or the lease's end. The address stays in use
+meanwhile (RFC 2131, 3.7), for configuration and data, but the client stays
+REBOOTING (`DhcpState::Rebooting`) until an ACK confirms the lease; the
+repeats never extend it. A NAK takes the address away and starts discovery
+over; at the lease's end the address goes. Without a lease, a new link
+starts discovery over at once.
+
+The client has no address conflict detection: an offered address is bound
+on its ACK without an ARP probe (RFC 2131, 2.2 and 4.4.1; RFC 5227), and no
+DECLINE is sent. While a client runs, data and echo replies protect at most all
 neighbor entries but one, so a renewal always finds one: a send that would
 protect an entry data does not protect yet costs a place, cached or not. Messages the client does not
 take are counted (`NetEvent::Dhcp`) and change nothing.

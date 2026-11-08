@@ -540,11 +540,13 @@ fn exchange(cx: &mut Cx<'_>) -> Result<(), Failure> {
         timeout_ms: EXCHANGE_MS,
     };
     let answer = cx.call(request, milliseconds(EXCHANGE_MS) + MARGIN)?;
-    let (from, received) = peer.served(milliseconds(EXCHANGE_MS) + MARGIN)?;
+    // The device's answer first: a refusal is the verdict, not the peer's
+    // wait for a connection that never came.
     check(
         answer == Exchanged::Echoed,
         format!("the exchange answered {answer:?}"),
     )?;
+    let (from, received) = peer.served(milliseconds(EXCHANGE_MS) + MARGIN)?;
     check(
         from.ip() == std::net::IpAddr::V4(Ipv4Addr::from(device.address)),
         format!(

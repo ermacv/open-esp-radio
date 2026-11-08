@@ -55,8 +55,8 @@ publishes within its own turn: it ends the group, which records it.
   link leaves it idle for the next one.
 - **WaitIpv4** waits, bounded by the request's timeout, for an address
   over an up link while the DHCP client holds it bound: a lease a server
-  granted, confirmed or extended. A client still selecting, requesting,
-  probing an offered address or rebooting holds none yet: after a link loss
+  granted, confirmed or extended. A client still selecting, requesting or
+  rebooting holds none yet: after a link loss
   the client's INIT-REBOOT keeps the old address in use but unconfirmed
   until a server's ACK, so the wait goes on to that ACK or the next lease.
   `Stopped` once the network ended.

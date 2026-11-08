@@ -72,10 +72,6 @@ enum Work {
         serial: u64,
         peer: [u8; 6],
     },
-    /// The DHCP client's owed ARP probe of an offered address.
-    Probe {
-        serial: u64,
-    },
     /// An echo reply owed.
     Echo {
         serial: u64,
@@ -463,9 +459,6 @@ pub enum NetEvent {
     SendOnly,
     /// A server's DHCP message the client did not take.
     Dhcp(DhcpDrop),
-    /// The address a server offered answered the client's ARP probe: the
-    /// client declines it.
-    AddressInUse,
     /// An ICMP message that got no reply.
     Icmp(IcmpDrop),
 }
@@ -1358,22 +1351,6 @@ impl<
                 return;
             }
         };
-        // An address being probed meets its other holder, RFC 5227, 2.1.1.
-        if let Some(client) = &mut self.dhcp {
-            let mut serial = self.serial;
-            let conflict = client.arp(
-                packet.sender_hardware,
-                packet.sender_protocol,
-                packet.target_protocol,
-                packet.operation == Operation::Request,
-                &mut serial,
-            );
-            self.serial = serial;
-            if conflict {
-                self.configured();
-                report(events, || NetEvent::AddressInUse);
-            }
-        }
         let for_us = self
             .ipv4
             .is_some_and(|ipv4| packet.target_protocol == ipv4.address());
@@ -1774,25 +1751,6 @@ impl<
                 work: Work::Dhcp { serial, peer },
                 brand,
             });
-        let probe = self
-            .dhcp
-            .as_ref()
-            .and_then(|client| {
-                let serial = client.owed()?;
-                client.probe(serial).map(|_| serial)
-            })
-            .into_iter()
-            .map(move |serial| Demand {
-                ready: Ready {
-                    class: Class::Control,
-                    length: ARP_FRAME,
-                    peer: BROADCAST_HARDWARE,
-                    flow: None,
-                    dscp: BEST_EFFORT,
-                },
-                work: Work::Probe { serial },
-                brand,
-            });
         let echoes = self.echoes.iter().filter_map(move |owed| {
             let peer = self.neighbors.hardware(now, owed.hop)?;
             Some(Demand {
@@ -1825,7 +1783,6 @@ impl<
         replies
             .chain(requests)
             .chain(dhcp)
-            .chain(probe)
             .chain(echoes)
             .chain(datagrams)
     }
@@ -1895,7 +1852,6 @@ impl<
                     reply.hardware,
                     reply.hardware,
                     reply.address,
-                    self.source(),
                 )
             }
             Work::Request { neighbor, serial } => {
@@ -1903,24 +1859,7 @@ impl<
                     .neighbors
                     .owed_requests()
                     .find(|owed| (owed.0, owed.2) == (neighbor, serial))?;
-                self.arp_frame(
-                    Operation::Request,
-                    BROADCAST_HARDWARE,
-                    [0; 6],
-                    address,
-                    self.source(),
-                )
-            }
-            // RFC 5227, 2.1.1: a probe's sender address is all zeros.
-            Work::Probe { serial } => {
-                let address = self.dhcp.as_ref()?.probe(serial)?;
-                self.arp_frame(
-                    Operation::Request,
-                    BROADCAST_HARDWARE,
-                    [0; 6],
-                    address,
-                    UNSPECIFIED,
-                )
+                self.arp_frame(Operation::Request, BROADCAST_HARDWARE, [0; 6], address)
             }
             Work::Datagram {
                 socket,
@@ -2034,7 +1973,6 @@ impl<
         destination: [u8; 6],
         target_hardware: [u8; 6],
         target_protocol: [u8; 4],
-        sender_protocol: [u8; 4],
     ) -> Option<Frame<'_>> {
         let mut frame = [0; ARP_FRAME];
         let (head, rest) = frame.split_at_mut_checked(ethernet::HEADER_LEN)?;
@@ -2048,7 +1986,7 @@ impl<
         Arp {
             operation,
             sender_hardware: self.interface.hardware(),
-            sender_protocol,
+            sender_protocol: self.source(),
             target_hardware,
             target_protocol,
         }
@@ -2181,7 +2119,7 @@ impl<
                 }
             }
             Work::Datagram { .. } => self.end_published(grant, Outcome::Rejected, pool),
-            Work::Dhcp { serial, .. } | Work::Probe { serial } => self.dhcp_sent(now, serial),
+            Work::Dhcp { serial, .. } => self.dhcp_sent(now, serial),
             Work::Echo { serial, .. } => self.end_echo(serial, pool),
         }
     }
@@ -2266,7 +2204,6 @@ impl<
                 self.identification = self.identification.wrapping_add(1);
                 self.dhcp_sent(now, serial);
             }
-            Work::Probe { serial } => self.dhcp_sent(now, serial),
             Work::Echo { serial, .. } => {
                 self.identification = self.identification.wrapping_add(1);
                 self.end_echo(serial, pool);

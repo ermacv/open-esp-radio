@@ -375,72 +375,13 @@ fn requesting<B>(stack: &mut Stack<B>, now: Instant) -> u32 {
     xid
 }
 
-/// The ARP probe in `frame`, RFC 5227, 2.1.1: the address it asks for.
-fn probe_of(frame: &[u8]) -> Option<[u8; 4]> {
-    let (ethernet, payload) = EthernetHeader::parse(frame).ok()?;
-    if ethernet.ether_type != EtherType::ARP {
-        return None;
-    }
-    let packet = Arp::parse(payload).unwrap().unwrap();
-    assert_eq!(ethernet.destination, [0xFF; 6]);
-    assert_eq!(packet.operation, Operation::Request);
-    assert_eq!(packet.sender_hardware, LOCAL);
-    assert_eq!(packet.sender_protocol, [0; 4]);
-    assert_eq!(packet.target_hardware, [0; 6]);
-    Some(packet.target_protocol)
-}
-
-/// The probes one pass sent.
-fn probes_at<B>(stack: &mut Stack<B>, now: Instant) -> Vec<[u8; 4]> {
-    turn(stack, now, &mut Dropped::default())
-        .iter()
-        .filter_map(|frame| probe_of(frame))
-        .collect()
-}
-
-/// Probe the ACK's address to its end, no host answering: when each probe
-/// went, and when the address was bound.
-fn probed<B>(stack: &mut Stack<B>) -> (Vec<Instant>, Instant) {
-    let mut sent = Vec::new();
-    assert_eq!(configuration(stack).dhcp, Some(DhcpState::Probing));
-    for _ in 0..8 {
-        assert_eq!(configuration(stack).ipv4, None);
-        let due = stack.poll_deadline().unwrap();
-        for probed in probes_at(stack, due) {
-            assert_eq!(probed, OFFERED);
-            sent.push(due);
-        }
-        // Bound, and with T1 or T2 already past, renewing or rebinding.
-        if configuration(stack).dhcp != Some(DhcpState::Probing) {
-            assert!(configuration(stack).lease.is_some());
-            return (sent, due);
-        }
-    }
-    panic!("no binding after the probes: {sent:?}");
-}
-
-/// The rest of the probing after a probe at `after`: when each later probe
-/// went, and when the address was bound.
-fn probed_from<B>(stack: &mut Stack<B>, after: Instant) -> (Vec<Instant>, Instant) {
-    let (probes, bound) = probed(stack);
-    assert!(probes.iter().all(|probe| *probe > after));
-    (probes, bound)
-}
-
-/// Bound with `options` on an ACK at `now`, its address probed; when it
-/// was bound.
-fn bound_at<B>(stack: &mut Stack<B>, now: Instant, options: Vec<(u8, Vec<u8>)>) -> (u32, Instant) {
+/// Bound at `now` with `options`.
+fn bound_with<B>(stack: &mut Stack<B>, now: Instant, options: Vec<(u8, Vec<u8>)>) -> u32 {
     let xid = requesting(stack, now);
     let mut ack = Reply::new(MessageType::Ack, xid);
     ack.options = options;
     assert!(give(stack, now, &ack.frame()).0.is_empty());
-    let (_, bound) = probed(stack);
-    (xid, bound)
-}
-
-/// Bound with `options` on an ACK at `now`, its address probed.
-fn bound_with<B>(stack: &mut Stack<B>, now: Instant, options: Vec<(u8, Vec<u8>)>) -> u32 {
-    bound_at(stack, now, options).0
+    xid
 }
 
 fn bound<B>(stack: &mut Stack<B>, now: Instant) -> u32 {
@@ -476,11 +417,6 @@ fn a_link_up_discovers_at_once_and_an_ack_binds_the_lease() {
                 .0
                 .is_empty()
         );
-        // RFC 2131, 4.4.1: the new address is probed before it is used.
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Probing));
-        assert_eq!(configuration(stack).ipv4, None);
-        assert_eq!(stack.address_version(), version);
-        let (probes, bound) = probed(stack);
         let configured = configuration(stack);
         assert_eq!(configured.ipv4, Some(leased_ipv4()));
         assert_eq!(configured.dhcp, Some(DhcpState::Bound));
@@ -498,19 +434,9 @@ fn a_link_up_discovers_at_once_and_an_ack_binds_the_lease() {
             at(1).saturating_add(Duration::from_secs(1000))
         );
         assert_eq!(stack.poll_deadline(), Some(lease.renew));
-        // RFC 5227, 1.1: the first probe up to a second after the ACK, the
-        // three one to two seconds apart, the binding two seconds after the
-        // last.
-        assert_eq!(probes.len(), 3, "{probes:?}");
-        let gap = |from: Instant, to: Instant| to.as_micros() - from.as_micros();
-        assert!(gap(at(2), probes[0]) <= 1_000_000, "{probes:?}");
-        for pair in probes.windows(2) {
-            assert!((1_000_000..=2_000_000).contains(&gap(pair[0], pair[1])));
-        }
-        assert_eq!(gap(probes[2], bound), 2_000_000);
         // A send goes from the leased address now.
         let block = filled(stack.pool(), b"late");
-        stack.send(bound, &socket, peer(), block).unwrap();
+        stack.send(at(2), &socket, peer(), block).unwrap();
     });
 }
 
@@ -592,7 +518,6 @@ fn an_ack_after_requests_repeated_still_binds() {
         let due = stack.poll_deadline().unwrap();
         one(stack, due);
         give(stack, due, &Reply::new(MessageType::Ack, xid).frame());
-        probed(stack);
         let lease = configuration(stack).lease.unwrap();
         // From the first REQUEST of the transaction.
         assert_eq!(lease.obtained, at(0));
@@ -824,158 +749,6 @@ fn the_configuration_names_the_link_the_core_last_saw_and_a_change_of_it_moves_t
     });
 }
 
-/// The ACK of a REQUESTING exchange at `now`: the client probes from here.
-fn acked<B>(stack: &mut Stack<B>, now: Instant) -> u32 {
-    let xid = requesting(stack, now);
-    assert!(
-        give(stack, now, &Reply::new(MessageType::Ack, xid).frame())
-            .0
-            .is_empty()
-    );
-    assert_eq!(configuration(stack).dhcp, Some(DhcpState::Probing));
-    xid
-}
-
-/// The first probe of the ACK's address: when it went.
-fn first_probe<B>(stack: &mut Stack<B>) -> Instant {
-    let due = stack.poll_deadline().unwrap();
-    assert_eq!(probes_at(stack, due), [OFFERED]);
-    due
-}
-
-/// The DECLINE a conflict owes, RFC 2131, Table 5: broadcast from 0, the
-/// address and the server named, no parameters asked.
-fn assert_decline(sent: &Sent, xid: u32) {
-    assert_eq!(sent.kind(), MessageType::Decline);
-    assert_eq!(sent.xid(), xid);
-    assert_eq!((sent.source, sent.destination), ([0; 4], [255; 4]));
-    assert_eq!(sent.hardware, [0xFF; 6]);
-    let message = sent.message();
-    assert_eq!(message.fixed.ciaddr, [0; 4]);
-    assert_eq!(message.fixed.secs, 0);
-    assert_eq!(
-        sent.option(option::REQUESTED_ADDRESS),
-        Some(OFFERED.to_vec())
-    );
-    assert_eq!(
-        sent.option(option::SERVER_IDENTIFIER),
-        Some(SERVER_IP.to_vec())
-    );
-    assert_eq!(sent.option(option::PARAMETER_REQUEST_LIST), None);
-    assert_eq!(sent.option(option::MAXIMUM_MESSAGE_SIZE), None);
-}
-
-#[test]
-fn an_offered_address_another_host_answers_for_is_declined_and_discovery_waits_ten_seconds() {
-    leasing!(|stack| {
-        let xid = acked(stack, at(0));
-        let probed = first_probe(stack);
-        let version = stack.address_version();
-        let changes = stack.configuration_changes();
-        // Its holder answers the probe, RFC 5227, 2.1.1.
-        let answer = arp_frame(Operation::Reply, (PEER, OFFERED), [0; 4]);
-        let mut dropped = Dropped::default();
-        stack.input(probed, &answer, &mut dropped);
-        assert_eq!(dropped.0, [NetEvent::AddressInUse]);
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Declining));
-        assert_ne!(stack.configuration_changes(), changes);
-        assert_decline(&one(stack, probed), xid);
-        // The address was never used.
-        assert_eq!(configuration(stack).ipv4, None);
-        assert_eq!(configuration(stack).lease, None);
-        assert_eq!(stack.address_version(), version);
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Selecting));
-        // RFC 2131, 3.1 (5): no DISCOVER for ten seconds, then a new
-        // transaction.
-        let restart = probed.saturating_add(Duration::from_secs(10));
-        assert_eq!(stack.poll_deadline(), Some(restart));
-        quiet(stack, Instant::from_micros(restart.as_micros() - 1));
-        assert_ne!(assert_discover(&one(stack, restart)), xid);
-    });
-}
-
-#[test]
-fn another_host_probing_for_the_offered_address_is_a_conflict() {
-    leasing!(|stack| {
-        let xid = acked(stack, at(0));
-        let probed = first_probe(stack);
-        // RFC 5227, 2.1.1: a probe from another station, sender 0, for the
-        // same address.
-        let probe = arp_frame(Operation::Request, (PEER, [0; 4]), OFFERED);
-        let mut dropped = Dropped::default();
-        stack.input(probed, &probe, &mut dropped);
-        assert_eq!(dropped.0, [NetEvent::AddressInUse]);
-        assert_decline(&one(stack, probed), xid);
-    });
-}
-
-#[test]
-fn arp_that_names_no_holder_of_the_offered_address_leaves_the_probing_on() {
-    leasing!(|stack| {
-        acked(stack, at(0));
-        let probed = first_probe(stack);
-        for frame in [
-            // Our own probe, as a switch may echo it.
-            arp_frame(Operation::Request, (LOCAL, [0; 4]), OFFERED),
-            // Another host asking for another address, and asking for the
-            // offered one from an address of its own.
-            arp_frame(Operation::Request, (PEER, PEER_IP), [192, 0, 2, 9]),
-            arp_frame(Operation::Request, (PEER, PEER_IP), OFFERED),
-            // A reply for another address.
-            arp_frame(Operation::Reply, (PEER, PEER_IP), [0; 4]),
-        ] {
-            let mut dropped = Dropped::default();
-            stack.input(probed, &frame, &mut dropped);
-            assert!(dropped.0.is_empty(), "{:?}", dropped.0);
-            assert_eq!(configuration(stack).dhcp, Some(DhcpState::Probing));
-        }
-        let (probes, _) = probed_from(stack, probed);
-        assert_eq!(probes.len(), 2);
-        assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
-    });
-}
-
-#[test]
-fn a_lease_that_ends_while_its_address_is_probed_grants_nothing() {
-    leasing!(|stack| {
-        let xid = requesting(stack, at(0));
-        let mut ack = Reply::new(MessageType::Ack, xid);
-        ack.options = with(
-            ack_options(),
-            option::LEASE_TIME,
-            Some(1_u32.to_be_bytes().to_vec()),
-        );
-        give(stack, at(0), &ack.frame());
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Probing));
-        // The first probe goes within a second, the second at least a
-        // second later: the lease's end at 1 s comes first and starts
-        // discovery over.
-        first_probe(stack);
-        let due = stack.poll_deadline().unwrap();
-        assert_eq!(due, secs(1));
-        assert_discover(&one(stack, due));
-        assert_eq!(configuration(stack).ipv4, None);
-        assert_eq!(configuration(stack).lease, None);
-    });
-}
-
-#[test]
-fn a_new_link_while_probing_starts_discovery_over() {
-    leasing!(|stack| {
-        let xid = acked(stack, at(0));
-        let probed = first_probe(stack);
-        link_down(stack);
-        quiet(stack, probed);
-        link_up(stack, 2);
-        let restarted = probed.saturating_add(Duration::from_millis(1));
-        let sent = dhcp_turn(stack, restarted);
-        assert_eq!(sent.len(), 1, "{sent:?}");
-        assert_ne!(assert_discover(&sent[0]), xid);
-        assert!(probes_at(stack, restarted).is_empty());
-        assert_eq!(configuration(stack).ipv4, None);
-    });
-}
-
 #[test]
 fn a_nak_to_init_reboot_starts_discovery_without_the_address() {
     leasing!(|stack| {
@@ -1023,13 +796,16 @@ fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_en
             );
             assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
             // Unanswered, the client keeps asking, and its address stays in
-            // use, RFC 2131, 3.7, never confirmed: still REBOOTING.
-            assert_eq!(configuration(stack).dhcp, Some(DhcpState::Rebooting));
-            assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
+            // use, RFC 2131, 3.7, never confirmed: still REBOOTING, and the
+            // lease stays the one the first ACK granted.
+            let configured = configuration(stack);
+            assert_eq!(configured.dhcp, Some(DhcpState::Rebooting));
+            assert_eq!(configured.ipv4, Some(leased_ipv4()));
+            assert_eq!(configured.lease.unwrap().expires, secs(1000));
             last = due;
         }
-        // Its retransmissions go on to the lease's end at 1000 s, where the
-        // address goes and discovery starts over.
+        // Its repeats go on to the lease's end at 1000 s, where the address
+        // goes and discovery starts over.
         let version = stack.address_version();
         let mut now = last;
         while now < secs(1000) {
@@ -1050,7 +826,7 @@ fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_en
 }
 
 #[test]
-fn an_ack_to_a_late_init_reboot_retransmission_confirms_the_lease() {
+fn an_ack_to_a_late_init_reboot_repeat_confirms_the_lease() {
     leasing!(|stack| {
         bound(stack, at(0));
         link_down(stack);
@@ -1067,14 +843,12 @@ fn an_ack_to_a_late_init_reboot_retransmission_confirms_the_lease() {
             due,
             &Reply::new(MessageType::Ack, first.xid()).frame(),
         );
-        // A lease the client held already goes on without a probe.
         let configured = configuration(stack);
         assert_eq!(configured.dhcp, Some(DhcpState::Bound));
         assert_eq!(configured.ipv4, Some(leased_ipv4()));
         assert_eq!(stack.address_version(), version);
         // It counts from the transaction's first REQUEST.
         assert_eq!(configured.lease.unwrap().obtained, secs(11));
-        assert!(probes_at(stack, due).is_empty());
         assert_eq!(stack.poll_deadline(), Some(configured.lease.unwrap().renew));
     });
 }

@@ -10,8 +10,9 @@ use oer::wifi::{Configuration, DhcpState, Ipv4, LinkSnapshot, LinkState, WatchRe
 /// The address a wait for one ends with: the interface's over an up link,
 /// while the DHCP client holds it bound: a lease a server granted, confirmed
 /// or extended, or an address the owner gave. A client still asking
-/// (SELECTING, REQUESTING, an INIT-REBOOT no server answered yet), probing
-/// an offered address or declining it holds none yet.
+/// (SELECTING, REQUESTING, an INIT-REBOOT no server answered yet) holds none
+/// yet. Only this wait asks for a confirmed lease: the network's own
+/// configuration and data keep using an unexpired lease while REBOOTING.
 pub(crate) fn leased(configuration: &Configuration) -> Option<Ipv4> {
     if configuration.link.state != LinkState::Up {
         return None;
@@ -20,13 +21,7 @@ pub(crate) fn leased(configuration: &Configuration) -> Option<Ipv4> {
         None | Some(DhcpState::Bound | DhcpState::Renewing | DhcpState::Rebinding) => {
             configuration.ipv4
         }
-        Some(
-            DhcpState::Selecting
-            | DhcpState::Requesting
-            | DhcpState::Rebooting
-            | DhcpState::Probing
-            | DhcpState::Declining,
-        ) => None,
+        Some(DhcpState::Selecting | DhcpState::Requesting | DhcpState::Rebooting) => None,
     }
 }
 
