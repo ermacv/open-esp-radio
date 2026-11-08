@@ -649,9 +649,13 @@ fn run<const HELD: u8>(inputs: Inputs) -> Outcome {
             resources,
         } = install;
         let ModelResources {
-            block_acks,
-            station_association,
-            station_pairwise,
+            shared: oer_protocols_ieee80211_testing_model::ModelShared { block_acks, .. },
+            station:
+                oer_protocols_ieee80211_testing_model::ModelStationPermissions {
+                    association: station_association,
+                    pairwise: station_pairwise,
+                    ..
+                },
             ..
         } = resources;
         air.set_air_time(AirConfig {

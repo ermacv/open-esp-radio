@@ -37,8 +37,10 @@
 //!
 //! The port is the contract between portable Wi-Fi MAC logic and the
 //! backend that puts frames on the air, whether a chip, a family driver or
-//! a host model. The station's datapath actor owns the radio as a
-//! [`DataPort`] and runs the lifecycle's [`PortCommand`]s in its turns.
+//! a host model. One actor owns the radio as a [`DataPort`], the shared
+//! physical owner, and runs the station lifecycle's [`PortCommand`]s and
+//! the access point's [`AccessPointCommand`]s ([`AccessPointPort`]) in its
+//! turns.
 //! One submitted operation owns its context, ticket and MPDU until its
 //! terminal. The backend executes the retry plan; a barrier waits for the
 //! current publication alone. Portable code selects rates and describes
@@ -62,6 +64,15 @@ pub use in_flight::{
     TerminalAccess, TerminalParts, TransmitPool, TxMpdu,
 };
 
+pub mod access_point;
+pub use access_point::{
+    AccessPointCapabilities, AccessPointCommand, AccessPointCommandKind, AccessPointCommands,
+    AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
+    AccessPointServices, AccessPointSubmission, AccessPointTypes, AdmittedBeacon,
+    BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant, BeaconParts, BeaconPermission, BeaconPool,
+    BeaconRefusal, BeaconRefused, BeaconStamp, BeaconSubmission, BeaconTimestamp, CurrentBeacon,
+    SupportedTsfControl, TsfControl,
+};
 pub mod arena;
 pub use arena::{
     ARENA_FRAMES, Arena, ArenaCompleted, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd,

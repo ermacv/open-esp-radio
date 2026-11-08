@@ -17,6 +17,7 @@ pub type InstallationPools = (
     association::BlockAckSlots<BlockAcks, 8>,
     InterfaceCommandPool<Station>,
     InterfaceCommandPool<AccessPoint>,
+    BeaconPool,
 );
 
 /// The tokens of one installation, under the brand its tasks share.
@@ -33,6 +34,7 @@ pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Obse
     pub block_acks: [association::BlockAckSlot<'p, BlockAcks, 8, Part<Id, 7>>; 8],
     pub station_group_permission: keys::StaPermission<'p, Id>,
     pub access_point_group_permission: keys::ApPermission<'p, Id>,
+    pub access_point_beacon: BeaconPermission<'p, Part<Id, 10>>,
     pub gate: GateOpen<'p, Part<Id, 1>>,
     pub arbiter_authority: ArbiterAuthority<'p, Part<Id, 1>>,
 }
@@ -71,6 +73,7 @@ impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             block_acks,
             station_group_permission,
             access_point_group_permission: _,
+            access_point_beacon: _,
             gate,
             arbiter_authority,
         } = self;

@@ -1391,6 +1391,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             block_acks,
             station_commands,
             access_point_commands,
+            beacon,
         ) = mint.into_pools();
         let CoreResources {
             authority,
@@ -1427,6 +1428,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             block_acks: block_acks.map(|slot| slot.lend(&loan)),
             station_group_permission: loan.lend_slot(station_group_permission),
             access_point_group_permission: loan.lend_slot(access_point_group_permission),
+            access_point_beacon: beacon.issue(generation).lend(&loan),
             gate: gate.lend(&loan),
             arbiter_authority: arbiter_authority.lend(&loan),
         };

@@ -15,6 +15,14 @@ pub(super) enum OwnedConfigured<'o, B: ModelComposition> {
             ModelStationContextOf<B>,
         >,
     ),
+    AccessPoint(
+        ConfigurePermission<
+            'o,
+            AccessPoint,
+            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 2>,
+            ModelAccessPointContextOf<B>,
+        >,
+    ),
 }
 
 pub(super) enum OwnedRemovedKey<'o, B: ModelComposition, R: ModelRole> {
@@ -80,6 +88,23 @@ type SingleTerminal<'o, B> = oer_protocols_ieee80211_contracts_port::Completed<
 >;
 pub(super) enum OwnedTxCompleted<'o, B: ModelComposition> {
     Single(SingleTerminal<'o, B>),
+    Beacon {
+        completed: SingleTerminal<'o, B>,
+        permission: OwnedBeacon<B>,
+    },
+}
+
+impl<'o, B: ModelComposition> OwnedTxCompleted<'o, B> {
+    /// A single MPDU's terminal, a beacon's when it held the permission.
+    pub(super) fn of(completed: SingleTerminal<'o, B>, beacon: Option<OwnedBeacon<B>>) -> Self {
+        match beacon {
+            Some(permission) => Self::Beacon {
+                completed,
+                permission,
+            },
+            None => Self::Single(completed),
+        }
+    }
 }
 
 pub(super) enum OwnedLowerMacTerminal<'o, B: ModelComposition> {
@@ -117,6 +142,7 @@ impl<B: ModelComposition> OwnedConfigured<'static, B> {
     {
         match self {
             Self::Station(permission) => Configured::Station(permission.lend(loan)),
+            Self::AccessPoint(permission) => Configured::AccessPoint(permission.lend(loan)),
         }
     }
 }
@@ -217,6 +243,13 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
             Self::TxCompleted(OwnedTxCompleted::Single(done)) => {
                 LowerMacTerminal::TxCompleted(TxCompleted::Single(done.lend(loan)))
             }
+            Self::TxCompleted(OwnedTxCompleted::Beacon {
+                completed,
+                permission,
+            }) => LowerMacTerminal::TxCompleted(TxCompleted::Beacon {
+                completed: completed.lend(loan),
+                permission: permission.lend(loan),
+            }),
             Self::GateClosed(gate) => LowerMacTerminal::GateClosed(gate.lend(loan)),
             Self::Configured(context) => LowerMacTerminal::Configured(context.lend(loan)),
             Self::KeyRemoved(key) => LowerMacTerminal::KeyRemoved(key.lend(loan)),

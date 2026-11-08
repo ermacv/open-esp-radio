@@ -103,6 +103,8 @@ struct Harness<'s> {
     group: Option<GroupTokens<'s>>,
     arenas: Vec<Arena>,
     counter: Arc<Counter>,
+    /// The access point's own permissions.
+    access_point: Option<ModelAccessPointPermissions<'s, B<'s>>>,
     /// The station MPDU the last station terminal returned `Sent`, kept for a
     /// retransmission.
     station: Option<(
@@ -135,16 +137,24 @@ impl<'s> Harness<'s> {
             resources,
         } = install;
         let ModelResources {
-            tickets,
-            small,
-            terminal_access,
-            station_commands,
-            station_association,
-            station_group,
-            station_group_permission,
-            station_pairwise,
-            gate,
-            ..
+            shared:
+                ModelShared {
+                    tickets,
+                    small,
+                    terminal_access,
+                    gate,
+                    ..
+                },
+            station:
+                ModelStationPermissions {
+                    commands: station_commands,
+                    association: station_association,
+                    group: station_group,
+                    group_permission: station_group_permission,
+                    pairwise: station_pairwise,
+                    ..
+                },
+            access_point,
         } = resources;
         Self {
             clock,
@@ -171,6 +181,7 @@ impl<'s> Harness<'s> {
             )),
             arenas: Vec::new(),
             counter: Arc::new(Counter(AtomicUsize::new(0))),
+            access_point: Some(access_point),
             station: None,
         }
     }
@@ -1638,3 +1649,5 @@ fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication(
         assert!(harness.sink.terminals.is_empty(), "the port keeps the MPDU");
     });
 }
+
+mod access_point;
