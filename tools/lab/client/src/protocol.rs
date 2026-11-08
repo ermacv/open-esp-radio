@@ -398,6 +398,16 @@ pub enum RouterChannelWidth {
     Ht40,
 }
 
+/// An access category of the AP radio's airtime queue limits.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RouterAccessCategory {
+    Vo,
+    Vi,
+    Be,
+    Bk,
+}
+
 /// One operation on the lab router.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "router", rename_all = "kebab-case", deny_unknown_fields)]
@@ -452,6 +462,31 @@ pub enum RouterOperation {
     /// Watch the AP's log for station `mac`'s departure until the
     /// operation stops. Result: what it saw.
     Departure { mac: String },
+    /// Set access category `ac`'s airtime queue limits (mac80211's AQL) on
+    /// the AP radio to `low_us`/`high_us` of estimated airtime, and station
+    /// `station`'s own limits too when given: mac80211 keeps a station's
+    /// limits that differ from the radio's old ones. A station associating
+    /// later starts with the radio's. Needs the router held exclusively.
+    /// The service journals the intent before anything is written, then the
+    /// confirmed or unconfirmed result; an intent it cannot journal writes
+    /// nothing. The router's end state after the lease has every category
+    /// at mac80211's defaults again; a station's own limits end with the
+    /// station. Result: the router's `station::airtime::Airtime`, read back
+    /// after the write.
+    SetAirtimeLimit {
+        ac: RouterAccessCategory,
+        low_us: u32,
+        high_us: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        station: Option<String>,
+    },
+    /// The AP radio's airtime limits and total threshold, and station
+    /// `mac`'s own limits and pending airtime when given. Result: the
+    /// router's `station::airtime::Airtime`.
+    AirtimeLimits {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mac: Option<String>,
+    },
 }
 
 #[cfg(test)]

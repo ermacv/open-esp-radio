@@ -12,6 +12,7 @@ mod fixture_install;
 mod init;
 mod install;
 mod local_fixtures;
+mod router;
 mod service;
 mod stand_file;
 
@@ -54,6 +55,7 @@ enum StandCommand {
     Devices(command::DevicesCli),
     Owner(command::OwnerCli),
     Preempt(command::PreemptCli),
+    Router(router::RouterCli),
     #[command(flatten)]
     Discovery(discover::StandCli),
     Init(init::InitCli),
@@ -136,6 +138,7 @@ fn run() -> Result<ExitCode> {
         Some(StandCommand::Devices(cli)) => command::devices(&ctx, &options, cli),
         Some(StandCommand::Owner(cli)) => command::owner(&ctx, cli),
         Some(StandCommand::Preempt(cli)) => command::preempt(&options.owner(&ctx)?, cli),
+        Some(StandCommand::Router(cli)) => router::router(options.owner(&ctx)?, cli),
         Some(StandCommand::Discovery(cli)) => discover::stand(&ctx, || options.owner(&ctx), cli),
         Some(StandCommand::Init(cli)) => init::init(&ctx.root, cli),
         Some(StandCommand::Install) => {

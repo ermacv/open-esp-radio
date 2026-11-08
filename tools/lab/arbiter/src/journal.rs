@@ -111,6 +111,40 @@ pub enum BoardEventKind {
         /// every reset booted.
         failure: Option<String>,
     },
+    /// A change of the lab router's airtime queue limits (mac80211's AQL),
+    /// journaled at each phase: `intended` before anything is written,
+    /// then `confirmed` (read back as written) or `unconfirmed` (the write
+    /// or its read-back failed, with `reason`). `restored` marks the
+    /// router's end state returning mac80211's defaults, not a lease's set;
+    /// `station` that a station's own limits were written too. It names no
+    /// board.
+    RouterAirtimeLimit {
+        phase: AirtimePhase,
+        changes: Vec<AirtimeChange>,
+        station: bool,
+        restored: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+}
+
+/// How far a journaled airtime change got.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AirtimePhase {
+    Intended,
+    Confirmed,
+    Unconfirmed,
+}
+
+/// One access category (`vo`, `vi`, `be` or `bk`) of the router's radio,
+/// its `[low, high]` limits in microseconds before and after.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AirtimeChange {
+    pub ac: String,
+    pub before: [u32; 2],
+    pub after: [u32; 2],
 }
 
 impl std::fmt::Display for BoardEvent {
@@ -177,6 +211,42 @@ impl std::fmt::Display for BoardEvent {
                 "{who} soaked it with {resets} resets in {cycles} cycles via {paths:?}: {}",
                 failure.as_deref().unwrap_or("every reset booted")
             ),
+            BoardEventKind::RouterAirtimeLimit {
+                phase,
+                changes,
+                station,
+                restored,
+                reason,
+            } => {
+                let changes = changes
+                    .iter()
+                    .map(|change| {
+                        format!(
+                            "{} {}/{} -> {}/{} us",
+                            change.ac,
+                            change.before[0],
+                            change.before[1],
+                            change.after[0],
+                            change.after[1]
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "{who} {} the router's airtime limits ({changes}{}): {phase:?}{}",
+                    if *restored { "restoring" } else { "setting" },
+                    if *station {
+                        ", the station's own too"
+                    } else {
+                        ""
+                    },
+                    reason
+                        .as_deref()
+                        .map(|why| format!(", {why}"))
+                        .unwrap_or_default()
+                )
+            }
         }
     }
 }
@@ -223,7 +293,8 @@ impl BoardEvent {
             BoardEventKind::Flashed { .. }
             | BoardEventKind::Recovered { .. }
             | BoardEventKind::QuarantineReleased { .. }
-            | BoardEventKind::Soaked { .. } => None,
+            | BoardEventKind::Soaked { .. }
+            | BoardEventKind::RouterAirtimeLimit { .. } => None,
         }
     }
 }
@@ -355,6 +426,38 @@ impl Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_router_airtime_change_names_no_board_and_is_not_a_flash() {
+        let event = BoardEvent {
+            unix: 5,
+            owner: "lab".into(),
+            checkout: None,
+            device: None,
+            kind: BoardEventKind::RouterAirtimeLimit {
+                phase: AirtimePhase::Unconfirmed,
+                changes: vec![AirtimeChange {
+                    ac: "be".into(),
+                    before: [5000, 12000],
+                    after: [5000, 18000],
+                }],
+                station: true,
+                restored: false,
+                reason: Some("ssh broke".into()),
+            },
+        };
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["kind"], "router-airtime-limit");
+        assert_eq!(json["phase"], "unconfirmed");
+        assert_eq!(serde_json::from_value::<BoardEvent>(json).unwrap(), event);
+        assert_eq!(
+            event.to_string(),
+            "lab setting the router's airtime limits (be 5000/12000 -> 5000/18000 us, the \
+             station's own too): Unconfirmed, ssh broke"
+        );
+        let (flashes, artifacts) = latest(std::slice::from_ref(&event));
+        assert!(flashes.is_empty() && artifacts.is_empty());
+    }
 
     #[test]
     fn events_serialize_flat_and_render_their_origin() {

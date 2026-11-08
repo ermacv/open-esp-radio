@@ -12,6 +12,7 @@ use crate::{
     ssh::{Remote, Result, Ssh},
 };
 
+pub mod airtime;
 pub mod link;
 pub mod network;
 pub mod stream;

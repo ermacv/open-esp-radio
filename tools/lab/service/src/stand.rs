@@ -344,8 +344,12 @@ impl Drivers for StandDrivers {
         }
         if recovery.resource == ROUTER {
             // Its end state: its AP section disabled and no access point
-            // running, its configuration kept.
-            return match self.stand().and_then(|stand| crate::router::park(&stand)) {
+            // running, its configuration kept, and its airtime limits at
+            // mac80211's defaults.
+            return match self
+                .stand()
+                .and_then(|stand| crate::router::park(&stand, &self.journal))
+            {
                 Ok(()) => Confirmation::Ready,
                 Err(error) => Confirmation::Unavailable {
                     reason: format!("the router's end state is not confirmed: {error}"),
@@ -485,7 +489,18 @@ impl Drivers for StandDrivers {
                 if !covers(claims, &[Claim::shared(ROUTER)]) {
                     return Err("a router operation needs a lease that holds the router".to_owned());
                 }
-                crate::router::run(request, &self.stand()?, &io)
+                if matches!(
+                    request,
+                    oer_tools_lab_client::protocol::RouterOperation::SetAirtimeLimit { .. }
+                ) && !covers(claims, &[Claim::exclusive(ROUTER)])
+                {
+                    return Err(
+                        "setting the router's airtime limits needs a lease that holds the \
+                         router exclusively"
+                            .to_owned(),
+                    );
+                }
+                crate::router::run(request, &self.stand()?, &io, &self.journal)
             }
             Operation::ProbeRouter => {
                 if !covers(claims, &[Claim::shared(ROUTER)]) {

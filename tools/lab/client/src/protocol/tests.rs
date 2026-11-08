@@ -79,3 +79,30 @@ fn a_station_link_names_its_station() {
         operation
     );
 }
+
+#[test]
+fn an_airtime_limit_names_its_category_and_both_limits() {
+    let operation = RouterOperation::SetAirtimeLimit {
+        ac: RouterAccessCategory::Be,
+        low_us: 5000,
+        high_us: 18000,
+        station: None,
+    };
+    let text = serde_json::to_string(&operation).unwrap();
+    assert_eq!(
+        text,
+        r#"{"router":"set-airtime-limit","ac":"be","low_us":5000,"high_us":18000}"#
+    );
+    assert_eq!(
+        serde_json::from_str::<RouterOperation>(&text).unwrap(),
+        operation
+    );
+    let read: RouterOperation = serde_json::from_str(r#"{"router":"airtime-limits"}"#).unwrap();
+    assert_eq!(read, RouterOperation::AirtimeLimits { mac: None });
+    assert!(
+        serde_json::from_str::<RouterOperation>(
+            r#"{"router":"set-airtime-limit","ac":"be","low_us":5000}"#
+        )
+        .is_err()
+    );
+}

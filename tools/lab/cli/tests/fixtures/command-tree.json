@@ -11,6 +11,7 @@
       "devices",
       "owner",
       "preempt",
+      "router",
       "discover",
       "doctor",
       "init",
@@ -98,6 +99,45 @@
     "subcommands": [],
     "flags": [
       "--reason"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "router"
+    ],
+    "subcommands": [
+      "airtime",
+      "set-airtime"
+    ],
+    "flags": [],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "router",
+      "airtime"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--station"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "router",
+      "set-airtime"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--station",
+      "--ac",
+      "--low-us",
+      "--high-us"
     ],
     "forwards": false
   },

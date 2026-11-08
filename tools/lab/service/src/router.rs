@@ -1,19 +1,25 @@
 //! The lab router's operations, run by the service over the router's SSH
 //! with the logic of `oer-tools-lab-router`: the AP profile a run applies, the
 //! station, station link, DHCP and ping views, the WPA2 checks, a deauthentication, the
-//! routed network's check, and the echo and departure observers. Every one
-//! needs a lease that holds the router. The stand file names the router and
+//! routed network's check, the echo and departure observers, and the AP
+//! radio's airtime queue limits. Every one needs a lease that holds the
+//! router. The stand file names the router and
 //! its AP; its secrets never leave the service.
 
 use std::{sync::atomic::Ordering, time::Duration};
 
-use oer_tools_lab_client::protocol::{RouterChannelWidth, RouterOperation};
+use oer_tools_lab_arbiter::journal::{AirtimeChange, AirtimePhase, BoardEventKind, Journal};
+use oer_tools_lab_client::protocol::{RouterAccessCategory, RouterChannelWidth, RouterOperation};
 use oer_tools_lab_model::Stand;
 use oer_tools_lab_router::{
     mac::Mac,
     router::{ChannelWidth, Profile},
     ssh::{Remote, Ssh},
-    station::{self, stream},
+    station::{
+        self,
+        airtime::{self, AccessCategory, Limit},
+        stream,
+    },
     station_wpa2,
 };
 use serde::Serialize;
@@ -63,11 +69,13 @@ fn json(value: impl Serialize) -> Result<serde_json::Value> {
     serde_json::to_value(value).map_err(|error| error.to_string())
 }
 
-/// Run `operation` on the router of `stand`.
+/// Run `operation` on the router of `stand`; a change of the router's
+/// airtime limits goes into `journal`.
 pub(crate) fn run(
     operation: &RouterOperation,
     stand: &Stand,
     io: &OperationIo,
+    journal: &Journal,
 ) -> Result<serde_json::Value> {
     let mut router = fixture(stand)?;
     let execute = |ssh: &Ssh| {
@@ -173,7 +181,90 @@ pub(crate) fn run(
             wait(io);
             json(departure.finish()?.to_string())
         }
+        RouterOperation::SetAirtimeLimit {
+            ac,
+            low_us,
+            high_us,
+            station,
+        } => {
+            let station = station.as_deref().map(mac).transpose()?;
+            let owner = io.owner.clone();
+            json(airtime::set_recorded(
+                &mut router.ssh,
+                &router.radio,
+                category(*ac),
+                Limit {
+                    low_us: *low_us,
+                    high_us: *high_us,
+                },
+                station.map(|station| (router.interface.as_str(), station)),
+                &mut |entry| record(journal, owner.clone(), entry),
+            )?)
+        }
+        RouterOperation::AirtimeLimits { mac: station } => {
+            let station = station.as_deref().map(mac).transpose()?;
+            json(airtime::read(
+                &mut router.ssh,
+                &router.radio,
+                station.map(|station| (router.interface.as_str(), station)),
+            )?)
+        }
     }
+}
+
+fn category(ac: RouterAccessCategory) -> AccessCategory {
+    match ac {
+        RouterAccessCategory::Vo => AccessCategory::Vo,
+        RouterAccessCategory::Vi => AccessCategory::Vi,
+        RouterAccessCategory::Be => AccessCategory::Be,
+        RouterAccessCategory::Bk => AccessCategory::Bk,
+    }
+}
+
+/// Journal one phase of a change of the router's airtime limits under
+/// `owner`.
+fn record(journal: &Journal, owner: String, entry: &airtime::Record<'_>) -> Result<()> {
+    journal
+        .record_by(
+            owner,
+            None,
+            BoardEventKind::RouterAirtimeLimit {
+                phase: match entry.phase {
+                    airtime::Phase::Intended => AirtimePhase::Intended,
+                    airtime::Phase::Confirmed => AirtimePhase::Confirmed,
+                    airtime::Phase::Unconfirmed => AirtimePhase::Unconfirmed,
+                },
+                changes: entry
+                    .changes
+                    .iter()
+                    .map(|change| AirtimeChange {
+                        ac: change.ac.label().to_ascii_lowercase(),
+                        before: [change.before.low_us, change.before.high_us],
+                        after: [change.after.low_us, change.after.high_us],
+                    })
+                    .collect(),
+                station: entry.station,
+                restored: entry.restored,
+                reason: entry.reason.map(str::to_owned),
+            },
+        )
+        .map_err(|error| error.to_string())
+}
+
+/// The owner the end state's journal entries name.
+const END_STATE: &str = "lab-service";
+
+/// Return the radio's airtime limits to mac80211's defaults, confirmed by
+/// reading them back, and journal each category that changed.
+fn restore_airtime(router: &mut Fixture, journal: &Journal) -> Result<()> {
+    // Without mac80211's file no lease could have set them.
+    if !airtime::present(&mut router.ssh, &router.radio)? {
+        return Ok(());
+    }
+    airtime::restore_recorded(&mut router.ssh, &router.radio, &mut |entry| {
+        record(journal, END_STATE.to_owned(), entry)
+    })?;
+    Ok(())
 }
 
 /// Wait until the operation is told to stop.
@@ -190,9 +281,30 @@ const AP_DOWN: Duration = Duration::from_secs(20);
 /// disabled, the rest of its configuration kept, and no wireless interface
 /// on its radio's PHY, so it does not radiate between leases: one netifd
 /// does not own, as a monitor a run added, is removed. A run's profile
-/// enables the section again.
-pub(crate) fn park(stand: &Stand) -> Result<()> {
+/// enables the section again. Its radio's airtime limits return to
+/// mac80211's defaults, journaled in `journal`. Both are attempted
+/// whatever the other's outcome; the end state is confirmed only when both
+/// are.
+pub(crate) fn park(stand: &Stand, journal: &Journal) -> Result<()> {
     let mut router = fixture(stand)?;
+    let quiet = quiet(&mut router);
+    let airtime = restore_airtime(&mut router, journal);
+    end_state(quiet, airtime)
+}
+
+/// The end state is confirmed only when the radio is quiet and its airtime
+/// limits are restored; each failure keeps its reason.
+fn end_state(quiet: Result<()>, airtime: Result<()>) -> Result<()> {
+    match (quiet, airtime) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), Err(error)) => Err(format!("its airtime limits: {error}")),
+        (Err(quiet), Err(airtime)) => Err(format!("{quiet}; its airtime limits: {airtime}")),
+    }
+}
+
+/// The AP section disabled and no interface on the radio's PHY.
+fn quiet(router: &mut Fixture) -> Result<()> {
     let section =
         oer_tools_lab_router::router::quote(&format!("wireless.{}.disabled=1", router.ap_section))?;
     router.ssh.run(&format!(
@@ -307,6 +419,17 @@ fn phy_interfaces(listing: &str, index: u32) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_end_state_needs_a_quiet_radio_and_restored_airtime_limits() {
+        assert_eq!(end_state(Ok(()), Ok(())), Ok(()));
+        let quiet = end_state(Err("loud".into()), Ok(())).unwrap_err();
+        assert_eq!(quiet, "loud");
+        let airtime = end_state(Ok(()), Err("stuck".into())).unwrap_err();
+        assert!(airtime.contains("airtime") && airtime.contains("stuck"));
+        let both = end_state(Err("loud".into()), Err("stuck".into())).unwrap_err();
+        assert!(both.contains("loud") && both.contains("stuck"));
+    }
 
     #[test]
     fn a_stray_interface_goes_by_its_quoted_name_and_a_gone_one_is_no_failure() {
