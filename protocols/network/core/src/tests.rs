@@ -258,10 +258,16 @@ fn filled<B>(pool: &mut Blocks<B>, data: &[u8]) -> Block<'static, B, SIZE> {
     block
 }
 
+/// The fill of a test whose work no producer declared: only a declared
+/// work's frame calls it.
+fn unproduced(_: crate::WorkId, _: &mut [u8]) -> Result<(), crate::Declined> {
+    panic!("no work of this test is a producer's")
+}
+
 /// Send the next ready work.
 fn send_next<B>(stack: &mut Stack<B>, now: Instant) -> Result<(), Unsent<&'static str>> {
     let demand = stack.poll_demand(now).unwrap();
-    stack.transmit(now, demand.grant())
+    stack.transmit(now, demand.grant(), unproduced)
 }
 
 /// Learn the peer through its own request for us.
@@ -311,7 +317,7 @@ fn a_datagram_to_an_unknown_neighbor_holds_a_block_and_no_port_room() {
         assert_eq!(stack.pool().free(), BLOCKS - 1);
         let demand = stack.poll_demand(at(0)).unwrap();
         assert_eq!(demand.ready.class, Class::Control);
-        stack.transmit(at(0), demand.grant()).unwrap();
+        stack.transmit(at(0), demand.grant(), unproduced).unwrap();
         let (header, payload) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
         assert_eq!(header.destination, [0xFF; 6]);
         let asked = Arp::parse(payload).unwrap().unwrap();
@@ -336,7 +342,7 @@ fn a_reply_releases_the_datagram_and_its_frame_is_whole() {
         assert_eq!(demand.ready.peer, PEER);
         assert_eq!(demand.ready.flow, Some(0));
         assert_eq!(demand.ready.dscp, dscp);
-        stack.transmit(at(1), demand.grant()).unwrap();
+        stack.transmit(at(1), demand.grant(), unproduced).unwrap();
         let frame = &stack.port_mut().sent[1];
         let (ethernet, payload) = EthernetHeader::parse(frame).unwrap();
         assert_eq!((ethernet.destination, ethernet.source), (PEER, LOCAL));
@@ -543,10 +549,10 @@ fn a_grant_of_a_reply_cannot_answer_a_later_asker() {
         stack.input(at(0), &first, &mut ());
         let stale = stack.poll_demand(at(0)).unwrap().grant();
         let again = stack.poll_demand(at(0)).unwrap();
-        stack.transmit(at(0), again.grant()).unwrap();
+        stack.transmit(at(0), again.grant(), unproduced).unwrap();
         let second = arp_frame(Operation::Request, (MOVED, [192, 0, 2, 3]), OUR_IP);
         stack.input(at(0), &second, &mut ());
-        assert_eq!(stack.transmit(at(0), stale), Err(Unsent::Stale));
+        assert_eq!(stack.transmit(at(0), stale, unproduced), Err(Unsent::Stale));
         assert_eq!(stack.port_mut().sent.len(), 1);
     });
 }
@@ -571,7 +577,7 @@ fn a_grant_stays_stale_however_often_its_place_is_used() {
         }
         let block = filled(stack.pool(), b"waiting");
         let _command = stack.send(at(1), &socket, peer(), block).unwrap();
-        assert_eq!(stack.transmit(at(1), stale), Err(Unsent::Stale));
+        assert_eq!(stack.transmit(at(1), stale, unproduced), Err(Unsent::Stale));
         assert!(stack.port_mut().sent.is_empty());
     });
 }
@@ -587,7 +593,7 @@ fn a_changed_neighbor_reaches_a_datagram_that_waits() {
         stack.input(at(2), &moved, &mut ());
         let demand = stack.poll_demand(at(2)).unwrap();
         assert_eq!(demand.ready.peer, MOVED);
-        stack.transmit(at(2), demand.grant()).unwrap();
+        stack.transmit(at(2), demand.grant(), unproduced).unwrap();
         let (header, _) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
         assert_eq!(header.destination, MOVED);
     });
@@ -603,7 +609,7 @@ fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
         let stale = stack.demands(at(1)).next().unwrap().grant();
         let later = at(0).saturating_add(Duration::from_secs(61));
         assert_eq!(
-            stack.transmit(later, stale),
+            stack.transmit(later, stale, unproduced),
             Err(Unsent::Stale),
             "no frame to an address that expired"
         );
@@ -615,7 +621,7 @@ fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
         let command = running(stack.take_result(command));
         let mut now = later;
         while let Some(demand) = stack.poll_demand(now) {
-            stack.transmit(now, demand.grant()).unwrap();
+            stack.transmit(now, demand.grant(), unproduced).unwrap();
             now = stack.poll_deadline().unwrap();
             stack.tick(now);
         }
@@ -654,7 +660,7 @@ fn a_dropped_observer_keeps_a_running_commands_place() {
         let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
         stack.input(at(0), &request, &mut ());
         let demand = stack.poll_demand(at(0)).unwrap();
-        stack.transmit(at(0), demand.grant()).unwrap();
+        stack.transmit(at(0), demand.grant(), unproduced).unwrap();
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = stack.pool().take().unwrap();
         let command = stack.send(at(1), &socket, peer(), block).unwrap();
@@ -663,10 +669,10 @@ fn a_dropped_observer_keeps_a_running_commands_place() {
         let refused = stack.send(at(1), &socket, peer(), second).unwrap_err();
         assert_eq!(refused.reason, SendRefusal::NoPlace);
         let demand = stack.poll_demand(at(1)).unwrap();
-        stack.transmit(at(1), demand.grant()).unwrap();
+        stack.transmit(at(1), demand.grant(), unproduced).unwrap();
         let command = stack.send(at(2), &socket, peer(), refused.block).unwrap();
         let demand = stack.poll_demand(at(2)).unwrap();
-        stack.transmit(at(2), demand.grant()).unwrap();
+        stack.transmit(at(2), demand.grant(), unproduced).unwrap();
         assert_eq!(finished(stack.take_result(command)), Outcome::Accepted);
     });
 }
@@ -757,7 +763,7 @@ fn a_grant_of_a_request_cannot_serve_a_later_resolution() {
         let stale = stack.demands(at(0)).next().unwrap().grant();
         let mut now = at(0);
         while let Some(demand) = stack.poll_demand(now) {
-            stack.transmit(now, demand.grant()).unwrap();
+            stack.transmit(now, demand.grant(), unproduced).unwrap();
             now = stack.poll_deadline().unwrap();
             stack.tick(now);
         }
@@ -765,7 +771,7 @@ fn a_grant_of_a_request_cannot_serve_a_later_resolution() {
         let block = filled(stack.pool(), b"y");
         let _second = stack.send(now, &socket, peer(), block).unwrap();
         stack.port_mut().sent.clear();
-        assert_eq!(stack.transmit(now, stale), Err(Unsent::Stale));
+        assert_eq!(stack.transmit(now, stale, unproduced), Err(Unsent::Stale));
         assert!(stack.port_mut().sent.is_empty());
     });
 }
@@ -780,7 +786,7 @@ fn a_grant_chosen_for_one_address_does_not_go_to_another() {
         let chosen = stack.poll_demand(at(1)).unwrap().grant();
         let moved = arp_frame(Operation::Reply, (MOVED, PEER_IP), OUR_IP);
         stack.input(at(2), &moved, &mut ());
-        assert_eq!(stack.transmit(at(2), chosen), Err(Unsent::Stale));
+        assert_eq!(stack.transmit(at(2), chosen, unproduced), Err(Unsent::Stale));
         assert!(stack.port_mut().sent.is_empty());
         assert_eq!(stack.poll_demand(at(2)).unwrap().ready.peer, MOVED);
     });
@@ -813,7 +819,7 @@ fn every_reply_owed_is_listed_and_any_can_be_chosen() {
         stack.input(at(0), &second, &mut ());
         let chosen = stack.demands(at(0)).nth(1).unwrap();
         assert_eq!(chosen.ready.peer, MOVED);
-        stack.transmit(at(0), chosen.grant()).unwrap();
+        stack.transmit(at(0), chosen.grant(), unproduced).unwrap();
         let left: Vec<_> = stack
             .demands(at(0))
             .map(|demand| demand.ready.peer)
@@ -851,7 +857,7 @@ fn a_retired_core_returns_its_blocks_and_the_next_finds_old_handles_gone() {
     let mut next: Stack<Net> = NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
     assert_eq!(next.take_result(command), CommandState::Gone);
     assert_eq!(next.receive(&socket).err(), Some(crate::StaleSocket));
-    assert_eq!(next.transmit(at(0), stale), Err(Unsent::Stale));
+    assert_eq!(next.transmit(at(0), stale, unproduced), Err(Unsent::Stale));
     let reused = next.open(5000, best_effort()).unwrap();
     assert_ne!(reused, socket);
 }
@@ -866,7 +872,7 @@ fn a_confirmed_result_outlives_its_core_unread() {
     let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
     stack.input(at(0), &request, &mut ());
     let demand = stack.poll_demand(at(0)).unwrap();
-    stack.transmit(at(0), demand.grant()).unwrap();
+    stack.transmit(at(0), demand.grant(), unproduced).unwrap();
     let first = stack.open(5000, best_effort()).unwrap();
     let block = filled(stack.pool(), b"one");
     let read = stack.send(at(1), &first, peer(), block).unwrap();
@@ -874,7 +880,7 @@ fn a_confirmed_result_outlives_its_core_unread() {
     let unread = stack.send(at(1), &first, peer(), block).unwrap();
     for _ in 0..2 {
         let demand = stack.poll_demand(at(1)).unwrap();
-        stack.transmit(at(1), demand.grant()).unwrap();
+        stack.transmit(at(1), demand.grant(), unproduced).unwrap();
     }
     assert_eq!(finished(stack.take_result(read)), Outcome::Accepted);
     let second = stack.open(5001, best_effort()).unwrap();
@@ -977,7 +983,7 @@ fn a_neighbor_that_never_answers_ends_its_datagrams_after_its_requests() {
         let mut now = at(0);
         let mut requests = 0;
         while let Some(demand) = stack.poll_demand(now) {
-            stack.transmit(now, demand.grant()).unwrap();
+            stack.transmit(now, demand.grant(), unproduced).unwrap();
             requests += 1;
             command = running(stack.take_result(command));
             now = stack.poll_deadline().unwrap();
@@ -1018,7 +1024,7 @@ fn an_arp_request_for_us_is_answered_and_control_goes_before_data() {
         stack.input(at(1), &request, &mut ());
         let demand = stack.poll_demand(at(1)).unwrap();
         assert_eq!(demand.ready.class, Class::Control);
-        stack.transmit(at(1), demand.grant()).unwrap();
+        stack.transmit(at(1), demand.grant(), unproduced).unwrap();
         let (header, payload) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
         assert_eq!(header.destination, PEER);
         let reply = Arp::parse(payload).unwrap().unwrap();
@@ -1301,11 +1307,11 @@ fn a_refused_datagram_keeps_its_turn() {
         stack.port_mut().full = true;
         let demand = stack.poll_demand(at(1)).unwrap();
         let flow = demand.ready.flow;
-        assert!(stack.transmit(at(1), demand.grant()).is_err());
+        assert!(stack.transmit(at(1), demand.grant(), unproduced).is_err());
         stack.port_mut().full = false;
         let demand = stack.poll_demand(at(1)).unwrap();
         assert_eq!(demand.ready.flow, flow, "refused work stays first");
-        stack.transmit(at(1), demand.grant()).unwrap();
+        stack.transmit(at(1), demand.grant(), unproduced).unwrap();
         assert_ne!(stack.poll_demand(at(1)).unwrap().ready.flow, flow);
     });
 }
@@ -1490,7 +1496,7 @@ fn walk_blocks<B: core::fmt::Debug + 'static>(seed: u64) {
             3 => {
                 stack.port_mut().full = walk.below(3) == 0;
                 if let Some(demand) = stack.poll_demand(now) {
-                    let _taken = stack.transmit(now, demand.grant());
+                    let _taken = stack.transmit(now, demand.grant(), unproduced);
                 }
             }
             4 => {
@@ -1629,7 +1635,7 @@ fn a_datagram_the_port_rejects_for_good_ends_named_and_goes_no_more() {
         let command = stack.send(at(0), &socket, peer(), block).unwrap();
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(at(0)).unwrap();
-        let refused = stack.transmit(at(0), demand.grant());
+        let refused = stack.transmit(at(0), demand.grant(), unproduced);
         assert!(matches!(refused, Err(Unsent::Rejected("rejected"))));
         assert!(
             stack.poll_demand(at(0)).is_none(),
@@ -1654,7 +1660,7 @@ fn an_arp_request_rejected_for_good_ends_what_waits_with_that_cause() {
         let second = stack.send(at(0), &socket, peer(), two).unwrap();
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(at(0)).unwrap();
-        let refused = stack.transmit(at(0), demand.grant());
+        let refused = stack.transmit(at(0), demand.grant(), unproduced);
         assert!(matches!(refused, Err(Unsent::Rejected("rejected"))));
         assert_eq!(finished(stack.take_result(first)), Outcome::Rejected);
         assert_eq!(finished(stack.take_result(second)), Outcome::Rejected);
@@ -1678,7 +1684,7 @@ fn a_rejected_arp_request_leaves_another_neighbor_waiting() {
         let waiting = stack.send(at(0), &socket, other, far).unwrap();
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(at(0)).unwrap();
-        assert!(stack.transmit(at(0), demand.grant()).is_err());
+        assert!(stack.transmit(at(0), demand.grant(), unproduced).is_err());
         assert_eq!(finished(stack.take_result(first)), Outcome::Rejected);
         stack.port_mut().rejects = false;
         assert!(send_next(stack, at(0)).is_ok(), "the other is still asked");
@@ -1703,7 +1709,7 @@ fn a_request_refused_after_one_went_out_ends_rejected() {
         stack.tick(at(1000));
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(at(1000)).unwrap();
-        assert!(stack.transmit(at(1000), demand.grant()).is_err());
+        assert!(stack.transmit(at(1000), demand.grant(), unproduced).is_err());
         assert_eq!(finished(stack.take_result(command)), Outcome::Rejected);
     });
 }
@@ -1716,7 +1722,7 @@ fn a_new_datagram_after_a_rejected_request_asks_anew() {
         let first = stack.send(at(0), &socket, peer(), block).unwrap();
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(at(0)).unwrap();
-        assert!(stack.transmit(at(0), demand.grant()).is_err());
+        assert!(stack.transmit(at(0), demand.grant(), unproduced).is_err());
         assert_eq!(finished(stack.take_result(first)), Outcome::Rejected);
         stack.port_mut().rejects = false;
         let block = filled(stack.pool(), b"later");
@@ -1725,3 +1731,5 @@ fn a_new_datagram_after_a_rejected_request_asks_anew() {
         assert!(matches!(stack.take_result(later), CommandState::Running(_)));
     });
 }
+
+mod produced;
