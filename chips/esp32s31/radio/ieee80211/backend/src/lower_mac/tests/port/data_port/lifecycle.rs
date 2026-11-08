@@ -1531,3 +1531,50 @@ fn a_key_left_installed_is_erased_by_the_reinstall_and_its_slot_takes_the_next_k
         );
     });
 }
+
+/// A single MPDU's plan that falls back from 24 to 6 Mb/s: its arena's end
+/// costs each publication at the rate it went at, PPDU, SIFS and the Ack
+/// the model declares, summed; never the last rate times the count.
+#[test]
+fn a_single_arena_s_cost_sums_each_publication_at_its_own_rate() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().statuses = std::vec![ACK_TIMEOUT, SUCCESS];
+        let [first, _second] = fixture.arenas();
+        fixture.fill(&first, &[10], plain);
+        let now = fixture.now();
+        let mut arenas = fixture.port.arena();
+        let fast = arenas
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm24M))
+            .expect("24 Mb/s");
+        let slow = arenas
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .expect("6 Mb/s");
+        let plan = plan(fast, 1).then(RetryStage {
+            rate: slow,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: Protection::None,
+        });
+        let plan = plan.unwrap_or_else(|_| panic!("two stages"));
+        arenas
+            .publish(publication(first, ArenaFormat::Single(plan)), now)
+            .unwrap_or_else(|_| panic!("published"));
+        let done = fixture.arena_end();
+        assert!(matches!(done.end(), AttemptEnd::Acked { .. }));
+        // By hand, IEEE Std 802.11-2020 17.4.3: the 30-octet MPDU and its
+        // FCS, 16 SERVICE and 6 tail bits, 4 us symbols of 96 or 24 bits,
+        // 20 us preamble, 6 us signal extension; each publication's SIFS of
+        // 10 us and Ack of 14 octets at 6 Mb/s.
+        let psdu = 30 + 4;
+        let ppdu =
+            |bits_per_symbol: u32| 20 + 4 * (16 + 8 * psdu + 6_u32).div_ceil(bits_per_symbol) + 6;
+        let ack = 10 + 20 + 4 * (16 + 8 * 14 + 6_u32).div_ceil(24) + 6;
+        assert_eq!(
+            done.cost(),
+            oer_protocols_ieee80211_contracts_port::TxEstimate::Estimated {
+                micros: ppdu(96) + ack + ppdu(24) + ack
+            }
+        );
+        let _first = fixture.port.arena().release(done, drop).expect("released");
+    });
+}

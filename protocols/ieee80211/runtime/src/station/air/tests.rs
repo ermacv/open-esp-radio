@@ -103,3 +103,70 @@ fn a_lost_frame_settles_with_no_buffer_and_an_unknown_cost_is_charged_the_ceilin
         ))
     );
 }
+
+#[derive(Clone, Copy)]
+struct Frame(Ready);
+
+impl oer_protocols_network_port::Candidate for Frame {
+    fn ready(&self) -> &Ready {
+        &self.0
+    }
+}
+
+/// The station's port and egress across associations, as the product runs
+/// them: each association leaves a frame whose buffer comes back late.
+/// Five associations through two accounts never exhaust them, each late
+/// buffer comes back once its end is handed on, and its return charges
+/// neither the closed account nor the current one.
+#[test]
+fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
+    use crate::egress::AirtimeEgress;
+    use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
+    use oer_protocols_network_port::Egress;
+
+    const BUFFERS: usize = 8;
+    let link = NetworkLink::new();
+    let mut storage =
+        AirtimeStorage::<StationKey, 2, BUFFERS>::new(NonZeroU32::new(2_000).unwrap());
+    let mut egress = AirtimeEgress::<'_, _, u8, 2, BUFFERS>::new(
+        &mut storage,
+        StationAir::new(&link, Fixed(1_000)),
+    );
+    let mut ends = Completions::<&'static str, u8, BUFFERS>::new();
+    let handed_on = |ends: &mut Completions<&'static str, u8, BUFFERS>,
+                     egress: &mut AirtimeEgress<'_, _, u8, 2, BUFFERS>| {
+        let mut buffers = std::vec::Vec::new();
+        while let Some((notice, buffer)) = ends.take_notice(link.snapshot()) {
+            egress.notice(notice).unwrap();
+            buffers.extend(buffer);
+        }
+        buffers
+    };
+    let names = ["a", "b", "c", "d", "e"];
+    for epoch in 1..=5_u64 {
+        link.publish(up(epoch));
+        // The previous association's end comes first.
+        assert!(handed_on(&mut ends, &mut egress).is_empty());
+        let (_, held) = egress
+            .choose([Frame(ready(1514))].into_iter())
+            .unwrap()
+            .expect("every association has its account");
+        let ticket = u8::try_from(epoch).unwrap();
+        egress.accepted(held, ticket).unwrap();
+    }
+    link.publish(up(6));
+    assert!(handed_on(&mut ends, &mut egress).is_empty());
+    assert_eq!((egress.unsettled(), egress.in_flight()), (0, 5));
+    // Now every buffer comes back, late.
+    for (ticket, name) in (1..=5_u8).zip(names) {
+        ends.returned(name, ticket, TxEstimate::Estimated { micros: 400 })
+            .unwrap();
+    }
+    assert_eq!(handed_on(&mut ends, &mut egress), names);
+    assert_eq!(egress.in_flight(), 0, "every ticket closed once");
+    assert_eq!(
+        egress.balance_micros(6),
+        None,
+        "the current one never charged"
+    );
+}

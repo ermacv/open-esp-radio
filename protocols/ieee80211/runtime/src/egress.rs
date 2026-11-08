@@ -43,7 +43,11 @@ pub struct Exchange<T> {
 pub enum RadioNotice<T, K> {
     /// A frame the port took has ended.
     Ended(Exchange<T>),
-    /// An association has ended: its account goes, once its frames settle.
+    /// An association has ended. Each of its frames still at the port
+    /// settles here, once, at its ceiling or its reservation if that is
+    /// more, and its account goes at once. The frames' buffers stay the
+    /// port's until they come back; each one's later [`Self::Ended`] only
+    /// closes its ticket, with no second charge.
     Left(K),
     /// The port took the frame and lost it with its memory before the
     /// radio's end of it: no completion follows, and whether it reached the
@@ -79,10 +83,25 @@ pub struct Held<'o, K> {
 }
 
 /// A frame the port holds.
-struct Flight<'o, T, K> {
-    ticket: T,
-    flight: AirtimeInFlight<'o, K>,
-    ceiling: NonZeroU32,
+enum Flight<'o, T, K> {
+    /// Its reservation is open, for its completion to settle.
+    Open {
+        ticket: T,
+        flight: AirtimeInFlight<'o, K>,
+        ceiling: NonZeroU32,
+    },
+    /// Its association left and its reservation settled at its ceiling: only
+    /// its buffer's return is owed, which closes the ticket and charges
+    /// nothing.
+    Closed { ticket: T },
+}
+
+impl<T, K> Flight<'_, T, K> {
+    const fn ticket(&self) -> &T {
+        match self {
+            Self::Open { ticket, .. } | Self::Closed { ticket } => ticket,
+        }
+    }
 }
 
 /// Airtime between peers, turns between one peer's flows, and control first.
@@ -119,19 +138,54 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
         self.scheduler.balance_micros(key)
     }
 
-    /// Frames the port still holds.
+    /// Frames the port still holds, settled or not: one per buffer it has
+    /// not given back.
     pub fn in_flight(&self) -> usize {
         self.flights.iter().flatten().count()
     }
 
-    /// End an association. A frame in flight still settles on its old account.
-    pub fn retire(&mut self, key: A::Key) {
+    /// Frames whose reservation is still open.
+    pub fn unsettled(&self) -> usize {
+        self.flights
+            .iter()
+            .flatten()
+            .filter(|flight| matches!(flight, Flight::Open { .. }))
+            .count()
+    }
+
+    /// End an association: each of its frames still at the port settles now
+    /// at its ceiling, or its reservation if that is more, and the account
+    /// goes. The frames' tickets stay until their buffers come back.
+    ///
+    /// # Errors
+    /// [`AirtimeFault`]: a settlement the ledger refused.
+    pub fn retire(&mut self, key: A::Key) -> Result<(), AirtimeFault> {
+        for slot in &mut self.flights {
+            let closes = matches!(slot, Some(Flight::Open { flight, .. }) if flight.key() == key);
+            if !closes {
+                continue;
+            }
+            let Some(Flight::Open {
+                ticket,
+                flight,
+                ceiling,
+            }) = slot.take()
+            else {
+                continue;
+            };
+            *slot = Some(Flight::Closed { ticket });
+            let charged = ceiling.max(flight.reserved_micros());
+            self.scheduler
+                .settle(flight.completed(()), charged, &mut ())
+                .map_err(|(error, _)| AirtimeFault::from(error))?;
+        }
         self.scheduler.retire(key);
         for slot in &mut self.flows {
             if slot.is_some_and(|(peer, _)| peer == key) {
                 *slot = None;
             }
         }
+        Ok(())
     }
 
     fn last_flow(&self, key: A::Key) -> Option<u8> {
@@ -247,7 +301,7 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
         if let Some(flow) = flow {
             self.remember(reservation.key(), flow);
         }
-        self.fly(Flight {
+        self.fly(Flight::Open {
             ticket,
             flight: reservation.published(),
             ceiling,
@@ -273,26 +327,29 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
                 ticket,
                 charged: None,
             },
-            RadioNotice::Left(key) => {
-                self.retire(key);
-                return Ok(());
-            }
+            RadioNotice::Left(key) => return self.retire(key),
         };
         let flight = self
             .flights
             .iter_mut()
             .find(|slot| {
                 slot.as_ref()
-                    .is_some_and(|flight| flight.ticket == exchange.ticket)
+                    .is_some_and(|flight| *flight.ticket() == exchange.ticket)
             })
             .and_then(Option::take);
-        let Some(flight) = flight else {
-            return Err(AirtimeFault::UnknownTicket);
-        };
-        let charged = exchange
-            .charged
-            .unwrap_or_else(|| flight.ceiling.max(flight.flight.reserved_micros()));
-        self.settle(flight.flight, charged)
+        match flight {
+            Some(Flight::Open {
+                flight, ceiling, ..
+            }) => {
+                let charged = exchange
+                    .charged
+                    .unwrap_or_else(|| ceiling.max(flight.reserved_micros()));
+                self.settle(flight, charged)
+            }
+            // Settled when its association left: its return closes it.
+            Some(Flight::Closed { .. }) => Ok(()),
+            None => Err(AirtimeFault::UnknownTicket),
+        }
     }
 }
 

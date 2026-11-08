@@ -176,7 +176,12 @@ only after the policy chose it and the port gave the room.
   not it sends, so an idle network still settles. A frame lost with its
   buffer at publication settles as `RadioNotice::Lost` at its ceiling; that
   settles the account only and returns no memory. A new link epoch ends
-  the old association's account (`RadioNotice::Left`) before the next end.
+  the old association's account (`RadioNotice::Left`) before the next end:
+  each of its frames still out settles there once, at its ceiling, and the
+  account goes at once; the frame's buffer stays the port's until it comes
+  back, and its return only closes the ticket, with no second charge and
+  nothing on the new account. An outcome a socket already read is not
+  changed by this settlement.
 
 ## Physical storage contracts (`oer-portable-embassy-net::datapath`)
 

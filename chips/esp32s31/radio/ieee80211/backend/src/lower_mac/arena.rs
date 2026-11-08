@@ -919,6 +919,13 @@ where
         let cookie = chain.cookie;
         let mut program = None;
         let before = chain.owner.batch_work();
+        // What the publication solicits, read before its frames go to the
+        // hardware.
+        let response = match spacing {
+            Some(_) => Response::BlockAck,
+            None if chain.owner.first_receiver_individual() => Response::Ack,
+            None => Response::None,
+        };
         let result = (|| {
             let admission = chain.admission.as_ref().ok_or(ArenaFault::State)?;
             match spacing {
@@ -982,16 +989,7 @@ where
             }
             Ok::<(), ArenaFault>(())
         })();
-        let pending = publication_cost(
-            before,
-            chain.owner.batch_work(),
-            rate,
-            match spacing {
-                Some(_) => Response::BlockAck,
-                None if chain.owner.first_receiver_individual() => Response::Ack,
-                None => Response::None,
-            },
-        );
+        let pending = publication_cost(before, chain.owner.batch_work(), rate, response);
         chain.phase = Phase::OnAir(OnAir {
             pending,
             spent: TxEstimate::NONE,
