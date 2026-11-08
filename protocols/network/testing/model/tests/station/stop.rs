@@ -3,6 +3,7 @@
 //! every transmit buffer of the network is free again.
 
 use oer_portable_time::Duration;
+use oer_protocols_ieee80211_runtime::datapath::ActorEnd;
 use oer_protocols_ieee80211_runtime::station::contract::{DisconnectReason, Notice};
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_network_core::{Outcome, Remote};
@@ -310,4 +311,100 @@ fn a_network_that_resumes_after_the_deadline_completes_the_return() {
     left_the_network(late);
     reports[1].assert_stopped_with_every_owner();
     left_the_network(&reports[1]);
+}
+
+/// The network's stop participant is lost, once before and once after the
+/// stop's deadline: each time the network ends without reporting its stop,
+/// keeping its owners with the composition, which gives them back. The
+/// radio's stop is confirmed and the loss is a handled, non-terminal end
+/// the composition records: before the deadline the stop ends with the
+/// loss, after it the late return completes with it. Every block, buffer
+/// and lent unit comes home each time, and a third session starts again
+/// from the same owners.
+#[test]
+fn a_lost_network_participant_before_and_after_the_deadline_is_handled_and_the_owners_reused() {
+    use oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd;
+    struct Net;
+    let reports = simulate_sessions::<Net>(
+        Setup::default(),
+        vec![
+            // Lost before the deadline.
+            session(|world| {
+                Box::pin(async move {
+                    joined_and_resolved(world).await;
+                    let observers = held_burst(world, 24).await;
+                    for n in 0..8_u16 {
+                        world.ap().wired.send_udp(7000, PORT, &[n as u8; 400]);
+                    }
+                    world
+                        .air
+                        .hold_completion(WmmAccessCategory::BestEffort, false);
+                    world.lose_network_stop();
+                    stop_and_read(world, observers).await;
+                })
+            }),
+            // Lost after the deadline: the network is late, then ends
+            // without reporting.
+            session(|world| {
+                Box::pin(async move {
+                    joined_and_resolved(world).await;
+                    let observers = held_burst(world, 24).await;
+                    for observer in observers {
+                        assert_eq!(world.result(observer).await, Sent::Ended(Outcome::Accepted));
+                    }
+                    world.suspend_network(true);
+                    world
+                        .air
+                        .hold_completion(WmmAccessCategory::BestEffort, false);
+                    world.lose_network_stop();
+                    world.stop(Duration::from_millis(10));
+                    world
+                        .until("the stop's wait ends", Duration::from_secs(1), |world| {
+                            world.stopped()
+                        })
+                        .await;
+                    world.sleep(Duration::from_millis(100)).await;
+                    world.suspend_network(false);
+                })
+            }),
+            // The same owners again.
+            session(|world| {
+                Box::pin(async move {
+                    joined_and_resolved(world).await;
+                    world.ap().wired.ping(7, 1, b"after two losses");
+                    world
+                        .until("the echo reply", Duration::from_secs(1), |world| {
+                            world.ap().wired.echo_replies.len() == 1
+                        })
+                        .await;
+                    let mut observers = Vec::new();
+                    for n in 0..16_u16 {
+                        observers.push(world.send(PEER, &[n as u8; 900]).await);
+                    }
+                    for observer in observers {
+                        assert_eq!(world.result(observer).await, Sent::Ended(Outcome::Accepted));
+                    }
+                })
+            }),
+        ],
+    );
+    let [before, after, again] = &reports[..] else {
+        panic!("three sessions");
+    };
+    match &before.lifecycle {
+        Some(end @ LifecycleEnd::StoppedNetworkLost(_)) => assert!(!end.is_terminal()),
+        end => panic!("a loss before the deadline ends with the loss: {end:?}"),
+    }
+    match &after.lifecycle {
+        Some(end @ LifecycleEnd::StoppedReturning(_)) => assert!(!end.is_terminal()),
+        end => panic!("a late network ends the wait returning: {end:?}"),
+    }
+    for (report, lost) in [(before, true), (after, true), (again, false)] {
+        assert_eq!(report.network_lost, lost, "the composition reads the loss");
+        assert!(matches!(report.actor, Some(ActorEnd::Retired)));
+        report.assert_owners_home();
+        report.assert_transmit_memory_home();
+        left_the_network(report);
+    }
+    again.assert_stopped_with_every_owner();
 }

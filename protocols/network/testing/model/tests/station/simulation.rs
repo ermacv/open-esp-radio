@@ -308,6 +308,8 @@ pub struct Report {
     pub actor: Option<ActorEnd<ModelPortFault>>,
     /// Why the network's service ended.
     pub network: Option<EndCause>,
+    /// The actor saw the network's stop participant lost.
+    pub network_lost: bool,
     /// The network's blocks in its pool after the run.
     pub blocks_free: usize,
     /// The network's transmit memory free after the run, of its total.
@@ -516,6 +518,8 @@ pub struct World<'b, T: 'static> {
     stopping: Cell<bool>,
     /// The network's task is suspended: not polled, its future kept.
     network_suspended: Cell<bool>,
+    /// The network's task ends without reporting its stop.
+    network_loses_its_stop: Cell<bool>,
 }
 
 impl<'b, T: 'static> World<'b, T> {
@@ -659,6 +663,13 @@ impl<'b, T: 'static> World<'b, T> {
     /// resume it: a software consumer that is late.
     pub fn suspend_network(&self, suspended: bool) {
         self.network_suspended.set(suspended);
+    }
+
+    /// Make the network's task end its stop without reporting it, as a
+    /// participant dropped unreported: its owners stay with the
+    /// composition, which returns them.
+    pub fn lose_network_stop(&self) {
+        self.network_loses_its_stop.set(true);
     }
 
     /// Let `duration` of virtual time pass.
@@ -1043,6 +1054,7 @@ async fn run<'s, T: 'static>(
             held: RefCell::new(Vec::new()),
             stopping: Cell::new(false),
             network_suspended: Cell::new(false),
+            network_loses_its_stop: Cell::new(false),
         };
 
         // The four tasks.
@@ -1081,7 +1093,14 @@ async fn run<'s, T: 'static>(
                 }
                 assert_eq!(ended.cause, cause);
                 *network_end.borrow_mut() = Some(ended);
-                network_stop.stopped();
+                // A network whose participant is lost ends its service and
+                // gives back what it holds all the same; only its report is
+                // missing.
+                if world.network_loses_its_stop.get() {
+                    network_stop.lost();
+                } else {
+                    network_stop.stopped();
+                }
             };
             let script_task = async {
                 script(&world).await;
@@ -1128,6 +1147,7 @@ async fn run<'s, T: 'static>(
             lifecycle: end,
             actor: actor_end.borrow_mut().take(),
             network: Some(ended.cause),
+            network_lost: actor.network_lost(),
             blocks_free: ended.retired.pool.free(),
             memory_free: free.free(),
             memory_queued: network_ends.transmit.len(),

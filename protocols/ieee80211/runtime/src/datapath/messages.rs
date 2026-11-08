@@ -278,6 +278,12 @@ pub enum StopOutcome {
     /// actor completes it whenever the network takes its turn, and a
     /// retirement waits for it. Nothing of the radio is unconfirmed.
     Returning(ReturnObserved),
+    /// The radio is stopped and every owner of the run is back, the
+    /// network's included: its memory went to the return queue and its lent
+    /// units came back. But the network's stop participant was lost, so
+    /// its stop was never confirmed: a software error for the composition
+    /// to record, not a fault of the radio.
+    NetworkLost(ReturnObserved),
     /// The stop proved nothing by its deadline: what was still out.
     Unconfirmed(StopObserved),
 }
@@ -365,10 +371,6 @@ pub enum ActorViolation {
     CutOverflow,
     /// The receive reordering lost its delivery order.
     ReorderOverflow,
-    /// The network's stop participant was lost while a stopped radio still
-    /// waited for its return: the memory and units it held stay where they
-    /// were.
-    NetworkLost,
 }
 
 /// How the actor's run ended.

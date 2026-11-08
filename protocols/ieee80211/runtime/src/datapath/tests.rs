@@ -1136,8 +1136,11 @@ fn a_stopped_radio_still_waits_for_its_network() {
     });
 }
 
+/// A participant lost before the deadline ends the stop at once with the
+/// radio's confirmed stop and the loss: nothing of the radio is unconfirmed,
+/// and the actor retires.
 #[test]
-fn a_lost_network_participant_leaves_the_stop_unconfirmed_at_once() {
+fn a_lost_network_participant_ends_the_stop_with_the_loss_and_the_radio_stopped() {
     bench(|bench| {
         bench.start();
         retire(bench, 50);
@@ -1148,11 +1151,13 @@ fn a_lost_network_participant_leaves_the_stop_unconfirmed_at_once() {
         bench.advance(1);
         bench.settle();
         match bench.next() {
-            Some(FromActor::Stopped(StopOutcome::Unconfirmed(observed))) => {
-                assert!(observed.network_lost && !observed.deadline);
+            Some(FromActor::Stopped(StopOutcome::NetworkLost(observed))) => {
+                assert_eq!((observed.memory_held, observed.lent), (0, 0));
             }
-            _ => panic!("a lost participant proves no stop"),
+            _ => panic!("a lost participant ends the stop with the loss"),
         }
+        bench.send(ToActor::Retire);
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
 
@@ -1183,10 +1188,11 @@ fn a_network_that_stops_late_ends_the_wait_returning_and_retires_after_it() {
     });
 }
 
-/// A participant lost while the actor still waited for the network's late
-/// return ends the actor on its contract: the owners stay where they are.
+/// A participant lost after the deadline, while the actor still followed
+/// the network's late return: the station's share is home, so the actor
+/// retires and tells the composition the loss.
 #[test]
-fn a_network_lost_after_the_deadline_ends_the_actor_on_its_contract() {
+fn a_network_lost_after_the_deadline_retires_the_actor_with_the_loss() {
     bench(|bench| {
         bench.start();
         retire(bench, 1);
@@ -1196,17 +1202,15 @@ fn a_network_lost_after_the_deadline_ends_the_actor_on_its_contract() {
             bench.next(),
             Some(FromActor::Stopped(StopOutcome::Returning(_)))
         ));
+        bench.send(ToActor::Retire);
+        bench.settle();
+        assert!(bench.end.is_none());
         bench
             .network
             .answer
             .set(Some(Err(crate::station::NetworkStopLost)));
         bench.settle();
-        assert_eq!(
-            bench.end,
-            Some(ActorEnd::Faulted(ActorFault::Contract(
-                ActorViolation::NetworkLost
-            )))
-        );
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
 

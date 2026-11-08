@@ -170,9 +170,15 @@ deadline ends the stop's wait there as `StopOutcome::Returning` (the
 lifecycle's `LifecycleEnd::StoppedReturning`), never as an unconfirmed stop.
 The return goes on without a deadline, the memory stays the station's until
 the network took it, and a retirement ends the actor only once the return
-came. Only a lost network participant, before the deadline an unconfirmed
-stop and after it the actor's `NetworkLost` contract fault, ends it
-otherwise.
+came. A lost network participant (its stop never reported) is a software
+error, not a fault of the radio: the station still returns its share of the
+network through the return queue and waits for its lent units, and once
+they are home the stop ends with `StopOutcome::NetworkLost`
+(`LifecycleEnd::StoppedNetworkLost`) before the deadline, or the late return
+completes after it; `Actor::network_lost` tells the composition, which
+records it. Neither end is terminal. The deadline ends the lifecycle's wait;
+the facade's public stop waits for the actual return and the radio's
+release.
 A stop for the next installation keeps the network and its MSDUs. An actor
 reinstalled after a stop that stopped the network asks the next network to
 stop again at its own stop. A new control epoch's reconnect policy keeps its

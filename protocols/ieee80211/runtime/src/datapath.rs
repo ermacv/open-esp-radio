@@ -307,8 +307,14 @@ enum NetworkStopping {
     Stopped,
     /// It reported its stop and holds no unit.
     Returned,
-    /// Its participant was lost.
+    /// Its participant was lost: its stop will not be confirmed. The
+    /// station still returns what it holds of the network through the
+    /// existing ways (the return queue, the lent units' own return).
     Lost,
+    /// Its participant was lost and the station holds nothing of the
+    /// network any more: its memory went to the return queue and every lent
+    /// unit came back.
+    LostReturned,
 }
 
 /// A port command the port holds at its barrier, with the group token of
@@ -602,6 +608,17 @@ where
     /// The port, for its owner's checks between runs.
     pub const fn port(&self) -> &D::Port {
         &self.port
+    }
+
+    /// Whether the last stop's network participant was lost: the station
+    /// returned everything it held of the network, but the network never
+    /// confirmed its stop. The composition records it; the radio's stop
+    /// was confirmed.
+    pub const fn network_lost(&self) -> bool {
+        matches!(
+            self.network_stopping,
+            NetworkStopping::Lost | NetworkStopping::LostReturned
+        )
     }
 
     /// The port, for its owner once the run retired it: the actor no

@@ -268,6 +268,11 @@ where
             (Ending::Stop, StopOutcome::Returning(observed)) => {
                 (ToActor::Retire, LifecycleEnd::StoppedReturning(observed))
             }
+            // The radio stopped and the network's owners are back; only its
+            // stop was never confirmed.
+            (Ending::Stop, StopOutcome::NetworkLost(observed)) => {
+                (ToActor::Retire, LifecycleEnd::StoppedNetworkLost(observed))
+            }
             (Ending::Stop, _) => (ToActor::Retire, LifecycleEnd::Stopped),
             (Ending::StartRefused(refused), _) => {
                 (ToActor::Retire, LifecycleEnd::StartRefused(refused))

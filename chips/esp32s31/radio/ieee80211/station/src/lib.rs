@@ -162,6 +162,9 @@ impl<'a, N: Notifies> Control<'a, N> {
     /// ([`LifecycleFailure::StopUnconfirmed`](crate::failure::LifecycleFailure::StopUnconfirmed)).
     /// A stopped radio whose network returns its memory or units late is
     /// no failure: the exit waits for that return and the radio's release.
+    /// A network whose stop participant was lost ends as
+    /// `StationExit::StoppedNetworkLost` once its share is home, without a
+    /// reset.
     pub fn stop(&mut self, deadline: oer_portable_time::Instant) {
         self.inner.stop_gracefully(deadline);
     }

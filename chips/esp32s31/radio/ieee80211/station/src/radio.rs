@@ -320,8 +320,12 @@ pub(crate) enum News<W: Binding> {
     Unavailable(InitializationError),
     /// The port did not reinstall after the station's restart.
     Reinstall(crate::failure::ReinstallCause),
-    /// The radio's release after the lifecycle retired the port.
-    Released(Result<(), crate::failure::ReleaseCause>),
+    /// The radio's release after the lifecycle retired the port, and
+    /// whether the last stop's network participant was lost.
+    Released {
+        result: Result<(), crate::failure::ReleaseCause>,
+        network_lost: bool,
+    },
 }
 
 /// The datapath actor's static places and the queues between it and the
@@ -524,19 +528,16 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
                 }
             }
             ActorEnd::Retired => {
-                let released = release::<W>(actor.port_mut()).await;
-                post(&mut mailbox, News::Released(released)).await;
-                return;
-            }
-            // The network was lost after the stop's wait ended: the
-            // lifecycle ended already, and the station's runner hears it
-            // here. Every owner stays with the actor.
-            ActorEnd::Faulted(oer_protocols_ieee80211_runtime::datapath::ActorFault::Contract(
-                oer_protocols_ieee80211_runtime::datapath::ActorViolation::NetworkLost,
-            )) => {
+                // Read before the release: the loss of the last stop's
+                // network participant, which the runner's exit records.
+                let network_lost = actor.network_lost();
+                let result = release::<W>(actor.port_mut()).await;
                 post(
                     &mut mailbox,
-                    News::Released(Err(crate::failure::ReleaseCause::NetworkLost)),
+                    News::Released {
+                        result,
+                        network_lost,
+                    },
                 )
                 .await;
                 return;

@@ -383,6 +383,8 @@ impl Worker {
         let left = match self.station.stop().await {
             Ok(()) => Left::Down,
             Err(StopError::Failed) => Left::Refused(StationError::Unavailable),
+            // The station stopped; only the network's stop went unconfirmed.
+            Err(StopError::NetworkLost) => Left::Down,
         };
         self.phase = Phase::Stopped;
         left

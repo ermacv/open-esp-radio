@@ -413,7 +413,10 @@ where
         &mut self,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) {
-        if self.network_stopping != NetworkStopping::Owed {
+        if !matches!(
+            self.network_stopping,
+            NetworkStopping::Owed | NetworkStopping::Lost
+        ) {
             return;
         }
         while self.data.freed.is_empty() && network.returned.free_capacity() != 0 {
@@ -431,7 +434,8 @@ where
             self.return_freed(network);
         }
         self.queued = network.transmit.len();
-        if matches!(self.radio, Radio::Draining { .. } | Radio::Returning)
+        if self.network_stopping == NetworkStopping::Owed
+            && matches!(self.radio, Radio::Draining { .. } | Radio::Returning)
             && self.data.freed.is_empty()
             && self.queued == 0
         {

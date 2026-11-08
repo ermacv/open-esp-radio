@@ -136,6 +136,9 @@ impl EventSink<ActorEvent> for Observed {
 pub struct NetworkStopState {
     requested: Cell<bool>,
     stopped: Cell<bool>,
+    /// The participant went without reporting, as the facade's
+    /// `NetworkStopper` dropped unreported.
+    lost: Cell<bool>,
     network: Cell<Option<Waker>>,
     station: Cell<Option<Waker>>,
 }
@@ -164,6 +167,14 @@ impl NetworkStopState {
     pub fn reset(&self) {
         self.requested.set(false);
         self.stopped.set(false);
+        self.lost.set(false);
+    }
+
+    /// The participant ends without reporting its stop: it lost the
+    /// confirmation, not the owners, which its composition still returns.
+    pub fn lost(&self) {
+        self.lost.set(true);
+        Self::wake(&self.station);
     }
 
     /// The network stopped and holds no frame of the station.
@@ -185,6 +196,8 @@ impl NetworkStop for NetworkStopState {
         self.station.set(Some(cx.waker().clone()));
         if self.stopped.get() {
             Poll::Ready(Ok(()))
+        } else if self.lost.get() {
+            Poll::Ready(Err(NetworkStopLost))
         } else {
             Poll::Pending
         }

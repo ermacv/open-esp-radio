@@ -48,7 +48,9 @@
 //! confirms only once it stopped and returned every lent buffer; a stopped
 //! radio whose network returns late ends the stop's wait at the deadline
 //! ([`LifecycleEnd::StoppedReturning`]) and the actor retires after that
-//! return. A restart keeps the network. A
+//! return; a lost network participant ends it with the loss once the
+//! station's share of the network is home
+//! ([`LifecycleEnd::StoppedNetworkLost`]). A restart keeps the network. A
 //! confirmed stop retires the actor ([`ToActor::Retire`]) after the
 //! application's stop, or ends it for the next installation
 //! ([`ToActor::Reinstall`]) after the station failed: the composition then
@@ -288,6 +290,11 @@ pub enum LifecycleEnd<F> {
     /// actor's end before it reuses the installation's owners. Not a
     /// failure.
     StoppedReturning(ReturnObserved),
+    /// The application stopped the station and the radio stopped; the
+    /// station returned everything it held of the network, but the
+    /// network's stop participant was lost and never confirmed its stop. A
+    /// software error the composition records; not a failure of the radio.
+    StoppedNetworkLost(ReturnObserved),
     /// The station failed; the radio stopped and the actor ended for the
     /// next installation. The composition reinstalls the port and builds
     /// the service again.
@@ -310,7 +317,10 @@ impl<F> LifecycleEnd<F> {
     pub const fn is_terminal(&self) -> bool {
         !matches!(
             self,
-            Self::Stopped | Self::StoppedReturning(_) | Self::Restart(_)
+            Self::Stopped
+                | Self::StoppedReturning(_)
+                | Self::StoppedNetworkLost(_)
+                | Self::Restart(_)
         )
     }
 }

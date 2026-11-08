@@ -492,7 +492,7 @@ async fn lifecycles<W: Binding>(
             radio::News::Reinstall(cause) => {
                 return StationExit::Failed(crate::failure::LifecycleFailure::Reinstall(cause));
             }
-            radio::News::Released(_) => {
+            radio::News::Released { .. } => {
                 return StationExit::Failed(crate::failure::LifecycleFailure::Mailbox);
             }
         };
@@ -530,8 +530,10 @@ async fn lifecycles<W: Binding>(
                 })
                 .await;
                 return match released {
-                    Some(radio::News::Released(Ok(()))) => StationExit::Stopped,
-                    Some(radio::News::Released(Err(cause))) => StationExit::ReleaseFailed(cause),
+                    Some(radio::News::Released {
+                        result,
+                        network_lost,
+                    }) => released_exit(result, network_lost),
                     None => StationExit::ReleaseFailed(crate::failure::ReleaseCause::Deadline),
                     Some(
                         radio::News::Installed(..)
@@ -540,16 +542,20 @@ async fn lifecycles<W: Binding>(
                     ) => StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
                 };
             }
-            LifecycleEnd::StoppedReturning(_) => {
+            // The radio stopped. The network returned late
+            // (`StoppedReturning`), or its stop participant was lost
+            // (`StoppedNetworkLost`): the deadline ended the lifecycle's wait,
+            // not the return. The actor retires once the station's share of
+            // the network came home and the radio's release follows: the
+            // exit waits for both, with no deadline of its own, as no radio
+            // owner is unconfirmed.
+            LifecycleEnd::StoppedReturning(_) | LifecycleEnd::StoppedNetworkLost(_) => {
                 drop(retired);
-                // The radio stopped; the network returns what it holds of
-                // the station late. The actor retires once that return
-                // came and the radio's release follows: the exit waits for
-                // them, with no deadline of its own, as the return is the
-                // network's software and no radio owner is unconfirmed.
                 return match news(mailbox).await {
-                    radio::News::Released(Ok(())) => StationExit::Stopped,
-                    radio::News::Released(Err(cause)) => StationExit::ReleaseFailed(cause),
+                    radio::News::Released {
+                        result,
+                        network_lost,
+                    } => released_exit(result, network_lost),
                     radio::News::Installed(..)
                     | radio::News::Unavailable(_)
                     | radio::News::Reinstall(_) => {
@@ -589,5 +595,18 @@ async fn lifecycles<W: Binding>(
                 };
             }
         }
+    }
+}
+
+/// The exit of a released radio: its release's result, and the loss of the
+/// last stop's network participant, which a stopped exit records.
+fn released_exit(
+    result: Result<(), crate::failure::ReleaseCause>,
+    network_lost: bool,
+) -> StationExit {
+    match (result, network_lost) {
+        (Ok(()), false) => StationExit::Stopped,
+        (Ok(()), true) => StationExit::StoppedNetworkLost,
+        (Err(cause), _) => StationExit::ReleaseFailed(cause),
     }
 }
