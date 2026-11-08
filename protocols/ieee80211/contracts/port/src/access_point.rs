@@ -33,7 +33,7 @@
 //! | Operation | Accepted at | Refused before | Ends with |
 //! | --- | --- | --- | --- |
 //! | a transmission ([`AccessPointPort::admit_access_point`]) | [`DataPort::submit`] | [`SubmitRefusal`](crate::SubmitRefusal) (a key of an earlier installation: `StalePermission`), its withdrawn terminal in the sink | [`TxCompleted::Single`](crate::TxCompleted::Single) |
-//! | a beacon ([`AccessPointPort::admit_beacon`]) | [`DataPort::submit`] | the same (a permission of an earlier installation: `StalePermission`), its terminal returning the permission | [`TxCompleted::Beacon`](crate::TxCompleted::Beacon) |
+//! | a beacon ([`AccessPointPort::admit_beacon`]) | [`DataPort::submit`] | the same (a permission of an earlier installation: `StalePermission`), its terminal returning the permission | [`TxCompleted::Beacon`](crate::TxCompleted::Beacon); `Expired` when not published by its deadline |
 //! | a key installation or removal, a configuration with its TSF control ([`AccessPointPort::access_point_command`]) | [`AccessPointProgress::Done`] | [`AccessPointProgress::Refused`] with the command ([`AccessPointRefusal`]) | its terminal in the sink |
 //!
 //! # Roles stop on their own
@@ -65,18 +65,19 @@
 //! ```compile_fail,E0382
 //! use oer_protocols_ieee80211_contracts_port::*;
 //! use oer_protocols_radio_port::{PoolPath, Slot};
+//! use oer_portable_time::Instant;
 //! fn twice<'id, T, M: PreparedTx<'id>, N: PreparedTx<'id>, K, X, Path: PoolPath, Q: PoolPath>(
 //!     permission: BeaconPermission<'id, Q>,
-//!     first: (X, Slot<'id, T, Path>, M, SupportedPower<K>, BeaconStamp<K>),
-//!     second: (X, Slot<'id, T, Path>, N, SupportedPower<K>, BeaconStamp<K>),
+//!     first: (X, Slot<'id, T, Path>, M, SupportedPower<K>, BeaconStamp<K>, Instant),
+//!     second: (X, Slot<'id, T, Path>, N, SupportedPower<K>, BeaconStamp<K>, Instant),
 //! ) where
 //!     M::Types: PortTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
 //!     N::Types: PortTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
 //! {
-//!     let (context, ticket, source, power, stamp) = first;
-//!     let _one = BeaconAttempt { context, ticket, source, power, coex_operation: TxOperation::Data, permission, stamp }.admit();
-//!     let (context, ticket, source, power, stamp) = second;
-//!     let _two = BeaconAttempt { context, ticket, source, power, coex_operation: TxOperation::Data, permission, stamp }.admit();
+//!     let (context, ticket, source, power, stamp, deadline) = first;
+//!     let _one = BeaconAttempt { context, ticket, source, power, permission, stamp, deadline }.admit();
+//!     let (context, ticket, source, power, stamp, deadline) = second;
+//!     let _two = BeaconAttempt { context, ticket, source, power, permission, stamp, deadline }.admit();
 //! }
 //! ```
 //!
@@ -85,14 +86,15 @@
 //! ```
 //! use oer_protocols_ieee80211_contracts_port::*;
 //! use oer_protocols_radio_port::{PoolPath, Slot};
+//! use oer_portable_time::Instant;
 //! fn once<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath, Q: PoolPath>(
 //!     permission: BeaconPermission<'id, Q>,
-//!     beacon: (X, Slot<'id, T, Path>, M, SupportedPower<K>, BeaconStamp<K>),
+//!     beacon: (X, Slot<'id, T, Path>, M, SupportedPower<K>, BeaconStamp<K>, Instant),
 //! ) where
 //!     M::Types: PortTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
 //! {
-//!     let (context, ticket, source, power, stamp) = beacon;
-//!     let _one = BeaconAttempt { context, ticket, source, power, coex_operation: TxOperation::Data, permission, stamp }.admit();
+//!     let (context, ticket, source, power, stamp, deadline) = beacon;
+//!     let _one = BeaconAttempt { context, ticket, source, power, permission, stamp, deadline }.admit();
 //! }
 //! ```
 //!
@@ -378,9 +380,17 @@ pub enum AccessPointRefusal {
 }
 
 /// One beacon awaiting admission: an access-point attempt of the frame the
-/// caller prepared as its Beacon, with the beacon permission and the
-/// Timestamp rule. Its access category is [`BEACON_ACCESS_CATEGORY`] and its
-/// first transmission goes unprotected.
+/// caller prepared as its Beacon, with the beacon permission, the Timestamp
+/// rule and the instant it stays fresh until. Its access category is
+/// [`BEACON_ACCESS_CATEGORY`], its coexistence operation
+/// [`TxOperation::Beacon`] and its transmission goes unprotected.
+///
+/// The caller submits it for its target TBTT and names the next TBTT as its
+/// `deadline`: a beacon the port has not published by then ends
+/// [`TxOutcome::Expired`](crate::TxOutcome::Expired), its permission and
+/// every other owner returned, and nothing of it went on the air. A beacon
+/// whose end is unknown ([`TxOutcome::Indeterminate`](crate::TxOutcome::Indeterminate))
+/// is not sent again: the caller builds the next TBTT's beacon instead.
 pub struct BeaconAttempt<
     'id,
     T,
@@ -398,12 +408,12 @@ pub struct BeaconAttempt<
     pub source: M,
     /// Its transmit power.
     pub power: SupportedPower<K>,
-    /// What the attempt is, for the radio it shares the air with.
-    pub coex_operation: TxOperation,
     /// The installation's one beacon permission.
     pub permission: BeaconPermission<'id, BeaconPath>,
     /// Who writes its Timestamp field.
     pub stamp: BeaconStamp<K>,
+    /// The port's instant it must be published by: the next TBTT.
+    pub deadline: Instant,
 }
 
 impl<'id, T, M, K, X, Path: PoolPath, BeaconPath: PoolPath>
@@ -420,9 +430,9 @@ where
             ticket,
             source,
             power,
-            coex_operation,
             permission,
             stamp,
+            deadline,
         } = self;
         AdmittedBeacon {
             attempt: crate::Attempt {
@@ -432,11 +442,12 @@ where
                 access_category: BEACON_ACCESS_CATEGORY,
                 protection: Protection::None,
                 power,
-                coex_operation,
+                coex_operation: TxOperation::Beacon,
             }
             .admit(),
             permission,
             stamp,
+            deadline,
         }
     }
 }
@@ -455,6 +466,7 @@ pub struct AdmittedBeacon<
     attempt: AdmittedAttempt<'id, T, M, K, X, Path>,
     permission: BeaconPermission<'id, BeaconPath>,
     stamp: BeaconStamp<K>,
+    deadline: Instant,
 }
 
 /// What a backend takes from a sealed beacon.
@@ -465,6 +477,8 @@ pub struct BeaconParts<'id, C, T, P, E, K, BeaconPath: PoolPath> {
     pub permission: BeaconPermission<'id, BeaconPath>,
     /// Who writes its Timestamp field.
     pub stamp: BeaconStamp<K>,
+    /// The port's instant it must be published by.
+    pub deadline: Instant,
 }
 
 impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath, BeaconPath: PoolPath>
@@ -480,6 +494,11 @@ impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath, BeaconPath: PoolPath>
         self.stamp
     }
 
+    /// The port's instant it must be published by.
+    pub const fn deadline(&self) -> Instant {
+        self.deadline
+    }
+
     /// Transfer the whole beacon through the backend's private frontend.
     pub fn into_parts(
         self,
@@ -489,6 +508,7 @@ impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath, BeaconPath: PoolPath>
             attempt: self.attempt.into_parts(loan),
             permission: self.permission,
             stamp: self.stamp,
+            deadline: self.deadline,
         }
     }
 }

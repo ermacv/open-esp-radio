@@ -2587,11 +2587,18 @@ struct Prepared<'id, B: ModelComposition> {
     key: Option<PreparedKey>,
     /// A beacon's permission, which its terminal returns.
     beacon: Option<OwnedBeacon<B>>,
+    /// A beacon's deadline: not published by then, it ends expired.
+    deadline: Option<Instant>,
 }
 
 impl<B: ModelComposition> Prepared<'_, B> {
     const fn role(&self) -> VifRole {
         self.role
+    }
+    /// Whether it aged past its MSDU `lifetime` or its deadline at `now`.
+    fn expired(&self, now: Instant, lifetime: Duration) -> bool {
+        self.operation.payload().expired(now, lifetime)
+            || self.deadline.is_some_and(|deadline| now >= deadline)
     }
     fn key(&self) -> Option<&RawKeyIdentity> {
         self.key.as_ref().map(|key| &key.identity)
@@ -3167,7 +3174,7 @@ fn publish_single<'id, B: ModelComposition>(
         .edca(plan.prepared.role)
         .access_category(plan.prepared.queue)
         .msdu_lifetime;
-    if plan.prepared.operation.payload().expired(now, lifetime) {
+    if plan.prepared.expired(now, lifetime) {
         held.air.expired(1);
         terminal(held, *plan.prepared, TxOutcome::Expired { msdus: 1 });
         return None;
@@ -3394,6 +3401,8 @@ pub struct ModelTxExecution<B: ModelComposition> {
     key: Option<PreparedKey>,
     role: VifRole,
     beacon: Option<OwnedBeacon<B>>,
+    /// A beacon's deadline: not published by then, it ends expired.
+    deadline: Option<Instant>,
 }
 
 /// The beacon permission while the model holds its beacon.
@@ -3426,6 +3435,7 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
                 key: self.key,
                 role: self.role,
                 beacon: None,
+                deadline: None,
             },
         }
     }

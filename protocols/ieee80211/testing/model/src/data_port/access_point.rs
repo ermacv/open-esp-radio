@@ -237,8 +237,10 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
             mut attempt,
             permission,
             stamp: _,
+            deadline,
         } = beacon.into_parts(&self.loan);
         attempt.execution.beacon = Some(permission.into_owned(&self.loan));
+        attempt.execution.deadline = Some(deadline);
         attempt
     }
 

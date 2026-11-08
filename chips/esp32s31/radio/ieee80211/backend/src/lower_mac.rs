@@ -1381,9 +1381,11 @@ where
         let queue = common.queue;
         // The static priority vendor data encapsulation assigns the access
         // category, unless the coexistence owner raises a connection frame.
+        // A beacon takes its access category's static priority: no beacon
+        // transmit priority is recovered.
         let raised = match operation {
             TxOperation::Connection(frame) => self.coex.connection_frame_priorities(frame),
-            TxOperation::Data => None,
+            TxOperation::Data | TxOperation::Beacon => None,
         };
         let (scheduler_priority, packet_priority, priority_count) = match raised {
             Some(connection) => (

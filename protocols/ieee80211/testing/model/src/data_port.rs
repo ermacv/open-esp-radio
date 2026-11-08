@@ -687,7 +687,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     .edca(work.role)
                     .access_category(work.queue)
                     .msdu_lifetime;
-                if !work.operation.payload().expired(now, lifetime) {
+                if !work.expired(now, lifetime) {
                     break;
                 }
                 let Some(work) = queue.waiting.pop_front() else {
@@ -839,6 +839,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                         .msdu_lifetime;
                     if let Some(at) = work.operation.payload().admitted_monotonic() {
                         due(at.saturating_add(lifetime));
+                    }
+                    if let Some(deadline) = work.deadline {
+                        due(deadline);
                     }
                 } else {
                     due(now);
@@ -1313,7 +1316,17 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
         self.expire(now);
-        self.driver.publish(&self.held);
+        if matches!(
+            self.access_point_held_since,
+            Some((AccessPointCommandKind::Configure, _))
+        ) {
+            // A held configuration of the access point withdraws its
+            // attempts queued behind its frame on the air, as its call did.
+            self.driver
+                .publish_before(&self.held, |role| role == VifRole::AccessPoint);
+        } else {
+            self.driver.publish(&self.held);
+        }
         let done = self.serve_arena(now)?;
         self.close_gate();
         if !self.driver.removing.is_empty() {
@@ -1427,6 +1440,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             key,
             role,
             beacon,
+            deadline,
         } = attempt.execution;
         let prepared = Box::new(Prepared {
             operation: attempt.operation,
@@ -1435,6 +1449,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             plan,
             key,
             beacon,
+            deadline,
         });
         attempt
             .access_category

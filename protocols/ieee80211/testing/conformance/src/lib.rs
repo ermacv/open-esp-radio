@@ -14,6 +14,8 @@
 //!
 //! - [`data_port`]: the cases every data port passes, called as its actor
 //!   calls it.
+//! - [`access_point`]: the access-point role of a port, beside the
+//!   station's on the one physical owner.
 //! - [`arena`]: intake, publication and settlement on a port's two TX
 //!   arenas.
 //! - [`group_keys`]: the acceptance of a GTK mutation's receive cut, from a
@@ -24,6 +26,7 @@
 //! from actual submitted and returned owners, never from the expected
 //! identities.
 
+pub mod access_point;
 pub mod arena;
 pub mod data_port;
 pub mod edca;
