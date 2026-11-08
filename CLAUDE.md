@@ -79,10 +79,15 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   a panic or reset. An impossible state returns a named fault retaining its
   source observations; its owners stay quarantined, then the image or HAL
   owner calls safe `fatal::reset_recording`, without `panic!`. A watchdog is
-  not this mechanism. A software contract violation not yet removed by types
-  restarts the station and records its cause, never the chip. The policy
-  and its limits (debugger, retained diagnostics, repeated boot failure) are
-  in [Fatal decisions and reset](docs/architecture.md#fatal-decisions-and-reset).
+  not this mechanism. That sequence is no license to poison: a new poison
+  (an owner or state quarantined without a recovery path) needs a proof
+  that no handled error can keep the owners, and the owner's approval
+  before any code is written. Existing PHY poison is debt to remove, never
+  a precedent to repeat. The subsystem contracts linked from this file do
+  not lift this requirement. A software contract violation not yet removed
+  by types restarts the station and records its cause, never the chip. The
+  policy and its limits (debugger, retained diagnostics, repeated boot
+  failure) are in [Fatal decisions and reset](docs/architecture.md#fatal-decisions-and-reset).
 - **Unsafe.** A change introduces no new `unsafe` code. Unsafe contracts
   cover memory safety; operation order and lifecycle are enforced by `&mut`
   ownership and typestate. `unsafe` stays in `portable/mmio` (volatile
@@ -195,6 +200,7 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
 ## Subsystem contracts
 
 A change to one of these follows its page; this file does not repeat them.
+A page never relaxes a rule above: where they differ, the rule above holds.
 
 | Subject | Contract |
 |---|---|
