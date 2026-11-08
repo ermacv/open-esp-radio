@@ -155,7 +155,14 @@ impl<const N: usize> Neighbors<N> {
 
     /// Note `address` at `hardware`. An entry is made only when `make`: RFC
     /// 826 merges what it knows, and adds only when the packet was for us.
-    pub(crate) fn learn(&mut self, now: Instant, address: [u8; 4], hardware: [u8; 6], make: bool) {
+    /// Whether an entry took it.
+    pub(crate) fn learn(
+        &mut self,
+        now: Instant,
+        address: [u8; 4],
+        hardware: [u8; 6],
+        make: bool,
+    ) -> bool {
         let known = Entry::Known {
             address,
             hardware,
@@ -167,14 +174,16 @@ impl<const N: usize> Neighbors<N> {
                     if held == address =>
                 {
                     *entry = known;
-                    return;
+                    return true;
                 }
                 _ => {}
             }
         }
         if make && let Some(entry) = self.entries.iter_mut().find(|entry| **entry == Entry::Free) {
             *entry = known;
+            return true;
         }
+        false
     }
 
     /// The requests owed: each entry with its address and resolution.

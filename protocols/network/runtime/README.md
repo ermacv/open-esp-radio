@@ -6,7 +6,8 @@ task that polls `Service::run` and then calls `Service::retire`.
 
 One task owns the core. A socket talks to it through queues, and blocks travel
 through them by value. A socket's lanes are its own, so one socket waits for no
-other's room.
+other's room. A local producer instead is called by the task itself, in its own
+turn: it needs no queue and no block.
 
 `Service::bind` opens a socket in the core and gives the application its end, so a
 socket exists only once its service holds the other end. A refused bind changes
@@ -86,8 +87,51 @@ Dropping a `LateSocket` or a `Service` with commands in a request lane still str
 what those hold: that has no contract yet.
 
 A turn takes commands, received frames and the port's notices, then, once it has
-read them all, chooses work and publishes it, then hands results and datagrams back. Each part is bounded, so no lane and no
-port starves the others, and sockets waiting for blocks take turns.
+read them all, asks its producer for offers, chooses work and publishes it, then
+hands results and datagrams back. Each part is bounded, so no lane and no port
+starves the others, and sockets waiting for blocks take turns. Every exit of a
+turn goes through that last part, a fault's too: after a policy or port fault the
+turn publishes nothing more, and only hands back what it knows, so at an await
+each open work truly was not published.
+
+## Local producer
+
+`Service::with_producer` owns a `Produce` by value, and `bind_local` gives it a
+send-only socket: a datagram for its port is dropped before any block is taken,
+as `NetEvent::SendOnly`. `()` is the service without one, at no cost. The
+producer runs on the service's hart and task; independent and cross-hart clients
+keep the channel sockets.
+
+Each turn the service asks `offer` and makes each offer one `Core::declare`, the
+acceptance point: a place and no block. A refusal is the offer's one answer,
+`refused`; a declared work has one outcome, `ended`. Once the policy chooses the
+work and the port gives it a slot, the core writes the Ethernet and IPv4 headers,
+the producer's `fill` writes the data in the slot itself, and the core sums the
+UDP checksum over it there. Generated data so needs no copy at all.
+
+Progress within one turn is bounded by eight offers and the hold rules. A final
+refusal (`TooLong`, `NoRoute`, `Stale`) moves on to the next offer in the same
+turn, with no wake. `NoPlace` and `NeighborsFull` hold the producer's offers, the
+hold belonging to the refused offer: it lasts until one of the producer's places
+frees, or the core's `neighbors_changed` counter moves (an ARP answer or expiry,
+a resolution given up, every end of work that held a neighbor), or until it is
+stale: the source's generation moved, or `current(tag)` is false. A stale hold
+gives way to a new offer, which meets `NoPlace` again while the places are taken.
+At most eight declared works are open at once.
+
+A source that overwrites what open tags name moves its generation, and the next
+turn withdraws each declared work no longer current: it ends `Declined`, with no
+slot and no port. Every fill checks `current(tag)` first, so no frame carries a
+later generation's data under an earlier work. A declining fill ends its work
+`Declined`, moves the next socket's turn past the producer's, and keeps the
+producer's flow out of the rest of the turn: one declining fill a turn, and
+another socket's work goes. An `Unknown` work is never declared again.
+
+Outcomes reach the producer before the turn ends, on every exit. `retire` ends
+each open work `Retired`, tells the producer, returns it in `Ended::producers`
+and only then sets the `LocalEnd` flag the image lent. Dropping the service drops
+the producer, calls nothing, and its guard sets the flag: every outcome was
+delivered before the last await, so every work still open never went out.
 
 The sink lent to `run` hears the core's drops and the service's `ServiceEvent`s:
 each request a turn takes by kind, each socket whose lane still holds requests once
@@ -98,8 +142,8 @@ it. A disabled sink, `()` among them, hears nothing and builds no event.
 
 `Service::run` ends at the first look after a stop, or at once when the port
 contradicts itself, and returns the cause. Nothing is published from then on.
-`Service::retire` returns `Ended`: the cause, the core's `Retired` and a
-`LateSocket` per socket. Every result the service knows goes to its place, the request lane goes to its socket, and only then
+`Service::retire` returns `Ended`: the cause, the core's `Retired`, a
+`LateSocket` per socket and the producer. Every result the service knows goes to its place, the request lane goes to its socket, and only then
 does `stopped` show: what still waits there the service never saw, so those
 observers read `Outcome::Retired`, and `Socket::reclaim` gives back their blocks
 and all else in the lanes, for the pool's holder. So an end waits for no

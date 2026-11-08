@@ -16,12 +16,25 @@ accepted by the port, not delivered: until then its block stays with the core,
 and a refusal moves nothing. The owner keeps its own record of what the frame's
 fill did and reads the port's answer against it. A fill that fails comes back as
 the fill's own error, never as a port refusal, and ends a datagram
-`Outcome::Rejected`. A port whose answer contradicts that record stops all
+`Outcome::Rejected`, or a producer's declined work `Outcome::Declined`. A port whose answer contradicts that record stops all
 publishing until the core retires: `Ok` after a failed or missing fill ends the
 work `Outcome::Unknown`, not repeated, whatever the fill's error, and a refusal of
 its own after a failed fill ends the work by the fill's cause. Every end at
 publication, a frame taken or refused for good, passes the turn to the next
 socket.
+
+A local producer's work is declared, not sent: `declare` takes a command place
+with `send`'s refusals and no block, and `open_local` gives the producer a
+send-only socket, whose port's datagrams are dropped before any block
+(`NetEvent::SendOnly`). Its frame's headers go into the port's slot first, then
+`transmit`'s `produce` fills the data there, and the UDP checksum, summed over
+that data in the slot, goes last. A producer that declines (`Declined`) ends the
+work `Outcome::Declined`, which also passes the turn to the next socket, and a
+`withdraw` ends it so before any port saw it. A declared work is never queued
+for eviction: it holds no block. `neighbors_changed` counts whatever may have
+freed a neighbor entry for a new send: an ARP answer, an entry asked again past
+its life, a resolution given up or refused, and every end of work that held a
+neighbor, so a waiter for `NeighborsFull` keeps the value it saw.
 
 `tick` comes first at every time `poll_deadline` names and at any later `now`
 before work is asked for: an address past its life is no work until then.

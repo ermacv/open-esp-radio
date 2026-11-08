@@ -6,6 +6,7 @@ use oer::wifi::embassy_net::TryError;
 use oer::wifi::embassy_net::udp::{RecvPacket, UdpMetadata, UdpSocket};
 use oer::wifi::embassy_net::wire::{ListenSocketAddr, SocketAddr};
 use oer::wifi::{IpDevice, Ipv4Status, Net};
+use oer_hil_services_load::header::Header;
 use oer_hil_services_load::{LoadError, Start};
 
 use crate::RX;
@@ -159,17 +160,15 @@ pub(crate) struct Sending<'a> {
 }
 
 impl Sending<'_> {
-    /// Offer `size` octets that `write` builds, without waiting.
-    pub(crate) fn try_send(
-        &mut self,
-        size: usize,
-        peer: Peer,
-        write: impl FnOnce(&mut [u8]) -> Option<()>,
-    ) -> Attempt {
+    /// Offer `size` octets of the datagram `header` begins, without waiting:
+    /// the whole payload is written in place
+    /// ([`Header::write_datagram`]).
+    pub(crate) fn try_send(&mut self, size: usize, peer: Peer, header: Header) -> Attempt {
         match self
             .socket
-            .try_send_to_with(size, SocketAddr::from(peer), write)
-        {
+            .try_send_to_with(size, SocketAddr::from(peer), |payload| {
+                header.write_datagram(payload)
+            }) {
             Ok(Some(())) => Attempt::Taken,
             Err(TryError::WouldBlock) => Attempt::NoRoom,
             Ok(None) | Err(TryError::Other(_)) => Attempt::Lost,
@@ -177,17 +176,12 @@ impl Sending<'_> {
     }
 
     /// As [`Self::try_send`], once the socket has room; whether it took it.
-    pub(crate) async fn send(
-        &mut self,
-        size: usize,
-        peer: Peer,
-        write: impl FnOnce(&mut [u8]) -> Option<()>,
-    ) -> bool {
+    pub(crate) async fn send(&mut self, size: usize, peer: Peer, header: Header) -> bool {
         matches!(
             self.socket
                 .send_to_with(size, SocketAddr::from(peer), |payload| (
                     size,
-                    write(payload)
+                    header.write_datagram(payload)
                 ))
                 .await,
             Ok(Some(()))

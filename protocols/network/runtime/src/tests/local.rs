@@ -35,7 +35,7 @@ use super::{
     BLOCKS, Count, DEPTH, LOCAL, OUR_IP, PEER, PEER_IP, Policy, RECEIVED, SIZE, counter, udp_frame,
 };
 use crate::{
-    Direct, EndCause, LocalEnd, LocalRefused, MemoryPolicy, Next, Offer, Observer, Produce,
+    Direct, EndCause, LocalEnd, LocalRefused, MemoryPolicy, Next, Observer, Offer, Produce,
     Producer, Sent, Service, ServiceEvent, Socket, SocketLanes, StopLane, Work,
 };
 
@@ -237,8 +237,10 @@ enum Reply {
     Take,
     /// No room.
     Full,
-    /// `Ok`, whatever the fill did: the port's fault.
+    /// `Ok`, whatever the fill did: the port's fault after a failed fill.
     Yes,
+    /// `Ok` without calling the fill: the port's fault.
+    Lazy,
     /// A refusal of its own after a failed fill: the port's fault.
     Misreport,
 }
@@ -321,13 +323,14 @@ impl FramePort for LocalPort {
     ) -> Result<u32, Unpublished<(), E>> {
         let mut line = self.0.borrow_mut();
         line.publishes += 1;
-        let reply = line
-            .replies
-            .pop_front()
-            .unwrap_or(if line.full { Reply::Full } else { Reply::Take });
+        let reply =
+            line.replies
+                .pop_front()
+                .unwrap_or(if line.full { Reply::Full } else { Reply::Take });
         let mut frame = vec![0; length];
         match reply {
             Reply::Full => Err(Unpublished::Port(())),
+            Reply::Lazy => Ok(0),
             Reply::Yes => {
                 let _either = fill(&mut frame);
                 Ok(0)
@@ -716,8 +719,7 @@ fn make_stale(script: &Script, how: Stale, held: Tag, next: Tag, remote: Remote)
 /// datagrams hold every neighbor entry. The application then offers B to
 /// broadcast, the neighbor table unchanged: the next turn drops the stale
 /// hold and declares B, and A hears no `ended`.
-fn a_stale_neighbors_full_hold_gives_way(how: Stale) {
-    brand!(Net);
+fn a_stale_neighbors_full_hold_gives_way<Net: 'static>(how: Stale) {
     let Bench {
         mut service,
         mut socket,
@@ -761,20 +763,21 @@ fn a_stale_neighbors_full_hold_gives_way(how: Stale) {
 
 #[test]
 fn a_new_generation_drops_a_stale_neighbors_full_hold() {
-    a_stale_neighbors_full_hold_gives_way(Stale::Generation);
+    brand!(Net);
+    a_stale_neighbors_full_hold_gives_way::<Net>(Stale::Generation);
 }
 
 #[test]
 fn an_offer_no_longer_the_producer_s_drops_its_neighbors_full_hold() {
-    a_stale_neighbors_full_hold_gives_way(Stale::NotCurrent);
+    brand!(Net);
+    a_stale_neighbors_full_hold_gives_way::<Net>(Stale::NotCurrent);
 }
 
 /// A `NoPlace` hold made stale is cancelled and a new offer is asked; the
 /// places are still taken, so that offer gets `NoPlace` again. The old works
 /// stay current and keep their places: this is the cancellation alone, apart
 /// from an acceptance.
-fn a_stale_no_place_hold_is_cancelled(how: Stale) {
-    brand!(Net);
+fn a_stale_no_place_hold_is_cancelled<Net: 'static>(how: Stale) {
     let Bench {
         mut service,
         line,
@@ -817,12 +820,14 @@ fn a_stale_no_place_hold_is_cancelled(how: Stale) {
 
 #[test]
 fn a_new_generation_cancels_a_no_place_hold() {
-    a_stale_no_place_hold_is_cancelled(Stale::Generation);
+    brand!(Net);
+    a_stale_no_place_hold_is_cancelled::<Net>(Stale::Generation);
 }
 
 #[test]
 fn an_offer_no_longer_the_producer_s_cancels_its_no_place_hold() {
-    a_stale_no_place_hold_is_cancelled(Stale::NotCurrent);
+    brand!(Net);
+    a_stale_no_place_hold_is_cancelled::<Net>(Stale::NotCurrent);
 }
 
 /// `NeighborsFull` asks nothing until the neighbor change counter moves,
@@ -1018,11 +1023,7 @@ fn a_new_generation_ends_old_works_and_its_offers_go_in_the_same_turn() {
             Call::Ended(tag(1, 0), Outcome::Accepted),
         ]
     );
-    assert_eq!(
-        line.publishes(),
-        publishes + 1,
-        "withdrawal calls no port"
-    );
+    assert_eq!(line.publishes(), publishes + 1, "withdrawal calls no port");
     assert_eq!(line.produced(), [data_of(tag(1, 0), 16)]);
     let works = script.0.borrow().works.clone();
     for (at, (id, tag)) in works.iter().enumerate() {
@@ -1084,15 +1085,17 @@ fn a_notice_fault_still_delivers_what_the_turn_ended() {
     let mut run = pin!(service.run(clock, &mut events));
     let (count, waker) = counter();
     let cx = &mut Context::from_waker(&waker);
-    let closed = channel_send(&mut socket, &mut run, host(7), b"closed");
+    // The producer's work asks for its neighbor from the start, the
+    // channel's a second later: only the first is given up at three.
     script.push(tag(0, 0), host(9), 16);
     script.wake();
     settle(&mut run, &count, &waker);
     let start = clock.now();
-    for second in 1..3 {
-        clock.advance_to(start.saturating_add(Duration::from_secs(second)));
-        settle(&mut run, &count, &waker);
-    }
+    clock.advance_to(start.saturating_add(Duration::from_secs(1)));
+    let closed = channel_send(&mut socket, &mut run, host(7), b"closed");
+    settle(&mut run, &count, &waker);
+    clock.advance_to(start.saturating_add(Duration::from_secs(2)));
+    settle(&mut run, &count, &waker);
     let sent = line.sent();
     clock.advance_to(start.saturating_add(Duration::from_secs(3)));
     {
@@ -1104,6 +1107,8 @@ fn a_notice_fault_still_delivers_what_the_turn_ended() {
         line.notices.push_back(1);
     }
     policy.0.borrow_mut().fails_completing = true;
+    // Ready work the faulted turn must neither declare nor publish.
+    script.push(tag(0, 1), broadcast(), 16);
     let cause = poll(&mut run, cx);
     assert_eq!(cause, Poll::Ready(EndCause::Egress));
     assert!(
@@ -1119,6 +1124,10 @@ fn a_notice_fault_still_delivers_what_the_turn_ended() {
         "before retirement"
     );
     assert_eq!(line.sent(), sent, "nothing published after the fault");
+    assert!(
+        !script.calls().contains(&Call::Offered(tag(0, 1))),
+        "nothing offered after the fault"
+    );
 }
 
 /// A publish fault after an `Accepted`: the producer hears it before `run`
@@ -1220,7 +1229,7 @@ fn a_dropped_service_has_delivered_every_known_outcome() {
     line.0
         .borrow_mut()
         .replies
-        .extend([Reply::Take, Reply::Yes]);
+        .extend([Reply::Take, Reply::Lazy]);
     for index in 0..3 {
         script.push(tag(0, index), broadcast(), 16);
     }

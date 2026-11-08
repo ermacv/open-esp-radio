@@ -786,7 +786,10 @@ fn a_grant_chosen_for_one_address_does_not_go_to_another() {
         let chosen = stack.poll_demand(at(1)).unwrap().grant();
         let moved = arp_frame(Operation::Reply, (MOVED, PEER_IP), OUR_IP);
         stack.input(at(2), &moved, &mut ());
-        assert_eq!(stack.transmit(at(2), chosen, unproduced), Err(Unsent::Stale));
+        assert_eq!(
+            stack.transmit(at(2), chosen, unproduced),
+            Err(Unsent::Stale)
+        );
         assert!(stack.port_mut().sent.is_empty());
         assert_eq!(stack.poll_demand(at(2)).unwrap().ready.peer, MOVED);
     });
@@ -1709,7 +1712,11 @@ fn a_request_refused_after_one_went_out_ends_rejected() {
         stack.tick(at(1000));
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(at(1000)).unwrap();
-        assert!(stack.transmit(at(1000), demand.grant(), unproduced).is_err());
+        assert!(
+            stack
+                .transmit(at(1000), demand.grant(), unproduced)
+                .is_err()
+        );
         assert_eq!(finished(stack.take_result(command)), Outcome::Rejected);
     });
 }

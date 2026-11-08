@@ -143,7 +143,12 @@ fn a_produced_frame_is_written_in_the_slot_and_its_checksum_verifies() {
         assert_ne!(udp.checksum, 0);
         assert!(
             Checksum::new()
-                .with(&ipv4_pseudo_header(OUR_IP, PEER_IP, PROTOCOL_UDP, udp.length))
+                .with(&ipv4_pseudo_header(
+                    OUR_IP,
+                    PEER_IP,
+                    PROTOCOL_UDP,
+                    udp.length
+                ))
                 .with(datagram)
                 .verifies()
         );
@@ -158,7 +163,9 @@ fn a_declared_work_waits_for_its_neighbor_without_a_slot() {
         let demand = stack.poll_demand(at(0)).unwrap();
         assert_eq!(demand.ready.class, Class::Control, "its neighbor first");
         let calls = Cell::new(0);
-        stack.transmit(at(0), demand.grant(), writes(&calls)).unwrap();
+        stack
+            .transmit(at(0), demand.grant(), writes(&calls))
+            .unwrap();
         assert_eq!(calls.get(), 0, "an ARP request fills no data");
         assert!(stack.poll_demand(at(0)).is_none(), "no slot during ARP");
         let work = running(stack.take_result(work));
@@ -438,10 +445,6 @@ fn reading_the_neighbor_counter_resets_nothing() {
         let calls = Cell::new(0);
         produce_next(stack, at(0), writes(&calls)).unwrap();
         assert_eq!(finished(stack.take_result(work)), Outcome::Accepted);
-        assert_eq!(
-            stack.neighbors_changed(),
-            before,
-            "broadcast held no entry"
-        );
+        assert_eq!(stack.neighbors_changed(), before, "broadcast held no entry");
     });
 }

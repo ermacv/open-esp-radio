@@ -36,12 +36,14 @@
 //! ```
 
 mod device;
+mod local;
 mod observation;
 mod returns;
 mod service;
 mod socket;
 
 pub use device::{DevicePort, PortRefusal, TxBuffers};
+pub use local::{LocalEnd, LocalRefused, Next, Offer, Produce, Producer, Producers, Work};
 pub use observation::{PublishEnd, RequestKind, ServiceEvent, TurnEnd};
 pub use returns::{NotHome, ReturnEnd, ReturnLane, ReturnRefusal, Returner};
 pub use service::{BindRefused, Direct, EndCause, Ended, MemoryPolicy, Service, StopLane};

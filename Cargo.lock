@@ -1997,6 +1997,7 @@ dependencies = [
  "oer-hil-services-load",
  "oer-hil-services-wifi-station",
  "oer-portable-events",
+ "oer-portable-memory",
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-portable-trace",

@@ -33,6 +33,11 @@ const TX_CAP_DBM: i8 = 20;
 type Requests = Either<wifi_station::Request, oer_hil_services_load::Request>;
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
+/// The network's service, with the load's producer in it.
+static NETWORK: ConstStaticCell<wifi::NetworkStorage<udp::LoadProducer>> =
+    ConstStaticCell::new(wifi::NetworkStorage::new());
+/// What the load's sender hands the producer.
+static SOURCE: udp::Source = udp::Source::new();
 
 oer::entry!(boot, group = network);
 
@@ -83,7 +88,8 @@ async fn application(
 fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
     let hart1 = boot.observe().ok_or(Error::ObserveTaken)?;
-    let (net, mut boot) = wifi::Network::start(device, boot)?;
+    let storage = NETWORK.try_take().ok_or(Error::Storage)?;
+    let (net, mut boot) = wifi::Network::start(device, boot, storage)?;
     let load = load::serve::LOAD.group(&mut boot)?;
     let relay = load::relay::RELAY.group(&mut boot)?;
     let tally = load::serve::TALLY.try_take().ok_or(Error::Storage)?;
@@ -94,7 +100,7 @@ fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted
 
 /// The load server, which never ends.
 async fn sockets(
-    net: wifi::Network,
+    net: wifi::Network<udp::LoadProducer>,
     load: load::serve::Requests,
     relay: load::relay::Client,
     hart1: observe::Hart1,
@@ -102,7 +108,7 @@ async fn sockets(
     turns: &'static mut udp::Turns,
     part: observe::Part,
 ) -> AppResult {
-    let net = udp::Network::new(net);
+    let net = udp::Network::new(net, &SOURCE);
     net.keep_turns(turns);
     let mut server = pin!(load::serve::serve(&net, load, relay, hart1, tally));
     match part.polled(server.as_mut()).await {}

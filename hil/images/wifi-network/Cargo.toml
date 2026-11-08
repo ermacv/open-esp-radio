@@ -23,6 +23,7 @@ static_cell.workspace = true
 embassy-futures = "0.1.2"
 heapless = "0.9.3"
 oer-portable-events = { path = "../../../portable/events" }
+oer-portable-memory = { path = "../../../portable/memory" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
 oer-protocols-network-core = { path = "../../../protocols/network/core", features = ["test-support"] }

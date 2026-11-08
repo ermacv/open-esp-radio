@@ -10,8 +10,9 @@ use oer_protocols_network_wire::ip::Dscp;
 use crate::block::{Block, CoreBrand, Group, Pool};
 use crate::interface::Interface;
 use crate::machine::{
-    CommandId, CommandState, Core, Datagram, Demand, Eviction, Grant, NetEvent, OpenRefused,
-    Queued, Remote, RetiredResults, SendRefused, SlotTooShort, SocketId, StaleSocket,
+    CommandId, CommandState, Core, Datagram, Declined, Demand, Eviction, FillFailed, Grant,
+    NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal, SendRefused, SocketId,
+    StaleSocket, WorkId,
 };
 
 /// What a retired core hands on, each to its own owner.
@@ -49,12 +50,17 @@ pub enum Unsent<R> {
     /// room back: the same frame would meet the same, so its work ended, and a
     /// datagram's outcome is [`Outcome::Rejected`](crate::Outcome::Rejected).
     SlotTooShort,
+    /// The producer declined to fill a declared work, and the port took the
+    /// room back: the work ended
+    /// [`Outcome::Declined`](crate::Outcome::Declined).
+    Declined,
     /// The fill failed, and the port answered with a refusal of its own rather
     /// than the fill's error, which breaks [`FramePort::publish`]. The port
     /// says it took nothing, and the frame was never whole, so the work ended
-    /// by the fill's cause: a datagram's outcome is
-    /// [`Outcome::Rejected`](crate::Outcome::Rejected). From then on every
-    /// `transmit` answers [`Self::PortContract`].
+    /// by the fill's cause: [`Outcome::Rejected`](crate::Outcome::Rejected)
+    /// for a short slot, [`Outcome::Declined`](crate::Outcome::Declined) for a
+    /// producer's decline. From then on every `transmit` answers
+    /// [`Self::PortContract`].
     FillMisreported(R),
     /// The port said `Ok` though the frame was not written, which breaks
     /// [`FramePort::publish`], and wins over any error of the fill. What
@@ -72,7 +78,7 @@ enum Filled {
     /// The port never called it.
     Never,
     Wrote,
-    Failed,
+    Failed(FillFailed),
 }
 
 /// The sole owner of a core, its pool and its port: the core takes and gives
@@ -125,9 +131,11 @@ impl<
     }
 
     /// Send the granted work: the frame is written in the port's room, and
-    /// the port's answer is committed before this returns. What the fill did
-    /// is this owner's own record, and a port's answer that contradicts it is
-    /// the port's fault, whatever the fill's error.
+    /// the port's answer is committed before this returns. A declared work's
+    /// data is `produce`'s to write, in the slot itself, once its headers are
+    /// there; no other work calls it. What the fill did is this owner's own
+    /// record, and a port's answer that contradicts it is the port's fault,
+    /// whatever the fill's error.
     ///
     /// # Errors
     /// [`Unsent`].
@@ -135,6 +143,7 @@ impl<
         &mut self,
         now: Instant,
         grant: Grant<B>,
+        produce: impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined>,
     ) -> Result<P::Ticket, Unsent<P::Refusal>> {
         if self.broken {
             return Err(Unsent::PortContract);
@@ -142,11 +151,10 @@ impl<
         let frame = self.core.frame(now, &grant).ok_or(Unsent::Stale)?;
         let mut filled = Filled::Never;
         let published = self.port.publish(frame.length(), |slot| {
-            let result = frame.write(slot);
-            filled = if result.is_ok() {
-                Filled::Wrote
-            } else {
-                Filled::Failed
+            let result = frame.write(slot, produce);
+            filled = match result {
+                Ok(()) => Filled::Wrote,
+                Err(cause) => Filled::Failed(cause),
             };
             result
         });
@@ -161,14 +169,22 @@ impl<
                     Err(Unsent::PortContract)
                 }
             }
-            // Generic in the fill's error, the port has no `SlotTooShort` but
-            // the one the fill returned.
-            Err(Unpublished::Fill(SlotTooShort)) => {
+            // Generic in the fill's error, the port has no fill error but the
+            // one the fill returned.
+            Err(Unpublished::Fill(FillFailed::SlotTooShort)) => {
                 self.core.reject(&grant, &mut self.pool);
                 Err(Unsent::SlotTooShort)
             }
-            Err(Unpublished::Port(refusal)) if filled == Filled::Failed => {
-                self.core.reject(&grant, &mut self.pool);
+            Err(Unpublished::Fill(FillFailed::Declined(_))) => {
+                self.core.decline(&grant, &mut self.pool);
+                Err(Unsent::Declined)
+            }
+            Err(Unpublished::Port(refusal)) if matches!(filled, Filled::Failed(_)) => {
+                if filled == Filled::Failed(FillFailed::SlotTooShort) {
+                    self.core.reject(&grant, &mut self.pool);
+                } else {
+                    self.core.decline(&grant, &mut self.pool);
+                }
                 self.broken = true;
                 Err(Unsent::FillMisreported(refusal))
             }
@@ -243,6 +259,38 @@ impl<
     /// [`OpenRefused`].
     pub fn open(&mut self, port: u16, dscp: Dscp) -> Result<SocketId<B>, OpenRefused> {
         self.core.open(port, dscp)
+    }
+
+    /// See [`Core::open_local`].
+    ///
+    /// # Errors
+    /// [`OpenRefused`].
+    pub fn open_local(&mut self, port: u16, dscp: Dscp) -> Result<SocketId<B>, OpenRefused> {
+        self.core.open_local(port, dscp)
+    }
+
+    /// See [`Core::declare`].
+    ///
+    /// # Errors
+    /// [`SendRefusal`].
+    pub fn declare(
+        &mut self,
+        now: Instant,
+        socket: &SocketId<B>,
+        remote: Remote,
+        length: usize,
+    ) -> Result<CommandId<B>, SendRefusal> {
+        self.core.declare(now, socket, remote, length)
+    }
+
+    /// See [`Core::withdraw`].
+    pub fn withdraw(&mut self, command: &CommandId<B>) -> bool {
+        self.core.withdraw(command)
+    }
+
+    /// See [`Core::neighbors_changed`].
+    pub const fn neighbors_changed(&self) -> u32 {
+        self.core.neighbors_changed()
     }
 
     /// See [`Core::send`].
