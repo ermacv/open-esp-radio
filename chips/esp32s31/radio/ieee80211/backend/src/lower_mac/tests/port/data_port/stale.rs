@@ -25,16 +25,17 @@ fn refused_stale<'id, Id: radio::SlotIdentity + 'id>(
     }
 }
 
+/// The station's association, installed keys and group permission.
+type InstalledKeys<'id, Id> = (
+    <Keys<Id> as KeyTypes<'id>>::Association,
+    <Keys<Id> as KeyTypes<'id>>::PairwiseKey,
+    <Keys<Id> as KeyTypes<'id>>::GroupKey,
+    <Keys<Id> as KeyTypes<'id>>::GroupPermission,
+);
+
 impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// Install the station's pairwise and group keys on its own tokens.
-    fn installed_keys(
-        &mut self,
-    ) -> (
-        <Keys<Id> as KeyTypes<'id>>::Association,
-        <Keys<Id> as KeyTypes<'id>>::PairwiseKey,
-        <Keys<Id> as KeyTypes<'id>>::GroupKey,
-        <Keys<Id> as KeyTypes<'id>>::GroupPermission,
-    ) {
+    fn installed_keys(&mut self) -> InstalledKeys<'id, Id> {
         let (association, group_slot, slot) = self.association();
         let (install, _) = self.commands.install_pairwise(
             &association,
@@ -343,6 +344,5 @@ fn a_station_frame_under_a_key_of_an_earlier_installation_is_refused_at_submit()
             published,
             "nothing published"
         );
-        drop(key);
     });
 }
