@@ -963,6 +963,8 @@ fn message2_must_echo_the_exact_association_rsn() {
             oer_portable_time::Instant::from_micros(1),
         )
         .unwrap();
+    // Message 1 is built; Message 2 answers it.
+    let _message1 = service.begin_wpa2_frame::<512>(PEER).unwrap();
 
     assert!(matches!(
         service
@@ -998,6 +1000,8 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
             oer_portable_time::Instant::from_micros(1),
         )
         .unwrap();
+    // Message 1 is built; Message 2 answers it.
+    let _message1 = service.begin_wpa2_frame::<512>(PEER).unwrap();
     let original_deadline = service.peer_status(PEER).unwrap().deadline;
 
     let replay_mismatch = RsnTxFrame::<512>::message4(
@@ -1137,6 +1141,8 @@ fn message2_must_echo_the_exact_association_rsnxe() {
             oer_portable_time::Instant::from_micros(1),
         )
         .unwrap();
+    // Message 1 is built; Message 2 answers it.
+    let _message1 = rejected.begin_wpa2_frame::<512>(PEER).unwrap();
     assert!(matches!(
         rejected
             .on_eapol(
@@ -1163,6 +1169,8 @@ fn message2_must_echo_the_exact_association_rsnxe() {
             oer_portable_time::Instant::from_micros(1),
         )
         .unwrap();
+    // Message 1 is built; Message 2 answers it.
+    let _message1 = accepted.begin_wpa2_frame::<512>(PEER).unwrap();
     assert!(matches!(
         accepted
             .on_eapol(
@@ -1380,12 +1388,15 @@ fn bounded_peer_table_has_an_explicit_memory_ceiling() {
     // that are retried. Management protection adds one optional sixteen-byte
     // replay frontier plus six Message-3 IPN snapshot bytes per slot. The
     // handshake state, its association IE binding and its pending PTK are
-    // one `oer-protocols-ieee80211-core-security-rsn` authenticator per peer, with its own padding.
+    // one `oer-protocols-ieee80211-core-security-rsn` authenticator per peer, with its own padding;
+    // it keeps the replay counters of up to `RSN_AP_REPLAY_WINDOW` built
+    // Message 1 and as many built Message 3 transmissions, and its latest
+    // built transmission.
     // Each TX BlockAck session also retains two eight-byte originator-window
     // masks, for acknowledged and expired MPDUs. These add 16 bytes per
     // session; table alignment determines the final storage size.
     assert!(
-        core::mem::size_of::<AccessPointPeerStorage>() <= 8_088,
+        core::mem::size_of::<AccessPointPeerStorage>() <= 9_168,
         "peer storage size {}",
         core::mem::size_of::<AccessPointPeerStorage>()
     );
@@ -2049,6 +2060,8 @@ fn begin_management_handshake(
             now,
         )
         .unwrap();
+    // Message 1 is built; Message 2 answers it.
+    let _message1 = service.begin_wpa2_frame::<512>(peer).unwrap();
     assert_eq!(association_status(action), status_code::SUCCESS);
     let ptk = Pmk::from_bytes(SAE_PMK).derive_ptk(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,

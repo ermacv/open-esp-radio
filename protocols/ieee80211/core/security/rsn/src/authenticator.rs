@@ -124,30 +124,30 @@ impl RsnAuthenticator {
         self.pending_ptk.as_ref()
     }
 
-    /// Message 1 and the transmission it is.
+    /// Message 1 and the transmission it is. Its answer is awaited only
+    /// once the frame is built.
     pub fn message1<const N: usize>(
-        &self,
+        &mut self,
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
         let RsnApAction::Transmit(transmit) = self.state.message1(false)? else {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };
-        Ok((
-            build_ap_action_frame(&self.state, transmit, [0; 8], &[])?,
-            transmit,
-        ))
+        let frame = build_ap_action_frame(&self.state, transmit, [0; 8], &[])?;
+        self.state.record_built(transmit)?;
+        Ok((frame, transmit))
     }
 
     /// Message 1 again, under the next replay counter, and the transmission
-    /// it is. Message 2 may answer it or an earlier Message 1 of the window;
-    /// the counter stays spent if the frame cannot be built.
+    /// it is. Once built, Message 2 may answer it or an earlier built
+    /// Message 1 of the window; a counter whose frame fails to build stays
+    /// spent and is never awaited.
     pub fn retransmit_message1<const N: usize>(
         &mut self,
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
         let transmit = self.state.retransmit_message1()?;
-        Ok((
-            build_ap_action_frame(&self.state, transmit, [0; 8], &[])?,
-            transmit,
-        ))
+        let frame = build_ap_action_frame(&self.state, transmit, [0; 8], &[])?;
+        self.state.record_built(transmit)?;
+        Ok((frame, transmit))
     }
 
     /// Advance through Message 2 or Message 4 with the association's `pmk`.
@@ -279,6 +279,7 @@ impl RsnAuthenticator {
             wrapped.as_bytes(),
         )?
         .authenticate(&ptk, engine)?;
+        self.state.record_built(transmit)?;
         self.pending_ptk = Some(ptk);
         Ok((frame, transmit))
     }
@@ -286,8 +287,9 @@ impl RsnAuthenticator {
     /// Message 3 again, under the next replay counter, with `key_data`
     /// wrapped under the pending PTK and the Key RSC `group_packet_number`,
     /// the last packet number the installed GTK has handed out at this
-    /// retransmission. Message 4 may answer it or an earlier Message 3 of
-    /// the window; the counter stays spent if the frame cannot be built.
+    /// retransmission. Once built, Message 4 may answer it or an earlier
+    /// built Message 3 of the window; a counter whose frame fails to build
+    /// stays spent and is never awaited.
     pub fn retransmit_message3<const N: usize, const K: usize, E: Aes128Engine>(
         &mut self,
         key_data: &RsnPlainKeyData<K>,
@@ -307,6 +309,7 @@ impl RsnAuthenticator {
             wrapped.as_bytes(),
         )?
         .authenticate(ptk, engine)?;
+        self.state.record_built(transmit)?;
         Ok((frame, transmit))
     }
 

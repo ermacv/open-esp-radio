@@ -32,7 +32,8 @@ construction), or the call is refused with `GroupKeyMismatch` before any
 handshake state changes. The numbering outlives the service while the key
 stays installed. Each Message 3, a retransmission included, carries the last
 packet number that owner has handed out as its Key RSC, and a new replay
-counter; a Message 4 answering any Message 3 of the window authorizes once.
+counter; a Message 4 answering any built Message 3 of the window authorizes
+once.
 
 An access point uses 40 MHz in 2.4 GHz only under the 20/40 coexistence rules;
 a station reports 20/40 OBSS as the standard requires.
@@ -41,6 +42,10 @@ a station reports 20/40 OBSS as the standard requires.
 
 **Security**
 
+- **A retried M3 repeats the first publication's IGTK IPN**
+  (`service/security.rs::message3_key_data`, `message3_management_ipns`),
+  while its GTK Key RSC is read at each build. Only the WPA2 slice without
+  management protection is claimed; WPA3/PMF correctness of the retry is not.
 - **BIP does not guard +HTC** (`service/management.rs::protect_group_management`).
 
 **Timing and protocol**

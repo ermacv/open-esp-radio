@@ -48,7 +48,7 @@ fn ptk() -> Ptk {
 /// Message 1.
 fn authenticator(association_rsn: &[u8]) -> RsnAuthenticator {
     let state = RsnApState::new(Akm::Psk, AP, PEER, ANONCE, REPLAY).unwrap();
-    let authenticator =
+    let mut authenticator =
         RsnAuthenticator::new(state, pmk().bind_association_security_ies(association_rsn));
     let (message1, transmit) = authenticator.message1::<512>().unwrap();
     assert_eq!(
@@ -212,8 +212,8 @@ fn message4_before_message3_is_refused_and_unsolicited_frames_are_rejected() {
         authenticator
             .state()
             .outstanding_transmit()
-            .map(|t| t.replay_counter),
-        Ok(REPLAY)
+            .map(|t| t.map(|t| t.replay_counter)),
+        Ok(Some(REPLAY))
     );
 }
 
@@ -264,4 +264,139 @@ fn a_retransmitted_message1_takes_the_next_counter_and_an_earlier_answer_stays_a
         )
         .unwrap();
     assert_eq!(message3.key_frame().unwrap().replay_counter(), REPLAY + 2);
+}
+
+fn signed_message4(replay: u64) -> OwnedEapolFrame<512> {
+    let answer = RsnTxFrame::<512>::message4(Akm::Psk, AP, replay)
+        .unwrap()
+        .authenticate(&ptk(), &mut SoftwareAes128)
+        .unwrap();
+    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, answer.as_bytes()).unwrap()
+}
+
+/// An authenticator whose first Message 3 (counter `REPLAY + 1`) was built.
+fn awaiting_message4() -> RsnAuthenticator {
+    let mut authenticator = authenticator(&STATION_RSN);
+    let RsnAuthenticatorStep::PrepareMessage3(preparation) = authenticator
+        .on_frame(&pmk(), message2(&STATION_RSN, &ptk()), &mut SoftwareAes128)
+        .unwrap()
+    else {
+        panic!("a verified Message 2 prepares Message 3");
+    };
+    authenticator
+        .complete_message3::<512, _, _>(
+            preparation,
+            &key_data(),
+            group_packet_number(0),
+            &mut SoftwareAes128,
+        )
+        .unwrap();
+    authenticator
+}
+
+#[test]
+fn a_message3_that_failed_to_build_is_not_awaited_and_its_counter_stays_spent() {
+    let mut authenticator = awaiting_message4();
+    // A one-octet frame cannot hold Message 3.
+    assert_eq!(
+        authenticator
+            .retransmit_message3::<1, _, _>(
+                &key_data(),
+                group_packet_number(0),
+                &mut SoftwareAes128
+            )
+            .err(),
+        Some(RsnAuthenticatorError::Frame(
+            RsnFrameError::CapacityExceeded
+        ))
+    );
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), signed_message4(REPLAY + 2), &mut SoftwareAes128),
+        Err(RsnAuthenticatorError::Rejected(
+            RsnStateError::ReplayCounterMismatch
+        ))
+    ));
+    // The next retry takes a newer counter; the failed one is never reused.
+    let (retry, transmit) = authenticator
+        .retransmit_message3::<512, _, _>(&key_data(), group_packet_number(0), &mut SoftwareAes128)
+        .unwrap();
+    assert_eq!(transmit.replay_counter, REPLAY + 3);
+    assert_eq!(retry.key_frame().unwrap().replay_counter(), REPLAY + 3);
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), signed_message4(REPLAY + 2), &mut SoftwareAes128),
+        Err(RsnAuthenticatorError::Rejected(
+            RsnStateError::ReplayCounterMismatch
+        ))
+    ));
+    assert!(matches!(
+        authenticator
+            .on_frame(&pmk(), signed_message4(REPLAY + 3), &mut SoftwareAes128)
+            .unwrap(),
+        RsnAuthenticatorStep::Authorized
+    ));
+}
+
+#[test]
+fn failed_message3_builds_do_not_evict_the_only_built_message3() {
+    let mut authenticator = awaiting_message4();
+    for _ in 0..crate::state::RSN_AP_REPLAY_WINDOW + 2 {
+        assert_eq!(
+            authenticator
+                .retransmit_message3::<1, _, _>(
+                    &key_data(),
+                    group_packet_number(0),
+                    &mut SoftwareAes128
+                )
+                .err(),
+            Some(RsnAuthenticatorError::Frame(
+                RsnFrameError::CapacityExceeded
+            ))
+        );
+    }
+    assert!(matches!(
+        authenticator
+            .on_frame(&pmk(), signed_message4(REPLAY + 1), &mut SoftwareAes128)
+            .unwrap(),
+        RsnAuthenticatorStep::Authorized
+    ));
+}
+
+#[test]
+fn a_message1_that_failed_to_build_is_not_awaited() {
+    let mut authenticator = authenticator(&STATION_RSN);
+    assert_eq!(
+        authenticator.retransmit_message1::<1>().err(),
+        Some(RsnAuthenticatorError::Frame(
+            RsnFrameError::CapacityExceeded
+        ))
+    );
+    let ptk = ptk();
+    let rsn = OwnedRsnIe::<64>::try_copy(&STATION_RSN).unwrap();
+    let answer = |replay| {
+        let frame = RsnTxFrame::<512>::message2(Akm::Psk, AP, replay, SNONCE, &rsn)
+            .unwrap()
+            .authenticate(&ptk, &mut SoftwareAes128)
+            .unwrap();
+        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
+    };
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), answer(REPLAY + 1), &mut SoftwareAes128),
+        Err(RsnAuthenticatorError::Rejected(
+            RsnStateError::ReplayCounterMismatch
+        ))
+    ));
+    let (_, transmit) = authenticator.retransmit_message1::<512>().unwrap();
+    assert_eq!(transmit.replay_counter, REPLAY + 2);
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), answer(REPLAY + 1), &mut SoftwareAes128),
+        Err(RsnAuthenticatorError::Rejected(
+            RsnStateError::ReplayCounterMismatch
+        ))
+    ));
+    assert!(matches!(
+        authenticator
+            .on_frame(&pmk(), answer(REPLAY + 2), &mut SoftwareAes128)
+            .unwrap(),
+        RsnAuthenticatorStep::PrepareMessage3(_)
+    ));
 }

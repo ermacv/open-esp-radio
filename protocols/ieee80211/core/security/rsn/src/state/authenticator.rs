@@ -39,16 +39,61 @@ pub enum RsnApAction<const N: usize = DEFAULT_EAPOL_FRAME_CAPACITY> {
     DeauthenticatePeer,
 }
 
-/// How many of the latest replay counters of one handshake message stay
-/// awaited.
+/// How many built transmissions of one handshake message stay awaited.
 ///
 /// Every Message 1 and Message 3, a retransmission included, takes a new
-/// counter; an answer to any of the latest `RSN_AP_REPLAY_WINDOW` of them
-/// completes the step, so a retransmission never invalidates an earlier
-/// frame the station may already have answered. The window closes when the
-/// step completes. hostapd keeps a bounded history of expected counters the
-/// same way (`src/ap/wpa_auth.c`, `wpa_replay_counter_valid`).
-pub const RSN_AP_REPLAY_WINDOW: u64 = 4;
+/// counter that is never handed out again. Only a transmission whose frame
+/// was built ([`RsnApState::record_built`]) enters the history of awaited
+/// answers; a counter whose frame failed to build stays spent, is not
+/// awaited and evicts nothing. An answer to any of the latest
+/// `RSN_AP_REPLAY_WINDOW` built transmissions completes the step, so a
+/// retransmission never invalidates an earlier frame the station may already
+/// have answered. The history closes when the step completes. hostapd keeps
+/// a bounded history of expected counters the same way (`src/ap/wpa_auth.c`,
+/// `wpa_replay_counter_valid`).
+pub const RSN_AP_REPLAY_WINDOW: usize = 4;
+
+/// The replay counters of one step's built transmissions; the oldest is
+/// replaced once all slots hold one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AwaitedAnswers {
+    counters: [u64; RSN_AP_REPLAY_WINDOW],
+    filled: u8,
+    next: u8,
+}
+
+impl AwaitedAnswers {
+    const EMPTY: Self = {
+        if RSN_AP_REPLAY_WINDOW == 0 || RSN_AP_REPLAY_WINDOW > u8::MAX as usize {
+            panic!("the awaited window holds between one and 255 transmissions");
+        }
+        Self {
+            counters: [0; RSN_AP_REPLAY_WINDOW],
+            filled: 0,
+            next: 0,
+        }
+    };
+
+    fn contains(&self, counter: u64) -> bool {
+        self.counters
+            .get(..usize::from(self.filled))
+            .is_some_and(|counters| counters.contains(&counter))
+    }
+
+    fn record(&mut self, counter: u64) {
+        if let Some(slot) = self.counters.get_mut(usize::from(self.next)) {
+            *slot = counter;
+        }
+        if usize::from(self.filled) < RSN_AP_REPLAY_WINDOW {
+            self.filled = self.filled.saturating_add(1);
+        }
+        self.next = self
+            .next
+            .checked_add(1)
+            .filter(|next| usize::from(*next) < RSN_AP_REPLAY_WINDOW)
+            .unwrap_or(0);
+    }
+}
 
 pub struct RsnApState {
     akm: Akm,
@@ -57,17 +102,16 @@ pub struct RsnApState {
     authenticator_nonce: [u8; RSN_NONCE_LEN],
     supplicant_nonce: [u8; RSN_NONCE_LEN],
     phase: RsnApPhase,
-    /// The first and the latest counter of the Message 1 transmissions.
-    message1_first: u64,
-    message1_replay: u64,
-    /// The first and the latest counter of the Message 3 transmissions.
-    message3_first: u64,
-    message3_replay: u64,
+    /// The last replay counter handed out; none is handed out twice.
+    last_counter: u64,
+    /// The built Message 1 and Message 3 transmissions whose answers are
+    /// awaited.
+    message1_awaited: AwaitedAnswers,
+    message3_awaited: AwaitedAnswers,
+    /// The latest built transmission of the current step.
+    latest_built: Option<RsnTransmit>,
     /// The counter of the Message 2 or 4 whose verification is in progress.
     answered_replay: u64,
-    /// Whether the counter of the current response window belongs to a
-    /// retransmission.
-    retransmitted: bool,
     active_ticket: RsnTicket,
     next_ticket: u32,
 }
@@ -93,12 +137,11 @@ impl RsnApState {
             authenticator_nonce,
             supplicant_nonce: [0; RSN_NONCE_LEN],
             phase: RsnApPhase::AwaitingMessage2,
-            message1_first: initial_replay_counter,
-            message1_replay: initial_replay_counter,
-            message3_first: 0,
-            message3_replay: 0,
+            last_counter: initial_replay_counter,
+            message1_awaited: AwaitedAnswers::EMPTY,
+            message3_awaited: AwaitedAnswers::EMPTY,
+            latest_built: None,
             answered_replay: 0,
-            retransmitted: false,
             active_ticket: RsnTicket(0),
             next_ticket: 1,
         })
@@ -128,45 +171,70 @@ impl RsnApState {
         &self.authenticator_nonce
     }
 
+    /// The original Message 1, under the counter the handshake started
+    /// with. Its answer is awaited once its frame is built
+    /// ([`Self::record_built`]).
     pub const fn message1(&self, retransmission: bool) -> Result<RsnApAction, RsnStateError> {
         if !matches!(self.phase, RsnApPhase::AwaitingMessage2) {
             return Err(RsnStateError::WrongPhase);
         }
         Ok(RsnApAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage1,
-            replay_counter: self.message1_replay,
+            replay_counter: self.last_counter,
             retransmission,
         }))
     }
 
-    /// The authenticator frame that owns the current response window: its
-    /// message and the replay counter its response must echo.
+    /// The latest built transmission of the current step, which owns its
+    /// response window; `None` while no frame of the step was built.
     ///
     /// Timing and retry budgets belong to the AP service. The WPA state only
     /// exposes the message and replay counter of its current phase; it never
     /// reads time or schedules work itself.
-    pub const fn outstanding_transmit(&self) -> Result<RsnTransmit, RsnStateError> {
+    pub const fn outstanding_transmit(&self) -> Result<Option<RsnTransmit>, RsnStateError> {
         match self.phase {
-            RsnApPhase::AwaitingMessage2 => Ok(RsnTransmit {
-                message: RsnTxMessage::PairwiseMessage1,
-                replay_counter: self.message1_replay,
-                retransmission: self.retransmitted,
-            }),
-            RsnApPhase::AwaitingMessage4 => Ok(RsnTransmit {
-                message: RsnTxMessage::PairwiseMessage3,
-                replay_counter: self.message3_replay,
-                retransmission: self.retransmitted,
-            }),
+            RsnApPhase::AwaitingMessage2 | RsnApPhase::AwaitingMessage4 => Ok(self.latest_built),
             _ => Err(RsnStateError::WrongPhase),
         }
+    }
+
+    /// Record that the frame of `transmit`, the step's latest transmission,
+    /// was built: from now on its answer is awaited, among the latest
+    /// [`RSN_AP_REPLAY_WINDOW`] built ones. Recording a built transmission
+    /// again changes nothing. Another step's transmission is refused with
+    /// `WrongPhase`; a counter that is not the latest handed out is refused
+    /// with `StaleCompletion` and never awaited.
+    pub fn record_built(&mut self, transmit: RsnTransmit) -> Result<(), RsnStateError> {
+        let awaited = match (self.phase, transmit.message) {
+            (RsnApPhase::AwaitingMessage2, RsnTxMessage::PairwiseMessage1) => {
+                &mut self.message1_awaited
+            }
+            (RsnApPhase::AwaitingMessage4, RsnTxMessage::PairwiseMessage3) => {
+                &mut self.message3_awaited
+            }
+            (RsnApPhase::AwaitingMessage2 | RsnApPhase::AwaitingMessage4, _) => {
+                return Err(RsnStateError::StaleCompletion);
+            }
+            _ => return Err(RsnStateError::WrongPhase),
+        };
+        if awaited.contains(transmit.replay_counter) {
+            return Ok(());
+        }
+        if transmit.replay_counter != self.last_counter {
+            return Err(RsnStateError::StaleCompletion);
+        }
+        awaited.record(transmit.replay_counter);
+        self.latest_built = Some(transmit);
+        Ok(())
     }
 
     /// Retransmit Message 1 under the next replay counter.
     ///
     /// Every EAPOL-Key frame the authenticator sends carries a new, larger
-    /// counter; Message 2 may answer any of the latest
-    /// [`RSN_AP_REPLAY_WINDOW`] Message 1 counters. The counter after the
-    /// latest stays free for Message 3, so a retransmission that would leave
+    /// counter, never handed out again; once its frame is built
+    /// ([`Self::record_built`]) Message 2 may answer it or any of the latest
+    /// [`RSN_AP_REPLAY_WINDOW`] built Message 1. The counter after it stays
+    /// free for Message 3, so a retransmission that would leave
     /// none is refused with `ReplayCounterExhausted` and the state is
     /// unchanged.
     pub fn retransmit_message1(&mut self) -> Result<RsnTransmit, RsnStateError> {
@@ -174,12 +242,11 @@ impl RsnApState {
             return Err(RsnStateError::WrongPhase);
         }
         let replay_counter = self
-            .message1_replay
+            .last_counter
             .checked_add(1)
             .filter(|counter| *counter != u64::MAX)
             .ok_or(RsnStateError::ReplayCounterExhausted)?;
-        self.message1_replay = replay_counter;
-        self.retransmitted = true;
+        self.last_counter = replay_counter;
         Ok(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage1,
             replay_counter,
@@ -187,19 +254,19 @@ impl RsnApState {
         })
     }
 
-    /// Retransmit Message 3 under the next replay counter. Message 4 may
-    /// answer any of the latest [`RSN_AP_REPLAY_WINDOW`] Message 3 counters.
-    /// On `ReplayCounterExhausted` the state is unchanged.
+    /// Retransmit Message 3 under the next replay counter, never handed out
+    /// again; once its frame is built ([`Self::record_built`]) Message 4 may
+    /// answer it or any of the latest [`RSN_AP_REPLAY_WINDOW`] built
+    /// Message 3. On `ReplayCounterExhausted` the state is unchanged.
     pub fn retransmit_message3(&mut self) -> Result<RsnTransmit, RsnStateError> {
         if !matches!(self.phase, RsnApPhase::AwaitingMessage4) {
             return Err(RsnStateError::WrongPhase);
         }
         let replay_counter = self
-            .message3_replay
+            .last_counter
             .checked_add(1)
             .ok_or(RsnStateError::ReplayCounterExhausted)?;
-        self.message3_replay = replay_counter;
-        self.retransmitted = true;
+        self.last_counter = replay_counter;
         Ok(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage3,
             replay_counter,
@@ -230,7 +297,7 @@ impl RsnApState {
         let key = frame.key_frame()?;
         let replay = key.replay_counter();
         let nonce = *key.nonce();
-        if !awaited(self.message1_first, self.message1_replay, replay) {
+        if !self.message1_awaited.contains(replay) {
             return Err(RsnStateError::ReplayCounterMismatch);
         }
         if nonce.iter().all(|byte| *byte == 0) {
@@ -280,7 +347,7 @@ impl RsnApState {
             RsnApPhase::AwaitingMessage4 | RsnApPhase::VerifyingMessage4 => {}
             _ => return Err(RsnStateError::UnexpectedMessage),
         }
-        if !awaited(self.message3_first, self.message3_replay, replay) {
+        if !self.message3_awaited.contains(replay) {
             return Err(RsnStateError::ReplayCounterMismatch);
         }
         match self.phase {
@@ -344,16 +411,16 @@ impl RsnApState {
             self.phase = RsnApPhase::Failed;
             return Ok(RsnApAction::DeauthenticatePeer);
         }
-        self.message3_replay = self
-            .message1_replay
+        let replay_counter = self
+            .last_counter
             .checked_add(1)
             .ok_or(RsnStateError::ReplayCounterExhausted)?;
-        self.message3_first = self.message3_replay;
-        self.retransmitted = false;
+        self.last_counter = replay_counter;
+        self.latest_built = None;
         self.phase = RsnApPhase::AwaitingMessage4;
         Ok(RsnApAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage3,
-            replay_counter: self.message3_replay,
+            replay_counter,
             retransmission: false,
         }))
     }
@@ -446,18 +513,6 @@ impl RsnApState {
         }
         self.active_ticket = ticket;
         ticket
-    }
-}
-
-/// Whether `replay` is one of the latest [`RSN_AP_REPLAY_WINDOW`] counters
-/// sent from `first` up to `latest`.
-const fn awaited(first: u64, latest: u64, replay: u64) -> bool {
-    if replay < first {
-        return false;
-    }
-    match latest.checked_sub(replay) {
-        Some(behind) => behind < RSN_AP_REPLAY_WINDOW,
-        None => false,
     }
 }
 

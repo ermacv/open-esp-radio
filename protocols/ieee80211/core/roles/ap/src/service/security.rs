@@ -153,13 +153,13 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// Build Message 1 only after the successful Association Response reached
     /// TX complete. The AP state retains the replay/nonce transaction.
     pub fn begin_wpa2_frame<const N: usize>(
-        &self,
+        &mut self,
         peer: [u8; 6],
     ) -> Result<ApEapolTransmit<N>, ApWpa2Error> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch.into());
         }
-        let (frame, transmit) = self.authenticator(peer)?.message1()?;
+        let (frame, transmit) = self.authenticator_mut(peer)?.message1()?;
         self.bind_eapol(frame, transmit)
     }
 
@@ -195,7 +195,10 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         if state.phase() == RsnApPhase::Authorized || state.phase() == RsnApPhase::Failed {
             return Ok(ApEapolTxCompletion::Superseded);
         }
-        let current = state.outstanding_transmit()?;
+        // Only the latest built transmission owns the response window.
+        let Some(current) = state.outstanding_transmit()? else {
+            return Ok(ApEapolTxCompletion::Superseded);
+        };
         if current.message != transmit.message || current.replay_counter != transmit.replay_counter
         {
             return Ok(ApEapolTxCompletion::Superseded);
@@ -515,6 +518,9 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             *destination = *source;
         }
         let index = self.peer_index(peer).ok_or(ApServiceError::UnknownPeer)?;
+        // A retried Message 3 repeats the IPN captured at its first
+        // publication. Only WPA2 without management protection is claimed;
+        // the WPA3/PMF correctness of that snapshot is not.
         let igtk = match self.igtk() {
             Some(igtk) => Some(RsnIgtk::new(
                 igtk.key_id(),

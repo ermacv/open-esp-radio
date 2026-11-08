@@ -701,7 +701,7 @@ const fn new_ap_wpa2_retry() -> RsnRetry {
     const {
         // Every transmission of a step, the original and each retry, stays
         // in the authenticator's window of awaited replay counters.
-        if AP_WPA2_RETRY_ATTEMPTS as u64 + 1
+        if AP_WPA2_RETRY_ATTEMPTS as usize + 1
             > oer_protocols_ieee80211_core_security_rsn::state::RSN_AP_REPLAY_WINDOW
         {
             panic!("the AP WPA2 retries exceed the awaited replay window");

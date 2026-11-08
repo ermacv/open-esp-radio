@@ -376,3 +376,92 @@ fn a_recreated_service_announces_the_continuing_numbering_of_the_same_gtk() {
     };
     assert_eq!(group_receive_sequence.value(), 3);
 }
+
+fn station_message4(replay: u64) -> OwnedEapolFrame<512> {
+    let frame = RsnTxFrame::<512>::message4(
+        oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+        AP,
+        replay,
+    )
+    .unwrap()
+    .authenticate(&station_ptk(), &mut SoftwareAes128)
+    .unwrap();
+    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
+}
+
+#[test]
+fn a_message3_retry_that_failed_to_build_is_not_awaited() {
+    let mut storage = AccessPointPeerStorage::new();
+    let mut service = service(&mut storage);
+    let gtk = gtk_numbers();
+    begin(&mut service);
+    let first = first_message3(&mut service, &gtk)
+        .key_frame()
+        .unwrap()
+        .replay_counter();
+    let deadline = service.next_wpa2_retry_deadline().unwrap();
+    assert_eq!(
+        service.take_due_wpa2_retry::<1, _>(deadline, &gtk).err(),
+        Some(ApWpa2Error::Frame(RsnFrameError::CapacityExceeded))
+    );
+    // Its counter is spent; a signed answer to it is not an awaited answer.
+    assert!(matches!(
+        service
+            .on_eapol(PEER, station_message4(first + 1), &gtk)
+            .unwrap(),
+        ApWpa2Progress::None
+    ));
+    assert!(!service.wpa2_authorized(PEER).unwrap());
+    // The next retry is built under a newer counter, and awaited.
+    let retry = retried_message3(&mut service, &gtk);
+    assert_eq!(retry.key_frame().unwrap().replay_counter(), first + 2);
+    assert!(matches!(
+        service
+            .on_eapol(PEER, station_message4(first + 1), &gtk)
+            .unwrap(),
+        ApWpa2Progress::None
+    ));
+    assert!(matches!(
+        service
+            .on_eapol(PEER, station_message4(first + 2), &gtk)
+            .unwrap(),
+        ApWpa2Progress::AuthorizePeer
+    ));
+}
+
+#[test]
+fn a_message1_retry_that_failed_to_build_is_not_awaited() {
+    let mut storage = AccessPointPeerStorage::new();
+    let mut service = service(&mut storage);
+    let gtk = gtk_numbers();
+    begin(&mut service);
+    let deadline = service.next_wpa2_retry_deadline().unwrap();
+    assert_eq!(
+        service.take_due_wpa2_retry::<1, _>(deadline, &gtk).err(),
+        Some(ApWpa2Error::Frame(RsnFrameError::CapacityExceeded))
+    );
+    // `signed_message2` answers counter 9, the built first Message 1; the
+    // failed retry took counter 10, which no answer may claim.
+    let unbuilt = {
+        let rsn = OwnedRsnIe::<64>::try_copy(&WPA2_RSN).unwrap();
+        let frame = RsnTxFrame::<512>::message2(
+            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+            AP,
+            10,
+            SNONCE,
+            &rsn,
+        )
+        .unwrap()
+        .authenticate(&station_ptk(), &mut SoftwareAes128)
+        .unwrap();
+        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
+    };
+    assert!(matches!(
+        service.on_eapol(PEER, unbuilt, &gtk).unwrap(),
+        ApWpa2Progress::None
+    ));
+    // The built first Message 1 is still awaited; Message 3 takes a counter
+    // above the spent one.
+    let message3 = first_message3(&mut service, &gtk);
+    assert_eq!(message3.key_frame().unwrap().replay_counter(), 11);
+}
