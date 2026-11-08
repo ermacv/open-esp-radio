@@ -119,6 +119,15 @@ Association also retains every advertised legacy rate from Supported and
 Extended Supported Rates in `StaAssociatedPeer::rate_peer`, alongside the
 separate basic-rate set for protection. A response cannot create a peer from
 an advertisement containing no usable legacy rate.
+The station asks for the PHY of `StaConfig::phy` (`association::StaPhyRequest`).
+`PreferHe20` asks an access point that admits HE20 (`association::he20_admitted`:
+HT Capabilities, HE-MCS 0..9 both ways on one stream and an HE Operation that
+parses) for HE20, with its Power Capability and HE UL-MU power elements; any
+other access point gets the HT40 or HT20 request. An HE20 Association Response
+without HE Capabilities or HE Operation makes no link
+(`StaAssociatedPeerError::HeNotGranted`): the station leaves with
+`AssociationFailed` and never keeps an HT link in its place. The connection
+notice and the Connect outcome name the PHY mode the station associated in.
 Authentication TX contexts also retain the attempt ordinal inside their link
 epoch. A late terminal or preparation refusal returns its credit and buffer
 but cannot end a later RX-driven retry or arm that retry's response timer.

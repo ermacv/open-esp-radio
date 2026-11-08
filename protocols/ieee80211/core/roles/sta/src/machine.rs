@@ -132,7 +132,9 @@ use {
     oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch,
 };
 
-use crate::association::{Preference, StaAssociatedPeer, select_phy};
+use crate::association::{
+    Preference, StaAssociatedPeer, StaHePower, StaPhyRequest, he20_admitted, select_phy,
+};
 use crate::receive::{Management, Received, observe_scan};
 use oer_protocols_ieee80211_contracts_port::ChannelWidth;
 use oer_protocols_ieee80211_wire::scan::HtSecondaryChannel;
@@ -947,12 +949,14 @@ pub enum StaEapol {
 /// What the station tells the application.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaNotice {
-    /// The station is connected to `bssid` on `channel`.
+    /// The station is connected to `bssid` on `channel` in `phy`.
     Connected {
         /// The access point.
         bssid: Bssid,
         /// Its primary channel number.
         channel: u8,
+        /// The PHY mode the station associated in.
+        phy: PhyMode,
     },
     /// The station left its network, or failed to join one.
     Disconnected(StaDisconnectReason),
@@ -1083,12 +1087,9 @@ pub struct StaConfig<K, C: StaCallbacks> {
     /// The nonzero number of beacon intervals advertised in Association.
     /// The composition also uses this value for its power-save policy.
     pub listen_interval: StationListenInterval,
-    /// The PHY the station associates with. HT40 is the widest it asks
-    /// for: a join takes HT40 on one of [`Self::wide_channels`] where the
-    /// access point's HT elements admit it, else HT20 with an access point
-    /// that advertises HT, else legacy ([`select_phy`]). Every other mode
-    /// is the one the request carries.
-    pub phy: PhyMode,
+    /// The PHY the station asks for ([`StaPhyRequest`]); HT40 takes one of
+    /// [`Self::wide_channels`].
+    pub phy: StaPhyRequest,
     /// The station's transmit Block Ack originator, which the composition
     /// builds from its policy; `None` negotiates no transmit agreement.
     pub tx_block_ack: Option<StaTxBlockAck>,
@@ -2119,6 +2120,9 @@ struct Join<T: StaTokens, K> {
     channel: SupportedChannel<K>,
     /// The PHY the join associates with, on `channel`.
     phy: PhyMode,
+    /// The power elements of the request: present exactly when `phy` is
+    /// HE20.
+    he_power: Option<StaHePower>,
     step: JoinStep<T::RxMeta>,
 }
 
@@ -3627,6 +3631,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                     StaCommandOutcome::Connected {
                         bssid: connected.bssid,
                         channel: connected.channel.channel().number(),
+                        phy: connected.peer.associated.phy,
                     },
                 )
             }
@@ -5138,7 +5143,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
         };
-        let (channel, phy) = join_phy(
+        let (channel, phy, he_power) = join_phy(
             self.config.phy,
             &self.config.wide_channels,
             &access_point,
@@ -5150,6 +5155,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             rsn,
             channel,
             phy,
+            he_power,
             step: JoinStep::NeedLease,
         })
     }
@@ -6202,6 +6208,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             let notice = StaNotice::Connected {
                 bssid: connected.bssid,
                 channel: connected.channel.channel().number(),
+                phy: connected.peer.associated.phy,
             };
             return (Change::Keep, ActionProgress::Action(Owed::Notify(notice)));
         }
@@ -7117,6 +7124,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     StaAssociationPoll::Transmit { runtime, attempt } => {
                         let capabilities = self.config.association;
                         let phy = join.phy;
+                        let he_power = join.he_power;
                         let address = self.config.address;
                         let listen_interval = self.config.listen_interval.get();
                         let access_point = &join.access_point;
@@ -7133,8 +7141,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                                     listen_interval,
                                     phy,
                                     security: rsn,
-                                    power_capability: None,
-                                    he_ul_mu_power: None,
+                                    power_capability: he_power.map(|power| power.power_capability),
+                                    he_ul_mu_power: he_power.map(|power| power.ul_mu_power),
                                 }
                                 .encode(frame, capabilities)
                                 .ok()
@@ -7611,19 +7619,28 @@ fn association_failure(failure: StaAssociationFailure) -> StaDisconnectReason {
     }
 }
 
-/// The channel and PHY of a join of `access_point`, scanned on `scanned`:
-/// with `phy` HT40, the one of `wide` whose primary is `scanned`'s and
-/// whose secondary the access point's HT Capabilities and HT Operation name,
-/// in the mode [`select_phy`] chooses between both stations' modes; any
-/// other `phy` stays on `scanned`.
+/// The channel, PHY and HE power elements of a join of `access_point`,
+/// scanned on `scanned`, under `request`: HE20 on `scanned` with the
+/// request's power elements where the access point admits HE20
+/// ([`he20_admitted`]); with HT40, the one of `wide` whose primary is
+/// `scanned`'s and whose secondary the access point's HT Capabilities and
+/// HT Operation name, in the mode [`select_phy`] chooses between both
+/// stations' modes; HT20 and legacy stay on `scanned`.
 fn join_phy<K: Ieee80211Capabilities>(
-    phy: PhyMode,
+    request: StaPhyRequest,
     wide: &[SupportedChannel<K>],
     access_point: &ScanRecord,
     scanned: SupportedChannel<K>,
-) -> (SupportedChannel<K>, PhyMode) {
-    if phy != PhyMode::Ht40 {
-        return (scanned, phy);
+) -> (SupportedChannel<K>, PhyMode, Option<StaHePower>) {
+    match request {
+        StaPhyRequest::PreferHe20 { power, .. } if he20_admitted(access_point) => {
+            return (scanned, PhyMode::He20, Some(power));
+        }
+        StaPhyRequest::PreferHe20 { ht40: true, .. } | StaPhyRequest::Ht40 => {}
+        StaPhyRequest::PreferHe20 { ht40: false, .. } | StaPhyRequest::Ht20 => {
+            return (scanned, PhyMode::Ht20, None);
+        }
+        StaPhyRequest::Legacy => return (scanned, PhyMode::Legacy, None),
     }
     let primary = scanned.channel();
     let wide = access_point
@@ -7646,7 +7663,7 @@ fn join_phy<K: Ieee80211Capabilities>(
         wide.is_some(),
         false,
     );
-    (wide.unwrap_or(scanned), phy)
+    (wide.unwrap_or(scanned), phy, None)
 }
 
 fn leave_unkeyed<T: StaTokens, K>(reason: StaDisconnectReason) -> Change<T, K> {

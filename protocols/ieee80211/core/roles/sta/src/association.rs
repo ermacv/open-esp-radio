@@ -84,20 +84,54 @@ pub fn select_association_phy(
     preference: Preference,
     ht40_capable: bool,
 ) -> PhyMode {
-    let he20_available = oer_protocols_ieee80211_wire::he::parse_he20_capabilities(
-        access_point.he_capability_ie_bytes(),
-    )
-    .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
-        && oer_protocols_ieee80211_wire::he::parse_he20_operation(
-            access_point.he_operation_ie_bytes(),
-        )
-        .is_ok();
     select_phy(
         preference,
         access_point.ht_capability_ie_bytes().is_some(),
         ht40_capable && access_point.ht40_secondary_channel(channel).is_some(),
-        he20_available,
+        he20_admitted(access_point),
     )
+}
+
+/// Whether `access_point` admits an HE20 association: it advertises HT
+/// Capabilities, HE Capabilities with HE-MCS 0..9 both ways on one stream
+/// and an HE Operation element that parses. The same rule admits the HE20
+/// request's elements ([`PhyMode`]'s `AssociationPhy`).
+pub fn he20_admitted(access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord) -> bool {
+    access_point.ht_capability_ie_bytes().is_some()
+        && oer_protocols_ieee80211_wire::he::parse_he20_capabilities(
+            access_point.he_capability_ie_bytes(),
+        )
+        .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
+        && oer_protocols_ieee80211_wire::he::parse_he20_operation(
+            access_point.he_operation_ie_bytes(),
+        )
+        .is_ok()
+}
+
+/// The power elements an HE20 Association Request carries: the Power
+/// Capability and the HE UL-MU power capability, from the composition's
+/// calibrated transmit power.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StaHePower {
+    pub power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability,
+    pub ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability,
+}
+
+/// The PHY a station asks its access point for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaPhyRequest {
+    /// Non-HT.
+    Legacy,
+    /// HT20. A request to an access point without HT does not encode.
+    Ht20,
+    /// HT40 on one of the station's 40 MHz channels where the access
+    /// point's HT elements admit it, else HT20 with an access point that
+    /// advertises HT, else non-HT.
+    Ht40,
+    /// HE20 with an access point that admits it ([`he20_admitted`]), with
+    /// `power`'s elements; with any other access point the request
+    /// [`Self::Ht40`] names when `ht40` holds, else [`Self::Ht20`].
+    PreferHe20 { ht40: bool, power: StaHePower },
 }
 
 /// What an associated station knows of its access point: the PHY it
@@ -137,6 +171,10 @@ pub enum StaAssociatedPeerError {
     HeCapabilities(oer_protocols_ieee80211_wire::he::HeElementError),
     /// An HE association whose access point's HE elements give no peer state.
     HePeer(oer_protocols_ieee80211_wire::he::HeElementError),
+    /// An HE association whose Association Response carries no HE
+    /// Capabilities or no HE Operation element: the access point did not
+    /// associate the station as an HE station.
+    HeNotGranted,
 }
 
 impl StaAssociatedPeer {
@@ -177,6 +215,9 @@ impl StaAssociatedPeer {
         }
         let he_capability = access_point.he_capability_ie_bytes();
         let (he_capabilities, he_peer_state) = if phy == PhyMode::He20 {
+            if !(response.he_capability && response.he_operation) {
+                return Err(StaAssociatedPeerError::HeNotGranted);
+            }
             let capabilities = parse_he20_capabilities(he_capability)
                 .map_err(StaAssociatedPeerError::HeCapabilities)?;
             let state = parse_he20_peer_state(he_capability, access_point.he_operation_ie_bytes())

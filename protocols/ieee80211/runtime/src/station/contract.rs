@@ -226,11 +226,24 @@ pub enum BackgroundScanEnd {
     CancelledAbsences,
     LinkEnded(DisconnectReason),
 }
+/// The PHY mode a station associated in.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LinkPhy {
+    /// Non-HT.
+    Legacy,
+    /// HT on a 20 MHz channel.
+    Ht20,
+    /// HT on a 40 MHz channel.
+    Ht40,
+    /// HE on a 20 MHz channel.
+    He20,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommandOutcome {
     Connected {
         bssid: [u8; 6],
         channel: u8,
+        phy: LinkPhy,
     },
     ConnectFailed(DisconnectReason),
     Disconnected(DisconnectReason),
@@ -240,7 +253,11 @@ pub enum CommandOutcome {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Notice {
-    Connected { bssid: [u8; 6], channel: u8 },
+    Connected {
+        bssid: [u8; 6],
+        channel: u8,
+        phy: LinkPhy,
+    },
     Disconnected(DisconnectReason),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -459,9 +476,14 @@ impl From<core_station::StaCommandOutcome> for CommandOutcome {
     fn from(value: core_station::StaCommandOutcome) -> Self {
         use core_station::StaCommandOutcome as C;
         match value {
-            C::Connected { bssid, channel } => Self::Connected {
+            C::Connected {
+                bssid,
+                channel,
+                phy,
+            } => Self::Connected {
                 bssid: bssid.get(),
                 channel,
+                phy: phy.into(),
             },
             C::ConnectFailed(r) => Self::ConnectFailed(r.into()),
             C::Disconnected(r) => Self::Disconnected(r.into()),
@@ -471,12 +493,28 @@ impl From<core_station::StaCommandOutcome> for CommandOutcome {
         }
     }
 }
+impl From<oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode> for LinkPhy {
+    fn from(value: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode) -> Self {
+        use oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode as P;
+        match value {
+            P::Legacy => Self::Legacy,
+            P::Ht20 => Self::Ht20,
+            P::Ht40 => Self::Ht40,
+            P::He20 => Self::He20,
+        }
+    }
+}
 impl From<core_station::StaNotice> for Notice {
     fn from(value: core_station::StaNotice) -> Self {
         match value {
-            core_station::StaNotice::Connected { bssid, channel } => Self::Connected {
+            core_station::StaNotice::Connected {
+                bssid,
+                channel,
+                phy,
+            } => Self::Connected {
                 bssid: bssid.get(),
                 channel,
+                phy: phy.into(),
             },
             core_station::StaNotice::Disconnected(r) => Self::Disconnected(r.into()),
         }

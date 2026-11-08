@@ -47,7 +47,9 @@ mod network;
 pub use network::*;
 
 pub use oer_portable_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
-pub use oer_protocols_ieee80211_runtime::station::contract::{CommandRefusal, DisconnectReason};
+pub use oer_protocols_ieee80211_runtime::station::contract::{
+    CommandRefusal, DisconnectReason, LinkPhy,
+};
 pub use oer_protocols_network_port::{LinkSnapshot, LinkState};
 pub use wifi::Restarts;
 
@@ -479,6 +481,8 @@ impl Profile {
 pub struct Connected {
     pub bssid: [u8; 6],
     pub channel: u8,
+    /// The PHY mode the station associated in.
+    pub phy: LinkPhy,
 }
 
 /// Why a connect did not join its network. Every cause is the station's own
@@ -706,9 +710,15 @@ impl Station {
         let credentials = profile.0.prepare().await.map_err(ConnectError::Profile)?;
         let operation = self.control.connect(credentials).await.map_err(control)?;
         match operation.await {
-            wifi::OperationEnd::Completed(CommandOutcome::Connected { bssid, channel }) => {
-                Ok(Connected { bssid, channel })
-            }
+            wifi::OperationEnd::Completed(CommandOutcome::Connected {
+                bssid,
+                channel,
+                phy,
+            }) => Ok(Connected {
+                bssid,
+                channel,
+                phy,
+            }),
             wifi::OperationEnd::Completed(
                 CommandOutcome::ConnectFailed(reason) | CommandOutcome::Disconnected(reason),
             ) => Err(ConnectError::Failed(reason)),
@@ -767,9 +777,18 @@ impl Station {
     pub fn linked(&self) -> Option<Connected> {
         let status = self.control.status();
         match (status.link.state, status.notice) {
-            (LinkState::Up, Some(Notice::Connected { bssid, channel })) => {
-                Some(Connected { bssid, channel })
-            }
+            (
+                LinkState::Up,
+                Some(Notice::Connected {
+                    bssid,
+                    channel,
+                    phy,
+                }),
+            ) => Some(Connected {
+                bssid,
+                channel,
+                phy,
+            }),
             _ => None,
         }
     }

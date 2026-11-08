@@ -6,7 +6,6 @@ use std::vec::Vec;
 use oer_portable_time::Duration;
 use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth};
 use oer_protocols_ieee80211_core_roles_sta::machine::StaSecurity;
-use oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode;
 use oer_protocols_ieee80211_testing_model::AirFrame;
 use oer_protocols_ieee80211_wire::{
     block_ack::frame::{
@@ -37,7 +36,7 @@ static HT_ASSOCIATION: AssociationCapabilities = AssociationCapabilities {
 
 pub(crate) fn ht_config() -> TestConfig {
     let (mut configuration, security) = config(StaSecurity::Open);
-    configuration.phy = PhyMode::Ht20;
+    configuration.phy = oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::Ht20;
     configuration.association = &HT_ASSOCIATION;
     (configuration, security)
 }

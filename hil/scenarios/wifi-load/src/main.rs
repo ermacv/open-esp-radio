@@ -866,7 +866,14 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         index += 1;
     }
     let (bssid, linked) = match joined {
-        Joined::Linked { bssid, channel } => (bssid, channel),
+        Joined::Linked {
+            bssid,
+            channel,
+            phy,
+        } => {
+            println!("connect: linked phy={phy:?}");
+            (bssid, channel)
+        }
         other => {
             return Err(Failure::Fail(format!(
                 "the station did not join: {other:?}"
