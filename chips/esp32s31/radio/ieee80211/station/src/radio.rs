@@ -446,7 +446,7 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
         return;
     };
     let config = boot.config;
-    let (parts, driver) = match install(boot, config).await {
+    let (parts, driver) = match install(boot, config, crate::supply::PORT_BUFFERS).await {
         Ok(installed) => installed,
         Err(error) => {
             post(&mut mailbox, News::Unavailable(error)).await;
@@ -540,7 +540,9 @@ const FIRST_TSF_EPOCH: u32 = 1;
 
 /// Release the retired port's radio membership. Every owner a failed step
 /// does not return stays quarantined in its static backing.
-async fn release<W: Binding>(port: &mut Port<W>) -> Result<(), crate::failure::ReleaseCause> {
+pub(crate) async fn release<W: Binding>(
+    port: &mut Port<W>,
+) -> Result<(), crate::failure::ReleaseCause> {
     use crate::failure::{ReleaseCause, convert};
     let Some(device) = port.release() else {
         return Err(ReleaseCause::NotStopped);
@@ -560,9 +562,12 @@ async fn release<W: Binding>(port: &mut Port<W>) -> Result<(), crate::failure::R
         )),
     }
 }
-async fn install<W: Binding>(
+/// Start the radio and assemble the port's parts: the port holds the first
+/// `bank` buffers of the transmit pool.
+pub(crate) async fn install<W: Binding>(
     boot: Boot<W>,
     config: Config,
+    bank: u8,
 ) -> Result<(PortParts<Device<W>, TX, ()>, &'static mut PortDriverOf<W>), InitializationError> {
     let domain = RegulatoryDomain::of(
         Country::new(config.country).map_err(|_| InitializationError::Country)?,
@@ -681,7 +686,7 @@ async fn install<W: Binding>(
         shared,
         transmitter,
         pool,
-        bank: crate::supply::PORT_BUFFERS,
+        bank,
         descriptors: TxDescriptors {
             single: [slot!(t1, s1), slot!(t2, s2), slot!(t3, s3), slot!(t4, s4)],
             chains: [chain!(c0, m0, r0), chain!(c1, m1, r1)],

@@ -704,6 +704,8 @@ struct ActorConnection<'a, N: Notifies, M> {
 }
 
 #[cfg(target_arch = "riscv32")]
+pub mod access_point;
+#[cfg(target_arch = "riscv32")]
 mod chip;
 #[cfg(target_arch = "riscv32")]
 mod dma;
