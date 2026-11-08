@@ -734,13 +734,6 @@ impl<P: oer_protocols_network_port::EthernetFrame, S: TxSupply<P>, const TX: usi
     fn flush(&mut self) {
         self.transmit.flush();
     }
-    fn take_returned(&mut self) {
-        Self::take_returned(self);
-    }
-    fn poll_returned(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        Self::take_returned(self);
-        core::pin::pin!(self.returned.ready()).poll(cx)
-    }
     fn try_transmit(&mut self, mut frame: P) -> Result<(), TransmitRefused<P>> {
         let checked = if self.link.snapshot().state == LinkState::Down {
             Err(TransmitError::LinkDown)

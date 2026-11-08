@@ -221,8 +221,9 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
     }
 
     fn take_notice(&mut self) -> Option<X::Notice> {
-        // What the device gave back becomes the buffers' notices first.
-        self.transmit.take_returned();
+        // Asking the transmit half takes back what the device returned, which
+        // becomes the buffers' notices first.
+        let _room = self.transmit.has_room();
         self.buffers.take_notice()
     }
 

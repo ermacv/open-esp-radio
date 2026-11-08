@@ -95,7 +95,7 @@ turn goes through that last part, a fault's too: after a policy or port fault th
 turn publishes nothing more, and only hands back what it knows, so at an await
 each open work truly was not published.
 
-## A device as the port
+## The device port
 
 `DevicePort` publishes into the device's own transmit buffers (`TxBuffers`)
 and hands each frame to the device (`NetTransmit`). A frame the device took

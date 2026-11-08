@@ -60,11 +60,6 @@ impl NetTransmit for Sink {
     fn flush(&mut self) {
         self.0.borrow_mut().flushed += 1;
     }
-    /// The sink keeps nothing it returns later.
-    fn take_returned(&mut self) {}
-    fn poll_returned(&mut self, _: &mut Context<'_>) -> Poll<()> {
-        Poll::Pending
-    }
     fn try_transmit(
         &mut self,
         frame: OwnedNetworkTxFrame,

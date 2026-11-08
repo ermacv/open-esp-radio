@@ -162,6 +162,7 @@ impl NetTransmit for Transmit {
     type Frame = Written;
     fn has_room(&mut self) -> bool {
         self.take_back();
+        self.takes += 1;
         !self.full
     }
     fn poll_room(&mut self, _: &mut Context<'_>) -> Poll<()> {
@@ -182,13 +183,6 @@ impl NetTransmit for Transmit {
     }
     fn flush(&mut self) {
         self.flushes += 1;
-    }
-    fn take_returned(&mut self) {
-        self.takes += 1;
-    }
-    fn poll_returned(&mut self, _: &mut Context<'_>) -> Poll<()> {
-        self.takes += 1;
-        Poll::Pending
     }
 }
 

@@ -517,12 +517,6 @@ impl NetTransmit for Transmit {
     fn flush(&mut self) {
         self.0.borrow_mut().flush();
     }
-    fn take_returned(&mut self) {
-        self.0.borrow_mut().take_returned();
-    }
-    fn poll_returned(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.0.borrow_mut().poll_returned(cx)
-    }
 }
 
 type Inner = DevicePort<Network<'static, Joined>, Transmit, Buffers>;

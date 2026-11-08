@@ -323,12 +323,6 @@ impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSu
     fn flush(&mut self) {
         self.inner.flush();
     }
-    fn take_returned(&mut self) {
-        self.inner.take_returned();
-    }
-    fn poll_returned(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.inner.poll_returned(cx)
-    }
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
 /// copy [`Network`] keeps.
