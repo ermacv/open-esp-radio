@@ -1854,3 +1854,52 @@ fn every_actor_span_is_found_by_its_number_and_no_other_number_is() {
     }
     assert_eq!(ActorSpan::from_number(ActorSpan::ALL.len() as u8), None);
 }
+
+/// A participant lost while the station still holds the network's memory:
+/// the return queue is full and the last ended frame's memory waits in the
+/// actor. The stop does not settle while it does; once the queue has room
+/// again the memory goes home, and only then the stop ends with the loss,
+/// holding nothing, and the actor retires.
+#[test]
+fn a_lost_network_settles_only_once_every_ended_frame_s_memory_went_home() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        let total = TX_DEPTH + 1;
+        for n in 0..total {
+            bench.send_msdu(msdu(0, &[n as u8; 8]));
+            bench.settle();
+        }
+        bench.advance(1);
+        bench.settle();
+        while bench.next().is_some() {}
+        retire(bench, 50);
+        bench
+            .network
+            .answer
+            .set(Some(Err(crate::station::NetworkStopLost)));
+        bench.settle();
+        assert!(bench.next().is_none(), "the actor still holds memory");
+        let mut home = 0;
+        while let Ok(Some(_memory)) = bench.returned.try_receive_with(Option::take) {
+            home += 1;
+        }
+        bench.settle();
+        let mut answer = None;
+        while let Some(message) = bench.next() {
+            if let FromActor::Stopped(outcome) = message {
+                answer = Some(outcome);
+            }
+        }
+        match answer {
+            Some(StopOutcome::NetworkLost(observed)) => assert_eq!(observed.memory_held, 0),
+            other => panic!("the lost stop settles with nothing held: {other:?}"),
+        }
+        while let Ok(Some(_memory)) = bench.returned.try_receive_with(Option::take) {
+            home += 1;
+        }
+        assert_eq!(home, total, "every MSDU's memory is home");
+        bench.send(ToActor::Retire);
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
+    });
+}

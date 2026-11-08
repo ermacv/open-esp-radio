@@ -314,8 +314,9 @@ fn a_network_that_resumes_after_the_deadline_completes_the_return() {
 }
 
 /// The network's stop participant is lost, once before and once after the
-/// stop's deadline: each time the network ends without reporting its stop,
-/// keeping its owners with the composition, which gives them back. The
+/// stop's deadline: each time it goes unreported while the network's owners
+/// stay with the composition, which keeps serving their returns; before the
+/// deadline the network's run is also dropped mid-traffic. The
 /// radio's stop is confirmed and the loss is a handled, non-terminal end
 /// the composition records: before the deadline the stop ends with the
 /// loss, after it the late return completes with it. Every block, buffer
@@ -328,7 +329,9 @@ fn a_lost_network_participant_before_and_after_the_deadline_is_handled_and_the_o
     let reports = simulate_sessions::<Net>(
         Setup::default(),
         vec![
-            // Lost before the deadline.
+            // Lost before the deadline: the network's run is dropped
+            // mid-traffic and its participant goes unreported, while the
+            // composition, which owns the service, serves the returns.
             session(|world| {
                 Box::pin(async move {
                     joined_and_resolved(world).await;
@@ -336,10 +339,11 @@ fn a_lost_network_participant_before_and_after_the_deadline_is_handled_and_the_o
                     for n in 0..8_u16 {
                         world.ap().wired.send_udp(7000, PORT, &[n as u8; 400]);
                     }
+                    world.lose_network_stop();
+                    world.cancel_network_run();
                     world
                         .air
                         .hold_completion(WmmAccessCategory::BestEffort, false);
-                    world.lose_network_stop();
                     stop_and_read(world, observers).await;
                 })
             }),
@@ -407,4 +411,66 @@ fn a_lost_network_participant_before_and_after_the_deadline_is_handled_and_the_o
         left_the_network(report);
     }
     again.assert_stopped_with_every_owner();
+}
+
+/// The owner's cancellation: the network service's real `run` future is
+/// dropped mid-traffic, with an aggregate held on the air, 24 datagrams in
+/// the station and a receive burst arriving, while the composition keeps
+/// the service. It retires it and serves the port's returns from then on,
+/// so the station's later graceful stop finds its memory taken back and
+/// its frames given back, and confirms. Every block and transmit buffer is
+/// home, and a second session starts from the same owners.
+#[test]
+fn a_dropped_network_run_is_served_by_its_owner_and_every_owner_returns() {
+    struct Net;
+    let reports = simulate_sessions::<Net>(
+        Setup::default(),
+        vec![
+            session(|world| {
+                Box::pin(async move {
+                    joined_and_resolved(world).await;
+                    let observers = held_burst(world, 24).await;
+                    for n in 0..16_u16 {
+                        world.ap().wired.send_udp(7000, PORT, &[n as u8; 400]);
+                    }
+                    assert!(world.memory_free() < NETWORK_BUFFERS, "mid-traffic");
+                    world.cancel_network_run();
+                    world
+                        .air
+                        .hold_completion(WmmAccessCategory::BestEffort, false);
+                    world.sleep(Duration::from_millis(50)).await;
+                    assert_eq!(
+                        world.memory_free(),
+                        NETWORK_BUFFERS,
+                        "the owner took back every ended frame's memory"
+                    );
+                    stop_and_read(world, observers).await;
+                })
+            }),
+            session(|world| {
+                Box::pin(async move {
+                    joined_and_resolved(world).await;
+                    for n in 0..16_u16 {
+                        world.ap().wired.send_udp(7000, PORT, &[n as u8; 600]);
+                    }
+                    for _ in 0..16 {
+                        let received = world.receive().await;
+                        world.release(received);
+                    }
+                    let mut observers = Vec::new();
+                    for n in 0..16_u16 {
+                        observers.push(world.send(PEER, &[n as u8; 900]).await);
+                    }
+                    for observer in observers {
+                        assert_eq!(world.result(observer).await, Sent::Ended(Outcome::Accepted));
+                    }
+                })
+            }),
+        ],
+    );
+    for report in &reports {
+        report.assert_stopped_with_every_owner();
+        assert!(!report.network_lost);
+        left_the_network(report);
+    }
 }

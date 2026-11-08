@@ -173,7 +173,8 @@ the network took it, and a retirement ends the actor only once the return
 came. A lost network participant (its stop never reported) is a software
 error, not a fault of the radio: the station still returns its share of the
 network through the return queue and waits for its lent units, and once
-they are home the stop ends with `StopOutcome::NetworkLost`
+they are home, looked at after every arena's end settled, the stop ends
+with `StopOutcome::NetworkLost`
 (`LifecycleEnd::StoppedNetworkLost`) before the deadline, or the late return
 completes after it; `Actor::network_lost` tells the composition, which
 records it. Neither end is terminal. The deadline ends the lifecycle's wait;

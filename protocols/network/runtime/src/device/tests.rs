@@ -491,6 +491,25 @@ fn a_bad_frame_waits_for_nothing() {
     assert!(!wakes_at_once(&mut port));
 }
 
+/// The return path without a service: the port's owner gives back the
+/// received frames and takes back the returned memory, and registers for
+/// the next of each.
+#[test]
+fn a_port_without_its_service_still_gives_back_and_takes_back() {
+    let returned = Arc::new(AtomicU32::new(0));
+    let mut port = port();
+    port.device
+        .incoming
+        .push_back(lent_from(Lent(b"held".to_vec(), Some(returned.clone()))));
+    port.transmit.returned = 2;
+    let woken = std::sync::Arc::new(Woken::default());
+    let waker = Waker::from(woken.clone());
+    port.serve_returns(&mut Context::from_waker(&waker));
+    assert_eq!(returned.load(Ordering::SeqCst), 1);
+    assert_eq!(port.transmit.taken_back, 2);
+    assert!(port.device.incoming.is_empty());
+}
+
 #[test]
 fn a_stop_gives_back_every_frame_and_takes_back_the_returned_memory() {
     let returned = Arc::new(AtomicU32::new(0));
@@ -501,7 +520,14 @@ fn a_stop_gives_back_every_frame_and_takes_back_the_returned_memory() {
     }
     port.device.incoming.push_back(Incoming::Copied);
     port.transmit.returned = 2;
+    port.transmit.full = true;
+    assert!(port.publish(4, octets).is_err(), "a frame waits for room");
+    port.transmit.full = false;
     port.give_back();
+    assert!(
+        !wakes_at_once(&mut port),
+        "the ended exchange leaves no frame waiting for room"
+    );
     assert_eq!(returned.load(Ordering::SeqCst), 3);
     assert_eq!(port.device.incoming.len(), 0);
     assert_eq!(

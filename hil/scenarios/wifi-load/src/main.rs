@@ -1263,7 +1263,13 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
     );
     check(
         left == Left::Down,
-        format!("a leave under load ends the station normally: {left:?}"),
+        match left {
+            Left::DownNetworkLost => {
+                "a leave under load stopped the radio, but the network's stop participant was lost"
+                    .into()
+            }
+            left => format!("a leave under load ends the station normally: {left:?}"),
+        },
     )
 }
 

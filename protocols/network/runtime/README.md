@@ -183,4 +183,9 @@ registration asks the transmit half for the memory the device returned, so that
 memory comes home whether or not the service sends; only a refused frame waiting for
 room is woken by room. `give_back` ends the exchange before the port ends: it gives
 back every frame the device's queue holds and takes back the memory the device
-returned, as the device's queues outlive the port.
+returned, as the device's queues outlive the port, and leaves no refused frame
+waiting, so a next service over the same port starts idle. `serve_returns` is the
+return path of a port whose service no longer runs: the service's owner keeps the
+service when its `run` is dropped (`retire` takes it whenever), and drives the
+port's returns, frames given back and memory taken back with a registration for the
+next of each, until the device's owner says it is done.

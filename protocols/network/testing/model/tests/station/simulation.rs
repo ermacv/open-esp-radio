@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll, Wake, Waker};
 
-use embassy_futures::select::{Either, select};
+use embassy_futures::select::{Either3, select, select3};
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
 use oer_portable_time::{Clock, Duration, Instant, Timer};
@@ -417,6 +417,33 @@ impl<'t> Task<'t> {
     }
 }
 
+/// A one-shot event a task waits for.
+#[derive(Default)]
+pub struct Signal {
+    raised: Cell<bool>,
+    waker: Cell<Option<Waker>>,
+}
+
+impl Signal {
+    pub fn raise(&self) {
+        self.raised.set(true);
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+    }
+
+    async fn wait(&self) {
+        std::future::poll_fn(|cx| {
+            if self.raised.get() {
+                return Poll::Ready(());
+            }
+            self.waker.set(Some(cx.waker().clone()));
+            Poll::Pending
+        })
+        .await;
+    }
+}
+
 /// The script's wait for the rest of the world to settle at this instant.
 #[derive(Default)]
 struct Idle {
@@ -520,6 +547,8 @@ pub struct World<'b, T: 'static> {
     network_suspended: Cell<bool>,
     /// The network's task ends without reporting its stop.
     network_loses_its_stop: Cell<bool>,
+    /// The network service's `run` future is dropped.
+    cancel_run: Signal,
 }
 
 impl<'b, T: 'static> World<'b, T> {
@@ -665,11 +694,18 @@ impl<'b, T: 'static> World<'b, T> {
         self.network_suspended.set(suspended);
     }
 
-    /// Make the network's task end its stop without reporting it, as a
-    /// participant dropped unreported: its owners stay with the
-    /// composition, which returns them.
+    /// Make the network's stop participant go without reporting, as the
+    /// facade's `NetworkStopper` dropped unreported: the network's owners
+    /// stay with the composition, which keeps serving their returns.
     pub fn lose_network_stop(&self) {
         self.network_loses_its_stop.set(true);
+    }
+
+    /// Drop the network service's `run` future now, mid-traffic, keeping
+    /// the service: its owner, the composition, retires it and serves the
+    /// port's returns from then on.
+    pub fn cancel_network_run(&self) {
+        self.cancel_run.raise();
     }
 
     /// Let `duration` of virtual time pass.
@@ -1055,52 +1091,83 @@ async fn run<'s, T: 'static>(
             stopping: Cell::new(false),
             network_suspended: Cell::new(false),
             network_loses_its_stop: Cell::new(false),
+            cancel_run: Signal::default(),
         };
 
         // The four tasks.
         let actor_end = RefCell::new(None);
         let lifecycle_end = RefCell::new(None);
         let network_end: RefCell<Option<NetEnded<'_, T>>> = RefCell::new(None);
+        let station_done = Signal::default();
         {
             let running = lifecycle.take().expect("the session's lifecycle");
             let actor_task = async {
                 let end = actor.run(&mut actor_ends, &mut network_ends, &*clock).await;
                 *actor_end.borrow_mut() = Some(end);
+                station_done.raise();
             };
             let lifecycle_task = async {
                 let completed = running.run(&mut lifecycle_ends, &mut io, &*clock).await;
                 *lifecycle_end.borrow_mut() = Some(completed);
             };
             let network_task = async {
+                // `None`: the composition dropped the run future.
                 let cause = {
                     let mut events = ();
                     let mut run = core::pin::pin!(service.run(&*clock, &mut events));
-                    match select(run.as_mut(), network_stop.requested()).await {
-                        Either::First(cause) => cause,
-                        Either::Second(()) => {
+                    match select3(
+                        run.as_mut(),
+                        network_stop.requested(),
+                        world.cancel_run.wait(),
+                    )
+                    .await
+                    {
+                        Either3::First(cause) => Some(cause),
+                        Either3::Second(()) => {
                             // The lane holds this one word.
                             let _sent = stop_lane.try_send(());
-                            run.await
+                            Some(run.await)
                         }
+                        Either3::Third(()) => None,
                     }
                 };
+                // The composition owns the service, whose run ended or was
+                // dropped: retiring it keeps every owner, the port included.
                 let mut ended = service.retire();
-                // The queues outlive the port, so its frames go back and the
-                // returned memory comes home first, as the application's
-                // stop does; the port itself stays for the next session.
-                if let Some(port) = ended.retired.port.0.as_mut() {
-                    port.give_back();
+                if let Some(cause) = cause {
+                    assert_eq!(ended.cause, cause);
                 }
-                assert_eq!(ended.cause, cause);
-                *network_end.borrow_mut() = Some(ended);
-                // A network whose participant is lost ends its service and
-                // gives back what it holds all the same; only its report is
-                // missing.
-                if world.network_loses_its_stop.get() {
-                    network_stop.lost();
+                if let Some(port) = ended.retired.port.0.as_mut() {
+                    // A dropped run: the composition serves the port's
+                    // returns until the station asks the network to stop.
+                    if cause.is_none() {
+                        let serving = std::future::poll_fn(|cx| {
+                            port.serve_returns(cx);
+                            Poll::<()>::Pending
+                        });
+                        let _asked = select(serving, network_stop.requested()).await;
+                    }
+                    // The queues outlive the port, so its frames go back and
+                    // the returned memory comes home first, as the
+                    // application's stop does.
+                    port.give_back();
+                    if world.network_loses_its_stop.get() {
+                        // The participant goes unreported; the composition
+                        // still serves the returns until the station ended.
+                        network_stop.lost();
+                        let serving = std::future::poll_fn(|cx| {
+                            port.serve_returns(cx);
+                            Poll::<()>::Pending
+                        });
+                        let _done = select(serving, station_done.wait()).await;
+                        port.give_back();
+                    } else {
+                        network_stop.stopped();
+                    }
                 } else {
                     network_stop.stopped();
                 }
+                *network_end.borrow_mut() = Some(ended);
             };
             let script_task = async {
                 script(&world).await;

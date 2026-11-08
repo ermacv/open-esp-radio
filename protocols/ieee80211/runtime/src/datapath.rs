@@ -309,12 +309,10 @@ enum NetworkStopping {
     Returned,
     /// Its participant was lost: its stop will not be confirmed. The
     /// station still returns what it holds of the network through the
-    /// existing ways (the return queue, the lent units' own return).
+    /// existing ways (the return queue, the lent units' own return); the
+    /// stop settles once nothing of the network is left with the station,
+    /// looked at after the data's settlement.
     Lost,
-    /// Its participant was lost and the station holds nothing of the
-    /// network any more: its memory went to the return queue and every lent
-    /// unit came back.
-    LostReturned,
 }
 
 /// A port command the port holds at its barrier, with the group token of
@@ -428,6 +426,8 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     /// The lifecycle retired the actor while the network's return went on:
     /// the actor ends once it came.
     retiring: bool,
+    /// Every unit lent to the network came back, at the last poll.
+    lent_home: bool,
     /// The reply offered to the lifecycle, until it answers.
     reply_out: Option<ReplyPlace>,
     owed: Owed<'id, D>,
@@ -515,6 +515,7 @@ where
             network_stopping: NetworkStopping::NotAsked,
             queued: 0,
             retiring: false,
+            lent_home: false,
             reply_out: None,
             owed: Owed::new(),
             facts: Facts::default(),
@@ -581,6 +582,7 @@ where
                 network_stopping: NetworkStopping::NotAsked,
                 queued: 0,
                 retiring: false,
+            lent_home: false,
                 reply_out: None,
                 owed: Owed::new(),
                 facts: Facts::default(),
@@ -615,10 +617,7 @@ where
     /// confirmed its stop. The composition records it; the radio's stop
     /// was confirmed.
     pub const fn network_lost(&self) -> bool {
-        matches!(
-            self.network_stopping,
-            NetworkStopping::Lost | NetworkStopping::LostReturned
-        )
+        matches!(self.network_stopping, NetworkStopping::Lost)
     }
 
     /// The port, for its owner once the run retired it: the actor no
@@ -694,6 +693,7 @@ where
         self.network_stopping = NetworkStopping::NotAsked;
         self.queued = 0;
         self.retiring = false;
+        self.lent_home = false;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract

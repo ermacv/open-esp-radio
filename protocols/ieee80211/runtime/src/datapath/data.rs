@@ -436,6 +436,7 @@ where
         self.queued = network.transmit.len();
         if self.network_stopping == NetworkStopping::Owed
             && matches!(self.radio, Radio::Draining { .. } | Radio::Returning)
+            && self.data_settled()
             && self.data.freed.is_empty()
             && self.queued == 0
         {

@@ -97,6 +97,27 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
         while self.take_frame(|_| {}) {}
         // Asking the transmit half takes back what the device returned.
         let _room = self.transmit.has_room();
+        // The exchange ended: no refused frame waits for anything, so a next
+        // service over this port is not woken for one.
+        self.waiting = Waiting::Nothing;
+    }
+
+    /// [`Self::give_back`], then register `cx` for the device's next frame
+    /// and its next returned memory, looking again until neither is ready.
+    /// The return path of a port whose service no longer runs: its owner
+    /// drives it after the service's `run` was cancelled or the service
+    /// retired, so what the device hands over or gives back keeps coming
+    /// home without the service.
+    pub fn serve_returns(&mut self, cx: &mut Context<'_>) {
+        loop {
+            self.give_back();
+            let received = self.device.poll_receive_ready(cx).is_ready();
+            // Takes back what came meanwhile and registers for the next.
+            let _room = self.transmit.poll_room(cx);
+            if !received {
+                return;
+            }
+        }
     }
 }
 
