@@ -431,3 +431,58 @@ description = "SOURCE: Blobray, esp32-wifi-lib f856b5db55cb18e2d1826044430f3f408
 [[sources]]
 id = "BLOB_LIBPP_BB_INTR_HANDL"
 description = "SOURCE: esp32-wifi-lib@f856b5db55cb18e2d1826044430f3f4089e47cf9 esp32s31/libpp.a [if_hwctrl.o]::bb_intr_handl+0x4 loads 0x2010704c; ermacv/oer-notes research/irq-blobray-wifi.md section Source 123. The loaded value is unused. A read-to-clear effect and the source-123 binding are unproved."
+
+# SOURCE(esp32s31): libpp[hal_mac_tx.o]::mac_tx_set_hesig,
+# libpp[pp.o]::ppProcTxSecFrame, libpp[hal_debug.o]::dbg_read_tx_ppdu.
+[[sources]]
+id = "BLOB_LIBPP_HE_SU_A2_METADATA_COPY_20261108"
+description = """
+Blobray, espressif/esp32-wifi-lib f856b5db55cb18e2d1826044430f3f4089e47cf9,
+esp32s31/libpp.a sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391.
+Complete libpp[hal_mac_tx.o]::mac_tx_set_hesig (0x324) loads word 0 of the TX
+metadata head (frame argument -> esf -> first TX DMA descriptor at esf+4 ->
+its buffer address at +4 -> buffer word 0) at +0x18c..0x1bc and stores the
+second HE SU vector word at +0x218: when that word's bits 27:25 are not
+0b100, vector bits 6:5 take its bits 26:25 and vector bit 8 is one; when they
+are 0b100, vector bits 6:5 and bit 8 are zero; in both cases vector bit 7
+takes its bit 28. libpp[pp_he.o]::ppCalSubFrameLength reaches the same word
+through the same chain. libpp[hal_debug.o]::dbg_read_tx_ppdu (0x3b6) +0x290..0x2c6
+decodes that word as mpdu_len, seq, single (bit 24), null_byte (bits 31:29)
+and htc and names no field in bits 28:25; +0x2e6..0x308 decodes the vector
+word's bits 27:11 as WDEV_TXQ_HE_LEN(apep_init_len). Producers:
+libpp[pp.o]::ppTxPkt (0x1c8) +0xc4 calls libpp[pp.o]::ppProcTxSecFrame
+(0x220), whose continuing branches clear the eight-byte head with memset at
++0x1f6 before writing the length and sequence (+0x120, +0x12e, +0x184) and
+clearing bits 31:29 (+0x17e..0x184). Field-access searches at offsets 0, 2
+and 3 over the pinned libpp, libnet80211, libcore, libmesh, libespnow,
+libsmartconfig and libwapi find word-0 stores through that chain only in
+ppProcTxSecFrame (+0x120, +0x12e, +0x184), ppAssembleAMPDU (+0x18, +0x62),
+ppRemoveHTC (+0x48), ppTxFragmentProc (+0x3e8) and ppCalTxHEAMPDULength
+(+0x174, +0x2b2), which change bit 24 or bits 13:0 or copy a complete head.
+Bits 28:25 of an ordinary STA frame's head are therefore zero, its vector
+bits 7:5 zero and its vector bit 8 one. No producer of bits 27:25 = 0b100
+was found in these libraries; ROM and hardware writeback were not examined.
+The meaning of the copied bits is not established."""
+
+# SOURCE(esp32s31): libpp[hal_debug.o]::dbg_dump_rx_ppdu,
+# libpp[wdev.o]::wDev_ProcessRxSucData.
+[[sources]]
+id = "BLOB_LIBPP_RX_SIG_MODE_20261108"
+description = """
+Blobray, espressif/esp32-wifi-lib f856b5db55cb18e2d1826044430f3f4089e47cf9,
+esp32s31/libpp.a sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391.
+Complete libpp[hal_debug.o]::dbg_dump_rx_ppdu (0xa36) passes RX-control
+prefix byte 1 shifted right by six (+0x100, +0x11e) as the sig_mode argument
+of its "(rx)cur_bb_format...sig_mode" format (.rodata.dbg_dump_rx_ppdu.str1.4+0xa8)
+and, at +0x158..0x192, byte 1 bits 4:0 as rate, bit 5 as cur_service and
+bits 7:6 as sig_mode of its "(rx)rssi, rate, cur_service, sig_mode" format
+(+0x148). Complete libpp[wdev.o]::wDev_ProcessRxSucData (0x6ca) reads byte 1
+at +0x142: bits 7:6 equal to one select the HT-SIG reading of prefix word
+0x04, copying its 14-bit length (word 0x04 bits 21:8) into prefix bytes
+0x38..0x39 (+0x152..0x16a); for its aggregation flag bit 7 set gives one,
+bits 7:6 equal to one give word 0x04 bit 27 (the HT-SIG Aggregation bit) and
+zero gives zero (+0x184..0x1a0). No reader in this library distinguishes the
+values two and three. ESP-IDF esp_wifi_he_types.h for
+SOC_WIFI_MAC_VERSION_NUM 3 (ESP_WIFI_SYS_S31_RXCTRL) declares byte 1 bits
+7:5 as unnamed bit-fields commented reserved in its public structure; the
+library reads bits 7:6."""

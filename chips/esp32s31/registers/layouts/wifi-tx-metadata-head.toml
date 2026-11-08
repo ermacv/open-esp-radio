@@ -26,6 +26,13 @@ bits = "24"
 writer = "cpu"
 description = "Set by the HE S-MPDU preparation before DMA publication: selects the single-MPDU container geometry, with the delimiter accounted for by the hardware insertion."
 
+[[layout.bytes.fields]]
+name = "BITS_25_28_OPAQUE"
+opaque = true
+bits = "28:25"
+writer = "cpu"
+description = "The vendor HE SU formatter copies bits 26:25 and 28 into the second HE SU vector word (HE_SU_SIGNAL_A2_LENGTH.BITS_5_7_OPAQUE) and clears that word's bit 8 when bits 27:25 are 0b100; every ordinary vendor TX path writes zero here."
+
 [[review]]
 entity = "WIFI_TX_METADATA_HEAD.CONTROL"
 sources = ["BLOB_LIBPP_PP_HE_SMPDU_LENGTH", "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30"]
@@ -33,6 +40,14 @@ provenance = "derived"
 accuracy = "exact"
 completeness = "partial"
 naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_METADATA_HEAD.CONTROL.BITS_25_28_OPAQUE"
+sources = ["BLOB_LIBPP_HE_SU_A2_METADATA_COPY_20261108"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "unknown"
+naming = "opaque"
 
 [[review]]
 entity = "WIFI_TX_METADATA_HEAD.CONTROL.HE_SMPDU"
