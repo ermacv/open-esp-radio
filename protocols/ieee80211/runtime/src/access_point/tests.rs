@@ -446,8 +446,8 @@ fn the_runner_beacons_answers_a_probe_and_stops_with_every_owner() {
 }
 
 /// The turns a runner may take while nothing changes: the event that woke
-/// it and the one that finds nothing due.
-const IDLE_TURNS: u32 = 4;
+/// it, its idle repeats and the one that settles.
+const IDLE_TURNS: u32 = super::IDLE_REPEATS as u32 + 2;
 
 #[test]
 fn a_stop_behind_a_held_group_removal_waits_for_the_port_without_turning() {

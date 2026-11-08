@@ -32,11 +32,15 @@
 //!
 //! # Waiting
 //!
-//! A turn that moved something yields to the executor once and turns
-//! again. A turn that changed nothing waits for a source: facts of the port
-//! other than the ones it just served (those wake it again only after the
-//! port woke it), a deadline after now, a frame of the network while a
-//! ticket and a buffer are free, or a stop not yet accepted.
+//! A turn that moved something (an owner, a unit, a terminal or a command
+//! taken) yields to the executor once and turns again. An idle turn yields
+//! and lets its sources decide: the port's facts, a deadline, a frame of
+//! the network while a ticket and a buffer are free, or a stop not yet
+//! accepted. After [`IDLE_REPEATS`] idle turns in a row the runner has
+//! settled: deadlines it found due no longer wake it, and the very facts
+//! it just served, when the port still reports them as it registers the
+//! runner's waker, stay held for the next turn (never dropped) until a wake
+//! of any source comes.
 //!
 //! # Ends
 //!
@@ -370,6 +374,22 @@ enum Purpose {
     Beacon(ApBeaconTxContext),
 }
 
+/// The idle turns in a row after which the runner waits only for a source
+/// other than the deadlines it found due and the facts it just served.
+pub(crate) const IDLE_REPEATS: u8 = 4;
+
+/// The facts of both polls.
+fn union(held: Facts, taken: Facts) -> Facts {
+    Facts {
+        tx: match (held.tx, taken.tx) {
+            (Some(held), Some(taken)) => Some(held.union(taken)),
+            (held, taken) => held.or(taken),
+        },
+        tbtt: held.tbtt || taken.tbtt,
+        rx: held.rx || taken.rx,
+    }
+}
+
 /// What a turn of the runner can change.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Mark {
@@ -378,6 +398,8 @@ struct Mark {
     owners: [usize; 8],
     network: bool,
     deadlines: [Option<Instant>; 2],
+    /// Units, terminals and commands the runner took from the port.
+    taken: u32,
 }
 
 /// What the runner is doing.
@@ -496,6 +518,9 @@ where
     stop: bool,
     /// The command the port refused.
     refused: Option<Command<'id, P>>,
+    /// Units, terminals and commands taken from the port, counted for the
+    /// progress of a turn.
+    taken: u32,
 }
 
 impl<'id, 's, 'n, P, I, C, S, X> ApRunner<'id, 's, 'n, P, I, C, S, X>
@@ -585,6 +610,7 @@ where
             },
             stop: false,
             refused: None,
+            taken: 0,
         }
     }
 
@@ -604,6 +630,8 @@ where
             return self.halted(halt, shared);
         }
         let mut facts = Facts::default();
+        // Turns in a row that changed nothing.
+        let mut idle: u8 = 0;
         loop {
             let now = clock.now();
             let before = self.mark();
@@ -626,16 +654,25 @@ where
             // stage of the next one (a terminal it took last queues a frame):
             // the runner yields to the executor once and turns again.
             if before != self.mark() {
+                idle = 0;
                 embassy_futures::yield_now().await;
                 continue;
             }
-            // A turn that changed nothing waits for a source: it does not
-            // wait again for the deadlines it found due, whose work waits
-            // for an owner a fact returns.
+            idle = idle.saturating_add(1);
+            // A port may owe the next call more than this one took (a cut, a
+            // repost): an idle turn yields and the sources decide, up to
+            // IDLE_REPEATS turns in a row. Then the runner has settled: a
+            // deadline it found due wakes it no more, and the very facts it
+            // just served stay held for the next turn, never dropped, until a
+            // wake of any source.
+            let settled = idle >= IDLE_REPEATS;
+            if !settled {
+                embassy_futures::yield_now().await;
+            }
             let deadline = [self.port.deadline(), self.engine_deadline()]
                 .into_iter()
                 .flatten()
-                .filter(|at| *at > now)
+                .filter(|at| !settled || *at > now)
                 .min();
             let sends = self.phase == Phase::Running
                 && !self.tickets.is_empty()
@@ -643,18 +680,22 @@ where
             let stopping = self.stop;
             let port = &mut self.port;
             let network = &mut self.network;
-            // Facts the turn just served without progress are a level the
-            // port holds, not an event: the wait's first poll registers for
-            // the port's next change and passes them over, so they wake the
-            // runner again only once the port woke it.
-            let mut served = Some(last);
+            let mut held = Facts::default();
+            // Only the wait's first poll, which registers for the port's
+            // next change, holds the facts just served: any later poll comes
+            // of a wake, and its facts are an event.
+            let mut first = settled;
             let polled = poll_fn(|cx| {
-                let facts = port.poll_facts(cx);
-                if facts.is_empty() || served.take() == Some(facts) {
-                    Poll::Pending
-                } else {
-                    Poll::Ready(facts)
+                let taken = port.poll_facts(cx);
+                let registering = core::mem::replace(&mut first, false);
+                if taken.is_empty() {
+                    return Poll::Pending;
                 }
+                if registering && taken == last {
+                    held = union(held, taken);
+                    return Poll::Pending;
+                }
+                Poll::Ready(taken)
             });
             let timer = async {
                 match deadline {
@@ -683,10 +724,11 @@ where
                     shared.poll_stop(cx)
                 }
             });
-            match select4(polled, timer, frames, stop).await {
-                Either4::First(taken) => facts = taken,
-                Either4::Second(()) | Either4::Third(()) | Either4::Fourth(()) => {}
-            }
+            let woke = select4(polled, timer, frames, stop).await;
+            facts = match woke {
+                Either4::First(taken) => union(held, taken),
+                Either4::Second(()) | Either4::Third(()) | Either4::Fourth(()) => held,
+            };
         }
         let stopped = poll_fn(|cx| {
             let now = clock.now();
@@ -739,6 +781,7 @@ where
             ],
             network: self.network.waiting(),
             deadlines: [self.port.deadline(), self.engine.deadline()],
+            taken: self.taken,
         }
     }
 
@@ -850,7 +893,10 @@ where
         while let Some(command) = self.commands_waiting.pop_front() {
             let progress = self.port.access_point_command(command, now, &mut self.sink);
             match progress {
-                Ok(AccessPointProgress::Done) => self.terminals(now)?,
+                Ok(AccessPointProgress::Done) => {
+                    self.taken = self.taken.wrapping_add(1);
+                    self.terminals(now)?;
+                }
                 Ok(AccessPointProgress::Held(command)) => {
                     if let Err(command) = self.commands_waiting.push_front(command) {
                         let _kept = core::mem::ManuallyDrop::new(command);
@@ -920,6 +966,7 @@ where
             return Err(Halt::Contract(ApContract::UnknownTicket(u8::MAX)));
         }
         while let Some(terminal) = self.sink.terminals.pop_front() {
+            self.taken = self.taken.wrapping_add(1);
             self.terminal(terminal, now)?;
         }
         Ok(())
@@ -1325,6 +1372,7 @@ where
             let RxPull::Unit { frame, meta } = pulled else {
                 break;
             };
+            self.taken = self.taken.wrapping_add(1);
             let result = self.received(
                 oer_protocols_ieee80211_contracts_port::RxBuffer::bytes(&frame),
                 integrity(&meta),
