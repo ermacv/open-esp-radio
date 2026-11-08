@@ -9,17 +9,15 @@ use core::pin::pin;
 
 use embassy_futures::select::{Either as Raced, select};
 use oer::{
-    AppResult, ApplicationEnd, Boot, Channel, Console, Error, GroupBoot, GroupPeripherals,
-    GroupStarted, Peripherals, GroupEnd, Started, observe,
+    AppResult, ApplicationEnd, Boot, Channel, Console, Error, GroupBoot, GroupEnd,
+    GroupPeripherals, GroupStarted, Peripherals, Started, observe,
     time::{Duration, with_timeout},
     wifi::{
         self, ConnectError, Ipv4Configuration, Ipv4Status, LinkState, Net, NetConfig, NetStatus,
         Station, StopError, embassy_net,
     },
 };
-use oer_protocols_hil_agent::base::Either;
 use oer_hil_agent::{Inbox, Mailbox, answer, answer_then_trap};
-use oer_protocols_hil_protocol::RequestIdentity;
 use oer_hil_services_sdk_station::{
     Address, Connect, Connection, Exchange, Exchanged, Ipv4, LinkLoss, Request, Status, WaitIpv4,
     WaitLinkDown,
@@ -29,6 +27,8 @@ use oer_hil_services_wifi_station::{
     phase::{Action, Answer, Phase},
     runtime as codes,
 };
+use oer_protocols_hil_agent::base::Either;
+use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
 
 /// The regulatory domain the station installs, every 2.4 GHz channel it
@@ -79,13 +79,9 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         requests: inbox,
     };
     Ok(boot.run(move || {
-        oer_hil_agent::serve(
-        console,
-        evidence,
-        services::IMAGE,
-        outbox,
-        move || application(worker, relay, hart0, relay_part),
-    )
+        oer_hil_agent::serve(console, evidence, services::IMAGE, outbox, move || {
+            application(worker, relay, hart0, relay_part)
+        })
     }))
 }
 
@@ -128,7 +124,12 @@ async fn sockets(
     part: observe::Part,
 ) -> AppResult {
     let mut server = pin!(load::serve::serve(&net, load, relay, hart1, tally));
-    match select(exchange_lines(&net, exchanges), part.polled(server.as_mut())).await {
+    match select(
+        exchange_lines(&net, exchanges),
+        part.polled(server.as_mut()),
+    )
+    .await
+    {
         Raced::First(result) => result,
         Raced::Second(never) => match never {},
     }
@@ -172,13 +173,17 @@ impl Worker {
                 Either::First(Either::First(Either::First(Request::Connect(connect)))) => {
                     answer(identity, &self.connect(connect).await);
                 }
-                Either::First(Either::First(Either::First(Request::WaitIpv4(WaitIpv4 { timeout_ms })))) => {
+                Either::First(Either::First(Either::First(Request::WaitIpv4(WaitIpv4 {
+                    timeout_ms,
+                })))) => {
                     answer(identity, &self.wait_ipv4(timeout_ms).await);
                 }
                 Either::First(Either::First(Either::First(Request::Exchange(exchange)))) => {
                     answer(identity, &self.exchange(exchange).await);
                 }
-                Either::First(Either::First(Either::First(Request::WaitLinkDown(WaitLinkDown { timeout_ms })))) => {
+                Either::First(Either::First(Either::First(Request::WaitLinkDown(
+                    WaitLinkDown { timeout_ms },
+                )))) => {
                     answer(identity, &self.wait_link_down(timeout_ms).await);
                 }
                 Either::First(Either::First(Either::First(Request::GetStatus(_)))) => {
@@ -189,12 +194,12 @@ impl Worker {
                 }
                 // Traps once the answer is written; a write the console
                 // cannot confirm ends the application, which records it.
-                Either::First(Either::Second(oer_hil_services_fault::Request::RaiseException(_))) => {
-                    match answer_then_trap(identity, &oer_hil_services_fault::Raising).await? {}
-                }
-                Either::First(Either::Second(oer_hil_services_fault::Request::RefusePublication(
+                Either::First(Either::Second(oer_hil_services_fault::Request::RaiseException(
                     _,
-                ))) => {
+                ))) => match answer_then_trap(identity, &oer_hil_services_fault::Raising).await? {},
+                Either::First(Either::Second(
+                    oer_hil_services_fault::Request::RefusePublication(_),
+                )) => {
                     oer::wifi::debug::refuse_next_publication();
                     answer(identity, &oer_hil_services_fault::Refusing);
                 }
@@ -266,8 +271,10 @@ impl Worker {
     /// refuses leave the image idle for another join.
     async fn join(&mut self, join: wifi_station::Join) -> Joined {
         let profile = wifi::Profile::wpa2(join.ssid.as_bytes(), join.passphrase.as_bytes());
-        let (Ok(profile), Ok(_)) = (profile, wifi::Config::new(COUNTRY, join.channel, TX_CAP_DBM))
-        else {
+        let (Ok(profile), Ok(_)) = (
+            profile,
+            wifi::Config::new(COUNTRY, join.channel, TX_CAP_DBM),
+        ) else {
             return Joined::Refused(StationError::InvalidSettings);
         };
         self.phase = Phase::Joined;
@@ -275,6 +282,7 @@ impl Worker {
             Ok(linked) => Joined::Linked {
                 bssid: linked.bssid,
                 channel: linked.channel,
+                phy: wifi_station::runtime::phy(linked.phy),
             },
             Err(error) => {
                 if matches!(error, ConnectError::Failed(_)) {
@@ -303,6 +311,7 @@ impl Worker {
             link: self.station.linked().map(|linked| wifi_station::Link {
                 bssid: linked.bssid,
                 channel: linked.channel,
+                phy: wifi_station::runtime::phy(linked.phy),
             }),
             ipv4: leased(self.net.status().await.ipv4).map(|configuration| wifi_station::Ipv4 {
                 address: configuration.address,

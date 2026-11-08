@@ -15,13 +15,27 @@ fn a_connect_that_completed_answers_the_join_with_its_access_point() {
     assert_eq!(
         joined(&CommandOutcome::Connected {
             bssid: BSSID,
-            channel: 6
+            channel: 6,
+            phy: LinkPhy::He20,
         }),
         Joined::Linked {
             bssid: BSSID,
-            channel: 6
+            channel: 6,
+            phy: Phy::He20,
         }
     );
+}
+
+#[test]
+fn every_phy_mode_keeps_its_name() {
+    for (link, named) in [
+        (LinkPhy::Legacy, Phy::Legacy),
+        (LinkPhy::Ht20, Phy::Ht20),
+        (LinkPhy::Ht40, Phy::Ht40),
+        (LinkPhy::He20, Phy::He20),
+    ] {
+        assert_eq!(phy(link), named);
+    }
 }
 
 #[test]
@@ -41,6 +55,10 @@ fn a_failed_connect_numbers_its_reason_and_the_access_points_code() {
             partial: true
         })),
         0x0105_0001
+    );
+    assert_eq!(
+        code(connect_failed(&DisconnectReason::HeNotGranted)),
+        0x0111_0000
     );
     assert_eq!(
         code(connect_failed(&DisconnectReason::Sae(
@@ -69,6 +87,7 @@ fn only_an_up_link_after_the_connection_notice_names_its_access_point() {
     let connected = Some(Notice::Connected {
         bssid: BSSID,
         channel: 11,
+        phy: LinkPhy::Ht40,
     });
     let up = LinkSnapshot {
         state: LinkState::Up,
@@ -83,7 +102,8 @@ fn only_an_up_link_after_the_connection_notice_names_its_access_point() {
         link(&status(up, connected)),
         Some(Link {
             bssid: BSSID,
-            channel: 11
+            channel: 11,
+            phy: Phy::Ht40,
         })
     );
     assert_eq!(link(&status(LinkSnapshot::DOWN, connected)), None);

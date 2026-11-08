@@ -364,9 +364,9 @@ impl<W: Binding> Profile<W> {
                 listen_interval:
                     oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
                 phy: if config.ht40 {
-                    oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht40
+                    oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::Ht40
                 } else {
-                    oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20
+                    oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::Ht20
                 },
                 tx_block_ack: Some(
                     oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
@@ -391,6 +391,7 @@ pub enum Event {
     Connected {
         bssid: [u8; 6],
         channel: u8,
+        phy: runtime::contract::LinkPhy,
     },
     Disconnected(runtime::contract::DisconnectReason),
     CommandRefused(runtime::CommandRefused),
@@ -418,7 +419,12 @@ impl<E: Events, N: crate::Notifies> runtime::ServiceOutputSink<Caps> for Output<
             runtime::ServiceOutput::Notice(runtime::contract::Notice::Connected {
                 bssid,
                 channel,
-            }) => Event::Connected { bssid, channel },
+                phy,
+            }) => Event::Connected {
+                bssid,
+                channel,
+                phy,
+            },
             runtime::ServiceOutput::Notice(runtime::contract::Notice::Disconnected(r)) => {
                 Event::Disconnected(r)
             }

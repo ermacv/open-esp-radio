@@ -71,8 +71,11 @@ mod associated_peer {
             status_code,
             association_id: 7,
             ht_capability: true,
-            he_capability: true,
-            he_operation: true,
+            he: oer_protocols_ieee80211_wire::station::ResponseHeElements::new(
+                &HE20_MCS9_CAPABILITY,
+                &HE20_OPERATION,
+            )
+            .unwrap(),
             wmm: true,
             wmm_parameters: None,
             association_comeback_tu: None,

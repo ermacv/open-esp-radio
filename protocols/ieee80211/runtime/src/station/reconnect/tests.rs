@@ -26,6 +26,7 @@ fn linked(request: u64) -> ServiceOutput<()> {
         outcome: super::super::contract::CommandOutcome::Connected {
             bssid: [2; 6],
             channel: 6,
+            phy: crate::station::contract::LinkPhy::Legacy,
         },
     })
 }
