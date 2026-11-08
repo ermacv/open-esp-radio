@@ -500,6 +500,69 @@ fn tracking_tick(observed: station::TrackingTick) -> Tick {
     }
 }
 
+/// The network core's turns; the network's task is their one writer.
+#[cfg(feature = "network")]
+static NETWORK: crate::observe::network::NetworkCounter =
+    crate::observe::network::NetworkCounter::new();
+
+/// What the network core's turns did since boot, each word read on its own.
+#[cfg(feature = "network")]
+pub fn network_turns() -> crate::observe::network::NetworkTurns {
+    NETWORK.read()
+}
+
+/// The network service's sink: its turns go to [`network_turns`], and the
+/// core's drops go nowhere, as without `observe`.
+#[cfg(feature = "network")]
+#[derive(Default)]
+pub(crate) struct NetworkSink(crate::observe::network::TurnTally);
+
+#[cfg(feature = "network")]
+impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent> for NetworkSink {
+    // Out of the service's turn: inlined, the counting grows the turn past
+    // its inlining into `run`, and its tail merging there joined two waker
+    // calls whose scope the image's stack proof then cannot name.
+    #[inline(never)]
+    fn event(&mut self, event: oer_protocols_network_runtime::ServiceEvent) {
+        use crate::observe::network::{Publish, Request};
+        use oer_protocols_network_runtime::{PublishEnd, RequestKind, ServiceEvent};
+        let tally = &mut self.0;
+        match event {
+            ServiceEvent::Took(kind) => tally.took(
+                &NETWORK,
+                match kind {
+                    RequestKind::Reserve => Request::Reserve,
+                    RequestKind::Release => Request::Release,
+                    RequestKind::Send => Request::Send,
+                    RequestKind::Close => Request::Close,
+                },
+            ),
+            ServiceEvent::BudgetSpent => tally.budget_spent(),
+            ServiceEvent::IntakeFull => tally.intake_full(),
+            ServiceEvent::Accepted => tally.accepted(),
+            ServiceEvent::Published(end) => tally.published(match end {
+                PublishEnd::Chose => Publish::Chose,
+                PublishEnd::Refused => Publish::Refused,
+                PublishEnd::Budget => Publish::Budget,
+                PublishEnd::Deferred => Publish::Deferred,
+                PublishEnd::Fault => Publish::Fault,
+            }),
+            ServiceEvent::TurnEnded(end) => {
+                tally.ended(&NETWORK, end.blocks_free, end.credits_free)
+            }
+            ServiceEvent::Yielded => tally.yielded(&NETWORK),
+            ServiceEvent::Waited { ready } => tally.waited(&NETWORK, ready),
+        }
+    }
+}
+
+#[cfg(feature = "network")]
+impl oer_portable_events::EventSink<oer_protocols_network_core::NetEvent> for NetworkSink {
+    const ENABLED: bool = false;
+
+    fn event(&mut self, _: oer_protocols_network_core::NetEvent) {}
+}
+
 /// The network bridge took a frame from the station.
 #[cfg(feature = "wifi")]
 pub(crate) fn bridge_received(_: oer_portable_embassy_net::EthernetFrameView<'_>) {

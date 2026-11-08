@@ -23,6 +23,7 @@ observe = ["oer-chips-family-app/observe"]
 udp = ["embassy-net/udp", "dep:xarxa"]
 ## The network core in place of the IP service, for an image to compare them.
 network = [
+    "dep:oer-portable-events",
     "dep:oer-protocols-network-core",
     "dep:oer-protocols-network-runtime",
     "dep:oer-protocols-network-wire",
@@ -36,6 +37,7 @@ oer-chips-family-app = { path = "../../family/app" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-embassy-net = { path = "../../../portable/embassy/net" }
+oer-portable-events = { path = "../../../portable/events", optional = true }
 oer-portable-memory = { path = "../../../portable/memory" }
 heapless = { version = "0.9.3", default-features = false, optional = true }
 oer-protocols-network-core = { path = "../../../protocols/network/core", optional = true }

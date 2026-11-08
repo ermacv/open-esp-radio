@@ -78,6 +78,13 @@ A turn takes commands, received frames and the port's notices, then, once it has
 read them all, chooses work and publishes it, then hands results and datagrams back. Each part is bounded, so no lane and no
 port starves the others, and sockets waiting for blocks take turns.
 
+The sink lent to `run` hears the core's drops and the service's `ServiceEvent`s:
+each request a turn takes by kind, each socket whose lane still holds requests once
+the turn took its budget of them, a full intake, each frame the port accepts, how
+publishing ended, what was free when the turn ended, and whether the pass after it
+yielded or waited. The sink counts; the service keeps nothing and reads no clock for
+it. A disabled sink, `()` among them, hears nothing and builds no event.
+
 `Service::run` ends at the first look after a stop, or at once when the port
 contradicts itself, and returns the cause. Nothing is published from then on.
 `Service::retire` returns `Ended`: the cause, the core's `Retired` and a
