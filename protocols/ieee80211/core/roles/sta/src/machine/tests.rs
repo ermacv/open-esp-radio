@@ -4672,6 +4672,47 @@ fn connected_eapol_rejects_changed_m3_and_unprotected_group_message1() {
 }
 
 #[test]
+fn a_frame_withdrawn_for_a_key_of_an_earlier_installation_ends_the_link_without_a_deauthentication()
+{
+    use oer_protocols_ieee80211_contracts_port::WithdrawCause;
+    installed(|mint| {
+        let (mut world, ptk) = wpa2_associated::<2>(mint);
+        world
+            .outcomes
+            .push_back((TxOutcome::Withdrawn(WithdrawCause::StalePermission), false));
+        world.receive(at(33), &retry_message3(&ptk, 2, 0x99));
+        // The ticket and buffer came back with the terminal.
+        assert_eq!(world.station.tickets.len(), 2);
+        assert_eq!(world.station.buffers.len(), 2);
+        assert!(!world.station.is_connected());
+        // It leaves for that reason, its keys asked off, and sends no
+        // Deauthentication (management subtype 12) under the refused key.
+        assert!(world.seen.iter().any(|seen| matches!(
+            seen,
+            Seen::Notify(StaNotice::Disconnected(
+                StaDisconnectReason::TransmitRefused(TxRefusal::StaleKey)
+            ))
+        )));
+        assert!(
+            !world
+                .seen
+                .iter()
+                .any(|seen| matches!(seen, Seen::Transmit { subtype: 12, .. })),
+            "{:?}",
+            world.seen
+        );
+        assert_eq!(
+            world
+                .seen
+                .iter()
+                .filter(|seen| matches!(seen, Seen::RemoveKey))
+                .count(),
+            2
+        );
+    });
+}
+
+#[test]
 fn only_delivered_m4_connects_and_other_terminals_keep_the_original_deadline() {
     use oer_protocols_ieee80211_contracts_port::{IndeterminateCause, WithdrawCause};
     for (outcome, published) in [
