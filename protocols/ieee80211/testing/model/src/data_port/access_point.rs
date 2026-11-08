@@ -24,6 +24,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) {
         let ModelPairwiseInstall {
             spp,
+            association: _,
             key,
             material,
             installed,
@@ -36,6 +37,52 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         ));
     }
 
+    /// The generations of the installation tokens `command` names: its
+    /// permission, association and key slots, as their issuer recorded them.
+    fn command_generations(command: &ModelAccessPointCommand<'id, Id, C, X>) -> [Option<u32>; 3] {
+        match command {
+            AccessPointCommand::InstallPairwise(ModelAccessPointPairwiseInstall(install)) => [
+                Some(install.association),
+                Some(install.key.0.generation),
+                None,
+            ],
+            AccessPointCommand::InstallGroup(ModelAccessPointGroupInstall(ModelGroupInstall(
+                install,
+            ))) => match install {
+                GroupInstallationCommand::AccessPoint(pending) => [
+                    Some(pending.association),
+                    Some(pending.slot.generation()),
+                    Some(pending.permission.generation()),
+                ],
+                GroupInstallationCommand::Station(pending) => [
+                    Some(pending.association),
+                    Some(pending.slot.generation()),
+                    Some(pending.permission.generation()),
+                ],
+            },
+            AccessPointCommand::RemovePairwise { association, key } => [
+                Some(association.owner.generation()),
+                Some(key.slot.generation()),
+                None,
+            ],
+            AccessPointCommand::RemoveGroup { permission, key } => [
+                Some(permission.generation()),
+                Some(key.slot.generation()),
+                None,
+            ],
+            AccessPointCommand::Configure { permission, .. } => {
+                [Some(permission.generation()), None, None]
+            }
+        }
+    }
+
+    /// The first token of an earlier installation `command` names.
+    fn stale_command(&self, command: &ModelAccessPointCommand<'id, Id, C, X>) -> Option<u32> {
+        let generations = Self::command_generations(command);
+        let named: Vec<u32> = generations.into_iter().flatten().collect();
+        first_stale(self.installation.generation(), &named)
+    }
+
     /// Run one access-point command.
     fn run_access_point(
         &mut self,
@@ -44,18 +91,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) -> ModelAccessPointProgress<'id, Id, C, X> {
         let group_held = self.air.group_held.get() && !self.held.draining.get();
         match command {
-            AccessPointCommand::Tsf(control) => {
-                let mut interface = self.air.access_point.get();
-                interface.tsf = match control.get() {
-                    TsfControl::Restart => ModelAccessPointTsf::Running { since: now },
-                    TsfControl::Stop => ModelAccessPointTsf::Stopped,
-                };
-                self.air.access_point.set(interface);
-                AccessPointProgress::Done
-            }
             AccessPointCommand::Configure {
                 permission,
                 receive,
+                tsf,
             } => {
                 // Its queued attempts end withdrawn; the station's stay.
                 self.driver
@@ -64,6 +103,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     return AccessPointProgress::Held(AccessPointCommand::Configure {
                         permission,
                         receive,
+                        tsf,
                     });
                 }
                 let mut interface = self.air.access_point.get();
@@ -71,6 +111,12 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     AccessPointReceive::Off => None,
                     AccessPointReceive::Bss { filter } => Some(filter.get()),
                 };
+                if let Some(control) = tsf {
+                    interface.tsf = match control.get() {
+                        TsfControl::Restart => ModelAccessPointTsf::Running { since: now },
+                        TsfControl::Stop => ModelAccessPointTsf::Stopped,
+                    };
+                }
                 self.air.access_point.set(interface);
                 self.held.post(OwnedLowerMacEvent::Terminal(
                     OwnedLowerMacTerminal::Configured(OwnedConfigured::AccessPoint(
@@ -79,14 +125,16 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 ));
                 AccessPointProgress::Done
             }
-            AccessPointCommand::InstallPairwise(install) => {
+            AccessPointCommand::InstallPairwise(ModelAccessPointPairwiseInstall(install)) => {
                 self.install_pairwise_key(install);
                 AccessPointProgress::Done
             }
             AccessPointCommand::InstallGroup(install) if group_held => {
                 AccessPointProgress::Held(AccessPointCommand::InstallGroup(install))
             }
-            AccessPointCommand::InstallGroup(ModelGroupInstall(install)) => {
+            AccessPointCommand::InstallGroup(ModelAccessPointGroupInstall(ModelGroupInstall(
+                install,
+            ))) => {
                 self.driver.group_change(
                     &self.held,
                     now.as_micros(),
@@ -181,10 +229,6 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
         attempt.into_parts(&self.loan)
     }
 
-    fn installation_generation(&self) -> u32 {
-        self.installation.generation()
-    }
-
     fn admit_beacon<'k, 'p>(
         &self,
         beacon: BeaconSubmission<'k, 'p, 'id, Self>,
@@ -208,10 +252,21 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
             self.retained_access_point.push(command);
             return Err(fault);
         }
+        // A token of an earlier installation is refused for good, before
+        // the radio's own state is asked.
+        if let Some(issued) = self.stale_command(&command) {
+            return Ok(AccessPointProgress::Refused(
+                command,
+                AccessPointRefusal::StalePermission {
+                    issued,
+                    installation: self.installation.generation(),
+                },
+            ));
+        }
         if self.radio != Radio::Running {
             return Ok(AccessPointProgress::Refused(
                 command,
-                CommandRefusal::NotEnabled,
+                AccessPointRefusal::NotEnabled,
             ));
         }
         let air = self.air.clone();

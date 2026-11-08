@@ -11,5 +11,5 @@ pub fn configure<'id>(resources: ModelResources<'id, Composition>) -> AccessPoin
     let permission = resources.access_point.commands.configure;
     #[cfg(ui_reject)]
     let permission = resources.station.commands.configure;
-    AccessPointCommand::Configure { permission, receive: AccessPointReceive::Off } // ui-error: E0308
+    AccessPointCommand::Configure { permission, receive: AccessPointReceive::Off, tsf: None } // ui-error: E0308
 }

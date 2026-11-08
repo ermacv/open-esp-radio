@@ -129,7 +129,10 @@
 //! for its own interface only, and [`ModelAir::access_point`] shows its
 //! receive rules and TSF. A confirmed stop leaves its interface receiving
 //! nothing and its TSF stopped. [`ModelResources`] groups the shared tokens
-//! and each role's own permissions.
+//! and each role's own permissions. Every token of its pools, its group
+//! permissions included, names its installation; the access point's
+//! commands and its beacons and keyed attempts at `submit` refuse a token of
+//! an earlier installation with its owners.
 
 pub mod air_time;
 pub use air_time::{
@@ -651,6 +654,8 @@ struct RawKeyIdentity(Rc<KeyInstall>);
 #[derive(Debug)]
 struct KeyInstall {
     index: u8,
+    /// The installation that issued the key's slot.
+    generation: u32,
     key_id: u8,
     active: Cell<bool>,
     group_role: Option<VifRole>,
@@ -674,9 +679,10 @@ impl PartialEq for RawKeyIdentity {
 impl Eq for RawKeyIdentity {}
 
 impl RawKeyIdentity {
-    fn new(index: u8, key_id: u8, role: VifRole, air: &Rc<ModelAir>) -> Self {
+    fn new(index: u8, generation: u32, key_id: u8, role: VifRole, air: &Rc<ModelAir>) -> Self {
         Self(Rc::new(KeyInstall {
             index,
+            generation,
             key_id,
             active: Cell::new(true),
             group_role: None,
@@ -688,6 +694,7 @@ impl RawKeyIdentity {
     }
     fn group(
         index: u8,
+        generation: u32,
         key_id: GroupKeyId,
         role: VifRole,
         key: Ccmp128Key,
@@ -695,6 +702,7 @@ impl RawKeyIdentity {
     ) -> Self {
         let identity = Self(Rc::new(KeyInstall {
             index,
+            generation,
             key_id: key_id.get(),
             active: Cell::new(true),
             group_role: Some(role),
@@ -1176,7 +1184,11 @@ impl<'id, B: ModelComposition + 'id, R: ModelRole + 'id> KeyTypes<'id> for Model
         GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>;
     type PairwiseKey = ModelPairwiseKey<'id, B, R>;
     type GroupKey = ModelGroupKey<'id, B, R>;
-    type GroupPermission = Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>;
+    type GroupPermission = oer_protocols_ieee80211_contracts_port::IssuedSlot<
+        'id,
+        ModelGroupPermission<R>,
+        R::GroupPermissionPath<B::Identity>,
+    >;
     type Identity = KeyIdentity<'id, B::Identity>;
     type GroupSlotIdentity = u8;
     fn pairwise_identity(key: &Self::PairwiseKey) -> Self::Identity {
@@ -1473,8 +1485,11 @@ pub struct ModelStationPermissions<'id, B: ModelComposition> {
         ModelPool<<B as ModelComposition>::Identity, 5>,
     >; MODEL_KEY_SLOTS],
     /// Its sole GTK mutation permission.
-    pub group_permission:
-        Slot<'id, ModelGroupPermission<Station>, ModelPool<<B as ModelComposition>::Identity, 8>>,
+    pub group_permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+        'id,
+        ModelGroupPermission<Station>,
+        ModelPool<<B as ModelComposition>::Identity, 8>,
+    >,
 }
 
 /// The access point's own permissions.
@@ -1510,7 +1525,7 @@ pub struct ModelAccessPointPermissions<'id, B: ModelComposition> {
         ModelPool<<B as ModelComposition>::Identity, 6>,
     >; MODEL_KEY_SLOTS],
     /// Its sole GTK mutation permission.
-    pub group_permission: Slot<
+    pub group_permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
         ModelGroupPermission<AccessPoint>,
         oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 0>,
@@ -2453,13 +2468,22 @@ impl ResponsePolicy {
 #[derive(Debug)]
 struct AnswerShapeMismatch;
 
-type StationGroupPermission<'id, B> =
-    Slot<'id, ModelGroupPermission<Station>, ModelPool<<B as ModelComposition>::Identity, 8>>;
+type StationGroupPermission<'id, B> = oer_protocols_ieee80211_contracts_port::IssuedSlot<
+    'id,
+    ModelGroupPermission<Station>,
+    ModelPool<<B as ModelComposition>::Identity, 8>,
+>;
 
 struct PendingGroupInstall<'id, B: ModelComposition, R: ModelRole> {
     spp: oer_protocols_ieee80211_wire::security::Spp,
+    /// The installation that issued the association.
+    association: u32,
     slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
-    permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
+    permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+        'id,
+        ModelGroupPermission<R>,
+        R::GroupPermissionPath<B::Identity>,
+    >,
     key_id: GroupKeyId,
     key: Ccmp128Key,
 }
@@ -2475,7 +2499,11 @@ trait GroupInstallationRole: ModelRole + Sized {
     ) -> GroupInstallationCommand<'_, B>;
     fn installed<'o, B: ModelComposition>(
         key: ModelGroupKey<'o, B, Self>,
-        permission: Slot<'o, ModelGroupPermission<Self>, Self::GroupPermissionPath<B::Identity>>,
+        permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+            'o,
+            ModelGroupPermission<Self>,
+            Self::GroupPermissionPath<B::Identity>,
+        >,
     ) -> OwnedInstalledGroup<'o, B>;
     fn pairwise_installed<'o, B: ModelComposition>(
         key: ModelPairwiseKey<'o, B, Self>,
@@ -2507,7 +2535,7 @@ impl GroupInstallationRole for AccessPoint {
     }
     fn installed<'o, B: ModelComposition>(
         key: ModelGroupKey<'o, B, Self>,
-        permission: Slot<
+        permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
             ModelGroupPermission<Self>,
             oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
@@ -2646,8 +2674,9 @@ mod installation;
 pub use installation::{ModelBackend, ModelPools};
 mod data_port;
 pub use data_port::{
-    MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAdmitted, ModelCommands, ModelGroupInstall,
-    ModelInstall, ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
+    MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAccessPointGroupInstall,
+    ModelAccessPointPairwiseInstall, ModelAdmitted, ModelCommands, ModelGroupInstall, ModelInstall,
+    ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
     ModelPortObservation, ModelReinstallRefused,
 };
 
@@ -2721,6 +2750,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         held.air.apply_association(R::ROLE, pending.spp);
         let identity = RawKeyIdentity::group(
             pending.slot.index(),
+            pending.slot.generation(),
             pending.key_id,
             R::ROLE,
             pending.key,
@@ -2768,6 +2798,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                 self.keys.retain(|key| *key != installed.identity);
                 let identity = RawKeyIdentity::group(
                     installed.slot.index(),
+                    installed.slot.generation(),
                     key_id,
                     VifRole::Station,
                     key,

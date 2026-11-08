@@ -1,8 +1,0 @@
-error[E0308]: mismatched types
-  --> tests/ui/beacon_unchecked_permission.rs:17:102
-   |
-17 | ...tion: TxOperation::Data, permission, stamp }.admit(); // ui-error: E0308
-   |                             ^^^^^^^^^^ expected `CurrentBeacon<'_, '_, _>`, found `BeaconPermission<'_, Q>`
-   |
-   = note: expected struct `oer_protocols_ieee80211_contracts_port::CurrentBeacon<'_, '_, _>`
-              found struct `oer_protocols_ieee80211_contracts_port::BeaconPermission<'id, Q>`

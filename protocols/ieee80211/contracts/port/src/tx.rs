@@ -145,6 +145,9 @@ pub enum WithdrawCause {
     KeyRemoved,
     /// The port is being disabled.
     Disabled,
+    /// The port refused the submission: a token of it was issued by an
+    /// earlier installation ([`SubmitRefusal::StalePermission`](crate::SubmitRefusal::StalePermission)).
+    StalePermission,
 }
 
 /// Why a published MPDU's outcome cannot be established.

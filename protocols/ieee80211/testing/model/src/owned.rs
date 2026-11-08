@@ -39,7 +39,11 @@ pub(super) enum OwnedRemovedKey<'o, B: ModelComposition, R: ModelRole> {
     Group {
         slot:
             GroupKeySlot<'o, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
-        permission: Slot<'o, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
+        permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+            'o,
+            ModelGroupPermission<R>,
+            R::GroupPermissionPath<B::Identity>,
+        >,
     },
 }
 
@@ -72,7 +76,7 @@ pub(super) enum OwnedInstalledGroup<'o, B: ModelComposition> {
     },
     AccessPoint {
         key: ModelGroupKey<'o, B, AccessPoint>,
-        permission: Slot<
+        permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
             ModelGroupPermission<AccessPoint>,
             oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
@@ -162,7 +166,7 @@ impl<B: ModelComposition, R: ModelRole> OwnedRemovedKey<'static, B, R> {
             },
             Self::Group { slot, permission } => RemovedKey::Group {
                 slot: slot.lend(loan),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
         }
     }
@@ -183,7 +187,7 @@ impl<B: ModelComposition, R: ModelRole> OwnedRemovedKey<'static, B, R> {
             },
             RemovedKey::Group { slot, permission } => Self::Group {
                 slot: slot.into_owned(loan),
-                permission: loan.reclaim_slot(permission),
+                permission: permission.into_owned(loan),
             },
         }
     }
@@ -221,11 +225,11 @@ impl<B: ModelComposition> OwnedInstalledGroup<'static, B> {
         match self {
             Self::Station { key, permission } => InstalledGroup::Station {
                 key: key.lend(loan),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
             Self::AccessPoint { key, permission } => InstalledGroup::AccessPoint {
                 key: key.lend(loan),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
         }
     }
@@ -255,11 +259,11 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
             Self::KeyRemoved(key) => LowerMacTerminal::KeyRemoved(key.lend(loan)),
             Self::GroupKeyReplaced { key, permission } => LowerMacTerminal::GroupKeyReplaced {
                 key: key.lend(loan),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
             Self::GroupKeySelected { key, permission } => LowerMacTerminal::GroupKeySelected {
                 key: key.lend(loan),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
             Self::GroupKeyInstalled(key) => LowerMacTerminal::GroupKeyInstalled(key.lend(loan)),
             Self::PairwiseKeyInstalled(key) => {

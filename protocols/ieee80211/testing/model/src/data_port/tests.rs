@@ -77,7 +77,11 @@ type GroupTokens<'s> = (
     >,
     [GroupKeySlot<'s, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<LocalId<'s>, 5>>;
         MODEL_KEY_SLOTS],
-    Slot<'s, ModelGroupPermission<Station>, ModelPool<LocalId<'s>, 8>>,
+    oer_protocols_ieee80211_contracts_port::IssuedSlot<
+        's,
+        ModelGroupPermission<Station>,
+        ModelPool<LocalId<'s>, 8>,
+    >,
     [PairwiseKeySlot<'s, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<LocalId<'s>, 5>>;
         MODEL_KEY_SLOTS],
 );

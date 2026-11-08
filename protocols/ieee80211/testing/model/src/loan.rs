@@ -176,14 +176,14 @@ impl<B: ModelComposition> ModelResources<'static, B> {
                 connection_epoch: loan.lend_slot(station.connection_epoch),
                 pairwise: station.pairwise.map(|slot| slot.lend(loan)),
                 group: station.group.map(|slot| slot.lend(loan)),
-                group_permission: loan.lend_slot(station.group_permission),
+                group_permission: station.group_permission.lend(loan),
             },
             access_point: ModelAccessPointPermissions {
                 association: access_point.association.lend(loan),
                 commands: access_point.commands.lend(loan),
                 pairwise: access_point.pairwise.map(|slot| slot.lend(loan)),
                 group: access_point.group.map(|slot| slot.lend(loan)),
-                group_permission: loan.lend_slot(access_point.group_permission),
+                group_permission: access_point.group_permission.lend(loan),
                 beacon: access_point.beacon.lend(loan),
             },
         }

@@ -324,36 +324,49 @@ Received units come from the one ring for both roles.
 The access point's permissions are its own: its configure permission, its
 association, its pairwise slots (one per association identifier), its group
 slots and group permission, and the installation's one `BeaconPermission`
-(minted by `BeaconPool`, issued with the installation's generation). A
-missing permission does not compile, and no station permission fits an
-access-point operation or the reverse (`tests/ui`, the model's `tests/ui`).
-`current_beacon` lends a permission of the current installation for a
-borrow of the port; one of an earlier installation is refused
-(`BeaconRefusal::StalePermission`) with the permission, before a beacon is
-built. A `BeaconAttempt` takes that checked permission, contends as
-`BEACON_ACCESS_CATEGORY` (voice) unprotected, and every end of it, a refused
-submission's included, is a `TxCompleted::Beacon` that returns the
-permission: one beacon is admitted, queued or on the air at a time.
+(minted by `BeaconPool`). A missing permission does not compile, and no
+station permission or installation payload fits an access-point operation or
+the reverse (`tests/ui`, the model's `tests/ui`). A `BeaconAttempt` takes the
+permission, contends as `BEACON_ACCESS_CATEGORY` (voice) unprotected, and
+every end of it, a refused submission's included, is a `TxCompleted::Beacon`
+that returns the permission: one beacon is admitted, queued or on the air at
+a time.
+
+Every token the port's own pools mint (configure permissions, association
+starts and key slots, the beacon permission, and a backend's group
+permission when it uses `IssuedSlots`) is an `IssuedSlot` that names the
+generation of the installation that issued it. A pool yields a grant
+(`SlotGrant`, `InterfaceGrant`, `AssociationGrant`, `BeaconGrant`); only the
+backend that consumed the mint holds it and issues it once with its
+installation's generation. After a reinstallation of the same identity an
+earlier token still compiles; the port refuses it at the acceptance point
+with its owners: `submit` refuses a beacon or an access-point attempt under
+an earlier permission or key (`SubmitRefusal::StalePermission`, terminal
+`Withdrawn(StalePermission)`), and `access_point_command` refuses a command
+naming an earlier permission, association, slot or key
+(`AccessPointRefusal::StalePermission`, the command back). The station's
+operations do not check yet.
 
 | Operation | Accepted at | Refused before | Ends with |
 | --- | --- | --- | --- |
 | access-point transmission | `submit` | `SubmitRefusal`, withdrawn terminal in the sink | `TxCompleted::Single` |
-| beacon | `submit` | stale permission at `current_beacon`; then as a transmission | `TxCompleted::Beacon` with the permission |
-| key install or removal, configuration, TSF control | `AccessPointProgress::Done` | `AccessPointProgress::Refused` with the command | its terminal (`PairwiseKeyInstalled`, `GroupKeyInstalled`, `KeyRemoved`, `Configured` of the access point), none for the TSF |
+| beacon | `submit` | as a transmission, an earlier installation's permission included; its terminal returns the permission | `TxCompleted::Beacon` with the permission |
+| key install or removal, configuration with its TSF control | `AccessPointProgress::Done` | `AccessPointProgress::Refused` with the command (`NotEnabled`, `StalePermission`) | its terminal (`PairwiseKeyInstalled`, `GroupKeyInstalled`, `KeyRemoved`, `Configured` of the access point) |
 
 The access point's commands run in its own order: one held at its barrier
 holds no station command, and a station command held at its barrier holds
 no access-point command. A configuration withdraws the queued attempts of
 its own interface and waits for its published ones only. The access point
 stops with its own commands (configuration `Off`, the removal of each
-pairwise key and of the group key, the TSF stop), which return its owners
+pairwise key and of the group key, a configuration stopping the TSF), which return its owners
 and leave the station's attempts, keys and configuration as they were. A
 confirmed `poll_stop` stops both roles: every queued attempt ends withdrawn,
 the access point's interface receives nothing and runs no TSF, and each
 role's permissions stay with their holders.
 
 Who writes a beacon's Timestamp field (`BeaconTimestamp`) and whether the
-TSF restarts and stops by a sourced sequence are the backend's
+TSF restarts and stops by a sourced sequence (a configuration carries the
+control, with the configure permission) are the backend's
 `AccessPointServices` (`AccessPointCapabilities`). An unsourced value is
 absent, and then no `BeaconStamp` or `SupportedTsfControl` exists for that
 backend: the operation is refused before it is built.

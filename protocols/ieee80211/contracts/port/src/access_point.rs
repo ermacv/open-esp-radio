@@ -16,31 +16,36 @@
 //! pairwise slots (one per association identifier), its group slots and group
 //! permission ([`PortTypes::AccessPointKeys`]), and the one
 //! [`BeaconPermission`]. Without them an access-point operation does not
-//! compile, and none of them fits a station operation. A beacon permission
-//! of an earlier installation of the port compiles and is refused
-//! explicitly ([`AccessPointPort::current_beacon`]) before a beacon is
-//! built.
+//! compile, and none of them fits a station operation.
+//!
+//! Each of these tokens names the installation that issued it
+//! ([`IssuedSlot`](crate::IssuedSlot)). After a reinstallation of the same
+//! identity a token of the earlier installation still compiles; the port
+//! refuses it explicitly, with its owners, at the operation's acceptance
+//! point: [`DataPort::submit`] for a beacon and for an attempt under an
+//! access-point key, [`AccessPointPort::access_point_command`] for every
+//! command. The station's operations do not check yet.
 //!
 //! # Acceptance and terminals
 //!
 //! | Operation | Accepted at | Refused before | Ends with |
 //! | --- | --- | --- | --- |
-//! | a transmission ([`AccessPointPort::admit_access_point`]) | [`DataPort::submit`] | [`SubmitRefusal`](crate::SubmitRefusal), its withdrawn terminal in the sink | [`TxCompleted::Single`](crate::TxCompleted::Single) |
-//! | a beacon ([`AccessPointPort::admit_beacon`]) | [`DataPort::submit`] | [`BeaconRefusal::StalePermission`] from [`AccessPointPort::current_beacon`] before the beacon is built; then as a transmission, its terminal returning the permission | [`TxCompleted::Beacon`](crate::TxCompleted::Beacon) |
-//! | a key installation or removal, a configuration, a TSF control ([`AccessPointPort::access_point_command`]) | [`AccessPointProgress::Done`] | [`AccessPointProgress::Refused`] with the command | its terminal in the sink, or none for a TSF control |
+//! | a transmission ([`AccessPointPort::admit_access_point`]) | [`DataPort::submit`] | [`SubmitRefusal`](crate::SubmitRefusal) (a key of an earlier installation: `StalePermission`), its withdrawn terminal in the sink | [`TxCompleted::Single`](crate::TxCompleted::Single) |
+//! | a beacon ([`AccessPointPort::admit_beacon`]) | [`DataPort::submit`] | the same (a permission of an earlier installation: `StalePermission`), its terminal returning the permission | [`TxCompleted::Beacon`](crate::TxCompleted::Beacon) |
+//! | a key installation or removal, a configuration with its TSF control ([`AccessPointPort::access_point_command`]) | [`AccessPointProgress::Done`] | [`AccessPointProgress::Refused`] with the command ([`AccessPointRefusal`]) | its terminal in the sink |
 //!
 //! # Roles stop on their own
 //!
 //! The access point stops with its own commands: a configuration
 //! [`AccessPointReceive::Off`], which ends its queued attempts (a queued
 //! beacon included) withdrawn and waits for its published one, the removal
-//! of each pairwise key and of its group key, and the TSF stop. None of them
-//! withdraws, holds or changes the station's attempts, keys or
-//! configuration, and an access-point command held at its barrier holds no
-//! station command. A confirmed [`DataPort::poll_stop`] stops the shared
-//! owner for both roles: every queued attempt ends withdrawn, the access
-//! point's interface receives nothing and its TSF runs no more, and each
-//! role's permissions stay with their holders.
+//! of each pairwise key and of its group key, and a configuration that stops
+//! its TSF. None of them withdraws, holds or changes the station's attempts,
+//! keys or configuration, and an access-point command held at its barrier
+//! holds no station command. A confirmed [`DataPort::poll_stop`] stops the
+//! shared owner for both roles: every queued attempt ends withdrawn, the
+//! access point's interface receives nothing and its TSF runs no more, and
+//! each role's permissions stay with their holders.
 //!
 //! # Values a backend sources first
 //!
@@ -58,8 +63,8 @@
 //! ```compile_fail,E0382
 //! use oer_protocols_ieee80211_contracts_port::*;
 //! use oer_protocols_radio_port::{PoolPath, Slot};
-//! fn twice<'c, 'id, T, M: PreparedTx<'id>, N: PreparedTx<'id>, K, X, Path: PoolPath, Q: PoolPath>(
-//!     permission: CurrentBeacon<'c, 'id, Q>,
+//! fn twice<'id, T, M: PreparedTx<'id>, N: PreparedTx<'id>, K, X, Path: PoolPath, Q: PoolPath>(
+//!     permission: BeaconPermission<'id, Q>,
 //!     first: (X, Slot<'id, T, Path>, M, SupportedPower<K>, BeaconStamp<K>),
 //!     second: (X, Slot<'id, T, Path>, N, SupportedPower<K>, BeaconStamp<K>),
 //! ) where
@@ -78,8 +83,8 @@
 //! ```
 //! use oer_protocols_ieee80211_contracts_port::*;
 //! use oer_protocols_radio_port::{PoolPath, Slot};
-//! fn once<'c, 'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath, Q: PoolPath>(
-//!     permission: CurrentBeacon<'c, 'id, Q>,
+//! fn once<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath, Q: PoolPath>(
+//!     permission: BeaconPermission<'id, Q>,
 //!     beacon: (X, Slot<'id, T, Path>, M, SupportedPower<K>, BeaconStamp<K>),
 //! ) where
 //!     M::Types: PortTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
@@ -89,26 +94,12 @@
 //! }
 //! ```
 //!
-//! A checked permission is lent for one borrow of its port, so it is not
-//! kept past a reinstallation:
-//!
-//! ```compile_fail
-//! use oer_protocols_ieee80211_contracts_port::*;
-//! fn keep<'id, P: AccessPointPort<'id>>(
-//!     port: &P,
-//!     permission: BeaconPermission<'id, <P::Types as PortTypes<'id>>::BeaconPath>,
-//! ) -> Option<CurrentBeacon<'static, 'id, <P::Types as PortTypes<'id>>::BeaconPath>> {
-//!     port.current_beacon(permission).ok()
-//! }
-//! ```
-//!
 //! A beacon permission is not made by a caller:
 //!
 //! ```compile_fail,E0451
-//! use oer_protocols_ieee80211_contracts_port::BeaconPermission;
-//! use oer_protocols_radio_port::Slot;
-//! fn forge<'id, K>(slot: Slot<'id, K>) -> BeaconPermission<'id> {
-//!     BeaconPermission { slot, generation: 0 }
+//! use oer_protocols_ieee80211_contracts_port::{BeaconPermission, IssuedSlot};
+//! fn forge<'id, K>(slot: IssuedSlot<'id, K>) -> BeaconPermission<'id> {
+//!     BeaconPermission { slot }
 //! }
 //! ```
 
@@ -121,10 +112,11 @@ use oer_protocols_ieee80211_wire::{
 };
 use oer_protocols_radio_port::{BodyLoan, LocalId, PoolPath, Root, Slot};
 
+use crate::issued::{IssuedSlot, IssuedSlots, SlotGrant};
 use crate::{
-    AccessPoint, AdmittedAttempt, AdmittedTxParts, CommandRefusal, CommandTypes,
-    ConfigurePermission, DataPort, Ieee80211Capabilities, InFlight, KeyTypes, PortSink, PortTypes,
-    PreparedTx, Protection, SupportedFilter, SupportedPower, TxOperation,
+    AccessPoint, AdmittedAttempt, AdmittedTxParts, CommandTypes, ConfigurePermission, DataPort,
+    Ieee80211Capabilities, InFlight, KeyTypes, PortSink, PortTypes, PreparedTx, Protection,
+    SupportedFilter, SupportedPower, TxOperation,
 };
 
 /// The access category of every beacon: a beacon contends as voice, the
@@ -290,9 +282,8 @@ impl<K> core::fmt::Debug for AccessPointReceive<K> {
 
 enum BeaconKind {}
 
-/// The beacon component of a backend's pool set: it mints the
-/// installation's one [`BeaconGrant`], which the backend issues as the
-/// installation's [`BeaconPermission`].
+/// The beacon component of a backend's pool set: its grant issues the
+/// installation's one [`BeaconPermission`].
 pub struct BeaconPool;
 
 impl oer_protocols_radio_port::PoolSet for BeaconPool {
@@ -301,44 +292,41 @@ impl oer_protocols_radio_port::PoolSet for BeaconPool {
     fn build<'id, Path: PoolPath>(
         builder: oer_protocols_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
-        let [slot] = builder.into_pools::<oer_protocols_radio_port::Slots<BeaconKind, 1>>();
-        BeaconGrant { slot }
+        BeaconGrant {
+            slot: builder.into_pools::<IssuedSlots<BeaconKind, 1>>(),
+        }
     }
 }
 
-/// The minted beacon place before its backend issues it to one installation.
+/// The beacon permission a mint made, before its backend issues it.
 #[must_use = "the backend issues the grant as its installation's beacon permission"]
 pub struct BeaconGrant<'id, Path: PoolPath = Root<LocalId<'id>>> {
-    slot: Slot<'id, BeaconKind, Path>,
+    slot: SlotGrant<'id, BeaconKind, 1, Path>,
 }
 
 impl<'id, Path: PoolPath> BeaconGrant<'id, Path> {
-    /// Issue the grant as the permission of the installation `generation`:
-    /// the backend that consumed the installation's mint holds the grant.
+    /// Issue the permission of the installation `generation`.
     pub fn issue(self, generation: u32) -> BeaconPermission<'id, Path> {
-        BeaconPermission {
-            slot: self.slot,
-            generation,
-        }
+        let [slot] = self.slot.issue(generation);
+        BeaconPermission { slot }
     }
 }
 
 /// The installation's one permission to have a beacon out: a beacon's
 /// admission takes it and its terminal gives it back, so at most one beacon
 /// is admitted, queued or on the air. It names the installation that issued
-/// it; a backend refuses the permission of an earlier installation
-/// ([`BeaconRefusal::StalePermission`]).
+/// it; [`DataPort::submit`] refuses the permission of an earlier
+/// installation ([`SubmitRefusal::StalePermission`](crate::SubmitRefusal::StalePermission)).
 #[must_use = "the beacon permission returns only with its beacon's terminal"]
 pub struct BeaconPermission<'id, Path: PoolPath = Root<LocalId<'id>>> {
-    slot: Slot<'id, BeaconKind, Path>,
-    generation: u32,
+    slot: IssuedSlot<'id, BeaconKind, Path>,
 }
 
 impl<Path: PoolPath> core::fmt::Debug for BeaconPermission<'_, Path> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
-            .debug_struct("BeaconPermission")
-            .field("generation", &self.generation)
+            .debug_tuple("BeaconPermission")
+            .field(&self.slot)
             .finish()
     }
 }
@@ -346,7 +334,7 @@ impl<Path: PoolPath> core::fmt::Debug for BeaconPermission<'_, Path> {
 impl<Path: PoolPath> BeaconPermission<'_, Path> {
     /// The generation of the installation that issued it.
     pub const fn generation(&self) -> u32 {
-        self.generation
+        self.slot.generation()
     }
 }
 
@@ -354,8 +342,7 @@ impl<Path: PoolPath> BeaconPermission<'static, Path> {
     /// Move the same permission across its backend's private body boundary.
     pub fn lend<'p, S>(self, loan: &BodyLoan<'p, Path::Identity, S>) -> BeaconPermission<'p, Path> {
         BeaconPermission {
-            slot: loan.lend_slot(self.slot),
-            generation: self.generation,
+            slot: self.slot.lend(loan),
         }
     }
 }
@@ -367,58 +354,25 @@ impl<'p, Path: PoolPath> BeaconPermission<'p, Path> {
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> BeaconPermission<'static, Path> {
         BeaconPermission {
-            slot: loan.reclaim_slot(self.slot),
-            generation: self.generation,
+            slot: self.slot.into_owned(loan),
         }
     }
 }
 
-/// Why [`AccessPointPort::current_beacon`] refused a beacon permission:
-/// before any beacon is built or admitted, the permission comes back.
+/// Why [`AccessPointPort::access_point_command`] refused a command; nothing
+/// changed and the command comes back with every owner.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum BeaconRefusal {
-    /// The permission was issued by an earlier installation of the port:
-    /// final for this permission; the current installation's permission is
-    /// with its holder or returns with its beacon's terminal.
+pub enum AccessPointRefusal {
+    /// The radio is not running.
+    NotEnabled,
+    /// A permission, key slot or association of the command was issued by
+    /// an earlier installation of the port: final for that token.
     StalePermission {
-        /// The permission's installation.
-        permission: u32,
+        /// The token's installation.
+        issued: u32,
         /// The port's installation.
         installation: u32,
     },
-}
-
-/// A refused beacon permission, unchanged, and why.
-#[derive(Debug)]
-pub struct BeaconRefused<'id, Path: PoolPath> {
-    /// Why.
-    pub reason: BeaconRefusal,
-    /// The permission.
-    pub permission: BeaconPermission<'id, Path>,
-}
-
-/// A beacon permission the port `'p` found to be its current
-/// installation's: it lives within that borrow of the port, so no
-/// reinstallation comes between the check and the beacon's admission.
-pub struct CurrentBeacon<'p, 'id, Path: PoolPath> {
-    permission: BeaconPermission<'id, Path>,
-    port: PhantomData<&'p ()>,
-}
-
-impl<'id, Path: PoolPath> CurrentBeacon<'_, 'id, Path> {
-    /// The permission back, unused.
-    pub fn into_permission(self) -> BeaconPermission<'id, Path> {
-        self.permission
-    }
-}
-
-impl<Path: PoolPath> core::fmt::Debug for CurrentBeacon<'_, '_, Path> {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        formatter
-            .debug_tuple("CurrentBeacon")
-            .field(&self.permission)
-            .finish()
-    }
 }
 
 /// One beacon awaiting admission: an access-point attempt of the frame the
@@ -426,7 +380,6 @@ impl<Path: PoolPath> core::fmt::Debug for CurrentBeacon<'_, '_, Path> {
 /// Timestamp rule. Its access category is [`BEACON_ACCESS_CATEGORY`] and its
 /// first transmission goes unprotected.
 pub struct BeaconAttempt<
-    'c,
     'id,
     T,
     M,
@@ -445,14 +398,14 @@ pub struct BeaconAttempt<
     pub power: SupportedPower<K>,
     /// What the attempt is, for the radio it shares the air with.
     pub coex_operation: TxOperation,
-    /// The installation's one beacon permission, checked by its port.
-    pub permission: CurrentBeacon<'c, 'id, BeaconPath>,
+    /// The installation's one beacon permission.
+    pub permission: BeaconPermission<'id, BeaconPath>,
     /// Who writes its Timestamp field.
     pub stamp: BeaconStamp<K>,
 }
 
 impl<'id, T, M, K, X, Path: PoolPath, BeaconPath: PoolPath>
-    BeaconAttempt<'_, 'id, T, M, K, X, Path, BeaconPath>
+    BeaconAttempt<'id, T, M, K, X, Path, BeaconPath>
 where
     M: PreparedTx<'id>,
     M::Types: PortTypes<'id, TicketKind = T, TicketPath = Path, Context = X>,
@@ -480,7 +433,7 @@ where
                 coex_operation,
             }
             .admit(),
-            permission: permission.permission,
+            permission,
             stamp,
         }
     }
@@ -551,16 +504,6 @@ pub type SealedBeaconParts<'id, T, M, K, Path, BeaconPath> = BeaconParts<
 
 /// The types of a port `P`.
 type Types<'id, P> = <P as DataPort<'id>>::Types;
-
-/// The beacon component of the port `P`.
-type PortBeaconPath<'id, P> = <Types<'id, P> as PortTypes<'id>>::BeaconPath;
-
-/// A beacon permission check of the port `P`: the permission lent for the
-/// borrow `'p`, or refused with the permission.
-pub type BeaconCheck<'p, 'id, P> = Result<
-    CurrentBeacon<'p, 'id, PortBeaconPath<'id, P>>,
-    BeaconRefused<'id, PortBeaconPath<'id, P>>,
->;
 
 /// A sealed single MPDU of the access point's interface on the port `P`.
 pub type AccessPointSubmission<'k, 'p, 'id, P> = AdmittedAttempt<
@@ -641,9 +584,10 @@ pub enum AccessPointCommand<'id, T: AccessPointTypes<'id>, K: Ieee80211Capabilit
         >,
         /// What it receives.
         receive: AccessPointReceive<K>,
+        /// A restart or stop of its TSF, after the receive rules took
+        /// effect.
+        tsf: Option<SupportedTsfControl<K>>,
     },
-    /// Restart or stop the access point's TSF; it has no terminal.
-    Tsf(SupportedTsfControl<K>),
 }
 
 impl<'id, T: AccessPointTypes<'id>, K: Ieee80211Capabilities> AccessPointCommand<'id, T, K> {
@@ -655,7 +599,6 @@ impl<'id, T: AccessPointTypes<'id>, K: Ieee80211Capabilities> AccessPointCommand
             Self::RemovePairwise { .. } => AccessPointCommandKind::RemovePairwise,
             Self::RemoveGroup { .. } => AccessPointCommandKind::RemoveGroup,
             Self::Configure { .. } => AccessPointCommandKind::Configure,
-            Self::Tsf(_) => AccessPointCommandKind::Tsf,
         }
     }
 }
@@ -673,8 +616,6 @@ pub enum AccessPointCommandKind {
     RemoveGroup,
     /// [`AccessPointCommand::Configure`].
     Configure,
-    /// [`AccessPointCommand::Tsf`].
-    Tsf,
 }
 
 /// How far [`AccessPointPort::access_point_command`] took one command.
@@ -684,8 +625,8 @@ pub enum AccessPointProgress<'id, T: AccessPointTypes<'id>, K: Ieee80211Capabili
     /// The command waits at its barrier; the caller runs it again, before
     /// any later command of the access point, on a later call.
     Held(AccessPointCommand<'id, T, K>),
-    /// The port cannot run the command in its state; nothing changed.
-    Refused(AccessPointCommand<'id, T, K>, CommandRefusal),
+    /// The port cannot run the command; nothing changed.
+    Refused(AccessPointCommand<'id, T, K>, AccessPointRefusal),
 }
 
 /// An access-point pairwise installation command and the identity its
@@ -735,37 +676,6 @@ pub trait AccessPointPort<'id>:
     /// The access point's own address, its BSSID.
     fn access_point_address(&self) -> IndividualAddress;
 
-    /// The generation of the port's current installation, which issued its
-    /// current beacon permission.
-    fn installation_generation(&self) -> u32;
-
-    /// Check that `permission` is the current installation's, lending it for
-    /// this borrow of the port. Only this check makes a [`CurrentBeacon`].
-    ///
-    /// # Errors
-    ///
-    /// The permission, unchanged, when an earlier installation issued it.
-    fn current_beacon(
-        &self,
-        permission: BeaconPermission<'id, PortBeaconPath<'id, Self>>,
-    ) -> BeaconCheck<'_, 'id, Self> {
-        let installation = self.installation_generation();
-        if permission.generation == installation {
-            Ok(CurrentBeacon {
-                permission,
-                port: PhantomData,
-            })
-        } else {
-            Err(BeaconRefused {
-                reason: BeaconRefusal::StalePermission {
-                    permission: permission.generation,
-                    installation,
-                },
-                permission,
-            })
-        }
-    }
-
     /// Accept a sealed access-point attempt, dropping its borrow of the
     /// port; [`DataPort::submit`] queues it as the access point's.
     fn admit_access_point<'k, 'p>(
@@ -773,9 +683,11 @@ pub trait AccessPointPort<'id>:
         attempt: AccessPointSubmission<'k, 'p, 'id, Self>,
     ) -> Self::Admitted;
 
-    /// Accept a sealed beacon with its current permission;
-    /// [`DataPort::submit`] queues it as the access point's, and every end
-    /// of it, a refused submission's included, is a
+    /// Accept a sealed beacon with its permission; [`DataPort::submit`]
+    /// queues it as the access point's, or refuses it, its permission an
+    /// earlier installation's, as
+    /// [`SubmitRefusal::StalePermission`](crate::SubmitRefusal::StalePermission).
+    /// Every end of it, a refused submission's included, is a
     /// [`TxCompleted::Beacon`](crate::TxCompleted::Beacon) returning the
     /// permission.
     fn admit_beacon<'k, 'p>(&self, beacon: BeaconSubmission<'k, 'p, 'id, Self>) -> Self::Admitted;

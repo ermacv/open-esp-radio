@@ -13,6 +13,7 @@
 //! this boundary belongs with that backend.
 
 use crate::InterfaceRole;
+use crate::issued::{IssuedSlot, IssuedSlots, SlotGrant};
 use core::marker::PhantomData;
 use oer_protocols_ieee80211_wire::security::Spp;
 use oer_protocols_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
@@ -165,23 +166,58 @@ impl<K, const N: usize> RxBlockAckPool for BlockAckSlots<K, N> {
 pub struct AssociationPool<R, const P: usize, const G: usize>(PhantomData<R>);
 
 impl<R: InterfaceRole, const P: usize, const G: usize> PoolSet for AssociationPool<R, P, G> {
-    type Pools<'id, Path: PoolPath> = VacantAssociation<'id, R, P, G, Path>;
+    type Pools<'id, Path: PoolPath> = AssociationGrant<'id, R, P, G, Path>;
     fn build<'id, Path: PoolPath>(builder: PoolBuilder<'id, Path>) -> Self::Pools<'id, Path> {
         const {
             if P == 0 || P > 256 || G > 256 {
                 panic!("association slots must fit their pool indices");
             }
         }
-        let ([owner], pairwise, group) = builder.into_pools::<(
-            Slots<OwnerKind<R, P, G>, 1>,
-            Slots<PairwiseKind<R, P, G>, P>,
-            Slots<GroupKind<R, P, G>, G>,
+        let (owner, pairwise, group) = builder.into_pools::<(
+            IssuedSlots<OwnerKind<R, P, G>, 1>,
+            IssuedSlots<PairwiseKind<R, P, G>, P>,
+            IssuedSlots<GroupKind<R, P, G>, G>,
         )>();
+        AssociationGrant {
+            owner,
+            pairwise,
+            group,
+        }
+    }
+}
+
+/// An association domain a mint made, before its backend issues it to its
+/// installation.
+#[must_use = "the backend issues the grant to its installation"]
+pub struct AssociationGrant<
+    'id,
+    R: InterfaceRole,
+    const P: usize,
+    const G: usize,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
+    owner: SlotGrant<'id, OwnerKind<R, P, G>, 1, Child<Path, 0>>,
+    pairwise: SlotGrant<'id, PairwiseKind<R, P, G>, P, Child<Path, 1>>,
+    group: SlotGrant<'id, GroupKind<R, P, G>, G, Child<Path, 2>>,
+}
+
+impl<'id, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
+    AssociationGrant<'id, R, P, G, Path>
+{
+    /// Issue the whole domain to the installation `generation`.
+    pub fn issue(self, generation: u32) -> VacantAssociation<'id, R, P, G, Path> {
+        let [owner] = self.owner.issue(generation);
         VacantAssociation {
             start: AssociationStart { _owner: owner },
             bank: VacantKeyBank {
-                pairwise: pairwise.map(|slot| PairwiseKeySlot { slot }),
-                group: group.map(|slot| GroupKeySlot { slot }),
+                pairwise: self
+                    .pairwise
+                    .issue(generation)
+                    .map(|slot| PairwiseKeySlot { slot }),
+                group: self
+                    .group
+                    .issue(generation)
+                    .map(|slot| GroupKeySlot { slot }),
             },
         }
     }
@@ -196,7 +232,7 @@ pub struct AssociationStart<
     const G: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
-    _owner: Slot<'id, OwnerKind<R, P, G>, Child<Path, 0>>,
+    _owner: IssuedSlot<'id, OwnerKind<R, P, G>, Child<Path, 0>>,
 }
 
 /// One immutable SPP decision. Its brand also identifies every key slot.
@@ -234,7 +270,7 @@ pub struct PairwiseKeySlot<
     const G: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
-    slot: Slot<'id, PairwiseKind<R, P, G>, Child<Path, 1>>,
+    slot: IssuedSlot<'id, PairwiseKind<R, P, G>, Child<Path, 1>>,
 }
 /// A vacant GTK slot, from the same association domain as its PTK slots.
 #[must_use]
@@ -245,7 +281,7 @@ pub struct GroupKeySlot<
     const G: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
-    slot: Slot<'id, GroupKind<R, P, G>, Child<Path, 2>>,
+    slot: IssuedSlot<'id, GroupKind<R, P, G>, Child<Path, 2>>,
 }
 
 /// The complete bank, never a count, mask, sparse array or partial collection.
@@ -296,6 +332,11 @@ impl<'id, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     pub fn begin(self, spp: Spp) -> Association<'id, R, P, G, Path> {
         Association { start: self, spp }
     }
+
+    /// The generation of the installation that issued the domain.
+    pub const fn generation(&self) -> u32 {
+        self._owner.generation()
+    }
 }
 impl<'id, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     Association<'id, R, P, G, Path>
@@ -303,6 +344,11 @@ impl<'id, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     /// Decision fixed for this association.
     pub const fn spp(&self) -> Spp {
         self.spp
+    }
+
+    /// The generation of the installation that issued the domain.
+    pub const fn generation(&self) -> u32 {
+        self.start.generation()
     }
 }
 impl<'id, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
@@ -367,6 +413,11 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     pub const fn index(&self) -> u8 {
         self.slot.index()
     }
+
+    /// The generation of the installation that issued the slot.
+    pub const fn generation(&self) -> u32 {
+        self.slot.generation()
+    }
 }
 impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     GroupKeySlot<'_, R, P, G, Path>
@@ -374,6 +425,11 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     /// Position within this domain's slot bank.
     pub const fn index(&self) -> u8 {
         self.slot.index()
+    }
+
+    /// The generation of the installation that issued the slot.
+    pub const fn generation(&self) -> u32 {
+        self.slot.generation()
     }
 }
 

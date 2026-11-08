@@ -12,7 +12,7 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> AssociationStart<'p, R, P, G, Path> {
         AssociationStart {
-            _owner: loan.lend_slot(self._owner),
+            _owner: self._owner.lend(loan),
         }
     }
 }
@@ -26,7 +26,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> AssociationStart<'static, R, P, G, Path> {
         AssociationStart {
-            _owner: loan.reclaim_slot(self._owner),
+            _owner: self._owner.into_owned(loan),
         }
     }
 }
@@ -40,7 +40,7 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> PairwiseKeySlot<'p, R, P, G, Path> {
         PairwiseKeySlot {
-            slot: loan.lend_slot(self.slot),
+            slot: self.slot.lend(loan),
         }
     }
 }
@@ -54,7 +54,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> PairwiseKeySlot<'static, R, P, G, Path> {
         PairwiseKeySlot {
-            slot: loan.reclaim_slot(self.slot),
+            slot: self.slot.into_owned(loan),
         }
     }
 }
@@ -68,7 +68,7 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> GroupKeySlot<'p, R, P, G, Path> {
         GroupKeySlot {
-            slot: loan.lend_slot(self.slot),
+            slot: self.slot.lend(loan),
         }
     }
 }
@@ -82,7 +82,7 @@ impl<'p, R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> GroupKeySlot<'static, R, P, G, Path> {
         GroupKeySlot {
-            slot: loan.reclaim_slot(self.slot),
+            slot: self.slot.into_owned(loan),
         }
     }
 }

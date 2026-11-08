@@ -33,9 +33,9 @@ pub type ModelPools = (
     ModelAssociationPool<Station>,
     ModelAssociationPool<AccessPoint>,
     ModelBlockAckPool,
-    oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
+    oer_protocols_ieee80211_contracts_port::IssuedSlots<ModelGroupPermission<Station>, 1>,
     (
-        oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
+        oer_protocols_ieee80211_contracts_port::IssuedSlots<ModelGroupPermission<AccessPoint>, 1>,
         InterfaceCommandPool<Station>,
         InterfaceCommandPool<AccessPoint>,
         oer_protocols_ieee80211_contracts_port::BeaconPool,
@@ -58,12 +58,18 @@ pub(super) fn installation_parts<B: ModelComposition>(
         station_vacant,
         access_point_vacant,
         block_acks,
-        [station_group_permission],
-        ([access_point_group_permission], station_commands, access_point_commands, beacon),
+        station_group_permission,
+        (access_point_group_permission, station_commands, access_point_commands, beacon),
     ) = mint.into_pools();
-    let (station_association, station_bank) = station_vacant.into_parts();
+    // Every token names this installation: a later one refuses it.
+    let [station_group_permission] = station_group_permission.issue(generation);
+    let [access_point_group_permission] = access_point_group_permission.issue(generation);
+    let station_commands = station_commands.issue(generation);
+    let access_point_commands = access_point_commands.issue(generation);
+    let (station_association, station_bank) = station_vacant.issue(generation).into_parts();
     let (station_pairwise, station_group) = station_bank.into_parts();
-    let (access_point_association, access_point_bank) = access_point_vacant.into_parts();
+    let (access_point_association, access_point_bank) =
+        access_point_vacant.issue(generation).into_parts();
     let (access_point_pairwise, access_point_group) = access_point_bank.into_parts();
     air.stream.set(ModelStream::Running);
     air.receive_agreements.take().clear();

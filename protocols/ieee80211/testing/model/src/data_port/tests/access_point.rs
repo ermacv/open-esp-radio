@@ -7,8 +7,8 @@
 use super::*;
 use oer_protocols_ieee80211_contracts_port::{
     AccessPointCommand, AccessPointCommands, AccessPointPort, AccessPointProgress,
-    AccessPointReceive, AttemptKey, BeaconAttempt, BeaconPermission, BeaconRefusal, BeaconStamp,
-    BeaconTimestamp, Configured, CurrentBeacon, GroupAddress, InstalledGroup, InstalledPairwise,
+    AccessPointReceive, AccessPointRefusal, AttemptKey, BeaconAttempt, BeaconPermission,
+    BeaconStamp, BeaconTimestamp, Configured, GroupAddress, InstalledGroup, InstalledPairwise,
     NumberedKey, ReceiveFilter, Removed, RemovedKey, SingleEnd, SupportedFilter,
     SupportedTsfControl, TsfControl,
 };
@@ -178,7 +178,6 @@ fn beacon<'s>(harness: &mut Harness<'s>, permission: Beacon<'s>) -> Admitted<'s>
     let ticket = harness.tickets.pop().unwrap();
     let mut buffer = harness.small.pop().unwrap();
     buffer.bytes_mut().unwrap().fill(0);
-    let current: CurrentBeacon<'_, 's, _> = harness.port.current_beacon(permission).unwrap();
     let rate = harness
         .port
         .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
@@ -219,7 +218,7 @@ fn beacon<'s>(harness: &mut Harness<'s>, permission: Beacon<'s>) -> Admitted<'s>
         source,
         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
         coex_operation: TxOperation::Data,
-        permission: current,
+        permission,
         stamp: BeaconStamp::new(BeaconTimestamp::Caller).unwrap(),
     }
     .admit();
@@ -252,10 +251,12 @@ fn ap_configure<'s>(
         oer_protocols_radio_port::Child<ModelPool<LocalId<'s>, 9>, 2>,
     >,
     receive: AccessPointReceive<ModelCaps>,
+    tsf: Option<TsfControl>,
 ) -> ApCommand<'s> {
     AccessPointCommand::Configure {
         permission,
         receive,
+        tsf: tsf.map(|control| SupportedTsfControl::new(control).unwrap()),
     }
 }
 
@@ -263,10 +264,6 @@ fn bss() -> AccessPointReceive<ModelCaps> {
     AccessPointReceive::Bss {
         filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).unwrap(),
     }
-}
-
-fn tsf<'s>(control: TsfControl) -> ApCommand<'s> {
-    AccessPointCommand::Tsf(SupportedTsfControl::new(control).unwrap())
 }
 
 /// Take the access point's configuration terminal from the sink.
@@ -472,7 +469,7 @@ fn an_access_point_frame_on_the_air_holds_only_the_access_points_configuration()
             settle(harness, &mut beacon),
             [Ended::Frame(station, End::Delivered)]
         );
-        let command = ap_configure(permissions.commands.configure, bss());
+        let command = ap_configure(permissions.commands.configure, bss(), None);
         let AccessPointProgress::Held(command) = ap_command(harness, command) else {
             panic!("the access point's frame on the air holds its configuration");
         };
@@ -562,42 +559,462 @@ fn a_beacon_the_stopped_radio_refuses_returns_its_permission_at_once() {
     });
 }
 
+/// Stop the started port of `harness` and reinstall it: the next
+/// installation's port and resources, with the earlier installation's
+/// tokens still with the caller.
+fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelResources<'s, B<'s>>) {
+    let waker = harness.waker();
+    let now = harness.clock.now();
+    assert!(matches!(
+        harness
+            .port
+            .poll_stop(&mut Context::from_waker(&waker), now),
+        Poll::Ready(Ok(()))
+    ));
+    let Harness {
+        clock,
+        air,
+        port,
+        mut installations,
+        commands: _,
+        sink,
+        tickets,
+        small,
+        terminal_access,
+        configure,
+        gate,
+        group,
+        arenas,
+        counter,
+        access_point,
+        station,
+    } = harness;
+    let Ok(ModelInstall {
+        port,
+        commands,
+        resources,
+    }) = port.reinstall(&mut installations)
+    else {
+        panic!("a retired port reinstalls");
+    };
+    assert_eq!(port.generation(), 1);
+    (
+        Harness {
+            clock,
+            air,
+            installations,
+            port,
+            commands,
+            sink,
+            tickets,
+            small,
+            terminal_access,
+            configure,
+            gate,
+            group,
+            arenas,
+            counter,
+            access_point,
+            station,
+        },
+        resources,
+    )
+}
+
 #[test]
-fn a_beacon_permission_of_an_earlier_installation_is_refused_before_a_beacon_is_built() {
+fn an_access_point_configure_permission_of_an_earlier_installation_is_refused_with_it() {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let mut harness = Harness::new(claim);
-        let stale = harness.access_point.take().unwrap().beacon;
-        let Harness {
-            port,
-            mut installations,
-            ..
-        } = harness;
-        let Ok(ModelInstall {
-            port, resources, ..
-        }) = port.reinstall(&mut installations)
-        else {
-            panic!("a retired port reinstalls");
-        };
-        assert_eq!(port.generation(), 1);
-        let Err(refused) = port.current_beacon(stale) else {
-            panic!("an earlier installation's permission is refused");
-        };
-        assert_eq!(
-            refused.reason,
-            BeaconRefusal::StalePermission {
-                permission: 0,
+        harness.start();
+        let (mut harness, resources) = reinstall(harness);
+        harness.start();
+        let stale = harness.access_point.take().unwrap();
+        let command = ap_configure(stale.commands.configure, bss(), Some(TsfControl::Restart));
+        let AccessPointProgress::Refused(
+            AccessPointCommand::Configure { permission, .. },
+            AccessPointRefusal::StalePermission {
+                issued: 0,
                 installation: 1,
-            }
-        );
+            },
+        ) = ap_command(&mut harness, command)
+        else {
+            panic!("an earlier installation's configure permission is refused");
+        };
+        assert_eq!(permission.generation(), 0, "the permission comes back");
         assert_eq!(
-            refused.permission.generation(),
-            0,
-            "the permission comes back"
+            harness.air.access_point(),
+            ModelAccessPointInterface::default(),
+            "nothing was configured"
         );
-        let current = port
-            .current_beacon(resources.access_point.beacon)
-            .expect("the current installation's permission is checked");
-        assert_eq!(current.into_permission().generation(), 1);
+        assert!(harness.sink.terminals.is_empty(), "no terminal is owed");
+        // The current installation's permission configures.
+        let command = ap_configure(resources.access_point.commands.configure, bss(), None);
+        assert!(matches!(
+            ap_command(&mut harness, command),
+            AccessPointProgress::Done
+        ));
+        assert_eq!(take_ap_configured(&mut harness).unwrap().generation(), 1);
+    }));
+}
+
+#[test]
+fn a_beacon_sealed_before_a_reinstallation_is_refused_at_submit_with_every_owner() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let mut harness = Harness::new(claim);
+        harness.start();
+        // The beacon is prepared and sealed under the first installation.
+        let permissions = harness.access_point.take().unwrap();
+        let sealed = beacon(&mut harness, permissions.beacon);
+        let ticket = sealed.operation.ticket().index();
+        let (mut harness, resources) = reinstall(harness);
+        harness.start();
+        let now = harness.clock.now();
+        assert_eq!(
+            harness.port.submit(sealed, now, &mut harness.sink),
+            Err(SubmitRefusal::StalePermission {
+                issued: 0,
+                installation: 1,
+            })
+        );
+        let mut returned = None;
+        assert_eq!(
+            settle(&mut harness, &mut returned),
+            [Ended::Beacon(
+                ticket,
+                End::Withdrawn(WithdrawCause::StalePermission)
+            )],
+            "its terminal returns ticket, buffer and permission"
+        );
+        assert_eq!(returned.unwrap().generation(), 0);
+        assert!(harness.air.sent().is_empty(), "nothing went on the air");
+        // The current installation's beacon goes.
+        let current = beacon(&mut harness, resources.access_point.beacon);
+        let current = submit(&mut harness, current);
+        harness.service();
+        let mut returned = None;
+        assert_eq!(
+            settle(&mut harness, &mut returned),
+            [Ended::Beacon(current, End::Delivered)]
+        );
+        assert_eq!(returned.unwrap().generation(), 1);
+    }));
+}
+
+/// The command a refusal for a token of installation 0 on installation 1
+/// returned.
+fn refused_stale<'s>(progress: ApProgress<'s>) -> ApCommand<'s> {
+    match progress {
+        AccessPointProgress::Refused(
+            command,
+            AccessPointRefusal::StalePermission {
+                issued: 0,
+                installation: 1,
+            },
+        ) => command,
+        _ => panic!("a token of the earlier installation is refused"),
+    }
+}
+
+#[test]
+fn every_access_point_key_token_of_an_earlier_installation_is_refused_with_its_owners() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let mut harness = Harness::new(claim);
+        harness.start();
+        let stale = harness.access_point.take().unwrap();
+        let (mut harness, resources) = reinstall(harness);
+        harness.start();
+        let current = resources.access_point;
+        let stale_association = ModelKeys::<B<'_>, AccessPoint>::begin_association(
+            stale.association,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let association = ModelKeys::<B<'_>, AccessPoint>::begin_association(
+            current.association,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let [stale_pairwise, _] = stale.pairwise;
+        let [pairwise, _] = current.pairwise;
+        let [stale_group, _] = stale.group;
+        let [group, _] = current.group;
+        // An earlier slot under the current association.
+        let (install, _) = harness.commands.install_access_point_pairwise(
+            &association,
+            stale_pairwise,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[8; 16]),
+        );
+        let progress = ap_command(&mut harness, install);
+        assert!(matches!(
+            refused_stale(progress),
+            AccessPointCommand::InstallPairwise(_)
+        ));
+        // A current slot under the earlier association.
+        let (install, _) = harness.commands.install_access_point_pairwise(
+            &stale_association,
+            pairwise,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[8; 16]),
+        );
+        let progress = ap_command(&mut harness, install);
+        assert!(matches!(
+            refused_stale(progress),
+            AccessPointCommand::InstallPairwise(_)
+        ));
+        // The earlier group permission with a current slot, and the
+        // current permission with an earlier slot.
+        let install = harness.commands.install_access_point_group(
+            &association,
+            stale.group_permission,
+            group,
+            GroupKeyId::new(1).unwrap(),
+            Ccmp128Key::new(&[9; 16]),
+        );
+        let progress = ap_command(&mut harness, install);
+        assert!(matches!(
+            refused_stale(progress),
+            AccessPointCommand::InstallGroup(_)
+        ));
+        let install = harness.commands.install_access_point_group(
+            &association,
+            current.group_permission,
+            stale_group,
+            GroupKeyId::new(1).unwrap(),
+            Ccmp128Key::new(&[9; 16]),
+        );
+        let progress = ap_command(&mut harness, install);
+        assert!(matches!(
+            refused_stale(progress),
+            AccessPointCommand::InstallGroup(_)
+        ));
+        assert!(harness.sink.terminals.is_empty(), "no terminal is owed");
+        assert_eq!(harness.air.group_writes(), 0, "no key was written");
+    }));
+}
+
+#[test]
+fn removing_an_access_point_key_of_an_earlier_installation_is_refused_with_its_owners() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let mut harness = Harness::new(claim);
+        harness.start();
+        let permissions = harness.access_point.take().unwrap();
+        let association = ModelKeys::<B<'_>, AccessPoint>::begin_association(
+            permissions.association,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let [pairwise_slot, _] = permissions.pairwise;
+        let [group_slot, _] = permissions.group;
+        let (install, _) = harness.commands.install_access_point_pairwise(
+            &association,
+            pairwise_slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[8; 16]),
+        );
+        assert!(matches!(
+            ap_command(&mut harness, install),
+            AccessPointProgress::Done
+        ));
+        let install = harness.commands.install_access_point_group(
+            &association,
+            permissions.group_permission,
+            group_slot,
+            GroupKeyId::new(1).unwrap(),
+            Ccmp128Key::new(&[9; 16]),
+        );
+        assert!(matches!(
+            ap_command(&mut harness, install),
+            AccessPointProgress::Done
+        ));
+        let mut installed = core::mem::take(&mut harness.sink.terminals).into_iter();
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(pairwise))) =
+            installed.next()
+        else {
+            panic!("the pairwise terminal");
+        };
+        let Some(LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint {
+            key: group,
+            permission,
+        })) = installed.next()
+        else {
+            panic!("the group terminal");
+        };
+        let (mut harness, resources) = reinstall(harness);
+        harness.start();
+        // The current installation's keys, installed on its own tokens.
+        let current = resources.access_point;
+        let current_association = ModelKeys::<B<'_>, AccessPoint>::begin_association(
+            current.association,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let [current_pairwise_slot, _] = current.pairwise;
+        let [current_group_slot, _] = current.group;
+        let (install, _) = harness.commands.install_access_point_pairwise(
+            &current_association,
+            current_pairwise_slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[8; 16]),
+        );
+        assert!(matches!(
+            ap_command(&mut harness, install),
+            AccessPointProgress::Done
+        ));
+        let install = harness.commands.install_access_point_group(
+            &current_association,
+            current.group_permission,
+            current_group_slot,
+            GroupKeyId::new(1).unwrap(),
+            Ccmp128Key::new(&[9; 16]),
+        );
+        assert!(matches!(
+            ap_command(&mut harness, install),
+            AccessPointProgress::Done
+        ));
+        let mut installed = core::mem::take(&mut harness.sink.terminals).into_iter();
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(
+            current_pairwise,
+        ))) = installed.next()
+        else {
+            panic!("the current pairwise terminal");
+        };
+        let Some(LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint {
+            key: current_group,
+            permission: current_permission,
+        })) = installed.next()
+        else {
+            panic!("the current group terminal");
+        };
+        // Each removal names exactly one token of the earlier installation,
+        // and is refused for it with every owner back.
+        let AccessPointCommand::RemovePairwise {
+            association,
+            key: current_pairwise,
+        } = refused_stale(ap_command(
+            &mut harness,
+            AccessPointCommand::RemovePairwise {
+                association,
+                key: current_pairwise,
+            },
+        ))
+        else {
+            panic!("an earlier association does not remove a current key");
+        };
+        let AccessPointCommand::RemovePairwise {
+            association: current_association,
+            key: pairwise,
+        } = refused_stale(ap_command(
+            &mut harness,
+            AccessPointCommand::RemovePairwise {
+                association: current_association,
+                key: pairwise,
+            },
+        ))
+        else {
+            panic!("an earlier key is not removed under the current association");
+        };
+        let AccessPointCommand::RemoveGroup {
+            permission,
+            key: current_group,
+        } = refused_stale(ap_command(
+            &mut harness,
+            AccessPointCommand::RemoveGroup {
+                permission,
+                key: current_group,
+            },
+        ))
+        else {
+            panic!("an earlier group permission does not remove a current key");
+        };
+        let AccessPointCommand::RemoveGroup {
+            permission: current_permission,
+            key: group,
+        } = refused_stale(ap_command(
+            &mut harness,
+            AccessPointCommand::RemoveGroup {
+                permission: current_permission,
+                key: group,
+            },
+        ))
+        else {
+            panic!("an earlier group key is not removed with the current permission");
+        };
+        assert!(harness.sink.terminals.is_empty(), "no terminal is owed");
+        assert_eq!(
+            (association.owner.generation(), permission.generation()),
+            (0, 0)
+        );
+        // The current tokens still remove the current keys.
+        assert!(matches!(
+            ap_command(
+                &mut harness,
+                AccessPointCommand::RemovePairwise {
+                    association: current_association,
+                    key: current_pairwise,
+                },
+            ),
+            AccessPointProgress::Done
+        ));
+        assert!(matches!(
+            ap_command(
+                &mut harness,
+                AccessPointCommand::RemoveGroup {
+                    permission: current_permission,
+                    key: current_group,
+                },
+            ),
+            AccessPointProgress::Done
+        ));
+        assert_eq!(harness.sink.terminals.len(), 2, "both removals end");
+        drop((association, permission, pairwise, group));
+    }));
+}
+
+#[test]
+fn an_access_point_frame_under_a_key_of_an_earlier_installation_is_refused_at_submit() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let mut harness = Harness::new(claim);
+        harness.start();
+        let permissions = harness.access_point.take().unwrap();
+        let association = ModelKeys::<B<'_>, AccessPoint>::begin_association(
+            permissions.association,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let [slot, _] = permissions.pairwise;
+        let (install, _) = harness.commands.install_access_point_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[8; 16]),
+        );
+        assert!(matches!(
+            ap_command(&mut harness, install),
+            AccessPointProgress::Done
+        ));
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key))) =
+            harness.sink.terminals.pop()
+        else {
+            panic!("the access point's pairwise terminal");
+        };
+        let sealed = access_point_frame(&mut harness, Some((&key, 1)), AP_QUEUE);
+        let ticket = sealed.operation.ticket().index();
+        let (mut harness, _resources) = reinstall(harness);
+        harness.start();
+        let now = harness.clock.now();
+        assert_eq!(
+            harness.port.submit(sealed, now, &mut harness.sink),
+            Err(SubmitRefusal::StalePermission {
+                issued: 0,
+                installation: 1,
+            })
+        );
+        let mut beacon = None;
+        assert_eq!(
+            settle(&mut harness, &mut beacon),
+            [Ended::Frame(
+                ticket,
+                End::Withdrawn(WithdrawCause::StalePermission)
+            )]
+        );
+        assert!(harness.air.sent().is_empty());
+        drop(key);
     }));
 }
 
@@ -714,16 +1131,16 @@ fn the_access_point_stops_alone_beside_an_active_station_with_its_frame_on_the_a
         assert!(harness.take_configured());
         let (_station_association, station_key) = station_key(harness);
         // The access point runs: configured, TSF restarted, its keys in.
-        let command = ap_configure(permissions.commands.configure, bss());
+        let command = ap_configure(
+            permissions.commands.configure,
+            bss(),
+            Some(TsfControl::Restart),
+        );
         assert!(matches!(
             ap_command(harness, command),
             AccessPointProgress::Done
         ));
         let ap_configure_permission = take_ap_configured(harness).unwrap();
-        assert!(matches!(
-            ap_command(harness, tsf(TsfControl::Restart)),
-            AccessPointProgress::Done
-        ));
         assert!(matches!(
             harness.air.access_point().tsf,
             ModelAccessPointTsf::Running { .. }
@@ -788,7 +1205,7 @@ fn the_access_point_stops_alone_beside_an_active_station_with_its_frame_on_the_a
         // The access point stops: its configuration Off waits for its frame
         // and ends its queued beacon at once, with the permission; the
         // station's queued frame goes out.
-        let command = ap_configure(ap_configure_permission, AccessPointReceive::Off);
+        let command = ap_configure(ap_configure_permission, AccessPointReceive::Off, None);
         let AccessPointProgress::Held(command) = ap_command(harness, command) else {
             panic!("the access point's frame on the air holds its stop");
         };
@@ -851,11 +1268,6 @@ fn the_access_point_stops_alone_beside_an_active_station_with_its_frame_on_the_a
             ),
             AccessPointProgress::Done
         ));
-        assert!(matches!(
-            ap_command(harness, tsf(TsfControl::Stop)),
-            AccessPointProgress::Done
-        ));
-        assert_eq!(harness.air.access_point().tsf, ModelAccessPointTsf::Stopped);
         let mut removed = core::mem::take(&mut harness.sink.terminals).into_iter();
         let Some(LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Group {
             slot: group_slot,
@@ -872,6 +1284,18 @@ fn the_access_point_stops_alone_beside_an_active_station_with_its_frame_on_the_a
             panic!("the pairwise removal's terminal");
         };
         assert!(removed.next().is_none());
+        // Its TSF stops last, with its configure permission.
+        let command = ap_configure(
+            ap_configure_permission,
+            AccessPointReceive::Off,
+            Some(TsfControl::Stop),
+        );
+        assert!(matches!(
+            ap_command(harness, command),
+            AccessPointProgress::Done
+        ));
+        assert_eq!(harness.air.access_point().tsf, ModelAccessPointTsf::Stopped);
+        let ap_configure_permission = take_ap_configured(harness).unwrap();
         // Every access-point owner is back: the complete bank ends its
         // association, the permissions are held again.
         let bank = oer_protocols_ieee80211_contracts_port::association::VacantKeyBank::new(
@@ -979,7 +1403,7 @@ fn a_stop_during_a_held_key_installation_returns_the_command_and_refuses_it_afte
         ));
         // The stopped port refuses the installation with its owners; no
         // terminal was owed.
-        let AccessPointProgress::Refused(install, CommandRefusal::NotEnabled) =
+        let AccessPointProgress::Refused(install, AccessPointRefusal::NotEnabled) =
             ap_command(harness, install)
         else {
             panic!("a stopped port refuses the command with its owners");
@@ -994,16 +1418,22 @@ fn the_shared_stop_ends_the_beacon_and_the_access_points_interface() {
     with_harness(|harness| {
         harness.start();
         let mut permissions = harness.access_point.take().unwrap();
-        let command = ap_configure(permissions.commands.configure, bss());
+        let command = ap_configure(permissions.commands.configure, bss(), None);
         assert!(matches!(
             ap_command(harness, command),
             AccessPointProgress::Done
         ));
         permissions.commands.configure = take_ap_configured(harness).unwrap();
+        let command = ap_configure(
+            permissions.commands.configure,
+            bss(),
+            Some(TsfControl::Restart),
+        );
         assert!(matches!(
-            ap_command(harness, tsf(TsfControl::Restart)),
+            ap_command(harness, command),
             AccessPointProgress::Done
         ));
+        permissions.commands.configure = take_ap_configured(harness).unwrap();
         // A beacon on the air and a station frame queued behind a busy
         // queue when the shared owner stops.
         harness.air.hold_completion(BEACON_QUEUE, true);
@@ -1044,10 +1474,14 @@ fn the_shared_stop_ends_the_beacon_and_the_access_points_interface() {
             "the stopped MAC receives nothing for the access point and runs no TSF"
         );
         // The access point's later commands are refused with their owners.
-        let command = ap_configure(permissions.commands.configure, AccessPointReceive::Off);
+        let command = ap_configure(
+            permissions.commands.configure,
+            AccessPointReceive::Off,
+            None,
+        );
         let AccessPointProgress::Refused(
             AccessPointCommand::Configure { permission, .. },
-            CommandRefusal::NotEnabled,
+            AccessPointRefusal::NotEnabled,
         ) = ap_command(harness, command)
         else {
             panic!("a stopped port refuses the configuration with its permission");

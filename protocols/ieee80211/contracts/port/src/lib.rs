@@ -64,14 +64,16 @@ pub use in_flight::{
     TerminalAccess, TerminalParts, TransmitPool, TxMpdu,
 };
 
+mod issued;
+pub use issued::{IssuedSlot, IssuedSlots, SlotGrant, first_stale};
 pub mod access_point;
 pub use access_point::{
     AccessPointCapabilities, AccessPointCommand, AccessPointCommandKind, AccessPointCommands,
     AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
-    AccessPointServices, AccessPointSubmission, AccessPointTypes, AdmittedBeacon,
-    BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconCheck, BeaconGrant, BeaconParts, BeaconPermission,
-    BeaconPool, BeaconRefusal, BeaconRefused, BeaconStamp, BeaconSubmission, BeaconTimestamp,
-    CurrentBeacon, SealedBeaconParts, SupportedTsfControl, TsfControl,
+    AccessPointRefusal, AccessPointServices, AccessPointSubmission, AccessPointTypes,
+    AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant, BeaconParts,
+    BeaconPermission, BeaconPool, BeaconStamp, BeaconSubmission, BeaconTimestamp,
+    SealedBeaconParts, SupportedTsfControl, TsfControl,
 };
 pub mod arena;
 pub use arena::{
@@ -166,7 +168,7 @@ pub use owner::{
 };
 mod interface_commands;
 pub use interface_commands::{
-    ConfigurePermission, Configured, InterfaceCommandPool, InterfacePermissions,
+    ConfigurePermission, Configured, InterfaceCommandPool, InterfaceGrant, InterfacePermissions,
 };
 pub use rx::{
     AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus,
