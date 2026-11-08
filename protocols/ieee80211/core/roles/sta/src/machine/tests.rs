@@ -4686,7 +4686,7 @@ fn a_frame_withdrawn_for_a_key_of_an_earlier_installation_ends_the_link_without_
         assert_eq!(world.station.buffers.len(), 2);
         assert!(!world.station.is_connected());
         // It leaves for that reason, its keys asked off, and sends no
-        // Deauthentication (management subtype 12) under the refused key.
+        // Deauthentication (Frame Control 0x00c0) under the refused key.
         assert!(world.seen.iter().any(|seen| matches!(
             seen,
             Seen::Notify(StaNotice::Disconnected(
@@ -4694,10 +4694,13 @@ fn a_frame_withdrawn_for_a_key_of_an_earlier_installation_ends_the_link_without_
             ))
         )));
         assert!(
-            !world
-                .seen
-                .iter()
-                .any(|seen| matches!(seen, Seen::Transmit { subtype: 12, .. })),
+            !world.seen.iter().any(|seen| matches!(
+                seen,
+                Seen::Transmit {
+                    subtype: 0x00c0,
+                    ..
+                }
+            )),
             "{:?}",
             world.seen
         );
