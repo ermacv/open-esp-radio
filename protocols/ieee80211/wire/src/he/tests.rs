@@ -396,3 +396,196 @@ fn a_sig_b_user_field_is_read_lsb_first_and_refused_past_the_stream() {
         None
     );
 }
+
+/// One-stream MCS 0..9 both ways with the given MAC and PHY fields.
+fn mcs9_local(mac: HeMacCapabilities, phy: HePhyCapabilities) -> He20LocalCapabilities {
+    He20LocalCapabilities {
+        mac,
+        phy,
+        receive: HeMcsNssSupport::Mcs0To9,
+        transmit: HeMcsNssSupport::Mcs0To9,
+    }
+}
+
+#[test]
+fn an_advertised_capability_reads_back_through_the_parser() {
+    let phy = HePhyCapabilities::from_bytes([0; 11])
+        .with_ldpc_coding_in_payload(true)
+        .with_stbc_receive_under_80_mhz(true)
+        .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US);
+    let element = he20_capability_ie(He20LocalCapabilities {
+        mac: HeMacCapabilities::from_bytes([0; 6]),
+        phy,
+        receive: HeMcsNssSupport::Mcs0To9,
+        transmit: HeMcsNssSupport::Mcs0To7,
+    });
+
+    let capability = parse_he20_capabilities(&element).unwrap();
+    assert_eq!(capability.receive_nss1, HeMcsNssSupport::Mcs0To9);
+    assert_eq!(capability.transmit_nss1, HeMcsNssSupport::Mcs0To7);
+    assert!(!capability.supports_bidirectional_mcs9());
+    assert!(capability.supports_ldpc_coding_in_payload());
+    assert!(capability.stbc_receive_under_80_mhz);
+    assert!(!capability.stbc_transmit_under_80_mhz);
+    assert!(!capability.supports_one_ltf_800ns_gi());
+    assert_eq!(capability.dcm_receive, HeDcmConstellation::NotSupported);
+    assert!(!capability.triggered_cqi_feedback);
+    assert!(!capability.non_triggered_cqi_feedback);
+}
+
+#[test]
+fn every_stream_after_the_first_is_not_supported() {
+    for (support, map) in [
+        (HeMcsNssSupport::Mcs0To7, 0xfffc_u16),
+        (HeMcsNssSupport::Mcs0To9, 0xfffd),
+        (HeMcsNssSupport::Mcs0To11, 0xfffe),
+        (HeMcsNssSupport::NotSupported, 0xffff),
+    ] {
+        let element = he20_capability_ie(He20LocalCapabilities {
+            mac: HeMacCapabilities::from_bytes([0; 6]),
+            phy: HePhyCapabilities::from_bytes([0; 11]),
+            receive: support,
+            transmit: support,
+        });
+        let capability = parse_he20_capabilities(&element).unwrap();
+        assert_eq!(capability.receive_mcs_map, map, "{support:?}");
+        assert_eq!(capability.transmit_mcs_map, map, "{support:?}");
+        assert_eq!(capability.receive_nss1, support);
+    }
+}
+
+#[test]
+fn the_element_has_no_ppe_thresholds_and_a_20_mhz_only_width_set() {
+    // A caller's PPE Thresholds Present or channel width would describe
+    // fields this 24-octet element does not carry.
+    let phy = HePhyCapabilities::from_bytes([0xff; 11])
+        .with_ppe_present(true)
+        .with_channel_width_set(oer_portable_wire::U8::constant::<0x7f>());
+    let element = he20_capability_ie(mcs9_local(HeMacCapabilities::from_bytes([0; 6]), phy));
+
+    assert_eq!(element.len(), HE_CAPABILITIES_IE_MIN_LEN);
+    let advertised = HePhyCapabilities::from_bytes(element[9..20].try_into().unwrap());
+    assert!(!advertised.ppe_present());
+    assert_eq!(advertised.channel_width_set().get(), 0);
+    // Everything else the caller set stays.
+    assert!(advertised.su_beamformee());
+    assert_eq!(advertised.nominal_padding().get(), 3);
+    // Without PPE Thresholds the peer state needs no bytes after the prefix
+    // and takes the nominal padding.
+    let state = parse_he20_peer_state(&element, &SEED_OPERATION).unwrap();
+    assert_eq!(state.packet_padding_eight_us, 3);
+}
+
+#[test]
+fn the_mac_capabilities_land_in_their_octets() {
+    let mac = HeMacCapabilities::from_bytes([0; 6])
+        .with_htc_he(true)
+        .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US)
+        .with_ht_and_vht_trigger_frame_rx(true);
+    let element = he20_capability_ie(mcs9_local(mac, HePhyCapabilities::from_bytes([0; 11])));
+    let advertised = HeMacCapabilities::from_bytes(element[3..9].try_into().unwrap());
+    assert_eq!(advertised, mac);
+    assert!(advertised.htc_he());
+    assert!(!advertised.twt_requester());
+    assert_eq!(advertised.trigger_frame_mac_padding().get(), 2);
+    assert!(advertised.ht_and_vht_trigger_frame_rx());
+    assert!(!advertised.bsr());
+}
+
+#[test]
+fn the_named_fields_reproduce_the_vendor_s31_station_element() {
+    // The vendor S31 station's element of
+    // `decodes_the_vendor_s31_sta_stbc_and_cqi_advertisement`, rebuilt from
+    // the named fields: the positions agree with a device an access point
+    // associated.
+    let mac = HeMacCapabilities::from_bytes([0; 6])
+        .with_htc_he(true)
+        .with_twt_requester(true)
+        .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US)
+        .with_multi_tid_aggregation_rx(oer_portable_wire::U8::constant::<1>())
+        .with_trs(true)
+        .with_bsr(true)
+        .with_broadcast_twt(true)
+        .with_ack_enabled_aggregation(true)
+        .with_om_control(true)
+        .with_maximum_ampdu_length_exponent_extension(oer_portable_wire::U8::constant::<1>())
+        .with_flexible_twt_schedule(true)
+        .with_rx_control_frame_to_multi_bss(true)
+        .with_ndp_feedback_report(true)
+        .with_ht_and_vht_trigger_frame_rx(true);
+    let phy = HePhyCapabilities::from_bytes([0; 11])
+        .with_device_class_a(true)
+        .with_ndp_4x_ltf_3200ns_gi(true)
+        .with_stbc_receive_under_80_mhz(true)
+        .with_ul_mu_partial_bandwidth_mu_mimo(true)
+        .with_dcm_transmit(3)
+        .unwrap()
+        .with_dcm_receive(3)
+        .unwrap()
+        .with_su_beamformee(true)
+        .with_beamformee_sts_under_80_mhz(oer_portable_wire::U8::constant::<3>())
+        .with_ng16_su_feedback(true)
+        .with_ng16_mu_feedback(true)
+        .with_codebook_size_42_su(true)
+        .with_codebook_size_75_mu(true)
+        .with_triggered_su_beamforming_feedback(true)
+        .with_triggered_mu_beamforming_partial_bandwidth_feedback(true)
+        .with_triggered_cqi_feedback(true)
+        .with_he_ppdu_20_mhz_in_40_mhz_2g(true)
+        .with_non_triggered_cqi_feedback(true)
+        .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US)
+        .with_mu_ppdu_more_than_one_ru_maximum_ltf(true);
+    assert_eq!(
+        he20_capability_ie(mcs9_local(mac, phy)),
+        [
+            0xff, 0x16, 0x23, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d,
+            0xc0, 0x1f, 0x00, 0x02, 0x82, 0x01, 0xfd, 0xff, 0xfd, 0xff,
+        ]
+    );
+}
+
+#[test]
+fn the_named_fields_reproduce_the_archive_station_element() {
+    // The narrowed element the predecessor station associated with (its
+    // `profile.rs` at open-esp-radio-rs da26f64c3): the vendor element
+    // without TWT Requester, beamformee feedback and CQI.
+    let mac = HeMacCapabilities::from_bytes([0; 6])
+        .with_htc_he(true)
+        .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US)
+        .with_multi_tid_aggregation_rx(oer_portable_wire::U8::constant::<1>())
+        .with_trs(true)
+        .with_bsr(true)
+        .with_broadcast_twt(true)
+        .with_ack_enabled_aggregation(true)
+        .with_om_control(true)
+        .with_maximum_ampdu_length_exponent_extension(oer_portable_wire::U8::constant::<1>())
+        .with_flexible_twt_schedule(true)
+        .with_rx_control_frame_to_multi_bss(true)
+        .with_ndp_feedback_report(true)
+        .with_ht_and_vht_trigger_frame_rx(true);
+    let phy = HePhyCapabilities::from_bytes([0; 11])
+        .with_device_class_a(true)
+        .with_ndp_4x_ltf_3200ns_gi(true)
+        .with_stbc_receive_under_80_mhz(true)
+        .with_ul_mu_partial_bandwidth_mu_mimo(true)
+        .with_dcm_transmit(3)
+        .unwrap()
+        .with_dcm_receive(3)
+        .unwrap()
+        .with_he_ppdu_20_mhz_in_40_mhz_2g(true)
+        .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US)
+        .with_mu_ppdu_more_than_one_ru_maximum_ltf(true);
+    let element = he20_capability_ie(mcs9_local(mac, phy));
+    assert_eq!(
+        element,
+        [
+            0xff, 0x16, 0x23, 0x01, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x00,
+            0x00, 0x00, 0x00, 0x02, 0x80, 0x01, 0xfd, 0xff, 0xfd, 0xff,
+        ]
+    );
+    let capability = parse_he20_capabilities(&element).unwrap();
+    assert!(!capability.triggered_su_beamforming_feedback);
+    assert!(!capability.triggered_cqi_feedback);
+    assert!(!capability.non_triggered_cqi_feedback);
+    assert!(capability.supports_bidirectional_mcs9());
+}
