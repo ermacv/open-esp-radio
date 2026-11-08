@@ -1,8 +1,8 @@
 //! The load image's paced sender on real sockets: the image's facade
-//! (`udp.rs`) and its schedule (`load/pace.rs`, with its `CATCH_UP` and
-//! batches), over a port that takes every frame and a peer that answers ARP,
-//! at the stand's paced level: about nine datagrams a millisecond, a burst
-//! the half look-ahead covers.
+//! (`udp.rs`), its producer and its schedule (`load/pace.rs`, with its
+//! `CATCH_UP` and batches), over a port that takes every frame and a peer
+//! that answers ARP, at the stand's paced level: about nine datagrams a
+//! millisecond.
 //! `oer` and the load service stand in for their chip-side names.
 extern crate self as oer;
 extern crate self as oer_hil_services_load;
@@ -22,14 +22,11 @@ use embassy_futures::yield_now;
 use oer_portable_events::EventSink;
 use oer_portable_time::{Clock, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
-use oer_protocols_network_core::{Group, Interface, NetEvent, NetworkOwner, claim};
+use oer_protocols_network_core::NetEvent;
 use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Unpublished};
-use oer_protocols_network_runtime::{
-    Direct, MemoryPolicy, RequestKind, Service, ServiceEvent, SocketLanes, StopLane,
-};
+use oer_protocols_network_runtime::{RequestKind, ServiceEvent};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
-use oer_protocols_network_wire::ip::Dscp;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StaticAddress {
@@ -49,31 +46,11 @@ pub enum LoadError {
     Bind,
 }
 
-pub mod wifi {
-    pub struct Brand;
-    pub const SOCKETS: usize = 2;
-    pub const BLOCKS: usize = 64;
-    pub const RESERVE_AHEAD: usize = oer_protocols_network_runtime::RESERVE_AHEAD;
-    pub type Socket =
-        oer_protocols_network_runtime::Socket<'static, 'static, Brand, 1472, 32, 32, 32>;
-    pub type NetworkBlock = oer_protocols_network_core::Block<'static, Brand, 1472>;
-    pub type Received = oer_protocols_network_core::Datagram<'static, Brand, 1472>;
-    pub use oer_protocols_network_core::Remote;
-    pub use oer_protocols_network_runtime::{Refusal, Refused};
-    pub struct NetworkAddress {
-        pub address: [u8; 4],
-        pub prefix: u8,
-        pub gateway: Option<[u8; 4]>,
-    }
-    pub struct Network {
-        pub sockets: Option<[Socket; 2]>,
-    }
-    impl Network {
-        pub fn configure(&mut self, _: NetworkAddress, _: [u16; 2]) -> Result<[Socket; 2], ()> {
-            self.sockets.take().ok_or(())
-        }
-    }
-}
+#[path = "support/wifi.rs"]
+pub mod wifi;
+
+#[path = "../../../services/load/src/header.rs"]
+pub mod header;
 
 #[path = "../src/udp.rs"]
 mod udp;
@@ -263,49 +240,14 @@ struct Sent {
 }
 
 #[test]
-fn at_tx_100_the_image_s_paced_sender_never_waits_for_a_block_after_its_first() {
-    let memory = Box::leak(Box::new([[0; 1472]; 64]));
-    let (pool, brand) = claim::<wifi::Brand, 1472, 64>(memory).unwrap();
-    let interface = Interface::new(LOCAL, OURS, 24, None, 1500).unwrap();
+fn at_tx_100_the_image_s_paced_producer_never_refuses_a_datagram() {
     let port = Port::default();
-    let owner = NetworkOwner::new(brand, interface, pool, port.clone());
-    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service: Service<
-        'static,
-        'static,
-        wifi::Brand,
-        1472,
-        2,
-        32,
-        8,
-        4,
-        64,
-        32,
-        32,
-        Port,
-        Direct,
-    > = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
-    let receiving = service
-        .bind(
-            5001,
-            Dscp::default(),
-            Group::shared(),
-            Box::leak(Box::new(SocketLanes::new())),
-        )
-        .ok()
-        .unwrap();
-    let sending = service
-        .bind(
-            5002,
-            Dscp::default(),
-            Group::shared(),
-            Box::leak(Box::new(SocketLanes::new())),
-        )
-        .ok()
-        .unwrap();
-    let net = udp::Network::new(wifi::Network {
-        sockets: Some([receiving, sending]),
-    });
+    let wifi::Built {
+        mut service,
+        net,
+        stop,
+        ..
+    } = wifi::network(port.clone(), LOCAL, OURS, 5001, 5002);
     let start = Start {
         address: Some(StaticAddress {
             address: OURS,
@@ -333,22 +275,24 @@ fn at_tx_100_the_image_s_paced_sender_never_waits_for_a_block_after_its_first() 
         // As `load::serve::send` paces, with the clock read once a batch.
         loop {
             let now = now_us();
-            let next = schedule.batch(now, || match sending.try_send(size, peer, |_| Some(())) {
-                udp::Attempt::Taken => {
-                    sent.taken += 1;
-                    true
+            let next = schedule.batch(now, || {
+                match sending.try_send(size, peer, load(sent.taken, now)) {
+                    udp::Attempt::Taken => {
+                        sent.taken += 1;
+                        true
+                    }
+                    udp::Attempt::NoRoom => {
+                        sent.refused_at.push(now - begin);
+                        false
+                    }
+                    udp::Attempt::Lost => panic!("a datagram was lost"),
                 }
-                udp::Attempt::NoRoom => {
-                    sent.refused_at.push(now - begin);
-                    false
-                }
-                udp::Attempt::Lost => panic!("a datagram was lost"),
             });
             match next {
                 pace::Next::Yield => yield_now().await,
                 pace::Next::Wait(at) => clock.wait_until(Instant::from_micros(at)).await,
                 pace::Next::Blocked => {
-                    assert!(sending.send(size, peer, |_| Some(())).await);
+                    assert!(sending.send(size, peer, load(sent.taken, now)).await);
                     sent.taken += 1;
                     schedule.taken(now_us());
                 }
@@ -370,19 +314,30 @@ fn at_tx_100_the_image_s_paced_sender_never_waits_for_a_block_after_its_first() 
     };
     let ((), sent) = run_tasks(clock, serve, drive);
     assert!(done.get());
-    let per_datagram = (messages.reserves + messages.sends) as f64 / messages.sends as f64;
     eprintln!(
-        "paced through the image: {} taken, {} missed, refused at {:?}; {} reservations, {:.3} messages per datagram",
-        sent.taken, sent.missed, sent.refused_at, messages.reserves, per_datagram
+        "paced through the image: {} taken, {} missed, refused at {:?}; {} reservations, {} sends",
+        sent.taken, sent.missed, sent.refused_at, messages.reserves, messages.sends
     );
-    // Only the first send, before any request, finds no block.
-    assert_eq!(sent.refused_at, [0], "a batch waited for its blocks");
+    // The producer has room for a turn's datagrams many times over.
+    assert_eq!(sent.refused_at, [] as [u64; 0], "a datagram found no room");
     // What the window's last sleep, of at least the schedule's granularity,
-    // leaves unsent at its end; nothing for a wait on a block.
+    // leaves unsent at its end; nothing for a wait on room.
     let last_sleep = (pace::GRANULARITY_US * u64::from(RATE_BPS) + u64::from(PAYLOAD) * 8_000_000
         - 1)
         / (u64::from(PAYLOAD) * 8_000_000);
     assert!(sent.missed <= last_sleep, "{} missed", sent.missed);
-    assert_eq!(messages.sends as u64, sent.taken);
-    assert!(per_datagram < 1.13, "{per_datagram}");
+    // No datagram goes through a socket's lane: no block, no request.
+    assert_eq!((messages.reserves, messages.sends), (0, 0));
+    assert_eq!(port.0.borrow().datagrams as u64, sent.taken);
+}
+
+/// A load datagram's header: the sequence is the count taken.
+fn load(sequence: u64, now: u64) -> header::Header {
+    header::Header {
+        run: 1,
+        sequence,
+        sent_us: now,
+        echo_request: false,
+        echo_reply: false,
+    }
 }

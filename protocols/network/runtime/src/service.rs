@@ -17,7 +17,8 @@ use oer_protocols_network_core::{
 use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
-use crate::observation::{PublishEnd, ServiceEvent, TurnEnd, seen};
+use crate::local::{LocalEnd, LocalRefused, Produce, Producer, Producers};
+use crate::observation::{LocalEvent, PublishEnd, ServiceEvent, TurnEnd, seen};
 use crate::returns::ReturnEnd;
 use crate::socket::{
     Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, Socket, SocketLanes, drain_requests,
@@ -26,8 +27,9 @@ use crate::socket::{
 
 /// Commands one turn takes from a lane.
 const TURN_COMMANDS: usize = 4;
-/// Frames one turn takes in, and publishes.
-const TURN_FRAMES: usize = 8;
+/// Frames one turn takes in, and publishes; offers a producer is asked for in
+/// one turn, and its declared works open at once.
+pub(crate) const TURN_FRAMES: usize = 8;
 
 /// The egress with no policy: the first ready work goes, no account is kept and
 /// a completion says nothing.
@@ -87,7 +89,8 @@ pub enum EndCause {
     /// The port's answer contradicted what its fill did, so what it does is
     /// not known. It said it took a frame it never filled, and the command
     /// that met this ends `Outcome::Unknown`; or it refused a frame whose fill
-    /// failed, and that command ends by the fill's cause, `Outcome::Rejected`.
+    /// failed, and that command ends by the fill's cause: `Outcome::Rejected`
+    /// for a short slot, `Outcome::Declined` for a producer's decline.
     /// The others end `Outcome::Retired`, and the port goes back to its owner
     /// in [`Ended::retired`].
     PortContract,
@@ -112,6 +115,7 @@ pub struct Ended<
     P,
     E,
     F,
+    R = (),
 > {
     pub cause: EndCause,
     pub retired: Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P>,
@@ -126,6 +130,9 @@ pub struct Ended<
     /// The receiving end of the lane, for the next service. The lane closes
     /// only when this ends.
     pub returns: Option<ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
+    /// The producer, which heard every outcome of its works: `()` for a
+    /// service without one.
+    pub producers: R,
 }
 
 impl<
@@ -141,7 +148,8 @@ impl<
     P,
     E,
     F,
-> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, F>
+    R,
+> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, F, R>
 {
     /// With no service to come, close the way home for good: what it accepted
     /// comes to the pool, and a later `give` is refused.
@@ -202,7 +210,8 @@ struct Bound<
     abandoned: bool,
 }
 
-/// The network's task.
+/// The network's task. `L` is its local producer: `()` for none, at no
+/// cost, or a [`Producer`] ([`Service::with_producer`]).
 pub struct Service<
     'a,
     'm,
@@ -217,6 +226,7 @@ pub struct Service<
     const LANE: usize,
     P: FramePort + FrameSource,
     E: Egress<P::Ticket, P::Notice>,
+    L = (),
 > {
     owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
     egress: E,
@@ -235,6 +245,7 @@ pub struct Service<
     /// Sockets of earlier services not yet dropped.
     adopted: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
     returns: Option<ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
+    local: L,
 }
 
 impl<
@@ -253,16 +264,112 @@ impl<
     E: Egress<P::Ticket, P::Notice>,
 > Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E>
 {
-    /// Own `owner`. A service keeps its owners until [`Self::retire`] hands
-    /// them on, so a cancelled [`Self::run`] loses none. Dropping a service
-    /// instead is the end of the whole network: its port, pool and brand go,
-    /// blocks in its lanes stay there unreachable and their memory is not
-    /// reused, and waiting sockets and observers end.
+    /// Own `owner`, with no local producer. A service keeps its owners until
+    /// [`Self::retire`] hands them on, so a cancelled [`Self::run`] loses
+    /// none. Dropping a service instead is the end of the whole network: its
+    /// port, pool and brand go, blocks in its lanes stay there unreachable and
+    /// their memory is not reused, and waiting sockets and observers end.
     pub const fn new(
         owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
         egress: E,
         memory: MemoryPolicy,
         stop: WakingSpscReceiver<'a, (), 1>,
+    ) -> Self {
+        Self::build(owner, egress, memory, stop, ())
+    }
+}
+
+impl<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const NEIGHBORS: usize,
+    const BLOCKS: usize,
+    const DEPTH: usize,
+    const LANE: usize,
+    P: FramePort + FrameSource,
+    E: Egress<P::Ticket, P::Notice>,
+    Q: Produce,
+>
+    Service<
+        'a,
+        'm,
+        B,
+        SIZE,
+        SOCKETS,
+        CREDITS,
+        RECEIVED,
+        NEIGHBORS,
+        BLOCKS,
+        DEPTH,
+        LANE,
+        P,
+        E,
+        Producer<'a, B, Q, CREDITS>,
+    >
+{
+    /// As [`Self::new`], with `producer`, owned by value, which the service
+    /// calls in its own turns once [`Self::bind_local`] gave it a socket.
+    /// `end` is the image's flag the service's end sets: at its retirement,
+    /// after every outcome its producer hears, or when it is dropped, with
+    /// nothing called.
+    pub const fn with_producer(
+        owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        egress: E,
+        memory: MemoryPolicy,
+        stop: WakingSpscReceiver<'a, (), 1>,
+        producer: Q,
+        end: &'a LocalEnd,
+    ) -> Self {
+        Self::build(owner, egress, memory, stop, Producer::new(producer, end))
+    }
+
+    /// Open the producer's socket on `port`, whose datagrams carry `dscp`. It
+    /// only sends: a datagram for its port is dropped before any block. A
+    /// refusal changes nothing.
+    ///
+    /// # Errors
+    /// [`LocalRefused`].
+    pub fn bind_local(&mut self, port: u16, dscp: Dscp) -> Result<(), LocalRefused> {
+        if self.local.bound() {
+            return Err(LocalRefused::Bound);
+        }
+        let socket = self
+            .owner
+            .open_local(port, dscp)
+            .map_err(LocalRefused::Open)?;
+        self.local.bind(socket);
+        Ok(())
+    }
+}
+
+impl<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const NEIGHBORS: usize,
+    const BLOCKS: usize,
+    const DEPTH: usize,
+    const LANE: usize,
+    P: FramePort + FrameSource,
+    E: Egress<P::Ticket, P::Notice>,
+    L,
+> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E, L>
+{
+    const fn build(
+        owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        egress: E,
+        memory: MemoryPolicy,
+        stop: WakingSpscReceiver<'a, (), 1>,
+        local: L,
     ) -> Self {
         Self {
             owner,
@@ -276,9 +383,28 @@ impl<
             pressure_at: None,
             adopted: [const { None }; SOCKETS],
             returns: None,
+            local,
         }
     }
+}
 
+impl<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const NEIGHBORS: usize,
+    const BLOCKS: usize,
+    const DEPTH: usize,
+    const LANE: usize,
+    P: FramePort + FrameSource,
+    E: Egress<P::Ticket, P::Notice>,
+    L: Producers<B, CREDITS>,
+> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E, L>
+{
     /// Take blocks home through `returns`, for as long as this service holds
     /// the pool.
     ///
@@ -409,13 +535,16 @@ impl<
         }
     }
 
-    /// One bounded pass over everything; whether anything moved.
+    /// One bounded pass over everything; whether anything moved. Every exit
+    /// goes through its one epilogue, which hands every known result to its
+    /// client, so at an await each open work truly was not published.
     fn turn(
         &mut self,
         now: Instant,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> bool {
         let mut moved = false;
+        self.local.turn_begins();
         self.owner.tick(now);
         for index in 0..SOCKETS {
             moved |= self.commands(now, index, events);
@@ -441,24 +570,40 @@ impl<
             let answer = self.egress.notice(notice);
             self.note(answer);
             if self.fault.is_some() {
-                report(events, || ServiceEvent::Published(PublishEnd::Fault));
-                self.turn_ended(events);
-                return true;
+                break;
             }
         }
-        // A policy chooses knowing all the port has said: a later notice may
-        // free what the choice needs. So publishing waits for the next turn.
-        if told_all {
+        if self.fault.is_some() {
+            // Nothing more is offered or published: the epilogue delivers.
+            report(events, || ServiceEvent::Published(PublishEnd::Fault));
+        } else if told_all {
+            moved |= self.local.offers(now, &mut self.owner, events);
             moved |= self.publish(now, events);
         } else {
+            // A policy chooses knowing all the port has said: a later notice
+            // may free what the choice needs. So publishing waits for the
+            // next turn.
             report(events, || ServiceEvent::Published(PublishEnd::Deferred));
             moved = true;
         }
+        // Eviction ends commands too, so it comes before the delivery: the
+        // epilogue's delivery is the turn's last step that can learn a result.
+        if self.fault.is_none() && !self.owner.port_broken() {
+            moved |= self.relieve(now);
+        }
+        moved |= self.deliver(events);
+        self.turn_ended(events);
+        moved
+    }
+
+    /// The turn's epilogue: hand every result the core knows to its client,
+    /// the channel sockets' places and the producer alike; whether any went.
+    fn deliver(&mut self, events: &mut impl EventSink<ServiceEvent>) -> bool {
+        let mut moved = false;
         for bound in self.bound.iter_mut().flatten() {
             moved |= bound.hand_back(&mut self.owner);
         }
-        moved |= self.relieve(now);
-        self.turn_ended(events);
+        moved |= self.local.deliver(&mut self.owner, events);
         moved
     }
 
@@ -640,7 +785,13 @@ impl<
         let mut moved = false;
         let mut end = PublishEnd::Budget;
         for _ in 0..TURN_FRAMES {
-            let chosen = match self.egress.choose(self.owner.demands(now)) {
+            // After a declining fill, the producer's flow sits out the turn.
+            let filtered = self.local.filtered();
+            let ready = self
+                .owner
+                .demands(now)
+                .filter(move |demand| filtered.is_none_or(|flow| demand.ready.flow != Some(flow)));
+            let chosen = match self.egress.choose(ready) {
                 Ok(chosen) => chosen,
                 Err(fault) => {
                     self.note(Err(fault));
@@ -652,7 +803,9 @@ impl<
                 end = PublishEnd::Chose;
                 break;
             };
-            match self.owner.transmit(now, demand.grant()) {
+            let local = &mut self.local;
+            let fill = |work, data: &mut [u8]| local.fill(now, work, data);
+            match self.owner.transmit(now, demand.grant(), fill) {
                 Ok(ticket) => {
                     moved = true;
                     report(events, || ServiceEvent::Accepted);
@@ -661,6 +814,15 @@ impl<
                 }
                 Err(Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort) => {
                     moved = true;
+                    let answer = self.egress.refused(reservation);
+                    self.note(answer);
+                }
+                // One declining fill a turn: the producer's flow is out of
+                // the rest of it, so its declines never stop another's work.
+                Err(Unsent::Declined) => {
+                    moved = true;
+                    report(events, || ServiceEvent::Local(LocalEvent::Declined));
+                    self.local.declined();
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
                 }
@@ -700,16 +862,21 @@ impl<
 
     /// Wait for anything to do: the port, a lane, a stop or a time wakes this.
     async fn wait<T: Timer>(&mut self, clock: &T, events: &mut impl EventSink<ServiceEvent>) {
-        let deadline = match (self.owner.poll_deadline(), self.pressure_at) {
-            (Some(core), Some(pressure)) => Some(core.min(pressure)),
-            (core, pressure) => core.or(pressure),
-        };
+        let deadline = [
+            self.owner.poll_deadline(),
+            self.pressure_at,
+            self.local.deadline(),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
         let Self {
             owner,
             bound,
             stop,
             adopted,
             returns,
+            local,
             ..
         } = self;
         let mut registered = false;
@@ -720,6 +887,7 @@ impl<
             }
             let mut ready = pin!(stop.ready()).poll(cx).is_ready();
             owner.register_port(cx);
+            local.register(cx, events);
             for bound in bound.iter_mut().flatten() {
                 ready |= bound.poll_lanes(cx);
             }
@@ -750,7 +918,8 @@ impl<
     /// or was cancelled.
     pub fn retire(
         self,
-    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, E::Fault> {
+    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, E::Fault, L::Returned>
+    {
         let cause = self.ended.unwrap_or(EndCause::Stopped);
         let mut this = self;
         while this.take_home() {}
@@ -760,6 +929,7 @@ impl<
         let sockets = this
             .bound
             .map(|bound| bound.map(|bound| bound.finish(&mut retired)));
+        let producers = this.local.retire(&mut retired.results);
         Ended {
             cause,
             retired,
@@ -768,6 +938,7 @@ impl<
             sockets,
             adopted,
             returns,
+            producers,
         }
     }
 }

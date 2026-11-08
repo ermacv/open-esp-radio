@@ -37,6 +37,26 @@ pub enum Publish {
     Fault,
 }
 
+/// What a turn did with its local producer, or what a wait registered it
+/// for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Local {
+    /// The producer offered a datagram.
+    Offered,
+    /// The core refused an offer for good.
+    Refused,
+    /// The core refused an offer for now: the producer's offers hold.
+    Held,
+    /// A fill declined.
+    Declined,
+    /// A declared work was withdrawn, its source having moved on.
+    Withdrawn,
+    /// A wait registered the producer for new offers.
+    WaitsOffers,
+    /// A wait registered the producer for changes only.
+    WaitsChanges,
+}
+
 /// The bins of [`NetworkTurns::accepted_by_turn`]: turns whose port took
 /// 0, 1, 2, 3, 4, 5 to 8, and 9 or more frames.
 pub const ACCEPTED_BINS: usize = 7;
@@ -91,6 +111,16 @@ pub struct NetworkTurns {
     /// many ([`RESERVE_BINS`]).
     pub reserve_blocks: u32,
     pub reserve_by_size: [u32; RESERVE_BINS],
+    /// A local producer's offers, final refusals, holds, declining fills
+    /// and withdrawals, and the waits that registered it for offers or for
+    /// changes only.
+    pub local_offered: u32,
+    pub local_refused: u32,
+    pub local_held: u32,
+    pub local_declined: u32,
+    pub local_withdrawn: u32,
+    pub local_waits_offers: u32,
+    pub local_waits_changes: u32,
 }
 
 /// The words of [`NetworkCounter`], by what they count.
@@ -120,15 +150,25 @@ mod word {
     pub const RESERVE_BLOCKS: usize = 27;
     /// [`super::RESERVE_BINS`] words.
     pub const RESERVE_BY_SIZE: usize = 28;
-    pub const COUNT: usize = 33;
+    pub const LOCAL_OFFERED: usize = 33;
+    pub const LOCAL_REFUSED: usize = 34;
+    pub const LOCAL_HELD: usize = 35;
+    pub const LOCAL_DECLINED: usize = 36;
+    pub const LOCAL_WITHDRAWN: usize = 37;
+    pub const LOCAL_WAITS_OFFERS: usize = 38;
+    pub const LOCAL_WAITS_CHANGES: usize = 39;
+    pub const COUNT: usize = 40;
 }
 
 const _: () = {
     if word::ACCEPTED_BY_TURN + ACCEPTED_BINS != word::PUBLISH_CHOSE {
         panic!("the histogram's words lie between the accepted count and the publish ends");
     }
-    if word::RESERVE_BY_SIZE + RESERVE_BINS != word::COUNT {
-        panic!("the reservations' histogram is the last of the words");
+    if word::RESERVE_BY_SIZE + RESERVE_BINS != word::LOCAL_OFFERED {
+        panic!("the producer's words follow the reservations' histogram");
+    }
+    if word::LOCAL_WAITS_CHANGES + 1 != word::COUNT {
+        panic!("the producer's waits are the last of the words");
     }
 };
 
@@ -187,6 +227,13 @@ impl NetworkCounter {
             reserve_by_size: core::array::from_fn(|bin| {
                 at(word::RESERVE_BY_SIZE.saturating_add(bin))
             }),
+            local_offered: at(word::LOCAL_OFFERED),
+            local_refused: at(word::LOCAL_REFUSED),
+            local_held: at(word::LOCAL_HELD),
+            local_declined: at(word::LOCAL_DECLINED),
+            local_withdrawn: at(word::LOCAL_WITHDRAWN),
+            local_waits_offers: at(word::LOCAL_WAITS_OFFERS),
+            local_waits_changes: at(word::LOCAL_WAITS_CHANGES),
         }
     }
 }
@@ -252,6 +299,22 @@ impl TurnTally {
                 Request::Release => word::RELEASES,
                 Request::Send => word::SENDS,
                 Request::Close => word::CLOSES,
+            },
+            1,
+        );
+    }
+
+    /// The turn, or the wait after it, did `local` with its producer.
+    pub fn local(&mut self, counter: &NetworkCounter, local: Local) {
+        counter.bump(
+            match local {
+                Local::Offered => word::LOCAL_OFFERED,
+                Local::Refused => word::LOCAL_REFUSED,
+                Local::Held => word::LOCAL_HELD,
+                Local::Declined => word::LOCAL_DECLINED,
+                Local::Withdrawn => word::LOCAL_WITHDRAWN,
+                Local::WaitsOffers => word::LOCAL_WAITS_OFFERS,
+                Local::WaitsChanges => word::LOCAL_WAITS_CHANGES,
             },
             1,
         );

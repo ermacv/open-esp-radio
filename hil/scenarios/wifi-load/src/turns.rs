@@ -74,6 +74,18 @@ pub fn window(turns: &NetworkTurns) -> Value {
         "yields_with_work": turns.yields_with_work,
         "waits_pending": turns.waits_pending,
         "waits_ready": turns.waits_ready,
+        "producer": {
+            "offered": turns.local_offered,
+            "refused": turns.local_refused,
+            "held": turns.local_held,
+            "declined": turns.local_declined,
+            "withdrawn": turns.local_withdrawn,
+            "waits_offers": turns.local_waits_offers,
+            "waits_changes": turns.local_waits_changes,
+            "wakes": turns.producer_wakes,
+            "unknown": turns.producer_unknown,
+        },
+        "producer_wakes_per_offer": ratio(turns.producer_wakes, turns.local_offered),
     })
 }
 
@@ -91,7 +103,9 @@ pub fn summary(turns: &NetworkTurns) -> String {
          budget spent in {} turns ({} sockets, share {}); intake full {}; \
          accepted {} ({} per turn; {bins}); publish chose {} refused {} budget {} \
          deferred {} fault {}; out at end: blocks {} credits {}; yields {} \
-         ({} with possible work), waits pending {} ready {}",
+         ({} with possible work), waits pending {} ready {}; producer offered {} \
+         refused {} held {} declined {} withdrawn {} unknown {}, waits for offers {} \
+         changes {}, wakes {}",
         turns.turns,
         turns.reserves,
         turns.sends,
@@ -117,6 +131,15 @@ pub fn summary(turns: &NetworkTurns) -> String {
         turns.yields_with_work,
         turns.waits_pending,
         turns.waits_ready,
+        turns.local_offered,
+        turns.local_refused,
+        turns.local_held,
+        turns.local_declined,
+        turns.local_withdrawn,
+        turns.producer_unknown,
+        turns.local_waits_offers,
+        turns.local_waits_changes,
+        turns.producer_wakes,
     )
 }
 
@@ -140,6 +163,10 @@ mod tests {
             publish_chose: 8,
             yields: 8,
             yields_with_work: 7,
+            local_offered: 6,
+            local_held: 1,
+            local_waits_changes: 2,
+            producer_wakes: 3,
             ..NetworkTurns::default()
         };
         let value = window(&turns);
@@ -154,6 +181,9 @@ mod tests {
         assert_eq!(value["accepted_by_turn"]["5-8"], 0);
         assert_eq!(value["publish_end"]["chose"], 8);
         assert_eq!(value["out_at_turn_end"]["blocks"], 0);
+        assert_eq!(value["producer"]["offered"], 6);
+        assert_eq!(value["producer"]["wakes"], 3);
+        assert_eq!(value["producer_wakes_per_offer"], 0.5);
         assert_eq!(
             summary(&turns),
             "8 turns; reserve 4 send 16 release 0 close 0 (reserve/send 0.25); \
@@ -161,7 +191,9 @@ mod tests {
              budget spent in 7 turns (7 sockets, share 0.88); intake full 0; \
              accepted 16 (2.00 per turn; 0:4 1:0 2:0 3:0 4:4 5-8:0 9+:0); publish chose 8 \
              refused 0 budget 0 deferred 0 fault 0; out at end: blocks 0 credits 0; \
-             yields 8 (7 with possible work), waits pending 0 ready 0"
+             yields 8 (7 with possible work), waits pending 0 ready 0; producer offered 6 \
+             refused 0 held 1 declined 0 withdrawn 0 unknown 0, waits for offers 0 \
+             changes 2, wakes 3"
         );
     }
 

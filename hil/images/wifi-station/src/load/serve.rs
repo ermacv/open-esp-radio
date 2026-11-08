@@ -586,8 +586,8 @@ fn millis(ms: u32) -> u64 {
 
 /// Send `transmit`'s datagrams from `begin` until `end`: paced to its rate,
 /// or as fast as the socket takes them. Each datagram is built where it
-/// leaves, every octet written in place ([`write`]), and the clock read once
-/// per batch.
+/// leaves, every octet written in place from its header ([`datagram`]), and
+/// the clock read once per batch.
 async fn send(
     socket: &mut Sending<'_>,
     run: u32,
@@ -612,8 +612,7 @@ async fn send(
         Some(mut schedule) => loop {
             let now = now_us();
             let next = schedule.batch(now, || {
-                let sequence = sent.datagrams;
-                let header = |payload: &mut [u8]| write(payload, run, sequence, now);
+                let header = datagram(run, sent.datagrams, now);
                 match socket.try_send(size, peer, header) {
                     Attempt::Taken => {
                         taken(sent, size, now);
@@ -673,9 +672,7 @@ async fn blocking(
     sequence: u64,
     now: u64,
 ) -> bool {
-    socket
-        .send(size, peer, |payload| write(payload, run, sequence, now))
-        .await
+    socket.send(size, peer, datagram(run, sequence, now)).await
 }
 
 /// Send as fast as the socket takes the datagrams until `end`: one deadline
@@ -710,11 +707,11 @@ async fn unpaced(
     select(sending, wait_until(end)).await;
 }
 
-/// Datagram `sequence` sent at `now`, in place in `payload`: the header at
-/// its front and the filler behind it. The generator writes every octet of
-/// the payload it sends, on both stacks alike; `None` when the payload is
-/// shorter than the header.
-fn write(payload: &mut [u8], run: u32, sequence: u64, now: u64) -> Option<()> {
+/// The header of datagram `sequence`, sent at `now`. The image's UDP writes
+/// the whole payload from it where it leaves, the header at its front and the
+/// filler behind it ([`Header::write_datagram`]): every octet, on both stacks
+/// alike.
+const fn datagram(run: u32, sequence: u64, now: u64) -> Header {
     Header {
         run,
         sequence,
@@ -722,7 +719,6 @@ fn write(payload: &mut [u8], run: u32, sequence: u64, now: u64) -> Option<()> {
         echo_request: false,
         echo_reply: false,
     }
-    .write_datagram(payload)
 }
 
 /// The socket took a datagram of `bytes` at `now`.

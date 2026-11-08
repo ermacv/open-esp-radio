@@ -559,8 +559,10 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
     // calls whose scope the image's stack proof then cannot name.
     #[inline(never)]
     fn event(&mut self, event: oer_protocols_network_runtime::ServiceEvent) {
-        use crate::observe::network::{Publish, Request};
-        use oer_protocols_network_runtime::{PublishEnd, RequestKind, ServiceEvent};
+        use crate::observe::network::{Local, Publish, Request};
+        use oer_protocols_network_runtime::{
+            Interest, LocalEvent, PublishEnd, RequestKind, ServiceEvent,
+        };
         let tally = &mut self.0;
         match event {
             ServiceEvent::Took(kind) => tally.took(
@@ -587,6 +589,18 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
             }
             ServiceEvent::Yielded => tally.yielded(&NETWORK),
             ServiceEvent::Waited { ready } => tally.waited(&NETWORK, ready),
+            ServiceEvent::Local(local) => tally.local(
+                &NETWORK,
+                match local {
+                    LocalEvent::Offered => Local::Offered,
+                    LocalEvent::Refused => Local::Refused,
+                    LocalEvent::Held => Local::Held,
+                    LocalEvent::Declined => Local::Declined,
+                    LocalEvent::Withdrawn => Local::Withdrawn,
+                    LocalEvent::Waits(Interest::Offers) => Local::WaitsOffers,
+                    LocalEvent::Waits(Interest::Changes) => Local::WaitsChanges,
+                },
+            ),
         }
     }
 }

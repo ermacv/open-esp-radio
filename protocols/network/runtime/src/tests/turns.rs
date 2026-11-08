@@ -129,7 +129,10 @@ fn turns(events: &[ServiceEvent]) -> Vec<Turn> {
                 turn.end = Some(end);
                 turns.push(core::mem::take(&mut turn));
             }
-            ServiceEvent::IntakeFull | ServiceEvent::Yielded | ServiceEvent::Waited { .. } => {}
+            ServiceEvent::IntakeFull
+            | ServiceEvent::Yielded
+            | ServiceEvent::Waited { .. }
+            | ServiceEvent::Local(_) => {}
         }
     }
     assert!(

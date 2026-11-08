@@ -6,12 +6,10 @@ extern crate self as oer_hil_services_load;
 use core::future::Future;
 use core::task::{Context, Waker};
 use oer_portable_time_virtual::VirtualClock;
-use oer_protocols_network_core::{Group, Interface, NetworkOwner, claim};
 use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Unpublished};
-use oer_protocols_network_runtime::{Direct, MemoryPolicy, Service, SocketLanes, StopLane};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
-use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields};
+use oer_protocols_network_wire::ip::{DsField, Ipv4Fields};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -35,31 +33,11 @@ pub enum LoadError {
     Bind,
 }
 
-pub mod wifi {
-    pub struct Brand;
-    pub const SOCKETS: usize = 2;
-    pub const BLOCKS: usize = 64;
-    pub const RESERVE_AHEAD: usize = oer_protocols_network_runtime::RESERVE_AHEAD;
-    pub type Socket =
-        oer_protocols_network_runtime::Socket<'static, 'static, Brand, 1472, 32, 32, 32>;
-    pub type NetworkBlock = oer_protocols_network_core::Block<'static, Brand, 1472>;
-    pub type Received = oer_protocols_network_core::Datagram<'static, Brand, 1472>;
-    pub use oer_protocols_network_core::Remote;
-    pub use oer_protocols_network_runtime::{Refusal, Refused};
-    pub struct NetworkAddress {
-        pub address: [u8; 4],
-        pub prefix: u8,
-        pub gateway: Option<[u8; 4]>,
-    }
-    pub struct Network {
-        pub sockets: Option<[Socket; 2]>,
-    }
-    impl Network {
-        pub fn configure(&mut self, _: NetworkAddress, _: [u16; 2]) -> Result<[Socket; 2], ()> {
-            self.sockets.take().ok_or(())
-        }
-    }
-}
+#[path = "support/wifi.rs"]
+pub mod wifi;
+
+#[path = "../../../services/load/src/header.rs"]
+pub mod header;
 
 #[path = "../src/udp.rs"]
 mod udp;
@@ -98,8 +76,7 @@ impl FrameSource for Port {
     }
     fn register(&mut self, _: &mut Context<'_>) {}
 }
-type TestService =
-    Service<'static, 'static, wifi::Brand, 1472, 2, 32, 8, 4, 64, 32, 32, Port, Direct>;
+type TestService = wifi::Served<Port>;
 fn turn(service: &mut TestService, clock: &VirtualClock) {
     let mut events = ();
     let mut run = core::pin::pin!(service.run(clock, &mut events));
@@ -162,26 +139,10 @@ fn datagram() -> Vec<u8> {
 
 #[test]
 fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
-    let memory = Box::leak(Box::new([[0; 1472]; 64]));
-    let (pool, brand) = claim::<wifi::Brand, 1472, 64>(memory).unwrap();
-    let interface = Interface::new([2; 6], [192, 0, 2, 1], 24, None, 1500).unwrap();
     let port = Port::default();
-    let owner = NetworkOwner::new(brand, interface, pool, port.clone());
-    let (_, stop) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stop);
-    let lanes1 = Box::leak(Box::new(SocketLanes::new()));
-    let lanes2 = Box::leak(Box::new(SocketLanes::new()));
-    let one = service
-        .bind(5001, Dscp::default(), Group::shared(), lanes1)
-        .ok()
-        .unwrap();
-    let two = service
-        .bind(5002, Dscp::default(), Group::shared(), lanes2)
-        .ok()
-        .unwrap();
-    let net = udp::Network::new(wifi::Network {
-        sockets: Some([one, two]),
-    });
+    let wifi::Built {
+        mut service, net, ..
+    } = wifi::network(port.clone(), [2; 6], [192, 0, 2, 1], 5001, 5002);
     let start = Start {
         address: Some(StaticAddress {
             address: [192, 0, 2, 1],
