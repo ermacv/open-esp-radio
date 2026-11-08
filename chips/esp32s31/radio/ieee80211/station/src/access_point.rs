@@ -255,8 +255,8 @@ pub enum ApExit {
     StartRefused,
     /// Its radio's stop was not confirmed; the port keeps what it holds.
     StopUnconfirmed,
-    /// The port faulted; the runner keeps every owner.
-    Faulted,
+    /// The port faulted for its named cause; the runner keeps every owner.
+    Faulted(crate::failure::BackendFault),
     /// The runner's own contract broke; it keeps every owner.
     Contract(oer_protocols_ieee80211_runtime::access_point::ApContract),
     /// The port refused one of the access point's commands: the runner
@@ -538,7 +538,7 @@ impl<W: Binding> AccessPointRunner<W> {
             },
             ApEnd::StartRefused => ApExit::StartRefused,
             ApEnd::StopUnconfirmed(_) => ApExit::StopUnconfirmed,
-            ApEnd::Faulted => ApExit::Faulted,
+            ApEnd::Faulted(fault) => ApExit::Faulted(crate::failure::convert::backend_fault(fault)),
             ApEnd::Contract(contract) => ApExit::Contract(contract),
             ApEnd::Refused(mut runner, refusal) => {
                 // The refused command's owners come back with the runner;

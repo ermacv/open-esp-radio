@@ -127,6 +127,8 @@ type Ticket<'id, P> = oer_protocols_radio_port::Slot<
 >;
 /// A transmit buffer of the class `C` of the port `P`.
 type Buffer<'id, P, C> = <Ty<'id, P> as TxBufferPool<'id, C>>::Buffer;
+/// The named fault of the port `P`.
+pub type PortFault<'id, P> = <P as DataPort<'id>>::Fault;
 /// An access-point command of the port `P`.
 type Command<'id, P> = AccessPointCommand<'id, Ty<'id, P>, Caps<'id, P>>;
 /// The access point's configure permission on the port `P`.
@@ -217,7 +219,7 @@ pub trait ApNonces {
 
 /// Why the runner ended.
 #[derive(Debug)]
-pub enum ApEnd<R> {
+pub enum ApEnd<R, F> {
     /// The access point stopped and the radio with it; every owner is back.
     Stopped(R),
     /// The radio did not start.
@@ -225,7 +227,7 @@ pub enum ApEnd<R> {
     /// The radio's stop is not confirmed: the port keeps what it holds.
     StopUnconfirmed(StopUnconfirmed),
     /// The port reported its named fault; the runner keeps every owner.
-    Faulted,
+    Faulted(F),
     /// A terminal named an owner the runner did not send, or the engine
     /// refused one of the runner's own steps; the runner keeps every owner.
     Contract(ApContract),
@@ -237,8 +239,8 @@ pub enum ApEnd<R> {
 }
 
 /// Why a step of the runner ended the run.
-enum Halt {
-    Faulted,
+enum Halt<F> {
+    Faulted(F),
     Contract(ApContract),
     /// The port refused a command, which the runner holds
     /// ([`ApRunner::take_refused`]).
@@ -616,7 +618,11 @@ where
 
     /// Run the access point until its stop: start, serve, stop, and return
     /// the port and the runner's owners.
-    pub async fn run<T: Timer>(mut self, shared: &ApShared, clock: &T) -> ApEnd<Self> {
+    pub async fn run<T: Timer>(
+        mut self,
+        shared: &ApShared,
+        clock: &T,
+    ) -> ApEnd<Self, PortFault<'id, P>> {
         // The radio starts on the BSS's channel.
         let started = poll_fn(|cx| {
             let now = clock.now();
@@ -745,9 +751,13 @@ where
 
     /// The end of a run a step halted: a refusal returns the runner with
     /// every owner, the access point no longer serving.
-    fn halted(mut self, halt: Halt, shared: &ApShared) -> ApEnd<Self> {
+    fn halted(
+        mut self,
+        halt: Halt<PortFault<'id, P>>,
+        shared: &ApShared,
+    ) -> ApEnd<Self, PortFault<'id, P>> {
         match halt {
-            Halt::Faulted => ApEnd::Faulted,
+            Halt::Faulted(fault) => ApEnd::Faulted(fault),
             Halt::Contract(contract) => ApEnd::Contract(contract),
             Halt::Refused(refusal) => {
                 self.status.running = false;
@@ -799,7 +809,7 @@ where
     }
 
     /// Start: configure the access point's receive rules.
-    fn begin(&mut self, now: Instant) -> Result<(), Halt> {
+    fn begin(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         let permission = self
             .configure
             .take()
@@ -815,7 +825,7 @@ where
     }
 
     /// Stop: tear every peer down, then close the interface.
-    fn begin_stop(&mut self, now: Instant) -> Result<(), Halt> {
+    fn begin_stop(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         self.phase = Phase::TearingDown;
         self.status.running = false;
         self.network.set_link(false);
@@ -842,7 +852,7 @@ where
     /// One turn: the port's transmit service and terminals, the received
     /// units, the engine's due work, the network's frames and the waiting
     /// commands.
-    fn turn(&mut self, now: Instant, facts: Facts) -> Result<(), Halt> {
+    fn turn(&mut self, now: Instant, facts: Facts) -> Result<(), Halt<PortFault<'id, P>>> {
         let due = self.port.deadline().is_some_and(|at| at <= now);
         if facts.tx.is_some() || facts.tbtt || due {
             let served = self.port.service_tx(
@@ -851,8 +861,8 @@ where
                 now,
                 &mut self.sink,
             );
-            if served.is_err() {
-                return Err(Halt::Faulted);
+            if let Err(fault) = served {
+                return Err(Halt::Faulted(fault));
             }
         }
         self.terminals(now)?;
@@ -889,7 +899,7 @@ where
 
     /// Run the waiting commands in order: a held one waits for the next
     /// turn, and the ones behind it with it.
-    fn run_commands(&mut self, now: Instant) -> Result<(), Halt> {
+    fn run_commands(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         while let Some(command) = self.commands_waiting.pop_front() {
             let progress = self.port.access_point_command(command, now, &mut self.sink);
             match progress {
@@ -909,7 +919,7 @@ where
                     self.refused = Some(command);
                     return Err(Halt::Refused(refusal));
                 }
-                Err(_) => return Err(Halt::Faulted),
+                Err(fault) => return Err(Halt::Faulted(fault)),
             }
         }
         Ok(())
@@ -918,7 +928,7 @@ where
     /// Issue the pairwise installations and removals the association
     /// allows: installations while it is home, one removal at a time, which
     /// holds it until its terminal.
-    fn key_commands(&mut self) -> Result<(), Halt> {
+    fn key_commands(&mut self) -> Result<(), Halt<PortFault<'id, P>>> {
         while let (Some(association), Some(peer)) =
             (self.association.as_ref(), self.installs.front().copied())
         {
@@ -961,7 +971,7 @@ where
 
     /// Take every terminal the port calls left in the sink, and the ones
     /// handling them left.
-    fn terminals(&mut self, now: Instant) -> Result<(), Halt> {
+    fn terminals(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         if self.sink.overflow {
             return Err(Halt::Contract(ApContract::UnknownTicket(u8::MAX)));
         }
@@ -977,7 +987,7 @@ where
         &mut self,
         terminal: LowerMacTerminal<'id, Ty<'id, P>>,
         now: Instant,
-    ) -> Result<(), Halt> {
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         match terminal {
             LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
                 self.completed(completed, now)
@@ -1069,7 +1079,7 @@ where
         &mut self,
         key: <Keys<'id, P> as KeyTypes<'id>>::PairwiseKey,
         now: Instant,
-    ) -> Result<(), Halt> {
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         let mut key = key;
         let mut matched = None;
         let mut index = 0;
@@ -1124,7 +1134,7 @@ where
 
     /// The access point's configuration took effect: the next step of the
     /// start or the stop.
-    fn configured(&mut self, now: Instant) -> Result<(), Halt> {
+    fn configured(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         match self.phase {
             Phase::Configuring => {
                 // The group key goes in before the TSF starts.
@@ -1194,7 +1204,7 @@ where
         &mut self,
         receive: AccessPointReceive<Caps<'id, P>>,
         tsf: Option<TsfControl>,
-    ) -> Result<(), Halt> {
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         let Some(permission) = self.configure.take() else {
             return Err(Halt::Contract(ApContract::CommandRefused));
         };
@@ -1218,7 +1228,7 @@ where
 
     /// Move the stop on: once every peer is gone and its key off, close the
     /// receive policy.
-    fn advance_stop(&mut self, _now: Instant) -> Result<(), Halt> {
+    fn advance_stop(&mut self, _now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         if self.phase != Phase::TearingDown {
             return Ok(());
         }
@@ -1246,7 +1256,7 @@ where
         &mut self,
         completed: oer_protocols_ieee80211_contracts_port::SingleCompleted<'id, Ty<'id, P>>,
         now: Instant,
-    ) -> Result<(), Halt> {
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         let parts = completed.into_parts(&mut self.access);
         let index = parts.ticket.index();
         let outcome = parts.outcome;
@@ -1324,7 +1334,10 @@ where
     }
 
     /// Return a buffer to the pool, renewed for a new MPDU.
-    fn give_buffer(&mut self, mut buffer: Buffer<'id, P, C>) -> Result<(), Halt> {
+    fn give_buffer(
+        &mut self,
+        mut buffer: Buffer<'id, P, C>,
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         if buffer.renew_msdu().is_err() {
             let _kept = core::mem::ManuallyDrop::new(buffer);
             return Err(Halt::Contract(ApContract::BufferClass));
@@ -1363,11 +1376,11 @@ where
     }
 
     /// Pull the received units of this turn and act on each.
-    fn receive(&mut self, now: Instant) -> Result<(), Halt> {
+    fn receive(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         for _ in 0..RECEIVE_BUDGET {
             let pulled = match self.port.receive(RECEIVE_ROOM, now) {
                 Ok(pulled) => pulled,
-                Err(_) => return Err(Halt::Faulted),
+                Err(fault) => return Err(Halt::Faulted(fault)),
             };
             let RxPull::Unit { frame, meta } = pulled else {
                 break;
@@ -1385,7 +1398,12 @@ where
     }
 
     /// Act on one received frame.
-    fn received(&mut self, bytes: &[u8], integrity: Integrity, now: Instant) -> Result<(), Halt> {
+    fn received(
+        &mut self,
+        bytes: &[u8],
+        integrity: Integrity,
+        now: Instant,
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         let received = self
             .engine
             .receive(bytes, integrity, now, self.nonce, 1, &mut self.scratch);
@@ -1474,7 +1492,7 @@ where
 
     /// The engine's due work: the beacon, handshake retries and inactive
     /// peers.
-    fn due(&mut self, now: Instant) -> Result<(), Halt> {
+    fn due(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         if self.beacon.is_some() {
             self.send_beacon(now)?;
         }
@@ -1496,7 +1514,7 @@ where
 
     /// Carry the network's frames into the BSS while tickets and buffers
     /// last.
-    fn transmit_network(&mut self, now: Instant) -> Result<(), Halt> {
+    fn transmit_network(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         for _ in 0..TRANSMIT_BUDGET {
             if self.tickets.is_empty() || self.buffers.is_empty() || !self.network.waiting() {
                 break;
@@ -1534,7 +1552,7 @@ where
     }
 
     /// Send the queued teardown frames while tickets and buffers last.
-    fn send_teardowns(&mut self, now: Instant) -> Result<(), Halt> {
+    fn send_teardowns(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         while !self.tickets.is_empty() && !self.buffers.is_empty() {
             let Some((teardown, kind)) = self.teardowns.pop_front() else {
                 break;
@@ -1563,7 +1581,7 @@ where
         >,
         context: ApEapolTxContext,
         now: Instant,
-    ) -> Result<(), Halt> {
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         match self.engine.write_eapol(frame, &mut self.scratch) {
             Ok(written) => self.send_scratch(
                 written,
@@ -1589,7 +1607,7 @@ where
         purpose: Purpose,
         operation: TxOperation,
         now: Instant,
-    ) -> Result<(), Halt> {
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         let Some(mut buffer) = self.buffers.pop() else {
             return self.unsent(purpose, now);
         };
@@ -1614,7 +1632,7 @@ where
 
     /// A frame of `purpose` did not go: what its terminal would have done
     /// without delivery.
-    fn unsent(&mut self, purpose: Purpose, now: Instant) -> Result<(), Halt> {
+    fn unsent(&mut self, purpose: Purpose, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         match purpose {
             Purpose::Eapol(context) => {
                 if self.engine.eapol_sent(context, false, now).is_err() {
@@ -1636,7 +1654,7 @@ where
     }
 
     /// Write and submit the beacon due now.
-    fn send_beacon(&mut self, now: Instant) -> Result<(), Halt> {
+    fn send_beacon(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         if self.engine.next_beacon().is_none_or(|due| now < due) || self.tickets.is_empty() {
             return Ok(());
         }
@@ -1677,7 +1695,7 @@ where
         operation: TxOperation,
         deadline: Option<Instant>,
         now: Instant,
-    ) -> Result<(), Halt> {
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
         let Some(ticket) = self.tickets.pop() else {
             self.give_buffer(buffer)?;
             return self.unsent(purpose, now);

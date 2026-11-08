@@ -199,7 +199,10 @@ pub(crate) async fn serve_access_point(start: ApStart) {
         ApExit::ReleaseFailed(_) => crate::fail(oer_portable_diagnostics::name!("ap-release"; 32)),
         ApExit::StartRefused => crate::fail(oer_portable_diagnostics::name!("ap-start"; 32)),
         ApExit::StopUnconfirmed => crate::fail(oer_portable_diagnostics::name!("ap-stop"; 32)),
-        ApExit::Faulted => crate::fail(oer_portable_diagnostics::name!("ap-faulted"; 32)),
+        ApExit::Faulted(fault) => crate::fail_path(
+            oer_portable_diagnostics::name!("ap-faulted"; 32),
+            &oer_portable_diagnostics::DiagPath::of(&fault),
+        ),
         ApExit::Contract(_) => crate::fail(oer_portable_diagnostics::name!("ap-contract"; 32)),
     }
 }

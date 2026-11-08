@@ -360,22 +360,22 @@ impl<F: core::future::Future> core::future::Future for Woken<F> {
 
 /// Run `script` beside the runner, the runner polled only when woken; the
 /// runner's end once the script asked it to stop and let it finish.
-async fn drive<R>(
-    run: impl core::future::Future<Output = ApEnd<R>>,
+async fn drive<R, F>(
+    run: impl core::future::Future<Output = ApEnd<R, F>>,
     script: impl core::future::Future<Output = ()>,
-) -> ApEnd<R> {
+) -> ApEnd<R, F> {
     match select(Woken::new(run), script).await {
         Either::First(end) => end,
         Either::Second(()) => panic!("the runner does not stop by the script's end"),
     }
 }
 
-fn stopped<R>(end: ApEnd<R>) -> R {
+fn stopped<R, F: core::fmt::Debug>(end: ApEnd<R, F>) -> R {
     match end {
         ApEnd::Stopped(runner) => runner,
         ApEnd::StartRefused => panic!("the radio starts"),
         ApEnd::StopUnconfirmed(unconfirmed) => panic!("the stop is confirmed: {unconfirmed:?}"),
-        ApEnd::Faulted => panic!("the port faulted"),
+        ApEnd::Faulted(fault) => panic!("the port faulted: {fault:?}"),
         ApEnd::Contract(contract) => panic!("the runner's contract: {contract:?}"),
         ApEnd::Refused(_, refusal) => panic!("the port takes every command: {refusal:?}"),
     }
