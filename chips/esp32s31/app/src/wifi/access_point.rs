@@ -3,13 +3,14 @@
 //! runner and its IP stack on the application executor, beside the
 //! image's roots.
 //!
-//! [`AccessPoint::start`] runs in the image's boot. Once the executor runs,
-//! the library's access-point task serves the BSS and the stack together;
-//! an exit other than an ordinary stop records and resets.
+//! [`AccessPoint::start`] runs in the image's boot; the application then
+//! names the channel and the BSS once with [`AccessPoint::serve`]. Once the
+//! executor runs, the library's access-point task serves the BSS and the
+//! stack together; an exit other than an ordinary stop records and resets.
 
 use super::*;
 use oer_chips_esp32s31_radio_ieee80211_station::access_point::{
-    self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage, ApExit,
+    self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage, ApExit, StartRefused,
 };
 use oer_portable_embassy_net::{
     NetworkInterfaceId, OwnedNetworkTxFrame,
@@ -63,11 +64,11 @@ pub struct AccessPoint {
 }
 
 impl AccessPoint {
-    /// Start the access point of `settings` on `wifi` at `address` (its
-    /// static IPv4 configuration, no gateway) on the channel of `config`:
-    /// the radio executor, the radio actor, the MAC driver, the access
+    /// Prepare the access point on `wifi` with `address` as its static
+    /// IPv4 configuration: the radio executor, the radio actor, the access
     /// point's runner and its IP service. Its task runs once the executor
-    /// does.
+    /// does and waits for [`Self::serve`]; `config` is the regulatory
+    /// configuration until then.
     ///
     /// # Errors
     /// The radio started already, or a binding, storage or the stack's
@@ -75,7 +76,6 @@ impl AccessPoint {
     pub fn start(
         wifi: WifiPeripheral,
         config: Config,
-        settings: ApSettings,
         address: ip::Ipv4Configuration,
         boot: &mut Boot,
     ) -> Result<Self, Error> {
@@ -90,7 +90,6 @@ impl AccessPoint {
             wifi::access_point::access_point::<binding::Binding, OwnedNetworkTxFrame>(
                 started.resources,
                 config.chip,
-                settings,
                 storage,
                 started.nonces,
             );
@@ -124,6 +123,18 @@ impl AccessPoint {
             net,
             address: mac,
         })
+    }
+
+    /// Serve the BSS of `settings` on the channel of `config`: the runner
+    /// derives the PMK, installs the radio and beacons. An access point
+    /// serves once.
+    ///
+    /// # Errors
+    /// It serves already; the settings come back.
+    pub fn serve(&self, config: Config, settings: ApSettings) -> Result<(), ApSettings> {
+        self.control
+            .start(config.chip, settings)
+            .map_err(|StartRefused::AlreadyStarted(settings)| settings)
     }
 
     /// The access point's status now.

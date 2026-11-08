@@ -306,6 +306,11 @@ impl ApShared {
         .await
     }
 
+    /// Wait until the application asks the access point to stop.
+    pub async fn stop_requested(&self) {
+        poll_fn(|cx| self.poll_stop(cx)).await;
+    }
+
     fn poll_stop(&self, cx: &mut Context<'_>) -> Poll<()> {
         self.stop_waker.register(cx.waker());
         if self.stop.get() {

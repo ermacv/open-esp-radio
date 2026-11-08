@@ -1,8 +1,9 @@
 //! The S31 access point: the S31 data port under the access point's
 //! runner (`oer_protocols_ieee80211_runtime::access_point`).
 //!
-//! The composition starts the radio and installs the port as the station's
-//! composition does, gives the runner the installation's access-point
+//! The composition's runner waits for the application's start, which names
+//! the channel and the BSS, then starts the radio and installs the port as
+//! the station's composition does, gives the runner the installation's access-point
 //! tokens, its tickets and the first [`AP_BANK`] transmit buffers, and runs
 //! it with the access point's own engine. The station's tokens of the
 //! installation stay unused: an access-point-only image runs no station.
@@ -50,14 +51,25 @@ const _: () = {
 pub struct ApSettings {
     /// Its SSID.
     pub ssid: WifiSsid,
-    /// Its WPA2-Personal passphrase: 8 to 63 characters.
-    pub passphrase: heapless::Vec<u8, 63>,
+    /// Its WPA2-Personal passphrase: 8 to 63 characters, erased on drop.
+    pub passphrase: zeroize::Zeroizing<heapless::Vec<u8, 63>>,
     /// The beacon interval, in TU.
     pub beacon_interval_tu: u16,
     /// The DTIM period, in beacons.
     pub dtim_period: u8,
     /// The stations it admits at most.
     pub client_limit: AccessPointClientLimit,
+}
+
+impl core::fmt::Debug for ApSettings {
+    /// Every setting but the passphrase.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ApSettings")
+            .field("ssid_octets", &self.ssid.as_bytes().len())
+            .field("beacon_interval_tu", &self.beacon_interval_tu)
+            .field("dtim_period", &self.dtim_period)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Why the settings are not a BSS the access point serves.
@@ -84,8 +96,9 @@ impl ApSettings {
         if !(8..=63).contains(&passphrase.len()) {
             return Err(ApSettingsError::Passphrase);
         }
-        let passphrase =
-            heapless::Vec::from_slice(passphrase).map_err(|_| ApSettingsError::Passphrase)?;
+        let passphrase = zeroize::Zeroizing::new(
+            heapless::Vec::from_slice(passphrase).map_err(|_| ApSettingsError::Passphrase)?,
+        );
         let client_limit =
             AccessPointClientLimit::new(clients).map_err(|_| ApSettingsError::ClientLimit)?;
         Ok(Self {
@@ -104,6 +117,7 @@ pub struct AccessPointStorage {
     template: [u8; AP_BEACON_CAPACITY],
     network: ApNetworkStorage,
     shared: ApShared,
+    start: StartSlot,
 }
 
 impl AccessPointStorage {
@@ -113,6 +127,41 @@ impl AccessPointStorage {
             template: [0; AP_BEACON_CAPACITY],
             network: ApNetworkStorage::new(),
             shared: ApShared::new(),
+            start: StartSlot::new(),
+        }
+    }
+}
+
+/// The application's one start of the access point, until its runner takes
+/// it.
+struct StartSlot {
+    start: core::cell::Cell<Option<(Config, ApSettings)>>,
+    /// Whether a start was given: a second one is refused.
+    given: core::cell::Cell<bool>,
+    waker: oer_portable_sync::PriorityWaker,
+}
+
+impl StartSlot {
+    const fn new() -> Self {
+        Self {
+            start: core::cell::Cell::new(None),
+            given: core::cell::Cell::new(false),
+            waker: oer_portable_sync::PriorityWaker::new(),
+        }
+    }
+
+    /// Wait for the start, or for a stop asked before it.
+    async fn take(&self, shared: &ApShared) -> Option<(Config, ApSettings)> {
+        let start = core::future::poll_fn(|cx| {
+            self.waker.register(cx.waker());
+            match self.start.take() {
+                Some(start) => core::task::Poll::Ready(start),
+                None => core::task::Poll::Pending,
+            }
+        });
+        match embassy_futures::select::select(start, shared.stop_requested()).await {
+            embassy_futures::select::Either::First(start) => Some(start),
+            embassy_futures::select::Either::Second(()) => None,
         }
     }
 }
@@ -126,9 +175,33 @@ impl Default for AccessPointStorage {
 /// The application's end of the access point.
 pub struct AccessPointControl {
     shared: &'static ApShared,
+    start: &'static StartSlot,
+}
+
+/// Why the access point refused a start.
+#[derive(Debug)]
+pub enum StartRefused {
+    /// It was started once already; the settings come back.
+    AlreadyStarted(ApSettings),
 }
 
 impl AccessPointControl {
+    /// Start the access point on `config`'s channel with `settings`: its
+    /// runner derives the PMK, starts the radio and beacons. The start is
+    /// the access point's one; a stop asked before it ends the runner
+    /// without a radio.
+    ///
+    /// # Errors
+    /// A second start returns its settings.
+    pub fn start(&self, config: Config, settings: ApSettings) -> Result<(), StartRefused> {
+        if self.start.given.replace(true) {
+            return Err(StartRefused::AlreadyStarted(settings));
+        }
+        self.start.start.set(Some((config, settings)));
+        self.start.waker.wake();
+        Ok(())
+    }
+
     /// The access point's status now.
     pub fn status(&self) -> ApStatus {
         self.shared.status()
@@ -177,7 +250,7 @@ pub enum ApExit {
 /// The access point's task: it owns the radio.
 pub struct AccessPointRunner<W: Binding> {
     boot: radio::Boot<W>,
-    settings: ApSettings,
+    start: &'static StartSlot,
     network: ApNetworkEnd<'static>,
     peers: &'static mut AccessPointPeerStorage,
     template: &'static mut [u8; AP_BEACON_CAPACITY],
@@ -189,11 +262,12 @@ pub struct AccessPointRunner<W: Binding> {
 pub type ApNetwork = ApNetDevice<'static>;
 
 /// Assemble the access point over `resources`: its control, its network
-/// device and sending path for the stack's frames `F`, and its task.
+/// device and sending path for the stack's frames `F`, and its task, which
+/// waits for the control's start. `config` holds the radio's regulatory
+/// configuration until the start names the one it runs on.
 pub fn access_point<W: Binding, F>(
     resources: Resources<W>,
     config: Config,
-    settings: ApSettings,
     storage: &'static mut AccessPointStorage,
     nonces: &'static mut crate::NonceSource,
 ) -> (
@@ -237,11 +311,13 @@ pub fn access_point<W: Binding, F>(
         template,
         network,
         shared,
+        start,
     } = storage;
     let (device, transmit, end) = network.split::<F>();
     let shared: &'static ApShared = shared;
+    let start: &'static StartSlot = start;
     (
-        AccessPointControl { shared },
+        AccessPointControl { shared, start },
         device,
         transmit,
         AccessPointRunner {
@@ -265,7 +341,7 @@ pub fn access_point<W: Binding, F>(
                 chains,
                 storage: &mut station.driver,
             },
-            settings,
+            start,
             network: end,
             peers,
             template,
@@ -276,18 +352,23 @@ pub fn access_point<W: Binding, F>(
 }
 
 impl<W: Binding> AccessPointRunner<W> {
-    /// Run the access point until its stop, then release the radio.
+    /// Wait for the start, run the access point until its stop, then
+    /// release the radio. A stop before the start ends it at once, with no
+    /// radio started.
     pub async fn run(self) -> ApExit {
         let Self {
-            boot,
-            settings,
+            mut boot,
+            start,
             network,
             peers,
             template,
             shared,
             mut nonces,
         } = self;
-        let config = boot.config;
+        let Some((config, settings)) = start.take(shared).await else {
+            return ApExit::Stopped;
+        };
+        boot.config = config;
         let Some(mut installations) = W::take_installations() else {
             return ApExit::Unavailable(InitializationError::Storage);
         };
