@@ -185,7 +185,11 @@ room is woken by room. `give_back` ends the exchange before the port ends: it gi
 back every frame the device's queue holds and takes back the memory the device
 returned, as the device's queues outlive the port, and leaves no refused frame
 waiting, so a next service over the same port starts idle. `serve_returns` is the
-return path of a port whose service no longer runs: the service's owner keeps the
-service when its `run` is dropped (`retire` takes it whenever), and drives the
-port's returns, frames given back and memory taken back with a registration for the
-next of each, until the device's owner says it is done.
+return path of a port whose service no longer runs, for a composition that cancels
+its network: an owner that outlives the cancelled future keeps the service
+(`retire` takes it whenever) and drives the port's returns, frames given back and
+memory taken back with a registration for the next of each, until the device's
+owner says it is done. Nothing serves the returns of a composition without such an
+owner. The S31 application does not cancel its network task: that task is a root
+pinned in an executor frame that never returns, and it has no such owner. A change
+that cancels it must bring a working return path with it.

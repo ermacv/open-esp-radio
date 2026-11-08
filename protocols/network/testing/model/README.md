@@ -50,6 +50,12 @@ station on the new installation's tokens takes the retired station's configurati
 the control opens a new epoch over the same command queue and state, and the network's
 core takes the retired pool and brand, the same device port and transmit memory.
 
+A case may drop the network service's `run` future mid-traffic: the harness's
+network task, which outlives that future, then keeps the service, retires it and
+serves the port's returns (`DevicePort::serve_returns`). That shows a host
+composition with such an owner recovering; it does not cancel the S31
+application's network task, which today is never cancelled.
+
 What it shows is the protocol composition over the model's port: the real handshake,
 DHCP, UDP, echo and the tasks' interaction under virtual time. The S31 hardware's
 wakes, its HE path and transmit timing are outside it.

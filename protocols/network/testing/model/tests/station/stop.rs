@@ -413,13 +413,16 @@ fn a_lost_network_participant_before_and_after_the_deadline_is_handled_and_the_o
     again.assert_stopped_with_every_owner();
 }
 
-/// The owner's cancellation: the network service's real `run` future is
-/// dropped mid-traffic, with an aggregate held on the air, 24 datagrams in
-/// the station and a receive burst arriving, while the composition keeps
-/// the service. It retires it and serves the port's returns from then on,
-/// so the station's later graceful stop finds its memory taken back and
-/// its frames given back, and confirms. Every block and transmit buffer is
-/// home, and a second session starts from the same owners.
+/// A host composition that cancels its network: the network service's real
+/// `run` future is dropped mid-traffic, with an aggregate held on the air,
+/// 24 datagrams in the station and a receive burst arriving, while the
+/// composition, the owner that outlives that future, keeps the service. It
+/// retires it and serves the port's returns from then on, so the station's
+/// later graceful stop finds its memory taken back and its frames given
+/// back, and confirms. Every block and transmit buffer is home, and a
+/// second session starts from the same owners. This is the harness's
+/// composition, not the S31 application's, which does not cancel its
+/// network task.
 #[test]
 fn a_dropped_network_run_is_served_by_its_owner_and_every_owner_returns() {
     struct Net;

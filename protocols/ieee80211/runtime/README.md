@@ -177,9 +177,11 @@ they are home, looked at after every arena's end settled, the stop ends
 with `StopOutcome::NetworkLost`
 (`LifecycleEnd::StoppedNetworkLost`) before the deadline, or the late return
 completes after it; `Actor::network_lost` tells the composition, which
-records it. Neither end is terminal. The deadline ends the lifecycle's wait;
-the facade's public stop waits for the actual return and the radio's
-release.
+records it. Neither end is terminal. That share comes home only while an
+owner of the network's side still takes the return queue and gives back the
+lent units; without one the stop stays returning. The deadline ends the
+lifecycle's wait; the facade's public stop waits for the actual return and
+the radio's release.
 A stop for the next installation keeps the network and its MSDUs. An actor
 reinstalled after a stop that stopped the network asks the next network to
 stop again at its own stop. A new control epoch's reconnect policy keeps its

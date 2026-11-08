@@ -104,10 +104,11 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
 
     /// [`Self::give_back`], then register `cx` for the device's next frame
     /// and its next returned memory, looking again until neither is ready.
-    /// The return path of a port whose service no longer runs: its owner
-    /// drives it after the service's `run` was cancelled or the service
-    /// retired, so what the device hands over or gives back keeps coming
-    /// home without the service.
+    /// The return path of a port whose service no longer runs: an owner
+    /// that outlives a cancelled `run` (or a retired service) drives it, so
+    /// what the device hands over or gives back keeps coming home without
+    /// the service. Only a composition that has such an owner gets this
+    /// return; cancelling the network without one serves nothing.
     pub fn serve_returns(&mut self, cx: &mut Context<'_>) {
         loop {
             self.give_back();
