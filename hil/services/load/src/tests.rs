@@ -729,6 +729,8 @@ fn full_network() -> NetworkTurns {
         yields_with_work: all,
         waits_pending: all,
         waits_ready: all,
+        reserve_blocks: all,
+        reserve_by_size: [all; RESERVE_BINS],
     }
 }
 
@@ -739,6 +741,8 @@ fn a_network_window_is_each_count_s_difference_and_the_end_s_availability() {
         turns: u32::MAX,
         sends: 10,
         accepted_by_turn: [1, 2, 3, 4, 5, 6, u32::MAX],
+        reserve_blocks: 30,
+        reserve_by_size: [u32::MAX, 0, 1, 2, 3],
         ..NetworkTurns::default()
     };
     let end = NetworkTurns {
@@ -747,6 +751,8 @@ fn a_network_window_is_each_count_s_difference_and_the_end_s_availability() {
         sends: 18,
         accepted_by_turn: [1, 3, 6, 4, 5, 6, 0],
         waits_pending: 2,
+        reserve_blocks: 62,
+        reserve_by_size: [0, 0, 1, 2, 5],
         ..NetworkTurns::default()
     };
     let window = NetworkTurns::window(&start, &end);
@@ -754,6 +760,8 @@ fn a_network_window_is_each_count_s_difference_and_the_end_s_availability() {
     assert_eq!(window.sends, 8);
     assert_eq!(window.accepted_by_turn, [0, 1, 3, 0, 0, 0, 1]);
     assert_eq!(window.waits_pending, 2);
+    assert_eq!(window.reserve_blocks, 32);
+    assert_eq!(window.reserve_by_size, [1, 0, 0, 0, 2]);
     assert!(window.available);
     assert!(!NetworkTurns::window(&start, &NetworkTurns::default()).available);
 }

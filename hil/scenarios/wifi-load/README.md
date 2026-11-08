@@ -110,6 +110,10 @@ in its turns over the window, and prints one line (`network turns
 <level>:`); only a trace image on the network core (`hil-wifi-network`)
 counts them (`available` false otherwise). `requests` counts the requests
 the turns took from the sockets' lanes by kind, with `reserve_per_send`.
+One reservation asks for several blocks: `reserve_blocks` counts the blocks
+the reservations asked for, `blocks_per_reserve` their mean and
+`reserve_by_size` the reservations by how many (`1`, `2`, `3-4`, `5-8`,
+`9-16`).
 `budget_spent` counts the sockets whose lane still held requests when the
 turn had taken its budget of them, `budget_turns` the turns with any and
 `budget_turn_share` their share of `turns`; `intake_full` the turns that

@@ -14,10 +14,61 @@ const ANSWERS: usize = RESERVE_AHEAD + 2;
 /// The most blocks a socket holds or asks for ahead of its sends.
 pub const RESERVE_AHEAD: usize = 16;
 
+/// How many blocks one reservation asks for: one to [`RESERVE_AHEAD`]. Its
+/// constructors clamp to that range or shrink within it, so no request asks
+/// for none or for more than a socket may hold ahead.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Batch(u8);
+
+impl Batch {
+    /// The most a request asks for.
+    const MOST: Self = {
+        if RESERVE_AHEAD == 0 || RESERVE_AHEAD > u8::MAX as usize {
+            panic!("a reservation counts its blocks in one byte, at least one");
+        }
+        Self(RESERVE_AHEAD as u8)
+    };
+
+    /// `blocks`, held to one and [`RESERVE_AHEAD`].
+    fn clamped(blocks: usize) -> Self {
+        match u8::try_from(blocks) {
+            Ok(0) => Self(1),
+            Ok(blocks) if usize::from(blocks) <= RESERVE_AHEAD => Self(blocks),
+            _ => Self::MOST,
+        }
+    }
+
+    /// What `self` leaves beyond `out`, none when nothing.
+    fn beyond(self, out: usize) -> Option<Self> {
+        let left = usize::from(self.0).checked_sub(out)?;
+        u8::try_from(left).ok().filter(|left| *left != 0).map(Self)
+    }
+
+    /// Half of `self`, rounded up: the deficit at which a look-ahead with
+    /// blocks still ready asks again.
+    const fn half(self) -> usize {
+        match self.0.checked_add(1) {
+            Some(twice_up) => (twice_up >> 1) as usize,
+            None => 128,
+        }
+    }
+
+    /// The blocks.
+    pub(crate) const fn blocks(self) -> usize {
+        self.0 as usize
+    }
+
+    /// The blocks, as a turn reports them.
+    pub(crate) const fn count(self) -> u8 {
+        self.0
+    }
+}
+
 /// What a socket asks of the service.
 pub(crate) enum Request<'m, B, const SIZE: usize> {
-    /// A free block; a socket has one such request at a time.
-    Reserve,
+    /// Free blocks, each granted on its own as one comes free. The request
+    /// ends when all came, or with the socket's close, drop or service.
+    Reserve(Batch),
     /// A block back.
     Release(Block<'m, B, SIZE>),
     /// A datagram, under its credit's tag.
@@ -34,7 +85,9 @@ impl<B, const SIZE: usize> Request<'_, B, SIZE> {
     /// The request's kind, as a turn reports it.
     pub(crate) const fn kind(&self) -> crate::RequestKind {
         match self {
-            Self::Reserve => crate::RequestKind::Reserve,
+            Self::Reserve(batch) => crate::RequestKind::Reserve {
+                blocks: batch.count(),
+            },
             Self::Release(_) => crate::RequestKind::Release,
             Self::Send { .. } => crate::RequestKind::Send,
             Self::Close => crate::RequestKind::Close,
@@ -310,7 +363,7 @@ pub(crate) fn lanes<
             credits,
             places,
             reserving: 0,
-            ahead: 1,
+            ahead: Batch::clamped(1),
             closing: false,
             closed: false,
         },
@@ -445,7 +498,7 @@ pub(crate) fn drain_requests<'m, B, const SIZE: usize, const DEPTH: usize, const
                 command(tag);
             }
             Request::Release(block) => pool.give(block),
-            Request::Reserve | Request::Close => {}
+            Request::Reserve(_) | Request::Close => {}
         }
     }
 }
@@ -518,7 +571,7 @@ pub struct Socket<
     /// Reservations asked and not answered.
     reserving: usize,
     /// The blocks to hold or have asked for ([`Socket::reserve_ahead`]).
-    ahead: usize,
+    ahead: Batch,
     /// The socket asked to close: no command follows.
     closing: bool,
     /// The socket's close finished, or the service stopped.
@@ -575,41 +628,79 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
 
     /// Hold up to `blocks` ready, at most [`RESERVE_AHEAD`] and at least one,
     /// so a sender runs a batch without a turn of the service for each block.
+    /// Taking a block asks again once half of them are gone, ready or asked
+    /// for.
     /// They count toward this socket's group while they wait here, and stay
     /// out of every other socket's reach.
     pub fn reserve_ahead(&mut self, blocks: usize) {
-        self.ahead = blocks.max(1).min(RESERVE_AHEAD);
+        self.ahead = Batch::clamped(blocks);
     }
 
     /// A reservation that came, if any.
     fn take_reserved(&mut self) -> Option<Block<'m, B, SIZE>> {
-        self.inbound
+        let block = self
+            .inbound
             .as_mut()?
             .reserved
             .iter_mut()
-            .find_map(Option::take)
+            .find_map(Option::take)?;
+        self.refill();
+        Some(block)
     }
 
-    /// Ask for what [`Self::reserve_ahead`] leaves out. Only the first block
-    /// may take the lane's last place: a release or a send needs it more
-    /// than a block that nobody waits for.
-    fn ask_ahead(&mut self) {
-        let held = self.inbound.as_ref().map_or(0, |lanes| {
+    /// The blocks that came and wait here.
+    fn ready(&self) -> usize {
+        self.inbound.as_ref().map_or(0, |lanes| {
             lanes
                 .reserved
                 .iter()
                 .filter(|place| place.is_some())
                 .count()
-        });
-        loop {
-            let out = held.saturating_add(self.reserving);
-            if out >= self.ahead || (out != 0 && self.requests.free_capacity() <= 1) {
-                return;
-            }
-            if self.requests.try_send(Request::Reserve).is_err() {
-                return;
-            }
-            self.reserving = self.reserving.saturating_add(1);
+        })
+    }
+
+    /// A block was taken: ask again once half the look-ahead is gone, ready
+    /// or asked for, so the request goes while the rest still cover the
+    /// sender. With a look-ahead of sixteen, a sender that takes the same c
+    /// blocks between two turns never finds none ready after its first for
+    /// c of 1 to 10, 12 and 16; for other bursts, or a larger burst after a
+    /// smaller one (sixteen after nine), a send can still find none and wait
+    /// for the next request. A look-ahead of one block asks when it finds
+    /// none, as before. A closed socket asks for nothing.
+    fn refill(&mut self) {
+        if self.ahead.blocks() == 1
+            || self.closed
+            || self.closing
+            || self.credits.stopped.load(Ordering::Acquire)
+        {
+            return;
+        }
+        self.ask(self.ready(), self.ahead.half());
+    }
+
+    /// Ask for what [`Self::reserve_ahead`] leaves out, none being ready.
+    fn ask_ahead(&mut self) {
+        self.ask(self.ready(), 1);
+    }
+
+    /// Ask, in one request, for what the look-ahead lacks beyond the `held`
+    /// ready and those asked for, if that is at least `least`. Only a socket
+    /// that holds and asked for nothing may take the lane's last place: a
+    /// release or a send needs it more than blocks nobody waits for.
+    fn ask(&mut self, held: usize, least: usize) {
+        let out = held.saturating_add(self.reserving);
+        let Some(batch) = self
+            .ahead
+            .beyond(out)
+            .filter(|batch| batch.blocks() >= least)
+        else {
+            return;
+        };
+        if out != 0 && self.requests.free_capacity() <= 1 {
+            return;
+        }
+        if self.requests.try_send(Request::Reserve(batch)).is_ok() {
+            self.reserving = self.reserving.saturating_add(batch.blocks());
         }
     }
 
@@ -856,7 +947,22 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
 
 #[cfg(test)]
 mod tests {
-    use super::{FIRST_RESULT, RESULTS, word_of};
+    use super::{Batch, FIRST_RESULT, RESERVE_AHEAD, RESULTS, word_of};
+
+    #[test]
+    fn a_batch_asks_for_one_to_the_look_ahead() {
+        assert_eq!(Batch::clamped(0).blocks(), 1);
+        assert_eq!(Batch::clamped(5).blocks(), 5);
+        assert_eq!(Batch::clamped(usize::MAX).blocks(), RESERVE_AHEAD);
+        let ahead = Batch::clamped(RESERVE_AHEAD);
+        assert_eq!(ahead.beyond(0), Some(ahead));
+        assert_eq!(ahead.beyond(3).map(Batch::blocks), Some(RESERVE_AHEAD - 3));
+        assert_eq!(ahead.beyond(RESERVE_AHEAD), None, "nothing left to ask");
+        assert_eq!(ahead.beyond(RESERVE_AHEAD + 1), None, "more out than ahead");
+        assert_eq!(ahead.half(), RESERVE_AHEAD / 2);
+        assert_eq!(Batch::clamped(1).half(), 1);
+        assert_eq!(Batch::clamped(5).half(), 3);
+    }
 
     #[test]
     fn every_result_has_its_own_word() {

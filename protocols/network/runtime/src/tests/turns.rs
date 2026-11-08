@@ -86,6 +86,33 @@ impl Turn {
     fn took(&self, kind: RequestKind) -> usize {
         self.took.iter().filter(|took| **took == kind).count()
     }
+
+    /// The reservations the turn took.
+    fn reserves(&self) -> usize {
+        self.took
+            .iter()
+            .filter(|took| matches!(took, RequestKind::Reserve { .. }))
+            .count()
+    }
+
+    /// The blocks each asked for.
+    fn sizes(&self) -> impl Iterator<Item = usize> + '_ {
+        self.took.iter().filter_map(|took| match took {
+            RequestKind::Reserve { blocks } => Some(usize::from(*blocks)),
+            _ => None,
+        })
+    }
+
+    /// The blocks they asked for.
+    fn asked(&self) -> usize {
+        self.took
+            .iter()
+            .map(|took| match took {
+                RequestKind::Reserve { blocks } => usize::from(*blocks),
+                _ => 0,
+            })
+            .sum()
+    }
 }
 
 /// The turns `events` tell, each ended by its `TurnEnded`.
@@ -145,10 +172,26 @@ fn an_unpaced_sender_s_turns_take_its_reserves_and_sends_within_the_budget() {
 
     let took = |kind| turns.iter().map(|turn| turn.took(kind)).sum::<usize>();
     assert_eq!(took(RequestKind::Send), DATAGRAMS);
-    let reserves = took(RequestKind::Reserve);
+    // One reservation asks for what the look-ahead lacks: every block sent
+    // was asked for, and at most the look-ahead more.
+    let reserves: usize = turns.iter().map(Turn::reserves).sum();
+    let asked: usize = turns.iter().map(Turn::asked).sum();
     assert!(
-        (DATAGRAMS..=DATAGRAMS + RESERVE_AHEAD).contains(&reserves),
-        "one reserve per block, and at most the look-ahead not sent: {reserves}"
+        (DATAGRAMS..=DATAGRAMS + RESERVE_AHEAD).contains(&asked),
+        "every block sent was asked for, at most the look-ahead not sent: {asked}"
+    );
+    // The first asks for the whole look-ahead; after it, each take that
+    // leaves half of it out asks for that half: messages per datagram are
+    // 1 + 1/8, not 2.
+    let sizes: Vec<usize> = turns.iter().flat_map(Turn::sizes).collect();
+    assert_eq!(sizes[0], RESERVE_AHEAD);
+    assert!(
+        sizes[1..].iter().all(|blocks| *blocks == RESERVE_AHEAD / 2),
+        "{sizes:?}"
+    );
+    assert!(
+        reserves <= DATAGRAMS.div_ceil(RESERVE_AHEAD / 2) + 1,
+        "{reserves} reservations for {DATAGRAMS} datagrams"
     );
     assert_eq!(took(RequestKind::Release) + took(RequestKind::Close), 0);
 
@@ -167,8 +210,9 @@ fn an_unpaced_sender_s_turns_take_its_reserves_and_sends_within_the_budget() {
         "every frame the port took, ARP's among them"
     );
 
-    // What the turns that took a request show: the budget ends most, and two
-    // requests a datagram leave about two datagrams a turn.
+    // What the turns that took a request show: the sends alone still spend
+    // the budget in most, and a reservation a look-ahead leaves more than
+    // three datagrams a turn, where one a block left two.
     let busy: Vec<&Turn> = turns.iter().filter(|turn| !turn.took.is_empty()).collect();
     let spent = busy.iter().filter(|turn| turn.spent != 0).count();
     assert!(
@@ -178,7 +222,7 @@ fn an_unpaced_sender_s_turns_take_its_reserves_and_sends_within_the_budget() {
     );
     let sent: usize = busy.iter().map(|turn| turn.took(RequestKind::Send)).sum();
     assert!(
-        sent <= busy.len() * TURN_COMMANDS / 2 + RESERVE_AHEAD,
+        3 * busy.len() < sent,
         "{sent} datagrams over {} busy turns",
         busy.len()
     );
@@ -205,6 +249,25 @@ fn an_unpaced_sender_s_turns_take_its_reserves_and_sends_within_the_budget() {
     );
 }
 
+/// Take `count` blocks into the application's hands, one a turn of `run`,
+/// leaving nothing asked.
+fn hold<B, R: Future>(
+    socket: &mut FlowSocket<B>,
+    run: &mut core::pin::Pin<&mut R>,
+    count: usize,
+) -> Vec<Block<'static, B, SIZE>> {
+    // One at a time: a look-ahead of one asks only when it finds none.
+    socket.reserve_ahead(1);
+    let mut held = Vec::new();
+    while held.len() < count {
+        match socket.try_reserve().unwrap() {
+            Some(block) => held.push(block),
+            None => pass(run),
+        }
+    }
+    held
+}
+
 #[test]
 fn a_spent_budget_counts_only_while_the_lane_holds_more() {
     brand!(Net);
@@ -213,17 +276,19 @@ fn a_spent_budget_counts_only_while_the_lane_holds_more() {
     let mut seen = Seen::default();
     {
         let mut run = pin!(service.run(clock, &mut seen));
-        socket.reserve_ahead(TURN_COMMANDS);
-        assert!(socket.try_reserve().unwrap().is_none());
+        for block in hold(&mut socket, &mut run, TURN_COMMANDS) {
+            socket.release(block).ok().unwrap();
+        }
         pass(&mut run);
     }
+    let release = ServiceEvent::Took(RequestKind::Release);
     assert_eq!(
-        seen.0,
+        seen.0[seen.0.len() - 7..],
         [
-            ServiceEvent::Took(RequestKind::Reserve),
-            ServiceEvent::Took(RequestKind::Reserve),
-            ServiceEvent::Took(RequestKind::Reserve),
-            ServiceEvent::Took(RequestKind::Reserve),
+            release,
+            release,
+            release,
+            release,
             ServiceEvent::Published(PublishEnd::Chose),
             ServiceEvent::TurnEnded(TurnEnd {
                 blocks_free: true,
@@ -239,21 +304,20 @@ fn a_spent_budget_counts_only_while_the_lane_holds_more() {
     let mut seen = Seen::default();
     {
         let mut run = pin!(service.run(clock, &mut seen));
-        socket.reserve_ahead(TURN_COMMANDS + 1);
-        assert!(socket.try_reserve().unwrap().is_none());
+        for block in hold(&mut socket, &mut run, TURN_COMMANDS + 1) {
+            socket.release(block).ok().unwrap();
+        }
         pass(&mut run);
         pass(&mut run);
     }
     let turns = turns(&seen.0);
-    assert_eq!(turns.len(), 2);
+    // The two turns the releases took.
+    let last = &turns[turns.len() - 2..];
     assert_eq!(
-        (turns[0].took(RequestKind::Reserve), turns[0].spent),
+        (last[0].took(RequestKind::Release), last[0].spent),
         (TURN_COMMANDS, 1)
     );
-    assert_eq!(
-        (turns[1].took(RequestKind::Reserve), turns[1].spent),
-        (1, 0)
-    );
+    assert_eq!((last[1].took(RequestKind::Release), last[1].spent), (1, 0));
 }
 
 #[test]

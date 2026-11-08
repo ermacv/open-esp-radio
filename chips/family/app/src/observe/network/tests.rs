@@ -31,7 +31,13 @@ fn each_request_counts_by_its_kind() {
     turn(
         &mut tally,
         &counter,
-        &[Reserve, Reserve, Send, Release, Close],
+        &[
+            Reserve { blocks: 1 },
+            Reserve { blocks: 16 },
+            Send,
+            Release,
+            Close,
+        ],
         0,
         0,
         Publish::Chose,
@@ -42,6 +48,20 @@ fn each_request_counts_by_its_kind() {
         (2, 1, 1, 1)
     );
     assert_eq!(read.turns, 1);
+}
+
+#[test]
+fn a_reservation_counts_the_blocks_it_asks_for_and_fills_one_bin() {
+    let counter = NetworkCounter::new();
+    let mut tally = TurnTally::new();
+    let asked = [1, 2, 3, 4, 5, 8, 9, 16, 16];
+    let took = asked.map(|blocks| Request::Reserve { blocks });
+    turn(&mut tally, &counter, &took, 0, 0, Publish::Chose);
+    let read = counter.read();
+    assert_eq!(read.reserves, 9, "one per message");
+    assert_eq!(read.reserve_blocks, 64, "the blocks they asked for");
+    assert_eq!(read.reserve_by_size, [1, 1, 2, 2, 3]);
+    assert_eq!(read.sends, 0);
 }
 
 #[test]
