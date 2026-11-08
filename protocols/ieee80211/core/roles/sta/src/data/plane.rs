@@ -680,11 +680,11 @@ impl DataPlane {
         if book.pending == 0 {
             return Ok(());
         }
-        let mut leave = book.with_costs(book.pending, |memory, cost| {
+        let leave = book.with_costs(book.pending, |memory, cost| {
             report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
             returned(memory, cost);
         });
-        arena.withdraw(right, |memory| leave(memory))?;
+        arena.withdraw(right, leave)?;
         book.clear();
         Ok(())
     }

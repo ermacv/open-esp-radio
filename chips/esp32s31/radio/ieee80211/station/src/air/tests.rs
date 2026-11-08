@@ -13,3 +13,9 @@ fn an_unknown_cost_is_charged_the_backends_ceiling_of_the_executed_bounds() {
     assert!(S31Ceiling.ceiling(1514) > S31Ceiling.ceiling(64));
     assert_eq!(S31Ceiling.ceiling(13), NonZeroU32::MAX);
 }
+
+#[test]
+fn a_longer_frame_asks_a_longer_least_grant() {
+    assert!(S31Ceiling.least(1514) > S31Ceiling.least(64));
+    assert!(S31Ceiling.least(1514) < S31Ceiling.ceiling(1514));
+}

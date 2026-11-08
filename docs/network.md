@@ -41,7 +41,7 @@ aliases and include optional and target-specific dependencies.
 | Crate | Owns | Does not own |
 | --- | --- | --- |
 | `oer-protocols-network-core` (`protocols/network/core`) | the sans-IO core with one owner: UDP, ARP, blocks, choosing work before a frame is built; the HIL `wifi-station` image links it | tasks, queues, time |
-| `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task and its sockets over messages; the HIL `wifi-station` image links it | protocol state, the port's implementation |
+| `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task, its sockets and its local producer, and `DevicePort`, whose frames carry the buffers' tickets and whose notices are the buffers' ends; the HIL `wifi-station` image links it | protocol state, the port's implementation |
 | `oer-protocols-network-testing-model` (`protocols/network/testing/model`) | a host model of one shared medium with several peers, the egress scenarios over the real stack, and the end-to-end station and network simulation against a simulated access point (its [README](../protocols/network/testing/model/README.md)) | product code; no product package depends on it |
 | `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, the `NetDevice` and `NetTransmit` contracts, and `FramePort`, `FrameSource` and `Egress`, the new core's port and its policy | queues, allocator, executor, hardware |
 | `oer-protocols-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-portable-wire` | decisions about a packet, IEEE 802.11 formats |
@@ -131,6 +131,52 @@ station (P2)
   an estimated BlockAck overhead, not an HE duration model.
 - `TxCompletion` exposes completion class, ACK SNR and trigger-flow packet
   counts (not retry counts); it exposes no response PHY or measured airtime.
+
+## Queued egress on the station (`oer::wifi::Queued`)
+
+The network core's egress is chosen by type: `wifi::Network<P, Queued>` takes
+the airtime egress (`AirtimeEgress`), `wifi::Network<P, Direct>` the first
+ready work with no table or account. How an application provides data, a
+local producer or a socket's blocks, does not depend on the mode; waiting work
+stays outside the transmit buffers in either, and a frame is built in one
+only after the policy chose it and the port gave the room.
+
+- **Accounts.** `StationAir` (`oer-protocols-ieee80211-runtime::station`)
+  keys the station's air by the link epoch: every frame of a station,
+  broadcast included, goes to its access point, so one account per
+  association. Control work goes first; flows take turns within the
+  account. Service classes are not separated yet.
+- **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
+  publications that reached the air by the backend's declared model: the
+  modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck
+  at the lowest mandatory rate of the PPDU's modulation class. AIFS, backoff
+  and CCA waits are not counted, nor publications that never reached the air.
+  It is the cost of that model, "PPDU + SIFS + ACK/BA", not a measured medium
+  occupancy and not a frame's service time. That the S31 MAC makes no
+  transmission of its own inside one publication is an unverified
+  assumption; it limits how far the model follows the air, and no airtime
+  guarantee rests on it.
+- **Split.** The data plane divides each attempt's cost among the frames the
+  attempt carried, exactly once, the first taking the remainder, and keeps
+  each frame's sum across its selective retries; a frame returns its memory
+  with that sum. An attempt the model cannot time makes its frames' cost
+  `Unknown` for good.
+- **Ceiling.** A frame of unknown cost is charged
+  `msdu_cost_ceiling_micros` (`lower_mac::arena`): up to the data plane's 32
+  aggregate attempts of a member, each its whole aggregate (HT within its
+  5484 us L-SIG TXTIME, HE the longest PPDU of the HE aggregate limit at HE
+  MCS 0, 4x HE-LTF, 3.2 us GI), then the largest single plan of any rate
+  record (32) at 1 Mb/s DSSS. It is a margin, not a statement of accuracy.
+- **Return and settlement are two events.** The station's buffer comes back
+  with its frame's cost (`TxSupply::give`) and waits with that end in
+  `Completions`; the buffer is free again only when the port hands the end
+  on to the policy (`TxBuffers::take_notice`). So no more frames are
+  unsettled than there are buffers, which is the policy's reservation
+  bound (`NETWORK_BUFFERS`). The port asks for returned buffers whether or
+  not it sends, so an idle network still settles. A frame lost with its
+  buffer at publication settles as `RadioNotice::Lost` at its ceiling; that
+  settles the account only and returns no memory. A new link epoch ends
+  the old association's account (`RadioNotice::Left`) before the next end.
 
 ## Physical storage contracts (`oer-portable-embassy-net::datapath`)
 

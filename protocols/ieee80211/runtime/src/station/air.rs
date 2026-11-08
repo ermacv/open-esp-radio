@@ -7,7 +7,7 @@
 //! the link epoch the network side reads. A frame's end carries what its
 //! transmissions cost by the backend's model ([`TxEstimate`]); one whose
 //! cost is not known is charged the backend's ceiling of that model
-//! ([`CostCeiling`]).
+//! ([`FrameCost`]).
 //!
 //! A buffer the station gives back and its frame's settlement are two
 //! events. [`Completions`] keeps each returned buffer with its end until the
@@ -19,7 +19,6 @@ use core::num::NonZeroU32;
 use oer_portable_memory::QueueNotify;
 use oer_protocols_ieee80211_contracts_port::TxEstimate;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeCandidate;
-use oer_protocols_ieee80211_wire::phy::{HtMcs, HtRate, PhyRate, PpduBandwidth};
 use oer_protocols_network_port::{LinkSnapshot, LinkState, Ready};
 
 use super::NetworkLink;
@@ -28,19 +27,14 @@ use crate::egress::{Exchange, PeerAir, RadioNotice};
 /// An association's account: the link epoch it runs under.
 pub type StationKey = u64;
 
-/// The most a frame of a given length can cost by the backend's model on
-/// the path it executes: what an egress policy charges where the cost is
-/// not known.
-pub trait CostCeiling {
+/// What the backend's model says of a frame of a given Ethernet length: the
+/// least it costs, its least useful grant, and the most it can cost on the
+/// path the backend executes, which an egress policy charges where the cost
+/// is not known.
+pub trait FrameCost {
+    fn least(&self, frame_octets: usize) -> NonZeroU32;
     fn ceiling(&self, frame_octets: usize) -> NonZeroU32;
 }
-
-/// What a data MPDU adds to its Ethernet frame on the air, as the least
-/// useful grant counts it: the QoS Data, CCMP and LLC/SNAP headers, an
-/// HT/HE Control field, the MIC and the FCS, less the Ethernet header.
-///
-/// SOURCE: IEEE Std 802.11-2020 9.3.2.1, 9.2.4.6 and 12.5.3.2.
-const MPDU_GROWTH: u32 = 26 + 8 + 8 + 4 + 8 + 4 - 14;
 
 /// The station's air over `link`, the network side's view of its link,
 /// with `C` charging a frame of unknown cost.
@@ -55,25 +49,19 @@ impl<'a, N, C> StationAir<'a, N, C> {
     }
 }
 
-impl<N: QueueNotify, C: CostCeiling> PeerAir for StationAir<'_, N, C> {
+impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
     type Key = StationKey;
 
-    /// While the link is up, its association's account. The least useful
-    /// grant is the frame at the fastest single-stream HT rate, MCS 7,
-    /// 20 MHz, short guard interval.
+    /// While the link is up, its association's account, with the frame's
+    /// least useful grant.
     fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<StationKey>> {
         let link = self.link.snapshot();
         if link.state != LinkState::Up {
             return None;
         }
-        let octets = u32::try_from(ready.length)
-            .ok()?
-            .saturating_add(MPDU_GROWTH);
-        let fastest = HtRate::new(HtMcs::SINGLE_STREAM_MAX, PpduBandwidth::Mhz20, true)?;
-        let minimum = PhyRate::Ht(fastest).max_ppdu_duration_micros(octets)?;
         Some(AirtimeCandidate {
             key: link.epoch,
-            minimum_micros: NonZeroU32::new(minimum)?,
+            minimum_micros: self.ceiling.least(ready.length),
         })
     }
 
@@ -155,6 +143,16 @@ impl<B, T, const N: usize> Completions<B, T, N> {
                 end: End::Lost,
             })
             .map_err(|completed| completed.ticket)
+    }
+
+    /// The ends waiting to be handed on.
+    pub fn len(&self) -> usize {
+        self.ended.len()
+    }
+
+    /// Whether no end waits.
+    pub fn is_empty(&self) -> bool {
+        self.ended.is_empty()
     }
 
     /// Whether [`Self::take_notice`] has something for a link now `link`.

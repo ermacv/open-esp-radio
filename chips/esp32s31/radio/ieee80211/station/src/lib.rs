@@ -296,6 +296,12 @@ impl<'a, N: Notifies> Network<'a, N> {
         self.inner.link_source()
     }
 }
+/// The station's air for a network's queued egress: one account per
+/// association of the link `N`'s network end reads, a frame of unknown
+/// cost charged the S31's ceiling.
+#[cfg(any(test, target_arch = "riscv32"))]
+pub type StationAir<'a, N> =
+    runtime::StationAir<'a, <Ch<N> as runtime::Notifies>::NetworkWaker, S31Ceiling>;
 /// Affine neutral Ethernet transmit end over the network stack's packets
 /// `P`, whose frames go into the network's transmit memory `S`.
 pub struct NetworkTransmit<'a, N: Notifies, P, S: runtime::TxSupply<P>> {

@@ -34,7 +34,7 @@
 //! [`EthernetFrame`]: oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame
 
 mod air;
-pub use air::{Completions, CostCeiling, StationAir, StationKey};
+pub use air::{Completions, FrameCost, StationAir, StationKey};
 mod commands;
 pub mod contract;
 mod events;

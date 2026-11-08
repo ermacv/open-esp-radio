@@ -3,7 +3,10 @@ use oer_protocols_network_port::Class;
 
 struct Fixed(u32);
 
-impl CostCeiling for Fixed {
+impl FrameCost for Fixed {
+    fn least(&self, frame_octets: usize) -> NonZeroU32 {
+        NonZeroU32::new(u32::try_from(frame_octets).unwrap()).unwrap()
+    }
     fn ceiling(&self, frame_octets: usize) -> NonZeroU32 {
         NonZeroU32::new(self.0 + u32::try_from(frame_octets).unwrap()).unwrap()
     }
@@ -35,7 +38,11 @@ fn an_association_is_one_account_keyed_by_its_epoch_and_a_down_link_serves_none(
     let first = air.candidate(&ready(1514)).unwrap();
     let small = air.candidate(&ready(64)).unwrap();
     assert_eq!((first.key, small.key), (3, 3), "every peer, one account");
-    assert!(first.minimum_micros > small.minimum_micros);
+    assert_eq!(
+        (first.minimum_micros.get(), small.minimum_micros.get()),
+        (1514, 64),
+        "each frame's least grant"
+    );
     link.publish(up(4));
     assert_eq!(air.candidate(&ready(1514)).unwrap().key, 4);
     assert_eq!(air.ceiling(&ready(1514)).get(), 2_514);

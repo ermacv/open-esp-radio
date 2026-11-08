@@ -14,8 +14,8 @@ use core::num::{NonZeroU16, NonZeroU32};
 
 use oer_protocols_ieee80211_contracts_port::TxEstimate;
 use oer_protocols_ieee80211_wire::phy::{
-    DsssPreamble, FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, PhyRate,
-    PpduBandwidth, SpatialStreams,
+    FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
+    SpatialStreams,
 };
 
 use crate::mac::tx::TxPhyRate;

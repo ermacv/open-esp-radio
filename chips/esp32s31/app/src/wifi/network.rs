@@ -2,6 +2,13 @@
 //! station's transmit buffers as the port's memory, a channel socket, a local
 //! producer, and the task on the group's executor.
 //!
+//! The egress is chosen by type ([`TransmitMode`]): [`Queued`] chooses among
+//! the waiting work by the station's airtime accounts, one per association,
+//! each frame's reservation settled by the cost the station's completion
+//! reports; [`Direct`] sends the first ready work with no tables and no
+//! account. How an application provides data, a producer or a socket's
+//! blocks, does not depend on it.
+//!
 //! [`Network::start`] takes the station's device in the group's boot, the
 //! storage the image lends for its service ([`NetworkStorage`]), its producer
 //! and the two ports: the service's type holds the image's producer, so no
@@ -19,7 +26,10 @@
 use super::*;
 use core::task::{Context as TaskContext, Poll};
 use oer_portable_memory::WakingSpscSender;
-use oer_protocols_ieee80211_runtime::station::{TxRefused, TxSupply};
+use oer_protocols_ieee80211_contracts_port::TxEstimate;
+use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
+use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, RadioNotice};
+use oer_protocols_ieee80211_runtime::station::{Completions, StationKey, TxRefused, TxSupply};
 use oer_protocols_network_core::{
     ClaimRefused, Group, Interface, InterfaceError, NetworkOwner, OpenRefused, Retired, claim,
 };
@@ -29,8 +39,8 @@ use oer_protocols_network_port::{
 };
 use oer_protocols_network_runtime::ConfigurationWatch;
 use oer_protocols_network_runtime::{
-    DevicePort, Direct, EndCause, Ended, LocalRefused, MemoryPolicy, PortRefusal, Producer,
-    Service, SocketLanes, StopLane, TxBuffers,
+    DevicePort, EndCause, Ended, LocalRefused, MemoryPolicy, PortRefusal, Producer, Service,
+    SocketLanes, StopLane, TxBuffers,
 };
 use oer_protocols_network_wire::ethernet::{EthernetHeader, HEADER_LEN};
 use oer_protocols_network_wire::ip::{Dscp, IPV4_HEADER_LEN};
@@ -81,7 +91,95 @@ pub type NetworkBlock = Block<'static, Brand, BLOCK>;
 
 /// The port of the service over the station.
 type Port = DevicePort<wifi::Network<'static, Notifies>, Transmit, WifiBuffers>;
-type NetService<P> = Service<
+
+/// Names a frame in the station's transmit buffers: its buffer's index,
+/// which no other frame has until the station gives the buffer back.
+pub type TxTicket = u8;
+/// What the port tells the egress policy.
+pub type TxNotice = RadioNotice<TxTicket, StationKey>;
+
+/// Accounts the queued egress keeps: the association's, and earlier ones
+/// whose frames have not settled.
+const AIR_PEERS: usize = 4;
+/// What each account earns a round, in microseconds: one long frame.
+const AIR_QUANTUM: core::num::NonZeroU32 = match core::num::NonZeroU32::new(2_000) {
+    Some(quantum) => quantum,
+    None => panic!("a quantum is not zero"),
+};
+
+/// The queued egress's account of the station's air.
+pub type AirStorage = AirtimeStorage<StationKey, AIR_PEERS, { wifi::NETWORK_BUFFERS }>;
+type Airtime = AirtimeEgress<
+    'static,
+    wifi::StationAir<'static, Notifies>,
+    TxTicket,
+    AIR_PEERS,
+    { wifi::NETWORK_BUFFERS },
+>;
+
+mod mode {
+    /// Only this module's modes select an egress.
+    pub trait Sealed {}
+}
+
+/// How the network chooses what goes out, by type: [`Queued`] or
+/// [`Direct`].
+pub trait TransmitMode: mode::Sealed + 'static {
+    #[doc(hidden)]
+    type Egress: oer_protocols_network_port::Egress<TxTicket, TxNotice> + 'static;
+    /// What the egress keeps, in the image's storage.
+    #[doc(hidden)]
+    type Storage: 'static;
+    #[doc(hidden)]
+    const STORAGE: Self::Storage;
+    #[doc(hidden)]
+    fn egress(
+        storage: &'static mut Self::Storage,
+        link: &'static wifi::NetworkLinkSource<Notifies>,
+    ) -> Self::Egress;
+}
+
+/// Waiting work stays outside the station's buffers; each frame is chosen
+/// when the port has room, by the station's airtime accounts, one per
+/// association; at most one frame per transmit buffer is reserved, and each
+/// reservation settles by its frame's cost when the station gives the
+/// buffer back.
+pub enum Queued {}
+
+/// The first ready work goes, with no account.
+pub enum Direct {}
+
+impl mode::Sealed for Queued {}
+impl mode::Sealed for Direct {}
+
+impl TransmitMode for Queued {
+    type Egress = Airtime;
+    type Storage = AirStorage;
+    const STORAGE: AirStorage = AirtimeStorage::new(AIR_QUANTUM);
+    fn egress(
+        storage: &'static mut AirStorage,
+        link: &'static wifi::NetworkLinkSource<Notifies>,
+    ) -> Airtime {
+        AirtimeEgress::new(
+            storage,
+            wifi::StationAir::<Notifies>::new(link, wifi::S31Ceiling),
+        )
+    }
+}
+
+impl TransmitMode for Direct {
+    type Egress = oer_protocols_network_runtime::Direct;
+    type Storage = ();
+    const STORAGE: () = ();
+    fn egress(
+        (): &'static mut (),
+        _link: &'static wifi::NetworkLinkSource<Notifies>,
+    ) -> oer_protocols_network_runtime::Direct {
+        oer_protocols_network_runtime::Direct
+    }
+}
+
+type NetService<P, M> = Service<
     'static,
     'static,
     Brand,
@@ -94,35 +192,38 @@ type NetService<P> = Service<
     DEPTH,
     LANE,
     Port,
-    Direct,
+    <M as TransmitMode>::Egress,
     Producer<'static, Brand, P, CREDITS>,
 >;
 type Lanes = SocketLanes<'static, 'static, Brand, BLOCK, DEPTH, LANE, CREDITS>;
 /// The service, where it stays while it runs.
-type Placed<P> = &'static mut Option<NetService<P>>;
+type Placed<P, M> = &'static mut Option<NetService<P, M>>;
 
-/// What an image lends a network whose producer is `P`, in a static of its
-/// own: where the service stays, the producer's end flag, which the service
-/// sets at its end ([`LocalEnd`]), and the watch of the interface's address.
-pub struct NetworkStorage<P: Produce + 'static> {
-    service: Option<NetService<P>>,
+/// What an image lends a network whose producer is `P` and whose egress is
+/// `M`'s, in a static of its own: where the service stays, the producer's
+/// end flag, which the service sets at its end ([`LocalEnd`]), the watch of
+/// the interface's address, and what the egress keeps.
+pub struct NetworkStorage<P: Produce + 'static, M: TransmitMode> {
+    service: Option<NetService<P, M>>,
     end: LocalEnd,
     /// Where the service publishes the interface's address.
     watch: ConfigurationWatch,
+    egress: M::Storage,
 }
 
-impl<P: Produce + 'static> NetworkStorage<P> {
+impl<P: Produce + 'static, M: TransmitMode> NetworkStorage<P, M> {
     #[must_use]
     pub const fn new() -> Self {
         Self {
             service: None,
             end: LocalEnd::new(),
             watch: ConfigurationWatch::new(),
+            egress: M::STORAGE,
         }
     }
 }
 
-impl<P: Produce + 'static> Default for NetworkStorage<P> {
+impl<P: Produce + 'static, M: TransmitMode> Default for NetworkStorage<P, M> {
     fn default() -> Self {
         Self::new()
     }
@@ -160,6 +261,9 @@ static STOP: ConstStaticCell<StopLane> = ConstStaticCell::new(StopLane::new());
 /// in the network's task, so a lend is never refused for another's.
 struct FreeSlots {
     slots: ClaimCell<heapless::Vec<wifi::TxSlot, { wifi::NETWORK_BUFFERS }>>,
+    /// What the station gave back, each with its frame's end, until the port
+    /// hands the end on: only then is the buffer free again.
+    ended: ClaimCell<Completions<wifi::TxSlot, TxTicket, { wifi::NETWORK_BUFFERS }>>,
     freed: AtomicWaker,
 }
 
@@ -170,6 +274,55 @@ impl FreeSlots {
 
     fn take(&self) -> Option<wifi::TxSlot> {
         self.slots.lend(heapless::Vec::pop).ok().flatten()
+    }
+
+    /// The station gave `slot` back, its frame ended at `cost`: it waits
+    /// with that end for the port.
+    fn ended(&self, slot: wifi::TxSlot, cost: TxEstimate) {
+        let ticket = slot.index();
+        let mut slot = Some(slot);
+        // Only the network's task lends this, so a lend is never refused.
+        let refused = self
+            .ended
+            .lend(|ended| {
+                let slot = slot.take()?;
+                ended.returned(slot, ticket, cost).err()
+            })
+            .ok()
+            .flatten();
+        // One end a buffer, and this holds an end for every buffer: no end
+        // is refused. Were one, its buffer would be free again at once.
+        if let Some(slot) = refused {
+            self.give(slot);
+        }
+        self.freed.wake();
+    }
+
+    /// The station took the frame of `ticket` and lost its buffer.
+    fn lost(&self, ticket: TxTicket) {
+        let _held = self.ended.lend(|ended| ended.lost(ticket));
+        self.freed.wake();
+    }
+
+    /// The next end for the egress policy, the link now `link`: its buffer is
+    /// free again from here.
+    fn take_notice(&self, link: oer_protocols_network_port::LinkSnapshot) -> Option<TxNotice> {
+        let (notice, slot) = self
+            .ended
+            .lend(|ended| ended.take_notice(link))
+            .ok()
+            .flatten()?;
+        if let Some(slot) = slot {
+            self.give(slot);
+        }
+        Some(notice)
+    }
+
+    /// Whether an end waits for the port.
+    fn notice_waiting(&self, link: oer_protocols_network_port::LinkSnapshot) -> bool {
+        self.ended
+            .lend(|ended| ended.waiting(link))
+            .unwrap_or(false)
     }
 
     /// A slot a refusal here drops goes back to the station's pool.
@@ -186,6 +339,7 @@ impl FreeSlots {
 
 static FREE: FreeSlots = FreeSlots {
     slots: ClaimCell::new(),
+    ended: ClaimCell::new(),
     freed: AtomicWaker::new(),
 };
 
@@ -232,6 +386,7 @@ impl wifi::NetworkTxSupply for WifiTx {
         }
         // One station's start per boot: a second keeps the first's list.
         let _installed = FREE.slots.install(free);
+        let _ends = FREE.ended.install(Completions::new());
         Self { publisher }
     }
 }
@@ -245,6 +400,7 @@ impl TxSupply<TxPacket> for WifiTx {
     }
     fn write(&mut self, frame: TxPacket) -> Result<wifi::TxMemory, TxRefused<TxPacket>> {
         let WrittenFrame { slot, length } = frame;
+        let ticket = slot.index();
         self.publisher
             .publish(slot, 0, length)
             .map_err(|refused| match refused {
@@ -252,19 +408,38 @@ impl TxSupply<TxPacket> for WifiTx {
                     frame: WrittenFrame { slot, length },
                     reason: TransmitError::InvalidLength(FrameLengthError::TooLong),
                 }),
-                wifi::TxPublishRefused::Lost => TxRefused::Lost,
+                wifi::TxPublishRefused::Lost => {
+                    // The port took it: its reservation settles as lost,
+                    // and its buffer stays out of reach for good.
+                    FREE.lost(ticket);
+                    TxRefused::Lost
+                }
             })
     }
-    fn give(&mut self, memory: wifi::TxMemory) {
-        FREE.give(self.publisher.slot(memory));
+    fn give(&mut self, memory: wifi::TxMemory, cost: TxEstimate) {
+        FREE.ended(self.publisher.slot(memory), cost);
     }
 }
 
-/// The port's end of the transmit buffers.
-struct WifiBuffers;
+/// The port's end of the transmit buffers, and the link the station
+/// publishes, whose epoch keys its air.
+struct WifiBuffers {
+    link: &'static wifi::NetworkLinkSource<Notifies>,
+}
 
 impl TxBuffers for WifiBuffers {
     type Frame = WrittenFrame;
+    type Ticket = TxTicket;
+    type Notice = TxNotice;
+    fn ticket(&self, frame: &WrittenFrame) -> TxTicket {
+        frame.slot.index()
+    }
+    fn take_notice(&mut self) -> Option<TxNotice> {
+        FREE.take_notice(self.link.snapshot())
+    }
+    fn notice_waiting(&self) -> bool {
+        FREE.notice_waiting(self.link.snapshot())
+    }
     fn available(&self) -> bool {
         FREE.any()
     }
@@ -331,28 +506,28 @@ impl From<NetworkError> for Error {
     }
 }
 
-/// The group's end of the network whose producer is `P`.
-pub struct Network<P: Produce + 'static> {
+/// The group's end of the network whose producer is `P`, its egress `M`'s.
+pub struct Network<P: Produce + 'static, M: TransmitMode> {
     end: &'static LocalEnd,
     watch: &'static ConfigurationWatch,
-    producer: core::marker::PhantomData<P>,
+    producer: core::marker::PhantomData<(P, M)>,
 }
 
 /// What the network's task runs: not an API.
 #[doc(hidden)]
-pub struct NetworkStart<P: Produce + 'static> {
-    service: Placed<P>,
+pub struct NetworkStart<P: Produce + 'static, M: TransmitMode> {
+    service: Placed<P, M>,
     stop: WakingSpscSender<'static, (), 1>,
     stopper: wifi::NetworkStopper<'static, Notifies>,
 }
 
-impl<P: Produce + 'static> crate::NetTask for NetworkStart<P> {
+impl<P: Produce + 'static, M: TransmitMode> crate::NetTask for NetworkStart<P, M> {
     fn serve(self) -> impl core::future::Future<Output = ()> {
         serve_network(self)
     }
 }
 
-impl<P: Produce + 'static> Network<P> {
+impl<P: Produce + 'static, M: TransmitMode> Network<P, M> {
     /// Take `device` for the network and `storage` for its service, open the
     /// channel socket on `ports.receiving` and `producer`'s send-only socket
     /// on `ports.sending`: the service runs from the group's start, leases
@@ -366,10 +541,10 @@ impl<P: Produce + 'static> Network<P> {
     pub fn start(
         mut device: Device,
         boot: GroupBoot,
-        storage: &'static mut NetworkStorage<P>,
+        storage: &'static mut NetworkStorage<P, M>,
         producer: P,
         ports: Ports,
-    ) -> Result<(Self, Socket, GroupBoot<NetworkStart<P>>), Error> {
+    ) -> Result<(Self, Socket, GroupBoot<NetworkStart<P, M>>), Error> {
         let (network, transmit, stopper) = device.network.take().ok_or(Error::AlreadyStarted)?;
         let interface =
             Interface::dhcp(device.address, MTU, device.seed).map_err(NetworkError::Interface)?;
@@ -382,14 +557,16 @@ impl<P: Produce + 'static> Network<P> {
             service,
             end,
             watch,
+            egress,
         } = storage;
         let (end, watch): (&'static LocalEnd, &'static ConfigurationWatch) = (end, watch);
         let (stop, stopping) = stop.split();
-        let port = DevicePort::new(network, transmit, WifiBuffers);
+        let link = network.link_source();
+        let port = DevicePort::new(network, transmit, WifiBuffers { link });
         let owner = NetworkOwner::new(brand, interface, pool, port);
         let running = service.insert(Service::with_producer(
             owner,
-            Direct,
+            M::egress(egress, link),
             MemoryPolicy::KEEP,
             stopping,
             producer,
@@ -447,7 +624,7 @@ impl<P: Produce + 'static> Network<P> {
 /// The network's task: the service until a stop or the port's fault, which
 /// records and resets. A stop drops the port, with the frames of the station
 /// it still holds, before the station hears of it.
-async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
+async fn serve_network<P: Produce + 'static, M: TransmitMode>(start: NetworkStart<P, M>) {
     let NetworkStart {
         service,
         stop,
