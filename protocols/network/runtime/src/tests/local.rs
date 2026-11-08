@@ -35,7 +35,7 @@ use super::{
     BLOCKS, Count, DEPTH, LOCAL, OUR_IP, PEER, PEER_IP, Policy, RECEIVED, SIZE, counter, udp_frame,
 };
 use crate::{
-    Direct, EndCause, LocalEnd, LocalRefused, MemoryPolicy, Next, Observer, Offer, Produce,
+    Direct, EndCause, Interest, LocalEnd, LocalRefused, MemoryPolicy, Next, Observer, Offer, Produce,
     Producer, Sent, Service, ServiceEvent, Socket, SocketLanes, StopLane, Work,
 };
 
@@ -102,6 +102,8 @@ struct Source {
     ended_after_end: Vec<bool>,
     end: Option<&'static LocalEnd>,
     waker: Option<Waker>,
+    /// What the service registered for, at each wait.
+    interests: Vec<Interest>,
 }
 
 #[derive(Clone, Default)]
@@ -130,6 +132,10 @@ impl Script {
     /// The calls since the first `skip`.
     fn calls_from(&self, skip: usize) -> Vec<Call> {
         self.calls().split_off(skip)
+    }
+
+    fn interest(&self) -> Option<Interest> {
+        self.0.borrow().interests.last().copied()
     }
 
     fn filled(&self) -> usize {
@@ -225,8 +231,10 @@ impl Produce for Script {
         source.held.retain(|item| item.tag != work.tag);
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
-        self.0.borrow_mut().waker = Some(cx.waker().clone());
+    fn register(&mut self, cx: &mut Context<'_>, interest: Interest) {
+        let mut source = self.0.borrow_mut();
+        source.waker = Some(cx.waker().clone());
+        source.interests.push(interest);
     }
 }
 
@@ -665,6 +673,11 @@ fn no_place_asks_nothing_until_a_place_frees() {
             Call::Offered(tag(0, 2)),
             Call::Refused(tag(0, 2), SendRefusal::NoPlace),
         ]
+    );
+    assert_eq!(
+        script.interest(),
+        Some(Interest::Changes),
+        "a held producer waits for changes only"
     );
     // A wake with nothing changed asks nothing.
     script.wake();
@@ -1430,4 +1443,49 @@ fn a_producer_binds_once_and_a_refusal_changes_nothing() {
         service.bind_local(LOCAL_PORT + 1, Dscp::default()),
         Err(LocalRefused::Bound)
     );
+}
+
+/// A producer whose next offer cannot be declared registers for changes
+/// only: with its open works at the turn's budget it is asked nothing, and
+/// new data alone is no reason to wake. With room again it registers for
+/// offers.
+#[test]
+fn a_producer_at_its_open_budget_waits_for_changes_only() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        line,
+        script,
+        clock,
+        ..
+    } = bench::<Net, Direct, 16>(Direct);
+    line.open(true);
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let (count, waker) = counter();
+    settle(&mut run, &count, &waker);
+    assert_eq!(
+        script.interest(),
+        Some(Interest::Offers),
+        "nothing to offer yet"
+    );
+    for index in 0..9 {
+        script.push(tag(0, index), broadcast(), 16);
+    }
+    script.wake();
+    settle(&mut run, &count, &waker);
+    let offered = |script: &Script| {
+        script
+            .calls()
+            .iter()
+            .filter(|call| matches!(call, Call::Offered(_)))
+            .count()
+    };
+    assert_eq!(offered(&script), 8, "eight open works at most");
+    assert_eq!(script.interest(), Some(Interest::Changes));
+    line.open(false);
+    settle(&mut run, &count, &waker);
+    assert_eq!(offered(&script), 9, "the ninth once places came back");
+    assert_eq!(line.produced().len(), 9);
+    assert_eq!(script.interest(), Some(Interest::Offers));
 }

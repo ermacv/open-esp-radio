@@ -31,6 +31,8 @@ pub(crate) struct Wire {
     pub(crate) sent: Vec<Vec<u8>>,
     /// The port takes frames.
     pub(crate) open: bool,
+    /// The port says it took a frame it never filled.
+    pub(crate) lazy: bool,
 }
 
 #[derive(Clone, Default)]
@@ -46,6 +48,9 @@ impl FramePort for Port {
         let mut wire = self.0.borrow_mut();
         if !wire.open {
             return Err(Unpublished::Port(()));
+        }
+        if wire.lazy {
+            return Ok(());
         }
         let mut frame = vec![0; length];
         fill(&mut frame).map_err(Unpublished::Fill)?;
@@ -204,4 +209,48 @@ pub(crate) fn sent(port: &Port) -> Vec<Vec<u8>> {
             (udp.ports.source == 5002).then(|| data.to_vec())
         })
         .collect()
+}
+
+/// A waker that counts its wakes, for a test that must see one come.
+#[derive(Default)]
+pub(crate) struct Count(std::sync::atomic::AtomicUsize);
+
+impl std::task::Wake for Count {
+    fn wake(self: std::sync::Arc<Self>) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    fn wake_by_ref(self: &std::sync::Arc<Self>) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl Count {
+    pub(crate) fn waker() -> (std::sync::Arc<Self>, Waker) {
+        let count = std::sync::Arc::new(Self::default());
+        let waker = Waker::from(count.clone());
+        (count, waker)
+    }
+
+    pub(crate) fn take(&self) -> usize {
+        self.0.swap(0, std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// Poll `run` until a poll leaves it waiting with no wake of its own; how
+/// many polls that took, `None` if it never did within `polls`.
+pub(crate) fn quiesce<F: Future>(
+    run: &mut core::pin::Pin<&mut F>,
+    count: &Count,
+    waker: &Waker,
+    polls: usize,
+) -> Option<usize> {
+    let cx = &mut Context::from_waker(waker);
+    for poll in 1..=polls {
+        count.take();
+        assert!(run.as_mut().poll(cx).is_pending(), "the service ended");
+        if count.take() == 0 {
+            return Some(poll);
+        }
+    }
+    None
 }

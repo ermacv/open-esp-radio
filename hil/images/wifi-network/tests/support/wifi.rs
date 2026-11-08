@@ -73,6 +73,7 @@ pub(crate) struct Built<P: FramePort + FrameSource> {
     pub net: crate::udp::Network,
     pub stop: WakingSpscSender<'static, (), 1>,
     pub end: &'static LocalEnd,
+    pub source: &'static crate::udp::Source,
 }
 
 /// A service over `port` at `ours`, whose producer sends from `sending` and
@@ -123,5 +124,6 @@ pub(crate) fn network<P: FramePort + FrameSource>(
         net,
         stop,
         end,
+        source,
     }
 }

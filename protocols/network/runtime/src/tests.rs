@@ -1889,6 +1889,37 @@ fn before_the_service<B: 'static>(held: usize) -> BeforeTheService<B> {
     (service, [sender, waiter], blocks, wire, stop)
 }
 
+/// An eviction is a known end: the turn that evicts hands it to its observer
+/// before its next await, so a cancelled `run` and a dropped service leave
+/// it `Evicted`, never `Retired`.
+#[test]
+fn an_eviction_reaches_its_observer_in_the_turn_that_evicts() {
+    brand!(Net);
+    let (mut service, [mut sender, mut waiter], mut blocks, _wire, _stop) =
+        before_the_service::<Net>(3);
+    let clock: VirtualClock = VirtualClock::new();
+    let mut events = ();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let evicted = sender.send(peer(), blocks.pop().unwrap()).ok().unwrap();
+    {
+        let mut run = pin!(service.run(&clock, &mut events));
+        for _ in 0..4 {
+            assert!(run.as_mut().poll(cx).is_pending());
+        }
+        assert!(pin!(waiter.reserve()).poll(cx).is_pending());
+        clock
+            .advance(oer_portable_time::Duration::from_millis(100))
+            .unwrap();
+        // This turn takes the request and evicts at the pressure deadline.
+        assert!(run.as_mut().poll(cx).is_pending());
+    }
+    drop(service);
+    assert_eq!(
+        evicted.take().ok(),
+        Some(Sent::Ended(Outcome::Evicted(Eviction::MemoryPressure)))
+    );
+}
+
 #[test]
 fn pressure_reaches_a_group_with_no_socket_here() {
     brand!(Net);
