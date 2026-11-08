@@ -201,9 +201,21 @@ the settle interval.
 
 ## RX and wakes
 
-- RX is copied into the endpoint's RX pool (`OwnedRxPublisher`) before
-  publication. The network retains packet-pool storage independently of the
-  radio's DMA storage, and the packet returns to its pool when dropped.
+- Over Xarxa, RX is copied into the endpoint's RX pool (`OwnedRxPublisher`)
+  before publication. The network retains packet-pool storage independently
+  of the radio's DMA storage, and the packet returns to its pool when dropped.
+- Over the network core, a socket's receive mode is explicit at its bind
+  (`oer::wifi::Copying` or `oer::wifi::Lending<CREDIT>`). A lending socket
+  keeps a datagram in the station's receive buffer under a loan of its
+  credit. The station's lend count holds `LENT_RX` buffers; the account gives
+  the socket `CREDIT` of them and keeps the rest for frames on their way, a
+  const check holding `CREDIT` to that count. The station marks each copy
+  with its reason: by form (an A-MSDU, or an MSDU sharing its frame with the
+  EAPOL), which a lending socket takes in a block of its group, or by
+  pressure (no lend room), which it drops. A buffer's loan frees when its
+  memory returns, never at a stop; the station's stop confirms once the
+  network stopped, without waiting for lent buffers, which rejoin whichever
+  ring runs when they drop.
 - A turn's received frames wake the network once, at the end of the turn's
   receive stage; a frame the network takes tells the station only while it
   waits for room in that queue.

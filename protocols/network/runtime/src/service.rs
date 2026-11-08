@@ -11,8 +11,8 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, Eviction, Group, GroupsFull, NetEvent, NetworkOwner, OpenRefused,
-    Outcome, Pool, Retired, SocketId, Unsent,
+    CommandId, CommandState, Eviction, Group, GroupsFull, Intake, LentDatagram, LoansRefused,
+    NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId, Unsent,
 };
 use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
@@ -21,8 +21,8 @@ use crate::local::{LocalEnd, LocalRefused, Produce, Producer, Producers};
 use crate::observation::{LocalEvent, PublishEnd, ServiceEvent, TurnEnd, seen};
 use crate::returns::ReturnEnd;
 use crate::socket::{
-    Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, Socket, SocketLanes, drain_requests,
-    lanes,
+    Answer, Inbound, LateSocket, LendingLanes, LendingSocket, LentEnd, Request, Sent, ServiceEnd,
+    Socket, SocketLanes, drain_requests, lanes, lending_lanes,
 };
 use crate::watch::{ConfigurationWatch, WatchRefused, Watched};
 
@@ -212,8 +212,11 @@ struct Bound<
     const DEPTH: usize,
     const LANE: usize,
     const CREDITS: usize,
+    H,
 > {
     end: ServiceEnd<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>,
+    /// A lending socket's loans.
+    lent: Option<LentEnd<'a, B, H, LANE>>,
     open: Option<Open<B>>,
     commands: [Option<CommandId<B>>; CREDITS],
     closing: Option<CommandId<B>>,
@@ -247,7 +250,7 @@ pub struct Service<
     egress: E,
     /// What ended the policy.
     fault: Option<E::Fault>,
-    bound: [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>>; SOCKETS],
+    bound: [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>; SOCKETS],
     stop: WakingSpscReceiver<'a, (), 1>,
     /// Why [`Self::run`] ended; it serves no more once this is set.
     ended: Option<EndCause>,
@@ -511,6 +514,11 @@ impl<
                 moved = true;
             }
         }
+        for bound in self.bound.iter_mut().flatten() {
+            if let Some(lent) = &mut bound.lent {
+                moved |= lent.collect(pool.loans());
+            }
+        }
         moved
     }
 
@@ -550,6 +558,67 @@ impl<
         let (socket, end) = lanes(storage);
         *place = Some(Bound {
             end,
+            lent: None,
+            group,
+            open: Some(Open { id, reserving: 0 }),
+            commands: [const { None }; CREDITS],
+            closing: None,
+            blocked: false,
+            abandoned: false,
+        });
+        Ok(socket)
+    }
+
+    /// Lend from `buffers` of the port's own, of which `reserve` stay the
+    /// port's, for the frames on their way: [`Loans::pool`], whose account
+    /// outlives this service with its pool.
+    ///
+    /// # Errors
+    /// [`LoansRefused`]; what was set stays.
+    ///
+    /// [`Loans::pool`]: oer_protocols_network_core::Loans::pool
+    pub fn lend_from(&mut self, buffers: usize, reserve: usize) -> Result<(), LoansRefused> {
+        self.owner.pool().loans().pool(buffers, reserve)
+    }
+
+    /// Open a socket on `port` that receives in the port's own buffers, with
+    /// a credit of `CREDIT` loans from the pool's account, and give the
+    /// application its end. The lane holds every loan the credit allows, so
+    /// `CREDIT` is checked against it when this compiles; the account checks
+    /// it against the pool here. A refusal changes nothing.
+    ///
+    /// # Errors
+    /// [`BindRefused`], with `storage`: [`OpenRefused::Loans`] when the
+    /// account cannot hold the credit.
+    pub fn bind_lending<const CREDIT: usize>(
+        &mut self,
+        port: u16,
+        dscp: Dscp,
+        group: Group<B>,
+        storage: &'a mut LendingLanes<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>,
+    ) -> Result<
+        LendingSocket<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>,
+        BindRefused<'a, LendingLanes<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>,
+    > {
+        const {
+            if CREDIT == 0 || CREDIT > LANE {
+                panic!("a lending socket's credit is at least one, and its lane holds it");
+            }
+        };
+        let Some(place) = self.bound.iter_mut().find(|place| place.is_none()) else {
+            return Err(BindRefused {
+                reason: OpenRefused::NoSocket,
+                storage,
+            });
+        };
+        let id = match self.owner.open_lending(port, dscp, group, CREDIT) {
+            Ok(id) => id,
+            Err(reason) => return Err(BindRefused { reason, storage }),
+        };
+        let (socket, end, lent) = lending_lanes(storage);
+        *place = Some(Bound {
+            end,
+            lent: Some(lent),
             group,
             open: Some(Open { id, reserving: 0 }),
             commands: [const { None }; CREDITS],
@@ -612,9 +681,13 @@ impl<
         moved |= self.give_blocks();
         let mut intake_full = true;
         for _ in 0..TURN_FRAMES {
-            if !self.owner.take_frame(now, events) {
-                intake_full = false;
-                break;
+            match self.owner.take_frame(now, events) {
+                Intake::Empty => {
+                    intake_full = false;
+                    break;
+                }
+                Intake::Read => {}
+                Intake::Lent(datagram) => self.lend(datagram, events),
             }
             moved = true;
         }
@@ -654,6 +727,40 @@ impl<
         self.publish_configuration();
         self.turn_ended(events);
         moved
+    }
+
+    /// Hand a lent datagram to its socket, or say why not: its buffer then
+    /// goes back to the port, and its loan to the account.
+    fn lend(&mut self, datagram: LentDatagram<B, P::Held>, events: &mut impl EventSink<NetEvent>) {
+        let flow = datagram.flow;
+        let end = self
+            .bound
+            .iter_mut()
+            .flatten()
+            .filter(|bound| !bound.abandoned)
+            .find(|bound| {
+                bound
+                    .open
+                    .as_ref()
+                    .is_some_and(|open| open.id.flow() == flow)
+            })
+            .and_then(|bound| bound.lent.as_mut());
+        let account = self.owner.pool().loans();
+        match end {
+            Some(end) => {
+                if end.lend(datagram, account).is_err() {
+                    report(events, || NetEvent::LentLaneFull);
+                }
+            }
+            // The core lends only to an open lending socket, which a lending
+            // bind holds here.
+            None => {
+                let LentDatagram { frame, loan, .. } = datagram;
+                drop(frame);
+                account.give_back(loan);
+                report(events, || NetEvent::NoSocket);
+            }
+        }
     }
 
     /// The turn's epilogue: hand every result the core knows to its client,
@@ -952,7 +1059,7 @@ impl<
                 ready |= bound.poll_lanes(cx);
             }
             for late in adopted.iter_mut().flatten() {
-                ready |= pin!(late.abandon.ready()).poll(cx).is_ready();
+                ready |= late.poll(cx);
             }
             if let Some(returns) = returns {
                 ready |= returns.poll_waiting(cx);
@@ -1006,8 +1113,8 @@ impl<
     }
 }
 
-impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const CREDITS: usize>
-    Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS>
+impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const CREDITS: usize, H>
+    Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, H>
 {
     /// Tell the socket. Its answer lane holds all it can be owed: the
     /// reservations it may ask ahead, a close, and a stop.
@@ -1151,6 +1258,9 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         if self.blocked {
             ready |= pin!(self.end.datagrams.ready()).poll(cx).is_ready();
         }
+        if let Some(lent) = &self.lent {
+            ready |= lent.poll(cx);
+        }
         ready
     }
 
@@ -1162,6 +1272,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
     ) -> LateSocket<'a, 'm, B, SIZE, DEPTH, LANE> {
         let Self {
             end,
+            lent,
             mut commands,
             abandoned,
             ..
@@ -1183,13 +1294,24 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             ending,
             ..
         } = end;
+        let mut dropped = abandoned;
         if let Some(inbound) = abandon.try_receive() {
             drain_requests(&requests, &mut retired.pool, |_| {});
             inbound.drain(&mut retired.pool);
+            dropped = true;
         } else if !abandoned {
             let _room_is_proven = answers.try_send(Answer::Stopped(requests));
         }
         drop(ending);
-        LateSocket { abandon }
+        let mut loans = lent.map(LentEnd::into_late);
+        // What came back before the end is the retired pool's at once.
+        if let Some(loans) = &mut loans {
+            let _any = loans.collect(retired.pool.loans());
+        }
+        LateSocket {
+            abandon,
+            dropped,
+            loans,
+        }
     }
 }

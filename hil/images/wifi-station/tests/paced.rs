@@ -100,18 +100,30 @@ impl FramePort for Port {
 impl FrameSource for Port {
     type Notice = ();
 
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
+    type Held = oer_protocols_network_port::NeverHeld;
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(
+            EthernetFrameView<'_>,
+            oer_protocols_network_port::Holding,
+        ) -> oer_protocols_network_port::Keep,
+    ) -> oer_protocols_network_port::Taken<Self::Held> {
         let Some(frame) = self.0.borrow_mut().incoming.pop_front() else {
-            return false;
+            return oer_protocols_network_port::Taken::Empty;
         };
         let (header, payload) = EthernetHeader::parse(&frame).unwrap();
-        read(EthernetFrameView {
-            destination: header.destination,
-            source: header.source,
-            ether_type: header.ether_type.value(),
-            payload,
-        });
-        true
+        let _copied = read(
+            EthernetFrameView {
+                destination: header.destination,
+                source: header.source,
+                ether_type: header.ether_type.value(),
+                payload,
+            },
+            oer_protocols_network_port::Holding::Copied(
+                oer_protocols_network_port::CopyReason::Format,
+            ),
+        );
+        oer_protocols_network_port::Taken::Read
     }
 
     fn take_notice(&mut self) -> Option<()> {

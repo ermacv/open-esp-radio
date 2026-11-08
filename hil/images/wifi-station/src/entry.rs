@@ -44,7 +44,9 @@ type Requests = Either<
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 /// The network's service, with the load's producer in it.
-static NETWORK: ConstStaticCell<wifi::NetworkStorage<udp::LoadProducer, wifi::Queued>> =
+static NETWORK: ConstStaticCell<
+    wifi::NetworkStorage<udp::LoadProducer, wifi::Queued, udp::Receive>,
+> =
     ConstStaticCell::new(wifi::NetworkStorage::new());
 /// What the load's sender hands the producer.
 static SOURCE: udp::Source = udp::Source::new();

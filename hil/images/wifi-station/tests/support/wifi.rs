@@ -7,9 +7,10 @@ use core::marker::PhantomData;
 
 use oer_portable_memory::WakingSpscSender;
 use oer_protocols_network_core::{Group, Interface, NetworkOwner, claim};
+use oer_protocols_network_port::NeverHeld;
 use oer_protocols_network_port::{FramePort, FrameSource};
 use oer_protocols_network_runtime::{
-    Direct, MemoryPolicy, Producer, Service, SocketLanes, StopLane,
+    Direct, LendingLanes, MemoryPolicy, Producer, Service, StopLane,
 };
 use oer_protocols_network_wire::ip::Dscp;
 
@@ -23,9 +24,24 @@ pub use oer_protocols_network_runtime::{
 pub struct Brand;
 pub const BLOCKS: usize = 64;
 pub const BLOCK: usize = 1472;
-pub type Socket = oer_protocols_network_runtime::Socket<'static, 'static, Brand, 1472, 32, 32, 32>;
+pub type LendingSocket = oer_protocols_network_runtime::LendingSocket<
+    'static,
+    'static,
+    Brand,
+    1472,
+    32,
+    32,
+    32,
+    NeverHeld,
+>;
 pub type NetworkBlock = oer_protocols_network_core::Block<'static, Brand, 1472>;
 pub type Received = oer_protocols_network_core::Datagram<'static, Brand, 1472>;
+pub type Delivered =
+    oer_protocols_network_runtime::Received<'static, 'static, Brand, 1472, NeverHeld>;
+
+/// The chip's receive mode that lends, by type, as the image names it. The
+/// host's ports lend no buffer, so its sockets meet copies only.
+pub enum Lending<const CREDIT: usize> {}
 
 /// The ports of a network's sockets, as the chip names them.
 pub struct Ports {
@@ -37,13 +53,13 @@ pub struct Ports {
 pub enum Queued {}
 
 /// A network the test built: its address is the test's to set.
-pub struct Network<P, M> {
+pub struct Network<P, M, R> {
     pub end: &'static LocalEnd,
     pub configuration: std::rc::Rc<core::cell::Cell<Option<Configuration>>>,
-    pub producer: PhantomData<(P, M)>,
+    pub producer: PhantomData<(P, M, R)>,
 }
 
-impl<P, M> Network<P, M> {
+impl<P, M, R> Network<P, M, R> {
     pub const fn end(&self) -> &'static LocalEnd {
         self.end
     }
@@ -86,7 +102,7 @@ pub(crate) type Served<P> = Service<
 >;
 
 /// What [`network`] builds.
-pub(crate) struct Built<P: FramePort + FrameSource> {
+pub(crate) struct Built<P: FramePort + FrameSource<Held = NeverHeld>> {
     pub service: Served<P>,
     /// What the facade reads as the network's address.
     pub address: std::rc::Rc<core::cell::Cell<Option<Configuration>>>,
@@ -100,7 +116,7 @@ pub(crate) struct Built<P: FramePort + FrameSource> {
 /// whose channel socket receives on `receiving`, as the chip's
 /// `Network::start` builds it, and the facade over it, which reads `ours` as
 /// the network's address until the test sets another.
-pub(crate) fn network<P: FramePort + FrameSource>(
+pub(crate) fn network<P: FramePort + FrameSource<Held = NeverHeld>>(
     port: P,
     hardware: [u8; 6],
     ours: [u8; 4],
@@ -123,12 +139,18 @@ pub(crate) fn network<P: FramePort + FrameSource>(
         end,
     );
     service.bind_local(sending, Dscp::default()).unwrap();
+    // The chip's lend count, `wifi::LENT_RX`, and the reserve its `Lending`
+    // keeps.
+    const LENT_RX: usize = 15;
+    service
+        .lend_from(LENT_RX, LENT_RX - crate::udp::CREDIT)
+        .unwrap();
     let socket = service
-        .bind(
+        .bind_lending::<{ crate::udp::CREDIT }>(
             receiving,
             Dscp::default(),
             Group::shared(),
-            Box::leak(Box::new(SocketLanes::new())),
+            Box::leak(Box::new(LendingLanes::new())),
         )
         .ok()
         .unwrap();

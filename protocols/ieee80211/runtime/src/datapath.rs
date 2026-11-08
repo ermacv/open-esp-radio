@@ -303,10 +303,9 @@ enum NetworkStopping {
     Owed,
     /// Asked, and it has not reported.
     Asked,
-    /// It reported its stop; lent units are still out.
+    /// It reported its stop. Units it holds stay lent: they return to the
+    /// lend count, which outlives the installation, whenever they drop.
     Stopped,
-    /// It reported its stop and holds no unit.
-    Returned,
     /// Its participant was lost: its stop will not be confirmed. The
     /// station still returns what it holds of the network through the
     /// existing ways (the return queue, the lent units' own return); the

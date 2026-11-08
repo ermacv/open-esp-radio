@@ -67,8 +67,8 @@ pub(crate) async fn until<T>(
 }
 
 #[cfg(target_arch = "riscv32")]
-impl<P: oer::wifi::Produce + 'static, M: oer::wifi::TransmitMode> Published
-    for oer::wifi::Network<P, M>
+impl<P: oer::wifi::Produce + 'static, M: oer::wifi::TransmitMode, R: oer::wifi::ReceiveMode>
+    Published for oer::wifi::Network<P, M, R>
 {
     fn configuration(&self) -> Result<Option<Configuration>, WatchRefused> {
         oer::wifi::Network::configuration(self)

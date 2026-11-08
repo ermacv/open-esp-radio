@@ -165,9 +165,12 @@ data left behind) go back through the return queue, as its room allows, and
 only then does the actor ask the network to stop. The network takes that
 memory back before its port ends, so a confirmed stop leaves none of it with
 the station. The radio's stop and the network's return are separate: a
-network that has not returned its memory, its stop or its lent units by the
-deadline ends the stop's wait there as `StopOutcome::Returning` (the
+network that has not returned its memory or its stop by the deadline ends
+the stop's wait there as `StopOutcome::Returning` (the
 lifecycle's `LifecycleEnd::StoppedReturning`), never as an unconfirmed stop.
+A network that stopped holding lent receive units does not hold the stop:
+the lend count outlives the installation, and each unit rejoins whichever
+ring runs when its holder drops it.
 The return goes on without a deadline, the memory stays the station's until
 the network took it, and a retirement ends the actor only once the return
 came. A lost network participant (its stop never reported) is a software

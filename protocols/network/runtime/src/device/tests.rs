@@ -8,9 +8,9 @@ use std::vec::Vec;
 use core::task::{Context, Poll, Waker};
 
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource, FrameStorage,
-    LentFrame, LinkSnapshot, LinkState, NetDevice, NetTransmit, ReceivedFrame,
-    StorageAdvanceRefused, TransmitError, TransmitRefused, Unpublished,
+    CopyReason, EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource,
+    FrameStorage, Holding, Keep, LentFrame, LinkSnapshot, LinkState, NetDevice, NetTransmit,
+    ReceivedFrame, StorageAdvanceRefused, Taken, TransmitError, TransmitRefused, Unpublished,
 };
 
 use super::{DevicePort, PortRefusal, TxBuffers};
@@ -53,6 +53,9 @@ impl ReceivedFrame for Incoming {
             Self::Lent(frame) => Ok(frame),
             Self::Copied => Err(()),
         }
+    }
+    fn copy_reason((): &()) -> CopyReason {
+        CopyReason::Pressure
     }
 }
 
@@ -305,10 +308,44 @@ fn a_lent_frame_and_a_copied_one_are_both_shown() {
         .incoming
         .extend([lent(b"lent"), Incoming::Copied]);
     let mut seen = Vec::new();
-    assert!(port.take_frame(|frame| seen.push(frame.payload.to_vec())));
-    assert!(port.take_frame(|frame| seen.push(frame.payload.to_vec())));
-    assert!(!port.take_frame(|_| panic!("nothing waits")));
-    assert_eq!(seen, [b"lent".to_vec(), b"copied".to_vec()]);
+    let mut show = |frame: EthernetFrameView<'_>, holding| {
+        seen.push((frame.payload.to_vec(), holding));
+        Keep::Drop
+    };
+    assert!(matches!(port.take_frame(&mut show), Taken::Read));
+    assert!(matches!(port.take_frame(&mut show), Taken::Read));
+    assert!(matches!(
+        port.take_frame(|_, _| panic!("nothing waits")),
+        Taken::Empty
+    ));
+    assert_eq!(
+        seen,
+        [
+            (b"lent".to_vec(), Holding::Lendable),
+            (b"copied".to_vec(), Holding::Copied(CopyReason::Pressure))
+        ]
+    );
+}
+
+#[test]
+fn a_kept_lent_frame_is_the_reader_s_until_it_drops_and_a_copy_stays_the_device_s() {
+    let returned = Arc::new(AtomicU32::new(0));
+    let mut port = port();
+    port.device
+        .incoming
+        .push_back(lent_from(Lent(b"kept".to_vec(), Some(returned.clone()))));
+    port.device.incoming.push_back(Incoming::Copied);
+    let Taken::Kept(kept) = port.take_frame(|_, _| Keep::Keep) else {
+        panic!("a lendable frame is kept");
+    };
+    assert_eq!(returned.load(Ordering::SeqCst), 0, "the reader holds it");
+    assert_eq!(kept.view().unwrap().payload, b"kept");
+    drop(kept);
+    assert_eq!(returned.load(Ordering::SeqCst), 1, "its drop returns it");
+    assert!(
+        matches!(port.take_frame(|_, _| Keep::Keep), Taken::Read),
+        "a copy is not the reader's to keep"
+    );
 }
 
 #[test]
@@ -316,7 +353,10 @@ fn a_frame_the_device_cannot_show_is_counted() {
     let mut port = port();
     port.device.bad_copy = true;
     port.device.incoming.push_back(Incoming::Copied);
-    assert!(port.take_frame(|_| panic!("unreadable")));
+    assert!(matches!(
+        port.take_frame(|_, _| panic!("unreadable")),
+        Taken::Read
+    ));
     assert_eq!(port.unreadable(), 1);
 }
 

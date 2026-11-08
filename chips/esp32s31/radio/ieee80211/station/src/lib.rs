@@ -359,6 +359,9 @@ impl<N: Notifies> oer_protocols_network_port::ReceivedFrame for Received<N> {
             runtime::Received::Copied(mark) => Err(Copied(mark)),
         }
     }
+    fn copy_reason(copied: &Copied) -> oer_protocols_network_port::CopyReason {
+        copied.0.reason()
+    }
 }
 impl<N: Notifies> NetDevice for Network<'_, N> {
     type RxFrame = Received<N>;
@@ -529,7 +532,8 @@ impl<N: Notifies> NetworkStopper<'_, N> {
         .await
     }
     /// The application and the IP service stopped and hold no frame of the
-    /// station. The station still waits for every lent buffer's return.
+    /// station but what they lent: the station's stop does not wait for a
+    /// lent buffer, which returns to the lend count whenever it drops.
     pub fn stopped(self) {
         self.report(|state| &state.stopped);
     }

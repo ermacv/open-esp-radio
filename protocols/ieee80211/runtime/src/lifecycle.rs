@@ -45,7 +45,8 @@
 //! The application's stop, and a failed station, take the link and the
 //! pairwise key back, then stop the radio by the stop's deadline. A stop
 //! that retires the radio also stops the network ([`NetworkEnd::Stops`]) and
-//! confirms only once it stopped and returned every lent buffer; a stopped
+//! confirms once it stopped, with no wait for the buffers it still holds
+//! lent, which return to the lend count whenever they drop; a stopped
 //! radio whose network returns late ends the stop's wait at the deadline
 //! ([`LifecycleEnd::StoppedReturning`]) and the actor retires after that
 //! return; a lost network participant ends it with the loss once the

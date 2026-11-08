@@ -5,7 +5,7 @@ use core::task::Context;
 
 use oer_protocols_network_wire::ip::Dscp;
 
-use crate::device::{EthernetFrameView, LinkSnapshot};
+use crate::device::{EthernetFrame, EthernetFrameView, LinkSnapshot};
 
 /// Where a frame goes out, and the one answer to it. Whoever publishes keeps
 /// its own record of what `fill` did, and a port whose answer contradicts that
@@ -67,8 +67,18 @@ pub trait FrameSource {
     /// whatever else its account needs. The network passes it on unread.
     type Notice;
 
-    /// Show the next received frame to `read`; whether there was one.
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool;
+    /// A received frame's buffer the port lets its reader keep:
+    /// [`NeverHeld`] for a port that lends none.
+    type Held: EthernetFrame;
+
+    /// Show the next received frame to `read`, with how the port holds it.
+    /// A frame in a buffer the port may lend ([`Holding::Lendable`]) is
+    /// handed over when `read` answers [`Keep::Keep`]; any other frame stays
+    /// the port's whatever the answer.
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
+    ) -> Taken<Self::Held>;
 
     /// The next notice.
     fn take_notice(&mut self) -> Option<Self::Notice>;
@@ -80,6 +90,52 @@ pub trait FrameSource {
     /// Make `cx` the one a received frame, a notice or room to publish wakes,
     /// at once if any came since the last look.
     fn register(&mut self, cx: &mut Context<'_>);
+}
+
+/// The buffer of a port that lends none: it cannot be.
+#[derive(Debug)]
+pub enum NeverHeld {}
+
+impl EthernetFrame for NeverHeld {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, crate::FrameLengthError> {
+        match *self {}
+    }
+}
+
+/// How a port holds a received frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Holding {
+    /// In a buffer the port may lend to its reader.
+    Lendable,
+    /// In the device's own copy, for this reason.
+    Copied(crate::CopyReason),
+}
+
+/// What a reader of a received frame does with its buffer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Keep {
+    /// Done with it: the buffer stays the port's.
+    Drop,
+    /// Keep a lendable frame's buffer.
+    Keep,
+}
+
+/// What a look for a received frame found.
+#[derive(Debug)]
+pub enum Taken<H> {
+    /// No frame waited.
+    Empty,
+    /// A frame was shown, and its buffer stayed the port's.
+    Read,
+    /// A frame was shown and its buffer kept: the reader's now.
+    Kept(H),
+}
+
+impl<H> Taken<H> {
+    /// Whether a frame was there.
+    pub const fn found(&self) -> bool {
+        !matches!(self, Self::Empty)
+    }
 }
 
 /// What kind of work a frame is.

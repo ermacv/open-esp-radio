@@ -1091,7 +1091,7 @@ fn retire(bench: &mut Bench<'_, '_>, window: u32) {
 }
 
 #[test]
-fn a_retiring_stop_waits_for_the_network_and_its_lent_units() {
+fn a_retiring_stop_waits_for_the_network_and_not_for_its_lent_units() {
     bench(|bench| {
         bench.start();
         bench.connect(link(true, None));
@@ -1106,13 +1106,15 @@ fn a_retiring_stop_waits_for_the_network_and_its_lent_units() {
         assert!(bench.next().is_none(), "the network has not stopped");
         bench.network.answer.set(Some(Ok(())));
         bench.settle();
-        assert!(bench.next().is_none(), "a lent unit is still out");
-        drop(held);
-        bench.settle();
+        // A lent unit held for ever does not hold the stop: it stays
+        // counted, and returns whenever its holder drops it.
         assert!(matches!(
             bench.next(),
             Some(FromActor::Stopped(StopOutcome::Confirmed))
         ));
+        drop(held);
+        bench.settle();
+        assert!(bench.next().is_none(), "a late return answers nothing");
     });
 }
 

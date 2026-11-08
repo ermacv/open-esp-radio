@@ -430,10 +430,7 @@ async fn receive(
         while let Some(mut packet) = socket.take() {
             let now = now_us();
             match classify(packet.payload(), run) {
-                Datagram::Echo(header) => {
-                    let written = echo(header).write(packet.payload_mut()).is_some();
-                    counts.echo(written && packet.reply());
-                }
+                Datagram::Echo(header) => counts.echo(packet.echo(echo(header)).await),
                 Datagram::Load(header) => {
                     window.socket.datagram(now);
                     counts.load(

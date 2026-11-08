@@ -81,8 +81,8 @@ use oer_protocols_network_port::{
     EthernetFrameView, FramePort, FrameSource, LinkSnapshot, Unpublished,
 };
 use oer_protocols_network_runtime::{
-    ConfigurationWatch, DevicePort, EndCause, Ended, MemoryPolicy, Observer, PortRefusal, Sent,
-    Service, Socket, SocketLanes, StopLane,
+    ConfigurationWatch, DevicePort, EndCause, Ended, LendingLanes, LendingSocket, MemoryPolicy,
+    Observer, PortRefusal, Received as Delivered, Sent, Service, Socket, SocketLanes, StopLane,
 };
 use oer_protocols_network_wire::ip::Dscp;
 use oer_protocols_radio_port::{Installations, LocalId, with_local_slot};
@@ -205,8 +205,55 @@ type NetEnded<'c, T> = Ended<
 >;
 /// The application's socket.
 pub type Sock<T> = Socket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS>;
-/// A datagram the application received.
-pub type NetDatagram<T> = Datagram<'static, T, BLOCK>;
+/// A received frame's buffer the station lends the network.
+type LentBuffer = oer_protocols_network_port::LentFrame<
+    <StationReceived<ModelLentRx> as oer_protocols_network_port::ReceivedFrame>::Storage,
+>;
+/// The application's socket when it lends ([`Setup::lending`]).
+type LendSock<T> = LendingSocket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS, LentBuffer>;
+/// A datagram the application received: a copy, or the station's buffer.
+pub type NetDatagram<T> = Delivered<'static, 'static, T, BLOCK, LentBuffer>;
+/// The lending socket's credit: half the model's lend count, the rest kept
+/// for frames on their way.
+const LEND_CREDIT: usize = oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS / 2;
+
+/// The application's socket, as the session's setup has it receive.
+enum AppSocket<T: 'static> {
+    Copying(Sock<T>),
+    Lending(LendSock<T>),
+}
+
+impl<T> AppSocket<T> {
+    fn socket(&mut self) -> &mut Sock<T> {
+        match self {
+            Self::Copying(socket) => socket,
+            Self::Lending(lending) => lending.socket(),
+        }
+    }
+
+    async fn receive(&mut self) -> Option<NetDatagram<T>> {
+        match self {
+            Self::Copying(socket) => socket.receive().await.ok().map(Delivered::Copied),
+            Self::Lending(lending) => lending.receive().await.ok(),
+        }
+    }
+}
+
+/// Who sent `datagram`.
+pub fn remote_of<T>(datagram: &NetDatagram<T>) -> Remote {
+    match datagram {
+        Delivered::Copied(datagram) => datagram.remote,
+        Delivered::Lent(lent) => lent.remote(),
+    }
+}
+
+/// The data of `datagram`.
+pub fn data_of<T>(datagram: &mut NetDatagram<T>) -> Vec<u8> {
+    match datagram {
+        Delivered::Copied(datagram) => datagram.block.octets().to_vec(),
+        Delivered::Lent(lent) => lent.data().expect("the lent buffer holds it").to_vec(),
+    }
+}
 
 /// The station's callbacks: nonces from a counter, the software AES.
 struct Callbacks {
@@ -322,6 +369,8 @@ pub struct Setup {
     pub seed: u64,
     /// The PMK the station's profile names: the network's by default.
     pub pmk: [u8; 32],
+    /// The application's socket lends ([`LEND_CREDIT`]) instead of copying.
+    pub lending: bool,
 }
 
 impl Default for Setup {
@@ -332,6 +381,7 @@ impl Default for Setup {
             reconnect: None,
             seed: 0x5eed,
             pmk: PMK,
+            lending: false,
         }
     }
 }
@@ -363,6 +413,9 @@ pub struct Report {
     pub counts: Counts,
     pub heard: Rc<Heard>,
     pub access_point: Rc<RefCell<AccessPoint>>,
+    /// Receive loans out in the network's account after the run, every held
+    /// datagram dropped.
+    pub loans_out: usize,
 }
 
 impl Report {
@@ -395,6 +448,7 @@ impl Report {
         );
         assert_eq!(self.network, Some(EndCause::Stopped), "the network stopped");
         assert_eq!(self.blocks_free, BLOCKS, "every block is in the pool");
+        assert_eq!(self.loans_out, 0, "every loan came back");
         assert_eq!(self.counts.tokens_lost, 0, "no station token is lost");
     }
 
@@ -549,8 +603,19 @@ impl<I: FramePort<Refusal = PortRefusal>> FramePort for Held<I> {
 
 impl<I: FrameSource> FrameSource for Held<I> {
     type Notice = I::Notice;
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
-        self.0.as_mut().is_some_and(|inner| inner.take_frame(read))
+    type Held = I::Held;
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(
+            EthernetFrameView<'_>,
+            oer_protocols_network_port::Holding,
+        ) -> oer_protocols_network_port::Keep,
+    ) -> oer_protocols_network_port::Taken<I::Held> {
+        self.0
+            .as_mut()
+            .map_or(oer_protocols_network_port::Taken::Empty, |inner| {
+                inner.take_frame(read)
+            })
     }
     fn take_notice(&mut self) -> Option<I::Notice> {
         self.0.as_mut().and_then(FrameSource::take_notice)
@@ -574,7 +639,7 @@ pub struct World<'b, T: 'static> {
     pub access_point: Rc<RefCell<AccessPoint>>,
     pub heard: Rc<Heard>,
     control: RefCell<Option<StationControl<'b>>>,
-    socket: RefCell<Option<Sock<T>>>,
+    socket: RefCell<Option<AppSocket<T>>>,
     /// Datagrams the application still holds at its end, for the pool's
     /// holder.
     held: RefCell<Vec<NetDatagram<T>>>,
@@ -687,7 +752,7 @@ impl<'b, T: 'static> World<'b, T> {
     /// Run `f` on the application's socket.
     pub fn with_socket<R>(&self, f: impl FnOnce(&mut Sock<T>) -> R) -> R {
         let mut socket = self.socket.borrow_mut();
-        f(socket.as_mut().expect("the socket"))
+        f(socket.as_mut().expect("the socket").socket())
     }
 
     /// The socket's next datagram, waited for.
@@ -698,8 +763,12 @@ impl<'b, T: 'static> World<'b, T> {
         datagram.expect("the socket is open")
     }
 
-    /// Give a received datagram's block back to the network.
+    /// Give a received datagram's block back to the network, or its lent
+    /// buffer to the station.
     pub fn release(&self, datagram: NetDatagram<T>) {
+        let Delivered::Copied(datagram) = datagram else {
+            return;
+        };
         self.with_socket(|socket| socket.release(datagram.block))
             .map_err(|refused| refused.reason)
             .expect("the lane takes the block");
@@ -709,10 +778,11 @@ impl<'b, T: 'static> World<'b, T> {
     /// it.
     pub async fn send(&self, to: Remote, payload: &[u8]) -> Observer<'static> {
         let mut socket = self.socket.borrow_mut().take().expect("the socket");
-        let mut block = socket.reserve().await.expect("a block");
+        let mut block = socket.socket().reserve().await.expect("a block");
         block.fill(payload).expect("the block holds it");
-        socket.credit().await.expect("a credit");
+        socket.socket().credit().await.expect("a credit");
         let observer = socket
+            .socket()
             .send(to, block)
             .map_err(|refused| refused.reason)
             .expect("the socket takes the datagram");
@@ -1115,15 +1185,35 @@ async fn run<'s, T: 'static>(
             Service::new(owner, egress, MemoryPolicy::KEEP, stopping);
         let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
         service.watch(watch).expect("the first publication");
-        let socket = service
-            .bind(
-                PORT,
-                Dscp::default(),
-                Group::shared(),
-                Box::leak(Box::new(SocketLanes::new())),
+        let socket = if setup.lending {
+            let lent = oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS;
+            service
+                .lend_from(lent, lent - LEND_CREDIT)
+                .expect("the account fits the model's lend count");
+            AppSocket::Lending(
+                service
+                    .bind_lending::<LEND_CREDIT>(
+                        PORT,
+                        Dscp::default(),
+                        Group::shared(),
+                        Box::leak(Box::new(LendingLanes::new())),
+                    )
+                    .map_err(|refused| refused.reason)
+                    .expect("the socket opens"),
             )
-            .map_err(|refused| refused.reason)
-            .expect("the socket opens");
+        } else {
+            AppSocket::Copying(
+                service
+                    .bind(
+                        PORT,
+                        Dscp::default(),
+                        Group::shared(),
+                        Box::leak(Box::new(SocketLanes::new())),
+                    )
+                    .map_err(|refused| refused.reason)
+                    .expect("the socket opens"),
+            )
+        };
 
         // What the application hears.
         let heard = Rc::new(Heard::default());
@@ -1252,12 +1342,17 @@ async fn run<'s, T: 'static>(
         // The account: what the station gave back, and every block.
         let mut ended = network_end.borrow_mut().take().expect("the network ended");
         let mut socket = world.socket.borrow_mut().take().expect("the socket");
+        // A held lent buffer goes back to the station only now, after the
+        // stop: its loan comes home to the pool's holder late.
         for datagram in world.held.borrow_mut().drain(..) {
-            ended.retired.pool.give(datagram.block);
+            if let Delivered::Copied(datagram) = datagram {
+                ended.retired.pool.give(datagram.block);
+            }
         }
-        while let Some(block) = socket.reclaim() {
+        while let Some(block) = socket.socket().reclaim() {
             ended.retired.pool.give(block);
         }
+        drop(socket);
         ended.collect();
         ended.close_returns();
         let (end, retired) = match lifecycle_end.borrow_mut().take() {
@@ -1278,6 +1373,7 @@ async fn run<'s, T: 'static>(
             counts: observed.counts(),
             heard,
             access_point: access_point.clone(),
+            loans_out: ended.retired.pool.loans().outstanding(),
         });
 
         // What the next session starts from.

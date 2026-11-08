@@ -51,18 +51,30 @@ impl FramePort for Port {
 }
 impl FrameSource for Port {
     type Notice = ();
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
+    type Held = oer_protocols_network_port::NeverHeld;
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(
+            EthernetFrameView<'_>,
+            oer_protocols_network_port::Holding,
+        ) -> oer_protocols_network_port::Keep,
+    ) -> oer_protocols_network_port::Taken<Self::Held> {
         let Some(frame) = self.0.borrow_mut().pop_front() else {
-            return false;
+            return oer_protocols_network_port::Taken::Empty;
         };
         let (header, payload) = EthernetHeader::parse(&frame).unwrap();
-        read(EthernetFrameView {
-            destination: header.destination,
-            source: header.source,
-            ether_type: header.ether_type.value(),
-            payload,
-        });
-        true
+        let _copied = read(
+            EthernetFrameView {
+                destination: header.destination,
+                source: header.source,
+                ether_type: header.ether_type.value(),
+                payload,
+            },
+            oer_protocols_network_port::Holding::Copied(
+                oer_protocols_network_port::CopyReason::Format,
+            ),
+        );
+        oer_protocols_network_port::Taken::Read
     }
     fn take_notice(&mut self) -> Option<()> {
         None
@@ -89,7 +101,8 @@ fn turn(service: &mut TestService, clock: &VirtualClock) {
 /// A datagram for this network's first port.
 fn datagram() -> Vec<u8> {
     let (ours, theirs) = ([192, 0, 2, 1], [192, 0, 2, 2]);
-    let data = [7; 16];
+    // Room for an echo's header.
+    let data = [7; header::LENGTH];
     let length = 8 + data.len() as u16;
     let unfilled = UdpHeader {
         ports: Ports {
@@ -166,8 +179,21 @@ fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
         }
         // Restore the lane's last place while Receiving keeps next.
         turn(&mut service, &clock);
+        let reply = header::Header {
+            run: 0,
+            sequence: 0,
+            sent_us: 0,
+            echo_request: false,
+            echo_reply: true,
+        };
         for _ in 0..32 {
-            assert!(receiving.take().expect("32 received datagrams").reply());
+            let packet = receiving.take().expect("32 received datagrams");
+            // A copied datagram's block carries its echo at once.
+            let mut echo = core::pin::pin!(packet.echo(reply));
+            assert!(matches!(
+                echo.as_mut().poll(&mut Context::from_waker(Waker::noop())),
+                core::task::Poll::Ready(true)
+            ));
         }
         // The request lane has 32 sends; the 33rd block cannot be returned.
         drop(receiving.take().expect("one ahead of the 32-place lane"));

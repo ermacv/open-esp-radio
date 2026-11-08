@@ -990,8 +990,8 @@ where
         Ok(())
     }
 
-    /// Follow the network side's stop, its report, then its lent units;
-    /// whether it moved, which the stop's turn then serves.
+    /// Follow the network side's stop and its report, and a lost one's lent
+    /// units; whether it moved, which the stop's turn then serves.
     fn poll_network_stop<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -1020,11 +1020,6 @@ where
             }
             _ => {}
         }
-        if self.network_stopping == NetworkStopping::Stopped
-            && self.port.poll_lent_returned(cx).is_ready()
-        {
-            self.network_stopping = NetworkStopping::Returned;
-        }
         // Only what the lent units are: the memory's part is looked at when
         // the stop decides, after the data settled ([`Self::network_home`]).
         let lent_before = self.lent_home;
@@ -1035,13 +1030,15 @@ where
     }
 
     /// Whether the network side owes the stop nothing: no stop asked it to
-    /// stop, or it stopped and holds no unit. A stop it is owed settles
-    /// nothing yet.
+    /// stop, or it stopped. A unit it still holds does not hold the stop:
+    /// the lend count outlives the installation, and the unit rejoins
+    /// whichever ring runs when the network drops it. A stop it is owed
+    /// settles nothing yet.
     fn network_settled(&self) -> bool {
         match self.network_stopping {
-            NetworkStopping::NotAsked | NetworkStopping::Returned => true,
+            NetworkStopping::NotAsked | NetworkStopping::Stopped => true,
             NetworkStopping::Lost => self.network_home(),
-            NetworkStopping::Owed | NetworkStopping::Asked | NetworkStopping::Stopped => false,
+            NetworkStopping::Owed | NetworkStopping::Asked => false,
         }
     }
 
