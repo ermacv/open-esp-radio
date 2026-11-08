@@ -80,6 +80,12 @@ impl<'id, Id: radio::SlotIdentity + 'id> ApTokens<'id, Id> {
 }
 
 /// The S31 port as the access-point conformance cases call it.
+/// The station's association and its installed pairwise key.
+type StationKey<'id, Id> = (
+    <StaKeys<Id> as KeyTypes<'id>>::Association,
+    <StaKeys<Id> as KeyTypes<'id>>::PairwiseKey,
+);
+
 struct ApFixture<'a, 'id, Id: radio::SlotIdentity + 'id> {
     fixture: Option<Fixture<'id, Id>>,
     installations: &'a mut Installations<Id, InstallationPools>,
@@ -87,10 +93,7 @@ struct ApFixture<'a, 'id, Id: radio::SlotIdentity + 'id> {
     earlier: ApTokens<'id, Id>,
     /// The current installation's generation: 0, then 1 after a reinstall.
     generation: u32,
-    station_key: Option<(
-        <StaKeys<Id> as KeyTypes<'id>>::Association,
-        <StaKeys<Id> as KeyTypes<'id>>::PairwiseKey,
-    )>,
+    station_key: Option<StationKey<'id, Id>>,
     station_number: u64,
     /// The register model's view of the access point's interface.
     interface: Rc<RefCell<AccessPointObserved>>,

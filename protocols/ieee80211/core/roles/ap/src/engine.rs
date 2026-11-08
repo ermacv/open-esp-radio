@@ -226,10 +226,20 @@ pub enum ApEapol {
     Nothing,
     /// Send the next message.
     Transmit(ApEapolTransmit<AP_EAPOL_CAPACITY>),
-    /// Message 4 is verified: install the peer's pairwise key
-    /// ([`ApEngine::pairwise_key`]), then [`ApEngine::authorize`] it on the
-    /// key's terminal.
-    InstallPairwise {
+    /// Message 2 is verified and derived a new PTK: install the peer's
+    /// pairwise key ([`ApEngine::pairwise_key`]) with its controlled port
+    /// closed, tell the engine on the key's terminal
+    /// ([`ApEngine::pairwise_installed`]), and only then send Message 3,
+    /// so the station's Message 4, protected or not, is readable.
+    Install {
+        /// The peer.
+        peer: [u8; 6],
+        /// Message 3, sent once the key is installed.
+        message3: ApEapolTransmit<AP_EAPOL_CAPACITY>,
+    },
+    /// Message 4 is verified: [`ApEngine::authorize`] the peer, whose
+    /// pairwise key is installed, which opens its controlled port.
+    Authorize {
         /// The peer.
         peer: [u8; 6],
     },
@@ -707,12 +717,54 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         else {
             return Ok(ApEapol::Nothing);
         };
+        let before = self.temporal_key(peer);
         Ok(match self.service.on_eapol(peer, frame, group_key)? {
             ApWpa2Progress::None => ApEapol::Nothing,
+            // A Message 3 for a PTK the peer had not derived before: a
+            // retried Message 3 or a repeated Message 2 of the same PTK
+            // installs nothing again.
+            ApWpa2Progress::Transmit(transmit)
+                if self
+                    .temporal_key(peer)
+                    .is_some_and(|key| Some(key) != before) =>
+            {
+                ApEapol::Install {
+                    peer,
+                    message3: transmit,
+                }
+            }
             ApWpa2Progress::Transmit(transmit) => ApEapol::Transmit(transmit),
-            ApWpa2Progress::AuthorizePeer => ApEapol::InstallPairwise { peer },
+            ApWpa2Progress::AuthorizePeer => ApEapol::Authorize { peer },
             ApWpa2Progress::DeauthenticatePeer => ApEapol::Deauthenticate { peer },
         })
+    }
+
+    /// The temporal key `peer`'s handshake derived, if any.
+    fn temporal_key(&self, peer: [u8; 6]) -> Option<[u8; 16]> {
+        self.service
+            .pending_ptk(peer)
+            .ok()
+            .map(|ptk| *ptk.temporal_key())
+    }
+
+    /// `peer`'s pairwise key is installed: a new receive replay owner reads
+    /// its protected frames, while its controlled port stays closed until
+    /// [`Self::authorize`].
+    ///
+    /// # Errors
+    ///
+    /// No replay owner fits.
+    pub fn pairwise_installed(&mut self, peer: [u8; 6]) -> Result<(), ApEngineError> {
+        self.forget_replay(peer);
+        let replay = CcmpRxReplayEpoch::new([0; 8], self.group_key_id, [0; 8])
+            .map_err(|_| ApEngineError::Service(ApServiceError::WrongPeerPhase))?;
+        let slot = self
+            .replay
+            .iter_mut()
+            .find(|slot| slot.is_none())
+            .ok_or(ApServiceError::BufferedTrafficOverflow)?;
+        *slot = Some(PeerReplay { peer, replay });
+        Ok(())
     }
 
     /// The temporal key of `peer`'s verified handshake, for its pairwise
@@ -746,23 +798,22 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         msdu.destination == self.address() || AddressFlags::from_bytes([first]).group()
     }
 
-    /// Open the controlled port of `peer`, whose pairwise key is installed,
-    /// with a new receive replay owner.
+    /// Open the controlled port of `peer`, whose pairwise key is installed
+    /// ([`Self::pairwise_installed`]); its replay owner continues.
     ///
     /// # Errors
     ///
-    /// The peer's handshake is not verified, or no replay owner fits.
+    /// The peer's handshake is not verified, or its key is not installed.
     pub fn authorize(&mut self, peer: [u8; 6], now: Instant) -> Result<(), ApEngineError> {
-        self.forget_replay(peer);
-        let replay = CcmpRxReplayEpoch::new([0; 8], self.group_key_id, [0; 8])
-            .map_err(|_| ApEngineError::Service(ApServiceError::WrongPeerPhase))?;
-        let slot = self
+        if !self
             .replay
-            .iter_mut()
-            .find(|slot| slot.is_none())
-            .ok_or(ApServiceError::BufferedTrafficOverflow)?;
+            .iter()
+            .flatten()
+            .any(|replay| replay.peer == peer)
+        {
+            return Err(ApEngineError::Service(ApServiceError::WrongPeerPhase));
+        }
         self.service.authorize(peer, now)?;
-        *slot = Some(PeerReplay { peer, replay });
         Ok(())
     }
 

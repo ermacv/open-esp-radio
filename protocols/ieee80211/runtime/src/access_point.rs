@@ -6,22 +6,45 @@
 //! installs the group key and restarts the TSF, in that order (the
 //! archive's start order); it then beacons at each TBTT, answers the
 //! management requests the engine takes, runs each peer's four-way
-//! handshake, installs its pairwise key before the controlled port opens,
-//! and carries the authorized peers' data to and from its network end
-//! ([`network`]). A stop tears every peer down (Disassociation and
+//! handshake and carries the authorized peers' data to and from its network
+//! end ([`network`]). A stop tears every peer down (Disassociation and
 //! Deauthentication, its key off), closes the receive policy, removes the
 //! group key, stops the TSF and stops the radio; the runner then returns
 //! every owner it holds.
 //!
-//! A beacon is submitted at its TBTT with the next TBTT as its deadline; a
-//! beacon that ends in any way is not sent again: the next TBTT's beacon
-//! replaces it. The beacon's Timestamp is written at its preparation
-//! ([`BeaconTimestamp::Caller`]): the runner's time since the TSF restart.
+//! # Handshake keys
 //!
-//! A port fault ends the run with every owner kept ([`ApEnd::Faulted`]); a
-//! frame of the air the engine refuses changes nothing; a frame the runner
-//! has no ticket or buffer for does not go, which its peer's own retry
-//! covers.
+//! A verified Message 2 that derived a new PTK installs the peer's pairwise
+//! key first; Message 3 goes once the key's terminal came, so the
+//! station's Message 4, protected or not, is readable. The controlled port
+//! stays closed until a verified Message 4. A retried Message 3 or a
+//! repeated Message 2 of the same PTK installs nothing again; a new PTK of
+//! a peer whose key is in or going in fails the handshake.
+//!
+//! # Beacons
+//!
+//! A beacon is submitted at its TBTT with the next TBTT as its deadline, a
+//! freshness bound: one not published by then ends expired, and a beacon
+//! that ends in any way is not sent again: the next TBTT's beacon replaces
+//! it. The beacon's Timestamp is written at its preparation
+//! ([`BeaconTimestamp::Caller`]): the runner's time since the TSF restart;
+//! the deadline says nothing of its accuracy on the air.
+//!
+//! # Waiting
+//!
+//! A turn that moved something yields to the executor once and turns
+//! again. A turn that changed nothing waits for a source: facts of the port
+//! other than the ones it just served (those wake it again only after the
+//! port woke it), a deadline after now, a frame of the network while a
+//! ticket and a buffer are free, or a stop not yet accepted.
+//!
+//! # Ends
+//!
+//! A port fault ends the run with every owner kept ([`ApEnd::Faulted`]). A
+//! command the port refuses ends the run with the runner, the refused
+//! command and every other owner returned ([`ApEnd::Refused`]). A frame of
+//! the air the engine refuses changes nothing; a frame the runner has no
+//! ticket or buffer for does not go, which its peer's own retry covers.
 
 pub mod network;
 
@@ -33,20 +56,20 @@ use embassy_futures::select::{Either4, select4};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AccessPointCommand, AccessPointCommands, AccessPointPort, AccessPointProgress,
-    AccessPointReceive, Attempt, AttemptKey, BeaconAttempt, BeaconPermission, BeaconStamp,
-    BeaconTimestamp, ConfigurePermission, Configured, ConnectionFrame, DataPort, GroupKeyId,
-    InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey, PhyRate, PortSink,
-    PortTypes, Protection, ReceiveFilter, Removed, RemovedKey, RetryPlan, RetryStage,
-    RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopUnconfirmed, SupportedChannel,
-    SupportedFilter, SupportedPower, SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl,
-    TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxOperation,
-    TxOutcome, TxPower, TxProtection, TxSource,
+    AccessPointReceive, AccessPointRefusal, Attempt, AttemptKey, BeaconAttempt, BeaconPermission,
+    BeaconStamp, BeaconTimestamp, ConfigurePermission, Configured, ConnectionFrame, DataPort,
+    Facts, GroupKeyId, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey,
+    PhyRate, PortSink, PortTypes, Protection, ReceiveFilter, Removed, RemovedKey, RetryPlan,
+    RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopUnconfirmed,
+    SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl, TbttEvent,
+    TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxFacts,
+    TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
-    ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
+    ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
     beacon::{ApBeaconTxContext, ApBeaconTxOutcome},
     engine::{
-        ApAfter, ApDue, ApEapol, ApEngine, ApEngineError, ApFrame, ApFrameKind,
+        AP_EAPOL_CAPACITY, ApAfter, ApDue, ApEapol, ApEngine, ApEngineError, ApFrame, ApFrameKind,
         ApPeerDisconnectKind, ApReceived, ApSppScope as SppScope, ApTeardown, port_frame,
     },
 };
@@ -202,21 +225,20 @@ pub enum ApEnd<R> {
     /// A terminal named an owner the runner did not send, or the engine
     /// refused one of the runner's own steps; the runner keeps every owner.
     Contract(ApContract),
+    /// The port refused one of the access point's commands for its
+    /// refusal: the runner stopped serving and returns with the port and
+    /// every owner, the refused command among them
+    /// ([`ApRunner::take_refused`]).
+    Refused(R, AccessPointRefusal),
 }
 
 /// Why a step of the runner ended the run.
 enum Halt {
     Faulted,
     Contract(ApContract),
-}
-
-impl Halt {
-    fn end<R>(self) -> ApEnd<R> {
-        match self {
-            Self::Faulted => ApEnd::Faulted,
-            Self::Contract(contract) => ApEnd::Contract(contract),
-        }
-    }
+    /// The port refused a command, which the runner holds
+    /// ([`ApRunner::take_refused`]).
+    Refused(AccessPointRefusal),
 }
 
 /// What the runner found broken of its own contract.
@@ -230,7 +252,7 @@ pub enum ApContract {
     ForeignKey,
     /// The engine refused a step of the runner's own.
     Engine(ApEngineError),
-    /// A command came back refused.
+    /// The runner had no owner a command of its own needs.
     CommandRefused,
 }
 
@@ -348,6 +370,16 @@ enum Purpose {
     Beacon(ApBeaconTxContext),
 }
 
+/// What a turn of the runner can change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Mark {
+    phase: Phase,
+    status: ApStatus,
+    owners: [usize; 8],
+    network: bool,
+    deadlines: [Option<Instant>; 2],
+}
+
 /// What the runner is doing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Phase {
@@ -438,6 +470,9 @@ where
     pairwise: heapless::Vec<<Keys<'id, P> as KeyTypes<'id>>::PairwiseSlot, AP_KEYS>,
     /// Peers whose pairwise installation waits for the association.
     installs: heapless::Deque<[u8; 6], AP_KEYS>,
+    /// Message 3 of each peer whose pairwise key is going in: it goes once
+    /// the key is installed.
+    held_message3: heapless::Vec<([u8; 6], ApEapolTransmit<AP_EAPOL_CAPACITY>), AP_KEYS>,
     /// Installed pairwise keys waiting for their removal.
     removals: heapless::Deque<<Keys<'id, P> as KeyTypes<'id>>::PairwiseKey, AP_KEYS>,
     /// The ANonce the next association takes; none once the source ran
@@ -459,6 +494,8 @@ where
     scratch: [u8; SCRATCH],
     sink: Sink<'id, Ty<'id, P>>,
     stop: bool,
+    /// The command the port refused.
+    refused: Option<Command<'id, P>>,
 }
 
 impl<'id, 's, 'n, P, I, C, S, X> ApRunner<'id, 's, 'n, P, I, C, S, X>
@@ -526,6 +563,7 @@ where
             association: Some(association),
             pairwise,
             installs: heapless::Deque::new(),
+            held_message3: heapless::Vec::new(),
             removals: heapless::Deque::new(),
             nonce,
             group_slot: Some(group),
@@ -546,6 +584,7 @@ where
                 overflow: false,
             },
             stop: false,
+            refused: None,
         }
     }
 
@@ -562,12 +601,15 @@ where
             return ApEnd::StartRefused;
         }
         if let Err(halt) = self.begin(clock.now()) {
-            return halt.end();
+            return self.halted(halt, shared);
         }
+        let mut facts = Facts::default();
         loop {
             let now = clock.now();
-            if let Err(halt) = self.turn(now) {
-                return halt.end();
+            let before = self.mark();
+            let last = facts;
+            if let Err(halt) = self.turn(now, core::mem::take(&mut facts)) {
+                return self.halted(halt, shared);
             }
             shared.publish(self.status);
             if self.phase == Phase::StoppingRadio {
@@ -576,17 +618,39 @@ where
             if !self.stop && shared.stop.get() {
                 self.stop = true;
                 if let Err(halt) = self.begin_stop(now) {
-                    return halt.end();
+                    return self.halted(halt, shared);
                 }
                 continue;
             }
+            // A turn that moved something may have left work for an earlier
+            // stage of the next one (a terminal it took last queues a frame):
+            // the runner yields to the executor once and turns again.
+            if before != self.mark() {
+                embassy_futures::yield_now().await;
+                continue;
+            }
+            // A turn that changed nothing waits for a source: it does not
+            // wait again for the deadlines it found due, whose work waits
+            // for an owner a fact returns.
             let deadline = [self.port.deadline(), self.engine_deadline()]
                 .into_iter()
                 .flatten()
+                .filter(|at| *at > now)
                 .min();
-            let facts = poll_fn(|cx| {
-                let facts = self.port.poll_facts(cx);
-                if facts.is_empty() {
+            let sends = self.phase == Phase::Running
+                && !self.tickets.is_empty()
+                && !self.buffers.is_empty();
+            let stopping = self.stop;
+            let port = &mut self.port;
+            let network = &mut self.network;
+            // Facts the turn just served without progress are a level the
+            // port holds, not an event: the wait's first poll registers for
+            // the port's next change and passes them over, so they wake the
+            // runner again only once the port woke it.
+            let mut served = Some(last);
+            let polled = poll_fn(|cx| {
+                let facts = port.poll_facts(cx);
+                if facts.is_empty() || served.take() == Some(facts) {
                     Poll::Pending
                 } else {
                     Poll::Ready(facts)
@@ -598,19 +662,30 @@ where
                     None => core::future::pending().await,
                 }
             };
-            let network = poll_fn(|cx| {
-                if self.network.waiting() {
+            // The network's frames wake the runner only while it can send
+            // one; a ticket or buffer comes back with a fact.
+            let frames = poll_fn(|cx| {
+                if !sends {
+                    return Poll::Pending;
+                }
+                if network.waiting() {
                     return Poll::Ready(());
                 }
-                let mut ready = core::pin::pin!(self.network.transmit.ready());
-                ready.as_mut().poll(cx)
+                let mut ready = core::pin::pin!(network.transmit.ready());
+                ready.as_mut().poll(cx).map(drop)
             });
-            let stop = poll_fn(|cx| shared.poll_stop(cx));
-            match select4(facts, timer, network, stop).await {
-                Either4::First(_)
-                | Either4::Second(())
-                | Either4::Third(())
-                | Either4::Fourth(()) => {}
+            // An accepted stop is no source: the stop's own commands and
+            // facts move it on.
+            let stop = poll_fn(|cx| {
+                if stopping {
+                    Poll::Pending
+                } else {
+                    shared.poll_stop(cx)
+                }
+            });
+            match select4(polled, timer, frames, stop).await {
+                Either4::First(taken) => facts = taken,
+                Either4::Second(()) | Either4::Third(()) | Either4::Fourth(()) => {}
             }
         }
         let stopped = poll_fn(|cx| {
@@ -623,6 +698,47 @@ where
         match stopped {
             Ok(()) => ApEnd::Stopped(self),
             Err(unconfirmed) => ApEnd::StopUnconfirmed(unconfirmed),
+        }
+    }
+
+    /// The end of a run a step halted: a refusal returns the runner with
+    /// every owner, the access point no longer serving.
+    fn halted(mut self, halt: Halt, shared: &ApShared) -> ApEnd<Self> {
+        match halt {
+            Halt::Faulted => ApEnd::Faulted,
+            Halt::Contract(contract) => ApEnd::Contract(contract),
+            Halt::Refused(refusal) => {
+                self.status.running = false;
+                self.network.set_link(false);
+                shared.publish(self.status);
+                ApEnd::Refused(self, refusal)
+            }
+        }
+    }
+
+    /// The command the port refused, once.
+    pub fn take_refused(&mut self) -> Option<Command<'id, P>> {
+        self.refused.take()
+    }
+
+    /// What a turn can change: equal marks before and after a turn mean
+    /// it made no progress.
+    fn mark(&self) -> Mark {
+        Mark {
+            phase: self.phase,
+            status: self.status,
+            owners: [
+                self.tickets.len(),
+                self.buffers.len(),
+                self.commands_waiting.len(),
+                self.teardowns.len(),
+                self.installs.len(),
+                self.installing.len(),
+                self.keys.len(),
+                self.removals.len(),
+            ],
+            network: self.network.waiting(),
+            deadlines: [self.port.deadline(), self.engine.deadline()],
         }
     }
 
@@ -683,12 +799,18 @@ where
     /// One turn: the port's transmit service and terminals, the received
     /// units, the engine's due work, the network's frames and the waiting
     /// commands.
-    fn turn(&mut self, now: Instant) -> Result<(), Halt> {
-        let served = self
-            .port
-            .service_tx(TxFacts::DUE, false, now, &mut self.sink);
-        if served.is_err() {
-            return Err(Halt::Faulted);
+    fn turn(&mut self, now: Instant, facts: Facts) -> Result<(), Halt> {
+        let due = self.port.deadline().is_some_and(|at| at <= now);
+        if facts.tx.is_some() || facts.tbtt || due {
+            let served = self.port.service_tx(
+                facts.tx.unwrap_or(TxFacts::DUE),
+                facts.tbtt,
+                now,
+                &mut self.sink,
+            );
+            if served.is_err() {
+                return Err(Halt::Faulted);
+            }
         }
         self.terminals(now)?;
         self.receive(now)?;
@@ -735,9 +857,11 @@ where
                     }
                     return Ok(());
                 }
-                Ok(AccessPointProgress::Refused(command, _)) => {
-                    let _kept = core::mem::ManuallyDrop::new(command);
-                    return Err(Halt::Contract(ApContract::CommandRefused));
+                Ok(AccessPointProgress::Refused(command, refusal)) => {
+                    // The command and its owners stay with the runner,
+                    // which returns them; nothing behind it runs.
+                    self.refused = Some(command);
+                    return Err(Halt::Refused(refusal));
                 }
                 Err(_) => return Err(Halt::Faulted),
             }
@@ -923,8 +1047,16 @@ where
         let Some((peer, installed)) = matched else {
             return Err(Halt::Contract(ApContract::ForeignKey));
         };
-        if self.engine.authorize(peer, now).is_err() {
-            // The peer left meanwhile: its key comes off.
+        let message3 = self
+            .held_message3
+            .iter()
+            .position(|(owner, _)| *owner == peer)
+            .map(|at| self.held_message3.swap_remove(at).1);
+        if self.engine.service().peer_status(peer).is_none()
+            || self.engine.pairwise_installed(peer).is_err()
+        {
+            // The peer left meanwhile: its key comes off, and its Message 3
+            // does not go.
             if let Err(key) = self.removals.push_back(installed.into_key()) {
                 let _kept = core::mem::ManuallyDrop::new(key);
             }
@@ -933,6 +1065,12 @@ where
         if let Err(installed) = self.keys.push((peer, installed)) {
             let _kept = core::mem::ManuallyDrop::new(installed);
             return Err(Halt::Contract(ApContract::ForeignKey));
+        }
+        // The key reads the station's Message 4 now, protected or not; the
+        // controlled port stays closed until Message 4 is verified.
+        if let Some(message3) = message3 {
+            let (frame, context) = message3.into_parts();
+            self.send_eapol(&frame, context, now)?;
         }
         Ok(())
     }
@@ -1155,6 +1293,7 @@ where
     fn finish_teardown(&mut self, peer: [u8; 6]) {
         self.remove_key(peer);
         self.installs.retain(|waiting| *waiting != peer);
+        self.held_message3.retain(|(waiting, _)| *waiting != peer);
         // A peer that left by itself is gone already.
         if self.engine.forget(peer).is_err() {
             self.refuse();
@@ -1226,6 +1365,7 @@ where
             ApReceived::PeerLeft { peer } => {
                 self.remove_key(peer);
                 self.installs.retain(|waiting| *waiting != peer);
+                self.held_message3.retain(|(waiting, _)| *waiting != peer);
                 Ok(())
             }
             ApReceived::Eapol { peer, body } => {
@@ -1238,8 +1378,27 @@ where
                         let (frame, context) = transmit.into_parts();
                         self.send_eapol(&frame, context, now)
                     }
-                    Ok(ApEapol::InstallPairwise { peer }) => {
-                        if self.installs.push_back(peer).is_err()
+                    Ok(ApEapol::Install { peer, message3 }) => {
+                        // A new PTK of a peer whose key is in or going in
+                        // is no handshake the runner serves: it fails.
+                        let keyed = self.installs.iter().any(|waiting| *waiting == peer)
+                            || self.installing.iter().any(|(owner, _)| *owner == peer)
+                            || self.keys.iter().any(|(owner, _)| *owner == peer);
+                        let held = !keyed
+                            && self.installs.push_back(peer).is_ok()
+                            && self.held_message3.push((peer, message3)).is_ok();
+                        if !held {
+                            self.installs.retain(|waiting| *waiting != peer);
+                            if let Ok(teardown) = self.engine.fail_handshake(peer) {
+                                self.teardown(teardown);
+                            }
+                        }
+                        Ok(())
+                    }
+                    Ok(ApEapol::Authorize { peer }) => {
+                        // Message 3 went only once the key was in.
+                        let keyed = self.keys.iter().any(|(owner, _)| *owner == peer);
+                        if (!keyed || self.engine.authorize(peer, now).is_err())
                             && let Ok(teardown) = self.engine.fail_handshake(peer)
                         {
                             self.teardown(teardown);

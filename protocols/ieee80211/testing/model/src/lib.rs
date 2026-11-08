@@ -1769,6 +1769,7 @@ pub struct ModelAir {
     rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<u8>,
+    refuse_access_point: Cell<u8>,
     group_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
@@ -1832,6 +1833,7 @@ impl ModelAir {
             rx: Default::default(),
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
+            refuse_access_point: Default::default(),
             group_held: Default::default(),
             key_installations: Default::default(),
             associations: Default::default(),
@@ -2112,6 +2114,64 @@ impl ModelAir {
         self.group_writes.get()
     }
 
+    /// The pairwise keys of `role` the hardware key table holds now.
+    pub fn installed_pairwise(&self, role: VifRole) -> usize {
+        let installations = self.key_installations.take();
+        let count = installations
+            .iter()
+            .filter_map(|entry| entry.identity.upgrade())
+            .filter(|identity| {
+                identity.active.get() && identity.group_role.is_none() && identity.role == role
+            })
+            .count();
+        self.key_installations.set(installations);
+        count
+    }
+
+    /// Capture a protected individually addressed frame as the hardware
+    /// does: decrypted with the pairwise key of `role` that the port
+    /// installed and that opens it, delivered as its header, its CCMP
+    /// header and its plaintext with the decryption observed. Without such
+    /// a key the frame is not captured: `false`.
+    pub fn receive_protected(&self, frame: &[u8], meta: ModelRxMeta, role: VifRole) -> bool {
+        const HEADER: usize = 24;
+        const CCMP: usize = oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN;
+        let installations = self.key_installations.take();
+        let mut opened = None;
+        for entry in &installations {
+            let Some(identity) = entry.identity.upgrade() else {
+                continue;
+            };
+            if !identity.active.get() || identity.group_role.is_some() || identity.role != role {
+                continue;
+            }
+            let mut wire: Vec<u8> = frame.into();
+            let Ok(body) = self.associations.get().get(role).open(
+                &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                &entry.key,
+                &mut wire,
+            ) else {
+                continue;
+            };
+            let body: Vec<u8> = body.into();
+            let mut delivered: Vec<u8> = frame.get(..HEADER + CCMP).unwrap_or_default().into();
+            delivered.extend_from_slice(&body);
+            opened = Some(delivered);
+            break;
+        }
+        self.key_installations.set(installations);
+        let Some(delivered) = opened else {
+            return false;
+        };
+        self.receive(
+            &delivered,
+            meta.with_crypto(RxEvidence::HardwareObserved(
+                oer_protocols_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
+            )),
+        );
+        true
+    }
+
     /// Capture a group frame against the current modeled hardware key table.
     /// Delayed DMA/ISR/software stages retain the original installation inside
     /// the backend; no installation identity is added to public RX metadata.
@@ -2288,6 +2348,23 @@ impl ModelAir {
     /// Refuse the next enable.
     pub fn refuse_enable(&self) {
         self.refuse_enables(1);
+    }
+
+    /// Refuse the next `count` access-point commands of a running radio as
+    /// not enabled, each with its owners returned.
+    pub fn refuse_access_point_commands(&self, count: u8) {
+        self.refuse_access_point.set(count);
+    }
+
+    /// Whether this access-point command is refused: one of the refusals
+    /// asked for.
+    pub(crate) fn take_access_point_refusal(&self) -> bool {
+        let left = self.refuse_access_point.get();
+        if left == 0 {
+            return false;
+        }
+        self.refuse_access_point.set(left.saturating_sub(1));
+        true
     }
 
     /// Refuse the next `count` enables.

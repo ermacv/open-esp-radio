@@ -265,7 +265,7 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
                 },
             ));
         }
-        if self.radio != Radio::Running {
+        if self.radio != Radio::Running || self.air.take_access_point_refusal() {
             return Ok(AccessPointProgress::Refused(
                 command,
                 AccessPointRefusal::NotEnabled,

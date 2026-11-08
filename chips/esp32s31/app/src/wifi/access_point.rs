@@ -10,7 +10,7 @@
 
 use super::*;
 use oer_chips_esp32s31_radio_ieee80211_station::access_point::{
-    self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage, ApExit, StartRefused,
+    self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage, StartRefused,
 };
 use oer_portable_embassy_net::{
     NetworkInterfaceId, OwnedNetworkTxFrame,
@@ -18,7 +18,7 @@ use oer_portable_embassy_net::{
 };
 use oer_protocols_ieee80211_runtime::access_point::network::{ApNetDevice, ApNetTransmit};
 
-pub use ap::{ApSettings, ApSettingsError};
+pub use ap::{ApExit, ApSettings, ApSettingsError};
 pub use oer_protocols_ieee80211_runtime::access_point::ApStatus;
 
 /// The access point's receive packets: each one 1514-byte Ethernet frame.
@@ -142,6 +142,12 @@ impl AccessPoint {
         self.control.status()
     }
 
+    /// How the access point ended, once it did: an ordinary stop, or a
+    /// command the port refused, after which the radio was released.
+    pub fn exit(&self) -> Option<ApExit> {
+        self.control.exit()
+    }
+
     /// Wait for a status other than `seen`.
     pub async fn changed(&self, seen: ApStatus) -> ApStatus {
         self.control.changed(seen).await
@@ -183,7 +189,12 @@ pub(crate) async fn serve_access_point(start: ApStart) {
         Either::Second(_) => crate::fail(oer_portable_diagnostics::name!("ap-net"; 32)),
     };
     match exit {
-        ApExit::Stopped => {}
+        // A refused command returned its owners and released the radio:
+        // the access point ends without a reset, its cause in `exit`.
+        ApExit::Stopped | ApExit::Refused(_) => {}
+        ApExit::RefusedUnreleased(_) => {
+            crate::fail(oer_portable_diagnostics::name!("ap-refused-release"; 32))
+        }
         ApExit::Unavailable(error) => failure(error),
         ApExit::ReleaseFailed(_) => crate::fail(oer_portable_diagnostics::name!("ap-release"; 32)),
         ApExit::StartRefused => crate::fail(oer_portable_diagnostics::name!("ap-start"; 32)),

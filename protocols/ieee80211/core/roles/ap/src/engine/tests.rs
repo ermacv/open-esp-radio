@@ -385,3 +385,189 @@ fn a_departing_peer_is_forgotten() {
     );
     assert!(engine.service().peer_status(PEER).is_none());
 }
+
+mod handshake {
+    use super::*;
+    use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+    use oer_protocols_ieee80211_core_security_rsn::{
+        Ptk, PtkContext,
+        frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnTxFrame},
+    };
+    use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
+
+    const ANONCE: [u8; 32] = [7; 32];
+    const SNONCE: [u8; 32] = [8; 32];
+
+    fn ptk() -> Ptk {
+        let mut derivation =
+            oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", SSID)
+                .unwrap();
+        let pmk = loop {
+            if let Some(pmk) = derivation.step() {
+                break pmk;
+            }
+        };
+        pmk.derive_ptk(
+            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+            PtkContext {
+                authenticator_address: AP,
+                supplicant_address: PEER,
+                authenticator_nonce: ANONCE,
+                supplicant_nonce: SNONCE,
+            },
+        )
+    }
+
+    fn message2(replay: u64) -> std::vec::Vec<u8> {
+        let rsn_ie = OwnedRsnIe::<64>::try_copy(&SUPPLICANT_RSN).unwrap();
+        let ies = OwnedAssociationSecurityIes::<128>::try_copy(&rsn_ie, &[]).unwrap();
+        RsnTxFrame::<512>::message2_with_security_ies(
+            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+            AP,
+            replay,
+            SNONCE,
+            &ies,
+        )
+        .unwrap()
+        .authenticate(&ptk(), &mut SoftwareAes128)
+        .unwrap()
+        .as_bytes()
+        .to_vec()
+    }
+
+    fn message4(replay: u64) -> std::vec::Vec<u8> {
+        RsnTxFrame::<512>::message4(
+            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+            AP,
+            replay,
+        )
+        .unwrap()
+        .authenticate(&ptk(), &mut SoftwareAes128)
+        .unwrap()
+        .as_bytes()
+        .to_vec()
+    }
+
+    /// A data uplink as the hardware hands one over after its decryption:
+    /// the protected header, the CCMP header and the plaintext.
+    fn protected_uplink(ether_type: u16, payload: &[u8], pn: u64) -> std::vec::Vec<u8> {
+        let mut frame = std::vec![0x08, 0x41, 0, 0];
+        frame.extend_from_slice(&AP);
+        frame.extend_from_slice(&PEER);
+        frame.extend_from_slice(&AP);
+        frame.extend_from_slice(&[0, 0]);
+        frame.extend_from_slice(
+            &CcmpHeader::new(CcmpPacketNumber::new(pn).unwrap(), CcmpKeyId::PAIRWISE).encode(),
+        );
+        frame.extend_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0]);
+        frame.extend_from_slice(&ether_type.to_be_bytes());
+        frame.extend_from_slice(payload);
+        frame
+    }
+
+    fn replay_counter(transmit: ApEapolTransmit<AP_EAPOL_CAPACITY>) -> u64 {
+        let (frame, _) = transmit.into_parts();
+        frame.key_frame().unwrap().replay_counter()
+    }
+
+    #[test]
+    fn the_pairwise_key_goes_in_before_message3_and_the_port_opens_only_with_message4() {
+        let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
+        let mut engine = engine(&mut storage, &mut beacon);
+        associate(&mut engine);
+        let (message1, context) = engine.begin_wpa2(PEER).unwrap().into_parts();
+        let replay1 = message1.key_frame().unwrap().replay_counter();
+        engine.eapol_sent(context, true, at(10)).unwrap();
+        let group = group_key();
+
+        // A verified Message 2 asks for the key first and holds Message 3.
+        let ApEapol::Install { peer, message3 } =
+            engine.eapol(PEER, &message2(replay1), &group).unwrap()
+        else {
+            panic!("a verified Message 2 installs the pairwise key");
+        };
+        assert_eq!(peer, PEER);
+        let (key, address) = engine.pairwise_key(PEER).unwrap();
+        assert_eq!(address.get(), PEER);
+        assert_eq!(
+            key.as_bytes(),
+            oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(ptk().temporal_key())
+                .as_bytes()
+        );
+        // The port stays closed before the key is in.
+        assert!(engine.authorize(PEER, at(11)).is_err());
+        engine.pairwise_installed(PEER).unwrap();
+        let (message3, context) = message3.into_parts();
+        let replay3 = message3.key_frame().unwrap().replay_counter();
+        engine.eapol_sent(context, true, at(12)).unwrap();
+
+        // The repeated Message 2 of the same PTK installs nothing again.
+        assert!(!matches!(
+            engine.eapol(PEER, &message2(replay1), &group).unwrap(),
+            ApEapol::Install { .. }
+        ));
+        // Message 3's retry is a transmission, never an installation.
+        let retry = engine
+            .due_retry(engine.deadline().unwrap().max(at(13)), &group)
+            .unwrap();
+        let Some(ApDue::Transmit(retry)) = retry else {
+            panic!("the Message 3 timeout retransmits");
+        };
+        let replay_retry = replay_counter(retry);
+        assert!(replay_retry > replay3);
+
+        // The station's Message 4 to the retry comes protected: the installed
+        // key reads it while the port is closed, and the port's data does not
+        // pass yet.
+        let mut output = [0; 512];
+        let data = protected_uplink(0x0800, &[0x45], 1);
+        assert_eq!(
+            engine
+                .receive(
+                    &data,
+                    Integrity::DecryptedAndVerified,
+                    at(14),
+                    None,
+                    0,
+                    &mut output
+                )
+                .unwrap(),
+            ApReceived::Nothing
+        );
+        let eapol = message4(replay_retry);
+        let frame = protected_uplink(EAPOL_ETHER_TYPE, &eapol, 2);
+        let ApReceived::Eapol { body, .. } = engine
+            .receive(
+                &frame,
+                Integrity::DecryptedAndVerified,
+                at(15),
+                None,
+                0,
+                &mut output,
+            )
+            .unwrap()
+        else {
+            panic!("the protected Message 4 reaches the authenticator");
+        };
+        let body = body.to_vec();
+        assert!(matches!(
+            engine.eapol(PEER, &body, &group).unwrap(),
+            ApEapol::Authorize { peer: PEER }
+        ));
+        engine.authorize(PEER, at(16)).unwrap();
+        let data = protected_uplink(0x0800, &[0x45], 3);
+        assert!(matches!(
+            engine
+                .receive(
+                    &data,
+                    Integrity::DecryptedAndVerified,
+                    at(17),
+                    None,
+                    0,
+                    &mut output
+                )
+                .unwrap(),
+            ApReceived::Msdu(_)
+        ));
+    }
+}

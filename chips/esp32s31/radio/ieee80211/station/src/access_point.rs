@@ -47,6 +47,12 @@ const _: () = {
     }
 };
 
+/// The transmissions of an individually addressed management frame of the
+/// access point (a response, an EAPOL-Key frame, a teardown): a named
+/// product policy of this composition, chosen, not taken from a source or
+/// a measurement.
+pub const MANAGEMENT_TRANSMISSIONS: u8 = 4;
+
 /// The BSS the access point serves.
 pub struct ApSettings {
     /// Its SSID.
@@ -138,6 +144,8 @@ struct StartSlot {
     start: core::cell::Cell<Option<(Config, ApSettings)>>,
     /// Whether a start was given: a second one is refused.
     given: core::cell::Cell<bool>,
+    /// How the runner ended, once it did.
+    ended: core::cell::Cell<Option<ApExit>>,
     waker: oer_portable_sync::PriorityWaker,
 }
 
@@ -146,6 +154,7 @@ impl StartSlot {
         Self {
             start: core::cell::Cell::new(None),
             given: core::cell::Cell::new(false),
+            ended: core::cell::Cell::new(None),
             waker: oer_portable_sync::PriorityWaker::new(),
         }
     }
@@ -207,6 +216,11 @@ impl AccessPointControl {
         self.shared.status()
     }
 
+    /// How the access point's runner ended, once it did.
+    pub fn exit(&self) -> Option<ApExit> {
+        self.start.ended.get()
+    }
+
     /// Wait for a status other than `seen`.
     pub async fn changed(&self, seen: ApStatus) -> ApStatus {
         self.shared.changed(seen).await
@@ -245,6 +259,12 @@ pub enum ApExit {
     Faulted,
     /// The runner's own contract broke; it keeps every owner.
     Contract(oer_protocols_ieee80211_runtime::access_point::ApContract),
+    /// The port refused one of the access point's commands: the runner
+    /// returned every owner, the radio stopped and was released.
+    Refused(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
+    /// The port refused a command and the radio's stop or release that
+    /// followed did not complete.
+    RefusedUnreleased(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
 }
 
 /// The access point's task: it owns the radio.
@@ -356,6 +376,13 @@ impl<W: Binding> AccessPointRunner<W> {
     /// release the radio. A stop before the start ends it at once, with no
     /// radio started.
     pub async fn run(self) -> ApExit {
+        let slot = self.start;
+        let exit = self.serve().await;
+        slot.ended.set(Some(exit));
+        exit
+    }
+
+    async fn serve(self) -> ApExit {
         let Self {
             mut boot,
             start,
@@ -475,7 +502,7 @@ impl<W: Binding> AccessPointRunner<W> {
         };
         let engine = ApEngine::new(service, beacon, ADVERTISEMENT, wire_channel, key_id);
         let (Some(management_transmissions), Some(data_transmissions)) = (
-            core::num::NonZeroU8::new(4),
+            core::num::NonZeroU8::new(MANAGEMENT_TRANSMISSIONS),
             core::num::NonZeroU8::new(lmac::SHORT_RETRY_LIMIT),
         ) else {
             return ApExit::Unavailable(InitializationError::Tx);
@@ -513,6 +540,32 @@ impl<W: Binding> AccessPointRunner<W> {
             ApEnd::StopUnconfirmed(_) => ApExit::StopUnconfirmed,
             ApEnd::Faulted => ApExit::Faulted,
             ApEnd::Contract(contract) => ApExit::Contract(contract),
+            ApEnd::Refused(mut runner, refusal) => {
+                // The refused command's owners come back with the runner;
+                // the radio stops and is released with them, and the
+                // access point ends without a reset.
+                drop(runner.take_refused());
+                let stopped = core::future::poll_fn(|cx| {
+                    let now = oer_portable_time::Clock::now(&EmbassyClock);
+                    oer_protocols_ieee80211_contracts_port::DataPort::poll_stop(
+                        runner.port_mut(),
+                        cx,
+                        now,
+                    )
+                })
+                .await;
+                if stopped.is_err() {
+                    let _kept = core::mem::ManuallyDrop::new(runner);
+                    return ApExit::RefusedUnreleased(refusal);
+                }
+                match radio::release::<W>(runner.port_mut()).await {
+                    Ok(()) => ApExit::Refused(refusal),
+                    Err(_) => {
+                        let _kept = core::mem::ManuallyDrop::new(runner);
+                        ApExit::RefusedUnreleased(refusal)
+                    }
+                }
+            }
         }
     }
 }
