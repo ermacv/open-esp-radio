@@ -75,6 +75,8 @@ struct Hardware {
     published: std::rc::Rc<RefCell<Vec<MacLegacyTxProgram>>>,
     ht: Vec<(u8, MacHtTxProgram)>,
     he: Vec<(u8, MacHeTxProgram)>,
+    /// The HE20 association the MAC holds.
+    he_association: Option<oer_chips_esp32s31_hal::types::MacHe20Association>,
     completion: [Option<MacTxCompletionObservation>; 4],
     block_ack_completion: [Option<MacHtAmpduCompletionObservation>; 4],
     timeout_pending: [bool; 4],
@@ -421,6 +423,18 @@ impl StationTbttHardware for Hardware {
 impl TxGateHardware for Hardware {
     fn set_power_save_tx_block(&mut self, blocked: bool) {
         self.tx_blocked = blocked;
+    }
+}
+
+impl crate::lower_mac::StaHeHardware for Hardware {
+    fn install_he20_association(
+        &mut self,
+        association: oer_chips_esp32s31_hal::types::MacHe20Association,
+    ) {
+        self.he_association = Some(association);
+    }
+    fn clear_he20_association(&mut self) {
+        self.he_association = None;
     }
 }
 
@@ -2926,6 +2940,59 @@ fn the_station_s_he_bss_color_is_installed() {
             oer_protocols_ieee80211_contracts_port::BssColor::new(63).unwrap(),
         );
         assert_eq!(core.tx.policy().he_bss_color(), 63);
+    });
+}
+
+/// An HE20 association of color 27 (enabled, not partial), default PE 4,
+/// 16 us padding, ER-SU disabled, AID 42 and MMSS code 5.
+fn he20_association(
+    color_enabled: bool,
+) -> oer_protocols_ieee80211_contracts_port::He20Association {
+    oer_protocols_ieee80211_contracts_port::He20Association::new(
+        &oer_protocols_ieee80211_wire::he::He20PeerState {
+            capability_prefix: [0; 24],
+            packet_padding_eight_us: 2,
+            default_packet_extension_duration: 4,
+            bss_color: 27,
+            bss_color_enabled: color_enabled,
+            partial_bss_color: false,
+            basic_mcs_nss_map: 0xfffc,
+            rts_threshold: None,
+            extended_range_single_user_disabled: true,
+        },
+        42,
+        5,
+    )
+    .unwrap()
+}
+
+#[test]
+fn an_he_association_programs_the_mac_and_colors_the_station_s_he_transmissions() {
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        core.set_checked_he(&mut hardware, StationHe::He20(he20_association(true)))
+            .unwrap();
+        let installed = hardware.he_association.expect("installed");
+        assert_eq!(installed.association_id.get(), 42);
+        assert_eq!(installed.minimum_mpdu_start_spacing.get(), 5);
+        assert_eq!(installed.peer.packet_padding_duration.get(), 16);
+        assert_eq!(installed.peer.default_packet_extension_duration.get(), 4);
+        assert_eq!(installed.peer.bss_color.get(), 27);
+        assert!(installed.peer.bss_color_enabled && !installed.peer.partial_bss_color);
+        assert!(installed.peer.extended_range_single_user_disabled);
+        assert_eq!(core.tx.policy().he_bss_color(), 27);
+
+        // Its end clears both; the next association installs again.
+        core.set_checked_he(&mut hardware, StationHe::Off).unwrap();
+        assert_eq!(hardware.he_association, None);
+        assert_eq!(core.tx.policy().he_bss_color(), 0);
+        core.set_checked_he(&mut hardware, StationHe::He20(he20_association(false)))
+            .unwrap();
+        assert!(hardware.he_association.is_some());
+        // A disabled BSS color is no transmit color.
+        assert_eq!(core.tx.policy().he_bss_color(), 0);
     });
 }
 

@@ -27,6 +27,10 @@ use oer_protocols_ieee80211_core_upper_mac::{
     rate_selection::{FrameRates, RateSelection},
 };
 use oer_protocols_ieee80211_wire::{
+    he::{
+        He20LocalCapabilities, HeMacCapabilities, HeMcsNssSupport, HePhyCapabilities,
+        he20_capability_ie,
+    },
     ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
     station::AssociationCapabilities,
 };
@@ -269,12 +273,73 @@ const HT40: [u8; 28] = ht_capability_ie(
         Err(_) => panic!("HT40 advertisement geometry"),
     },
 );
+// HT Capabilities beside HE20: HT20, one spatial stream, MCS 0..7, SM power
+// save disabled, A-MPDUs of up to 65 535 octets with MPDUs at least 4 us
+// apart: the HT40 element's fields on the 20 MHz geometry.
+//
+// SOURCE: the vendor station's HT Capabilities beside its HE elements
+// (`libnet80211.a[ieee80211_ht.o]::ieee80211_add_htcap_body`, frame 7624 of
+// HIL_VENDOR_HE20_NDPA_CBF_2026_07_24: capability information 0x112c, A-MPDU
+// Parameters 0x17), without its short guard interval and RX STBC claims.
+const HE20_HT: [u8; 28] = ht_capability_ie(
+    HtLocalCapabilities::new(
+        u16::from_le_bytes(
+            HtCapabilityInfo::from_bytes([0; 2])
+                .with_sm_power_save(HtCapabilityInfo::SM_POWER_SAVE_DISABLED)
+                .to_bytes(),
+        ),
+        {
+            let [parameters] = HtAmpduParameters::from_bytes([0])
+                .with_exponent(HtAmpduParameters::EXPONENT_65535_OCTETS)
+                .with_spacing(HtAmpduParameters::SPACING_4_US)
+                .to_bytes();
+            parameters
+        },
+        0xff,
+        1,
+    ),
+    match Channel::ghz2_4(
+        1,
+        oer_protocols_ieee80211_wire::channel::WifiChannelWidth::Mhz20,
+    ) {
+        Ok(channel) => channel,
+        Err(_) => panic!("HE20 HT advertisement geometry"),
+    },
+);
+// HE20: one spatial stream, HE-MCS 0..9 received and transmitted, and no
+// optional capability: every HE MAC capability clear but the Trigger Frame
+// MAC Padding Duration, 16 us; every HE PHY capability clear but the Nominal
+// Packet Padding, 16 us for every constellation. Neither value claims a
+// capability: they ask the access point for processing time. LDPC, 1x LTF
+// with 0.8 us GI, STBC, DCM, beamformee, device class A, UL MU-MIMO, PPE
+// Thresholds and every trigger, TWT, BSR, OM control and +HTC-HE capability
+// stay clear: nothing here implements them, and no Trigger frame gets an
+// HE TB PPDU answer this station owns.
+//
+// SOURCE: the vendor's TF MAC padding default `s_mac_cap_padding_duration = 2`
+// (`libnet80211.a[ieee80211_he.o]::ieee80211_add_hecap` +0x130/+0x134,
+// `esp_wifi_set_tf_padding_duration` admits 0..2) and Nominal Packet Padding
+// 16 us (the vendor default element, PHY byte 9 bits 7:6 = 2). Field
+// positions: IEEE Std 802.11ax-2021, 9.4.2.248.2 and .3, as Linux cites them.
+const HE20: [u8; 24] = he20_capability_ie(He20LocalCapabilities {
+    mac: HeMacCapabilities::from_bytes([0; 6])
+        .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US),
+    phy: HePhyCapabilities::from_bytes([0; 11])
+        .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US),
+    receive: HeMcsNssSupport::Mcs0To9,
+    transmit: HeMcsNssSupport::Mcs0To9,
+});
+// Extended Capabilities beside HE20 (Element ID 127, twelve octets): no
+// capability. The vendor's HE station path sets Event, Multiple BSSID and
+// TWT Requester (`libnet80211.a[ieee80211_output.o]::ieee80211_add_extcap`
+// +0x6c..0x13c); this station implements none of them.
+const HE20_EXTENDED: [u8; 14] = [127, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities {
     ht20: HT20,
     ht40: HT40,
-    he20_ht: [0; 28],
-    he20: [0; 24],
-    he20_extended: [0; 14],
+    he20_ht: HE20_HT,
+    he20: HE20,
+    he20_extended: HE20_EXTENDED,
     wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
 };
 /// The station's contexts at their tickets' places.

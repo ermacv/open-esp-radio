@@ -399,6 +399,7 @@ enum Seen {
     SelectGroup,
     RemoveKey,
     Edca(WmmParameterSet),
+    He(oer_protocols_ieee80211_contracts_port::StationHe),
 }
 
 /// Counts the station's token losses and RSN input drops, each test's own.
@@ -547,6 +548,7 @@ fn test_profile(security: StaSecurity) -> StaProfile {
     StaProfile {
         ssid: heapless::Vec::from_slice(SSID).unwrap(),
         security,
+        prefer_he20: false,
     }
 }
 
@@ -836,6 +838,7 @@ impl<'id, const G: usize> World<'id, G> {
                     }
                     StaAction::Ready(id) => self.arbiter.ready(id),
                     StaAction::SetEdca(edca) => self.seen.push(Seen::Edca(edca.get().wmm())),
+                    StaAction::SetHe(he) => self.seen.push(Seen::He(he)),
                     StaAction::InstallPairwiseKey {
                         association,
                         pending,

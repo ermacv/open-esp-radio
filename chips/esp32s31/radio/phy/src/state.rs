@@ -127,6 +127,12 @@ impl PhyConfig {
         highest
     }
 
+    /// The per-rate target powers this configuration tunes to
+    /// (`phy_get_max_pwr`'s inputs), before any transmit-power ceiling.
+    pub const fn tx_target_power_profile(&self) -> PhyTxTargetPowerProfile {
+        PhyTxTargetPowerProfile::new(self.target_power_maximum, self.target_power)
+    }
+
     pub const fn with_target_power(
         mut self,
         maximum: i8,
@@ -969,7 +975,7 @@ impl PhyState {
     }
 
     pub const fn tx_target_power_profile(&self) -> PhyTxTargetPowerProfile {
-        PhyTxTargetPowerProfile::new(self.config.target_power_maximum, self.config.target_power)
+        self.config.tx_target_power_profile()
     }
 
     pub const fn baseband_calibration_complete(&self) -> bool {

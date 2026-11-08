@@ -122,8 +122,10 @@ impl DiagnosticPath for BackendFault {
                     PortCommandKind::CloseGate => "CloseGate",
                     PortCommandKind::SetEdca => "SetEdca",
                     PortCommandKind::SetBssColor => "SetBssColor",
+                    PortCommandKind::SetHe => "SetHe",
                 });
             }
+            Self::HeAssociationRange => path.name("HeAssociationRange"),
         }
     }
 }

@@ -210,8 +210,14 @@ the types the port's owners and terminals carry:
   attempts; another interface's publication does not block it.
   A stop drains these command terminals with their owners.
 - **Settings.** EDCA (`PortCommand::SetEdca`), BSS color
-  (`PortCommand::SetBssColor`) and Block Ack desired state take effect
-  before the next publication; the latest value of each wins. Each VIF keeps its
+  (`PortCommand::SetBssColor`), the HE association (`PortCommand::SetHe`)
+  and Block Ack desired state take effect before the next publication; the
+  latest value of each wins. `SetHe` carries `StationHe`: an
+  `He20Association` (the access point's HE parameters from its Association
+  Response, the AID and the minimum MPDU start spacing, each within its
+  field) or `Off`. The station installs it after the Association Response
+  and before the link's data and sets `Off` once the association ends; it
+  also sets the color of the station's HE transmissions. Each VIF keeps its
   complete EDCA table: AIFSN, ECWmin, ECWmax, TXOP limit and MSDU lifetime.
   `SupportedEdca` refuses unsupported records; the port applies them
   exactly. The head frame's VIF selects the parameters of its AC queue's

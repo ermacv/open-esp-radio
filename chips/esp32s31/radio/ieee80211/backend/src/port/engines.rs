@@ -214,9 +214,10 @@ fn station_generations<
             None,
         ],
         PortCommand::Configure { permission, .. } => [Some(permission.generation()), None, None],
-        PortCommand::CloseGate(_) | PortCommand::SetEdca(_) | PortCommand::SetBssColor(_) => {
-            [None, None, None]
-        }
+        PortCommand::CloseGate(_)
+        | PortCommand::SetEdca(_)
+        | PortCommand::SetBssColor(_)
+        | PortCommand::SetHe(_) => [None, None, None],
     }
 }
 
@@ -243,6 +244,8 @@ struct PortSettings {
     edca: [EdcaParameterSet; 2],
     edca_dirty: bool,
     color: Option<BssColor>,
+    /// The station interface's HE association to install or end.
+    he: Option<oer_protocols_ieee80211_contracts_port::StationHe>,
     /// The receive Block Ack agreements the caller wants installed.
     block_acks: [Option<core_mac::RxBlockAckValues>; 8],
     block_acks_dirty: bool,
@@ -254,13 +257,14 @@ impl PortSettings {
             edca: [EdcaParameterSet::STANDARD_DEFAULT; 2],
             edca_dirty: true,
             color: None,
+            he: None,
             block_acks: [None; 8],
             block_acks_dirty: false,
         }
     }
 
     fn dirty(&self) -> bool {
-        self.edca_dirty || self.color.is_some() || self.block_acks_dirty
+        self.edca_dirty || self.color.is_some() || self.he.is_some() || self.block_acks_dirty
     }
 }
 
@@ -923,6 +927,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             view.set_checked_he_bss_color(color);
             self.settings.color = None;
         }
+        if let Some(he) = self.settings.he {
+            view.set_checked_he(self.device.hardware()?, he)
+                .map_err(|crate::lower_mac::HeAssociationRange| Fault::HeAssociationRange)?;
+            self.settings.he = None;
+        }
         if self.settings.block_acks_dirty {
             for (index, old) in driver.applied_ba.iter_mut().enumerate() {
                 let wanted = self.settings.block_acks.get(index).copied().flatten();
@@ -1304,6 +1313,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             PortCommand::SetBssColor(color) => {
                 self.settings.color = Some(color);
+                self.apply_settings()?;
+                Ok(CommandProgress::Done)
+            }
+            PortCommand::SetHe(he) => {
+                self.settings.he = Some(he);
                 self.apply_settings()?;
                 Ok(CommandProgress::Done)
             }

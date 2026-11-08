@@ -466,6 +466,7 @@ impl<'b> World<'b> {
         oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
             ssid: heapless::Vec::from_slice(SSID).unwrap(),
             security: duplicate(&self.security),
+            prefer_he20: false,
         }
     }
 

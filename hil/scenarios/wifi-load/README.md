@@ -21,7 +21,10 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 
 Each load case offers 10, 30, 50 and 65 Mbit/s in total (1472-byte
 datagrams); `OER_WIFI_LOAD_MBPS=10,65,100` replaces the levels (and `OER_WIFI_LOAD_WIDTH=ht20` the 40 MHz channel the path case asks the router for), e.g. to
-overload. Each level is one run of the image's load service: a 5 s
+overload. `OER_WIFI_LOAD_WIDTH=he20` asks the router for its HE20 station
+profile and the station's join for HE20 (experimental, off otherwise); the
+path case prints the PHY the station associated in, and each level's `rx`
+and `tx` counts name the HE-SU MPDUs (`HE`). Each level is one run of the image's load service: a 5 s
 (`OER_WIFI_LOAD_SECONDS` replaces it, 1 to 60) measuring window after 300 ms, then 500 ms of drain, after which the image
 ends the run by itself. Throughput and CPU are over the window (the image's
 clock); per level it records offered, sent and received throughput, lost

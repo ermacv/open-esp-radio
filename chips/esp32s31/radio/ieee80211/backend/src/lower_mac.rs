@@ -155,7 +155,7 @@ pub trait Observations: EventSink<ContentionDraw> + 'static {}
 impl<O: EventSink<ContentionDraw> + 'static> Observations for O {}
 
 use crate::mac::tsf_relation::TsfTimingError;
-use oer_chips_esp32s31_hal::types::{MacPti, StaTbttSchedule};
+use oer_chips_esp32s31_hal::types::{MacHe20Association, MacPti, StaTbttSchedule};
 use oer_protocols_ieee80211_contracts_port::TsfGeneration;
 use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
 
@@ -441,6 +441,73 @@ pub trait RxBeaconPriorityHardware {
     fn clear_rx_beacon_pti(&mut self);
 }
 
+/// The station interface's HE association registers
+/// (`libnet80211.a[wl_cnx.o]::cnx_connect_to_bss` and `ic_set_sta`).
+pub trait StaHeHardware {
+    /// Install the interface-zero HE20 association in the vendor's order.
+    fn install_he20_association(&mut self, association: MacHe20Association);
+    /// Remove the interface-zero HE association.
+    fn clear_he20_association(&mut self);
+}
+
+/// An HE20 association whose values the MAC's fields do not hold; the
+/// port contract's ranges lie within them, so a correct contract never
+/// produces one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HeAssociationRange;
+
+/// The MAC's form of `association`.
+///
+/// The contract's AID (1..=2007), MMSS code (0..=7), padding (0..=16 us),
+/// default PE code (0..=7) and color (0..=63) lie within the MAC's fields,
+/// which the inline check below proves for each maximum.
+pub fn mac_he20_association(
+    association: &oer_protocols_ieee80211_contracts_port::He20Association,
+) -> Result<MacHe20Association, HeAssociationRange> {
+    use oer_chips_esp32s31_hal::types::{
+        MacAssociationId, MacHe20PeerConfig, MacHeBssColor, MacHeDefaultPacketExtensionDuration,
+        MacHePacketPaddingDuration, MacMinimumMpduStartSpacing,
+    };
+    use oer_protocols_ieee80211_contracts_port::He20Association;
+    const {
+        if (He20Association::MAX_ASSOCIATION_ID as u32) > MacAssociationId::MAX
+            || MacAssociationId::MIN > 1
+            || (He20Association::MAX_MINIMUM_MPDU_START_SPACING as u32)
+                > MacMinimumMpduStartSpacing::MAX
+            || (He20Association::MAX_PACKET_PADDING_EIGHT_US as u32) * 8
+                > MacHePacketPaddingDuration::MAX
+            || (He20Association::MAX_DEFAULT_PACKET_EXTENSION as u32)
+                > MacHeDefaultPacketExtensionDuration::MAX
+            || 63 > MacHeBssColor::MAX
+        {
+            panic!("the HE association's ranges lie within the MAC's fields");
+        }
+    }
+    let (color, color_enabled, partial_color) = association.color();
+    Ok(MacHe20Association {
+        peer: MacHe20PeerConfig {
+            packet_padding_duration: MacHePacketPaddingDuration::new(
+                u32::from(association.packet_padding_eight_us()) * 8,
+            )
+            .ok_or(HeAssociationRange)?,
+            default_packet_extension_duration: MacHeDefaultPacketExtensionDuration::new(u32::from(
+                association.default_packet_extension(),
+            ))
+            .ok_or(HeAssociationRange)?,
+            bss_color: MacHeBssColor::new(u32::from(color.get())).ok_or(HeAssociationRange)?,
+            bss_color_enabled: color_enabled,
+            partial_bss_color: partial_color,
+            extended_range_single_user_disabled: association.extended_range_single_user_disabled(),
+        },
+        association_id: MacAssociationId::new(u32::from(association.association_id()))
+            .ok_or(HeAssociationRange)?,
+        minimum_mpdu_start_spacing: MacMinimumMpduStartSpacing::new(u32::from(
+            association.minimum_mpdu_start_spacing(),
+        ))
+        .ok_or(HeAssociationRange)?,
+    })
+}
+
 /// The coexistence priorities of the shared radio the core shares its RF
 /// with, as it last published them.
 /// The core retains a concrete `C: RadioCoexPriorities` chosen by its image;
@@ -494,6 +561,7 @@ pub trait LowerMacHardware:
     + StationTbttHardware
     + TxGateHardware
     + RxBeaconPriorityHardware
+    + StaHeHardware
 {
 }
 
@@ -513,6 +581,7 @@ impl<H> LowerMacHardware for H where
         + StationTbttHardware
         + TxGateHardware
         + RxBeaconPriorityHardware
+        + StaHeHardware
 {
 }
 
@@ -1723,6 +1792,31 @@ where
         for index in 0..LOWER_MAC_TX_QUEUES {
             self.abort_held(hardware, index, sink);
         }
+    }
+
+    /// Install or end the station interface's HE association: the MAC's
+    /// HE registers and the color of the station's HE transmissions. An
+    /// association outside the MAC's fields changes nothing.
+    pub fn set_checked_he<H: StaHeHardware>(
+        &mut self,
+        hardware: &mut H,
+        he: oer_protocols_ieee80211_contracts_port::StationHe,
+    ) -> Result<(), HeAssociationRange> {
+        use oer_protocols_ieee80211_contracts_port::StationHe;
+        match he {
+            StationHe::Off => {
+                hardware.clear_he20_association();
+                self.tx.policy_mut().install_he_bss_color(0);
+            }
+            StationHe::He20(association) => {
+                let mac = mac_he20_association(&association)?;
+                hardware.install_he20_association(mac);
+                self.tx
+                    .policy_mut()
+                    .install_he_bss_color(association.transmit_color().get());
+            }
+        }
+        Ok(())
     }
 
     /// Retain the phase's six-bit color proof through the core boundary.

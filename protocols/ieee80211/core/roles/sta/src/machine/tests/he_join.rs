@@ -103,21 +103,38 @@ fn associating<'id>(
     let mut world = World::new(mint, 3);
     world.station.config.association = &ELEMENTS;
     world.station.config.phy = request;
-    world.command(at(0), 1, StaCommand::Connect).unwrap();
-    world.run(at(0));
+    prefer_he20(&mut world, true);
+    let request = join(&mut world, 0, 1, beacon);
+    (world, request)
+}
+
+/// Whether the world's profile asks for HE20.
+fn prefer_he20(world: &mut World<'_>, prefer: bool) {
+    world
+        .station
+        .profile
+        .as_mut()
+        .expect("the world's profile")
+        .prefer_he20 = prefer;
+}
+
+/// Connect from idle at `start` ms with command tag `tag`, hear `beacon`
+/// and authenticate: the Association Request sent.
+fn join(world: &mut World<'_>, start: u32, tag: u64, beacon: &[u8]) -> Vec<u8> {
+    let sent = world.frames.len();
+    world.command(at(start), tag, StaCommand::Connect).unwrap();
+    world.run(at(start));
     world.advance();
-    world.receive(at(13), beacon);
+    world.receive(at(start + 13), beacon);
     world.advance();
-    world.answer_authentication(at(30), 0);
-    let requests = world
-        .frames
+    world.answer_authentication(at(start + 30), 0);
+    let requests = world.frames[sent..]
         .iter()
         .filter(|frame| frame[0] & 0xfc == 0x00)
         .cloned()
         .collect::<Vec<_>>();
     assert_eq!(requests.len(), 1);
-    let request = requests.into_iter().next().unwrap();
-    (world, request)
+    requests.into_iter().next().unwrap()
 }
 
 fn connected_phy(world: &World<'_>) -> Option<PhyMode> {
@@ -369,5 +386,189 @@ fn he_without_ht_is_not_admitted() {
         world.receive(at(31), &open_association_response());
         assert!(world.station.is_connected());
         assert_eq!(connected_phy(&world), Some(PhyMode::Legacy));
+    });
+}
+
+/// The HE association the station set, in order of the actions it took.
+fn he_settings(seen: &[Seen]) -> Vec<oer_protocols_ieee80211_contracts_port::StationHe> {
+    seen.iter()
+        .filter_map(|seen| match seen {
+            Seen::He(he) => Some(*he),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_profile_without_the_he_preference_gets_the_ht_request() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.station.config.association = &ELEMENTS;
+        world.station.config.phy = StaPhyRequest::PreferHe20 {
+            ht40: false,
+            power: power(),
+        };
+        let request = join(&mut world, 0, 1, &access_point_beacon(true));
+        assert_eq!(
+            request_elements(&request),
+            [(0, None), (1, None), (45, None), (221, None)]
+        );
+        world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
+        assert_eq!(connected_phy(&world), Some(PhyMode::Ht20));
+        assert!(he_settings(&world.take()).is_empty());
+    });
+}
+
+#[test]
+fn an_he_link_installs_its_association_before_its_data_and_ends_it_at_its_leave() {
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    installed(|mint| {
+        let (mut world, _) = associating(
+            mint,
+            StaPhyRequest::PreferHe20 {
+                ht40: false,
+                power: power(),
+            },
+            &access_point_beacon(true),
+        );
+        world.take();
+        world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
+        let seen = world.take();
+        let edca = seen.iter().position(|seen| matches!(seen, Seen::Edca(_)));
+        let he = seen.iter().position(|seen| matches!(seen, Seen::He(_)));
+        let connected = seen
+            .iter()
+            .position(|seen| matches!(seen, Seen::Notify(StaNotice::Connected { .. })));
+        assert!(edca < he && he < connected, "{seen:?}");
+        let [StationHe::He20(association)] = he_settings(&seen)[..] else {
+            panic!("one HE20 association: {seen:?}");
+        };
+        // The response's AID (0xc02a less its two top bits), the access
+        // point's minimum MPDU start spacing (none) and its HE Operation:
+        // color 27, default PE 4, ER-SU disabled.
+        assert_eq!(association.association_id(), 0x2a);
+        assert_eq!(association.minimum_mpdu_start_spacing(), 0);
+        assert_eq!(association.transmit_color().get(), 27);
+        assert_eq!(association.default_packet_extension(), 4);
+        assert!(association.extended_range_single_user_disabled());
+
+        // The leave ends it before receive goes off.
+        world.command(at(40), 2, StaCommand::Disconnect).unwrap();
+        world.run(at(40));
+        let seen = world.take();
+        let off = seen
+            .iter()
+            .position(|seen| *seen == Seen::He(StationHe::Off));
+        let configure = seen.iter().position(|seen| *seen == Seen::Configure("off"));
+        assert!(off.is_some() && off < configure, "{seen:?}");
+        assert_eq!(he_settings(&seen), [StationHe::Off]);
+    });
+}
+
+#[test]
+fn an_ht_link_sets_no_he_association() {
+    installed(|mint| {
+        let (mut world, _) = associating(
+            mint,
+            StaPhyRequest::PreferHe20 {
+                ht40: false,
+                power: power(),
+            },
+            &access_point_beacon(false),
+        );
+        world.receive(at(31), &response(&[]));
+        world.command(at(40), 2, StaCommand::Disconnect).unwrap();
+        world.run(at(40));
+        assert!(he_settings(&world.take()).is_empty());
+    });
+}
+
+#[test]
+fn he_then_ht_then_he_sets_each_association_and_ends_each() {
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    installed(|mint| {
+        let (mut world, _) = associating(
+            mint,
+            StaPhyRequest::PreferHe20 {
+                ht40: false,
+                power: power(),
+            },
+            &access_point_beacon(true),
+        );
+        world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
+        world.command(at(40), 2, StaCommand::Disconnect).unwrap();
+        world.run(at(40));
+        let first = he_settings(&world.take());
+        assert!(
+            matches!(first[..], [StationHe::He20(_), StationHe::Off]),
+            "{first:?}"
+        );
+
+        // The access point drops HE: the next link is HT and sets nothing.
+        let request = join(&mut world, 100, 3, &access_point_beacon(false));
+        assert!(!request_elements(&request).contains(&(255, Some(35))));
+        world.receive(at(131), &response(&[]));
+        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::Ht20);
+        world.command(at(140), 4, StaCommand::Disconnect).unwrap();
+        world.run(at(140));
+        assert!(he_settings(&world.take()).is_empty());
+
+        // HE again: the association is installed once more.
+        let request = join(&mut world, 200, 5, &access_point_beacon(true));
+        assert!(request_elements(&request).contains(&(255, Some(35))));
+        world.receive(at(231), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
+        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::He20);
+        let again = he_settings(&world.take());
+        assert!(matches!(again[..], [StationHe::He20(_)]), "{again:?}");
+    });
+}
+
+#[test]
+fn a_join_first_ends_an_he_association_left_set() {
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    // A setup the station recorded as set, then left without its leave's
+    // step (as a partly applied one would be): the next join ends it before
+    // its receive configuration.
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.station.he = true;
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        world.advance();
+        world.receive(at(13), &access_point_beacon(false));
+        world.advance();
+        let seen = world.take();
+        let off = seen
+            .iter()
+            .position(|seen| *seen == Seen::He(StationHe::Off));
+        let bss = seen.iter().position(|seen| *seen == Seen::Configure("bss"));
+        assert!(off.is_some() && off < bss, "{seen:?}");
+        assert!(!world.station.he);
+    });
+}
+
+#[test]
+fn an_he_response_with_an_aid_outside_its_field_is_no_link() {
+    installed(|mint| {
+        let (mut world, _) = associating(
+            mint,
+            StaPhyRequest::PreferHe20 {
+                ht40: false,
+                power: power(),
+            },
+            &access_point_beacon(true),
+        );
+        world.take();
+        let mut frame = response(&[&HE_CAPABILITY, &HE_OPERATION]);
+        // AID 0, its two top bits set.
+        frame[28..30].copy_from_slice(&0xc000_u16.to_le_bytes());
+        world.receive(at(31), &frame);
+        world.run(at(31));
+        assert!(!world.station.is_connected());
+        assert!(he_settings(&world.take()).is_empty());
+        assert!(world.completed.iter().any(|terminal| matches!(
+            terminal.outcome,
+            StaCommandOutcome::ConnectFailed(StaDisconnectReason::HeNotGranted)
+        )));
     });
 }

@@ -54,6 +54,7 @@ pub(crate) fn backend_fault(
         Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
         Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
         Source::CommandExpired(kind) => BackendFault::CommandExpired(command_kind(kind)),
+        Source::HeAssociationRange => BackendFault::HeAssociationRange,
     }
 }
 
@@ -133,6 +134,7 @@ pub(super) fn command_kind(
         Source::CloseGate => PortCommandKind::CloseGate,
         Source::SetEdca => PortCommandKind::SetEdca,
         Source::SetBssColor => PortCommandKind::SetBssColor,
+        Source::SetHe => PortCommandKind::SetHe,
     }
 }
 

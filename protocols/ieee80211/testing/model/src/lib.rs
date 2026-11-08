@@ -1820,6 +1820,10 @@ pub struct ModelAir {
     rx_limits: Cell<ModelRxLimits>,
     /// The subframes one data arena holds.
     arena_frames: Cell<u8>,
+    /// The station interface's HE association, as the last
+    /// [`PortCommand::SetHe`](oer_protocols_ieee80211_contracts_port::PortCommand::SetHe)
+    /// set it.
+    he: Cell<oer_protocols_ieee80211_contracts_port::StationHe>,
 }
 impl ModelAir {
     fn new(clock: Rc<dyn Clock>) -> Self {
@@ -1841,6 +1845,7 @@ impl ModelAir {
             recovery: Default::default(),
             disables: Default::default(),
             edca: Default::default(),
+            he: Cell::new(oer_protocols_ieee80211_contracts_port::StationHe::Off),
             held: Default::default(),
             held_results: Default::default(),
             relayed: Cell::new(0),
@@ -2357,6 +2362,17 @@ impl ModelAir {
     /// modeled hardware holds them.
     pub fn access_point(&self) -> ModelAccessPointInterface {
         self.access_point.get()
+    }
+
+    /// The station interface's HE association, as the last `SetHe` set it;
+    /// `Off` before any.
+    pub fn he(&self) -> oer_protocols_ieee80211_contracts_port::StationHe {
+        self.he.get()
+    }
+
+    /// Set the station interface's HE association.
+    pub(crate) fn set_he(&self, he: oer_protocols_ieee80211_contracts_port::StationHe) {
+        self.he.set(he);
     }
 
     /// The complete EDCA set currently installed for this interface.

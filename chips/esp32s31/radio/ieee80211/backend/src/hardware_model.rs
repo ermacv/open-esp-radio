@@ -196,6 +196,9 @@ struct State {
     station_tsf: u64,
     tbtt: Option<StaTbttSchedule>,
     tx_blocked: bool,
+    /// The HE20 association the MAC holds, `None` after a removal or
+    /// before any.
+    he: Option<oer_chips_esp32s31_hal::types::MacHe20Association>,
     cca_forced: bool,
     breaks: Vec<RuleBreak>,
     counts: AtomCounts,
@@ -221,11 +224,17 @@ impl Atoms {
             station_tsf: 0,
             tbtt: None,
             tx_blocked: false,
+            he: None,
             cca_forced: false,
             breaks: Vec::new(),
             counts: AtomCounts::default(),
             clock,
         })))
+    }
+
+    /// The HE20 association the MAC holds now.
+    pub fn he(&self) -> Option<oer_chips_esp32s31_hal::types::MacHe20Association> {
+        self.0.borrow().he
     }
 
     /// The PPDUs started since the last call.
@@ -798,6 +807,18 @@ impl StationTbttHardware for ModelRegisters {
 impl TxGateHardware for ModelRegisters {
     fn set_power_save_tx_block(&mut self, blocked: bool) {
         self.atoms.with(|state| state.tx_blocked = blocked);
+    }
+}
+
+impl crate::lower_mac::StaHeHardware for ModelRegisters {
+    fn install_he20_association(
+        &mut self,
+        association: oer_chips_esp32s31_hal::types::MacHe20Association,
+    ) {
+        self.atoms.with(|state| state.he = Some(association));
+    }
+    fn clear_he20_association(&mut self) {
+        self.atoms.with(|state| state.he = None);
     }
 }
 

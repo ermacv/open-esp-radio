@@ -1028,6 +1028,71 @@ fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
     });
 }
 
+/// The port's MAC after `settings`, each a `SetHe` command it ran.
+fn he_after(
+    settings: &[oer_protocols_ieee80211_contracts_port::StationHe],
+) -> Option<oer_chips_esp32s31_hal::types::MacHe20Association> {
+    let mut held = None;
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        for &he in settings {
+            let now = fixture.now();
+            assert!(matches!(
+                fixture
+                    .port
+                    .command(PortCommand::SetHe(he), now, &mut fixture.outbox),
+                Ok(CommandProgress::Done)
+            ));
+            fixture.turn();
+        }
+        fixture.stop();
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        drop(buffers);
+        let device = port
+            .release()
+            .expect("the stopped port releases its device");
+        held = Some(device.hardware.he_association);
+    });
+    held.expect("the installation ran")
+}
+
+#[test]
+fn the_port_installs_an_he_association_and_ends_it() {
+    use oer_protocols_ieee80211_contracts_port::{He20Association, StationHe};
+    let peer = oer_protocols_ieee80211_wire::he::He20PeerState {
+        capability_prefix: [0; 24],
+        packet_padding_eight_us: 1,
+        default_packet_extension_duration: 2,
+        bss_color: 9,
+        bss_color_enabled: true,
+        partial_bss_color: true,
+        basic_mcs_nss_map: 0xfffc,
+        rts_threshold: Some(100),
+        extended_range_single_user_disabled: false,
+    };
+    let association = He20Association::new(&peer, 7, 0).expect("in range");
+    let installed = he_after(&[StationHe::He20(association)]).expect("installed");
+    assert_eq!(installed.association_id.get(), 7);
+    assert_eq!(installed.peer.packet_padding_duration.get(), 8);
+    assert_eq!(installed.peer.bss_color.get(), 9);
+    assert!(installed.peer.partial_bss_color);
+    // HE, then its end, then HE again: each command's state, in order.
+    assert_eq!(
+        he_after(&[StationHe::He20(association), StationHe::Off]),
+        None
+    );
+    assert_eq!(
+        he_after(&[
+            StationHe::He20(association),
+            StationHe::Off,
+            StationHe::He20(association)
+        ]),
+        Some(installed)
+    );
+}
+
 #[test]
 fn a_completion_without_effect_keeps_the_arena_watchdog_whose_expiry_cancels_the_arena() {
     with_fixture(|fixture| {
