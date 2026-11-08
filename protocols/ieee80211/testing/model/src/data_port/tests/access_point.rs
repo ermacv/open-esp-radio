@@ -782,19 +782,25 @@ fn the_access_point_stops_alone_beside_an_active_station_with_its_frame_on_the_a
         let mut beacon_back = None;
         assert!(settle(harness, &mut beacon_back).is_empty());
 
+        // A station frame waits in a free queue as the access point stops.
+        let station_queued = station_frame_on(harness, WmmAccessCategory::Background);
+        let station_queued = submit(harness, station_queued);
         // The access point stops: its configuration Off waits for its frame
-        // and ends its queued beacon at once, with the permission.
+        // and ends its queued beacon at once, with the permission; the
+        // station's queued frame goes out.
         let command = ap_configure(ap_configure_permission, AccessPointReceive::Off);
         let AccessPointProgress::Held(command) = ap_command(harness, command) else {
             panic!("the access point's frame on the air holds its stop");
         };
-        assert_eq!(
-            settle(harness, &mut beacon_back),
-            [Ended::Beacon(
-                queued_beacon,
-                End::Withdrawn(WithdrawCause::GateClosed)
-            )]
-        );
+        harness.service();
+        // Terminals of different queues come in no promised order.
+        let ended = settle(harness, &mut beacon_back);
+        assert_eq!(ended.len(), 2);
+        assert!(ended.contains(&Ended::Beacon(
+            queued_beacon,
+            End::Withdrawn(WithdrawCause::GateClosed)
+        )));
+        assert!(ended.contains(&Ended::Frame(station_queued, End::Delivered)));
         assert!(beacon_back.is_some(), "the beacon permission is back");
         // The station is not held by the access point's stop: its frame
         // ends, a new one goes, and its own command runs.

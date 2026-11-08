@@ -1234,6 +1234,15 @@ its model and conformance case.
   ends the actor with every owner kept. Installations of one static identity
   are minted by `radio_port::Installations`; a token of another installation
   is refused at run time.
+- `DataPort` is the one physical owner of an installation (MAC, receive
+  ring, interrupt owner, DMA, transmit queues). The access point reaches it
+  through `AccessPointPort` beside the station's entry points: its own
+  admission, commands and issuer on its own permissions (configure, keys,
+  the one beacon permission), the same `submit`, queues and sink. Each role
+  stops with its own commands without touching the other's; `poll_stop`
+  stops the shared owner for both. A beacon contends as voice, one at a
+  time; who writes its Timestamp and the TSF control are backend
+  declarations, absent until sourced.
 - A caller that drops an admitted request detaches only its waker; the port
   keeps the registration and buffer lease until the terminal event and
   reclaims exactly once. Event streams end with the uninstall.

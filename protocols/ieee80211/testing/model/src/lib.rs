@@ -122,6 +122,14 @@
 //! Only that clock's owner advances time. Radio instants are projections
 //! through an affine, zero-drift relation with a sampled nonzero offset.
 //! Hardware backends declare their own PPDU plus response/timeout bound.
+//!
+//! The access point uses the same port ([`ModelPort`] implements
+//! `AccessPointPort`): its attempts share the queues and the key table, its
+//! commands keep their own held bound, its configuration withdraws and waits
+//! for its own interface only, and [`ModelAir::access_point`] shows its
+//! receive rules and TSF. A confirmed stop leaves its interface receiving
+//! nothing and its TSF stopped. [`ModelResources`] groups the shared tokens
+//! and each role's own permissions.
 
 pub mod air_time;
 pub use air_time::{
