@@ -219,6 +219,9 @@ pub struct RadioDevice<
     timeline: MacTimeline,
     power: Option<Power<F>>,
     rx_pending: bool,
+    /// The receive signal held facts at the last facts call: ring work its
+    /// next pull takes.
+    rx_raised: bool,
     tx_pending: u32,
     tbtt_pending: bool,
     cut: bool,
@@ -330,6 +333,7 @@ impl<
             timeline: MacTimeline::new(),
             power: None,
             rx_pending: false,
+            rx_raised: false,
             tx_pending: 0,
             tbtt_pending: false,
             cut: false,
@@ -757,17 +761,18 @@ where
         self.cut_blocked
     }
     fn returns_quiet(&mut self, held: usize, returned: bool) -> bool {
-        let rearm_due = returned || self.rx_pending;
+        let rearm_due = returned || self.rx_pending || self.rx_raised;
         let whole = self.returns.quiet(held, rearm_due);
         whole || self.continuation.is_some()
     }
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
         // A trace build's stall snapshot goes before any of this turn's
-        // receive work, the receive facts' take included.
+        // receive work, the pull's take of the receive facts included.
         #[cfg(oer_trace)]
         let diagnosed = self.serve_stall(cx);
         #[cfg(not(oer_trace))]
         let diagnosed = false;
+        self.rx_raised = false;
         if self.cut || self.pausing {
             return Ok(diagnosed);
         }
@@ -778,17 +783,19 @@ where
                 .sample_mac_counts(self.timer.now().as_micros() as u32);
         }
         let session = self.session.as_mut().map_err(|e| *e)?;
-        if let Poll::Ready(facts) = session.poll_received(cx) {
-            let facts = facts.map_err(Fault::Receive)?;
-            // A returned staging credit rearms the ring as a received unit
-            // fills it: both are ring work.
-            self.rx_pending |= !facts.is_empty();
+        // The facts stay raised for the pull that serves them: taking one
+        // here would take the wake its raise owes this task, and a caller
+        // that does not pull before it sleeps would leave the ring masked
+        // with nothing to wake it.
+        if let Poll::Ready(result) = session.poll_received_raised(cx) {
+            result.map_err(Fault::Receive)?;
+            self.rx_raised = true;
         }
         // Ring work that waits for its continuation is the caller's alarm's
         // (the pull answered `Later`): it is no fact before then.
         Ok(diagnosed
             || !self.received.0.get_mut().is_empty()
-            || (self.rx_pending && self.continuation.is_none()))
+            || ((self.rx_pending || self.rx_raised) && self.continuation.is_none()))
     }
     fn pull_unit(
         &mut self,
@@ -803,6 +810,16 @@ where
         if receive_room == 0 || self.cut || self.pausing {
             return Ok(DevicePull::Empty);
         }
+        // The pull serves the receive facts, so it takes them: a received
+        // unit and a returned staging credit are both ring work.
+        let facts = self
+            .session
+            .as_mut()
+            .map_err(|e| *e)?
+            .take_received()
+            .map_err(Fault::Receive)?;
+        self.rx_pending |= !facts.is_empty();
+        self.rx_raised = false;
         if let Some(frame) = self.received.0.get_mut().pop_front() {
             return Ok(DevicePull::Unit(self.hand_over(frame, Some(now))));
         }
@@ -905,5 +922,5 @@ impl<T: Timer> Timer for TurnClock<'_, T> {
     }
 }
 
-#[cfg(all(test, oer_trace))]
+#[cfg(test)]
 mod tests;

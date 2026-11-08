@@ -276,12 +276,14 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// which only its returns free.
     fn cut_held_by_units(&self) -> bool;
     fn finish_rx_cut(&mut self) -> Result<(), Fault>;
-    /// The data port's receive facts: take them, registering `cx` alone
-    /// on their signal, and report whether the ring holds work: a staged
-    /// unit, or ring work that waits for no continuation (the pull that
-    /// answered [`DevicePull::Later`] left that work to the caller's
-    /// alarm). It reads no clock; while a cut or a stop holds the ring it
-    /// is `false`.
+    /// The data port's receive facts: register `cx` alone on their signal
+    /// and report whether the ring holds work: a staged unit, a raised
+    /// receive fact or known ring work, either waiting for no continuation
+    /// (the pull that answered [`DevicePull::Later`] left that work to the
+    /// caller's alarm). The facts stay raised for [`Self::pull_unit`], so a
+    /// fact raised after the executor woke the task still wakes it at the
+    /// next round. It reads no clock; while a cut or a stop holds the ring
+    /// it is `false`.
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault>;
     /// Whether a unit coming back may wait for the ring's next service,
     /// with `held` units lent and `returned` when one came back unseen: the
@@ -289,9 +291,10 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// bring it ([`ReturnQuiet`](crate::rx::receive::ReturnQuiet)).
     fn returns_quiet(&mut self, held: usize, returned: bool) -> bool;
     /// The data port's receive pull at the turn's `now`: a staged unit, or
-    /// the ring serviced once, while the caller has `receive_room`. It
-    /// never wakes: ring work left now is [`DevicePull::Again`], work
-    /// waiting for its continuation [`DevicePull::Later`].
+    /// the ring serviced once, while the caller has `receive_room`; a pull
+    /// with room takes the raised receive facts it serves. It never wakes:
+    /// ring work left now is [`DevicePull::Again`], work waiting for its
+    /// continuation [`DevicePull::Later`].
     fn pull_unit(
         &mut self,
         receive_room: usize,

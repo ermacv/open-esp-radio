@@ -214,8 +214,12 @@ deadline covers. A unit the actor recycles goes straight back to the ring,
 and its lends come off its count at the next pull. The MAC's receive facts
 (a received unit, a returned staging credit) travel in their own signal,
 which the port's facts poll (`DataPort::poll_facts`) beside the transmit
-and TBTT facts, all in the actor's task. The RX interrupt stays masked
-until a pull drained the ring. While a group mutation's receive cut or a
+and TBTT facts, all in the actor's task. The facts call only registers
+and looks: the pull that serves the facts takes them. A fact raised during
+a turn therefore still wakes the actor at the executor's next round,
+whether or not the actor reposts after the facts that followed its turn.
+The RX interrupt stays masked until a pull drained the ring, so that wake
+is the masked ring's only edge. While a group mutation's receive cut or a
 stop holds the ring, the pull takes nothing; a cut's units reach the actor
 through its sink ahead of the mutation's terminal.
 
@@ -246,7 +250,7 @@ One received frame and the owner of its DMA buffer at each step:
    executor (`oer_chips_family_platform_interrupt_table::signal`), which pends it and
    touches no waker; the buffer is the DMA engine's.
 2. **Actor.** The executor's next round wakes the actor, the signal's
-   one waiter; the port's receive pull runs the
+   one waiter; the port's receive pull takes the fact and runs the
    product service (`rx/transaction`), which takes the completed unit
    and stages it: the original buffer becomes a `NetworkRxFrame` lease of
    the staging pool, with no copy. Chained, oversized, empty and too-long
@@ -280,8 +284,8 @@ turn's instant: the descriptors a service pass observed (DMA) and the units
 it hands to the port (driver). A diagnostic reader on the device's hart asks
 for a snapshot (`RxStall::request`), which wakes the actor's task through
 the waker the device registers at every `poll_rx_work`. At the first port
-facts after the request, before the receive facts are taken and before the
-turn's receive pull, the device reads, without writing a register, moving a
+facts after the request, before the turn's receive pull takes the receive
+facts, the device reads, without writing a register, moving a
 descriptor or taking a fact: both stamps, its own ring work, the walker's
 registers, the ring's view, every descriptor's `OWNER` and `RX_DONE`, the
 session's buffers and the software side of the interrupt line, and the

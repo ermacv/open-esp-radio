@@ -1,6 +1,11 @@
-//! A trace build's stall snapshot through the radio device over the
-//! hardware model: the snapshot comes before the turn's receive service,
-//! the resume after it, and the request changes no ring work.
+//! The radio device over the hardware model: its receive facts stay raised
+//! until the pull that serves them, and a trace build's stall snapshot
+//! comes before the turn's receive service, the resume after it, and the
+//! request changes no ring work.
+//!
+//! The signals are deferred, as the executor's are: a raise pends the
+//! executor, whose next round ([`service`]) wakes the task for the facts it
+//! has not taken yet.
 
 use super::*;
 use crate::hardware_model::{
@@ -10,13 +15,17 @@ use crate::irq::HostActivation;
 use crate::lower_mac::{ConnectionFramePriorities, RadioCoexPriorities};
 use crate::port::{Device, DevicePull};
 use crate::rx::arena::{WifiIrqSignals, WifiRxArena, WifiRxStatic};
+#[cfg(oer_trace)]
 use crate::rx::counters::stall::{RxStall, RxStallReading, RxStallTicket};
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::{
     rx_dma::model::{RxWalkerLanding, RxWalkerModel},
     space::HostDma,
 };
 use oer_chips_esp32s31_hal::system::memory::dma_static::Placed;
-use oer_chips_family_platform_interrupt_table::signal::host::{Host, signal};
+use oer_chips_family_platform_interrupt_table::signal::{
+    host::{Deferred, deferred_signal},
+    service,
+};
 use oer_portable_time::Clock;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::ConnectionFrame;
@@ -84,12 +93,12 @@ type Model = RadioDevice<
     Shared,
     ModelFrontier,
     HostActivation,
-    ModelDoorbell<Host>,
+    ModelDoorbell<Deferred>,
     N,
     RB,
     RS,
     Q,
-    Host,
+    Deferred,
 >;
 
 /// A waker that counts its wakes.
@@ -101,12 +110,13 @@ impl Wake for Count {
 }
 
 /// The device started on its channel, the DMA engine's port on its ring,
-/// its interrupt line, its clock and its stall record.
+/// its interrupt line, its clock and a trace build's stall record.
 struct Bench {
     device: &'static mut Model,
     rx: ModelRx<N, RB, RS>,
-    line: Rc<ModelLine<Host>>,
+    line: Rc<ModelLine<Deferred>>,
     clock: Shared,
+    #[cfg(oer_trace)]
     stall: &'static RxStall,
     wakes: Arc<Count>,
     sequence: u16,
@@ -122,14 +132,14 @@ impl Bench {
         let clock = Shared(Rc::new(VirtualClock::new()));
         let reader = clock.clone();
         let atoms = Atoms::new(Rc::new(move || reader.now().as_micros()));
-        let arena: &'static mut WifiRxStatic<N, RB, RS, Q, Host, HostDma> =
+        let arena: &'static mut WifiRxStatic<N, RB, RS, Q, Deferred, HostDma> =
             leak(bytemuck::Zeroable::zeroed());
         let (rx, _stop, _frames) = WifiRxArena::bind(
             Placed::host(arena),
             WifiIrqSignals {
-                mac: signal().0,
-                receive: signal().0,
-                power: signal().0,
+                mac: deferred_signal().0,
+                receive: deferred_signal().0,
+                power: deferred_signal().0,
             },
         )
         .ok()
@@ -137,8 +147,9 @@ impl Bench {
         let storage = rx.rx();
         let requests = rx.requests();
         let walker: &'static RefCell<RxWalkerModel> = leak(RefCell::new(RxWalkerModel::new()));
-        let cell: &'static HandlerCell<WifiIrqLine<Host>> = leak(HandlerCell::new());
+        let cell: &'static HandlerCell<WifiIrqLine<Deferred>> = leak(HandlerCell::new());
         let line = Rc::new(ModelLine::new(cell, requests, atoms.clone()));
+        #[cfg(oer_trace)]
         let stall: &'static RxStall = leak(RxStall::new());
         let device = leak(RadioDevice::new(RadioParts {
             wifi: ModelFrontier::new(ModelRegisters::new(atoms.clone(), walker), channel()),
@@ -155,6 +166,7 @@ impl Bench {
                 chip_maximum_mbm: 2000,
                 owner_cap_mbm: None,
             },
+            #[cfg(oer_trace)]
             stall,
         }));
         let bench = Self {
@@ -162,6 +174,7 @@ impl Bench {
             rx: ModelRx::new(storage, walker, atoms),
             line,
             clock,
+            #[cfg(oer_trace)]
             stall,
             wakes: Arc::new(Count(AtomicUsize::new(0))),
             sequence: 0,
@@ -178,6 +191,11 @@ impl Bench {
 
     fn waker(&self) -> Waker {
         Waker::from(self.wakes.clone())
+    }
+
+    /// The wakes the device's task got so far.
+    fn woken(&self) -> usize {
+        self.wakes.0.load(Ordering::Relaxed)
     }
 
     /// The port's facts: the device's receive work.
@@ -211,11 +229,13 @@ impl Bench {
         }
     }
 
+    #[cfg(oer_trace)]
     fn read(&self, ticket: RxStallTicket) -> Option<RxStallReading> {
         let now = self.clock.now().as_micros() as u32;
         self.stall.read(ticket, now)
     }
 
+    #[cfg(oer_trace)]
     fn pass(&self, micros: u64) {
         self.clock
             .0
@@ -224,6 +244,48 @@ impl Bench {
     }
 }
 
+/// A unit lands after the facts call that registered the device's task, as
+/// one does while the actor's turn runs: the next facts call sees its fact
+/// but leaves it raised, so the executor's next round still wakes the task,
+/// whether or not the caller turns again. The pull that serves it takes it.
+#[test]
+fn a_receive_fact_stays_raised_until_the_pull_that_serves_it() {
+    let mut bench = Bench::new();
+    assert!(!bench.facts(), "a quiet ring has no work");
+    service::<Deferred>();
+    let woken = bench.woken();
+    bench.land(true);
+    assert!(bench.facts(), "the facts see the raised fact");
+    assert!(bench.facts(), "and leave it raised");
+    service::<Deferred>();
+    assert_eq!(bench.woken(), woken + 1, "the raise's wake stays owed");
+    assert!(matches!(bench.pull(), DevicePull::Unit(_)));
+    // Served: no fact is left, and no round wakes the task for it again.
+    service::<Deferred>();
+    assert_eq!(bench.woken(), woken + 1);
+    assert!(matches!(bench.pull(), DevicePull::Empty));
+    assert!(!bench.facts());
+}
+
+/// A pull without room serves nothing, so it takes no fact: the facts keep
+/// telling of the ring's work until a pull with room serves it.
+#[test]
+fn a_pull_without_room_leaves_the_receive_fact_raised() {
+    let mut bench = Bench::new();
+    assert!(!bench.facts());
+    bench.land(true);
+    let now = bench.clock.now();
+    assert!(matches!(
+        <Model as Device<TX>>::pull_unit(bench.device, 0, now).expect("the receive pull"),
+        DevicePull::Empty
+    ));
+    assert!(bench.facts(), "the fact still waits");
+    assert!(matches!(bench.pull(), DevicePull::Unit(_)));
+    assert!(matches!(bench.pull(), DevicePull::Empty));
+    assert!(!bench.facts());
+}
+
+#[cfg(oer_trace)]
 #[test]
 fn the_snapshot_precedes_the_turn_s_service_and_the_resume_follows_it() {
     let mut bench = Bench::new();
@@ -293,6 +355,7 @@ fn the_snapshot_precedes_the_turn_s_service_and_the_resume_follows_it() {
     assert!(!bench.facts());
 }
 
+#[cfg(oer_trace)]
 #[test]
 fn a_request_without_ring_work_takes_a_snapshot_but_no_service() {
     let mut bench = Bench::new();

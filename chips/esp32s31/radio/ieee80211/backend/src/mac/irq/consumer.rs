@@ -434,6 +434,32 @@ impl<E: SignalExecutor> IrqConsumer<'_, E> {
             .map(|facts| facts.map(|pending| IrqBatch { pending }))
     }
 
+    /// Whether receive facts wait, registering the polling task on the
+    /// receive signal only. The facts stay for [`Self::take_received`]: a
+    /// fact raised since the executor's last round still wakes the task at
+    /// its next one.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::poll_batch`].
+    pub fn poll_received_raised(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), ForeignContext>> {
+        self.storage.receive.poll_pending(cx)
+    }
+
+    /// Take the receive facts, without registering a task.
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor; the facts stay.
+    pub fn take_received(&mut self) -> Result<IrqBatch, ForeignContext> {
+        Ok(IrqBatch {
+            pending: self.storage.receive.take()?,
+        })
+    }
+
     /// Every fact but the receive ones (TX completion, timeout, queue collision,
     /// masking); registers the polling task on the MAC signal only.
     ///

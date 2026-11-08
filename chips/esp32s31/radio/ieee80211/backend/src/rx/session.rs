@@ -161,12 +161,20 @@ where
         self.irq.has_event().unwrap_or(false)
     }
 
-    /// The receive facts alone, for the task that takes received units: it
-    /// alone waits on their signal.
-    pub fn poll_received(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, WifiRxCause>> {
+    /// Whether receive facts wait, for the task that takes received units:
+    /// it alone waits on their signal. The facts stay raised until
+    /// [`Self::take_received`].
+    pub fn poll_received_raised(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), WifiRxCause>> {
         self.irq
-            .poll_received(cx)
+            .poll_received_raised(cx)
             .map(|r| r.map_err(|_| WifiRxCause::ForeignExecutor))
+    }
+
+    /// Take the receive facts, for the service that serves them.
+    pub fn take_received(&mut self) -> Result<IrqBatch, WifiRxCause> {
+        self.irq
+            .take_received()
+            .map_err(|_| WifiRxCause::ForeignExecutor)
     }
 
     /// Drain through the same bounded service/reload path as W1. Frames remain
