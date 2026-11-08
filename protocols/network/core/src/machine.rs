@@ -623,6 +623,10 @@ pub struct Configuration {
     pub lease: Option<Lease>,
     /// The DHCP client's state; `None` for an address given by its owner.
     pub dhcp: Option<DhcpState>,
+    /// The port's link as the core last observed it: an application that
+    /// waits for an address over an up link, or for that link's loss, reads
+    /// both from one publication.
+    pub link: LinkSnapshot,
 }
 
 #[derive(Debug)]
@@ -797,11 +801,12 @@ impl<
             version: self.version,
             lease: self.dhcp.as_ref().and_then(Client::lease).copied(),
             dhcp: self.dhcp.as_ref().map(Client::state),
+            link: self.link,
         }
     }
 
     /// A wrapping count that moves whenever [`Self::configuration`] may have
-    /// changed: an address, a lease's times, the client's state.
+    /// changed: an address, a lease's times, the client's state, the link.
     pub const fn configuration_changes(&self) -> u32 {
         self.configuration_changes
     }

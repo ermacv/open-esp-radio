@@ -726,6 +726,30 @@ fn a_link_lost_and_back_mid_lease_runs_init_reboot_and_keeps_the_address() {
 }
 
 #[test]
+fn the_configuration_names_the_link_the_core_last_saw_and_a_change_of_it_moves_the_count() {
+    use oer_protocols_network_port::{LinkSnapshot, LinkState};
+    leasing!(|stack| {
+        assert_eq!(configuration(stack).link, LinkSnapshot::DOWN);
+        bound(stack, at(0));
+        let up = configuration(stack).link;
+        assert_eq!((up.state, up.epoch), (LinkState::Up, 1));
+        let changes = stack.configuration_changes();
+        link_down(stack);
+        quiet(stack, secs(10));
+        // The lease and its address stay; the link that carried them went.
+        let down = configuration(stack);
+        assert_eq!(down.link.state, LinkState::Down);
+        assert_eq!(down.ipv4, Some(leased_ipv4()));
+        assert_eq!(down.dhcp, Some(DhcpState::Bound));
+        assert_ne!(stack.configuration_changes(), changes);
+        link_up(stack, 2);
+        one(stack, secs(11));
+        let again = configuration(stack).link;
+        assert_eq!((again.state, again.epoch), (LinkState::Up, 2));
+    });
+}
+
+#[test]
 fn a_nak_to_init_reboot_starts_discovery_without_the_address() {
     leasing!(|stack| {
         bound(stack, at(0));

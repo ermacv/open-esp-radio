@@ -14,7 +14,7 @@ scenario knows lives here or beside the facade it uses.
 | Image | Services |
 | --- | --- |
 | [`hil-aes`](images/aes/README.md) | AES |
-| [`hil-wifi-station`](images/wifi-station/README.md) | SDK station: connect, address, TCP exchange, link loss and status over the `oer` station and IP service; Wi-Fi station: join, status and leave over the same station; fault: an exception raised on request; load: UDP load on the station's address and the library's observations of its work |
+| [`hil-wifi-station`](images/wifi-station/README.md) | SDK station: connect, address, link loss and status over the `oer` station and its network core, which has no TCP: an exchange is refused; Wi-Fi station: join, status and leave over the same station; fault: an exception raised on request; load: UDP load on the station's address and the library's observations of its work |
 
 | Scenario | Image | Checks |
 | --- | --- | --- |

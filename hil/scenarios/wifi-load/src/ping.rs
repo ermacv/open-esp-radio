@@ -1,5 +1,5 @@
 //! Ordinary ICMP echo: the host's own `ping` to the image, answered by the
-//! image's IP stack, one request each [`PERIOD`] and a report of the same
+//! network core's ICMP echo, one request each [`PERIOD`] and a report of the same
 //! shape as the RTT probes'.
 
 use std::{net::Ipv4Addr, process::Command, time::Duration};

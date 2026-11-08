@@ -50,29 +50,19 @@ use oer_tools_hil_harness::{
     Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
 };
 
-/// The image the scenario runs.
+/// The image the scenario runs: the station on the network core.
 const IMAGE: &str = "hil-wifi-station";
-/// The same image on the network core, chosen by [`STACK_ENV`].
-const NETWORK_IMAGE: &str = "hil-wifi-network";
-/// `network` runs the scenario on the network core, which leases its address
-/// as the station's IP service does.
-const STACK_ENV: &str = "OER_WIFI_LOAD_STACK";
 
-const fn scenario(image: &'static str) -> Scenario {
-    Scenario::new(
-        "wifi-load",
-        image,
-        &[
-            oer_hil_services_wifi_station::Request::KEYS,
-            oer_hil_services_load::Request::KEYS,
-        ],
-    )
-    .using_router()
-    .using_air_exclusively()
-}
-
-const SCENARIO: Scenario = scenario(IMAGE);
-const NETWORK_SCENARIO: Scenario = scenario(NETWORK_IMAGE);
+const SCENARIO: Scenario = Scenario::new(
+    "wifi-load",
+    IMAGE,
+    &[
+        oer_hil_services_wifi_station::Request::KEYS,
+        oer_hil_services_load::Request::KEYS,
+    ],
+)
+.using_router()
+.using_air_exclusively();
 
 const CASES: [Case; 9] = [
     Case {
@@ -152,17 +142,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     }
-    let scenario = if network_core() {
-        &NETWORK_SCENARIO
-    } else {
-        &SCENARIO
-    };
-    oer_tools_hil_harness::main(scenario, &CASES)
-}
-
-/// Whether the scenario runs on the network core.
-fn network_core() -> bool {
-    std::env::var(STACK_ENV).as_deref() == Ok("network")
+    oer_tools_hil_harness::main(&SCENARIO, &CASES)
 }
 
 /// The route the host takes to an address of the station network, as
@@ -653,8 +633,8 @@ fn hart1(hart1: &Hart1Window, window_us: u64) -> serde_json::Value {
 
 /// The window's counters: the image's measured hart's cycles and retired
 /// instructions with their rate per microsecond (MHz) and per cycle, what
-/// the network bridge did with the station's frames, the frames the IP
-/// stack took with the hart's instructions over them, and the L1 cache's
+/// the network bridge did with the station's frames, the datagrams the
+/// network delivered with the hart's instructions over them, and the L1 cache's
 /// accesses by bus ([`cache`]), and the receive path's counts as the image
 /// took them: the S31 driver's and the station service's receive
 /// decisions, each the window's difference. The hart's counts include all
@@ -729,7 +709,7 @@ impl Per {
 /// The L1 cache's counts of each bus within the window, with each bus's
 /// misses as a share of its hits and misses, and its misses and next-level
 /// reads (and a data bus's next-level writes) per 1000 of the serving
-/// hart's instructions and per frame the IP stack took. An overflowed
+/// hart's instructions and per datagram the network delivered. An overflowed
 /// bus's counts are not exact: its derived values are null.
 fn cache(counters: &Counters) -> serde_json::Value {
     let per = Per {
@@ -1213,7 +1193,7 @@ const STOP_AFTER: Duration = Duration::from_secs(2);
 const LEAVE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Leave while the host offers RX load the image receives and its socket
-/// holds: the stop closes the socket and stops the IP service, every lent
+/// holds: the stop closes the socket and stops the network, every lent
 /// buffer returns and the radio retires, so the station reports `Down`.
 fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let device = device_address(cx)?;
@@ -1523,7 +1503,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         object.insert("addba".to_owned(), addba_measurement(name, &ended));
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
-        let elf = profile::elf(if network_core() { NETWORK_IMAGE } else { IMAGE });
+        let elf = profile::elf(IMAGE);
         let sites = elf
             .as_ref()
             .map_err(Clone::clone)

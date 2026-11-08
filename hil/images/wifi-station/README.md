@@ -1,38 +1,50 @@
-# ESP32-S31 SDK station image
+# ESP32-S31 station image
 
 The image of the [SDK station](../../scenarios/sdk-station/README.md),
 [Wi-Fi station](../../scenarios/wifi-station/README.md) and
 [Wi-Fi load](../../scenarios/wifi-load/README.md) scenarios: an
 application of the entry `oer` (`oer`, features
-`wifi`, `console`, `group`, `observe` and `udp`; the build selects the chip). Its boot takes the Wi-Fi
-station (on the AES accelerator) and its IP service with the library's defaults and the USB
-Serial/JTAG console; the library places their interrupts, executors and
+`wifi`, `console`, `group`, `observe` and `network`; the build selects the chip). Its boot takes the Wi-Fi
+station (on the AES accelerator) with the library's defaults and the USB
+Serial/JTAG console; its group starts the network core
+(`wifi::Network::start`, protocols/network) over the station's device in
+place of the IP service. The library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image
 declares no interrupt, DMA or service task of its own. Its boot is the
 [station example's](../../../examples/wifi-station/README.md) with
-these differences: the `observe` feature with the `trace` instrumentation
-(the library's observations, which the load service reports), the `udp`
-feature (the load's socket), the `console` feature and `Console::open`, every
-channel scanned (`wifi::Config::all_channels`) in place of the profile's
-one, and its own IP pools, 32 receive, 16 transmit and 32 general frames
-(`Net::start_with` with a static `wifi::Pools` in the group), in
-place of the library's 8, 8 and 8. Like the example, its group
-(`entry!(boot, group = network)`) starts the IP service and runs the line
-exchanges and the load server on its sockets; the worker reaches them over
-a `Channel` each, and the load server reaches the boot hart's counters and
-sampler over a third. The fault service is a handler, not a change to the boot. Review keeps the two boots in step; `oer-tools-test-layers` checks only that
-the image takes nothing the SDK places.
+these differences: the `observe` feature with the `trace` and
+`fault-injection` instrumentation (the library's observations, which the
+load service reports, and the fault service's refused publication), the
+`network` feature (the network core in the IP service's place: ARP, IPv4,
+UDP, a DHCPv4 client and ICMP echo, without TCP), the `console` feature and
+`Console::open`, and every channel scanned (`wifi::Config::all_channels`)
+in place of the profile's one. Its group
+(`entry!(boot, group = network)`) starts the network with the load's
+channel socket and producer bound at the start, answers the worker's asks
+for the network's address and its waits, and runs the load server on the
+network's sockets; the worker reaches them over a `Channel` each, and the
+load server reaches the boot hart's counters and sampler over another. The
+fault service is a handler, not a change to the boot. Review keeps the two
+boots in step; `oer-tools-test-layers` checks only that the image takes
+nothing the SDK places.
 
 | Service | Handler |
 | --- | --- |
 | HIL base module | The [agent on the entry](../../agent/README.md); the boot evidence is the library's (`Boot::evidence`): hart 0's reset cause, the previous boot's panic, and its CPU exception as the post-mortem (`Fault::Exception`), which the library already printed and cleared |
 | [SDK station](../../services/sdk-station/src/lib.rs) | One worker on the application executor answers the requests in order; a request while one waits is refused as `Busy` |
 | [Wi-Fi station](../../services/wifi-station/src/lib.rs) | The same worker, after the service's phases (`oer_hil_services_wifi_station::phase`): one join per boot, a leave of the joined station once |
-| [Fault](../../services/fault/src/lib.rs) | The same worker answers `RaiseException`, waits until the console wrote the answer and traps on an illegal instruction (`answer_then_trap`); a write the console cannot confirm ends the application with `sdk-console`, recorded and reset, without the trap |
+| [Fault](../../services/fault/src/lib.rs) | The same worker answers `RaiseException`, waits until the console wrote the answer and traps on an illegal instruction (`answer_then_trap`); a write the console cannot confirm ends the application with `sdk-console`, recorded and reset, without the trap. `RefusePublication` has the station refuse its next publication (`oer_fault_injection`), and `GetRestarts` answers the station's restarts without a reset and the last one's cause |
 | [Load](../../services/load/src/lib.rs) | The same worker hands each request to the load server in the group and publishes its answer (`src/load`) |
 
 The application is the agent's `serve`: the console and the worker side by
 side. The boot identity is the library's (`oer::boot_id`).
+
+The group answers the worker's asks one at a time, so at most one wait
+reads the network's publications (`src/waits.rs`). Each publication holds
+the interface's address, the DHCP client's state and the link as the core
+saw it, so a wait reads the address and the link of one moment. A read the
+watch refuses is an impossible state on the group's hart, where the service
+publishes within its own turn: it ends the group, which records it.
 
 - **Connect** builds a WPA2-Personal profile and awaits the station's
   `connect`: `Linked`, or `Failed` with the code the
@@ -41,15 +53,19 @@ side. The boot identity is the library's (`oer::boot_id`).
   that did not admit it). Once linked, the station keeps the network and
   rejoins it every second after a lost association; a connect without a
   link leaves it idle for the next one.
-- **WaitIpv4** and **WaitLinkDown** bound the IP service's waits by the
-  request's timeout.
-- **Exchange** goes to the group's future over the channel, which
-  opens one TCP socket (128-byte buffers) on the IP stack, sends the line,
-  reads as many bytes back and closes, within the request's timeout;
-  without an address it answers `NoAddress`. The worker waits for its
-  answer.
+- **WaitIpv4** waits, bounded by the request's timeout, for an address
+  over an up link while the DHCP client holds it bound: a lease the server
+  granted or extended, or one an INIT-REBOOT no server answered keeps for
+  its time (RFC 2131, 3.2 (3)). A client still selecting, requesting or
+  rebooting holds none yet, so across a link loss the wait goes on to the
+  next bound lease. `Stopped` once the network ended.
+- **WaitLinkDown** waits, bounded by the request's timeout, until the link
+  up at its start is down or up in a later epoch, as the network saw it; a
+  link down at the start ends it at once.
+- **Exchange** is refused as `NoTcp`: the network core has no TCP, and the
+  image opens no connection.
 - **GetStatus** answers the station's MAC address, whether its link is up
-  and the IPv4 configuration over it.
+  and the network's address.
 
 The Wi-Fi station service's requests go to the same station:
 
@@ -60,15 +76,15 @@ The Wi-Fi station service's requests go to the same station:
   setting: `Linked` names the channel the station found. A failure answers
   `Refused` with the same codes as the SDK station service's `Connect`.
 - **GetStatus** answers the station's address, the access point and channel
-  while the link is up (`Station::linked`) and the IPv4 configuration.
-- **Leave** stops the station (`Station::stop`): the IP service returns its
+  while the link is up (`Station::linked`) and the network's address.
+- **Leave** stops the station (`Station::stop`): the network returns its
   receive buffers within the default drain of two seconds, the radio
   retires, and the answer is `Left::Down`. Every later request of either
   station service finds the station stopped.
 
 ## Load
 
-The load server runs in the group on hart 1, beside the IP stack;
+The load server runs in the group on hart 1, beside the network;
 the boot hart's relay, a part of the application beside the worker, serves
 what it needs there: the boot hart's cycle, instruction and cache counters
 (`Boot::observe`) with the library's counts (`observe::counters`), read
@@ -76,10 +92,12 @@ together, the PC sampler, and a page of samples, which the relay answers
 itself. The server sends one command at a time and waits for its reply.
 Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
 
-- **Start** binds one UDP socket on its port of the station's DHCP address
-  and answers `Running` at once; without an address it is refused
-  (`NoAddress`), while a run runs (`Busy`). Its parameters are refused
-  (`InvalidParameters`) for a zero port or peer port, a delay, window or
+- **Start** takes the network's channel socket, bound at the group's start
+  on port 5001 of the station's DHCP address, and answers `Running` at once;
+  the run's datagrams leave through the producer, bound on 5002 (`src/udp.rs`).
+  Without an address it is refused (`NoAddress`), while a run runs (`Busy`).
+  Its parameters are refused (`InvalidParameters`) for another port than
+  5001, a zero peer port, a delay, window or
   drain past the service's maximum, a payload below the 28-byte load
   header or above 1472 bytes (one 1514-byte Ethernet frame: the stack
   fragments nothing), or a sampling period outside 250 to 10000 µs. The
@@ -110,7 +128,7 @@ Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
   answer.
 - **Counters, link, tracking:** hart 1's cycles and retired instructions
   at the window's two ends, read on hart 1, and the window's differences of
-  the boot hart's counters, the bridge's frames, the frames the IP stack took, the
+  the boot hart's counters, the bridge's frames, the datagrams the network delivered, the network core's turns, the
   cache's counts (cleared just before the window) and geometry, the
   receive driver's and the station's receive counts, the transmit
   agreements', the link's rates and the PHY tracking ticks.
@@ -120,7 +138,7 @@ Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
   session kept refuses the next sampled run (`NoSampler`), and hart 1's
   refusal leaves only hart 1 unsampled.
 
-A stop of the station closes the run's socket with the IP service (its
+A stop of the station closes the run's socket with the network (its
 queued datagrams return their lent buffers); the run then receives and
 sends nothing more and ends at its time.
 

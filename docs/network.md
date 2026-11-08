@@ -40,8 +40,8 @@ aliases and include optional and target-specific dependencies.
 
 | Crate | Owns | Does not own |
 | --- | --- | --- |
-| `oer-protocols-network-core` (`protocols/network/core`) | the sans-IO core with one owner: UDP, ARP, blocks, choosing work before a frame is built; linked by no image yet | tasks, queues, time |
-| `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task and its sockets over messages; linked by no image yet | protocol state, the port's implementation |
+| `oer-protocols-network-core` (`protocols/network/core`) | the sans-IO core with one owner: UDP, ARP, blocks, choosing work before a frame is built; the HIL `wifi-station` image links it | tasks, queues, time |
+| `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task and its sockets over messages; the HIL `wifi-station` image links it | protocol state, the port's implementation |
 | `oer-protocols-network-testing-model` (`protocols/network/testing/model`) | a host model of one shared medium with several peers, and the egress scenarios over the real stack | product code; no product package depends on it |
 | `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, the `NetDevice` and `NetTransmit` contracts, and `FramePort`, `FrameSource` and `Egress`, the new core's port and its policy | queues, allocator, executor, hardware |
 | `oer-protocols-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-portable-wire` | decisions about a packet, IEEE 802.11 formats |
