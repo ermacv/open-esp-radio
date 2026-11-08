@@ -18,7 +18,6 @@ mod airtime_tests;
 pub mod ap_policy;
 pub mod ap_tsf;
 pub mod capabilities;
-pub mod channel_state;
 pub mod coex_runtime;
 pub mod crypto;
 pub mod edca;

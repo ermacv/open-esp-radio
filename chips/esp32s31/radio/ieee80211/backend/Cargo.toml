@@ -17,7 +17,6 @@ pin-project = "1.1.13"
 subtle = { version = "2.6.1", default-features = false }
 zeroize = { version = "1.9.0", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
-oer-chips-family-radio-coex = { path = "../../../../family/radio/coex" }
 oer-chips-esp32s31-hal = { path = "../../../hal" }
 oer-chips-esp32s31-radio-phy = { path = "../../phy" }
 oer-chips-esp32s31-radio-client = { path = "../../client" }
@@ -40,6 +39,7 @@ test-support = ["oer-chips-esp32s31-hal/test-support", "oer-chips-family-platfor
 
 [dev-dependencies]
 oer-portable-embassy-net = { path = "../../../../../portable/embassy/net" }
+oer-chips-family-radio-coex = { path = "../../../../family/radio/coex" }
 oer-chips-esp32s31-hal = { path = "../../../hal", features = ["test-support"] }
 oer-protocols-ieee80211-wire = { path = "../../../../../protocols/ieee80211/wire", features = ["test-support"] }
 oer-chips-family-radio-ieee80211-policy = { path = "../../../../family/radio/ieee80211/policy" }

@@ -4,8 +4,6 @@
 //! Role crates consume these value-only contracts while executor adapters own
 //! waiting, queues and task placement.
 
-pub mod lifecycle;
-
 /// Result of one bounded RX bottom-half pass.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DatapathRxProgress {

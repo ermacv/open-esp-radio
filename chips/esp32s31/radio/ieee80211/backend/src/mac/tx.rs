@@ -3583,7 +3583,6 @@ pub mod test_support;
 
 pub mod ampdu;
 pub mod metadata;
-pub mod policy;
 pub mod protection;
 pub mod runtime;
 
