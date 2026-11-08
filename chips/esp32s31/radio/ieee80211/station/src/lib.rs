@@ -287,6 +287,15 @@ type EthernetCopy = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 pub struct Network<'a, N: Notifies> {
     inner: runtime::Device<'a, LentRx<N>, RX_DEPTH, Ch<N>>,
 }
+/// The link a [`Network`] reads, which another reader on the network's
+/// side may read too.
+pub type NetworkLinkSource<N> = runtime::NetworkLink<<Ch<N> as runtime::Notifies>::NetworkWaker>;
+impl<'a, N: Notifies> Network<'a, N> {
+    /// The link this end reads.
+    pub const fn link_source(&self) -> &'a NetworkLinkSource<N> {
+        self.inner.link_source()
+    }
+}
 /// Affine neutral Ethernet transmit end over the network stack's packets
 /// `P`, whose frames go into the network's transmit memory `S`.
 pub struct NetworkTransmit<'a, N: Notifies, P, S: runtime::TxSupply<P>> {
@@ -307,6 +316,12 @@ impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSu
     }
     fn flush(&mut self) {
         self.inner.flush();
+    }
+    fn take_returned(&mut self) {
+        self.inner.take_returned();
+    }
+    fn poll_returned(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        self.inner.poll_returned(cx)
     }
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
@@ -558,7 +573,12 @@ pub struct Channels<N: Notifies, M> {
         Station<N>,
         Net<N>,
     >,
-    returned: oer_portable_memory::WakingSlotQueue<Option<M>, TX_DEPTH, Net<N>, Station<N>>,
+    returned: oer_portable_memory::WakingSlotQueue<
+        Option<runtime::TxEnded<M>>,
+        TX_DEPTH,
+        Net<N>,
+        Station<N>,
+    >,
     rx: WakingSpscQueue<Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
     rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }, Net<N>, Station<N>>,
     state: runtime::State<Ch<N>>,
@@ -697,7 +717,13 @@ struct ActorConnection<'a, N: Notifies, M> {
         Station<N>,
         Net<N>,
     >,
-    returned: oer_portable_memory::SlotSender<'a, Option<M>, TX_DEPTH, Net<N>, Station<N>>,
+    returned: oer_portable_memory::SlotSender<
+        'a,
+        Option<runtime::TxEnded<M>>,
+        TX_DEPTH,
+        Net<N>,
+        Station<N>,
+    >,
     receive: oer_portable_memory::WakingSpscSender<'a, Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
     receive_copied: oer_portable_memory::WakingSpscSender<
         'a,
@@ -708,6 +734,10 @@ struct ActorConnection<'a, N: Notifies, M> {
     >,
 }
 
+#[cfg(any(test, target_arch = "riscv32"))]
+mod air;
+#[cfg(any(test, target_arch = "riscv32"))]
+pub use air::S31Ceiling;
 #[cfg(target_arch = "riscv32")]
 mod chip;
 #[cfg(target_arch = "riscv32")]
@@ -928,7 +958,7 @@ mod tests {
                 },
             ))
         }
-        fn give(&mut self, (): ()) {}
+        fn give(&mut self, (): (), _: oer_protocols_ieee80211_contracts_port::TxEstimate) {}
     }
     #[test]
     fn a_stopper_reports_its_stop_and_a_dropped_one_is_a_lost_participant() {

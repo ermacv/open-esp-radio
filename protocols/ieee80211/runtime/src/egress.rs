@@ -45,6 +45,12 @@ pub enum RadioNotice<T, K> {
     Ended(Exchange<T>),
     /// An association has ended: its account goes, once its frames settle.
     Left(K),
+    /// The port took the frame and lost it with its memory before the
+    /// radio's end of it: no completion follows, and whether it reached the
+    /// air is not known. Its reservation settles here at its ceiling, or its
+    /// reservation if that is more. This settles the account only: it
+    /// returns no memory and permits no reuse of the lost buffer.
+    Lost(T),
 }
 
 /// Why the policy cannot go on. The scheduler keeps a charge it could not
@@ -263,6 +269,10 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
     fn notice(&mut self, notice: RadioNotice<T, A::Key>) -> Result<(), AirtimeFault> {
         let exchange = match notice {
             RadioNotice::Ended(exchange) => exchange,
+            RadioNotice::Lost(ticket) => Exchange {
+                ticket,
+                charged: None,
+            },
             RadioNotice::Left(key) => {
                 self.retire(key);
                 return Ok(());

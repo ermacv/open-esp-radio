@@ -248,6 +248,24 @@ fn a_frame_of_unknown_end_is_charged_and_not_refunded() {
 }
 
 #[test]
+fn a_lost_frame_settles_its_reservation_at_the_ceiling_and_frees_its_place() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0)];
+    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    policy.accepted(held, 7).unwrap();
+    policy.notice(RadioNotice::Lost(7)).unwrap();
+    let left = i64::from(QUANTUM) - i64::from(CEILING);
+    assert_eq!(policy.balance_micros(1), Some(left));
+    assert_eq!(policy.in_flight(), 0, "nothing waits for its completion");
+    assert_eq!(
+        policy.notice(RadioNotice::Lost(7)),
+        Err(AirtimeFault::UnknownTicket),
+        "settled once"
+    );
+}
+
+#[test]
 fn a_completion_of_no_frame_is_a_fault() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());

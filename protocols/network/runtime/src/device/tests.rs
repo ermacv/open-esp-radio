@@ -144,6 +144,8 @@ struct Transmit {
     full: bool,
     flushes: u32,
     room_polls: u32,
+    /// Times the port asked for what the device returned.
+    takes: u32,
     /// Memory the device returned that the stack has not taken back.
     returned: u32,
     /// Memory the stack took back.
@@ -181,6 +183,13 @@ impl NetTransmit for Transmit {
     fn flush(&mut self) {
         self.flushes += 1;
     }
+    fn take_returned(&mut self) {
+        self.takes += 1;
+    }
+    fn poll_returned(&mut self, _: &mut Context<'_>) -> Poll<()> {
+        self.takes += 1;
+        Poll::Pending
+    }
 }
 
 /// `free` buffers of `room` octets.
@@ -190,10 +199,17 @@ struct Buffers {
     /// `write` refuses though a buffer looked free.
     refuse: Option<PortRefusal>,
     free_polls: u32,
+    /// The tickets given so far.
+    tickets: u32,
+    /// Frames whose buffer the device gave back, their ends not yet handed
+    /// on: each buffer is free again only when its notice is taken.
+    ended: std::collections::VecDeque<u32>,
 }
 
 impl TxBuffers for Buffers {
     type Frame = Written;
+    type Ticket = u32;
+    type Notice = u32;
     fn available(&self) -> bool {
         self.free != 0
     }
@@ -227,6 +243,17 @@ impl TxBuffers for Buffers {
     fn restore(&mut self, _: Written) {
         self.free += 1;
     }
+    fn ticket(&self, _: &Written) -> u32 {
+        self.tickets + 1
+    }
+    fn take_notice(&mut self) -> Option<u32> {
+        let ticket = self.ended.pop_front()?;
+        self.free += 1;
+        Some(ticket)
+    }
+    fn notice_waiting(&self) -> bool {
+        !self.ended.is_empty()
+    }
 }
 
 type Port = DevicePort<Device, Transmit, Buffers>;
@@ -240,6 +267,8 @@ fn port() -> Port {
             room: 64,
             refuse: None,
             free_polls: 0,
+            tickets: 0,
+            ended: std::collections::VecDeque::new(),
         },
     )
 }
@@ -534,4 +563,55 @@ fn a_stop_gives_back_every_frame_and_takes_back_the_returned_memory() {
         port.transmit.taken_back, 2,
         "and takes back the returned memory"
     );
+}
+
+/// Publish a frame and count its ticket, as the buffers hand them out.
+fn sent(port: &mut Port) -> u32 {
+    let ticket = port.publish(4, octets).unwrap();
+    port.buffers.tickets += 1;
+    ticket
+}
+
+#[test]
+fn each_frame_the_device_takes_has_its_own_ticket() {
+    let mut port = port();
+    let first = sent(&mut port);
+    let second = sent(&mut port);
+    assert_ne!(first, second);
+    assert_eq!(port.buffers.free, 0);
+}
+
+/// A returned buffer and a settled end are two events: the buffer is free
+/// again only once its end went on, so no more frames than buffers are
+/// ever unsettled.
+#[test]
+fn a_buffer_frees_only_when_its_end_is_handed_on() {
+    let mut port = port();
+    let first = sent(&mut port);
+    let second = sent(&mut port);
+    port.buffers.ended.extend([first, second]);
+    assert_eq!(
+        port.publish(4, octets),
+        Err(Unpublished::Port(PortRefusal::NoRoom)),
+        "two buffers, two unsettled ends: no third frame"
+    );
+    let takes = port.transmit.takes;
+    assert_eq!(port.take_notice(), Some(first));
+    assert!(port.transmit.takes > takes, "the device is asked first");
+    assert_eq!(port.buffers.free, 1);
+    let third = sent(&mut port);
+    assert_ne!(third, first);
+    assert_eq!(port.take_notice(), Some(second));
+    assert_eq!(port.take_notice(), None);
+}
+
+#[test]
+fn a_waiting_end_wakes_the_service() {
+    let mut port = port();
+    assert!(!wakes_at_once(&mut port));
+    let first = sent(&mut port);
+    port.buffers.ended.push_back(first);
+    assert!(wakes_at_once(&mut port));
+    assert_eq!(port.take_notice(), Some(first));
+    assert!(!wakes_at_once(&mut port));
 }

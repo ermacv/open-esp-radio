@@ -54,9 +54,13 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 };
 use oer_protocols_ieee80211_contracts_port::{
     Air, BlockAckSnr, Ieee80211Capabilities, MpduProtection, PhyRate, Protection, RetryPlan,
-    SnrSample, TxPower, TxStatus, VifRole,
+    SnrSample, TxEstimate, TxPower, TxStatus, VifRole,
 };
 use oer_protocols_radio_port::PoolPath;
+
+mod cost;
+pub use cost::msdu_cost_ceiling_micros;
+use cost::{Response, publication_cost};
 
 /// What the S31 observed of an arena's ACK or BlockAck: its SNR, when the
 /// completion carried a sample.
@@ -115,6 +119,11 @@ struct OnAir<'core, Path: PoolPath> {
     /// An abort found the PPDU on the air: only its completion ends it, and
     /// `deadline` is the last one.
     past_abort: bool,
+    /// What the publication on the air costs by the model, should it reach
+    /// the air ([`publication_cost`]).
+    pending: TxEstimate,
+    /// What the attempt's publications that reached the air cost.
+    spent: TxEstimate,
 }
 
 /// A published single MPDU's retry plan, run as the core runs an MPDU's
@@ -909,6 +918,7 @@ where
         };
         let cookie = chain.cookie;
         let mut program = None;
+        let before = chain.owner.batch_work();
         let result = (|| {
             let admission = chain.admission.as_ref().ok_or(ArenaFault::State)?;
             match spacing {
@@ -972,7 +982,19 @@ where
             }
             Ok::<(), ArenaFault>(())
         })();
+        let pending = publication_cost(
+            before,
+            chain.owner.batch_work(),
+            rate,
+            match spacing {
+                Some(_) => Response::BlockAck,
+                None if chain.owner.first_receiver_individual() => Response::Ack,
+                None => Response::None,
+            },
+        );
         chain.phase = Phase::OnAir(OnAir {
+            pending,
+            spent: TxEstimate::NONE,
             queue,
             arena: publication.arena,
             published,
@@ -1043,6 +1065,11 @@ where
             Ok(None) => return Ok(None),
             Err(fault) => return Err(self.arenas.quarantine(fault)),
         };
+        // This publication's end: its cost counts once it reached the air.
+        if end.air().is_some() {
+            on_air.spent = on_air.spent.add(on_air.pending);
+        }
+        on_air.pending = TxEstimate::NONE;
         let end = match on_air
             .retry
             .as_mut()
@@ -1076,6 +1103,7 @@ where
             return Err(self.arenas.quarantine(ArenaFault::State));
         };
         let published = on_air.published;
+        let cost = on_air.spent;
         let Phase::OnAir(on_air) =
             core::mem::replace(&mut chain.phase, Phase::Completed { published })
         else {
@@ -1093,7 +1121,7 @@ where
         };
         *place = Some(queue);
         self.core.reset_contention(role, category);
-        Ok(Some(Completion::new(arena, chain.len, end)))
+        Ok(Some(Completion::new(arena, chain.len, end, cost)))
     }
 
     fn settle(
@@ -1246,12 +1274,23 @@ where
     chain
         .owner
         .prepare_format(cookie, |_| Some(0), matches!(tx_rate, TxPhyRate::He(_)))?;
+    let before = chain.owner.batch_work();
     chain.owner.submit_single(
         hardware,
         cookie,
         LegacyTxQueue::from_access_category(category),
         config,
     )?;
+    on_air.pending = publication_cost(
+        before,
+        chain.owner.batch_work(),
+        tx_rate,
+        if individual {
+            Response::Ack
+        } else {
+            Response::None
+        },
+    );
     on_air.rate = rate;
     on_air.deadline = now.saturating_add(core.publication_timeout());
     on_air.settling = false;

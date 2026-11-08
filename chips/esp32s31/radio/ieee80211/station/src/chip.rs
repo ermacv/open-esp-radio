@@ -125,7 +125,7 @@ const TX_BLOCK_ACK: oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockA
             lifetime: Duration::from_micros(
                 oer_chips_family_radio_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
             ),
-            attempts: oer_chips_family_radio_ieee80211_policy::lmac::LONG_RETRY_LIMIT,
+            attempts: crate::air::AGGREGATE_MEMBER_ATTEMPTS,
         },
     };
 pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);

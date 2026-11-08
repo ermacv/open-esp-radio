@@ -1,5 +1,14 @@
 use super::*;
-use crate::station::Outgoing;
+use crate::station::{Outgoing, TxEnded};
+use oer_protocols_ieee80211_contracts_port::TxEstimate;
+
+/// `memory` back from an MSDU that never reached the air.
+fn ended(memory: Vec<u8>) -> TxEnded<Vec<u8>> {
+    TxEnded {
+        memory,
+        cost: TxEstimate::NONE,
+    }
+}
 use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_testing_model::ModelLentRx;
@@ -47,7 +56,7 @@ impl<P: oer_protocols_network_port::EthernetFrame> TxSupply<P> for Supply {
         memory[at + 14..][..view.payload.len()].copy_from_slice(view.payload);
         Ok(memory)
     }
-    fn give(&mut self, memory: Vec<u8>) {
+    fn give(&mut self, memory: Vec<u8>, _cost: TxEstimate) {
         self.0.borrow_mut().push(memory);
     }
 }
@@ -114,7 +123,7 @@ fn a_restart_keeps_the_network_unless_a_newer_connect_published_one() {
 fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
-    let mut back = WakingSlotQueue::<Option<Vec<u8>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
@@ -186,7 +195,7 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     assert!(
         returned
             .try_send_with(|slot| {
-                *slot = Some(first.memory);
+                *slot = Some(ended(first.memory));
                 Ok::<_, ()>(())
             })
             .is_ok()
@@ -239,7 +248,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     }
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
-    let mut back = WakingSlotQueue::<Option<Vec<u8>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
@@ -344,7 +353,7 @@ impl oer_protocols_network_port::EthernetFrame for Marked {
 fn a_network_frame_requests_the_priority_of_its_marking() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
-    let mut back = WakingSlotQueue::<Option<Vec<u8>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
@@ -711,7 +720,7 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     let mut tx =
         WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1, Side, Side>::across_harts(station, network);
     let mut back =
-        WakingSlotQueue::<Option<Vec<u8>>, 1, Side, Side>::across_harts(network, station);
+        WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1, Side, Side>::across_harts(network, station);
     let mut rx =
         WakingSpscQueue::<Received<ModelLentRx>, 1, Side, Side>::across_harts(network, station);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH, Side, Side>::across_harts(
@@ -773,7 +782,7 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     assert!(
         returned
             .try_send_with(|slot| {
-                *slot = Some(outgoing.memory);
+                *slot = Some(ended(outgoing.memory));
                 Ok::<_, ()>(())
             })
             .is_ok()
@@ -846,14 +855,14 @@ impl<P> TxSupply<P> for Losing {
         drop(frame);
         Err(TxRefused::Lost)
     }
-    fn give(&mut self, _: Vec<u8>) {}
+    fn give(&mut self, _: Vec<u8>, _: TxEstimate) {}
 }
 
 #[test]
 fn asking_for_room_takes_returned_memory_back() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
-    let mut back = WakingSlotQueue::<Option<Vec<u8>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
@@ -866,7 +875,7 @@ fn asking_for_room_takes_returned_memory_back() {
     assert!(
         returned
             .try_send_with(|slot| {
-                *slot = Some(std::vec![0; 1600]);
+                *slot = Some(ended(std::vec![0; 1600]));
                 Ok::<_, core::convert::Infallible>(())
             })
             .is_ok()
@@ -879,7 +888,7 @@ fn asking_for_room_takes_returned_memory_back() {
 fn a_frame_lost_with_its_memory_is_accepted_and_reaches_no_station() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
-    let mut back = WakingSlotQueue::<Option<Vec<u8>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();

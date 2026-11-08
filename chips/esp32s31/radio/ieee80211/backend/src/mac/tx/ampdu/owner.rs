@@ -914,7 +914,48 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         let handed_over = || storage.as_mut().record_single_publication(queue);
         hardware
             .start_bound_tx(publication, index, handed_over)
-            .map_err(prepare_refusal)
+            .map_err(prepare_refusal)?;
+        // The publication's work, as `submit` records an aggregate's: its
+        // PSDU at its own rate.
+        let (psdu_bytes, kbps, rate, contention) = match config {
+            SingleTxConfig::Legacy(config) => (
+                config.signal,
+                core::num::NonZeroU32::new(
+                    crate::mac::portable::legacy_phy_rate(config.rate).kbps(),
+                ),
+                crate::mac::tx::TxPhyRate::Legacy(config.rate),
+                (config.aifsn, config.contention_window),
+            ),
+            SingleTxConfig::Ht(config) => (
+                config.length,
+                core::num::NonZeroU32::new(config.rate.nominal_kbps()),
+                crate::mac::tx::TxPhyRate::Ht(config.rate),
+                (config.aifsn, config.contention_window),
+            ),
+            SingleTxConfig::He(config) => (
+                config.apep_length(),
+                None,
+                crate::mac::tx::TxPhyRate::He(config.rate),
+                (config.aifsn, config.contention_window),
+            ),
+        };
+        storage.as_mut().project().work.record_publication(
+            psdu_bytes,
+            1,
+            kbps,
+            rate.ppdu_timing(),
+            Some(TxContention {
+                aifsn: contention.0,
+                backoff_slots: contention.1,
+            }),
+        );
+        Ok(())
+    }
+
+    /// The work the batch's publications recorded since its `begin`, every
+    /// retry included.
+    pub fn batch_work(&self) -> Option<crate::mac::tx_work::MacTxWork> {
+        Some(self.storage.as_ref()?.as_ref().get_ref().work())
     }
 
     /// Sample a single MPDU's completion and synchronize both ownership

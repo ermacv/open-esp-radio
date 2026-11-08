@@ -367,6 +367,8 @@ const FROM: usize = from_actor_depth(RETURNS);
 #[derive(Default)]
 struct Free {
     slots: RefCell<Vec<TxSlot>>,
+    /// What the station gave back, free once the port handed its end on.
+    ended: RefCell<std::collections::VecDeque<TxSlot>>,
     waker: Cell<Option<Waker>>,
 }
 
@@ -426,8 +428,18 @@ impl TxSupply<WrittenFrame> for Supply {
                 TxPublishRefused::Lost => TxRefused::Lost,
             })
     }
-    fn give(&mut self, memory: TxMemory) {
-        self.free.give(self.publisher.slot(memory));
+    fn give(
+        &mut self,
+        memory: TxMemory,
+        _cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
+    ) {
+        self.free
+            .ended
+            .borrow_mut()
+            .push_back(self.publisher.slot(memory));
+        if let Some(waker) = self.free.waker.take() {
+            waker.wake();
+        }
     }
 }
 
@@ -436,6 +448,17 @@ struct Buffers(Rc<Free>);
 
 impl TxBuffers for Buffers {
     type Frame = WrittenFrame;
+    type Ticket = ();
+    type Notice = ();
+    fn ticket(&self, _: &WrittenFrame) {}
+    fn take_notice(&mut self) -> Option<()> {
+        let slot = self.0.ended.borrow_mut().pop_front()?;
+        self.0.give(slot);
+        Some(())
+    }
+    fn notice_waiting(&self) -> bool {
+        !self.0.ended.borrow().is_empty()
+    }
     fn available(&self) -> bool {
         !self.0.slots.borrow().is_empty()
     }
@@ -493,6 +516,12 @@ impl NetTransmit for Transmit {
     }
     fn flush(&mut self) {
         self.0.borrow_mut().flush();
+    }
+    fn take_returned(&mut self) {
+        self.0.borrow_mut().take_returned();
+    }
+    fn poll_returned(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        self.0.borrow_mut().poll_returned(cx)
     }
 }
 
@@ -1336,7 +1365,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
     /// The buffers home: what the station gave back and the network took.
     fn buffers_home(&mut self) -> usize {
         let _room = self.transmit.0.borrow_mut().has_room();
-        self.free.slots.borrow().len()
+        self.free.slots.borrow().len() + self.free.ended.borrow().len()
     }
 
     /// The work so far.

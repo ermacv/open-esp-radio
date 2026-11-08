@@ -159,6 +159,71 @@ pub enum IndeterminateCause {
     KeyRefused,
 }
 
+/// What transmissions cost by a backend's declared model, in microseconds:
+/// for every publication that reached the air, its modelled PPDU duration,
+/// one SIFS and its solicited response (an ACK or a BlockAck) at the
+/// backend's declared response rate. It is an estimate of that model only:
+/// AIFS, backoff, CCA waits and publications that never reached the air are
+/// not in it, and it is neither a measured medium occupancy nor a frame's
+/// service time. A transmission the hardware repeats inside one publication,
+/// unseen by the backend, is not in it either: that the backend's
+/// publications are its only transmissions is an unverified assumption.
+///
+/// [`Self::Unknown`] names a publication the model cannot describe; it is
+/// never zero.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxEstimate {
+    /// The model's sum.
+    Estimated {
+        /// Microseconds.
+        micros: u32,
+    },
+    /// A publication outside the model, or a sum past a `u32`.
+    Unknown,
+}
+
+impl TxEstimate {
+    /// Nothing reached the air.
+    pub const NONE: Self = Self::Estimated { micros: 0 };
+
+    /// Both: unknown when either is, or when the sum leaves a `u32`.
+    #[must_use]
+    pub const fn add(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Estimated { micros: a }, Self::Estimated { micros: b }) => {
+                match a.checked_add(b) {
+                    Some(micros) => Self::Estimated { micros },
+                    None => Self::Unknown,
+                }
+            }
+            _ => Self::Unknown,
+        }
+    }
+
+    /// The parts of `self` among `parts` works, each counted once: the first
+    /// part, which takes the remainder, then the part of every other. With
+    /// no parts nothing is split.
+    #[must_use]
+    pub const fn split(self, parts: u8) -> Option<(Self, Self)> {
+        let Self::Estimated { micros } = self else {
+            return match parts {
+                0 => None,
+                _ => Some((Self::Unknown, Self::Unknown)),
+            };
+        };
+        let Some(each) = micros.checked_div(parts as u32) else {
+            return None;
+        };
+        let remainder = micros.wrapping_sub(each.wrapping_mul(parts as u32));
+        Some((
+            Self::Estimated {
+                micros: each.wrapping_add(remainder),
+            },
+            Self::Estimated { micros: each },
+        ))
+    }
+}
+
 /// The MPDU transmissions an attempt made, the first included, and the rate
 /// of the last of them. It exists only when at least one went out.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

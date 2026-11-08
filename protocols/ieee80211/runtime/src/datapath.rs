@@ -103,7 +103,7 @@ use oer_protocols_radio_port::{PoolPath, Slot};
 use crate::station::contract::MsduRefusal;
 use crate::station::{
     NetworkStop, Notifies, Outgoing, PortRxBlockAck, RX_COPIED_DEPTH, Received, RxBlockAckView,
-    SameHart, StationEvents,
+    SameHart, StationEvents, TxEnded,
 };
 
 /// The frames the lifecycle holds at most: those it has not sent back.
@@ -389,7 +389,7 @@ struct Stage<'id, D: DatapathPort<'id>> {
 struct DataTx<M> {
     plane: Option<DataPlane>,
     deferred: Option<OutboundMsdu<M>>,
-    freed: heapless::Deque<M, HELD>,
+    freed: heapless::Deque<TxEnded<M>, HELD>,
 }
 
 /// The station's datapath actor over the data port of `D`: its rates `S`

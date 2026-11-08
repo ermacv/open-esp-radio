@@ -410,7 +410,7 @@ struct World<'b> {
     control: RefCell<Option<Control<'b, ModelCaps24, COMMANDS>>>,
     security: StaSecurity,
     stack: RefCell<SlotSender<'b, Option<Outgoing<Memory>>, TX_DEPTH>>,
-    returned: RefCell<SlotReceiver<'b, Option<Memory>, TX_DEPTH>>,
+    returned: RefCell<SlotReceiver<'b, Option<crate::station::TxEnded<Memory>>, TX_DEPTH>>,
     delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>>,
     copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
     /// The lifecycle task's waker.
@@ -1014,7 +1014,8 @@ fn pair_with<const G: usize>(
             WakingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
         let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue = WakingSlotQueue::<Option<Outgoing<Memory>>, TX_DEPTH>::new();
-        let mut returned_queue = WakingSlotQueue::<Option<Memory>, TX_DEPTH>::new();
+        let mut returned_queue =
+            WakingSlotQueue::<Option<crate::station::TxEnded<Memory>>, TX_DEPTH>::new();
         let mut receive_queue = WakingSpscQueue::<Received<ModelLentRx>, RX_DEPTH>::new();
         let mut copies_queue = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
         let mut command_queue =

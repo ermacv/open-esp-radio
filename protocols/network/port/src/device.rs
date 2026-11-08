@@ -238,6 +238,13 @@ pub trait NetTransmit {
     /// End a burst of [`Self::try_transmit`]s: a frame it took may wait for
     /// this call before its device acts on it.
     fn flush(&mut self);
+    /// Take back what the device returned of earlier transmissions, where
+    /// the device keeps it until asked. A port that settles completions asks
+    /// this whether or not it has a frame to send.
+    fn take_returned(&mut self);
+    /// As [`Self::take_returned`], registering `cx` for what the device
+    /// returns next: `Ready` when something came back after it looked.
+    fn poll_returned(&mut self, cx: &mut Context<'_>) -> Poll<()>;
 }
 
 #[cfg(test)]
