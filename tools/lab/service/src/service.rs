@@ -83,6 +83,8 @@ pub struct OperationIo {
     /// Input chunks; they end when the client closes the input.
     pub input: Input,
     pub stop: Arc<AtomicBool>,
+    /// The owner of the lease the operation runs under, for the journal.
+    pub owner: String,
 }
 
 /// An operation's input from its client. Each chunk taken returns the
@@ -872,6 +874,7 @@ impl Service {
         let stop = Arc::new(AtomicBool::new(false));
         let overrun = Arc::new(AtomicBool::new(false));
         let (input, receiver) = mpsc::sync_channel(INPUT_DEPTH);
+        let owner = lease.owner.clone();
         lease.operations.insert(
             (connection, id),
             Running {
@@ -896,6 +899,7 @@ impl Service {
                 operation: id,
             },
             stop,
+            owner,
         };
         std::thread::spawn(move || {
             let mut result = service.shared.drivers.run(&operation, &claims, io);

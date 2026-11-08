@@ -111,6 +111,17 @@ pub enum BoardEventKind {
         /// every reset booted.
         failure: Option<String>,
     },
+    /// The lab router's airtime queue limits (mac80211's AQL) of access
+    /// category `ac` (`vo`, `vi`, `be` or `bk`) changed from `before` to
+    /// `after`, each `[low, high]` in microseconds: a lease set them, or
+    /// the router's end state restored mac80211's defaults (`restored`).
+    /// It names no board.
+    RouterAirtimeLimit {
+        ac: String,
+        before: [u32; 2],
+        after: [u32; 2],
+        restored: bool,
+    },
 }
 
 impl std::fmt::Display for BoardEvent {
@@ -177,6 +188,20 @@ impl std::fmt::Display for BoardEvent {
                 "{who} soaked it with {resets} resets in {cycles} cycles via {paths:?}: {}",
                 failure.as_deref().unwrap_or("every reset booted")
             ),
+            BoardEventKind::RouterAirtimeLimit {
+                ac,
+                before,
+                after,
+                restored,
+            } => write!(
+                f,
+                "{who} {} the router's {ac} airtime limits {}/{} -> {}/{} us",
+                if *restored { "restored" } else { "set" },
+                before[0],
+                before[1],
+                after[0],
+                after[1]
+            ),
         }
     }
 }
@@ -223,7 +248,8 @@ impl BoardEvent {
             BoardEventKind::Flashed { .. }
             | BoardEventKind::Recovered { .. }
             | BoardEventKind::QuarantineReleased { .. }
-            | BoardEventKind::Soaked { .. } => None,
+            | BoardEventKind::Soaked { .. }
+            | BoardEventKind::RouterAirtimeLimit { .. } => None,
         }
     }
 }
@@ -355,6 +381,31 @@ impl Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_router_airtime_change_names_no_board_and_is_not_a_flash() {
+        let event = BoardEvent {
+            unix: 5,
+            owner: "lab".into(),
+            checkout: None,
+            device: None,
+            kind: BoardEventKind::RouterAirtimeLimit {
+                ac: "be".into(),
+                before: [5000, 12000],
+                after: [5000, 18000],
+                restored: false,
+            },
+        };
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["kind"], "router-airtime-limit");
+        assert_eq!(serde_json::from_value::<BoardEvent>(json).unwrap(), event);
+        assert_eq!(
+            event.to_string(),
+            "lab set the router's be airtime limits 5000/12000 -> 5000/18000 us"
+        );
+        let (flashes, artifacts) = latest(std::slice::from_ref(&event));
+        assert!(flashes.is_empty() && artifacts.is_empty());
+    }
 
     #[test]
     fn events_serialize_flat_and_render_their_origin() {

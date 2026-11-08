@@ -429,6 +429,12 @@ receive, BSS receive and transmit time, noise) and the station's TID 0 drops
 from mac80211's `aqm` debugfs file when it is readable. Directions are the
 AP's. A known line the host cannot read refuses the observation; a value the
 driver does not report stays absent.
+`station::airtime` reads the AP radio's airtime queue limits (mac80211's
+AQL) per access category and the total threshold from the PHY's debugfs,
+and one station's own limits and pending airtime from its `aql` file; it
+writes one category's limits into `aql_txq_limit` and confirms them by
+reading back, and restores every category to mac80211's defaults. AQL holds
+frames in mac80211's queue and never drops one.
 `station::lease` reads its DHCP address and lifetime from the isolated lease
 file. `station::stream::Capture::start_peer` observes peer-originated ICMP
 requests and DUT replies; a complete capture requires every pair and clean

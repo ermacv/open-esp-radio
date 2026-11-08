@@ -123,13 +123,22 @@ the air, shared at least.
   network.wireless status`) shows the radio's configuration applied, not
   pending, and `iw dev` lists no interface of any type on the radio's PHY
   (`iwinfo nl80211 phyname`). Both views must answer; one that fails
-  leaves the router unavailable, never parked. A run's profile enables the
-  section again. Its operations are the logic of
+  leaves the router unavailable, never parked. Its radio's airtime queue
+  limits (mac80211's AQL, `aql_txq_limit`) are back at mac80211's defaults
+  of 5000/12000 µs in every access category, written and read back, and
+  each category that changed is journaled; a radio without that debugfs
+  file has none to restore. The quiet radio and the limits are both
+  attempted, and the router is ready only when both are confirmed. A run's
+  profile enables the section again. Its operations are the logic of
   `oer-tools-lab-router`: the AP profile on a channel the stand file allows (its
   isolated network forwarding UDP and TCP with one host when the run names
   it), the station, DHCP and ping views, the station network's DHCP server
   stopped or serving, the WPA2 checks, a deauthentication, the
-  routed network's check and the echo and departure observers. The service
+  routed network's check, the echo and departure observers, and the radio's
+  airtime limits read back or set for one access category. A set needs the
+  router held exclusively, is journaled with the lease's owner, and lasts
+  until the lease ends (`cargo stand router set-airtime` inside `cargo stand
+  lease --stand`). The service
   probes the equipment it reaches over SSH (the router, the air observer)
   under a lease that holds the router; the host's own radios are probed by
   `cargo stand fixtures` itself and run by their fixture launchers.
