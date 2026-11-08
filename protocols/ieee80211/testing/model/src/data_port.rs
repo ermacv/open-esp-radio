@@ -1095,7 +1095,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             } else {
                 TxFacts::DUE
             }),
-            tbtt: false,
+            tbtt: self.air.tbtt.take(),
             rx: self.radio == Radio::Running
                 && (!self.air.rx.is_empty() || group_ready || streaming),
         }
@@ -1111,11 +1111,21 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn service_tx(
         &mut self,
         _: TxFacts,
-        _: bool,
+        tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<Option<PortCompleted<'id, Self>>, ModelPortFault> {
         self.check(ModelPortCall::ServiceTx)?;
+        if tbtt {
+            sink.tbtt(oer_protocols_ieee80211_contracts_port::TbttEvent {
+                tbtt: oer_protocols_ieee80211_contracts_port::VifTsf::new(
+                    VifRole::Station,
+                    oer_protocols_ieee80211_contracts_port::tsf::TsfInstant::from_micros(
+                        now.as_micros(),
+                    ),
+                ),
+            });
+        }
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
         self.expire(now);
@@ -1212,6 +1222,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
 
     fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, ModelPortFault> {
         self.check(ModelPortCall::Receive)?;
+        if self.air.tbtt_landing.take() {
+            self.air.tbtt.set(true);
+        }
         if room == 0
             || self.radio != Radio::Running
             || self.held.rx_out.get() >= self.air.rx_limits.get().held

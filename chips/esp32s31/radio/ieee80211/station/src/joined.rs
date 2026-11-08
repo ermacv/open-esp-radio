@@ -6,7 +6,11 @@
 //! The test plays the lifecycle (as the actor's bench does), the application,
 //! the air and the peer. A task is polled only once woken, and with nothing
 //! woken time moves to the next deadline: a lost wake ends a case. A hardware
-//! event runs the interrupt handler at once, between two polls of a task.
+//! event runs the interrupt handler at once, between two polls of a task or,
+//! where a case asks, as the actor's turn ends ([`TURN_ENDS`]). The handler's
+//! signals pend their executor, as the chip's do: before each round of polls
+//! the bench services them, as the executor's handler does, so a fact a task
+//! took before that round wakes no one.
 //!
 //! What stands in for the product here: the lifecycle (no scan, join or
 //! keys: an open link handed over) and [`Buffers`], which mirrors the
@@ -38,6 +42,7 @@ use std::{boxed::Box, println, rc::Rc, sync::Arc, task::Wake, vec::Vec};
 use embassy_futures::select::{Either, select};
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::{
     rx_dma::model::{RxWalkerLanding, RxWalkerModel},
+    rx_storage::RxDmaStorage,
     space::HostDma,
 };
 use oer_chips_esp32s31_hal::system::memory::dma_static::Placed;
@@ -64,7 +69,7 @@ use oer_chips_esp32s31_radio_ieee80211_backend::{
     rx::arena::{WifiIrqSignals, WifiRxArena, WifiRxStatic},
     tx::{CappedTxPowerProfile, WifiTxResources},
 };
-use oer_chips_family_platform_interrupt_table::signal::host::{Host, signal};
+use oer_chips_family_platform_interrupt_table::signal::host::{Deferred, deferred_signal};
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_events::EventSink;
 use oer_portable_memory::{
@@ -85,9 +90,10 @@ use oer_protocols_ieee80211_core_roles_sta::{
 use oer_protocols_ieee80211_core_upper_mac::{block_ack::RxBlockAckEvent, qos::AcAdmission};
 use oer_protocols_ieee80211_runtime::{
     datapath::{
-        Actor, ActorEnd, ActorEpochPath, ActorEvent, ActorLink, DatapathPort, FromActor,
-        GroupPending, LIFECYCLE_FRAMES, LifecycleEnds, NetworkEnd, NetworkEnds, PARCELS, Parcel,
-        Returned, StopOutcome, ToActor, from_actor_depth, returns_depth,
+        Actor, ActorEnd, ActorEpochPath, ActorEvent, ActorLink, ActorSpan, DUE_REPOSTS,
+        DatapathPort, FromActor, GroupPending, LIFECYCLE_FRAMES, LifecycleEnds, NetworkEnd,
+        NetworkEnds, PARCELS, Parcel, Returned, StopOutcome, ToActor, from_actor_depth,
+        returns_depth,
     },
     station::{self as runtime, RxBlockAckStorage, ServiceEvent, TxRefused, TxSupply},
 };
@@ -283,12 +289,12 @@ type Device = RadioDevice<
     Clocked,
     ModelFrontier,
     HostActivation,
-    ModelDoorbell<Host>,
+    ModelDoorbell<Deferred>,
     N,
     B,
     S,
     Q,
-    Host,
+    Deferred,
 >;
 type Types<'s> = port::Types<LocalId<'s>, Device, TX, ()>;
 type Caps = Esp32s31Caps<TX>;
@@ -311,6 +317,24 @@ impl<'s> DatapathPort<'s> for Datapath<'s> {
             snr: SnrSample::Measured(snr_db),
         })
     }
+
+    fn span(span: ActorSpan, end: bool) {
+        if span == ActorSpan::Turn && end {
+            let edge = TURN_ENDS.with_borrow_mut(std::collections::VecDeque::pop_front);
+            if let Some(edge) = edge {
+                edge();
+            }
+        }
+    }
+}
+
+std::thread_local! {
+    /// What the air does as each of the actor's next turns ends, after the
+    /// turn's last pull and before the facts the actor registers on for its
+    /// next one: the edge preempts the task there, as the radio handler
+    /// preempts it on the chip. One per turn, in order.
+    static TURN_ENDS: RefCell<std::collections::VecDeque<Box<dyn FnOnce()>>> =
+        const { RefCell::new(std::collections::VecDeque::new()) };
 }
 
 type P<'s> = Datapath<'s>;
@@ -677,9 +701,10 @@ enum Air {
 struct Bench<'b, 's, T: 'static> {
     clock: Clocked,
     atoms: Atoms,
-    line: Rc<ModelLine<Host>>,
+    line: Rc<ModelLine<Deferred>>,
     rx: ModelRx<N, B, S>,
     walker: &'static RefCell<RxWalkerModel>,
+    storage: &'static RxDmaStorage<N, B, S, HostDma>,
     stage: &'static RxStagePool<Q, B>,
     actor: Task<'b>,
     service: Task<'b>,
@@ -806,14 +831,14 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
         let atoms = Atoms::new(Rc::new(move || reader.now().as_micros()));
 
         // The receive arena, as the facade's `install` binds it.
-        let arena: &'static mut WifiRxStatic<N, B, S, Q, Host, HostDma> =
+        let arena: &'static mut WifiRxStatic<N, B, S, Q, Deferred, HostDma> =
             leak(bytemuck::Zeroable::zeroed());
         let (rx, _stop, _frames) = WifiRxArena::bind(
             Placed::host(arena),
             WifiIrqSignals {
-                mac: signal().0,
-                receive: signal().0,
-                power: signal().0,
+                mac: deferred_signal().0,
+                receive: deferred_signal().0,
+                power: deferred_signal().0,
             },
         )
         .ok()
@@ -822,7 +847,7 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
         let requests = rx.requests();
         let stage = rx.stage();
         let walker: &'static RefCell<RxWalkerModel> = leak(RefCell::new(RxWalkerModel::new()));
-        let cell: &'static HandlerCell<WifiIrqLine<Host>> = leak(HandlerCell::new());
+        let cell: &'static HandlerCell<WifiIrqLine<Deferred>> = leak(HandlerCell::new());
         let line = Rc::new(ModelLine::new(cell, requests, atoms.clone()));
 
         let device: &'static mut Device = leak(RadioDevice::new(RadioParts {
@@ -1053,6 +1078,7 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
             line: line.clone(),
             rx: ModelRx::new(storage, walker, atoms),
             walker,
+            storage,
             stage,
             actor: Task::new(actor_task.as_mut()),
             service: Task::new(network_task.as_mut()),
@@ -1099,6 +1125,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
     /// Poll what is woken, serve the air, until nothing is left to do now.
     fn settle(&mut self) {
         for _ in 0..PASSES {
+            oer_chips_family_platform_interrupt_table::signal::service::<Deferred>();
             let actor = self.actor.run();
             let service = !self.network_paused && self.service.run();
             if actor || service {
@@ -1777,5 +1804,178 @@ fn a_stop_the_hardware_does_not_confirm_keeps_the_owners_it_cannot_prove() {
         );
         assert!(bench.ends.borrow().actor.is_none(), "nothing retired");
         bench.work().report("stop, unconfirmed", &start);
+    });
+}
+
+/// A data frame of another BSS, for another station: the ring takes it, the
+/// station drops it, and the actor gets no unit of it.
+fn foreign_data(sequence: u16) -> Vec<u8> {
+    let mut frame = data_from_ap(sequence, &udp_from_peer(b"not for this station"));
+    frame[4..10].copy_from_slice(&[0x02, 0, 0, 0x77, 0x77, 0x77]);
+    frame[10..16].copy_from_slice(&[0x30, 0x05, 0x5c, 0x99, 0x99, 0x99]);
+    frame
+}
+
+impl<T: 'static> Bench<'_, '_, T> {
+    /// Land `mpdus` one each as the actor's next turns end: its edge runs the
+    /// handler then, after the turn's last pull.
+    fn land_as_turns_end(&mut self, mpdus: Vec<Vec<u8>>) {
+        for mpdu in mpdus {
+            let rx = ModelRx::<N, B, S>::new(self.storage, self.walker, self.atoms.clone());
+            let line = self.line.clone();
+            TURN_ENDS.with_borrow_mut(|edges| {
+                edges.push_back(Box::new(move || {
+                    let (landing, event) = rx
+                        .land(&RxPrefix::new(), &mpdu)
+                        .expect("the unit fits its buffer");
+                    assert!(
+                        matches!(landing, RxWalkerLanding::Landed(_)),
+                        "the walker takes the unit: {landing:?}"
+                    );
+                    if let Some(event) = event {
+                        line.latch(event);
+                    }
+                }));
+            });
+        }
+    }
+
+    /// Land `mpdu` now; its edge runs the handler.
+    fn land_now(&mut self, mpdu: &[u8]) {
+        let (landing, event) = self
+            .rx
+            .land(&RxPrefix::new(), mpdu)
+            .expect("the unit fits its buffer");
+        assert!(
+            matches!(landing, RxWalkerLanding::Landed(_)),
+            "the walker takes the unit: {landing:?}"
+        );
+        if let Some(event) = event {
+            self.line.latch(event);
+        }
+    }
+
+    /// The next Sequence Number of the access point.
+    fn next_sequence(&mut self) -> u16 {
+        let sequence = self.sequence;
+        self.sequence += 1;
+        sequence
+    }
+}
+
+/// Turns in a row that took no unit, and one more: past the reposts the actor
+/// makes for facts that served none of the port's work.
+const TURNS_WITHOUT_UNITS: usize = DUE_REPOSTS as usize + 2;
+
+/// Each of a run of turns ends with a unit landing: its edge masks RX
+/// delivery and raises the receive fact after the turn's last pull. The
+/// next turn serves it, but the station drops it, so no turn takes a unit.
+/// Every landed unit is still served, the last one the AP's datagram.
+#[test]
+fn a_unit_that_lands_as_a_turn_ends_is_served_after_turns_that_took_none() {
+    struct Network;
+    joined::<Network>(|bench| {
+        let start = bench.work();
+        let mut units: Vec<_> = (0..TURNS_WITHOUT_UNITS)
+            .map(|_| foreign_data(bench.next_sequence()))
+            .collect();
+        let sequence = bench.next_sequence();
+        units.push(data_from_ap(sequence, &udp_from_peer(b"after the run")));
+        bench.land_as_turns_end(units);
+        // The first unit starts the run of turns.
+        let sequence = bench.next_sequence();
+        bench.land_now(&foreign_data(sequence));
+        let datagram = bench.receive_datagram();
+        assert_eq!(datagram.block.octets(), b"after the run");
+        assert!(TURN_ENDS.with_borrow(std::collections::VecDeque::is_empty));
+        // Drained: RX delivery is back, and the next unit raises its edge.
+        bench.settle();
+        assert!(bench.line.rx_delivery_enabled());
+        bench.land_from_peer(&udp_from_peer(b"the next one"));
+        assert_eq!(bench.receive_datagram().block.octets(), b"the next one");
+        assert_eq!(bench.atoms.rule_breaks(), []);
+        let end = bench.work();
+        end.report("rx after turns without units", &start);
+        assert_eq!(
+            end.atoms.units_landed - start.atoms.units_landed,
+            TURNS_WITHOUT_UNITS as u32 + 3
+        );
+    });
+}
+
+/// The same run of turns, the AP's units landing between polls once it
+/// ended: the ring the run left is served, and so is everything after it.
+#[test]
+fn units_after_a_run_of_turns_without_units_reach_the_socket() {
+    struct Network;
+    joined::<Network>(|bench| {
+        let units = (0..TURNS_WITHOUT_UNITS)
+            .map(|_| foreign_data(bench.next_sequence()))
+            .collect();
+        bench.land_as_turns_end(units);
+        let sequence = bench.next_sequence();
+        bench.land_now(&foreign_data(sequence));
+        bench.until("the run of turns ends", |_| {
+            TURN_ENDS.with_borrow(std::collections::VecDeque::is_empty)
+        });
+        for n in 0..4_u8 {
+            bench.land_from_peer(&udp_from_peer(&[n; 8]));
+        }
+        for n in 0..4_u8 {
+            assert_eq!(bench.receive_datagram().block.octets(), [n; 8]);
+        }
+        bench.settle();
+        assert_eq!(bench.atoms.rule_breaks(), []);
+    });
+}
+
+/// Run `edge` as the actor's turn ends, after the edges queued before it.
+fn then_as_a_turn_ends(edge: impl FnOnce() + 'static) {
+    TURN_ENDS.with_borrow_mut(|edges| edges.push_back(Box::new(edge)));
+}
+
+/// A PPDU on the air with the next one prepared behind it ends as the last
+/// of a run of turns without units ends: its completion's turn puts the
+/// prepared one on the air, with no other wake and no time passing.
+#[test]
+fn a_completion_after_turns_that_took_none_puts_the_prepared_ppdu_on_the_air() {
+    struct Network;
+    joined::<Network>(|bench| {
+        let first = bench.send_datagram(b"first");
+        assert_eq!(bench.result(first), Sent::Ended(Outcome::Accepted));
+        bench.until("the first PPDU ended", |bench| {
+            bench.mpdus(EtherType::IPV4.value()).len() == 1
+        });
+        bench.settle();
+        bench.air = Air::Holds;
+        let on_air = bench.send_datagram(b"on the air");
+        assert_eq!(bench.result(on_air), Sent::Ended(Outcome::Accepted));
+        bench.until("the PPDU is on the air", |bench| {
+            bench.mpdus(EtherType::IPV4.value()).len() == 2
+        });
+        let queue = bench.seen.last().expect("on the air").queue;
+        let prepared = bench.send_datagram(b"prepared behind it");
+        assert_eq!(bench.result(prepared), Sent::Ended(Outcome::Accepted));
+        bench.settle();
+        assert_eq!(bench.mpdus(EtherType::IPV4.value()).len(), 2);
+
+        let units = (0..TURNS_WITHOUT_UNITS)
+            .map(|_| foreign_data(bench.next_sequence()))
+            .collect();
+        bench.land_as_turns_end(units);
+        let (atoms, line) = (bench.atoms.clone(), bench.line.clone());
+        then_as_a_turn_ends(move || line.latch(atoms.end_ppdu(queue, 0, 0)));
+        let sequence = bench.next_sequence();
+        bench.land_now(&foreign_data(sequence));
+        let now = bench.clock.now();
+        bench.settle();
+        assert!(TURN_ENDS.with_borrow(std::collections::VecDeque::is_empty));
+        assert_eq!(bench.clock.now(), now, "no timer moved time");
+        assert_eq!(
+            bench.mpdus(EtherType::IPV4.value()).len(),
+            3,
+            "the completion's turn published the prepared PPDU"
+        );
+        assert_eq!(bench.atoms.rule_breaks(), []);
     });
 }

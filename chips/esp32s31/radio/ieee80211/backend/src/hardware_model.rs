@@ -950,6 +950,11 @@ impl<X: SignalExecutor + 'static> ModelLine<X> {
         !mac.rx_delivery_enabled() && !mac.other_sources_enabled()
     }
 
+    /// Whether the MAC bank delivers RX events.
+    pub fn rx_delivery_enabled(&self) -> bool {
+        self.part.borrow().epoch().banks().0.rx_delivery_enabled()
+    }
+
     /// Whether the MAC bank latched anything.
     pub fn latched(&self) -> bool {
         !self.part.borrow().epoch().banks().0.latched().is_empty()

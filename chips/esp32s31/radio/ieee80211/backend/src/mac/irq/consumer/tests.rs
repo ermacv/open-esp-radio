@@ -392,3 +392,42 @@ fn receive_facts_wake_only_the_receive_waiter_and_the_rest_only_the_mac_waiter()
         [IrqWork::TxComplete, IrqWork::TxTimeout]
     );
 }
+
+/// Looking at the receive facts takes none: a raise the executor has not
+/// serviced yet still wakes the waiter at its next round, and the facts wait
+/// for the take, which leaves the MAC facts.
+#[test]
+fn a_look_at_the_receive_facts_leaves_them_and_their_wake_to_the_take() {
+    use oer_chips_family_platform_interrupt_table::signal::{host, service};
+    let mut storage = IrqStorage::new(host::deferred_signal().0, host::deferred_signal().0);
+    let (publisher, mut consumer) = storage.split();
+    let wakes = Arc::new(WakeCount::default());
+    let waker = Waker::from(wakes.clone());
+    let look = |consumer: &mut IrqConsumer<'_, host::Deferred>| {
+        consumer.poll_received_raised(&mut Context::from_waker(&waker))
+    };
+    assert!(look(&mut consumer).is_pending());
+    publisher.publish(EVENT_RX_SUCCESS | EVENT_TX_COMPLETE);
+    assert!(matches!(look(&mut consumer), Poll::Ready(Ok(()))));
+    assert!(
+        matches!(look(&mut consumer), Poll::Ready(Ok(()))),
+        "still there"
+    );
+    service::<host::Deferred>();
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 1, "the raise's wake comes");
+    let taken = consumer.take_received().unwrap();
+    assert_eq!(taken.collect::<std::vec::Vec<_>>(), [IrqWork::RxSuccess]);
+    assert!(look(&mut consumer).is_pending(), "taken once");
+    assert!(consumer.take_received().unwrap().is_empty());
+    assert_eq!(
+        consumer.take_batch().unwrap().collect::<std::vec::Vec<_>>(),
+        [IrqWork::TxComplete],
+        "the MAC facts stay for their own take"
+    );
+    service::<host::Deferred>();
+    assert_eq!(
+        wakes.0.load(Ordering::Relaxed),
+        1,
+        "nothing left to wake for"
+    );
+}
