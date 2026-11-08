@@ -80,9 +80,10 @@ address and its server (`DhcpState::Declining`) and starts discovery over
 ten seconds later in a new transaction (RFC 2131, 3.1 (5)); a lease that
 ends while it is probed grants nothing. A link that comes back at a new
 epoch runs INIT-REBOOT with a lease: its broadcast REQUEST names the held
-address with no server identifier at once, and is repeated after 4 s,
-doubling to 64 s, each wait moved by a uniform draw of up to a second
-either way from the client's seeded generator (RFC 2131, 4.1). The address
+address with no server identifier at once, and is repeated on the
+DISCOVER's schedule, 250 ms doubling to 10 s, each wait jittered down by up
+to a quarter, as a rejoin's first message meets the same race with the
+access point's key as a first join's. The address
 stays in use meanwhile (RFC 2131, 3.7) but the client stays REBOOTING until
 an ACK confirms the lease, which binds it without a probe; a NAK takes the
 address away and starts discovery over, and with no answer the client asks

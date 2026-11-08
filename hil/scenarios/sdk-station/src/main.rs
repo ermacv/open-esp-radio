@@ -187,10 +187,10 @@ const LINK_WAIT_MS: u32 = 10_000;
 const EXCHANGE_MS: u32 = 10_000;
 /// How long a lease may take not to come while the router serves no DHCP.
 const NO_DHCP_WAIT_MS: u32 = 20_000;
-/// The longest INIT-REBOOT retransmission wait, 64 s moved by up to a second
-/// (RFC 2131, 4.1), and a second for the router's answer: once it serves
-/// again, the station's next REQUEST and its ACK come within this.
-const SERVED_AGAIN_WAIT_MS: u32 = 66_000;
+/// The longest INIT-REBOOT retransmission wait of the network core, 10 s,
+/// and 5 s for the router's DHCP server to answer once it serves again: the
+/// station's next REQUEST and its ACK come within this.
+const SERVED_AGAIN_WAIT_MS: u32 = 15_000;
 const MARGIN: Duration = Duration::from_secs(5);
 /// How long the router may take to show what the device did.
 const ROUTER_SEES: Duration = Duration::from_secs(10);
@@ -636,8 +636,8 @@ mod tests {
 
     #[test]
     fn the_wait_after_dhcp_serves_again_covers_the_longest_retransmission_wait() {
-        // RFC 2131, 4.1: 64 s at most, moved by up to a second.
-        assert!(milliseconds(SERVED_AGAIN_WAIT_MS) > Duration::from_secs(65));
+        // The core's INIT-REBOOT repeats wait 10 s at most.
+        assert!(milliseconds(SERVED_AGAIN_WAIT_MS) > Duration::from_secs(10));
     }
 
     #[test]

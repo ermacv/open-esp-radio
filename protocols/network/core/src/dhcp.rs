@@ -11,10 +11,9 @@
 //! 4.4.5; a renewal goes to the server identifier, RFC 2131, 4.1; an ACK
 //! without a lease time or subnet mask is refused, not given a default; a link
 //! that comes back with a lease runs INIT-REBOOT, RFC 2131, 3.2 and 4.4.2,
-//! its REQUEST at once and repeated after 4 s, doubling to 64 s, each wait
-//! randomized by up to a second either way (RFC 2131, 4.1), for as long as the
-//! lease lasts: the address stays in use meanwhile (RFC 2131, 3.7), and only
-//! an ACK ends REBOOTING. A new address is probed with ARP before it is bound
+//! its REQUEST at once and repeated on the DISCOVER's schedule, for as long
+//! as the lease lasts: the address stays in use meanwhile (RFC 2131, 3.7),
+//! and only an ACK ends REBOOTING. A new address is probed with ARP before it is bound
 //! (RFC 2131, 2.2 and 4.4.1, with RFC 5227, 2.1's probe and its times); one
 //! in use is declined, and discovery starts over no sooner than ten seconds
 //! later (RFC 2131, 3.1 (5)).
@@ -38,14 +37,12 @@ const DISCOVER_MOST: Duration = Duration::from_secs(10);
 const REQUEST_FIRST: Duration = Duration::from_secs(5);
 /// REQUESTs to an OFFER before discovery starts again.
 const REQUEST_TRIES: u8 = 5;
-/// RFC 2131, 4.1: the first wait for an answer to an INIT-REBOOT's REQUEST;
-/// it doubles with each retransmission up to [`RETRANSMIT_MOST`].
-const REBOOT_FIRST: Duration = Duration::from_secs(4);
-/// RFC 2131, 4.1: the longest retransmission wait.
-const RETRANSMIT_MOST: Duration = Duration::from_secs(64);
-/// RFC 2131, 4.1: each INIT-REBOOT wait moves by a uniform draw of up to this
-/// either way.
-const RANDOMIZE: Duration = Duration::from_secs(1);
+/// An INIT-REBOOT's REQUEST repeats on the DISCOVER's schedule, from
+/// [`DISCOVER_FIRST`] doubling to [`DISCOVER_MOST`], each wait jittered down
+/// by up to a quarter, until an ACK or the lease's end: a rejoin meets the
+/// same race as a first join, its first message reaching the access point
+/// before the pairwise key and AUTHORIZED (oer-notes
+/// design/network-slice.md, findings at 9d0b0f7d4).
 /// RFC 2131, 3.1 (5): the least wait after a DECLINE before discovery
 /// starts over.
 const DECLINE_WAIT: Duration = Duration::from_secs(10);
@@ -306,13 +303,6 @@ impl Random {
         Duration::from_micros(least.as_micros().saturating_add(offset))
     }
 
-    /// `wait` moved by a uniform draw of up to [`RANDOMIZE`] either way,
-    /// RFC 2131, 4.1.
-    fn spread(&mut self, wait: Duration) -> Duration {
-        let span = Duration::from_micros(RANDOMIZE.as_micros().saturating_mul(2));
-        self.uniform(wait.saturating_sub(RANDOMIZE), span)
-    }
-
     /// `wait` less up to a quarter of it: the draw's high half scales the
     /// quarter, so no 64-bit division runs.
     fn jitter(&mut self, wait: Duration) -> Duration {
@@ -464,7 +454,7 @@ impl Client {
             self.new_transaction(now);
             self.phase = Phase::Rebooting {
                 next: None,
-                wait: REBOOT_FIRST,
+                wait: DISCOVER_FIRST,
             };
             self.owe(serial);
         } else {
@@ -766,11 +756,11 @@ impl Client {
                 self.sent.get_or_insert(now);
             }
             Phase::Rebooting { next, wait } => {
-                *next = Some(now.saturating_add(random.spread(*wait)));
+                *next = Some(now.saturating_add(random.jitter(*wait)));
                 *wait = Duration::from_micros(
                     wait.as_micros()
                         .saturating_mul(2)
-                        .min(RETRANSMIT_MOST.as_micros()),
+                        .min(DISCOVER_MOST.as_micros()),
                 );
                 self.sent.get_or_insert(now);
             }

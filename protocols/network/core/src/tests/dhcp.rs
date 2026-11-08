@@ -995,23 +995,22 @@ fn a_nak_to_init_reboot_starts_discovery_without_the_address() {
 }
 
 #[test]
-fn an_unanswered_init_reboot_repeats_with_rfc_2131_backoff_until_the_lease_ends() {
+fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_ends() {
     leasing!(|stack| {
         bound(stack, at(0));
         link_down(stack);
         quiet(stack, secs(10));
         link_up(stack, 2);
         let first = one(stack, secs(11));
-        // RFC 2131, 4.1: 4 s, doubling to 64 s, each moved by up to a second
-        // either way; the same transaction throughout.
+        // The DISCOVER's schedule: 250 ms doubling to 10 s, each wait less
+        // up to a quarter; the same transaction throughout.
         let mut last = secs(11);
-        for nominal in [4, 8, 16, 32, 64, 64, 64] {
+        for nominal in [250, 500, 1000, 2000, 4000, 8000, 10_000, 10_000] {
             let due = stack.poll_deadline().unwrap();
             let wait = due.as_micros() - last.as_micros();
-            let nominal = nominal * 1_000_000;
             assert!(
-                (nominal - 1_000_000..=nominal + 1_000_000).contains(&wait),
-                "{wait} µs for {nominal} µs"
+                (nominal * 750..=nominal * 1000).contains(&wait),
+                "{wait} µs for {nominal} ms"
             );
             quiet(stack, Instant::from_micros(due.as_micros() - 1));
             let sent = one(stack, due);
