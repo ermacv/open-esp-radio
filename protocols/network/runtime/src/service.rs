@@ -784,9 +784,11 @@ impl<
                 .flatten()
                 .filter(|bound| bound.open.is_some() && !bound.abandoned)
                 .all(|bound| bound.end.credits.any_free());
+            let loans = self.owner.pool().loans().outstanding();
             Some(ServiceEvent::TurnEnded(TurnEnd {
                 blocks_free,
                 credits_free,
+                loans,
             }))
         });
     }

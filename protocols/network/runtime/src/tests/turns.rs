@@ -296,6 +296,7 @@ fn a_spent_budget_counts_only_while_the_lane_holds_more() {
             ServiceEvent::TurnEnded(TurnEnd {
                 blocks_free: true,
                 credits_free: true,
+                loans: 0,
             }),
             ServiceEvent::Yielded,
         ],
@@ -360,6 +361,7 @@ fn a_turn_says_which_resource_was_out_when_it_ended() {
         Some(TurnEnd {
             blocks_free: false,
             credits_free: false,
+            loans: 0,
         })
     );
     assert_eq!(

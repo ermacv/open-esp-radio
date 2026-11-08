@@ -20,7 +20,7 @@ fn turn(
         tally.accepted();
     }
     tally.published(publish);
-    tally.ended(counter, true, true);
+    tally.ended(counter, true, true, 0);
 }
 
 #[test]
@@ -104,12 +104,12 @@ fn a_turn_counts_how_publishing_ended_and_what_was_out() {
         Publish::Fault,
     ] {
         tally.published(publish);
-        tally.ended(&counter, true, true);
+        tally.ended(&counter, true, true, 0);
     }
     tally.published(Publish::Chose);
-    tally.ended(&counter, false, true);
+    tally.ended(&counter, false, true, 0);
     tally.published(Publish::Chose);
-    tally.ended(&counter, true, false);
+    tally.ended(&counter, true, false, 0);
     let read = counter.read();
     assert_eq!(
         [
@@ -134,7 +134,7 @@ fn a_yield_counts_whether_its_turn_left_work() {
     // So does a full intake.
     tally.intake_full();
     tally.published(Publish::Chose);
-    tally.ended(&counter, true, true);
+    tally.ended(&counter, true, true, 0);
     tally.yielded(&counter);
     // And publishing at its budget, or deferred.
     turn(&mut tally, &counter, &[], 0, 8, Publish::Budget);
@@ -207,4 +207,56 @@ fn a_producer_s_steps_count_each_in_its_own_word() {
         [7, 1, 2, 3, 4, 5, 6]
     );
     assert_eq!((read.turns, read.waits_pending), (0, 0), "nothing else");
+}
+
+#[test]
+fn each_drop_counts_in_its_own_word_and_nothing_else() {
+    let counter = NetworkCounter::new();
+    let mut tally = TurnTally::new();
+    let reasons = [
+        Dropped::Malformed,
+        Dropped::Checksum,
+        Dropped::NoSocket,
+        Dropped::ReceiveFull,
+        Dropped::NoBlock,
+        Dropped::GroupLimit,
+        Dropped::TooLong,
+        Dropped::Fragment,
+        Dropped::BadSource,
+        Dropped::ReplyDropped,
+        Dropped::SendOnly,
+        Dropped::NoCredit,
+        Dropped::NotLentStopping,
+        Dropped::NotLentSocket,
+        Dropped::PressureCopy,
+        Dropped::LentLaneFull,
+        Dropped::Dhcp,
+        Dropped::Icmp,
+    ];
+    assert_eq!(reasons.len(), DROP_KINDS);
+    for (times, reason) in (1..).zip(reasons) {
+        for _ in 0..times {
+            tally.dropped(&counter, reason);
+        }
+    }
+    let read = counter.read();
+    assert_eq!(read.drops, core::array::from_fn(|kind| kind as u32 + 1));
+    assert_eq!(read.loans_at_turn_end, [0; LOAN_BINS]);
+    assert_eq!(
+        (read.turns, read.local_waits_changes),
+        (0, 0),
+        "nothing else"
+    );
+}
+
+#[test]
+fn a_turn_counts_the_loans_out_at_its_end_the_last_bin_holding_the_rest() {
+    let counter = NetworkCounter::new();
+    let mut tally = TurnTally::new();
+    for loans in [0, 1, 1, 4, 5, 9] {
+        tally.ended(&counter, true, true, loans);
+    }
+    let read = counter.read();
+    assert_eq!(read.loans_at_turn_end, [1, 2, 0, 0, 1, 2]);
+    assert_eq!(read.drops, [0; DROP_KINDS]);
 }

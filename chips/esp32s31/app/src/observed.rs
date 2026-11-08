@@ -546,8 +546,8 @@ const _: () = {
     }
 };
 
-/// The network service's sink: its turns go to [`network_turns`], and the
-/// core's drops go nowhere, as without `observe`.
+/// The network service's sink: its turns and the core's drops, by reason,
+/// go to [`network_turns`].
 #[cfg(feature = "network")]
 #[derive(Default)]
 pub(crate) struct NetworkSink(crate::observe::network::TurnTally);
@@ -585,7 +585,7 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
                 PublishEnd::Fault => Publish::Fault,
             }),
             ServiceEvent::TurnEnded(end) => {
-                tally.ended(&NETWORK, end.blocks_free, end.credits_free)
+                tally.ended(&NETWORK, end.blocks_free, end.credits_free, end.loans)
             }
             ServiceEvent::Yielded => tally.yielded(&NETWORK),
             ServiceEvent::Waited { ready } => tally.waited(&NETWORK, ready),
@@ -607,9 +607,35 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
 
 #[cfg(feature = "network")]
 impl oer_portable_events::EventSink<oer_protocols_network_core::NetEvent> for NetworkSink {
-    const ENABLED: bool = false;
-
-    fn event(&mut self, _: oer_protocols_network_core::NetEvent) {}
+    // Out of the core's input, as the turns' sink is out of the turn.
+    #[inline(never)]
+    fn event(&mut self, event: oer_protocols_network_core::NetEvent) {
+        use crate::observe::network::Dropped;
+        use oer_protocols_network_core::{NetEvent, NotLent};
+        self.0.dropped(
+            &NETWORK,
+            match event {
+                NetEvent::Malformed => Dropped::Malformed,
+                NetEvent::Checksum => Dropped::Checksum,
+                NetEvent::NoSocket => Dropped::NoSocket,
+                NetEvent::ReceiveFull => Dropped::ReceiveFull,
+                NetEvent::NoBlock => Dropped::NoBlock,
+                NetEvent::GroupLimit => Dropped::GroupLimit,
+                NetEvent::TooLong => Dropped::TooLong,
+                NetEvent::Fragment => Dropped::Fragment,
+                NetEvent::BadSource => Dropped::BadSource,
+                NetEvent::ReplyDropped => Dropped::ReplyDropped,
+                NetEvent::SendOnly => Dropped::SendOnly,
+                NetEvent::NotLent(NotLent::NoCredit) => Dropped::NoCredit,
+                NetEvent::NotLent(NotLent::Stopping) => Dropped::NotLentStopping,
+                NetEvent::NotLent(NotLent::Socket) => Dropped::NotLentSocket,
+                NetEvent::PressureCopy => Dropped::PressureCopy,
+                NetEvent::LentLaneFull => Dropped::LentLaneFull,
+                NetEvent::Dhcp(_) => Dropped::Dhcp,
+                NetEvent::Icmp(_) => Dropped::Icmp,
+            },
+        );
+    }
 }
 
 /// The network bridge took a frame from the station.

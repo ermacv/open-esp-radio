@@ -462,6 +462,8 @@ const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::N
     local_waits_changes: 0,
     producer_wakes: 0,
     producer_unknown: 0,
+    drops: [0; oer_hil_services_load::DROP_KINDS],
+    loans_at_turn_end: [0; oer_hil_services_load::LOAN_BINS],
 };
 
 /// The network core's turns at the open window's start, and the last closed
@@ -562,6 +564,8 @@ fn network_turns(source: &Source) -> oer_hil_services_load::NetworkTurns {
         local_waits_changes: turns.local_waits_changes,
         producer_wakes: source.wakes(),
         producer_unknown: source.unknown(),
+        drops: turns.drops,
+        loans_at_turn_end: turns.loans_at_turn_end,
     }
 }
 
