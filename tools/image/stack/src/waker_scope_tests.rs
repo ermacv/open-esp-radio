@@ -1060,3 +1060,179 @@ fn terminal_table_trap_allows_merged_waker_slots_one_and_two() {
     })
     .unwrap();
 }
+
+/// Two rarely taken endings of one function wake a `Waker` each, from
+/// different inlined helpers. LLVM's tail merging (branch folding, which the
+/// image pipeline keeps) folds the two `wake` calls, with their vtable loads,
+/// into one block whose debug location is line 0 of the enclosing function.
+const MERGED_WAKES_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+use core::task::{RawWaker, RawWakerVTable, Waker};
+
+static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, by_ref, drop);
+
+fn mark(value: u32) {
+    unsafe { core::ptr::write_volatile(0x1000 as *mut u32, value) }
+}
+unsafe fn clone(data: *const ()) -> RawWaker {
+    mark(1);
+    RawWaker::new(data, &VTABLE)
+}
+unsafe fn wake(_: *const ()) {
+    mark(2);
+}
+unsafe fn by_ref(_: *const ()) {
+    mark(3);
+}
+unsafe fn drop(_: *const ()) {
+    mark(4);
+}
+
+pub struct Bound {
+    closed: Option<Waker>,
+    unsent: Option<Waker>,
+}
+
+impl Bound {
+    #[inline(always)]
+    fn answer(&mut self) {
+        if let Some(waker) = self.closed.take() {
+            mark(20);
+            waker.wake();
+        }
+    }
+    #[inline(always)]
+    fn ended(&mut self) {
+        if let Some(waker) = self.unsent.take() {
+            mark(30);
+            waker.wake();
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start(bound: &mut Bound, kind: u32) {
+    match kind {
+        0 => bound.answer(),
+        1 => bound.ended(),
+        _ => mark(40),
+    }
+    mark(50);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn keep() -> *const RawWakerVTable {
+    &VTABLE
+}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
+    loop {}
+}
+"#;
+
+/// PR #1177: with a trace sink inlined, `Service::turn` left `run`'s poll and
+/// LLVM tail-merged the `wake` calls of two cold endings of
+/// `Service::commands` (`answer(Closed)` and an unsent send's `ended`) into
+/// one call through slot 1 whose scope was `turn` at line 0. The Waker rule
+/// selects a slot only from a Waker method scope at the call or at every
+/// reaching load, so the merged call names no callee: it stays exactly one
+/// unresolved loaded call, never resolved to a guessed slot and never
+/// dropped from the bound. The image fixed it locally (cold out-of-line
+/// `Bound::closed` and `Bound::unsent`); tail merging stays enabled.
+#[test]
+fn tail_merged_waker_calls_of_two_endings_stay_one_unresolved_site() {
+    let elf = compiled(MERGED_WAKES_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = crate::read_debug(
+        &std::rc::Rc::from(elf.as_slice()),
+        DebugMetadata::TypedLocations,
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let start = analysis
+        .functions
+        .values()
+        .find(|facts| facts.function.names.iter().any(|name| name == "_start"))
+        .unwrap();
+    let root = start.function.address;
+    // The compiler shape: two source wakes, one machine call.
+    let indirect = start
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.target.is_none())
+        .collect::<Vec<_>>();
+    assert_eq!(indirect.len(), 1, "{:x?}", start.transfers);
+    let (site, kind) = (indirect[0].site, indirect[0].kind);
+    assert_eq!(kind, TransferKind::Call);
+    let scopes = (root..root + start.function.size)
+        .step_by(2)
+        .map(|address| dwarf.inline_chain(address).unwrap())
+        .collect::<Vec<_>>();
+    for ending in ["<main::Bound>::answer", "<main::Bound>::ended"] {
+        assert!(
+            scopes.iter().any(|chain| chain.iter().any(|f| f == ending)),
+            "{ending} left no code: {scopes:?}"
+        );
+    }
+    // Every name the Waker rule maps to a vtable slot.
+    let methods = [
+        "<core::task::wake::Waker as core::clone::Clone>::clone",
+        "<core::task::wake::Waker>::wake",
+        "<core::task::wake::Waker>::wake_by_ref",
+        "<core::task::wake::Waker as core::ops::drop::Drop>::drop",
+        "core::task::wake::Waker::wake",
+        "core::task::wake::Waker::wake_by_ref",
+    ];
+    assert!(
+        !scopes
+            .iter()
+            .flatten()
+            .any(|function| methods.contains(&function.as_str())),
+        "a Waker method scope survived the merge: {scopes:?}"
+    );
+    let symbolizer = oer_tools_analysis_elf::dwarf::Symbolizer::new(&elf).unwrap();
+    let loads = &start.target_loads[&site];
+    assert_eq!(loads.len(), 1, "{loads:x?}");
+    assert_eq!(loads[0].offset, 4, "slot 1, wake");
+    for address in [site, loads[0].site] {
+        assert_eq!(dwarf.inline_chain(address).unwrap(), ["_start"]);
+        let frames = symbolizer.frames(u64::from(address)).unwrap();
+        assert_eq!(frames.len(), 1, "{frames:?}");
+        // Line 0, which addr2line reports as no line.
+        assert_eq!(frames[0].line, None, "{frames:?}");
+    }
+
+    // The analyzer: the one vtable is found, and still no fact names the
+    // merged call's callee.
+    let table = census(&elf, &dwarf, &types, &analysis).unwrap().unwrap();
+    let mut resolutions = waker_resolutions(
+        &analysis,
+        &dwarf,
+        &types,
+        Some(&table),
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    let pointers = with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        crate::function_pointer_resolutions(&audit, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
+    resolutions.extend(pointers);
+    assert!(resolutions.get(site).is_none(), "{resolutions:x?}");
+    let bound = analysis
+        .bound_with(root, &resolutions, &mut ledger(), &mut || Ok(()))
+        .unwrap();
+    assert_eq!(bound.unresolved, [(site, Reason::LoadedCall)], "{bound:x?}");
+    assert_eq!(
+        Reason::LoadedCall.to_string(),
+        "indirect call through a loaded pointer"
+    );
+    assert_eq!(bound.bytes, None);
+    assert!(!bound.sites.contains_key(&site), "{bound:x?}");
+}
