@@ -23,8 +23,8 @@
     )
 )]
 
-//! Ethernet, VLAN, ARP, IP and transport header fields, and the Internet
-//! checksum.
+//! Ethernet, VLAN, ARP, IP, ICMP echo and transport header fields, DHCP
+//! messages, and the Internet checksum.
 //!
 //! The codec owns byte order, bit fields, lengths and the structural
 //! dependencies between these fields. It returns checked values and borrowed
@@ -34,7 +34,9 @@
 
 pub mod arp;
 pub mod checksum;
+pub mod dhcp;
 pub mod ethernet;
+pub mod icmp;
 pub mod ip;
 pub mod transport;
 pub mod vlan;
