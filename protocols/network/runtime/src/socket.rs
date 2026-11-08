@@ -44,6 +44,15 @@ impl Batch {
         u8::try_from(left).ok().filter(|left| *left != 0).map(Self)
     }
 
+    /// Half of `self`, rounded up: the deficit at which a look-ahead with
+    /// blocks still ready asks again.
+    const fn half(self) -> usize {
+        match self.0.checked_add(1) {
+            Some(twice_up) => (twice_up >> 1) as usize,
+            None => 128,
+        }
+    }
+
     /// The blocks.
     pub(crate) const fn blocks(self) -> usize {
         self.0 as usize
@@ -619,6 +628,8 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
 
     /// Hold up to `blocks` ready, at most [`RESERVE_AHEAD`] and at least one,
     /// so a sender runs a batch without a turn of the service for each block.
+    /// Taking a block while others are ready asks again once half of them
+    /// are gone.
     /// They count toward this socket's group while they wait here, and stay
     /// out of every other socket's reach.
     pub fn reserve_ahead(&mut self, blocks: usize) {
@@ -627,26 +638,61 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
 
     /// A reservation that came, if any.
     fn take_reserved(&mut self) -> Option<Block<'m, B, SIZE>> {
-        self.inbound
+        let block = self
+            .inbound
             .as_mut()?
             .reserved
             .iter_mut()
-            .find_map(Option::take)
+            .find_map(Option::take)?;
+        self.refill();
+        Some(block)
     }
 
-    /// Ask for what [`Self::reserve_ahead`] leaves out, in one request. Only
-    /// a socket that holds and asked for nothing may take the lane's last
-    /// place: a release or a send needs it more than blocks nobody waits for.
-    fn ask_ahead(&mut self) {
-        let held = self.inbound.as_ref().map_or(0, |lanes| {
+    /// The blocks that came and wait here.
+    fn ready(&self) -> usize {
+        self.inbound.as_ref().map_or(0, |lanes| {
             lanes
                 .reserved
                 .iter()
                 .filter(|place| place.is_some())
                 .count()
-        });
+        })
+    }
+
+    /// A block was taken: ask again once half the look-ahead is gone, ready
+    /// or asked for. The request goes while the rest still cover the
+    /// sender, so a batch never ends waiting for the next one, and with
+    /// half a look-ahead a request, a turn's grants keep up with a sender
+    /// that takes up to half of it, and one more, between two turns. A
+    /// look-ahead of one block asks when it finds none, as before. A closed
+    /// socket asks for nothing.
+    fn refill(&mut self) {
+        if self.ahead.blocks() == 1
+            || self.closed
+            || self.closing
+            || self.credits.stopped.load(Ordering::Acquire)
+        {
+            return;
+        }
+        self.ask(self.ready(), self.ahead.half());
+    }
+
+    /// Ask for what [`Self::reserve_ahead`] leaves out, none being ready.
+    fn ask_ahead(&mut self) {
+        self.ask(self.ready(), 1);
+    }
+
+    /// Ask, in one request, for what the look-ahead lacks beyond the `held`
+    /// ready and those asked for, if that is at least `least`. Only a socket
+    /// that holds and asked for nothing may take the lane's last place: a
+    /// release or a send needs it more than blocks nobody waits for.
+    fn ask(&mut self, held: usize, least: usize) {
         let out = held.saturating_add(self.reserving);
-        let Some(batch) = self.ahead.beyond(out) else {
+        let Some(batch) = self
+            .ahead
+            .beyond(out)
+            .filter(|batch| batch.blocks() >= least)
+        else {
             return;
         };
         if out != 0 && self.requests.free_capacity() <= 1 {
@@ -912,6 +958,9 @@ mod tests {
         assert_eq!(ahead.beyond(3).map(Batch::blocks), Some(RESERVE_AHEAD - 3));
         assert_eq!(ahead.beyond(RESERVE_AHEAD), None, "nothing left to ask");
         assert_eq!(ahead.beyond(RESERVE_AHEAD + 1), None, "more out than ahead");
+        assert_eq!(ahead.half(), RESERVE_AHEAD / 2);
+        assert_eq!(Batch::clamped(1).half(), 1);
+        assert_eq!(Batch::clamped(5).half(), 3);
     }
 
     #[test]

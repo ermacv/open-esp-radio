@@ -35,7 +35,10 @@ share a hart.
 
 A block comes from the service, which takes a turn. `reserve_ahead` lets a socket hold
 up to `RESERVE_AHEAD` ready, so a sender runs a batch on one turn. A socket asks for
-what it lacks in one request, of at most `RESERVE_AHEAD` blocks. The service grants
+what it lacks in one request, of at most `RESERVE_AHEAD` blocks. Taking a block
+asks again once half the look-ahead is out, ready or asked for, so the next request
+goes while the rest still cover the sender and a batch never ends waiting for one; a
+look-ahead of one block asks when it finds none. The service grants
 them one by one as blocks come free, each chosen anew among the waiting sockets, so a
 larger request gains no place. A block counts toward its group from its grant, not
 from the request. Granted blocks stay out of other sockets' reach while they wait, and

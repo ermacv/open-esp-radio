@@ -1996,6 +1996,8 @@ dependencies = [
  "oer-hil-agent",
  "oer-hil-services-load",
  "oer-hil-services-wifi-station",
+ "oer-portable-events",
+ "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-portable-trace",
  "oer-protocols-hil-agent",

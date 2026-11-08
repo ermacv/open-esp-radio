@@ -110,14 +110,15 @@ fn pass<R: Future>(run: &mut core::pin::Pin<&mut R>) {
     assert!(run.as_mut().poll(cx).is_pending());
 }
 
-/// Take `count` blocks into `socket`'s application, a turn at a time,
-/// leaving nothing asked.
+/// Take `count` blocks into `socket`'s application, one a turn, leaving
+/// nothing asked.
 fn hold<B, R: Future>(
     socket: &mut Sock<B>,
     run: &mut core::pin::Pin<&mut R>,
     count: usize,
 ) -> Held<B> {
-    socket.reserve_ahead(count);
+    // One at a time: a look-ahead of one asks only when it finds none.
+    socket.reserve_ahead(1);
     let mut held = Vec::new();
     while held.len() < count {
         match socket.try_reserve().unwrap() {
@@ -136,6 +137,11 @@ fn granted<B>(socket: &mut Sock<B>) -> Option<Block<'static, B, SIZE>> {
         Poll::Ready(block) => Some(block.unwrap()),
         Poll::Pending => None,
     }
+}
+
+/// What `hold` asks for: one block a request.
+fn ones(count: usize) -> Vec<u8> {
+    std::vec![1; count]
 }
 
 /// After a retirement: everything in hands goes home, and the pool is whole,
@@ -174,26 +180,31 @@ fn a_reservation_is_granted_block_by_block_as_blocks_come_home() {
         pass(&mut run);
         taken.push(granted(&mut first).expect("the one free block"));
         assert!(granted(&mut first).is_none(), "none other is free");
-        // Each block that comes home goes to the request, with no new one.
+        // Each block that comes home goes to the socket. Every second block
+        // it takes leaves half its look-ahead of four out, and the take asks
+        // for those two in one request.
         for _ in 0..3 {
             holder.release(held.pop().unwrap()).ok().unwrap();
             pass(&mut run);
             taken.push(granted(&mut first).expect("a block it is owed"));
         }
-        // The request is whole: the next block home stays free.
+        // The next block home goes to what it asks for still: it stays in
+        // the lane, not taken.
         holder.release(held.pop().unwrap()).ok().unwrap();
         pass(&mut run);
     }
+    let mut expected = ones(POOL - 1);
+    expected.extend([4, 2, 2]);
     assert_eq!(
-        asked.0,
-        [7, 4],
-        "the holder's request, and the socket's one"
+        asked.0, expected,
+        "the holder's, the socket's, and the two its takes renewed"
     );
     let mut ended = service.retire();
-    assert_eq!(ended.retired.pool.free(), 1);
-    assert_eq!(ended.retired.pool.held(groups[0]), 4);
-    assert!(first.reclaim().is_none(), "nothing more was granted");
-    whole(&mut ended, groups, [held, taken, Vec::new()]);
+    assert_eq!(ended.retired.pool.free(), 0);
+    assert_eq!(ended.retired.pool.held(groups[0]), 5);
+    let reclaimed: Vec<_> = core::iter::from_fn(|| first.reclaim()).collect();
+    assert_eq!(reclaimed.len(), 1, "the one granted and not taken");
+    whole(&mut ended, groups, [held, taken, reclaimed]);
 }
 
 #[test]
@@ -232,7 +243,11 @@ fn a_cancelled_wait_keeps_what_its_request_is_granted() {
         pass(&mut run);
     }
     assert_eq!(taken.len(), 2);
-    assert_eq!(asked.0, [8, 4], "one request survives its cancelled wait");
+    // One request survives its cancelled wait; the second take, leaving half
+    // the look-ahead out, asks for those two.
+    let mut expected = ones(POOL);
+    expected.extend([4, 2]);
+    assert_eq!(asked.0, expected);
     let mut ended = service.retire();
     assert_eq!(ended.retired.pool.free(), 0);
     assert_eq!(ended.retired.pool.held(groups[0]), 2);
@@ -331,8 +346,15 @@ fn blocks_granted_while_the_close_waits_in_the_lane_stay_the_socket_s() {
         while let Ok(Some(block)) = first.try_reserve() {
             taken.push(block);
         }
+        // Taking them asked for nothing: a turn finds no request.
+        pass(&mut run);
     }
-    assert_eq!(asked.0, [5, 3, 4]);
+    let mut expected = ones(POOL);
+    expected.push(4);
+    assert_eq!(
+        asked.0, expected,
+        "a closing socket's takes ask for nothing"
+    );
     assert_eq!(taken.len(), 3, "granted before the close was taken");
     let mut ended = service.retire();
     assert_eq!(ended.retired.pool.free(), 2, "none is granted after it");
@@ -366,7 +388,9 @@ fn a_retirement_ends_what_is_owed_and_every_granted_block_comes_back_once() {
         second.reserve_ahead(2);
         assert!(second.try_reserve().unwrap().is_none());
     }
-    assert_eq!(asked.0, [6, 1, 4]);
+    let mut expected = ones(POOL - 1);
+    expected.push(4);
+    assert_eq!(asked.0, expected, "the second's request was never taken");
     let mut ended = service.retire();
     assert_eq!(ended.retired.pool.outstanding(), POOL);
     // The block granted and not taken comes back once; nothing else does.
@@ -412,7 +436,7 @@ fn a_reservation_past_its_group_s_limit_waits_with_blocks_free() {
         assert!(granted(&mut first).is_none());
     }
     assert_eq!(taken.len(), 2);
-    assert_eq!(asked.0, [4]);
+    assert_eq!(asked.0, [4, 2], "the second take asks for the two it took");
     let mut ended = service.retire();
     assert_eq!(ended.retired.pool.held(groups[0]), 2);
     whole(&mut ended, groups, [taken, Vec::new(), Vec::new()]);
@@ -465,11 +489,53 @@ fn two_groups_short_of_blocks_share_them_block_by_block_whatever_they_ask() {
         [[1, 0], [0, 1], [1, 0], [0, 1], [1, 1], [1, 1]],
         "per block, as many as asked for or not"
     );
-    assert_eq!(&asked.0[..2], [8, 16]);
-    assert!(asked.0[2..].iter().all(|blocks| *blocks == 1));
+    assert_eq!(asked.0[..POOL], ones(POOL));
+    assert_eq!(asked.0[POOL..POOL + 2], [16, 1]);
+    assert!(asked.0[POOL + 2..].iter().all(|blocks| *blocks == 1));
     let mut ended = service.retire();
     let [first_hand, second_hand] = hands;
     whole(&mut ended, groups, [held, first_hand, second_hand]);
+}
+
+#[test]
+fn a_refill_leaves_the_lane_s_last_place_to_a_send_or_a_release() {
+    brand!(Net);
+    let Three {
+        mut service,
+        mut first,
+        groups,
+        clock,
+        ..
+    } = three::<Net>([POOL, POOL]);
+    let mut asked = Asked::default();
+    let mut hand = Vec::new();
+    {
+        let mut run = pin!(service.run(clock, &mut asked));
+        first.reserve_ahead(RESERVE_AHEAD);
+        assert!(first.try_reserve().unwrap().is_none());
+        pass(&mut run);
+        // All eight of the pool came; seven taken leave less than half out.
+        for _ in 0..POOL - 1 {
+            hand.push(first.try_reserve().unwrap().unwrap());
+        }
+        // Four of the lane's five places taken: two sends and two releases.
+        for _ in 0..CREDITS {
+            drop(first.send(peer(), hand.pop().unwrap()).ok().unwrap());
+        }
+        for _ in 0..2 {
+            first.release(hand.pop().unwrap()).ok().unwrap();
+        }
+        // The eighth take leaves half out, but the last place is not a
+        // refill's: the release after it finds it.
+        let last = first.try_reserve().unwrap().unwrap();
+        first.release(last).ok().unwrap();
+        pass(&mut run);
+        pass(&mut run);
+    }
+    assert_eq!(asked.0, [16], "no refill took the last place");
+    let mut ended = service.retire();
+    let reclaimed: Vec<_> = core::iter::from_fn(|| first.reclaim()).collect();
+    whole(&mut ended, groups, [hand, reclaimed, Vec::new()]);
 }
 
 #[test]
@@ -485,16 +551,20 @@ fn a_reservation_reports_the_blocks_it_asks_for() {
     let mut asked = Asked::default();
     {
         let mut run = pin!(service.run(clock, &mut asked));
-        // What the look-ahead lacks, once none is ready.
-        let held = hold(&mut first, &mut run, 5);
-        for block in held {
-            first.release(block).ok().unwrap();
+        // What the look-ahead lacks, once none is ready: five.
+        first.reserve_ahead(5);
+        assert!(first.try_reserve().unwrap().is_none());
+        pass(&mut run);
+        // Taking them: the third take leaves three of five out, half
+        // rounded up, and asks for those three.
+        let mut taken = Vec::new();
+        for _ in 0..5 {
+            taken.push(first.try_reserve().unwrap().expect("one of the five"));
         }
-        let _again = hold(&mut first, &mut run, 5);
         // At most the look-ahead.
         second.reserve_ahead(usize::MAX);
         assert!(second.try_reserve().unwrap().is_none());
         pass(&mut run);
     }
-    assert_eq!(asked.0, [5, 5, 16]);
+    assert_eq!(asked.0, [5, 3, 16]);
 }

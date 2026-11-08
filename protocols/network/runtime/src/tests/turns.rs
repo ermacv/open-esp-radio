@@ -95,6 +95,14 @@ impl Turn {
             .count()
     }
 
+    /// The blocks each asked for.
+    fn sizes(&self) -> impl Iterator<Item = usize> + '_ {
+        self.took.iter().filter_map(|took| match took {
+            RequestKind::Reserve { blocks } => Some(usize::from(*blocks)),
+            _ => None,
+        })
+    }
+
     /// The blocks they asked for.
     fn asked(&self) -> usize {
         self.took
@@ -172,12 +180,17 @@ fn an_unpaced_sender_s_turns_take_its_reserves_and_sends_within_the_budget() {
         (DATAGRAMS..=DATAGRAMS + RESERVE_AHEAD).contains(&asked),
         "every block sent was asked for, at most the look-ahead not sent: {asked}"
     );
-    // This sender takes every block it holds before it asks again, so each
-    // reservation asks for the whole look-ahead: messages per datagram are
-    // 1 + 1/16, not 2.
-    assert_eq!(reserves * RESERVE_AHEAD, asked);
+    // The first asks for the whole look-ahead; after it, each take that
+    // leaves half of it out asks for that half: messages per datagram are
+    // 1 + 1/8, not 2.
+    let sizes: Vec<usize> = turns.iter().flat_map(Turn::sizes).collect();
+    assert_eq!(sizes[0], RESERVE_AHEAD);
     assert!(
-        reserves <= DATAGRAMS.div_ceil(RESERVE_AHEAD) + 1,
+        sizes[1..].iter().all(|blocks| *blocks == RESERVE_AHEAD / 2),
+        "{sizes:?}"
+    );
+    assert!(
+        reserves <= DATAGRAMS.div_ceil(RESERVE_AHEAD / 2) + 1,
         "{reserves} reservations for {DATAGRAMS} datagrams"
     );
     assert_eq!(took(RequestKind::Release) + took(RequestKind::Close), 0);
@@ -236,14 +249,15 @@ fn an_unpaced_sender_s_turns_take_its_reserves_and_sends_within_the_budget() {
     );
 }
 
-/// Take `count` blocks into the application's hands, a turn of `run` at a
-/// time, leaving nothing asked.
+/// Take `count` blocks into the application's hands, one a turn of `run`,
+/// leaving nothing asked.
 fn hold<B, R: Future>(
     socket: &mut FlowSocket<B>,
     run: &mut core::pin::Pin<&mut R>,
     count: usize,
 ) -> Vec<Block<'static, B, SIZE>> {
-    socket.reserve_ahead(count);
+    // One at a time: a look-ahead of one asks only when it finds none.
+    socket.reserve_ahead(1);
     let mut held = Vec::new();
     while held.len() < count {
         match socket.try_reserve().unwrap() {
