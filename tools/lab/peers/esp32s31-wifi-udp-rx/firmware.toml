@@ -1,0 +1,6 @@
+# Firmware catalog entry: `cargo fw idf build wifi-udp-rx-peer`.
+# The vendor Wi-Fi station joins the stand's access point and counts the
+# host's UDP load: the vendor receiver beside the open station's load runs.
+image = "wifi-udp-rx-peer"
+chip = "esp32s31"
+pins = "esp32s31"

@@ -22,6 +22,7 @@ mod stall;
 mod tracking;
 mod traffic;
 mod turns;
+mod vendor;
 
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
@@ -149,6 +150,9 @@ const REPORT_TIMEOUT: Duration = Duration::from_secs(2);
 const CALL: Duration = Duration::from_secs(2);
 
 fn main() -> ExitCode {
+    if let Some(board) = vendor::board() {
+        return vendor::main(&board);
+    }
     let scenario = if static_address().is_some() {
         &NETWORK_SCENARIO
     } else {

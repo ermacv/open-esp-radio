@@ -298,6 +298,20 @@ nothing: a case fails only when the path or an exchange does not work. Each meas
 release the run's results, its cleanup and verdict go to
 `target/hil/results/wifi-load-<time in ns>.json`.
 
+`OER_WIFI_LOAD_VENDOR=<board>` runs the RX levels against the vendor
+receiver instead of the cases: the stand's ESP-IDF
+[UDP receiver peer](../../../tools/lab/peers/esp32s31-wifi-udp-rx/README.md)
+(`cargo fw idf build wifi-udp-rx-peer` first) on `<board>`, under a lease of
+the board, the router and the air exclusively. The program writes the peer
+unless the board runs it, applies the same station profile with a generated
+network and hands it to the peer on its console, then offers each level as
+`rx` does (`OER_WIFI_LOAD_MBPS`, `OER_WIFI_LOAD_SECONDS`,
+`OER_WIFI_LOAD_PROBES` and `OER_WIFI_LOAD_WIDTH` apply). Each level records
+the same `rx` counts by the load header, `rtt`, the access point's
+`link.router` window, and in `vendor` the peer's own counts: the IP stack's,
+the vendor's reception and MAC receive statistics and its statistics dump.
+Its results go to `target/hil/results/wifi-load-vendor-<time in ns>.json`.
+
 The host needs, once, a route to the station network through the router's
 LAN address: `ip route add 10.231.0.0/24 via <router LAN address>` (or the
 same as a permanent route of the wired connection), and the stand file names

@@ -14,7 +14,10 @@ oer-tools-analysis-elf = { path = "../../../tools/analysis/elf" }
 oer-tools-hil-harness = { path = "../../../tools/hil/harness" }
 oer-tools-image-build = { path = "../../../tools/image/build" }
 oer-tools-image-checks = { path = "../../../tools/image/checks" }
+oer-tools-image-esp-idf = { path = "../../../tools/image/esp-idf" }
 oer-tools-os-process = { path = "../../../tools/os/process" }
+oer-tools-lab-arbiter = { path = "../../../tools/lab/arbiter" }
+oer-tools-lab-client = { path = "../../../tools/lab/client" }
 oer-tools-lab-model = { path = "../../../tools/lab/model" }
 oer-hil-services-load = { path = "../../services/load" }
 oer-hil-services-wifi-station = { path = "../../services/wifi-station" }
