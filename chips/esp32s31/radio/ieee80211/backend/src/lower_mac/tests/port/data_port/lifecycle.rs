@@ -1421,3 +1421,46 @@ fn a_held_retune_starts_once_the_radio_answers_within_its_bound_and_is_refused_p
         fixture.stop();
     });
 }
+
+/// Install the station's pairwise key in its one slot and take it from its
+/// terminal.
+fn installed_pairwise<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &mut Fixture<'id, Id>,
+) -> PairwiseKey<'id, Id, Station> {
+    let (association, _, slot) = fixture.association();
+    let (install, _) = fixture.commands.install_pairwise(
+        &association,
+        slot,
+        IndividualAddress::new(BSSID).expect("peer"),
+        group_key(7),
+    );
+    assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+    match fixture.outbox.terminals.pop() {
+        Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) => key,
+        _ => panic!("the installation terminal returns the key"),
+    }
+}
+
+#[test]
+fn a_key_left_installed_is_erased_by_the_reinstall_and_its_slot_takes_the_next_key() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        // The lifecycle stops without removing its key.
+        let _left = installed_pairwise(&mut fixture);
+        fixture.stop();
+        let mut fixture = reinstall(fixture, installations).expect("reinstalled");
+        fixture.start();
+        // The next installation's key takes the same slot, and frames go
+        // out under it.
+        let key = installed_pairwise(&mut fixture);
+        let attempt = fixture.protected_mpdu(&key).expect("a frame");
+        let published = fixture.observed.borrow().publications;
+        fixture.submit_now(attempt);
+        let _ = fixture.turn();
+        assert_eq!(
+            fixture.observed.borrow().publications,
+            published + 1,
+            "the frame under the new key is published"
+        );
+    });
+}

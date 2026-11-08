@@ -280,6 +280,17 @@ impl Atoms {
         self.0.borrow().promiscuous
     }
 
+    /// The key-table entries that hold a key, in installation order.
+    pub fn installed_keys(&self) -> Vec<u8> {
+        self.0.borrow().keys.iter().map(|(slot, _)| *slot).collect()
+    }
+
+    /// Put a key in the key table's entry `index`, as an earlier
+    /// installation's write left it.
+    pub fn seed_key(&self, index: u8, identity: MacCcmpKeyIdentity) {
+        self.0.borrow_mut().keys.push((index, identity));
+    }
+
     fn queue<R>(&self, queue: u8, f: impl FnOnce(&mut Queue) -> R) -> R {
         let mut state = self.0.borrow_mut();
         let mut vacant = Queue::default();
