@@ -99,9 +99,22 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   decrypts air frames at capture against its key table and drains
   captured hardware, DMA and interrupt frames through the RX cut. A
   publication is identified by its program's PSDU length: every host DMA
-  allocation has the same model descriptor address. Not run: air denial
-  (no device model) and the access point's role, which the station-only
-  data port does not issue.
+  allocation has the same model descriptor address. The shared
+  access-point cases (`access_point::check`) run against the same port and
+  model (`lower_mac/tests/port/data_port/access_point`): both roles on one
+  port, each role's configuration barrier, beacons and their expiry, stale
+  tokens, keys and stops. Not run: air denial (no device model).
+- **Access point.** The port implements `AccessPointPort` with its own
+  commands: a configuration withdraws the access point's queued attempts,
+  holds while one of its own is on the air or the core configures, and
+  restarts or stops the AP TSF; while the core configures the access
+  point, the station's attempts still publish (`ConfiguringView::other_interface`).
+  Its group key installs and removes through the same RX cut as the
+  station's. A beacon queued on VO past its deadline ends `Expired` with
+  its permission (`expire_beacons`). Its Timestamp is written by the
+  caller (`BeaconTimestamp::Caller`): the vendor's beacon path writes the
+  MAC's local-time count into the frame in software, and whether the
+  hardware rewrites the field at transmission is not established.
 - **Publication observations.** `Esp32s31Port`'s last parameter `O` is
   the port's observation receiver (`port::Observations`, an
   `oer_portable_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is

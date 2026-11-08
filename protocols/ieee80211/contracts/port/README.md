@@ -327,10 +327,14 @@ slots and group permission, and the installation's one `BeaconPermission`
 (minted by `BeaconPool`). A missing permission does not compile, and no
 station permission or installation payload fits an access-point operation or
 the reverse (`tests/ui`, the model's `tests/ui`). A `BeaconAttempt` takes the
-permission, contends as `BEACON_ACCESS_CATEGORY` (voice) unprotected, and
-every end of it, a refused submission's included, is a `TxCompleted::Beacon`
-that returns the permission: one beacon is admitted, queued or on the air at
-a time.
+permission, contends as `BEACON_ACCESS_CATEGORY` (voice) unprotected under
+its own coexistence operation (`TxOperation::Beacon`), and every end of it,
+a refused submission's included, is a `TxCompleted::Beacon` that returns the
+permission: one beacon is admitted, queued or on the air at a time. Its
+`deadline` is its TBTT's: a beacon the port has not published by then ends
+`TxOutcome::Expired` with the permission and is not sent later; one
+published ends with what the air reported, and a beacon of indeterminate
+end is not repeated.
 
 Every token the port's own pools mint (configure permissions, association
 starts and key slots, the beacon permission, and a backend's group
@@ -353,7 +357,7 @@ Block Ack slots, the epoch slot) are not checked.
 | Operation | Accepted at | Refused before | Ends with |
 | --- | --- | --- | --- |
 | access-point transmission | `submit` | `SubmitRefusal`, withdrawn terminal in the sink | `TxCompleted::Single` |
-| beacon | `submit` | as a transmission, an earlier installation's permission included; its terminal returns the permission | `TxCompleted::Beacon` with the permission |
+| beacon | `submit` | as a transmission, an earlier installation's permission included; its terminal returns the permission | `TxCompleted::Beacon` with the permission, `Expired` when unpublished by its deadline |
 | key install or removal, configuration with its TSF control | `AccessPointProgress::Done` | `AccessPointProgress::Refused` with the command (`NotEnabled`, `StalePermission`) | its terminal (`PairwiseKeyInstalled`, `GroupKeyInstalled`, `KeyRemoved`, `Configured` of the access point) |
 
 The access point's commands run in its own order: one held at its barrier
