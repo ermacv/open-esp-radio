@@ -317,3 +317,64 @@ fn an_owner_stamp_is_its_age_before_the_image_s_reading() {
         "a boundary that never moved has no time"
     );
 }
+
+#[test]
+fn the_addba_requests_keep_each_tid_s_record_and_the_counts_as_read() {
+    use oer::observe::addba::{self as observed, Outcome, Request};
+    let mut reading = observed::Addba {
+        accepted: 2,
+        repeated: 1,
+        refused: 4,
+        unanswered: 3,
+        ..observed::Addba::default()
+    };
+    reading.last[0] = Some(Request {
+        requested: 0,
+        outcome: Outcome::Accepted { window: 16 },
+    });
+    reading.last[1] = Some(Request {
+        requested: 64,
+        outcome: Outcome::Repeated { window: 1 },
+    });
+    reading.last[9] = Some(Request {
+        requested: 8,
+        outcome: Outcome::Refused { status: 37 },
+    });
+    reading.last[15] = Some(Request {
+        requested: 1023,
+        outcome: Outcome::Unanswered,
+    });
+    let wire = addba(&reading);
+    assert_eq!(
+        wire.last[..2],
+        [
+            Some(AddbaRequest {
+                requested: 0,
+                outcome: AddbaOutcome::Accepted { window: 16 },
+            }),
+            Some(AddbaRequest {
+                requested: 64,
+                outcome: AddbaOutcome::Repeated { window: 1 },
+            }),
+        ]
+    );
+    assert_eq!(
+        wire.last[9],
+        Some(AddbaRequest {
+            requested: 8,
+            outcome: AddbaOutcome::Refused { status: 37 },
+        })
+    );
+    assert_eq!(
+        wire.last[15],
+        Some(AddbaRequest {
+            requested: 1023,
+            outcome: AddbaOutcome::Unanswered,
+        })
+    );
+    assert_eq!(wire.last.iter().filter(|last| last.is_some()).count(), 4);
+    assert_eq!(
+        (wire.accepted, wire.repeated, wire.refused, wire.unanswered),
+        (2, 1, 4, 3)
+    );
+}

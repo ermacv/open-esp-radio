@@ -85,10 +85,12 @@ pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
                     .await
                     .map_err(|_| LoadError::NoSampler),
             ),
-            Command::Counters { start } => Reply::Counters(super::report::snapshot(
-                hart0.counters(start),
-                observe::counters(),
-            )),
+            Command::Counters { start } => {
+                // The counters first: the ADDBA reading may yield.
+                let (hart, counters) = (hart0.counters(start), observe::counters());
+                let addba = observe::addba_requests().await;
+                Reply::Counters(super::report::snapshot(hart, counters, &addba))
+            }
             Command::Page(identity, from) => {
                 oer_hil_agent::answer(identity, &page(hart0.sampler(), from));
                 continue;

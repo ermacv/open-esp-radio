@@ -55,6 +55,29 @@ pub enum RxBlockAckEvent {
     Started { tid: u8, window: u16 },
     /// An agreement ended.
     Stopped { tid: u8, reason: AgreementStop },
+    /// One ADDBA Request taken: its TID, the Buffer Size it asked for as
+    /// received (zero included) and what became of it. A started agreement
+    /// reports [`Self::Started`] first.
+    Requested {
+        tid: u8,
+        requested: u16,
+        outcome: AddbaOutcome,
+    },
+}
+
+/// What became of one ADDBA Request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddbaOutcome {
+    /// A new agreement started with `window`; its success response is owed.
+    Accepted { window: u16 },
+    /// The running agreement's own request again: its success response,
+    /// with the agreement's `window`, is owed once more.
+    Repeated { window: u16 },
+    /// A refusal response with this status is queued.
+    Refused(AddbaStatus),
+    /// No reply place or bank remained ([`RxBlockAckCapacity`]): no
+    /// response leaves, and the access point asks again.
+    Unanswered,
 }
 
 /// What a reorder decision answered.
@@ -464,6 +487,28 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let Some(parsed) = RxAddbaRequest::from_action(action) else {
             return Ok(());
         };
+        let answered = self.request(now, bssid, parsed, supported, port, events);
+        report(events, || RxBlockAckEvent::Requested {
+            tid: parsed.tid(),
+            requested: parsed.window(),
+            outcome: match answered {
+                Ok(outcome) => outcome,
+                Err(RxBlockAckCapacity) => AddbaOutcome::Unanswered,
+            },
+        });
+        answered.map(|_| ())
+    }
+
+    /// Answer one ADDBA Request: start, repeat or refuse its agreement.
+    fn request<P: RxBlockAckPort<T>>(
+        &mut self,
+        now: Instant,
+        bssid: Bssid,
+        parsed: RxAddbaRequest,
+        supported: bool,
+        port: &mut P,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) -> Result<AddbaOutcome, RxBlockAckCapacity> {
         if let Some((index, response)) = self.banks.iter().enumerate().find_map(|(index, bank)| {
             bank.active
                 .as_ref()?
@@ -474,13 +519,13 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                 if let Some(bank) = self.banks.get_mut(index) {
                     bank.response = true;
                 }
-                return Ok(());
+                return Ok(AddbaOutcome::Repeated {
+                    window: response.window,
+                });
             }
             return self.queue_response(response);
         }
-        let BlockAckAction::AddbaRequest { tid, .. } = action else {
-            return Ok(());
-        };
+        let tid = parsed.tid();
         let existing = self.banks.iter().position(|bank| {
             bank.active
                 .as_ref()
@@ -543,7 +588,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                 report(events, || RxBlockAckEvent::Started { tid, window });
                 bank.active = Some(active);
                 bank.response = true;
-                Ok(())
+                Ok(AddbaOutcome::Accepted { window })
             }
             Err((running, _)) => {
                 bank.free = Some(port.remove(running));
@@ -555,9 +600,12 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         }
     }
 
-    fn queue_response(&mut self, response: AddbaResponse) -> Result<(), RxBlockAckCapacity> {
+    fn queue_response(
+        &mut self,
+        response: AddbaResponse,
+    ) -> Result<AddbaOutcome, RxBlockAckCapacity> {
         match response.encode().filter(|body| self.queue(*body)) {
-            Some(_) => Ok(()),
+            Some(_) => Ok(AddbaOutcome::Refused(response.status)),
             None => Err(RxBlockAckCapacity),
         }
     }

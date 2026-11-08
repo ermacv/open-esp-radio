@@ -31,9 +31,9 @@ pub mod reorder;
 pub mod session;
 
 pub use banks::{
-    AgreementStop, Parked, RX_BLOCK_ACK_WINDOW, ReorderCause, ReplyPlace, RxBlockAckCapacity,
-    RxBlockAckEvent, RxBlockAckPort, RxBlockAckReplyBody, RxBlockAckStorage, RxBlockAckTypes,
-    RxBlockAckView, RxDisposition,
+    AddbaOutcome, AgreementStop, Parked, RX_BLOCK_ACK_WINDOW, ReorderCause, ReplyPlace,
+    RxBlockAckCapacity, RxBlockAckEvent, RxBlockAckPort, RxBlockAckReplyBody, RxBlockAckStorage,
+    RxBlockAckTypes, RxBlockAckView, RxDisposition,
 };
 pub use originator::{
     DialogTokenSequence, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,

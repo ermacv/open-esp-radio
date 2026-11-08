@@ -57,6 +57,17 @@ impl RxAddbaRequest {
             _ => None,
         }
     }
+
+    /// The TID the request names.
+    pub const fn tid(&self) -> u8 {
+        self.tid
+    }
+
+    /// The Buffer Size the request asks for, as received: zero asks the
+    /// recipient to choose.
+    pub const fn window(&self) -> u16 {
+        self.window
+    }
 }
 
 /// A response to one parsed request; refusal retains its dialog and TID.

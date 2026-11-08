@@ -629,3 +629,146 @@ fn parking_beyond_the_retained_frames_is_a_capacity_fault() {
         2
     );
 }
+
+/// An ADDBA Request for `tid` asking for `window`, zero included, which the
+/// encoder refuses to write.
+fn request_for(dialog_token: u8, tid: u8, window: u16) -> BlockAckAction {
+    BlockAckAction::AddbaRequest {
+        dialog_token,
+        tid,
+        immediate: true,
+        amsdu: false,
+        window,
+        timeout_tu: 0,
+        starting_sequence: SequenceNumber::new(100).unwrap(),
+    }
+}
+
+/// The ADDBA records of `events`, in order.
+fn requested(events: &[RxBlockAckEvent]) -> Vec<(u8, u16, AddbaOutcome)> {
+    events
+        .iter()
+        .filter_map(|event| match *event {
+            RxBlockAckEvent::Requested {
+                tid,
+                requested,
+                outcome,
+            } => Some((tid, requested, outcome)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn each_request_records_the_asked_buffer_size_and_the_window_it_got() {
+    for (asked, window) in [(0, 16), (8, 8), (64, 16)] {
+        let mut events = Kept::default();
+        let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+        let mut view = storage.view();
+        let mut port = Recording::default();
+        view.offer(
+            now(1),
+            7,
+            bssid(),
+            request_for(5, 0, asked),
+            true,
+            &mut port,
+            &mut events,
+        )
+        .unwrap();
+        assert_eq!(
+            requested(&events.0),
+            [(0, asked, AddbaOutcome::Accepted { window })],
+            "a request for {asked}"
+        );
+        assert!(
+            matches!(
+                events.0.as_slice(),
+                [
+                    RxBlockAckEvent::Started { tid: 0, window: started },
+                    RxBlockAckEvent::Requested { .. },
+                ] if *started == window
+            ),
+            "the agreement starts first: {:?}",
+            events.0
+        );
+    }
+}
+
+#[test]
+fn a_second_concurrent_tid_records_the_one_frame_left_for_it() {
+    let mut events = Kept::default();
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    for (dialog, tid) in [(5, 0), (6, 1)] {
+        view.offer(
+            now(1),
+            7,
+            bssid(),
+            request_for(dialog, tid, 64),
+            true,
+            &mut port,
+            &mut events,
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        requested(&events.0),
+        [
+            (0, 64, AddbaOutcome::Accepted { window: 16 }),
+            (1, 64, AddbaOutcome::Accepted { window: 1 }),
+        ]
+    );
+    // The first agreement keeps its window: nothing ends it.
+    assert!(
+        !events
+            .0
+            .iter()
+            .any(|event| matches!(event, RxBlockAckEvent::Stopped { .. }))
+    );
+}
+
+#[test]
+fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outcome() {
+    let mut events = Kept::default();
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    let mut offer = |view: &mut RxBlockAckView<'_, Types, u32>, action, supported| {
+        view.offer(
+            now(1),
+            7,
+            bssid(),
+            action,
+            supported,
+            &mut port,
+            &mut events,
+        )
+    };
+    offer(&mut view, request_for(5, 0, 8), true).unwrap();
+    offer(&mut view, request_for(5, 0, 8), true).unwrap();
+    // The same dialog with changed parameters, a TID no bank serves.
+    offer(&mut view, request_for(5, 0, 4), true).unwrap();
+    offer(&mut view, request_for(9, 9, 8), true).unwrap();
+    for dialog in 0..PENDING - 2 {
+        offer(&mut view, request_for(dialog as u8, 3, 8), false).unwrap();
+    }
+    assert!(!view.can_receive_management());
+    assert_eq!(
+        offer(&mut view, request_for(20, 3, 0), false),
+        Err(RxBlockAckCapacity)
+    );
+    let records = requested(&events.0);
+    assert_eq!(
+        records[..4],
+        [
+            (0, 8, AddbaOutcome::Accepted { window: 8 }),
+            (0, 8, AddbaOutcome::Repeated { window: 8 }),
+            (0, 4, AddbaOutcome::Refused(AddbaStatus::RequestDeclined)),
+            (9, 8, AddbaOutcome::Refused(AddbaStatus::RequestDeclined)),
+        ]
+    );
+    assert_eq!(records.last(), Some(&(3, 0, AddbaOutcome::Unanswered)));
+    assert_eq!(records.len(), 4 + PENDING - 2 + 1);
+}

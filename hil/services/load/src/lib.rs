@@ -85,6 +85,8 @@ oer_protocols_hil_protocol::messages! {
     topic StallMacCollected = "load/stall-mac-report";
     endpoint CollectNetwork = "load/network" => NetworkCollected;
     topic NetworkCollected = "load/network-report";
+    endpoint CollectAddba = "load/addba" => AddbaCollected;
+    topic AddbaCollected = "load/addba-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -1463,6 +1465,60 @@ pub struct StallMac {
     pub periodic_us: Option<u64>,
 }
 
+/// The ADDBA Requests the station took since boot, at the end of run
+/// `run`'s window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectAddba {
+    pub run: u32,
+}
+
+/// The answer to [`CollectAddba`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum AddbaCollected {
+    Report(Addba),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// The TIDs an ADDBA Request can name: its four-bit field.
+pub const ADDBA_TIDS: usize = 16;
+
+/// The ADDBA Requests the station's receive agreements took since boot:
+/// the last of each TID and the requests by outcome. Only a trace build
+/// counts them; others report none.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Addba {
+    /// The last request of each TID, `None` for a TID without one.
+    pub last: [Option<AddbaRequest>; ADDBA_TIDS],
+    pub accepted: u32,
+    pub repeated: u32,
+    pub refused: u32,
+    pub unanswered: u32,
+}
+
+/// One ADDBA Request: the Buffer Size the access point asked for as
+/// received (zero asks the station to choose) and what became of it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct AddbaRequest {
+    pub requested: u16,
+    pub outcome: AddbaOutcome,
+}
+
+/// What became of one ADDBA Request, as the station's recipient names it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum AddbaOutcome {
+    /// A new agreement started with `window`.
+    Accepted { window: u16 },
+    /// The running agreement's own request again, answered with its
+    /// `window`.
+    Repeated { window: u16 },
+    /// Refused with this IEEE 802.11 status code.
+    Refused { status: u16 },
+    /// No reply place or bank remained: it went unanswered.
+    Unanswered,
+}
+
 /// Why the image refused a request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum LoadError {
@@ -1501,6 +1557,7 @@ oer_protocols_hil_agent::service! {
         CollectStall(CollectStall) => stall,
         CollectStallMac(CollectStallMac) => stall_mac,
         CollectNetwork(CollectNetwork) => network,
+        CollectAddba(CollectAddba) => addba,
     }
 }
 
