@@ -81,6 +81,7 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
         ("protocols/network/runtime/src/local.rs", 3),
         ("protocols/network/runtime/src/returns.rs", 3),
         ("protocols/network/runtime/src/socket.rs", 5),
+        ("protocols/network/runtime/src/watch.rs", 3),
         ("protocols/radio/port/src/slot.rs", 3),
     ]
     .into_iter()

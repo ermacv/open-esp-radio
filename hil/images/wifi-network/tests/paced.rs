@@ -28,14 +28,7 @@ use oer_protocols_network_runtime::{RequestKind, ServiceEvent};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct StaticAddress {
-    pub address: [u8; 4],
-    pub prefix: u8,
-    pub gateway: [u8; 4],
-}
 pub struct Start {
-    pub address: Option<StaticAddress>,
     pub port: u16,
 }
 #[derive(Debug)]
@@ -125,6 +118,12 @@ impl FrameSource for Port {
         None
     }
 
+    fn link(&self) -> oer_protocols_network_port::LinkSnapshot {
+        oer_protocols_network_port::LinkSnapshot {
+            state: oer_protocols_network_port::LinkState::Up,
+            epoch: 1,
+        }
+    }
     fn register(&mut self, cx: &mut Context<'_>) {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
@@ -248,14 +247,7 @@ fn at_tx_100_the_image_s_paced_producer_never_refuses_a_datagram() {
         stop,
         ..
     } = wifi::network(port.clone(), LOCAL, OURS, 5001, 5002);
-    let start = Start {
-        address: Some(StaticAddress {
-            address: OURS,
-            prefix: 24,
-            gateway: THEIRS,
-        }),
-        port: 5001,
-    };
+    let start = Start { port: 5001 };
     let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
     let now_us = || clock.now().as_micros();
     let peer = udp::Peer {

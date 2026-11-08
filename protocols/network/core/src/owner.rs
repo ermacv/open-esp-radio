@@ -10,9 +10,9 @@ use oer_protocols_network_wire::ip::Dscp;
 use crate::block::{Block, CoreBrand, Group, Pool};
 use crate::interface::Interface;
 use crate::machine::{
-    CommandId, CommandState, Core, Datagram, Declined, Demand, Eviction, FillFailed, Grant,
-    NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal, SendRefused, SocketId,
-    StaleSocket, WorkId,
+    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Eviction, FillFailed,
+    Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal, SendRefused,
+    SocketId, StaleSocket, WorkId,
 };
 
 /// What a retired core hands on, each to its own owner.
@@ -116,7 +116,7 @@ impl<
     P: FramePort,
 > NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>
 {
-    pub const fn new(
+    pub fn new(
         brand: CoreBrand<B>,
         interface: Interface,
         pool: Pool<'m, B, SIZE, BLOCKS>,
@@ -172,7 +172,7 @@ impl<
             // Generic in the fill's error, the port has no fill error but the
             // one the fill returned.
             Err(Unpublished::Fill(FillFailed::SlotTooShort)) => {
-                self.core.reject(&grant, &mut self.pool);
+                self.core.reject(now, &grant, &mut self.pool);
                 Err(Unsent::SlotTooShort)
             }
             Err(Unpublished::Fill(FillFailed::Declined(_))) => {
@@ -181,7 +181,7 @@ impl<
             }
             Err(Unpublished::Port(refusal)) if matches!(filled, Filled::Failed(_)) => {
                 if filled == Filled::Failed(FillFailed::SlotTooShort) {
-                    self.core.reject(&grant, &mut self.pool);
+                    self.core.reject(now, &grant, &mut self.pool);
                 } else {
                     self.core.decline(&grant, &mut self.pool);
                 }
@@ -189,7 +189,7 @@ impl<
                 Err(Unsent::FillMisreported(refusal))
             }
             Err(Unpublished::Port(refusal)) if P::is_final(&refusal) => {
-                self.core.reject(&grant, &mut self.pool);
+                self.core.reject(now, &grant, &mut self.pool);
                 Err(Unsent::Rejected(refusal))
             }
             Err(Unpublished::Port(refusal)) => Err(Unsent::Port(refusal)),
@@ -197,8 +197,31 @@ impl<
     }
 
     /// Advance to `now`; see [`Core::tick`].
-    pub fn tick(&mut self, now: Instant) {
-        self.core.tick(now, &mut self.pool);
+    pub fn tick(&mut self, now: Instant, events: &mut impl EventSink<NetEvent>) {
+        self.core.tick(now, &mut self.pool, events);
+    }
+
+    /// Tell the core the port's link at `now`; see [`Core::link`].
+    pub fn observe_link(&mut self, now: Instant)
+    where
+        P: FrameSource,
+    {
+        self.core.link(now, self.port.link());
+    }
+
+    /// See [`Core::configuration`].
+    pub fn configuration(&self) -> Configuration {
+        self.core.configuration()
+    }
+
+    /// See [`Core::configuration_changes`].
+    pub const fn configuration_changes(&self) -> u32 {
+        self.core.configuration_changes()
+    }
+
+    /// See [`Core::address_version`].
+    pub const fn address_version(&self) -> u32 {
+        self.core.address_version()
     }
 
     /// See [`Core::poll_deadline`].

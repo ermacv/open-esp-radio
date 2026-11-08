@@ -568,6 +568,9 @@ pub enum Error {
     /// no station.
     #[cfg(feature = "wifi")]
     NoDevice,
+    /// The network core refused its start.
+    #[cfg(all(feature = "wifi", feature = "network"))]
+    Network(wifi::NetworkError),
     /// The image named every one of its observed parts.
     #[cfg(feature = "observe")]
     ImageParts,
@@ -619,6 +622,8 @@ impl Error {
             Self::NetWait(_) => oer_portable_diagnostics::name!("sdk-net-wait"; 32),
             #[cfg(feature = "wifi")]
             Self::NoDevice => oer_portable_diagnostics::name!("sdk-no-device"; 32),
+            #[cfg(all(feature = "wifi", feature = "network"))]
+            Self::Network(_) => oer_portable_diagnostics::name!("sdk-network"; 32),
             #[cfg(feature = "observe")]
             Self::ImageParts => oer_portable_diagnostics::name!("sdk-image-parts"; 32),
             #[cfg(feature = "observe")]

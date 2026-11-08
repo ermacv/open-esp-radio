@@ -71,8 +71,10 @@ pub trait Produce {
     /// ([`SendRefusal::TooLong`], [`SendRefusal::NoRoute`],
     /// [`SendRefusal::Stale`]) is the offer's one answer: the producer takes
     /// it out of what it offers until its own conditions change. A temporary
-    /// one ([`SendRefusal::NoPlace`], [`SendRefusal::NeighborsFull`]) holds
-    /// the producer's offers until what it lacks is released, or until the
+    /// one ([`SendRefusal::NoPlace`], [`SendRefusal::NeighborsFull`],
+    /// [`SendRefusal::NoAddress`]) holds the producer's offers until what it
+    /// lacks is released (a place, the neighbor counter, the address
+    /// version), or until the
     /// held offer is stale: its generation moved or it is no longer
     /// [`Self::current`]. The producer keeps the refused data.
     fn refused(&mut self, tag: Self::Tag, reason: SendRefusal);
@@ -98,7 +100,8 @@ pub enum Interest {
     Offers,
     /// The service cannot declare a next offer now: a refused offer holds,
     /// or its open works are at the turn's budget. What frees it is a place,
-    /// the neighbor counter or a publication, each in a turn of its own; the
+    /// the neighbor counter, the address version or a publication, each in a
+    /// turn of its own; the
     /// producer wakes only when it makes an open or held work stale.
     Changes,
 }
@@ -200,6 +203,8 @@ enum Waits {
     Place,
     /// The core's neighbor change counter to move from this value.
     Neighbors(u32),
+    /// The interface's address version to move from this value.
+    Address(u32),
 }
 
 /// A temporary refusal's hold: it belongs to the refused offer.
@@ -274,6 +279,7 @@ pub(crate) mod sealed {
         fn withdraw(&mut self, command: &CommandId<B>) -> bool;
         fn take_result(&mut self, command: CommandId<B>) -> CommandState<B>;
         fn neighbors_changed(&self) -> u32;
+        fn address_version(&self) -> u32;
     }
 
     /// A service's producers: none (`()`), or one [`super::Producer`].
@@ -371,6 +377,10 @@ impl<
     fn neighbors_changed(&self) -> u32 {
         Self::neighbors_changed(self)
     }
+
+    fn address_version(&self) -> u32 {
+        Self::address_version(self)
+    }
 }
 
 impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
@@ -460,6 +470,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             let released = match hold.waits {
                 Waits::Place => self.open < CREDITS,
                 Waits::Neighbors(seen) => owner.neighbors_changed() != seen,
+                Waits::Address(seen) => owner.address_version() != seen,
             };
             // A hold belongs to its refused offer: a stale one gives way.
             if released || hold.generation != generation || !self.producer.current(hold.tag) {
@@ -499,6 +510,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
                     let waits = match reason {
                         SendRefusal::NoPlace => Waits::Place,
                         SendRefusal::NeighborsFull => Waits::Neighbors(owner.neighbors_changed()),
+                        SendRefusal::NoAddress => Waits::Address(owner.address_version()),
                         SendRefusal::TooLong | SendRefusal::NoRoute | SendRefusal::Stale => {
                             report(events, || ServiceEvent::Local(LocalEvent::Refused));
                             continue;

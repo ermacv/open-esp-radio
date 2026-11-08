@@ -1,7 +1,7 @@
 //! The load server's UDP over the network core: a channel socket that
-//! receives and echoes, kept across runs, and a local producer that sends. The
-//! first run's start names the address, which configures the network; a later
-//! run names the same.
+//! receives and echoes, kept across runs, and a local producer that sends.
+//! Both are bound at the group's start, on [`PORT`] and the one after it; the
+//! network leases its address by DHCP, and a run starts once it holds one.
 //!
 //! The sender hands each datagram's header to the producer's [`Source`]; the
 //! network's task asks the producer for it in its own turn and the producer
@@ -18,12 +18,23 @@ use core::task::{Context, Poll};
 use embassy_futures::select::{Either, select};
 use heapless::Vec;
 use oer::wifi::{
-    self, AtomicWaker, ClaimCell, Declined, Interest, LocalEnd, NetworkAddress, NetworkBlock,
-    NetworkInstant, Next, Offer, Outcome, Produce, Received, Refusal, Refused, Remote, SendRefusal,
-    Socket, Work,
+    self, AtomicWaker, ClaimCell, Declined, Interest, Ipv4, LocalEnd, NetworkBlock, NetworkInstant,
+    Next, Offer, Outcome, Produce, Received, Refusal, Refused, Remote, SendRefusal, Socket,
+    WatchRefused, Work,
 };
 use oer_hil_services_load::header::{self, Header};
 use oer_hil_services_load::{LoadError, Start};
+
+/// The load port the channel socket holds; the producer sends from the one
+/// after it. The image binds them at the group's start, before any run, so a
+/// run names this one.
+pub(crate) const PORT: u16 = 5001;
+
+/// The ports of the network's sockets.
+pub(crate) const PORTS: wifi::Ports = wifi::Ports {
+    receiving: PORT,
+    sending: PORT + 1,
+};
 
 /// Where a datagram goes.
 #[derive(Clone, Copy)]
@@ -278,7 +289,7 @@ impl Produce for LoadProducer {
     fn refused(&mut self, tag: Tag, reason: SendRefusal) {
         match reason {
             // It waits for what it lacks, and is offered again.
-            SendRefusal::NoPlace | SendRefusal::NeighborsFull => {
+            SendRefusal::NoPlace | SendRefusal::NeighborsFull | SendRefusal::NoAddress => {
                 let _found = self.find(tag, |datagrams, at| {
                     if let Some(pending) = datagrams.pending.get_mut(at) {
                         pending.offered = false;
@@ -318,12 +329,11 @@ impl Produce for LoadProducer {
 
 /// The network the load server opens its runs on.
 pub(crate) struct Network {
-    network: RefCell<wifi::Network<LoadProducer>>,
+    network: wifi::Network<LoadProducer>,
     /// The channel socket, which receives and echoes.
-    socket: RefCell<Option<Socket>>,
+    socket: RefCell<Socket>,
     source: &'static Source,
     end: &'static LocalEnd,
-    address: Cell<Option<oer_hil_services_load::StaticAddress>>,
     /// Datagrams the sockets delivered: this core counts no frames.
     delivered: Cell<u32>,
     /// Blocks an ended run could not give back. They outlive its adapters,
@@ -337,16 +347,20 @@ pub(crate) struct Network {
 }
 
 impl Network {
-    pub(crate) fn new(network: wifi::Network<LoadProducer>, source: &'static Source) -> Self {
+    /// The network, its channel socket, and the source its producer reads.
+    pub(crate) fn new(
+        network: wifi::Network<LoadProducer>,
+        socket: Socket,
+        source: &'static Source,
+    ) -> Self {
         let _installed = source.datagrams.install(Datagrams {
             pending: Vec::new(),
         });
         Self {
             end: network.end(),
-            network: RefCell::new(network),
-            socket: RefCell::new(None),
+            network,
+            socket: RefCell::new(socket),
             source,
-            address: Cell::new(None),
             delivered: Cell::new(0),
             parked: RefCell::new(Vec::new()),
             #[cfg(target_arch = "riscv32")]
@@ -355,33 +369,27 @@ impl Network {
     }
 }
 
-/// A run's sockets, on the address its start names.
+/// The address the network holds now, as the service last published it.
+///
+/// # Errors
+/// [`WatchRefused`]: a publication holds it at this moment, which no reader
+/// on the network's hart meets: the service publishes within its own turn.
+pub(crate) fn address(net: &Network) -> Result<Option<Ipv4>, WatchRefused> {
+    Ok(net
+        .network
+        .configuration()?
+        .and_then(|configuration| configuration.ipv4))
+}
+
+/// A run's sockets, once the network holds an address.
 pub(crate) fn open<'a>(net: &'a Network, start: &Start) -> Result<Run<'a>, LoadError> {
-    let address = start.address.ok_or(LoadError::NoAddress)?;
-    match net.address.get() {
-        Some(configured) if configured == address => {}
-        Some(_) => return Err(LoadError::InvalidParameters),
-        None => {
-            let mut network = net.network.try_borrow_mut().map_err(|_| LoadError::Busy)?;
-            let receiving = network
-                .configure(
-                    NetworkAddress {
-                        address: address.address,
-                        prefix: address.prefix,
-                        gateway: Some(address.gateway),
-                    },
-                    start.port,
-                    start.port.wrapping_add(1),
-                    LoadProducer::new(net.source),
-                )
-                .map_err(|_| LoadError::Bind)?;
-            let mut held = net.socket.try_borrow_mut().map_err(|_| LoadError::Busy)?;
-            *held = Some(receiving);
-            net.address.set(Some(address));
-        }
+    if start.port != PORT {
+        return Err(LoadError::InvalidParameters);
     }
-    let held = net.socket.try_borrow_mut().map_err(|_| LoadError::Busy)?;
-    let socket = RefMut::filter_map(held, Option::as_mut).map_err(|_| LoadError::Bind)?;
+    address(net)
+        .map_err(|_| LoadError::Busy)?
+        .ok_or(LoadError::NoAddress)?;
+    let socket = net.socket.try_borrow_mut().map_err(|_| LoadError::Busy)?;
     net.source.begin();
     Ok(Run {
         socket,

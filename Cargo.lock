@@ -2885,6 +2885,7 @@ dependencies = [
  "oer-portable-memory",
  "oer-portable-time",
  "oer-portable-time-virtual",
+ "oer-portable-wire",
  "oer-protocols-network-core",
  "oer-protocols-network-port",
  "oer-protocols-network-wire",

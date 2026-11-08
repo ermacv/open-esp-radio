@@ -1,7 +1,7 @@
 # oer-protocols-network-wire
 
-Allocation-free Ethernet II, VLAN tag, ARP, IPv4, IPv6, TCP and UDP header
-fields and the Internet checksum. Its one dependency is `oer-portable-wire`.
+Allocation-free Ethernet II, VLAN tag, ARP, IPv4, IPv6, ICMPv4 echo, TCP and
+UDP header fields, DHCP messages and the Internet checksum. Its one dependency is `oer-portable-wire`.
 
 | Module | Fields |
 | --- | --- |
@@ -11,6 +11,8 @@ fields and the Internet checksum. Its one dependency is `oer-portable-wire`.
 | `vlan` | VLAN Tag Control Information and the enclosed EtherType |
 | `ip` | IPv4 and IPv6 fixed headers, Differentiated Services field and DSCP |
 | `transport` | TCP and UDP header bounds and ports |
+| `icmp` | ICMPv4 Echo and Echo Reply |
+| `dhcp` | DHCP's fixed fields, magic cookie and options, read and written |
 
 A parse returns a checked value over the caller's bytes or a typed refusal;
 a valid header of another kind (another EtherType, another IP protocol) is

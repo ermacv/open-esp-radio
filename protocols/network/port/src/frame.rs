@@ -5,7 +5,7 @@ use core::task::Context;
 
 use oer_protocols_network_wire::ip::Dscp;
 
-use crate::device::EthernetFrameView;
+use crate::device::{EthernetFrameView, LinkSnapshot};
 
 /// Where a frame goes out, and the one answer to it. Whoever publishes keeps
 /// its own record of what `fill` did, and a port whose answer contradicts that
@@ -72,6 +72,10 @@ pub trait FrameSource {
 
     /// The next notice.
     fn take_notice(&mut self) -> Option<Self::Notice>;
+
+    /// The link now: its state and its epoch, which a new association moves.
+    /// A change of it wakes what [`Self::register`] registered.
+    fn link(&self) -> LinkSnapshot;
 
     /// Make `cx` the one a received frame, a notice or room to publish wakes,
     /// at once if any came since the last look.
