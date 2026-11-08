@@ -437,6 +437,64 @@ mod tests {
         }
     }
 
+    /// The paths a CMake file names in quotes and starting with `..`.
+    fn outside_paths(cmake: &str) -> Vec<String> {
+        cmake
+            .split('"')
+            .skip(1)
+            .step_by(2)
+            .filter(|quoted| quoted.starts_with("../") || quoted.contains("}/../"))
+            .map(|quoted| {
+                quoted
+                    .split_once("}/")
+                    .map_or(quoted, |(_, path)| path)
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_tracked_entry_names_the_outside_files_its_build_reads() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = root.canonicalize().unwrap();
+        for entry in entries(&root).unwrap() {
+            let project = root.join(&entry.directory);
+            let shared = entry
+                .shared
+                .iter()
+                .map(|file| {
+                    let path = project.join(file);
+                    path.canonicalize().unwrap_or_else(|error| {
+                        panic!("{}: {}: {error}", entry.image, path.display())
+                    })
+                })
+                .collect::<Vec<_>>();
+            for (directory, file) in [
+                (project.clone(), "CMakeLists.txt"),
+                (project.join("main"), "main/CMakeLists.txt"),
+            ] {
+                let Ok(cmake) = std::fs::read_to_string(project.join(file)) else {
+                    continue;
+                };
+                for path in outside_paths(&cmake) {
+                    let resolved = directory
+                        .join(&path)
+                        .canonicalize()
+                        .unwrap_or_else(|error| {
+                            panic!("{}: {file} names {path}: {error}", entry.image)
+                        });
+                    if resolved.is_file() && !resolved.starts_with(&project) {
+                        assert!(
+                            shared.contains(&resolved),
+                            "{}: {file} reads {path}, which its `shared` does not name",
+                            entry.image
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     /// The catalog entry `image` of the fixture tree and a finished ESP-IDF
     /// build of it holding the files `flasher_args.json` names.
     fn built_peer(root: &Path, image: &str) -> (Entry, idf::Build) {

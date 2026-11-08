@@ -5,3 +5,6 @@
 image = "wifi-injector-vendor-reference"
 chip = "esp32s31"
 pins = "esp32s31"
+# Its build reads the frame source peer's source: it takes part in this
+# entry's build recipe.
+shared = ["../../../../lab/peers/esp32c5-wifi-injector/main/injector.c"]

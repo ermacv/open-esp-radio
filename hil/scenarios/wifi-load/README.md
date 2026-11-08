@@ -322,8 +322,14 @@ station against the driver's count over the run, with what it leaves
 or not at all: every line the protocol names for the run once and of that
 run, nothing else, each with exactly its fields, counts unsigned, the window
 and the run's boundaries as the host asked, and the counts consistent with
-each other (`src/vendor/report.rs`); anything else ends the run as
-incomplete. Its results go to
+each other and with what the host sent (no more distinct datagrams or bytes
+than it sent, every byte in its datagrams, no sequence it did not send)
+(`src/vendor/report.rs`); anything else ends the run as incomplete. The loss
+is the host's datagrams less the peer's distinct ones, exact (`lost`) only
+when the peer tracked every arrival; with untracked arrivals `lost` is null
+and `lost_at_most` bounds it. The peer's link state machine is tested on the
+host by `tests/peer_link.rs`, which needs a C compiler (`$OER_HOST_CC`, else
+`cc`) and fails without one. Its results go to
 `target/hil/results/wifi-load-vendor-<time in ns>.json`.
 
 The host needs, once, a route to the station network through the router's

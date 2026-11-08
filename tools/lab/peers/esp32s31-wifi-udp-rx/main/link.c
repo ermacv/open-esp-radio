@@ -7,6 +7,7 @@ void link_init(link_t *link)
     link->state = LINK_IDLE;
     link->associated = false;
     link->addressed = false;
+    link->epoch = 0;
     link->disconnects = 0;
     link->last_reason = 0;
 }
@@ -26,6 +27,9 @@ link_action_t link_apply(link_t *link, const link_event_t *event)
         link->disconnects++;
         link->last_reason = event->reason;
     }
+    /* Every event of the association or the address is a new link state,
+     * even one that sets a flag already set. */
+    link->epoch++;
     if (link->state == LINK_FAULTED) {
         return LINK_ACT_NONE;
     }
@@ -103,6 +107,7 @@ link_confirm_t link_confirm(link_t *link, link_next_fn next, link_act_fn act,
     if (!link_candidate(link)) {
         return LINK_CONFIRM_NOT_YET;
     }
+    uint32_t epoch = link->epoch;
     bool read = verify(context);
     acted = link_drain(link, next, act, context);
     if (link->state == LINK_FAULTED) {
@@ -112,7 +117,7 @@ link_confirm_t link_confirm(link_t *link, link_next_fn next, link_act_fn act,
         link_fail(link);
         return LINK_CONFIRM_FAILED;
     }
-    if (!link_candidate(link)) {
+    if (!link_candidate(link) || link->epoch != epoch) {
         return LINK_CONFIRM_NOT_YET;
     }
     if (!read) {

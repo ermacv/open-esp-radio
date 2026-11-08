@@ -132,6 +132,37 @@ static void a_disconnection_while_the_facts_are_read_is_no_join(void)
     CHECK(link.state == LINK_JOINING && script.reconnects == 1);
 }
 
+static void a_reconnection_while_the_facts_are_read_reads_them_again(void)
+{
+    /* The read began on the first link; it ended and a second came up
+     * before the drain: both flags are set again, but the facts are the
+     * first link's. */
+    link_t link = joining();
+    const link_event_t taken[] = { CONNECTED, GOT_IP };
+    apply_all(&link, taken, 2);
+    const link_event_t during[] = { DISCONNECTED, CONNECTED, GOT_IP };
+    script_t script = { .events = during, .count = 3, .pending = 0, .read_works = true,
+                        .reconnect_works = true };
+    CHECK(link_confirm(&link, next, act, verify, &script) == LINK_CONFIRM_NOT_YET);
+    CHECK(link.state == LINK_JOINING && link_candidate(&link) && script.reads == 1);
+    /* The next confirmation reads the second link's facts. */
+    CHECK(link_confirm(&link, next, act, verify, &script) == LINK_CONFIRM_UP);
+    CHECK(link.state == LINK_UP && script.reads == 2);
+}
+
+static void a_repeated_address_during_the_read_reads_the_facts_again(void)
+{
+    link_t link = joining();
+    const link_event_t taken[] = { CONNECTED, GOT_IP };
+    apply_all(&link, taken, 2);
+    const link_event_t during[] = { GOT_IP };
+    script_t script = { .events = during, .count = 1, .pending = 0, .read_works = true,
+                        .reconnect_works = true };
+    CHECK(link_confirm(&link, next, act, verify, &script) == LINK_CONFIRM_NOT_YET);
+    CHECK(link_confirm(&link, next, act, verify, &script) == LINK_CONFIRM_UP);
+    CHECK(script.reads == 2);
+}
+
 static void a_failed_read_of_a_standing_link_fails_the_join(void)
 {
     link_t link = joining();
@@ -224,6 +255,8 @@ int main(void)
     a_join_with_an_address_goes_up_once_the_facts_are_read();
     a_disconnection_queued_behind_the_address_is_no_join();
     a_disconnection_while_the_facts_are_read_is_no_join();
+    a_reconnection_while_the_facts_are_read_reads_them_again();
+    a_repeated_address_during_the_read_reads_the_facts_again();
     a_failed_read_of_a_standing_link_fails_the_join();
     a_refused_reconnect_fails_the_join();
     an_address_of_an_ended_association_does_not_count();

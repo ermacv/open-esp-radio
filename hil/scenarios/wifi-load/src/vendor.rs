@@ -448,6 +448,16 @@ fn balance(router: &Value, report: &report::Report) -> Value {
     })
 }
 
+/// What the host sent, as the report is checked against it.
+fn sent_of(sent: &traffic::Sent, offer: &Offer) -> report::Sent {
+    report::Sent {
+        datagrams: sent.datagrams,
+        bytes: sent.bytes,
+        failed: sent.failed,
+        payload: offer.payload as u64,
+    }
+}
+
 /// One RX level against the peer, as [`crate::level`] runs it against the
 /// image.
 #[allow(clippy::too_many_arguments)]
@@ -520,8 +530,10 @@ fn level(
             drain_ms: DRAIN_MS,
             channel: joined.channel,
             disconnects: joined.disconnects,
+            sent: sent_of(&sent, offer),
         },
     )?;
+    let loss = report::loss(&reported, &sent_of(&sent, offer))?;
     let dump = peer.dump()?;
     let mut received = endpoint.close();
     received.echoes.sent = probes;
@@ -550,14 +562,17 @@ fn level(
             "device_received_mbps": mbps(rx.window_bytes, window_s),
             "device_received_datagrams": rx.datagrams,
             "device_received_in_window": rx.window_datagrams,
-            "lost": sent.datagrams.saturating_sub(rx.datagrams),
-            "lost_percent": percent(sent.datagrams.saturating_sub(rx.datagrams), sent.datagrams),
+            "lost": loss.exact,
+            "lost_at_most": loss.at_most,
+            "lost_exact": loss.exact.is_some(),
+            "lost_percent": loss.exact.map(|lost| percent(lost, sent.datagrams)),
             "lost_below_highest": rx.lost,
             "reordered": rx.reordered,
             "duplicates": rx.duplicates,
             "untracked": rx.untracked,
             "foreign": rx.foreign,
         },
+        "loss": loss.json(),
         "link": { "router": router },
         "vendor": vendor,
     });

@@ -51,6 +51,9 @@ typedef struct {
     link_state_t state;
     bool associated;
     bool addressed;
+    /* Advances with every event that changes the association or the
+     * address: facts read under one epoch belong to one link. */
+    uint32_t epoch;
     uint32_t disconnects;
     int32_t last_reason;
 } link_t;
@@ -84,8 +87,9 @@ bool link_drain(link_t *link, link_next_fn next, link_act_fn act, void *context)
 typedef enum {
     /* Every event so far says joined, and the facts were read: UP. */
     LINK_CONFIRM_UP,
-    /* The pending events took the association or the address: keep
-     * waiting for the join. */
+    /* The pending events took the association or the address, or the link
+     * changed while its facts were read (they may be another link's): keep
+     * waiting for the join, which reads them again. */
     LINK_CONFIRM_NOT_YET,
     /* Still joined by every event, but the facts could not be read, or a
      * reconnect failed: the join failed (DOWN). */
@@ -96,6 +100,6 @@ typedef enum {
 
 /* Confirm a join candidate: drain the pending events, read the facts,
  * drain again, and go UP only when every event up to the last drain still
- * says joined. */
+ * says joined and none of them changed the link since the read began. */
 link_confirm_t link_confirm(link_t *link, link_next_fn next, link_act_fn act,
                             link_verify_fn verify, void *context);

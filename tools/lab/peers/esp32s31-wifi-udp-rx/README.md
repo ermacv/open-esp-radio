@@ -61,13 +61,13 @@ address lost) to its queue, in the event loop's order, and a handler that
 cannot post one marks the state unknown for good. The state machine
 ([`main/link.c`](main/link.c), no SDK call) goes up only when every event
 applied up to the last one pending after the joined link's facts were read
-still says associated and addressed, so a disconnection queued behind the
-address is no join. Its host test needs a C compiler and is not part of the
-cargo tests:
-
-```console
-cc -std=c11 -Wall -Wextra -Werror -Imain test/link_test.c main/link.c -o <scratch>/link_test && <scratch>/link_test
-```
+still says associated and addressed, and none of those events changed the
+link since the read began (its epoch): a disconnection queued behind the
+address is no join, and facts read on a link that went and came back are
+read again on the new one, within the join's 30 s. Its host test
+([`test/link_test.c`](test/link_test.c)) runs in
+`cargo test -p oer-hil-scenarios-wifi-load` (`tests/peer_link.rs`) with the
+host's C compiler (`$OER_HOST_CC`, else `cc`); a missing compiler fails it.
 
 The IP stack's counters are read in lwIP's own thread (`tcpip_api_call`):
 the run task samples them every 100 ms and adds up their 16-bit differences

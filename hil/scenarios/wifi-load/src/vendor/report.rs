@@ -40,6 +40,65 @@ pub struct Expect {
     /// The disconnections the peer counted when it joined: a joined link
     /// that stayed up counts no more.
     pub disconnects: u64,
+    /// What the host sent the run.
+    pub sent: Sent,
+}
+
+/// The host's load of a run: every datagram `payload` bytes, its
+/// sequences `0..datagrams + failed` (a send the socket refused still took
+/// its sequence).
+#[derive(Clone, Copy, Debug)]
+pub struct Sent {
+    pub datagrams: u64,
+    pub bytes: u64,
+    pub failed: u64,
+    pub payload: u64,
+}
+
+/// The run's loss over the network, from the host's send to the peer's
+/// tally.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Loss {
+    pub sent: u64,
+    pub received: u64,
+    /// Sent less received: exact only when the peer tracked every
+    /// sequence. With untracked arrivals some of these did arrive, so it is
+    /// only a bound.
+    pub at_most: u64,
+    /// The exact loss; `None` when the peer could not track every arrival.
+    pub exact: Option<u64>,
+}
+
+impl Loss {
+    pub fn json(&self) -> Value {
+        json!({
+            "sent": self.sent,
+            "received": self.received,
+            "lost": self.exact,
+            "lost_at_most": self.at_most,
+            "exact": self.exact.is_some(),
+            "lost_percent": self.exact.filter(|_| self.sent != 0)
+                .map(|lost| (lost as f64 * 10_000.0 / self.sent as f64).round() / 100.0),
+        })
+    }
+}
+
+/// The loss of `report`'s run of `sent`; an error when the peer counted
+/// more than the host sent.
+pub fn loss(report: &Report, sent: &Sent) -> Result<Loss, String> {
+    let rx = &report.rx;
+    let at_most = sent.datagrams.checked_sub(rx.datagrams).ok_or_else(|| {
+        format!(
+            "the peer counted {} distinct datagrams, the host sent {}",
+            rx.datagrams, sent.datagrams
+        )
+    })?;
+    Ok(Loss {
+        sent: sent.datagrams,
+        received: rx.datagrams,
+        at_most,
+        exact: (rx.untracked == 0).then_some(at_most),
+    })
 }
 
 /// `@RX`: the tally of the run's load datagrams.
@@ -359,6 +418,44 @@ fn rx(report: &peer_line::Report, expect: &Expect) -> Result<Rx, String> {
         last_us: f.optional("last_us")?,
         window_us: f.unsigned("window_us")?,
     };
+    let sent = &expect.sent;
+    let attempted = sent
+        .datagrams
+        .checked_add(sent.failed)
+        .ok_or_else(|| format!("{}: the host's sends overflow", f.what))?;
+    f.check(
+        rx.datagrams <= sent.datagrams,
+        format!(
+            "{} distinct datagrams, the host sent {}",
+            rx.datagrams, sent.datagrams
+        ),
+    )?;
+    f.check(
+        rx.bytes <= sent.bytes,
+        format!("{} bytes, the host sent {}", rx.bytes, sent.bytes),
+    )?;
+    let of_payload = |datagrams: u64, bytes: u64| {
+        datagrams
+            .checked_mul(sent.payload)
+            .is_some_and(|expected| expected == bytes)
+    };
+    f.check(
+        of_payload(rx.datagrams, rx.bytes) && of_payload(rx.window_datagrams, rx.window_bytes),
+        format!("bytes other than {}-byte datagrams", sent.payload),
+    )?;
+    f.check(
+        rx.untracked == 0 || attempted > TALLY_CAPACITY,
+        format!(
+            "{} untracked arrivals, the host sent no sequence past {}",
+            rx.untracked, TALLY_CAPACITY
+        ),
+    )?;
+    if let Some(highest) = rx.highest {
+        f.check(
+            highest < attempted,
+            format!("highest sequence {highest}, the host sent {attempted}"),
+        )?;
+    }
     let window_us = u64::from(expect.window_ms) * 1000;
     f.check(
         rx.window_us == window_us,
@@ -776,6 +873,12 @@ mod tests {
         drain_ms: 500,
         channel: 13,
         disconnects: 0,
+        sent: Sent {
+            datagrams: 42,
+            bytes: 42 * 1472,
+            failed: 0,
+            payload: 1472,
+        },
     };
 
     const HW: &str = "@HWRX run=7 span=window rx_fcs_err=3 rx_abort=0 rx_abort_fcs_pass=0 \
@@ -981,5 +1084,72 @@ mod tests {
         }
         let twice = parsed(&[good.to_owned(), good.to_owned()]);
         assert!(super::joined(&twice, 13).is_err());
+    }
+
+    fn decoded_for(lines: &[String], sent: Sent) -> Result<Report, String> {
+        decode(&parsed(lines), &Expect { sent, ..EXPECT })
+    }
+
+    #[test]
+    fn a_report_is_checked_against_what_the_host_sent() {
+        let sent = |datagrams: u64, failed: u64| Sent {
+            datagrams,
+            bytes: datagrams * 1472,
+            failed,
+            payload: 1472,
+        };
+        // 40 received and consistent in itself, but the host sent 39.
+        let error = decoded_for(&report(), sent(39, 0)).unwrap_err();
+        assert!(error.contains("the host sent 39"), "{error}");
+        // The highest sequence must be one the host sent.
+        let error = decoded_for(&report(), sent(40, 0)).unwrap_err();
+        assert!(error.contains("highest sequence 41"), "{error}");
+        assert!(decoded_for(&report(), sent(41, 1)).is_ok());
+        // Every byte comes in the host's datagrams.
+        let other = Sent {
+            payload: 1400,
+            ..sent(42, 0)
+        };
+        assert!(
+            decoded_for(&report(), other)
+                .unwrap_err()
+                .contains("1400-byte")
+        );
+        let fewer = Sent {
+            bytes: 100,
+            ..sent(42, 0)
+        };
+        assert!(decoded_for(&report(), fewer).is_err());
+        // Untracked arrivals need sequences past the tally.
+        let untracked = with(0, "untracked=0", "untracked=2");
+        assert!(
+            decoded_for(&untracked, sent(42, 0))
+                .unwrap_err()
+                .contains("untracked")
+        );
+    }
+
+    #[test]
+    fn the_loss_is_sent_less_received_and_exact_only_when_every_arrival_was_tracked() {
+        let report = decoded(&report()).unwrap();
+        let loss = loss(&report, &EXPECT.sent).unwrap();
+        assert_eq!(
+            (loss.sent, loss.received, loss.at_most, loss.exact),
+            (42, 40, 2, Some(2))
+        );
+        let mut untracked = report.clone();
+        untracked.rx.untracked = 3;
+        let bound = super::loss(&untracked, &EXPECT.sent).unwrap();
+        assert_eq!((bound.at_most, bound.exact), (2, None));
+        assert_eq!(bound.json()["lost"], Value::Null);
+        assert_eq!(bound.json()["exact"], false);
+        let fewer = Sent {
+            datagrams: 39,
+            ..EXPECT.sent
+        };
+        assert!(
+            super::loss(&report, &fewer).is_err(),
+            "no saturation to zero"
+        );
     }
 }

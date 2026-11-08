@@ -4,3 +4,6 @@
 image = "ieee802154-vendor-reference"
 chip = "esp32s31"
 pins = "esp32s31"
+# Its build reads the reference peer's source: it takes part in this
+# entry's build recipe.
+shared = ["../../../../lab/peers/esp32c5-ieee802154/main/peer.c"]
