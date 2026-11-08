@@ -663,6 +663,10 @@ where
         self.radio = Radio::Stopped;
         self.end = None;
         self.recovering = false;
+        // A stop that stopped the network ended with its installation: the
+        // next stop asks the network of the next installation again.
+        self.network_stopping = NetworkStopping::NotAsked;
+        self.queued = 0;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract

@@ -114,6 +114,10 @@ impl<N: Notifies> State<N> {
         self.operations.begin_epoch();
         // An ended epoch's unserved profile erases itself here.
         drop(self.profile.take());
+        // An ended epoch's stop ended with it: the new epoch's policy keeps
+        // only the configuration, and no stop deadline is pending.
+        self.policy.set(self.policy.get().next_epoch());
+        self.stop_deadline.set(None);
         self.set_status(Status {
             link: LinkSnapshot::DOWN,
             notice: None,

@@ -54,6 +54,11 @@ impl Policy {
             disconnect_sent: false,
         }
     }
+    /// The policy of a new control epoch: the same configuration, no stop
+    /// and no network yet, as a new epoch's application connects first.
+    pub const fn next_epoch(&self) -> Self {
+        Self::new(self.config)
+    }
     pub fn admitted(&mut self, command: Command) {
         match command {
             Command::Connect => {

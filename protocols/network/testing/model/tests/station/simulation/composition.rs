@@ -160,6 +160,12 @@ impl NetworkStopState {
         .await;
     }
 
+    /// A new session's network: no stop asked, none answered.
+    pub fn reset(&self) {
+        self.requested.set(false);
+        self.stopped.set(false);
+    }
+
     /// The network stopped and holds no frame of the station.
     pub fn stopped(&self) {
         self.stopped.set(true);

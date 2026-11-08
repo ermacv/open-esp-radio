@@ -166,7 +166,10 @@ only then does the actor ask the network to stop. The network takes that
 memory back before its port ends, so a confirmed stop leaves none of it with
 the station. A network that never takes it back ends the stop at its
 deadline, unconfirmed, with the memory held in `StopObserved::memory_held`.
-A stop for the next installation keeps the network and its MSDUs.
+A stop for the next installation keeps the network and its MSDUs. An actor
+reinstalled after a stop that stopped the network asks the next network to
+stop again at its own stop. A new control epoch's reconnect policy keeps its
+configuration and forgets the ended epoch's stop and network.
 Policy deadline exhaustion is a typed station failure. No policy timer
 exists when reconnect is disabled.
 

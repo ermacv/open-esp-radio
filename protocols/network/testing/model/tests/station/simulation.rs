@@ -18,7 +18,13 @@
 //! only once woken; with nothing woken the script's waits look again, and
 //! then time moves to the next deadline. After the script, the harness
 //! stops the station gracefully and runs every task to its end, then
-//! accounts for the network's blocks and transmit memory ([`Report`]).
+//! accounts for the network's blocks and transmit memory ([`Report`]). A
+//! run of several sessions starts each after the first from the owners the
+//! last stop returned ([`simulate_sessions`]).
+//!
+//! The boundary: the protocol composition over the model's port, with the
+//! real handshake, DHCP, UDP, echo and task interaction. The S31 hardware's
+//! wakes, its HE path and transmit timing are outside it.
 
 pub mod access_point;
 pub mod composition;
@@ -658,44 +664,52 @@ impl<'b, T: 'static> World<'b, T> {
     }
 }
 
+/// One session's script, boxed.
+pub type Session<T> = Box<dyn for<'a, 'b> FnOnce(&'a World<'b, T>) -> Script<'a>>;
+
+/// Box `script` as a session.
+pub fn session<T: 'static>(
+    script: impl for<'a, 'b> FnOnce(&'a World<'b, T>) -> Script<'a> + 'static,
+) -> Session<T> {
+    Box::new(script)
+}
+
 /// Run the station and the network of `setup` on a fresh model with
 /// `script` as the application, the access point and the peer, then stop
 /// gracefully. `T` names the network: each case brings its own type.
 pub fn simulate<T: 'static>(
     setup: Setup,
-    script: impl for<'a, 'b> FnOnce(&'a World<'b, T>) -> Script<'a>,
+    script: impl for<'a, 'b> FnOnce(&'a World<'b, T>) -> Script<'a> + 'static,
 ) -> Report {
+    let mut reports = simulate_sessions::<T>(setup, vec![session(script)]);
+    reports.pop().expect("one session's report")
+}
+
+/// [`simulate`], one session per script: each after the first starts again
+/// from the owners the last stop returned. The actor reinstalls the
+/// model's port, and a station on the new installation's tokens takes the
+/// retired station's configuration and the events' sink; the control
+/// opens a new epoch over the same command queue and state; the network's
+/// core takes the retired pool and brand, the same device port and
+/// transmit memory. Each session's report accounts for what its own stop
+/// returned.
+pub fn simulate_sessions<T: 'static>(setup: Setup, sessions: Vec<Session<T>>) -> Vec<Report> {
     embassy_futures::block_on(with_local_slot(async |slot| {
-        run::<T>(slot, setup, script).await
+        run::<T>(slot, setup, sessions).await
     }))
 }
 
-#[allow(clippy::too_many_lines, reason = "one composition, built in order")]
-async fn run<'s, T: 'static>(
-    slot: oer_protocols_radio_port::SlotClaim<LocalId<'s>>,
-    setup: Setup,
-    script: impl for<'a, 'b> FnOnce(&'a World<'b, T>) -> Script<'a>,
-) -> Report {
-    let clock = Rc::new(VirtualClock::new());
-    let mut installations = Installations::claim(slot);
-    let (install, air) = ModelPort::install(
-        &mut installations,
-        access_point::channel(),
-        [
-            IndividualAddress::new(STATION).expect("an individual address"),
-            IndividualAddress::new(LOCAL_ACCESS_POINT).expect("an individual address"),
-        ],
-        clock.clone(),
-    )
-    .expect("the first installation");
-    let ModelInstall {
-        port,
-        commands: issuer,
-        resources,
-    } = install;
-
-    // The station's lifecycle on the installation's tokens, as the facade's
-    // `initialize` builds it.
+/// A station's lifecycle on an installation's `resources` and `issuer`, as
+/// the facade's `initialize` builds it, and its receive agreements' storage.
+fn lifecycle_on<'s>(
+    config: StaConfig<ModelCaps24, Callbacks>,
+    resources: ModelResources<'s, composition::Backend<'s>>,
+    issuer: Issuer<'s>,
+    events: Observed,
+) -> (
+    StationLifecycle<'s>,
+    RxBlockAckStorage<'s, composition::Types<'s>, 2, 4>,
+) {
     let ModelResources {
         shared:
             oer_protocols_ieee80211_testing_model::ModelShared {
@@ -723,7 +737,6 @@ async fn run<'s, T: 'static>(
     let Ok(small) = <[_; 4]>::try_from(small) else {
         panic!("four station buffers");
     };
-    let config = station_config();
     let channel = config.channels[0];
     let (arbiter, place, absence) = LifecycleArbiter::<P<'s>>::new(
         ArbiterPolicy::DEFAULT
@@ -751,27 +764,53 @@ async fn run<'s, T: 'static>(
         ),
         group_permission: station_group_permission,
     };
-    let observed = Observed::default();
     let station = Station::new(config, station_resources, GroupCapacity::new());
-    let lifecycle: StationLifecycle<'s> = Lifecycle::new(
+    let lifecycle = Lifecycle::new(
         station,
         arbiter,
         issuer,
         CcmpPacketNumberStep::ONE,
         channel,
         terminal_access,
-        observed.clone(),
+        events,
     );
-    let block_ack_storage = Box::leak(Box::new(RxBlockAckStorage::<_, 2, 4>::new(
-        block_acks,
-        Duration::from_millis(100),
-    )));
+    let storage = RxBlockAckStorage::<_, 2, 4>::new(block_acks, Duration::from_millis(100));
+    (lifecycle, storage)
+}
+
+#[allow(clippy::too_many_lines, reason = "one composition, built in order")]
+async fn run<'s, T: 'static>(
+    slot: oer_protocols_radio_port::SlotClaim<LocalId<'s>>,
+    setup: Setup,
+    sessions: Vec<Session<T>>,
+) -> Vec<Report> {
+    let clock = Rc::new(VirtualClock::new());
+    let mut installations = Installations::claim(slot);
+    let (install, air) = ModelPort::install(
+        &mut installations,
+        access_point::channel(),
+        [
+            IndividualAddress::new(STATION).expect("an individual address"),
+            IndividualAddress::new(LOCAL_ACCESS_POINT).expect("an individual address"),
+        ],
+        clock.clone(),
+    )
+    .expect("the first installation");
+    let ModelInstall {
+        port,
+        commands: issuer,
+        resources,
+    } = install;
+    let observed = Observed::default();
+    let (lifecycle, storage) = lifecycle_on(station_config(), resources, issuer, observed.clone());
+    let block_ack_storage = Box::leak(Box::new(storage));
     let mut actor = Actor::<P<'s>, _, _>::new(
         port,
         EspressifRateSelection::<ModelCaps24>::new(),
         block_ack_storage.view(),
         observed.clone(),
     );
+    let mut lifecycle = Some(lifecycle);
 
     // The queues between the lifecycle and the actor.
     let mut to_queue = WakingSpscQueue::<ToActor<'s, P<'s>>, TO>::new();
@@ -821,12 +860,6 @@ async fn run<'s, T: 'static>(
     let (copies_end, copies) = copies_queue.split();
     let (application, commands) = command_queue.split();
     let state = State::new();
-    let (mut control, runner) = Control::new(application, &state)
-        .map_err(|refused| refused.reason)
-        .expect("the control");
-    if let Some(interval) = setup.reconnect {
-        control.configure_reconnect(ReconnectPolicy::every(interval).expect("an interval"));
-    }
     let network_stop = NetworkStopState::default();
     let mut network_ends = NetworkEnds::<_, _, _, TX_DEPTH, RX_DEPTH, runtime::SameHart> {
         transmit: transmit_end,
@@ -838,57 +871,15 @@ async fn run<'s, T: 'static>(
     let free = FreeMemory::new(NETWORK_BUFFERS);
     let device = Device::new(delivered, copies, &state);
     let transmit = DeviceTransmit::new(stack, returned, Supply(free.clone()), &state);
+    let mut port = Some(DevicePort::new(device, transmit, Buffers(free.clone())));
 
-    // The network, as the application's `Network::start` builds it.
+    // The network's memory, claimed once for every session's core.
     let memory = Box::leak(Box::new([[0_u8; BLOCK]; BLOCKS]));
-    let (pool, brand) = claim::<T, BLOCK, BLOCKS>(memory)
-        .map_err(|refused| refused.reason)
-        .expect("the network's brand");
-    let interface = Interface::dhcp(STATION, MTU, setup.seed).expect("the interface");
-    let port_end = Held(Some(DevicePort::new(
-        device,
-        transmit,
-        Buffers(free.clone()),
-    )));
-    let owner = NetworkOwner::new(brand, interface, pool, port_end);
-    let (stop_lane, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service: NetService<'_, T> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
-    let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
-    service.watch(watch).expect("the first publication");
-    let socket = service
-        .bind(
-            PORT,
-            Dscp::default(),
-            Group::shared(),
-            Box::leak(Box::new(SocketLanes::new())),
-        )
-        .map_err(|refused| refused.reason)
-        .expect("the socket opens");
-
-    // What the application hears.
-    let heard = Rc::new(Heard::default());
-    let record = {
-        let heard = heard.clone();
-        let clock = clock.clone();
-        move |output: ServiceOutput<ModelCaps24>| match output {
-            ServiceOutput::Notice(notice) => heard.notices.borrow_mut().push((clock.now(), notice)),
-            ServiceOutput::TxRefused { .. } => {
-                heard
-                    .refused_transmissions
-                    .set(heard.refused_transmissions.get() + 1);
-            }
-            _ => {}
-        }
-    };
-    let mut output = control.events(record);
-    let mut io = LifecycleIo {
-        commands,
-        output: &mut output,
-        control: runner,
-        stop: StopPolicy {
-            drain: Duration::from_secs(1),
-        },
-    };
+    let mut network = Some(
+        claim::<T, BLOCK, BLOCKS>(memory)
+            .map_err(|refused| refused.reason)
+            .expect("the network's brand"),
+    );
 
     let access_point = Rc::new(RefCell::new(AccessPoint::new(
         air.clone(),
@@ -897,107 +888,252 @@ async fn run<'s, T: 'static>(
         Wired::new(setup.dhcp),
     )));
     let idle = Rc::new(Idle::default());
-    let world = World {
-        clock: clock.clone(),
-        air: air.clone(),
-        access_point: access_point.clone(),
-        heard: heard.clone(),
-        control: RefCell::new(Some(control)),
-        socket: RefCell::new(Some(socket)),
-        watch,
-        idle: idle.clone(),
-        free: free.clone(),
-        observed: observed.clone(),
-        protected: setup.access_point.protected,
-        pmk: setup.pmk,
-        held: RefCell::new(Vec::new()),
-        stopping: Cell::new(false),
+    let mut reports = Vec::new();
+    // The lifecycle's ends to the application, which every session's
+    // lifecycle takes in turn: the command queue's receiver, what the
+    // application hears and the control epoch's runner end.
+    let (first_control, runner) = Control::new(application, &state)
+        .map_err(|refused| refused.reason)
+        .expect("the control");
+    let mut application = None;
+    let mut first = Some(first_control);
+    let hearing: Rc<RefCell<Rc<Heard>>> = Rc::default();
+    let record = {
+        let hearing = hearing.clone();
+        let clock = clock.clone();
+        move |output: ServiceOutput<ModelCaps24>| {
+            let heard = hearing.borrow().clone();
+            match output {
+                ServiceOutput::Notice(notice) => {
+                    heard.notices.borrow_mut().push((clock.now(), notice));
+                }
+                ServiceOutput::TxRefused { .. } => {
+                    heard
+                        .refused_transmissions
+                        .set(heard.refused_transmissions.get() + 1);
+                }
+                _ => {}
+            }
+        }
     };
+    let mut output = first.as_ref().expect("the first control").events(record);
+    let mut io = LifecycleIo {
+        commands,
+        output: &mut output,
+        control: runner,
+        stop: StopPolicy {
+            drain: Duration::from_secs(1),
+        },
+    };
+    let mut retired_config = None;
+    for (index, script) in sessions.into_iter().enumerate() {
+        if index != 0 {
+            // The next installation under the same actor, and a station on
+            // its tokens with the retired station's configuration.
+            let mut minted = None;
+            #[expect(
+                clippy::result_large_err,
+                reason = "the model's refusal returns its port"
+            )]
+            let reinstalled = actor.reinstall(|port| {
+                port.reinstall(&mut installations)
+                    .map(|install| {
+                        let ModelInstall {
+                            port,
+                            commands,
+                            resources,
+                        } = install;
+                        minted = Some((commands, resources));
+                        port
+                    })
+                    .map_err(|refused| {
+                        let (port, reason) = *refused;
+                        (port, reason)
+                    })
+            });
+            actor = match reinstalled {
+                Ok(actor) => actor,
+                Err((_, reason)) => panic!("the stopped port reinstalls: {reason:?}"),
+            };
+            let (issuer, resources) = minted.expect("the new installation");
+            let config = retired_config
+                .take()
+                .expect("the retired station's configuration");
+            let (next, storage) = lifecycle_on(config, resources, issuer, observed.clone());
+            // The actor keeps its receive agreements' storage; the new
+            // installation's stays owned.
+            let _kept = Box::leak(Box::new(storage));
+            lifecycle = Some(next);
+            network_stop.reset();
+        }
 
-    // The four tasks.
-    let actor_end = RefCell::new(None);
-    let lifecycle_end = RefCell::new(None);
-    let network_end: RefCell<Option<NetEnded<'_, T>>> = RefCell::new(None);
-    {
-        let actor_task = async {
-            let end = actor.run(&mut actor_ends, &mut network_ends, &*clock).await;
-            *actor_end.borrow_mut() = Some(end);
+        // A control epoch over the command queue and the state; the first
+        // one's runner end is already the lifecycle's.
+        let mut control = match first.take() {
+            Some(control) => control,
+            None => {
+                let (control, runner) =
+                    Control::new(application.take().expect("the producer"), &state)
+                        .map_err(|refused| refused.reason)
+                        .expect("the control");
+                io.control = runner;
+                control
+            }
         };
-        let lifecycle_task = async {
-            let completed = lifecycle.run(&mut lifecycle_ends, &mut io, &*clock).await;
-            *lifecycle_end.borrow_mut() = Some(completed.end);
+        if let Some(interval) = setup.reconnect {
+            control.configure_reconnect(ReconnectPolicy::every(interval).expect("an interval"));
+        }
+
+        // The network, as the application's `Network::start` builds it.
+        let (pool, brand) = network.take().expect("the network's pool and brand");
+        let seed = setup.seed.wrapping_add(index as u64);
+        let interface = Interface::dhcp(STATION, MTU, seed).expect("the interface");
+        let owner = NetworkOwner::new(brand, interface, pool, Held(port.take()));
+        let (stop_lane, stopping) = Box::leak(Box::new(StopLane::new())).split();
+        let mut service: NetService<'_, T> =
+            Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+        let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
+        service.watch(watch).expect("the first publication");
+        let socket = service
+            .bind(
+                PORT,
+                Dscp::default(),
+                Group::shared(),
+                Box::leak(Box::new(SocketLanes::new())),
+            )
+            .map_err(|refused| refused.reason)
+            .expect("the socket opens");
+
+        // What the application hears.
+        let heard = Rc::new(Heard::default());
+        *hearing.borrow_mut() = heard.clone();
+        let world = World {
+            clock: clock.clone(),
+            air: air.clone(),
+            access_point: access_point.clone(),
+            heard: heard.clone(),
+            control: RefCell::new(Some(control)),
+            socket: RefCell::new(Some(socket)),
+            watch,
+            idle: idle.clone(),
+            free: free.clone(),
+            observed: observed.clone(),
+            protected: setup.access_point.protected,
+            pmk: setup.pmk,
+            held: RefCell::new(Vec::new()),
+            stopping: Cell::new(false),
         };
-        let network_task = async {
-            let cause = {
-                let mut events = ();
-                let mut run = core::pin::pin!(service.run(&*clock, &mut events));
-                match select(run.as_mut(), network_stop.requested()).await {
-                    Either::First(cause) => cause,
-                    Either::Second(()) => {
-                        // The lane holds this one word.
-                        let _sent = stop_lane.try_send(());
-                        run.await
+
+        // The four tasks.
+        let actor_end = RefCell::new(None);
+        let lifecycle_end = RefCell::new(None);
+        let network_end: RefCell<Option<NetEnded<'_, T>>> = RefCell::new(None);
+        {
+            let running = lifecycle.take().expect("the session's lifecycle");
+            let actor_task = async {
+                let end = actor.run(&mut actor_ends, &mut network_ends, &*clock).await;
+                *actor_end.borrow_mut() = Some(end);
+            };
+            let lifecycle_task = async {
+                let completed = running.run(&mut lifecycle_ends, &mut io, &*clock).await;
+                *lifecycle_end.borrow_mut() = Some(completed);
+            };
+            let network_task = async {
+                let cause = {
+                    let mut events = ();
+                    let mut run = core::pin::pin!(service.run(&*clock, &mut events));
+                    match select(run.as_mut(), network_stop.requested()).await {
+                        Either::First(cause) => cause,
+                        Either::Second(()) => {
+                            // The lane holds this one word.
+                            let _sent = stop_lane.try_send(());
+                            run.await
+                        }
                     }
+                };
+                let mut ended = service.retire();
+                // The queues outlive the port, so its frames go back and the
+                // returned memory comes home first, as the application's
+                // stop does; the port itself stays for the next session.
+                if let Some(port) = ended.retired.port.0.as_mut() {
+                    port.give_back();
+                }
+                assert_eq!(ended.cause, cause);
+                *network_end.borrow_mut() = Some(ended);
+                network_stop.stopped();
+            };
+            let script_task = async {
+                script(&world).await;
+                if !world.stopping.get() {
+                    world.stop(Duration::from_secs(10));
                 }
             };
-            let mut ended = service.retire();
-            // The queue outlives the port, so its frames go back first, as the
-            // application's stop gives them.
-            if let Some(port) = ended.retired.port.0.as_mut() {
-                port.give_back();
-            }
-            ended.retired.port.0 = None;
-            assert_eq!(ended.cause, cause);
-            *network_end.borrow_mut() = Some(ended);
-            network_stop.stopped();
-        };
-        let script_task = async {
-            script(&world).await;
-            if !world.stopping.get() {
-                world.stop(Duration::from_secs(10));
-            }
-        };
-        let mut actor_task = core::pin::pin!(actor_task);
-        let mut lifecycle_task = core::pin::pin!(lifecycle_task);
-        let mut network_task = core::pin::pin!(network_task);
-        let mut script_task = core::pin::pin!(script_task);
-        let mut tasks = [
-            Task::new("actor", actor_task.as_mut()),
-            Task::new("lifecycle", lifecycle_task.as_mut()),
-            Task::new("network", network_task.as_mut()),
-            Task::new("script", script_task.as_mut()),
-        ];
-        execute(&mut tasks, &clock, &air, &access_point, &idle);
-    }
-    // The network's memory the station never took from its queue.
-    let mut queued = 0;
-    while let Ok(Some(_memory)) = network_ends.transmit.try_receive_with(Option::take) {
-        queued += 1;
-    }
+            let mut actor_task = core::pin::pin!(actor_task);
+            let mut lifecycle_task = core::pin::pin!(lifecycle_task);
+            let mut network_task = core::pin::pin!(network_task);
+            let mut script_task = core::pin::pin!(script_task);
+            let mut tasks = [
+                Task::new("actor", actor_task.as_mut()),
+                Task::new("lifecycle", lifecycle_task.as_mut()),
+                Task::new("network", network_task.as_mut()),
+                Task::new("script", script_task.as_mut()),
+            ];
+            execute(&mut tasks, &clock, &air, &access_point, &idle);
+        }
 
-    // The account: what the station gave back, and every block.
-    let mut ended = network_end.borrow_mut().take().expect("the network ended");
-    let mut socket = world.socket.borrow_mut().take().expect("the socket");
-    for datagram in world.held.borrow_mut().drain(..) {
-        ended.retired.pool.give(datagram.block);
+        // The account: what the station gave back, and every block.
+        let mut ended = network_end.borrow_mut().take().expect("the network ended");
+        let mut socket = world.socket.borrow_mut().take().expect("the socket");
+        for datagram in world.held.borrow_mut().drain(..) {
+            ended.retired.pool.give(datagram.block);
+        }
+        while let Some(block) = socket.reclaim() {
+            ended.retired.pool.give(block);
+        }
+        ended.collect();
+        ended.close_returns();
+        let (end, retired) = match lifecycle_end.borrow_mut().take() {
+            Some(completed) => (Some(completed.end), Some(completed.retired)),
+            None => (None, None),
+        };
+        reports.push(Report {
+            lifecycle: end,
+            actor: actor_end.borrow_mut().take(),
+            network: Some(ended.cause),
+            blocks_free: ended.retired.pool.free(),
+            memory_free: free.free(),
+            memory_queued: network_ends.transmit.len(),
+            memory: free.total(),
+            counts: observed.counts(),
+            heard,
+            access_point: access_point.clone(),
+        });
+
+        // What the next session starts from.
+        let Ended {
+            retired:
+                oer_protocols_network_core::Retired {
+                    pool,
+                    brand,
+                    port: held,
+                    ..
+                },
+            ..
+        } = ended;
+        network = Some((pool, brand));
+        port = held.0;
+        retired_config = retired.map(|retired| retired.station.into_config());
+        let mut control = world.control.borrow_mut().take().expect("the control");
+        // The ended epoch's stop is observed before its producer comes back.
+        control.wait_stopped().await;
+        application = Some(
+            control
+                .try_finish()
+                .ok()
+                .expect("the stopped epoch gives its producer back"),
+        );
     }
-    while let Some(block) = socket.reclaim() {
-        ended.retired.pool.give(block);
-    }
-    ended.collect();
-    ended.close_returns();
-    Report {
-        lifecycle: lifecycle_end.borrow_mut().take(),
-        actor: actor_end.borrow_mut().take(),
-        network: Some(ended.cause),
-        blocks_free: ended.retired.pool.free(),
-        memory_free: free.free(),
-        memory_queued: queued,
-        memory: free.total(),
-        counts: observed.counts(),
-        heard,
-        access_point,
-    }
+    reports
 }
 
 /// Run `tasks` to their ends: woken tasks are polled, the access point

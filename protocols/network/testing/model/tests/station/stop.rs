@@ -10,7 +10,9 @@ use oer_protocols_network_runtime::{Observer, Sent};
 
 use crate::simulation::access_point::ApEvent;
 use crate::simulation::wired::PEER_IP;
-use crate::simulation::{NETWORK_BUFFERS, PORT, Report, Setup, TX_DEPTH, World, simulate};
+use crate::simulation::{
+    NETWORK_BUFFERS, PORT, Report, Setup, TX_DEPTH, World, session, simulate, simulate_sessions,
+};
 
 const PEER: Remote = Remote {
     address: PEER_IP,
@@ -21,11 +23,12 @@ const PEER: Remote = Remote {
 /// follows goes straight on.
 async fn joined_and_resolved<T>(world: &World<'_, T>) {
     world.join().await;
+    let before = world.ap().wired.udp.len();
     let first = world.send(PEER, b"resolve").await;
     assert_eq!(world.result(first).await, Sent::Ended(Outcome::Accepted));
     world
         .until("the first datagram", Duration::from_secs(1), |world| {
-            world.ap().wired.udp.len() == 1
+            world.ap().wired.udp.len() == before + 1
         })
         .await;
 }
@@ -150,4 +153,76 @@ fn a_stop_after_an_idle_network_gives_back_every_ended_frame_s_memory() {
     report.assert_stopped();
     assert_eq!(report.memory_queued, 0);
     report.assert_transmit_memory_home();
+}
+
+/// The owners a stop returned start the station and the network again: the
+/// actor reinstalls the model's port, a station on the new installation's
+/// tokens takes the retired station's configuration, the control opens a
+/// new epoch and the network's core takes the retired pool and brand, the
+/// same device port and transmit memory. The second session joins with a
+/// second handshake, leases its address, carries an echo and a burst both
+/// ways, and its own stop brings every owner home again.
+#[test]
+fn a_stop_under_load_returns_owners_that_start_the_station_again() {
+    struct Net;
+    const BURST: u16 = 32;
+    let reports = simulate_sessions::<Net>(
+        Setup::default(),
+        vec![
+            session(|world| {
+                Box::pin(async move {
+                    joined_and_resolved(world).await;
+                    let observers = held_burst(world, 24).await;
+                    for n in 0..BURST {
+                        world.ap().wired.send_udp(7000, PORT, &[n as u8; 800]);
+                    }
+                    let held = world.receive().await;
+                    world.hold(held);
+                    stop_and_read(world, observers).await;
+                    world
+                        .air
+                        .hold_completion(WmmAccessCategory::BestEffort, false);
+                })
+            }),
+            session(|world| {
+                Box::pin(async move {
+                    assert!(!world.stopped(), "a new control epoch");
+                    joined_and_resolved(world).await;
+                    world.ap().wired.ping(9, 1, b"again");
+                    world
+                        .until("the echo reply", Duration::from_secs(1), |world| {
+                            world.ap().wired.echo_replies.len() == 1
+                        })
+                        .await;
+                    for n in 0..BURST {
+                        world.ap().wired.send_udp(7000, PORT, &[n as u8; 800]);
+                    }
+                    for _ in 0..BURST {
+                        let received = world.receive().await;
+                        world.release(received);
+                    }
+                    let mut observers = Vec::new();
+                    for n in 0..BURST {
+                        observers.push(world.send(PEER, &[n as u8; 1000]).await);
+                    }
+                    for observer in observers {
+                        assert_eq!(world.result(observer).await, Sent::Ended(Outcome::Accepted));
+                    }
+                })
+            }),
+        ],
+    );
+    assert_eq!(reports.len(), 2);
+    for report in &reports {
+        report.assert_stopped_with_every_owner();
+        left_the_network(report);
+    }
+    let ap = reports[1].access_point.borrow();
+    assert_eq!(ap.associations(), 2, "a second association");
+    let authorized = ap
+        .events
+        .iter()
+        .filter(|(_, event)| matches!(event, ApEvent::Authorized(_)))
+        .count();
+    assert_eq!(authorized, 2, "a second handshake");
 }

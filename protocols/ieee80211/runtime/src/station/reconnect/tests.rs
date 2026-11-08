@@ -192,3 +192,22 @@ fn pending_tells_whether_the_next_command_gives_one() {
         Some(ServiceCommand::Stop)
     ));
 }
+
+/// A new control epoch's policy keeps the configuration and forgets the
+/// ended epoch's stop and network: it issues nothing until the new epoch's
+/// application connects, and then retries as configured.
+#[test]
+fn a_new_epoch_s_policy_keeps_the_configuration_and_forgets_the_stop() {
+    let time = clock();
+    let mut policy = Policy::new(ReconnectPolicy::every(Duration::from_secs(1)).unwrap());
+    policy.admitted(Command::Connect);
+    policy.observe(&linked(7), true);
+    policy.stop();
+    let mut next = policy.next_epoch();
+    assert!(!next.pending(time.now(), false), "no stop and no network");
+    assert!(next.command::<()>(time.now(), false).unwrap().is_none());
+    next.admitted(Command::Connect);
+    next.observe(&linked(8), true);
+    next.observe(&lost(), false);
+    assert_eq!(connect::<()>(next.command(time.now(), false).unwrap()), 1);
+}
