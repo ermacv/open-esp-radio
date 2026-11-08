@@ -149,6 +149,9 @@ oer_chips_family_platform_executor::tasks! {
         /// The Wi-Fi datapath actor, which owns the radio, beside the
         /// station's lifecycle.
         datapath(datapath: wifi::Datapath) = wifi::datapath;
+        #[cfg(feature = "access-point")]
+        /// The Wi-Fi access point, which owns the radio, and its IP service.
+        access_point(launch: wifi::ApStart) = wifi::serve_access_point;
     }
 }
 
@@ -273,6 +276,9 @@ pub(crate) struct Pending {
     /// The Wi-Fi datapath actor, started beside the station.
     #[cfg(feature = "wifi")]
     pub(crate) datapath: Option<wifi::Datapath>,
+    /// The Wi-Fi access point and its IP service.
+    #[cfg(feature = "access-point")]
+    pub(crate) access_point: Option<wifi::ApStart>,
 }
 
 impl Boot {
@@ -932,6 +938,11 @@ impl Starts {
             && pending
                 .station
                 .is_none_or(|start| SdkTasks::station(library, start).is_ok());
+        #[cfg(feature = "access-point")]
+        let started = started
+            && pending
+                .access_point
+                .is_none_or(|start| SdkTasks::access_point(library, start).is_ok());
         if !started {
             fail(Error::AlreadyStarted.name());
         }

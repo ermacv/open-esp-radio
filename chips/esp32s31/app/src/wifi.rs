@@ -37,6 +37,10 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_protocols_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
 use static_cell::StaticCell;
 
+#[cfg(feature = "access-point")]
+mod access_point;
+#[cfg(feature = "access-point")]
+pub use access_point::*;
 #[cfg(not(feature = "network"))]
 mod ip_service;
 #[cfg(not(feature = "network"))]
@@ -281,6 +285,106 @@ pub(crate) async fn serve_station(start: StationStart) {
             super::fail(oer_portable_diagnostics::name!("wifi-release"; 32))
         }
     }
+}
+
+/// What a started radio hands the role that runs on it: the resources of
+/// its composition, its handshake nonces and the stack's seed.
+pub(crate) struct RadioStarted {
+    pub(crate) resources: wifi::Resources<binding::Binding>,
+    pub(crate) nonces: &'static mut wifi::NonceSource,
+    pub(crate) seed: u64,
+}
+
+/// Start the radio for a role on `wifi`: the radio executor and the radio
+/// actor, the timers, the Wi-Fi interrupt with its doorbell, the boot's
+/// identity and the handshake nonces.
+pub(crate) fn start_radio(wifi: WifiPeripheral, boot: &mut Boot) -> Result<RadioStarted, Error> {
+    let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
+    let timer = boot.timer.take().ok_or(Error::AlreadyStarted)?;
+    let app_alarm = boot.app_alarm.take().ok_or(Error::AlreadyStarted)?;
+    let dma = wifi::DmaResources::claim().map_err(|_| Error::Storage)?;
+    let identity = DeviceIdentity::read(wifi.efuse);
+    let address = identity.station_address();
+    let ap = identity.ap_address();
+    let resources =
+        wifi::RadioResources::new::<binding::Binding>(wifi.radio, wifi.clocks, &identity);
+    let pilot = PILOT.init(wifi.timg0_alarm, boot.router(), radio.phy);
+    let (actor, hardware) = resources.start(pilot, StationObserver::default());
+    let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
+    // The radio executor writes the system timer; the application
+    // executor publishes its deadlines to it.
+    let timers = oer_chips_esp32s31_platform_runtime::platform::timers(
+        timer,
+        boot.router(),
+        app_alarm,
+        radio.radio_alarm,
+    );
+    #[cfg(feature = "group")]
+    {
+        boot.timers = Some(timers);
+    }
+    #[cfg(not(feature = "group"))]
+    let _ = timers;
+    let (line, lower) = DoorbellLine::<Esp32s31, 3>::split(radio.line3);
+    let bound = boot
+        .router()
+        .bind(
+            radio.wifi,
+            wifi::Interrupts::part(wifi.interrupts, radio.irq3, wifi::Lower(lower)),
+        )
+        .unwrap_or_else(|error| {
+            oer_chips_family_platform_runtime::interrupts::reset_binding::<
+                oer_chips_esp32s31_hal::system::platform::Port,
+                _,
+            >(error)
+        });
+    let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
+    let (hart, router) = boot.adopted.parts();
+    let executor = RadioExecutor::new(radio.line2)
+        .start(hart, router, radio.radio, radio.irq2, urgent)
+        .unwrap_or_else(|failure| failure.reset());
+    let entropy = boot.entropy.take().ok_or(Error::Entropy)?;
+    let mut rng =
+        oer_chips_esp32s31_platform_runtime::platform::Entropy::new(entropy, EmbassyClock);
+    if !rng.is_healthy() {
+        return Err(Error::Entropy);
+    }
+    // Every draw happens here, at boot: the generator stays with no
+    // runtime owner, so a failed health test is a typed boot error.
+    boot.boot_id = Some(super::draw_boot_id(&mut rng).map_err(|_| Error::Entropy)?);
+    let nonces =
+        wifi::NonceSource::from_entropy(|seed| rng.fill(seed)).map_err(|_| Error::Entropy)?;
+    let nonces = NONCES.try_init(nonces).ok_or(Error::Storage)?;
+    let mut words = [0; 12];
+    rng.fill(&mut words).map_err(|_| Error::Entropy)?;
+    let [t0, t1, t2, t3, s0, s1, s2, s3, s4, s5, s6, s7] = words;
+    let mut delay = [0; 4];
+    rng.fill(&mut delay).map_err(|_| Error::Entropy)?;
+    let resources = wifi::Resources {
+        events: ProductEvents,
+        storage: binding::storage(),
+        hardware,
+        delay_random: u32::from_le_bytes(delay),
+        address,
+        ap,
+        bound,
+        bell: wifi::Bell(bell),
+        entropy: u32::from_le_bytes([t0, t1, t2, t3]),
+        interrupts: &LINE,
+        mac: &MAC_SIGNAL,
+        receive: &MAC_RX_SIGNAL,
+        power: &POWER_SIGNAL,
+        dma,
+    };
+    if RadioTasks::radio_actor(&executor, actor).is_err() {
+        return Err(Error::AlreadyStarted);
+    }
+    boot.urgent = Some(urgent);
+    Ok(RadioStarted {
+        resources,
+        nonces,
+        seed: u64::from_le_bytes([s0, s1, s2, s3, s4, s5, s6, s7]),
+    })
 }
 
 /// The radio's owners: the station takes them all.
@@ -582,90 +686,12 @@ impl Station {
         boot: &mut Boot,
     ) -> Result<(Self, NetStatus), Error> {
         let aes = aes.engine(boot)?;
-        let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
-        let timer = boot.timer.take().ok_or(Error::AlreadyStarted)?;
-        let app_alarm = boot.app_alarm.take().ok_or(Error::AlreadyStarted)?;
-        let dma = wifi::DmaResources::claim().map_err(|_| Error::Storage)?;
-        let identity = DeviceIdentity::read(wifi.efuse);
-        let address = identity.station_address();
-        let ap = identity.ap_address();
-        let resources =
-            wifi::RadioResources::new::<binding::Binding>(wifi.radio, wifi.clocks, &identity);
-        let pilot = PILOT.init(wifi.timg0_alarm, boot.router(), radio.phy);
-        let (actor, hardware) = resources.start(pilot, StationObserver::default());
-        let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
-        // The radio executor writes the system timer; the application
-        // executor publishes its deadlines to it.
-        let timers = oer_chips_esp32s31_platform_runtime::platform::timers(
-            timer,
-            boot.router(),
-            app_alarm,
-            radio.radio_alarm,
-        );
-        #[cfg(feature = "group")]
-        {
-            boot.timers = Some(timers);
-        }
-        #[cfg(not(feature = "group"))]
-        let _ = timers;
-        let (line, lower) = DoorbellLine::<Esp32s31, 3>::split(radio.line3);
-        let bound = boot
-            .router()
-            .bind(
-                radio.wifi,
-                wifi::Interrupts::part(wifi.interrupts, radio.irq3, wifi::Lower(lower)),
-            )
-            .unwrap_or_else(|error| {
-                oer_chips_family_platform_runtime::interrupts::reset_binding::<
-                    oer_chips_esp32s31_hal::system::platform::Port,
-                    _,
-                >(error)
-            });
-        let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
-        let (hart, router) = boot.adopted.parts();
-        let executor = RadioExecutor::new(radio.line2)
-            .start(hart, router, radio.radio, radio.irq2, urgent)
-            .unwrap_or_else(|failure| failure.reset());
-        let entropy = boot.entropy.take().ok_or(Error::Entropy)?;
-        let mut rng =
-            oer_chips_esp32s31_platform_runtime::platform::Entropy::new(entropy, EmbassyClock);
-        if !rng.is_healthy() {
-            return Err(Error::Entropy);
-        }
-        // Every draw happens here, at boot: the generator stays with no
-        // runtime owner, so a failed health test is a typed boot error.
-        boot.boot_id = Some(super::draw_boot_id(&mut rng).map_err(|_| Error::Entropy)?);
-        let nonces =
-            wifi::NonceSource::from_entropy(|seed| rng.fill(seed)).map_err(|_| Error::Entropy)?;
-        let nonces = NONCES.try_init(nonces).ok_or(Error::Storage)?;
-        let mut words = [0; 12];
-        rng.fill(&mut words).map_err(|_| Error::Entropy)?;
-        let [t0, t1, t2, t3, s0, s1, s2, s3, s4, s5, s6, s7] = words;
-        let mut delay = [0; 4];
-        rng.fill(&mut delay).map_err(|_| Error::Entropy)?;
-        let (control, network, transmit, stopper, runners) = wifi::station(
-            wifi::Resources {
-                events: ProductEvents,
-                storage: binding::storage(),
-                hardware,
-                delay_random: u32::from_le_bytes(delay),
-                address,
-                ap,
-                bound,
-                bell: wifi::Bell(bell),
-                entropy: u32::from_le_bytes([t0, t1, t2, t3]),
-                interrupts: &LINE,
-                mac: &MAC_SIGNAL,
-                receive: &MAC_RX_SIGNAL,
-                power: &POWER_SIGNAL,
-                dma,
-            },
-            config.chip,
-        );
-        if RadioTasks::radio_actor(&executor, actor).is_err() {
-            return Err(Error::AlreadyStarted);
-        }
-        boot.urgent = Some(urgent);
+        let started = start_radio(wifi, boot)?;
+        let address = started.resources.address;
+        let nonces = started.nonces;
+        let seed = started.seed;
+        let (control, network, transmit, stopper, runners) =
+            wifi::station(started.resources, config.chip);
         boot.pending.datapath = Some(runners.datapath);
         boot.pending.station = Some(StationStart {
             runner: runners.station,
@@ -677,7 +703,7 @@ impl Station {
         boot.device = Some(Device {
             network: Some((network, transmit, stopper)),
             address,
-            seed: u64::from_le_bytes([s0, s1, s2, s3, s4, s5, s6, s7]),
+            seed,
         });
         Ok((
             Self {
