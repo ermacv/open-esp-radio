@@ -1028,6 +1028,73 @@ fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
     });
 }
 
+/// The port's MAC after `settings`, each a `SetHe` command it ran.
+fn he_after(
+    settings: &[oer_protocols_ieee80211_contracts_port::StationHe],
+) -> Option<oer_chips_esp32s31_hal::types::MacHe20Association> {
+    let mut held = None;
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        for &he in settings {
+            let now = fixture.now();
+            assert!(matches!(
+                fixture
+                    .port
+                    .command(PortCommand::SetHe(he), now, &mut fixture.outbox),
+                Ok(CommandProgress::Done)
+            ));
+            fixture.turn();
+        }
+        fixture.stop();
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        drop(buffers);
+        let device = port
+            .release()
+            .expect("the stopped port releases its device");
+        held = Some(device.hardware.he_association);
+    });
+    held.expect("the installation ran")
+}
+
+#[test]
+fn the_port_installs_an_he_connection_and_association_and_ends_them() {
+    use oer_protocols_ieee80211_contracts_port::{He20Association, HeBssColor, StationHe};
+    let peer = oer_protocols_ieee80211_wire::he::He20PeerState {
+        capability_prefix: [0; 24],
+        packet_padding_eight_us: 1,
+        default_packet_extension_duration: 2,
+        bss_color: 9,
+        bss_color_enabled: true,
+        partial_bss_color: true,
+        basic_mcs_nss_map: 0xfffc,
+        rts_threshold: Some(100),
+        max_co_hosted_bssid_indicator: Some(2),
+        extended_range_single_user_disabled: false,
+    };
+    let bss = StationHe::Bss(
+        HeBssColor::of(&oer_protocols_ieee80211_wire::he::He20Operation {
+            bss_color: 9,
+            bss_color_enabled: true,
+            partial_bss_color: true,
+            basic_mcs_nss_map: 0xfffc,
+        })
+        .expect("a color"),
+    );
+    let association = StationHe::He20(He20Association::new(&peer, 7, 0).expect("in range"));
+    let installed = he_after(&[bss, association]).expect("installed");
+    assert_eq!(installed.association_id.get(), 7);
+    assert_eq!(installed.peer.packet_padding_duration.get(), 8);
+    assert_eq!(installed.peer.max_co_hosted_bssid_indicator, Some(2));
+    // HE, then its end, then HE again: each command's state, in order.
+    assert_eq!(he_after(&[bss, association, StationHe::Off]), None);
+    assert_eq!(
+        he_after(&[bss, association, StationHe::Off, bss, association]),
+        Some(installed)
+    );
+}
+
 #[test]
 fn a_completion_without_effect_keeps_the_arena_watchdog_whose_expiry_cancels_the_arena() {
     with_fixture(|fixture| {

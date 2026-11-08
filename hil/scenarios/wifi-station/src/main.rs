@@ -161,6 +161,7 @@ fn join(cx: &mut Cx<'_>) -> Result<(), Failure> {
         passphrase: heapless::String::try_from(passphrase.as_str())
             .map_err(|_| Failure::Incomplete("the generated passphrase is too long".into()))?,
         channel,
+        he20: false,
     };
     let _ = JOIN_STARTED.set(Instant::now());
     let answer = cx.call(request, JOIN_TIMEOUT)?;

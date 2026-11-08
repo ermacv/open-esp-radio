@@ -512,6 +512,9 @@ pub struct BssColor {
 }
 
 impl BssColor {
+    /// Color zero: no BSS color.
+    pub const ZERO: Self = Self { color: 0 };
+
     /// `color`, when it is a BSS color.
     pub const fn new(color: u8) -> Option<Self> {
         if color <= 63 {

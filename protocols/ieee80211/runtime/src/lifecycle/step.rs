@@ -431,6 +431,10 @@ where
                 self.send(actor, ToActor::Port(PortCommand::SetEdca(edca)));
                 return Follow::Nothing;
             }
+            StaAction::SetHe(he) => {
+                self.send(actor, ToActor::Port(PortCommand::SetHe(he)));
+                return Follow::Nothing;
+            }
             StaAction::InstallPairwiseKey {
                 association,
                 pending,

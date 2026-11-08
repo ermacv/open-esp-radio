@@ -1,7 +1,7 @@
 use super::*;
 use core::marker::PhantomData;
 use oer_portable_time::Duration;
-use oer_protocols_ieee80211_contracts_port::{AmpduRate, PortArena, PortRate, RxMeta};
+use oer_protocols_ieee80211_contracts_port::{AmpduRate, PortArena, PortRate, Protection, RxMeta};
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, InstalledCcmpTxKey, SoftwareCcmpKey,
 };
@@ -89,6 +89,7 @@ fn link(protection: LinkProtection) -> DataLink {
             max_length: 65_535,
         }),
         windows: [None; 8],
+        protection: Default::default(),
     }
 }
 
@@ -954,4 +955,129 @@ fn once<R>(rate: R) -> oer_protocols_ieee80211_contracts_port::RetryPlan<R> {
             protection: oer_protocols_ieee80211_contracts_port::Protection::None,
         },
     )
+}
+
+/// HE-MCS 7 on 20 MHz, one stream.
+fn he() -> PhyRate {
+    use oer_protocols_ieee80211_wire::phy::{FecCoding, HeGiLtf, HeMcs, HeRate, SpatialStreams};
+    PhyRate::He(
+        HeRate::new(
+            HeMcs::new(7).unwrap(),
+            SpatialStreams::ONE,
+            PpduBandwidth::Mhz20,
+            HeGiLtf::Ltf2xGi800Ns,
+            FecCoding::Bcc,
+            false,
+        )
+        .unwrap(),
+    )
+}
+
+/// The link of an access point whose HE Operation names an HE TXOP
+/// Duration RTS Threshold of 64 (2 ms), when `threshold`.
+fn he_link(threshold: bool) -> DataLink {
+    use oer_protocols_ieee80211_core_upper_mac::protection::{
+        BasicRates, BssProtection, HeTxopDurationRtsThreshold,
+    };
+    DataLink {
+        protection: BssProtection {
+            he_txop_rts_threshold: if threshold {
+                HeTxopDurationRtsThreshold::new(64)
+            } else {
+                None
+            },
+            basic_rates: BasicRates::from_rate_elements(&[0x8c, 0x12, 0x98, 0x24], &[]),
+            ..BssProtection::UNPROTECTED
+        },
+        ..link(LinkProtection::Open)
+    }
+}
+
+/// The protection of the first publication of `frames` MSDUs of the
+/// link `link` at the HE rate `rate`, and each stage's of a single MPDU's
+/// plan of two stages.
+fn he_publication(
+    link: DataLink,
+    rate: PhyRate,
+    frames: u8,
+) -> (Protection, Option<Vec<Protection>>) {
+    let arena = ModelArena::<ModelCaps>::new();
+    let single = PortArena::rate(&arena, rate).unwrap();
+    let aggregate = PortArena::ampdu_rate(&arena, single).ok().unwrap();
+    let mut world = World::new(
+        Rates {
+            single,
+            aggregate,
+            install: PhantomData,
+        },
+        link,
+    );
+    world.plane.aggregate_rate(Some(AggregateRate {
+        rate,
+        max_subframes: 8,
+        max_length: 65_535,
+    }));
+    if frames > 1 {
+        world.agree(BE, 64);
+    }
+    for tag in 0..frames {
+        world.taken(tag, BE);
+    }
+    let publication = world
+        .plane
+        .publication(|plan| {
+            Some(match plan.kind {
+                PpduKind::Single => ArenaFormat::Single(
+                    once(single)
+                        .then(oer_protocols_ieee80211_contracts_port::RetryStage {
+                            rate: single,
+                            transmissions: core::num::NonZeroU8::MIN,
+                            protection: Protection::None,
+                        })
+                        .ok()
+                        .unwrap(),
+                ),
+                PpduKind::Aggregate { spacing } => ArenaFormat::Aggregate {
+                    rate: aggregate,
+                    spacing,
+                },
+            })
+        })
+        .unwrap();
+    let stages = match &publication.format {
+        ArenaFormat::Single(plan) => Some(plan.stages().map(|stage| stage.protection).collect()),
+        ArenaFormat::Aggregate { .. } => None,
+    };
+    (publication.protection, stages)
+}
+
+#[test]
+fn a_finite_he_txop_threshold_protects_every_he_ppdu_and_its_retries() {
+    let rts = |rate| {
+        let mut policy = oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::new(None);
+        policy.install_bss(he_link(true).protection);
+        policy.every_he_txop_protection(rate)
+    };
+    assert!(matches!(rts(he()), Protection::RtsCts { .. }));
+    // A single MPDU: the publication and each retry stage.
+    let (first, stages) = he_publication(he_link(true), he(), 1);
+    assert_eq!(first, rts(he()));
+    assert_eq!(stages, Some(std::vec![rts(he()), rts(he())]));
+    // An A-MPDU.
+    let (first, stages) = he_publication(he_link(true), he(), 3);
+    assert_eq!(first, rts(he()));
+    assert_eq!(stages, None);
+}
+
+#[test]
+fn without_a_threshold_or_at_an_ht_rate_nothing_is_protected() {
+    for (link, rate) in [(he_link(false), he()), (he_link(true), ht())] {
+        for frames in [1, 3] {
+            let (first, stages) = he_publication(link, rate, frames);
+            assert_eq!(first, Protection::None);
+            if let Some(stages) = stages {
+                assert!(stages.iter().all(|stage| *stage == Protection::None));
+            }
+        }
+    }
 }

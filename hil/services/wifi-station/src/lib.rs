@@ -67,6 +67,9 @@ pub struct Join {
     pub ssid: heapless::String<MAX_SSID>,
     pub passphrase: heapless::String<MAX_PASSPHRASE>,
     pub channel: u8,
+    /// Experimental: ask an access point that admits HE20 for it; another
+    /// gets the HT request. [`Joined::Linked`] names the mode.
+    pub he20: bool,
 }
 
 /// The answer to [`Join`].

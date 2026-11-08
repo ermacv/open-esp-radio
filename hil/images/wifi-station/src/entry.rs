@@ -353,7 +353,14 @@ impl Worker {
     /// host checks that the link came up on it. Settings the station
     /// refuses leave the image idle for another join.
     async fn join(&mut self, join: wifi_station::Join) -> Joined {
-        let profile = wifi::Profile::wpa2(join.ssid.as_bytes(), join.passphrase.as_bytes());
+        let profile = wifi::Profile::wpa2(join.ssid.as_bytes(), join.passphrase.as_bytes())
+            .map(|profile| {
+                if join.he20 {
+                    profile.with_he20()
+                } else {
+                    profile
+                }
+            });
         let (Ok(profile), Ok(_)) = (
             profile,
             wifi::Config::new(COUNTRY, join.channel, TX_CAP_DBM),

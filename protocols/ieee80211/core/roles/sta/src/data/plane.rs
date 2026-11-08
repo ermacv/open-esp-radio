@@ -60,8 +60,7 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 };
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Ieee80211Capabilities, IndeterminateCause, MpduProtection,
-    MpduStartSpacing, PhyRate, Protection, RxMetadata, SingleEnd, SingleOutcome, SingleResponse,
-    TxOutcome,
+    MpduStartSpacing, PhyRate, RxMetadata, SingleEnd, SingleOutcome, SingleResponse, TxOutcome,
 };
 use oer_protocols_ieee80211_core_upper_mac::{
     ccmp::CcmpTxPacketNumber,
@@ -145,6 +144,10 @@ pub struct DataLink {
     pub ht: Option<HtLimits>,
     /// Each TID's operational transmit Block Ack window.
     pub windows: [Option<TxWindow>; 8],
+    /// The protection facts of the access point's BSS; the publications
+    /// follow its HE TXOP Duration RTS Threshold
+    /// ([`ProtectionPolicy::every_he_txop_protection`](oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::every_he_txop_protection)).
+    pub protection: oer_protocols_ieee80211_core_upper_mac::protection::BssProtection,
 }
 
 /// Why the plane did not take a link.
@@ -919,6 +922,18 @@ impl DataPlane {
             frames,
             kind,
         })?;
+        // Every individually addressed HE PPDU of a BSS that advertises an
+        // HE TXOP Duration RTS Threshold goes behind RTS/CTS, its retries
+        // and an aggregate alike: the plane estimates no TXOP duration.
+        let mut policy = oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::new(None);
+        policy.install_bss(link.protection);
+        let protection = policy.every_he_txop_protection(format.rate());
+        let format = match format {
+            ArenaFormat::Single(plan) => ArenaFormat::Single(
+                plan.with_protection(|rate| policy.every_he_txop_protection(rate.get())),
+            ),
+            aggregate @ ArenaFormat::Aggregate { .. } => aggregate,
+        };
         let matches = matches!(
             (&format, kind),
             (ArenaFormat::Single(_), PpduKind::Single)
@@ -935,7 +950,7 @@ impl DataPlane {
             arena,
             format,
             access_category,
-            protection: Protection::None,
+            protection,
             encryption,
             power: crate::machine::calibrated_power::<K>(),
         })

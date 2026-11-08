@@ -170,3 +170,26 @@ fn a_plan_past_its_first_stage_keeps_the_rest_in_order_and_ends() {
     assert_eq!(rates, [1, 2, 3, 4]);
     assert!(rest.is_none(), "the last stage ends the plan");
 }
+
+#[test]
+fn a_plan_s_protection_follows_each_stage_s_rate_and_keeps_the_rest() {
+    let rts = Protection::RtsCts {
+        rate: oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm24M,
+    };
+    let protected = plan().with_protection(|rate| if *rate >= 2 { rts } else { Protection::None });
+    let stages: Vec<_> = protected
+        .stages()
+        .map(|stage| (stage.rate, stage.transmissions, stage.protection))
+        .collect();
+    let expected: Vec<_> = (0..4)
+        .map(|rate| {
+            (
+                rate,
+                stage(rate).transmissions,
+                if rate >= 2 { rts } else { Protection::None },
+            )
+        })
+        .collect();
+    assert_eq!(stages, expected);
+    assert_eq!(protected.transmissions(), plan().transmissions());
+}

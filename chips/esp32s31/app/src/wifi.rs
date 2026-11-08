@@ -479,6 +479,16 @@ impl Profile {
     pub fn wpa2(ssid: &[u8], passphrase: &[u8]) -> Result<Self, ProfileError> {
         wifi::StationSettings::wpa2_passphrase(ssid, passphrase).map(Self)
     }
+
+    /// Experimental, off unless asked: the connect asks an access point
+    /// that admits HE20 for HE20 (one spatial stream, HE-MCS 0 to 9, no
+    /// optional HE capability, no answer to Trigger frames); another access
+    /// point gets the HT request. [`Connected::phy`] names the mode the
+    /// station associated in; an access point that answers the HE request
+    /// without HE ends the connect with `ConnectError::Failed(HeNotGranted)`.
+    pub fn with_he20(self) -> Self {
+        Self(self.0.with_he20())
+    }
 }
 
 /// The network a connect joined.

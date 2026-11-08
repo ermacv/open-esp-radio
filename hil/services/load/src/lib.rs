@@ -755,7 +755,7 @@ impl Link {
 }
 
 /// The counts of [`Mac`].
-pub const MAC_COUNTS: usize = 42;
+pub const MAC_COUNTS: usize = 45;
 
 /// Each of [`Mac`]'s counts: its name, as the vendor's decoders print it
 /// or the register model names it, and the bits it wraps at.
@@ -802,6 +802,11 @@ pub const MAC_COUNT_NAMES: [(&str, u8); MAC_COUNTS] = [
     ("tx_cts", 32),
     ("track", 32),
     ("trcts", 32),
+    // The HE Trigger frames received, the HE TB PPDUs sent and the QoS
+    // Nulls among them.
+    ("he_rx_trigger", 16),
+    ("he_tb", 16),
+    ("he_tb_qos_null", 16),
 ];
 
 /// What the MAC itself counted within run `run`'s window.

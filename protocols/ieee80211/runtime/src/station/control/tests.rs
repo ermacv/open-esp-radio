@@ -66,6 +66,7 @@ fn profile(ssid: &[u8]) -> StaProfile {
     StaProfile {
         ssid: heapless::Vec::from_slice(ssid).unwrap(),
         security: oer_protocols_ieee80211_core_roles_sta::machine::StaSecurity::Open,
+        prefer_he20: false,
     }
 }
 

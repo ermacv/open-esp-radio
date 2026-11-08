@@ -342,3 +342,42 @@ fn leaving_the_bss_keeps_only_the_local_length_threshold() {
     );
     assert_eq!(TxReceiver::from_address1(&[0xff; 6]), TxReceiver::Group);
 }
+
+#[test]
+fn every_he_txop_is_protected_while_the_bss_advertises_a_threshold() {
+    let mut policy = policy(
+        ErpProtection::NONE,
+        HtProtectionMode::NonHtMixed,
+        basic(OFDM_BASIC),
+    );
+    // No threshold: no exchange, whatever the HT and ERP rules ask.
+    assert_eq!(
+        policy.every_he_txop_protection(PhyRate::He(he(7))),
+        Protection::None
+    );
+    let mut bss = policy.bss();
+    bss.he_txop_rts_threshold = HeTxopDurationRtsThreshold::new(64);
+    policy.install_bss(bss);
+    let protection = policy.every_he_txop_protection(PhyRate::He(he(7)));
+    assert_eq!(
+        protection,
+        Protection::RtsCts {
+            rate: policy.control_rate(PhyRate::He(he(7)))
+        }
+    );
+    // It is the exchange select gives an HE PPDU of any length.
+    assert_eq!(
+        policy
+            .select(
+                ampdu(PhyRate::He(he(7)), TxReceiver::Individual, 1),
+                &ProtectEveryHeTxop
+            )
+            .protection,
+        protection
+    );
+    // An HT rate takes none from the HE rule.
+    assert_eq!(
+        policy.every_he_txop_protection(ht(7, PpduBandwidth::Mhz20)),
+        Protection::None
+    );
+}

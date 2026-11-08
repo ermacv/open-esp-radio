@@ -614,6 +614,7 @@ fn link<'s, const HELD: u8>(
             max_length: 65_535,
         }),
         windows: [None; 8],
+        protection: Default::default(),
     };
     LinkHandover::for_test(1, address, bssid, false, true, Some(key), Some(data))
 }

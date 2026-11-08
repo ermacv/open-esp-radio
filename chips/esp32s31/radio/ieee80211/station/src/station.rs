@@ -272,9 +272,9 @@ const HT40: [u8; 28] = ht_capability_ie(
 pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities {
     ht20: HT20,
     ht40: HT40,
-    he20_ht: [0; 28],
-    he20: [0; 24],
-    he20_extended: [0; 14],
+    he20_ht: crate::he::HE20_HT,
+    he20: crate::he::HE20,
+    he20_extended: crate::he::HE20_EXTENDED,
     wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
 };
 /// The station's contexts at their tickets' places.

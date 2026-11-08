@@ -574,6 +574,40 @@ async fn release<W: Binding>(port: &mut Port<W>) -> Result<(), crate::failure::R
         )),
     }
 }
+/// What bounds the station's transmit power besides its regulatory domain:
+/// the board, the PHY's highest target and the owner's cap of `cap_dbm`.
+fn power_limits(cap_dbm: i8) -> oer_protocols_radio_regulatory::PowerLimits {
+    board::wifi_power_limits(
+        i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
+        Some(i32::from(cap_dbm) * 100),
+    )
+}
+
+/// The power elements of an HE20 Association Request on `channel` of
+/// `domain` at `cap_dbm` ([`crate::he::he_power`]): each HE-MCS's PHY
+/// target power ([`PhyTxTargetPowerProfile::pair`], the MAC's power table)
+/// bounded by the transmit ceiling the port's transmissions take
+/// ([`CappedTxPowerProfile`]), and the MAC's minimum.
+pub(crate) fn he_power(
+    domain: &RegulatoryDomain,
+    channel: u8,
+    cap_dbm: i8,
+) -> Result<oer_protocols_ieee80211_core_roles_sta::association::StaHePower, InitializationError> {
+    let channel = WifiChannel::new_2_4_ghz(channel, WifiChannelWidth::Mhz20)
+        .map_err(|_| InitializationError::Channel)?;
+    let ceiling = domain
+        .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
+        .map_err(|_| InitializationError::Channel)?
+        .tx_ceiling(power_limits(cap_dbm))
+        .dbm();
+    let targets = PhyConfig::production().tx_target_power_profile();
+    crate::he::he_power(
+        oer_chips_esp32s31_hal::types::MAC_MINIMUM_TX_POWER_DBM,
+        |rate| targets.pair(rate).primary.min(ceiling),
+    )
+    .map_err(|_| InitializationError::HePower)
+}
+
 async fn install<W: Binding>(
     boot: Boot<W>,
     config: Config,
@@ -587,10 +621,7 @@ async fn install<W: Binding>(
     let initial = domain
         .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
         .map_err(|_| InitializationError::Channel)?;
-    let limits = board::wifi_power_limits(
-        i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
-        Some(i32::from(config.cap_dbm) * 100),
-    );
+    let limits = power_limits(config.cap_dbm);
     let ceiling = initial.tx_ceiling(limits);
     let start = RadioStartConfig::new(
         WifiColdStartConfig::new(initial, ceiling),

@@ -47,6 +47,7 @@ mod tests {
             ssid: connect.ssid.clone(),
             passphrase: connect.passphrase.clone(),
             channel: u8::MAX,
+            he20: true,
         };
         let start = oer_hil_services_load::Start {
             run: u32::MAX,

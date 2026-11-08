@@ -308,9 +308,10 @@ fn station_generations<'id, B: ModelComposition + 'id, C: Ieee80211Capabilities>
             None,
         ],
         PortCommand::Configure { permission, .. } => [Some(permission.generation()), None, None],
-        PortCommand::CloseGate(_) | PortCommand::SetEdca(_) | PortCommand::SetBssColor(_) => {
-            [None, None, None]
-        }
+        PortCommand::CloseGate(_)
+        | PortCommand::SetEdca(_)
+        | PortCommand::SetBssColor(_)
+        | PortCommand::SetHe(_) => [None, None, None],
     }
 }
 
@@ -898,6 +899,15 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 CommandProgress::Done
             }
             PortCommand::SetBssColor(_) => CommandProgress::Done,
+            PortCommand::SetHe(he @ oer_protocols_ieee80211_contracts_port::StationHe::He20(_))
+                if self.air.take_he_association_refusal() =>
+            {
+                CommandProgress::Refused(PortCommand::SetHe(he), CommandRefusal::Busy)
+            }
+            PortCommand::SetHe(he) => {
+                self.air.set_he(he);
+                CommandProgress::Done
+            }
             PortCommand::CloseGate(gate) => {
                 if !matches!(self.driver.gate, DriverGate::Open) {
                     return CommandProgress::Refused(

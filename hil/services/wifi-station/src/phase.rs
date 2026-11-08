@@ -73,6 +73,7 @@ mod tests {
             ssid: heapless::String::try_from("lab").unwrap(),
             passphrase: heapless::String::try_from("passphrase").unwrap(),
             channel: 6,
+            he20: false,
         }
     }
 

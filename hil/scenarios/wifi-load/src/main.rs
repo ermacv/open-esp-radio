@@ -438,7 +438,8 @@ fn link_measurement(
 const MAX_LEVEL_MBPS: u64 = 1000;
 
 /// The channel width the router's profile asks for: HT40, or the
-/// `OER_WIFI_LOAD_WIDTH` it names (`ht20` or `ht40`).
+/// `OER_WIFI_LOAD_WIDTH` it names (`ht20`, `ht40`, or `he20`: the router's
+/// HE20 station profile, and the station's join asks for HE20).
 const WIDTH_ENV: &str = "OER_WIFI_LOAD_WIDTH";
 
 fn width() -> Result<RouterChannelWidth, Failure> {
@@ -452,8 +453,9 @@ fn parse_width(text: &str) -> Result<RouterChannelWidth, Failure> {
     match text.trim() {
         "ht20" => Ok(RouterChannelWidth::Ht20),
         "ht40" => Ok(RouterChannelWidth::Ht40),
+        "he20" => Ok(RouterChannelWidth::He20),
         other => Err(Failure::Incomplete(format!(
-            "{WIDTH_ENV}=`{other}` is neither `ht20` nor `ht40`"
+            "{WIDTH_ENV}=`{other}` is none of `ht20`, `ht40` and `he20`"
         ))),
     }
 }
@@ -824,11 +826,12 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let host = host_route(Ipv4Addr::from(ROUTER_ADDRESS))?.source;
     let channel = channel()?;
     let (ssid, passphrase) = (generated("oer-load-"), generated("oer-"));
+    let width = width()?;
     cx.router(RouterOperation::ApplyStationProfile {
         ssid: ssid.clone(),
         passphrase: passphrase.clone(),
         channel,
-        width: width()?,
+        width,
         forward_host: Some(host),
     })?;
     let join = Join {
@@ -837,6 +840,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         passphrase: heapless::String::try_from(passphrase.as_str())
             .map_err(|_| Failure::Incomplete("the generated passphrase is too long".into()))?,
         channel,
+        he20: width == RouterChannelWidth::He20,
     };
     let joined = cx.call(join, JOIN_TIMEOUT)?;
     println!("connect: {}", cx.call(GetConnectTimes, REPORT_TIMEOUT)?);
@@ -1682,9 +1686,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_width_is_ht20_or_ht40_and_nothing_else() {
+    fn the_width_is_ht20_ht40_or_he20_and_nothing_else() {
         assert_eq!(parse_width("ht20").unwrap(), RouterChannelWidth::Ht20);
         assert_eq!(parse_width(" ht40 ").unwrap(), RouterChannelWidth::Ht40);
+        assert_eq!(parse_width("he20").unwrap(), RouterChannelWidth::He20);
         assert!(parse_width("40").is_err());
     }
 
