@@ -929,9 +929,12 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
                 crate::mac::tx::TxPhyRate::Legacy(config.rate),
                 (config.aifsn, config.contention_window),
             ),
+            // The nominal rate is the work's statistic, not its cost: the
+            // HT table's index can reach a bounds check here, so a single
+            // records none and its PPDU timing alone.
             SingleTxConfig::Ht(config) => (
                 config.length,
-                core::num::NonZeroU32::new(config.rate.nominal_kbps()),
+                None,
                 crate::mac::tx::TxPhyRate::Ht(config.rate),
                 (config.aifsn, config.contention_window),
             ),
