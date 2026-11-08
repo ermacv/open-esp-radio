@@ -811,6 +811,14 @@ where
                 deadline,
                 network: end,
             } => self.stop(deadline, end, lifecycle, network)?,
+            ToActor::Retire if matches!(self.radio, Radio::Returning) => {
+                if self.pairwise.is_some() {
+                    return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
+                }
+                // The radio stopped; the actor ends once the network's
+                // return came.
+                self.retiring = true;
+            }
             ToActor::Retire | ToActor::Reinstall => {
                 if !matches!(self.radio, Radio::Halted | Radio::Stopped) {
                     // Only a stopped radio retires: the lifecycle stops it
@@ -1097,7 +1105,7 @@ where
                         let data_home = !observed.arena_on_air && observed.frames_out == 0;
                         if data_home && self.network_settled() {
                             Some(StopOutcome::Confirmed)
-                        } else if data_home && !late && !observed.network_lost {
+                        } else if data_home && !observed.network_lost {
                             // The radio and its data are done: what is left
                             // is the network's, whose memory goes home
                             // before it stops.
@@ -1123,16 +1131,31 @@ where
             Radio::Draining { deadline } => {
                 let late = now >= deadline;
                 let observed = self.observed(None, late);
-                let outcome = if self.network_settled() {
-                    Some(StopOutcome::Confirmed)
-                } else if late || observed.network_lost {
-                    Some(StopOutcome::Unconfirmed(observed))
-                } else {
-                    None
-                };
-                if let Some(outcome) = outcome {
+                if self.network_settled() {
                     self.radio = Radio::Halted;
-                    self.owed.stopped = Some(outcome);
+                    self.owed.stopped = Some(StopOutcome::Confirmed);
+                } else if observed.network_lost {
+                    self.radio = Radio::Halted;
+                    self.owed.stopped = Some(StopOutcome::Unconfirmed(observed));
+                } else if late {
+                    // The radio stopped: only the network's return is late.
+                    // The wait ends here; the return does not.
+                    self.radio = Radio::Returning;
+                    self.owed.stopped = Some(StopOutcome::Returning(ReturnObserved {
+                        memory_held: observed.memory_held,
+                        network_running: observed.network_running,
+                        lent: observed.lent,
+                    }));
+                }
+            }
+            Radio::Returning => {
+                if self.network_settled() {
+                    self.radio = Radio::Halted;
+                    if self.retiring {
+                        self.end = Some(ActorEnd::Retired);
+                    }
+                } else if self.network_stopping == NetworkStopping::Lost {
+                    return Err(ActorFault::Contract(ActorViolation::NetworkLost));
                 }
             }
             Radio::Stopped | Radio::Running | Radio::Halted => {}

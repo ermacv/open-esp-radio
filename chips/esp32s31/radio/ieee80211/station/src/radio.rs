@@ -528,6 +528,19 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
                 post(&mut mailbox, News::Released(released)).await;
                 return;
             }
+            // The network was lost after the stop's wait ended: the
+            // lifecycle ended already, and the station's runner hears it
+            // here. Every owner stays with the actor.
+            ActorEnd::Faulted(oer_protocols_ieee80211_runtime::datapath::ActorFault::Contract(
+                oer_protocols_ieee80211_runtime::datapath::ActorViolation::NetworkLost,
+            )) => {
+                post(
+                    &mut mailbox,
+                    News::Released(Err(crate::failure::ReleaseCause::NetworkLost)),
+                )
+                .await;
+                return;
+            }
             // The lifecycle hears the fault and ends with it: every owner
             // stays with the actor until the image resets.
             ActorEnd::Faulted(_) => return,

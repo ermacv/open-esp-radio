@@ -164,8 +164,15 @@ the ended frames' memory and every MSDU left in the transmit queue (each as
 data left behind) go back through the return queue, as its room allows, and
 only then does the actor ask the network to stop. The network takes that
 memory back before its port ends, so a confirmed stop leaves none of it with
-the station. A network that never takes it back ends the stop at its
-deadline, unconfirmed, with the memory held in `StopObserved::memory_held`.
+the station. The radio's stop and the network's return are separate: a
+network that has not returned its memory, its stop or its lent units by the
+deadline ends the stop's wait there as `StopOutcome::Returning` (the
+lifecycle's `LifecycleEnd::StoppedReturning`), never as an unconfirmed stop.
+The return goes on without a deadline, the memory stays the station's until
+the network took it, and a retirement ends the actor only once the return
+came. Only a lost network participant, before the deadline an unconfirmed
+stop and after it the actor's `NetworkLost` contract fault, ends it
+otherwise.
 A stop for the next installation keeps the network and its MSDUs. An actor
 reinstalled after a stop that stopped the network asks the next network to
 stop again at its own stop. A new control epoch's reconnect policy keeps its

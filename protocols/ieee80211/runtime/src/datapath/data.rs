@@ -431,7 +431,7 @@ where
             self.return_freed(network);
         }
         self.queued = network.transmit.len();
-        if matches!(self.radio, Radio::Draining { .. })
+        if matches!(self.radio, Radio::Draining { .. } | Radio::Returning)
             && self.data.freed.is_empty()
             && self.queued == 0
         {

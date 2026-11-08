@@ -546,6 +546,10 @@ pub enum ReleaseCause {
     /// the release. The task keeps what it was handed; a later answer is
     /// never read, and nothing is reused.
     Deadline,
+    /// The network's stop participant was lost while the stopped radio
+    /// waited for the network's return: the actor ended on that contract
+    /// and keeps what it held; the radio is not released.
+    NetworkLost,
 }
 /// Why the station's lifecycle, or the datapath actor under it, ended
 /// with a cause the image records before it resets. A restart of the

@@ -41,7 +41,7 @@ use std::task::{Context, Poll, Wake, Waker};
 use embassy_futures::select::{Either, select};
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{RegulatedChannel, SupportedChannel};
 use oer_protocols_ieee80211_core_arbiter::ArbiterPolicy;
@@ -338,6 +338,12 @@ impl Report {
             "the lifecycle stopped: {:?}",
             self.lifecycle
         );
+        self.assert_owners_home();
+    }
+
+    /// The actor retired, the network's service stopped with every block in
+    /// its pool, and no station token was lost.
+    pub fn assert_owners_home(&self) {
         assert!(
             matches!(self.actor, Some(ActorEnd::Retired)),
             "the actor retired: {:?}",
@@ -508,6 +514,8 @@ pub struct World<'b, T: 'static> {
     protected: bool,
     pmk: [u8; 32],
     stopping: Cell<bool>,
+    /// The network's task is suspended: not polled, its future kept.
+    network_suspended: Cell<bool>,
 }
 
 impl<'b, T: 'static> World<'b, T> {
@@ -647,6 +655,18 @@ impl<'b, T: 'static> World<'b, T> {
     }
 
     /// Stop the station gracefully, by `within` from now.
+    /// Suspend the network's task, keeping its future and owners, or
+    /// resume it: a software consumer that is late.
+    pub fn suspend_network(&self, suspended: bool) {
+        self.network_suspended.set(suspended);
+    }
+
+    /// Let `duration` of virtual time pass.
+    pub async fn sleep(&self, duration: Duration) {
+        let at = self.now().saturating_add(duration);
+        self.clock.wait_until(at).await;
+    }
+
     /// Keep `datagram` in the application's hands to its end.
     pub fn hold(&self, datagram: NetDatagram<T>) {
         self.held.borrow_mut().push(datagram);
@@ -1022,6 +1042,7 @@ async fn run<'s, T: 'static>(
             pmk: setup.pmk,
             held: RefCell::new(Vec::new()),
             stopping: Cell::new(false),
+            network_suspended: Cell::new(false),
         };
 
         // The four tasks.
@@ -1078,7 +1099,14 @@ async fn run<'s, T: 'static>(
                 Task::new("network", network_task.as_mut()),
                 Task::new("script", script_task.as_mut()),
             ];
-            execute(&mut tasks, &clock, &air, &access_point, &idle);
+            execute(
+                &mut tasks,
+                &clock,
+                &air,
+                &access_point,
+                &idle,
+                &world.network_suspended,
+            );
         }
 
         // The account: what the station gave back, and every block.
@@ -1146,12 +1174,19 @@ fn execute(
     air: &ModelAir,
     access_point: &RefCell<AccessPoint>,
     idle: &Idle,
+    suspended: &Cell<bool>,
 ) {
     let mut announced = false;
+    // The network's task is not polled while the script suspends it: its
+    // future and owners stay as they are, its wakes wait.
+    let held = |task: &Task<'_>| suspended.get() && task.name == "network";
     for _ in 0..PASSES {
         let mut progress = false;
         let script = tasks.len() - 1;
         for (index, task) in tasks.iter_mut().enumerate() {
+            if held(task) {
+                continue;
+            }
             let ran = task.run();
             // The script's own look after a settle is no progress of the
             // world's.
@@ -1167,7 +1202,7 @@ fn execute(
         }
         if tasks
             .iter()
-            .any(|task| !task.done && task.flag.0.load(Ordering::SeqCst))
+            .any(|task| !task.done && !held(task) && task.flag.0.load(Ordering::SeqCst))
         {
             continue;
         }

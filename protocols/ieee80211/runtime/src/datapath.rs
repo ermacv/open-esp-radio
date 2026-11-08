@@ -65,8 +65,8 @@ mod turn;
 
 pub use messages::{
     ActorEnd, ActorEvent, ActorEvents, ActorFault, ActorViolation, FromActor, GroupPending,
-    LifecycleEnds, NetworkEnd, NetworkEnds, Parcel, RetuneFailed, Returned, StationTx,
-    StopObserved, StopOutcome, ToActor, from_actor_depth, returns_depth,
+    LifecycleEnds, NetworkEnd, NetworkEnds, Parcel, RetuneFailed, ReturnObserved, Returned,
+    StationTx, StopObserved, StopOutcome, ToActor, from_actor_depth, returns_depth,
 };
 
 use core::future::{Future, poll_fn};
@@ -272,6 +272,10 @@ enum Radio<K> {
     /// Stopped already: a retiring stop waits for the network by the
     /// deadline.
     Draining { deadline: Instant },
+    /// Stopped, and the stop answered at its deadline while the network
+    /// still owed its return ([`StopOutcome::Returning`]): the return goes
+    /// on without a deadline, and a retirement waits for it.
+    Returning,
     /// The stop was answered; the radio takes a start or the retirement.
     Halted,
 }
@@ -415,6 +419,9 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     /// last count: what a stop still holds of the network's memory beside
     /// the ended frames' (`DataTx::freed`).
     queued: usize,
+    /// The lifecycle retired the actor while the network's return went on:
+    /// the actor ends once it came.
+    retiring: bool,
     /// The reply offered to the lifecycle, until it answers.
     reply_out: Option<ReplyPlace>,
     owed: Owed<'id, D>,
@@ -501,6 +508,7 @@ where
             frames_out: 0,
             network_stopping: NetworkStopping::NotAsked,
             queued: 0,
+            retiring: false,
             reply_out: None,
             owed: Owed::new(),
             facts: Facts::default(),
@@ -566,6 +574,7 @@ where
                 frames_out: 0,
                 network_stopping: NetworkStopping::NotAsked,
                 queued: 0,
+                retiring: false,
                 reply_out: None,
                 owed: Owed::new(),
                 facts: Facts::default(),
@@ -667,6 +676,7 @@ where
         // next stop asks the network of the next installation again.
         self.network_stopping = NetworkStopping::NotAsked;
         self.queued = 0;
+        self.retiring = false;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract

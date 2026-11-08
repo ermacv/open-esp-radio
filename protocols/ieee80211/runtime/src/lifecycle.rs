@@ -45,8 +45,10 @@
 //! The application's stop, and a failed station, take the link and the
 //! pairwise key back, then stop the radio by the stop's deadline. A stop
 //! that retires the radio also stops the network ([`NetworkEnd::Stops`]) and
-//! confirms only once it stopped and returned every lent buffer; a restart
-//! keeps the network. A
+//! confirms only once it stopped and returned every lent buffer; a stopped
+//! radio whose network returns late ends the stop's wait at the deadline
+//! ([`LifecycleEnd::StoppedReturning`]) and the actor retires after that
+//! return. A restart keeps the network. A
 //! confirmed stop retires the actor ([`ToActor::Retire`]) after the
 //! application's stop, or ends it for the next installation
 //! ([`ToActor::Reinstall`]) after the station failed: the composition then
@@ -88,8 +90,8 @@ use oer_protocols_radio_port::Slot;
 
 use crate::datapath::{
     ActorAnyBuffer, ActorCommand, ActorEpochPath, ActorFault, ActorGatePath, ActorLink,
-    ActorTerminal, DatapathPort, FromActor, GroupPending, NetworkEnd, PARCELS, Parcel, Returned,
-    StationTx, StopObserved, ToActor,
+    ActorTerminal, DatapathPort, FromActor, GroupPending, NetworkEnd, PARCELS, Parcel,
+    ReturnObserved, Returned, StationTx, StopObserved, ToActor,
 };
 use crate::station::{
     BackendContractViolation, Notifies, Request, RunnerControl, SameHart, ServiceCommand,
@@ -279,6 +281,13 @@ pub enum LifecycleEnd<F> {
     /// The application stopped the station; the radio stopped and the
     /// actor retired its installation.
     Stopped,
+    /// The application stopped the station and the radio stopped, but by
+    /// the stop's deadline the network had not returned all it holds of
+    /// the station. The actor completes that return when the network
+    /// takes its turn and then retires; the composition waits for the
+    /// actor's end before it reuses the installation's owners. Not a
+    /// failure.
+    StoppedReturning(ReturnObserved),
     /// The station failed; the radio stopped and the actor ended for the
     /// next installation. The composition reinstalls the port and builds
     /// the service again.
@@ -299,7 +308,10 @@ impl<F> LifecycleEnd<F> {
     /// Whether the composition records this end and resets: everything but
     /// an ordinary stop and a restart.
     pub const fn is_terminal(&self) -> bool {
-        !matches!(self, Self::Stopped | Self::Restart(_))
+        !matches!(
+            self,
+            Self::Stopped | Self::StoppedReturning(_) | Self::Restart(_)
+        )
     }
 }
 

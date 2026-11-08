@@ -262,10 +262,17 @@ where
             self.inner.end = Some(LifecycleEnd::StopUnconfirmed(observed));
             return;
         }
-        let (message, end) = match why {
-            Ending::Stop => (ToActor::Retire, LifecycleEnd::Stopped),
-            Ending::StartRefused(refused) => (ToActor::Retire, LifecycleEnd::StartRefused(refused)),
-            Ending::Restart(failure) => (ToActor::Reinstall, LifecycleEnd::Restart(failure)),
+        let (message, end) = match (why, outcome) {
+            // The radio stopped; the actor retires once the network's late
+            // return came.
+            (Ending::Stop, StopOutcome::Returning(observed)) => {
+                (ToActor::Retire, LifecycleEnd::StoppedReturning(observed))
+            }
+            (Ending::Stop, _) => (ToActor::Retire, LifecycleEnd::Stopped),
+            (Ending::StartRefused(refused), _) => {
+                (ToActor::Retire, LifecycleEnd::StartRefused(refused))
+            }
+            (Ending::Restart(failure), _) => (ToActor::Reinstall, LifecycleEnd::Restart(failure)),
         };
         self.inner.send(actor, message);
         if self.inner.end.is_none() {

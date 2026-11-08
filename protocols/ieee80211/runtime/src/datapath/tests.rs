@@ -1156,19 +1156,57 @@ fn a_lost_network_participant_leaves_the_stop_unconfirmed_at_once() {
     });
 }
 
+/// The radio stopped, but the network has not stopped by the deadline: the
+/// stop's wait ends there as returning, not unconfirmed. A retirement waits
+/// for the network, which the actor still follows, and ends the actor once
+/// it stopped.
 #[test]
-fn a_network_that_never_stops_leaves_the_stop_unconfirmed_at_its_deadline() {
+fn a_network_that_stops_late_ends_the_wait_returning_and_retires_after_it() {
     bench(|bench| {
         bench.start();
         retire(bench, 1);
         bench.advance(2_000);
         bench.settle();
         match bench.next() {
-            Some(FromActor::Stopped(StopOutcome::Unconfirmed(observed))) => {
-                assert!(observed.network_running && observed.deadline);
+            Some(FromActor::Stopped(StopOutcome::Returning(observed))) => {
+                assert!(observed.network_running);
+                assert_eq!((observed.memory_held, observed.lent), (0, 0));
             }
-            _ => panic!("a network that never stopped proves no stop"),
+            _ => panic!("a stopped radio whose network is late is returning"),
         }
+        bench.send(ToActor::Retire);
+        bench.settle();
+        assert!(bench.end.is_none(), "the retirement waits for the network");
+        bench.network.answer.set(Some(Ok(())));
+        bench.settle();
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
+    });
+}
+
+/// A participant lost while the actor still waited for the network's late
+/// return ends the actor on its contract: the owners stay where they are.
+#[test]
+fn a_network_lost_after_the_deadline_ends_the_actor_on_its_contract() {
+    bench(|bench| {
+        bench.start();
+        retire(bench, 1);
+        bench.advance(2_000);
+        bench.settle();
+        assert!(matches!(
+            bench.next(),
+            Some(FromActor::Stopped(StopOutcome::Returning(_)))
+        ));
+        bench
+            .network
+            .answer
+            .set(Some(Err(crate::station::NetworkStopLost)));
+        bench.settle();
+        assert_eq!(
+            bench.end,
+            Some(ActorEnd::Faulted(ActorFault::Contract(
+                ActorViolation::NetworkLost
+            )))
+        );
     });
 }
 

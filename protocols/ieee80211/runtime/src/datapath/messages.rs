@@ -272,8 +272,25 @@ pub enum RetuneFailed<F> {
 pub enum StopOutcome {
     /// The radio is stopped and every owner of the run is back.
     Confirmed,
+    /// The radio is stopped and its data settled, but by the deadline the
+    /// network had not returned all it holds of the station: its transmit
+    /// memory, its stop or its lent receive units. The return goes on: the
+    /// actor completes it whenever the network takes its turn, and a
+    /// retirement waits for it. Nothing of the radio is unconfirmed.
+    Returning(ReturnObserved),
     /// The stop proved nothing by its deadline: what was still out.
     Unconfirmed(StopObserved),
+}
+
+/// What the network still owed a stopped radio at the stop's deadline.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReturnObserved {
+    /// The network's transmit memory the station still holds.
+    pub memory_held: u16,
+    /// The network was asked to stop and has not reported it.
+    pub network_running: bool,
+    /// Receive units the network still holds.
+    pub lent: u16,
 }
 
 /// What a stop does to the network side.
@@ -348,6 +365,10 @@ pub enum ActorViolation {
     CutOverflow,
     /// The receive reordering lost its delivery order.
     ReorderOverflow,
+    /// The network's stop participant was lost while a stopped radio still
+    /// waited for its return: the memory and units it held stay where they
+    /// were.
+    NetworkLost,
 }
 
 /// How the actor's run ended.

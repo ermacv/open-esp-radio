@@ -457,6 +457,7 @@ fn actor_violation(
         V::PairwiseCustody => "PairwiseCustody",
         V::CutOverflow => "CutOverflow",
         V::ReorderOverflow => "ReorderOverflow",
+        V::NetworkLost => "NetworkLost",
     }
 }
 

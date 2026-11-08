@@ -540,6 +540,23 @@ async fn lifecycles<W: Binding>(
                     ) => StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
                 };
             }
+            LifecycleEnd::StoppedReturning(_) => {
+                drop(retired);
+                // The radio stopped; the network returns what it holds of
+                // the station late. The actor retires once that return
+                // came and the radio's release follows: the exit waits for
+                // them, with no deadline of its own, as the return is the
+                // network's software and no radio owner is unconfirmed.
+                return match news(mailbox).await {
+                    radio::News::Released(Ok(())) => StationExit::Stopped,
+                    radio::News::Released(Err(cause)) => StationExit::ReleaseFailed(cause),
+                    radio::News::Installed(..)
+                    | radio::News::Unavailable(_)
+                    | radio::News::Reinstall(_) => {
+                        StationExit::Failed(crate::failure::LifecycleFailure::Mailbox)
+                    }
+                };
+            }
             LifecycleEnd::Restart(failure) => {
                 let failure = crate::failure::convert::restart(failure);
                 restarts.record(failure);

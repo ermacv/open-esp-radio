@@ -743,9 +743,10 @@ impl Station {
     }
 
     /// Leave the network and stop the station for good: the IP service
-    /// stops and returns every receive buffer it holds within the
-    /// configuration's drain ([`Config::with_drain`]), then the radio
-    /// retires. The future ends once the station stopped; a later connect
+    /// stops and returns every receive buffer it holds, then the radio
+    /// retires. The configuration's drain ([`Config::with_drain`]) bounds
+    /// the radio's stop; a network that returns late past it is no failure,
+    /// and the future ends once that return came. The future ends once the station stopped; a later connect
     /// answers [`ConnectError::Stopped`], and the IP service's waits end
     /// with its stop. A second stop ends with the first one's result.
     ///

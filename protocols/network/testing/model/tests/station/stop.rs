@@ -226,3 +226,88 @@ fn a_stop_under_load_returns_owners_that_start_the_station_again() {
         .count();
     assert_eq!(authorized, 2, "a second handshake");
 }
+
+/// The network's service is late with its return: the application holds
+/// 24 accepted datagrams in the station, the network's task is suspended
+/// with its future and owners kept, and the graceful stop names a 10 ms
+/// deadline. The radio stops; at the deadline the stop's wait ends as
+/// returning, not unconfirmed, and the station's control reports it
+/// stopped, while the memory the network has not taken back stays the
+/// station's. Once the same service resumes, the return completes: the
+/// network stops, the actor retires, every block and transmit buffer is
+/// home, and the owners start a second session that joins, leases, pings
+/// and carries data both ways.
+#[test]
+fn a_network_that_resumes_after_the_deadline_completes_the_return() {
+    use oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd;
+    struct Net;
+    let reports = simulate_sessions::<Net>(
+        Setup::default(),
+        vec![
+            session(|world| {
+                Box::pin(async move {
+                    joined_and_resolved(world).await;
+                    let observers = held_burst(world, 24).await;
+                    for observer in observers {
+                        assert_eq!(world.result(observer).await, Sent::Ended(Outcome::Accepted));
+                    }
+                    world.suspend_network(true);
+                    world
+                        .air
+                        .hold_completion(WmmAccessCategory::BestEffort, false);
+                    world.stop(Duration::from_millis(10));
+                    world
+                        .until("the stop's wait ends", Duration::from_secs(1), |world| {
+                            world.stopped()
+                        })
+                        .await;
+                    assert!(
+                        world.memory_free() < NETWORK_BUFFERS,
+                        "the memory is not free before the network took it back"
+                    );
+                    world.sleep(Duration::from_millis(100)).await;
+                    assert!(world.memory_free() < NETWORK_BUFFERS);
+                    world.suspend_network(false);
+                })
+            }),
+            session(|world| {
+                Box::pin(async move {
+                    joined_and_resolved(world).await;
+                    world.ap().wired.ping(5, 1, b"after a late return");
+                    world
+                        .until("the echo reply", Duration::from_secs(1), |world| {
+                            world.ap().wired.echo_replies.len() == 1
+                        })
+                        .await;
+                    for n in 0..16_u16 {
+                        world.ap().wired.send_udp(7000, PORT, &[n as u8; 600]);
+                    }
+                    for _ in 0..16 {
+                        let received = world.receive().await;
+                        world.release(received);
+                    }
+                    let mut observers = Vec::new();
+                    for n in 0..16_u16 {
+                        observers.push(world.send(PEER, &[n as u8; 900]).await);
+                    }
+                    for observer in observers {
+                        assert_eq!(world.result(observer).await, Sent::Ended(Outcome::Accepted));
+                    }
+                })
+            }),
+        ],
+    );
+    let late = &reports[0];
+    match late.lifecycle {
+        Some(LifecycleEnd::StoppedReturning(observed)) => {
+            assert!(observed.memory_held > 0, "{observed:?}");
+            assert_eq!(observed.lent, 0);
+        }
+        ref end => panic!("a late network return ends the wait returning: {end:?}"),
+    }
+    late.assert_owners_home();
+    late.assert_transmit_memory_home();
+    left_the_network(late);
+    reports[1].assert_stopped_with_every_owner();
+    left_the_network(&reports[1]);
+}
