@@ -882,8 +882,8 @@ impl<
     /// Whether data may take another neighbor entry for `hop`: with a DHCP
     /// client, data and echo replies hold at most all entries but one, so a
     /// renewal always finds one, RFC 2131, 4.4.5's unicast.
-    fn data_may_resolve(&self, now: Instant, hop: [u8; 4]) -> bool {
-        if self.dhcp.is_none() || self.neighbors.holds(now, hop) {
+    fn data_may_resolve(&self, hop: [u8; 4]) -> bool {
+        if self.dhcp.is_none() || self.neighbors.holds(hop) {
             return true;
         }
         let sockets = &self.sockets;
@@ -895,7 +895,7 @@ impl<
 
     /// Resolve `hop` for data, within the control reserve.
     fn resolve_for_data(&mut self, now: Instant, hop: [u8; 4]) -> Lookup {
-        if !self.data_may_resolve(now, hop) {
+        if !self.data_may_resolve(hop) {
             return Lookup::Full;
         }
         let serial = self.next_serial();
@@ -1638,7 +1638,7 @@ impl<
         // A renewal's neighbor that is neither known nor asked for is asked
         // for: the reserve keeps an entry for it.
         if let Some(hop) = dhcp
-            && !self.neighbors.holds(now, hop)
+            && !self.neighbors.holds(hop)
         {
             serial = serial.wrapping_add(1);
             let (sockets, echoes) = (&self.sockets, &self.echoes);

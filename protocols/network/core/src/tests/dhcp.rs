@@ -1100,3 +1100,19 @@ fn a_router_that_is_no_host_is_none_and_the_next_one_counts() {
         );
     });
 }
+
+#[test]
+fn a_neighbor_data_holds_takes_no_second_entry_even_once_expired() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let socket = stack.open(7, best_effort()).unwrap();
+        let reply = arp_frame(Operation::Reply, (PEER, PEER_IP), OFFERED);
+        let block = filled(stack.pool(), b"one");
+        stack.send(secs(10), &socket, peer(), block).unwrap();
+        stack.input(secs(10), &reply, &mut ());
+        // Its entry expires with the datagram still waiting; a second
+        // datagram to the same peer reuses it in place.
+        let block = filled(stack.pool(), b"two");
+        stack.send(secs(100), &socket, peer(), block).unwrap();
+    });
+}

@@ -123,15 +123,11 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
-    /// Whether `address` has an entry a send can use or wait for: known and
-    /// alive, or asked for.
-    pub(crate) fn holds(&self, now: Instant, address: [u8; 4]) -> bool {
+    /// Whether `address` has an entry of its own: known, alive or expired
+    /// (which [`Self::resolve`] asks for again in place), or asked for.
+    pub(crate) fn holds(&self, address: [u8; 4]) -> bool {
         self.entries.iter().any(|entry| match *entry {
-            Entry::Known {
-                address: known,
-                expires,
-                ..
-            } => known == address && now < expires,
+            Entry::Known { address: known, .. } => known == address,
             Entry::Asking { address: asked, .. } => asked == address,
             Entry::Free => false,
         })
