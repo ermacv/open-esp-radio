@@ -1709,6 +1709,10 @@ pub struct ModelAir {
     /// Frames that land once a receive pull found the ring empty, without
     /// a wake.
     landing: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
+    /// A TBTT that fires at the data port's next receive call, without a
+    /// wake, and the one fired for the port's next facts.
+    tbtt_landing: Cell<bool>,
+    tbtt: Cell<bool>,
     /// The shared channel of a timed air: without it, publications are
     /// answered at once.
     medium: Cell<Option<Box<Medium>>>,
@@ -1750,6 +1754,8 @@ impl ModelAir {
             rx_later: Cell::new(None),
             kept_due: Cell::new(None),
             landing: Default::default(),
+            tbtt_landing: Cell::new(false),
+            tbtt: Cell::new(false),
             medium: Default::default(),
             air_fault: Default::default(),
             rx_limits: Cell::new(ModelRxLimits {
@@ -2118,6 +2124,14 @@ impl ModelAir {
     /// facts takes.
     pub fn receive_during_pull(&self, frame: &[u8], meta: ModelRxMeta) {
         self.landing.push_back((frame.into(), meta));
+    }
+
+    /// Fire the station's TBTT at the data port's next receive call, waking
+    /// nobody: an event that comes during the actor's turn, whose signal's
+    /// wake the actor's own next poll of the facts takes. The port's next
+    /// facts give it, and the transmit service that takes it announces it.
+    pub fn tbtt_during_receive(&self) {
+        self.tbtt_landing.set(true);
     }
 
     /// Move the landing frames to the ring; whether one landed.

@@ -147,9 +147,8 @@ where
 
     /// Every MAC fact but the receive ones: TX completion/timeout/color
     /// facts. The caller services TX in the same task before discarding the
-    /// batch.
+    /// batch. The power facts stay for [`Self::port_power`].
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, WifiRxCause>> {
-        while let Poll::Ready(Ok(_)) = self.power.poll(cx) {}
         self.irq
             .poll_mac(cx)
             .map(|r| r.map_err(|_| WifiRxCause::ForeignExecutor))

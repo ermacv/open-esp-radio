@@ -1642,6 +1642,36 @@ fn standing_ring_work_the_actor_cannot_take_reposts_a_bounded_number_of_turns() 
     });
 }
 
+/// A TBTT fires during a turn of an actor that already slept on standing
+/// ring work it cannot take: the facts after that turn take its wake, and
+/// the actor's next turn still serves it and tells the lifecycle.
+#[test]
+fn a_tbtt_after_turns_of_standing_work_takes_a_repost() {
+    bench(|bench| {
+        bench.start();
+        for sequence in 0..6 {
+            bench.air.receive(&management(sequence), meta());
+        }
+        bench.settle();
+        // Asleep past its reposts: a poll serves the standing fact and
+        // wakes nothing.
+        let wakes = bench.wakes();
+        bench.poll();
+        assert_eq!(bench.wakes(), wakes);
+        bench.air.tbtt_during_receive();
+        bench.poll();
+        assert!(bench.wakes() > wakes, "the TBTT takes a repost");
+        bench.settle();
+        let mut told = 0;
+        while let Some(message) = bench.next() {
+            if matches!(message, FromActor::Tbtt(_)) {
+                told += 1;
+            }
+        }
+        assert_eq!(told, 1, "the lifecycle hears the TBTT once");
+    });
+}
+
 /// The port fails before the stop: the stop answers once, unconfirmed with
 /// the port's report, the actor keeps running until the image's reset and
 /// sleeps meanwhile.

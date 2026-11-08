@@ -115,6 +115,8 @@ struct Bench {
     device: &'static mut Model,
     rx: ModelRx<N, RB, RS>,
     line: Rc<ModelLine<Deferred>>,
+    /// The power signal, which the radio handler raises a TBTT on.
+    power: &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<Deferred>,
     clock: Shared,
     #[cfg(oer_trace)]
     stall: &'static RxStall,
@@ -132,6 +134,7 @@ impl Bench {
         let clock = Shared(Rc::new(VirtualClock::new()));
         let reader = clock.clone();
         let atoms = Atoms::new(Rc::new(move || reader.now().as_micros()));
+        let power = deferred_signal().0;
         let arena: &'static mut WifiRxStatic<N, RB, RS, Q, Deferred, HostDma> =
             leak(bytemuck::Zeroable::zeroed());
         let (rx, _stop, _frames) = WifiRxArena::bind(
@@ -139,7 +142,7 @@ impl Bench {
             WifiIrqSignals {
                 mac: deferred_signal().0,
                 receive: deferred_signal().0,
-                power: deferred_signal().0,
+                power,
             },
         )
         .ok()
@@ -173,6 +176,7 @@ impl Bench {
             device,
             rx: ModelRx::new(storage, walker, atoms),
             line,
+            power,
             clock,
             #[cfg(oer_trace)]
             stall,
@@ -265,6 +269,42 @@ fn a_receive_fact_stays_raised_until_the_pull_that_serves_it() {
     assert_eq!(bench.woken(), woken + 1);
     assert!(matches!(bench.pull(), DevicePull::Empty));
     assert!(!bench.facts());
+}
+
+/// A TBTT comes after the device's facts found no power fact and before
+/// they look at the MAC's: the MAC's look leaves it, and the next facts give
+/// it.
+#[test]
+fn a_tbtt_between_the_power_and_the_mac_facts_is_kept() {
+    let mut bench = Bench::new();
+    let waker = bench.waker();
+    let cx = &mut Context::from_waker(&waker);
+    let session = bench.device.session.as_mut().expect("the session");
+    assert!(session.port_power(cx).is_pending());
+    // The radio handler's typed publication on the device's power signal.
+    let mut storage = crate::mac::irq::consumer::PowerIrqStorage::new(bench.power);
+    let (publisher, _consumer) = storage.split();
+    publisher.publish(
+        oer_chips_esp32s31_hal::types::MacPowerInterruptObservation::from_semantic_events(
+            false, false, false, false, true, false,
+        ),
+    );
+    assert!(session.poll(cx).is_pending(), "no MAC fact");
+    assert!(
+        matches!(session.port_power(cx), Poll::Ready(Ok(facts)) if facts.sta_tbtt()),
+        "the TBTT waits for the power facts"
+    );
+    // Through the device: the facts give it as its event once.
+    publisher.publish(
+        oer_chips_esp32s31_hal::types::MacPowerInterruptObservation::from_semantic_events(
+            false, false, false, false, true, false,
+        ),
+    );
+    assert!(matches!(
+        <Model as Device<TX>>::poll_event(bench.device, cx),
+        Poll::Ready(Ok(DeviceEvent::Tbtt))
+    ));
+    assert!(<Model as Device<TX>>::poll_event(bench.device, cx).is_pending());
 }
 
 /// A pull without room serves nothing, so it takes no fact: the facts keep

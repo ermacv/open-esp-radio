@@ -203,15 +203,20 @@ where
     /// Whether the facts the port's signals gave after the turn take a
     /// repost: taking them took the wake their signal owed (a unit or a
     /// transmit event that came during the turn), so the next turn serves
-    /// them after one repost. A port that gives standing work rather than
-    /// new facts (a ring waiting for its continuation, a ring the caller
-    /// has no room for) gives it again after a turn that served none of the
-    /// port's work: after [`DUE_REPOSTS`] such turns in a row the actor
-    /// sleeps, and that work's own source (its alarm, the network's return,
-    /// the lifecycle's frame) wakes it.
+    /// them after one repost. A transmit event or a TBTT among them always
+    /// takes it: the port gives each once, the actor holds it, and the next
+    /// turn serves it as the port's work (its relay, its settlement), so no
+    /// streak may leave it to an unrelated wake. A port that gives standing
+    /// work rather than new facts (a ring waiting for its continuation, a
+    /// ring the caller has no room for) gives it again after a turn that
+    /// served none of the port's work: after [`DUE_REPOSTS`] such turns in a
+    /// row the actor sleeps, and that work's own source (its alarm, the
+    /// network's return, the lifecycle's frame) wakes it.
     pub(super) fn facts_again(&mut self, fresh: bool) -> bool {
         let progressed = core::mem::take(&mut self.progressed);
-        if !fresh || progressed {
+        // What the next turn's transmit service counts as progress.
+        let events = self.facts.tx.is_some_and(|tx| tx.bits() != 0) || self.facts.tbtt;
+        if !fresh || progressed || events {
             self.fact_streak = 0;
         }
         if !fresh {

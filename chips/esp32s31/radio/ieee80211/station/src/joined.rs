@@ -1928,3 +1928,54 @@ fn units_after_a_run_of_turns_without_units_reach_the_socket() {
         assert_eq!(bench.atoms.rule_breaks(), []);
     });
 }
+
+/// Run `edge` as the actor's turn ends, after the edges queued before it.
+fn then_as_a_turn_ends(edge: impl FnOnce() + 'static) {
+    TURN_ENDS.with_borrow_mut(|edges| edges.push_back(Box::new(edge)));
+}
+
+/// A PPDU on the air with the next one prepared behind it ends as the last
+/// of a run of turns without units ends: its completion's turn puts the
+/// prepared one on the air, with no other wake and no time passing.
+#[test]
+fn a_completion_after_turns_that_took_none_puts_the_prepared_ppdu_on_the_air() {
+    struct Network;
+    joined::<Network>(|bench| {
+        let first = bench.send_datagram(b"first");
+        assert_eq!(bench.result(first), Sent::Ended(Outcome::Accepted));
+        bench.until("the first PPDU ended", |bench| {
+            bench.mpdus(EtherType::IPV4.value()).len() == 1
+        });
+        bench.settle();
+        bench.air = Air::Holds;
+        let on_air = bench.send_datagram(b"on the air");
+        assert_eq!(bench.result(on_air), Sent::Ended(Outcome::Accepted));
+        bench.until("the PPDU is on the air", |bench| {
+            bench.mpdus(EtherType::IPV4.value()).len() == 2
+        });
+        let queue = bench.seen.last().expect("on the air").queue;
+        let prepared = bench.send_datagram(b"prepared behind it");
+        assert_eq!(bench.result(prepared), Sent::Ended(Outcome::Accepted));
+        bench.settle();
+        assert_eq!(bench.mpdus(EtherType::IPV4.value()).len(), 2);
+
+        let units = (0..TURNS_WITHOUT_UNITS)
+            .map(|_| foreign_data(bench.next_sequence()))
+            .collect();
+        bench.land_as_turns_end(units);
+        let (atoms, line) = (bench.atoms.clone(), bench.line.clone());
+        then_as_a_turn_ends(move || line.latch(atoms.end_ppdu(queue, 0, 0)));
+        let sequence = bench.next_sequence();
+        bench.land_now(&foreign_data(sequence));
+        let now = bench.clock.now();
+        bench.settle();
+        assert!(TURN_ENDS.with_borrow(std::collections::VecDeque::is_empty));
+        assert_eq!(bench.clock.now(), now, "no timer moved time");
+        assert_eq!(
+            bench.mpdus(EtherType::IPV4.value()).len(),
+            3,
+            "the completion's turn published the prepared PPDU"
+        );
+        assert_eq!(bench.atoms.rule_breaks(), []);
+    });
+}
