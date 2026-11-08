@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -37,9 +38,10 @@
 #include "esp_wifi.h"
 #include "esp_wifi_he.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/event_groups.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "link.h"
+#include "lwip/priv/tcpip_priv.h"
 #include "lwip/sockets.h"
 #include "lwip/stats.h"
 #include "nvs_flash.h"
@@ -47,14 +49,13 @@
 
 #if defined(OER_UDP_RX_FAST)
 #include "lwip/pbuf.h"
-#include "lwip/priv/tcpip_priv.h"
 #include "lwip/udp.h"
 #define VARIANT "fast"
 #else
 #define VARIANT "socket"
 #endif
 
-#define PROTOCOL_VERSION 2
+#define PROTOCOL_VERSION 3
 #define LINE_CAPACITY 192
 #define JOIN_TIMEOUT_MS 30000
 /* The load header (hil/services/load/src/header.rs), big-endian. */
@@ -71,17 +72,23 @@
 #define TASK_STACK 4096
 /* How long after its end a run's counting may take to confirm it stopped. */
 #define STOP_CONFIRM_MS 2000
+/* The run task samples lwIP's 16-bit counters this often and adds their
+ * differences up in 64 bits: far fewer than 2^16 datagrams arrive between
+ * two samples. */
+#define LWIP_SAMPLE_MS 100
+#define LINK_EVENTS 32
 
 static const char *TAG = "udp-rx";
 
-#define BIT_GOT_IP BIT0
-static EventGroupHandle_t s_events;
 static esp_netif_t *s_netif;
-static volatile bool s_joining;
-static volatile bool s_joined;
-static volatile uint32_t s_disconnects;
-static volatile int32_t s_last_reason;
 static bool s_started;
+/* The link's state: only the console task touches it. */
+static link_t s_link;
+/* Link events from the Wi-Fi and IP handlers to the console task, in the
+ * event loop's order; a handler that cannot post one raises the overflow,
+ * which the console takes as a lost event. */
+static QueueHandle_t s_link_events;
+static atomic_bool s_link_overflow;
 
 /* One run's count. Written only by its counter (the socket receiver task, or
  * lwIP's thread in the fast variant) while the run counts; read by the
@@ -95,14 +102,22 @@ typedef struct {
     int64_t first_us, last_us;
 } counts_t;
 
+/* lwIP's counters as its thread holds them (16 bits each). */
 typedef struct {
     STAT_COUNTER link_recv, link_drop, ip_recv, ip_drop, udp_recv, udp_drop, udp_memerr;
 } lwip_counts_t;
 
+/* lwIP's counters added up over a run, in 64 bits. */
+typedef struct {
+    uint64_t link_recv, link_drop, ip_recv, ip_drop, udp_recv, udp_drop, udp_memerr;
+} lwip_totals_t;
+
 /* The vendor's counters at one moment of a run. */
 typedef struct {
     int64_t at_us;
-    lwip_counts_t lwip;
+    lwip_totals_t lwip;
+    /* Every lwIP sample up to this moment was taken through lwIP's thread. */
+    bool lwip_ok;
     esp_test_rx_statistics_t rx;
     esp_err_t rx_error;
 } snapshot_t;
@@ -146,6 +161,11 @@ static esp_test_hw_rx_statistics_t s_hw;
 static esp_err_t s_hw_error;
 /* The run task's completions, each naming its run. */
 static QueueHandle_t s_completions;
+/* The run's lwIP sampling: set by the console before the run task starts,
+ * then the run task's alone. */
+static lwip_counts_t s_lwip_last;
+static lwip_totals_t s_lwip_totals;
+static bool s_lwip_ok;
 
 static void reply_error(const char *command, const char *reason)
 {
@@ -187,24 +207,84 @@ static bool parse_unsigned(const char *text, unsigned long maximum, unsigned lon
     return true;
 }
 
+/* Runs in the event loop task: post the event to the link's owner. */
+static void post_link_event(link_event_kind_t kind, int32_t reason)
+{
+    link_event_t event = { .kind = kind, .reason = reason };
+    if (xQueueSend(s_link_events, &event, 0) != pdTRUE) {
+        atomic_store(&s_link_overflow, true);
+    }
+}
+
 static void on_event(void *argument, esp_event_base_t base, int32_t id, void *data)
 {
     (void)argument;
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_CONNECTED) {
+        post_link_event(LINK_EVENT_CONNECTED, 0);
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         const wifi_event_sta_disconnected_t *event = data;
-        s_disconnects++;
-        s_last_reason = event != NULL ? (int32_t)event->reason : -1;
-        if (s_joined) {
-            /* The link of a run ended: reported, never rejoined here. */
-            s_joined = false;
-            printf("@LOST reason=%" PRId32 "\n", s_last_reason);
-            fflush(stdout);
-        } else if (s_joining) {
-            esp_wifi_connect();
-        }
+        post_link_event(LINK_EVENT_DISCONNECTED, event != NULL ? (int32_t)event->reason : -1);
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-        xEventGroupSetBits(s_events, BIT_GOT_IP);
+        post_link_event(LINK_EVENT_GOT_IP, 0);
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_LOST_IP) {
+        post_link_event(LINK_EVENT_LOST_IP, 0);
     }
+}
+
+static const char *link_state_name(link_state_t state)
+{
+    switch (state) {
+    case LINK_IDLE:
+        return "idle";
+    case LINK_JOINING:
+        return "joining";
+    case LINK_UP:
+        return "up";
+    case LINK_DOWN:
+        return "down";
+    case LINK_FAULTED:
+        return "faulted";
+    }
+    return "unknown";
+}
+
+/* The console's side of the link events (link.h). */
+static bool next_link_event(void *context, link_event_t *event)
+{
+    (void)context;
+    if (xQueueReceive(s_link_events, event, 0) == pdTRUE) {
+        return true;
+    }
+    if (atomic_exchange(&s_link_overflow, false)) {
+        event->kind = LINK_EVENT_OVERFLOW;
+        event->reason = 0;
+        return true;
+    }
+    return false;
+}
+
+/* The last reconnect the driver refused, for the JOIN refusal. */
+static esp_err_t s_connect_error = ESP_OK;
+
+static bool act_on_link(void *context, link_action_t action)
+{
+    (void)context;
+    if (action == LINK_ACT_RECONNECT) {
+        s_connect_error = esp_wifi_connect();
+        return s_connect_error == ESP_OK;
+    }
+    if (action == LINK_ACT_REPORT_LOST) {
+        printf("@LOST state=%s reason=%" PRId32 " disconnects=%" PRIu32 "\n",
+               link_state_name(s_link.state), s_link.last_reason, s_link.disconnects);
+        fflush(stdout);
+    }
+    return true;
+}
+
+/* Apply every pending link event. */
+static void drain_link(void)
+{
+    link_drain(&s_link, next_link_event, act_on_link, NULL);
 }
 
 static uint32_t be32(const uint8_t *bytes)
@@ -269,9 +349,15 @@ static void count(uint64_t sequence, size_t length, int64_t now)
     }
 }
 
-static void lwip_counts(lwip_counts_t *counts)
+typedef struct {
+    struct tcpip_api_call_data base;
+    lwip_counts_t counts;
+} lwip_read_t;
+
+/* Runs in lwIP's thread, the owner of its counters. */
+static err_t read_lwip(struct tcpip_api_call_data *data)
 {
-    /* Word reads of lwIP's own counters, which its thread writes. */
+    lwip_counts_t *counts = &((lwip_read_t *)data)->counts;
     counts->link_recv = lwip_stats.link.recv;
     counts->link_drop = lwip_stats.link.drop;
     counts->ip_recv = lwip_stats.ip.recv;
@@ -279,16 +365,53 @@ static void lwip_counts(lwip_counts_t *counts)
     counts->udp_recv = lwip_stats.udp.recv;
     counts->udp_drop = lwip_stats.udp.drop;
     counts->udp_memerr = lwip_stats.udp.memerr;
+    return ERR_OK;
 }
 
+/* lwIP's counters, read in lwIP's thread. */
+static bool lwip_sample(lwip_counts_t *counts)
+{
+    lwip_read_t read = { 0 };
+    if (tcpip_api_call(read_lwip, &read.base) != ERR_OK) {
+        return false;
+    }
+    *counts = read.counts;
+    return true;
+}
+
+/* Add what lwIP counted since the last sample to the run's totals. */
+static void lwip_advance(void)
+{
+    lwip_counts_t now;
+    if (!lwip_sample(&now)) {
+        s_lwip_ok = false;
+        return;
+    }
+    lwip_counts_t *last = &s_lwip_last;
+    lwip_totals_t *totals = &s_lwip_totals;
+    totals->link_recv += (STAT_COUNTER)(now.link_recv - last->link_recv);
+    totals->link_drop += (STAT_COUNTER)(now.link_drop - last->link_drop);
+    totals->ip_recv += (STAT_COUNTER)(now.ip_recv - last->ip_recv);
+    totals->ip_drop += (STAT_COUNTER)(now.ip_drop - last->ip_drop);
+    totals->udp_recv += (STAT_COUNTER)(now.udp_recv - last->udp_recv);
+    totals->udp_drop += (STAT_COUNTER)(now.udp_drop - last->udp_drop);
+    totals->udp_memerr += (STAT_COUNTER)(now.udp_memerr - last->udp_memerr);
+    *last = now;
+}
+
+/* The run's counters now; the run task takes it, after a final lwIP
+ * sample. */
 static void snapshot(snapshot_t *snap)
 {
+    lwip_advance();
     snap->at_us = esp_timer_get_time();
-    lwip_counts(&snap->lwip);
+    snap->lwip = s_lwip_totals;
+    snap->lwip_ok = s_lwip_ok;
     memset(&snap->rx, 0, sizeof(snap->rx));
     snap->rx_error = esp_wifi_get_rx_statistics(0, &snap->rx);
 }
 
+/* Wait for `at_us`, sampling lwIP's counters on the way. */
 static void wait_until(int64_t at_us)
 {
     for (;;) {
@@ -296,8 +419,10 @@ static void wait_until(int64_t at_us)
         if (remaining <= 0) {
             return;
         }
-        TickType_t ticks = pdMS_TO_TICKS(remaining / 1000);
+        int64_t step_ms = remaining / 1000 < LWIP_SAMPLE_MS ? remaining / 1000 : LWIP_SAMPLE_MS;
+        TickType_t ticks = pdMS_TO_TICKS(step_ms);
         vTaskDelay(ticks > 0 ? ticks : 1);
+        lwip_advance();
     }
 }
 
@@ -549,6 +674,42 @@ static bool take_completion(TickType_t ticks)
 
 /* `JOIN <channel> <ssid> <passphrase>`: join the run's WPA2 network HT40,
  * power save off, and wait for its DHCP address. */
+/* The joined link's facts, read while confirming the join. */
+typedef struct {
+    wifi_ap_record_t ap;
+    wifi_phy_mode_t phymode;
+    esp_netif_ip_info_t ip;
+    const char *failed;
+    esp_err_t error;
+} join_facts_t;
+
+static bool read_join_facts(void *context)
+{
+    join_facts_t *facts = context;
+    facts->failed = NULL;
+    if ((facts->error = esp_wifi_sta_get_ap_info(&facts->ap)) != ESP_OK) {
+        facts->failed = "get_ap_info";
+    } else if ((facts->error = esp_wifi_sta_get_negotiated_phymode(&facts->phymode)) != ESP_OK) {
+        facts->failed = "get_negotiated_phymode";
+    } else if ((facts->error = esp_netif_get_ip_info(s_netif, &facts->ip)) != ESP_OK) {
+        facts->failed = "get_ip_info";
+    } else if (facts->ip.ip.addr == 0) {
+        facts->failed = "get_ip_info";
+        facts->error = ESP_ERR_INVALID_STATE;
+    }
+    return facts->failed == NULL;
+}
+
+/* The JOIN refusal for a failed vendor call: the join is over. */
+static void join_failed(const char *call, esp_err_t error)
+{
+    link_fail(&s_link);
+    reply_esp_error("JOIN", call, error);
+}
+
+/* `JOIN <channel> <ssid> <passphrase>`: join the run's WPA2 network HT40,
+ * power save off, and wait for the link to be up: associated, addressed and
+ * read back, with no later event taking either. */
 static void command_join(char **argv, int argc)
 {
     unsigned long channel;
@@ -557,7 +718,8 @@ static void command_join(char **argv, int argc)
         reply_error("JOIN", "invalid");
         return;
     }
-    if (s_started) {
+    drain_link();
+    if (s_started || !link_begin_join(&s_link)) {
         reply_error("JOIN", "joined-before");
         return;
     }
@@ -570,57 +732,81 @@ static void command_join(char **argv, int argc)
     esp_err_t error = esp_wifi_set_config(WIFI_IF_STA, &config);
     memset(&config, 0, sizeof(config));
     if (error != ESP_OK) {
-        reply_esp_error("JOIN", "set_config", error);
+        join_failed("set_config", error);
         return;
     }
     if ((error = esp_wifi_start()) != ESP_OK) {
-        reply_esp_error("JOIN", "start", error);
+        join_failed("start", error);
         return;
     }
     s_started = true;
     /* HT only, as the open station: the access point runs HE off. */
     if ((error = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G |
                                                         WIFI_PROTOCOL_11N)) != ESP_OK) {
-        reply_esp_error("JOIN", "set_protocol", error);
+        join_failed("set_protocol", error);
         return;
     }
     if ((error = esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW40)) != ESP_OK) {
-        reply_esp_error("JOIN", "set_bandwidth", error);
+        join_failed("set_bandwidth", error);
         return;
     }
     if ((error = esp_wifi_set_ps(WIFI_PS_NONE)) != ESP_OK) {
-        reply_esp_error("JOIN", "set_ps", error);
+        join_failed("set_ps", error);
         return;
     }
     if ((error = esp_wifi_enable_rx_statistics(true, false)) != ESP_OK) {
-        reply_esp_error("JOIN", "enable_rx_statistics", error);
+        join_failed("enable_rx_statistics", error);
         return;
     }
-    s_joining = true;
     if ((error = esp_wifi_connect()) != ESP_OK) {
-        s_joining = false;
-        reply_esp_error("JOIN", "connect", error);
+        join_failed("connect", error);
         return;
     }
-    EventBits_t bits = xEventGroupWaitBits(s_events, BIT_GOT_IP, pdTRUE, pdTRUE,
-                                           pdMS_TO_TICKS(JOIN_TIMEOUT_MS));
-    s_joining = false;
-    if (!(bits & BIT_GOT_IP)) {
-        printf("@ERR JOIN timeout disconnects=%" PRIu32 " reason=%" PRId32 "\n", s_disconnects,
-               s_last_reason);
-        fflush(stdout);
-        return;
+    int64_t deadline = esp_timer_get_time() + (int64_t)JOIN_TIMEOUT_MS * 1000;
+    join_facts_t facts = { 0 };
+    for (;;) {
+        int64_t remaining_ms = (deadline - esp_timer_get_time()) / 1000;
+        if (remaining_ms <= 0) {
+            link_fail(&s_link);
+            printf("@ERR JOIN timeout disconnects=%" PRIu32 " reason=%" PRId32 "\n",
+                   s_link.disconnects, s_link.last_reason);
+            fflush(stdout);
+            return;
+        }
+        link_event_t event;
+        if (xQueueReceive(s_link_events, &event, pdMS_TO_TICKS(remaining_ms > 100 ? 100
+                                                                                  : remaining_ms)) ==
+            pdTRUE) {
+            link_action_t action = link_apply(&s_link, &event);
+            if (action != LINK_ACT_NONE && !act_on_link(NULL, action)) {
+                join_failed("connect", s_connect_error);
+                return;
+            }
+        }
+        if (atomic_load(&s_link_overflow) || link_candidate(&s_link)) {
+            link_confirm_t confirmed =
+                link_confirm(&s_link, next_link_event, act_on_link, read_join_facts, &facts);
+            if (confirmed == LINK_CONFIRM_UP) {
+                break;
+            }
+            if (confirmed == LINK_CONFIRM_FAULTED) {
+                reply_error("JOIN", "events-lost");
+                return;
+            }
+            if (confirmed == LINK_CONFIRM_FAILED) {
+                if (facts.failed != NULL) {
+                    reply_esp_error("JOIN", facts.failed, facts.error);
+                } else {
+                    reply_esp_error("JOIN", "connect", s_connect_error);
+                }
+                return;
+            }
+        }
     }
-    s_joined = true;
-    wifi_ap_record_t ap = { 0 };
-    wifi_phy_mode_t phymode = 0;
-    esp_netif_ip_info_t ip = { 0 };
-    esp_wifi_sta_get_ap_info(&ap);
-    esp_wifi_sta_get_negotiated_phymode(&phymode);
-    esp_netif_get_ip_info(s_netif, &ip);
     printf("@JOINED channel=%u second=%d rssi=%d phymode=%d ip=" IPSTR " disconnects=%" PRIu32
            "\n",
-           ap.primary, (int)ap.second, ap.rssi, (int)phymode, IP2STR(&ip.ip), s_disconnects);
+           facts.ap.primary, (int)facts.ap.second, facts.ap.rssi, (int)facts.phymode,
+           IP2STR(&facts.ip.ip), s_link.disconnects);
     reply_ok("JOIN");
 }
 
@@ -638,7 +824,8 @@ static void command_rx(char **argv, int argc)
         reply_error("RX", "invalid");
         return;
     }
-    if (!s_joined) {
+    drain_link();
+    if (s_link.state != LINK_UP) {
         reply_error("RX", "no-link");
         return;
     }
@@ -662,6 +849,12 @@ static void command_rx(char **argv, int argc)
     s_run = (uint32_t)run;
     esp_wifi_clr_rx_statistics(8);
     esp_test_clr_hw_statistics();
+    memset(&s_lwip_totals, 0, sizeof(s_lwip_totals));
+    if (!lwip_sample(&s_lwip_last)) {
+        reply_error("RX", "lwip");
+        return;
+    }
+    s_lwip_ok = true;
     snapshot(&s_snaps[SNAP_RUN_START]);
     s_start_us = s_snaps[SNAP_RUN_START].at_us;
     s_window_start_us = s_start_us + (int64_t)delay * 1000;
@@ -683,17 +876,19 @@ static void command_rx(char **argv, int argc)
     reply_ok("RX");
 }
 
-static void print_lwip(const char *span, const lwip_counts_t *from, const lwip_counts_t *to)
+static void print_lwip(const char *span, const snapshot_t *from, const snapshot_t *to)
 {
-    printf("@LWIP run=%" PRIu32 " span=%s link_recv=%u link_drop=%u ip_recv=%u ip_drop=%u "
-           "udp_recv=%u udp_drop=%u udp_memerr=%u\n",
-           s_run, span, (unsigned)(STAT_COUNTER)(to->link_recv - from->link_recv),
-           (unsigned)(STAT_COUNTER)(to->link_drop - from->link_drop),
-           (unsigned)(STAT_COUNTER)(to->ip_recv - from->ip_recv),
-           (unsigned)(STAT_COUNTER)(to->ip_drop - from->ip_drop),
-           (unsigned)(STAT_COUNTER)(to->udp_recv - from->udp_recv),
-           (unsigned)(STAT_COUNTER)(to->udp_drop - from->udp_drop),
-           (unsigned)(STAT_COUNTER)(to->udp_memerr - from->udp_memerr));
+    if (!from->lwip_ok || !to->lwip_ok) {
+        printf("@LWIP run=%" PRIu32 " span=%s error=sample\n", s_run, span);
+        return;
+    }
+    const lwip_totals_t *a = &from->lwip, *b = &to->lwip;
+    printf("@LWIP run=%" PRIu32 " span=%s link_recv=%" PRIu64 " link_drop=%" PRIu64
+           " ip_recv=%" PRIu64 " ip_drop=%" PRIu64 " udp_recv=%" PRIu64 " udp_drop=%" PRIu64
+           " udp_memerr=%" PRIu64 "\n",
+           s_run, span, b->link_recv - a->link_recv, b->link_drop - a->link_drop,
+           b->ip_recv - a->ip_recv, b->ip_drop - a->ip_drop, b->udp_recv - a->udp_recv,
+           b->udp_drop - a->udp_drop, b->udp_memerr - a->udp_memerr);
 }
 
 static void print_wifi_rx(const char *span, const snapshot_t *from, const snapshot_t *to)
@@ -791,17 +986,23 @@ static void command_report(char **argv, int argc)
            s_run, s_snaps[SNAP_WINDOW_START].at_us - s_start_us,
            s_snaps[SNAP_WINDOW_END].at_us - s_start_us,
            s_snaps[SNAP_RUN_END].at_us - s_start_us);
-    print_lwip("window", &s_snaps[SNAP_WINDOW_START].lwip, &s_snaps[SNAP_WINDOW_END].lwip);
-    print_lwip("run", &s_snaps[SNAP_RUN_START].lwip, &s_snaps[SNAP_RUN_END].lwip);
+    print_lwip("window", &s_snaps[SNAP_WINDOW_START], &s_snaps[SNAP_WINDOW_END]);
+    print_lwip("run", &s_snaps[SNAP_RUN_START], &s_snaps[SNAP_RUN_END]);
     print_wifi_rx("window", &s_snaps[SNAP_WINDOW_START], &s_snaps[SNAP_WINDOW_END]);
     print_wifi_rx("run", &s_snaps[SNAP_RUN_START], &s_snaps[SNAP_RUN_END]);
     print_hw_statistics();
+    drain_link();
     wifi_ap_record_t ap = { 0 };
-    if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
-        printf("@LINK run=%" PRIu32 " channel=%u second=%d rssi=%d disconnects=%" PRIu32 "\n",
-               s_run, ap.primary, (int)ap.second, ap.rssi, s_disconnects);
+    esp_err_t ap_error = s_link.state == LINK_UP ? esp_wifi_sta_get_ap_info(&ap) : ESP_OK;
+    if (s_link.state != LINK_UP) {
+        printf("@LINK run=%" PRIu32 " state=%s disconnects=%" PRIu32 "\n", s_run,
+               link_state_name(s_link.state), s_link.disconnects);
+    } else if (ap_error != ESP_OK) {
+        printf("@LINK run=%" PRIu32 " state=up error=0x%x\n", s_run, (unsigned)ap_error);
     } else {
-        printf("@LINK run=%" PRIu32 " down disconnects=%" PRIu32 "\n", s_run, s_disconnects);
+        printf("@LINK run=%" PRIu32 " state=up channel=%u second=%d rssi=%d disconnects=%" PRIu32
+               "\n",
+               s_run, ap.primary, (int)ap.second, ap.rssi, s_link.disconnects);
     }
     reply_ok("REPORT");
 }
@@ -860,7 +1061,9 @@ void app_main(void)
         error = nvs_flash_init();
     }
     ESP_ERROR_CHECK(error);
-    s_events = xEventGroupCreate();
+    link_init(&s_link);
+    s_link_events = xQueueCreate(LINK_EVENTS, sizeof(link_event_t));
+    ESP_ERROR_CHECK(s_link_events != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     s_completions = xQueueCreate(1, sizeof(completion_t));
     ESP_ERROR_CHECK(s_completions != NULL ? ESP_OK : ESP_ERR_NO_MEM);
 #if !defined(OER_UDP_RX_FAST)
@@ -878,6 +1081,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_set_country_code("DE", false));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, on_event, NULL));
     ESP_LOGW(TAG, "ready; the radio starts on JOIN");
     print_ready();
     fflush(stdout);
@@ -885,6 +1089,7 @@ void app_main(void)
     static char line[LINE_CAPACITY];
     size_t length = 0;
     for (;;) {
+        drain_link();
         int character = getchar();
         if (character == EOF) {
             vTaskDelay(1);

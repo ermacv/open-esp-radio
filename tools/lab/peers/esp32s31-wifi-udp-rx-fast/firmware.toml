@@ -4,3 +4,11 @@
 image = "wifi-udp-rx-fast-peer"
 chip = "esp32s31"
 pins = "esp32s31"
+# Its build reads the socket variant's source and configuration: they take
+# part in this entry's build recipe.
+shared = [
+    "../esp32s31-wifi-udp-rx/main/link.c",
+    "../esp32s31-wifi-udp-rx/main/link.h",
+    "../esp32s31-wifi-udp-rx/main/udp_rx.c",
+    "../esp32s31-wifi-udp-rx/sdkconfig.defaults",
+]

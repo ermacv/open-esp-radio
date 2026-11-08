@@ -8,7 +8,10 @@
 //! images that do not boot staged. The manifest names the image (its name in
 //! the board journal), the target chip and the chip whose `artifacts.toml`
 //! pins the ESP-IDF; every entry builds against that one pin through
-//! `oer_tools_image_esp_idf`.
+//! `oer_tools_image_esp_idf`. A project that builds from files outside its
+//! directory (another entry's source or configuration) names them in its
+//! manifest's `shared`, so they take part in its build recipe: a change to
+//! one makes every entry that reads it not current.
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -31,6 +34,10 @@ struct Manifest {
     /// Why the image must not be flashed now; flashing it is refused.
     #[serde(default)]
     hold: Option<String>,
+    /// Files outside the project directory its build reads, relative to
+    /// it: they take part in its build recipe.
+    #[serde(default)]
+    shared: Vec<PathBuf>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -42,6 +49,8 @@ pub struct Entry {
     pub hold: Option<String>,
     /// Project directory, relative to the repository root.
     pub directory: PathBuf,
+    /// Files outside the project directory its build reads, relative to it.
+    pub shared: Vec<PathBuf>,
 }
 
 impl Entry {
@@ -55,6 +64,7 @@ impl Entry {
                 .unwrap_or_default(),
             source: root.join(&self.directory),
             chip: self.chip.clone(),
+            shared: self.shared.clone(),
         }
     }
 }
@@ -85,6 +95,7 @@ pub fn entries(root: &Path) -> Result<Vec<Entry>> {
             pins: manifest.pins,
             hold: manifest.hold,
             directory: directory.strip_prefix(root)?.to_owned(),
+            shared: manifest.shared,
         });
     }
     entries.sort_by(|a, b| a.image.cmp(&b.image));
@@ -293,6 +304,80 @@ mod tests {
         std::fs::write(directory.join(MANIFEST), manifest).unwrap();
     }
 
+    /// Record a build of `entry` that followed its current recipe.
+    fn record_current_build(root: &Path, entry: &Entry) {
+        let project = entry.project(root);
+        let output = idf::output(root, &project);
+        std::fs::create_dir_all(&output).unwrap();
+        let recipe = idf::recipe(root, &entry.pins, &project).unwrap();
+        let build: idf::Build = serde_json::from_value(serde_json::json!({
+            "chip": entry.chip,
+            "project": project.name,
+            "idf_revision": "aa",
+            "overrides": [],
+            "application": "",
+            "application_sha256": "",
+            "elf": "",
+            "recipe": recipe,
+        }))
+        .unwrap();
+        std::fs::write(
+            output.join("build.json"),
+            serde_json::to_vec(&build).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_shared_file_makes_every_entry_that_reads_it_not_current_when_it_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path();
+        let pins = root.join("chips/chip-a/vendor/artifacts.toml");
+        std::fs::create_dir_all(pins.parent().unwrap()).unwrap();
+        std::fs::write(
+            &pins,
+            "schema = 1\nartifact = []\n\n[[source]]\nid = \"esp-idf\"\nkind = \"git\"\n\
+             repository = \"https://example.invalid/esp-idf\"\nrevision = \"aa\"\n",
+        )
+        .unwrap();
+        project(
+            root,
+            "tools/lab/peers/socket",
+            "image = \"socket-peer\"\nchip = \"chip-a\"\npins = \"chip-a\"\n",
+        );
+        project(
+            root,
+            "tools/lab/peers/fast",
+            "image = \"fast-peer\"\nchip = \"chip-a\"\npins = \"chip-a\"\n\
+             shared = [\"../socket/main/peer.c\", \"../socket/sdkconfig.defaults\"]\n",
+        );
+        let socket = root.join("tools/lab/peers/socket");
+        std::fs::create_dir_all(socket.join("main")).unwrap();
+        std::fs::write(socket.join("main/peer.c"), "#define PROTOCOL_VERSION 2\n").unwrap();
+        std::fs::write(socket.join("sdkconfig.defaults"), "CONFIG_A=y\n").unwrap();
+        let entries = entries(root).unwrap();
+        for entry in &entries {
+            record_current_build(root, entry);
+        }
+        let current = |image: &str| super::current(root, image).is_ok();
+        assert!(current("socket-peer") && current("fast-peer"));
+        for (file, changed) in [
+            ("main/peer.c", "#define PROTOCOL_VERSION 3\n"),
+            ("sdkconfig.defaults", "CONFIG_A=n\n"),
+        ] {
+            let path = socket.join(file);
+            let before = std::fs::read(&path).unwrap();
+            std::fs::write(&path, changed).unwrap();
+            assert!(!current("socket-peer"), "{file} changed: socket current");
+            assert!(!current("fast-peer"), "{file} changed: fast current");
+            std::fs::write(&path, before).unwrap();
+            assert!(current("socket-peer") && current("fast-peer"));
+        }
+        std::fs::remove_file(socket.join("main/peer.c")).unwrap();
+        let error = super::current(root, "fast-peer").err().unwrap().to_string();
+        assert!(error.contains("shared file"), "{error}");
+    }
+
     #[test]
     fn peers_and_vendor_references_form_one_catalog() {
         let root = tempfile::tempdir().unwrap();
@@ -317,6 +402,7 @@ mod tests {
                     pins: "chip-a".into(),
                     hold: None,
                     directory: "tools/lab/peers/chip-b-ieee802154".into(),
+                    shared: vec![],
                 },
                 Entry {
                     image: "vendor-calibration".into(),
@@ -324,6 +410,7 @@ mod tests {
                     pins: "chip-a".into(),
                     hold: None,
                     directory: "tools/vendor/references/chip-a/calibration".into(),
+                    shared: vec![],
                 },
             ]
         );
@@ -361,6 +448,7 @@ mod tests {
             pins: entry.pins.clone(),
             hold: None,
             directory: entry.directory.clone(),
+            shared: entry.shared.clone(),
         };
         let build = idf::output(root, &entry.project(root)).join("build");
         std::fs::create_dir_all(&build).unwrap();

@@ -43,7 +43,9 @@ use oer_tools_lab_client::{
     protocol::{FlashVia, LeaseRequest, Operation},
 };
 use oer_tools_lab_model::peer_line::{self, Line};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
+
+mod report;
 
 use crate::{
     DELAY_MS, DEVICE_PORT, DRAIN_MS, Mode, Offer, PROBE_PERIOD, ROUTER_ADDRESS, channel, generated,
@@ -54,7 +56,7 @@ use crate::{
 /// Selects the vendor receiver and its variant.
 pub const VARIANT_ENV: &str = "OER_WIFI_LOAD_VENDOR";
 /// The peer's line protocol.
-const PROTOCOL: u32 = 2;
+const PROTOCOL: u32 = 3;
 /// How long the peer's boot may take to say `@READY` after the reset.
 const READY_TIMEOUT: Duration = Duration::from_secs(10);
 /// The peer's own join wait is 30 s.
@@ -375,15 +377,11 @@ fn leased(
             forward_host: Some(host),
         },
     )?;
-    let joined = peer.command(&format!("JOIN {channel} {ssid} {passphrase}"), JOIN_TIMEOUT)?;
-    let joined = joined
-        .iter()
-        .find(|report| report.name == "JOINED")
-        .ok_or("the peer joined without its JOINED report")?;
-    let device: Ipv4Addr = joined
-        .field("ip")
-        .and_then(|ip| ip.parse().ok())
-        .ok_or("the peer's JOINED report names no address")?;
+    let joined = report::joined(
+        &peer.command(&format!("JOIN {channel} {ssid} {passphrase}"), JOIN_TIMEOUT)?,
+        channel,
+    )?;
+    let device = joined.address;
     let route = host_route(device).map_err(failure)?;
     if route.source != host {
         return Err(format!(
@@ -400,7 +398,13 @@ fn leased(
             "variant": plan.variant.name(),
             "host": host.to_string(),
             "device": device.to_string(),
-            "joined": fields(joined),
+            "joined": {
+                "channel": joined.channel,
+                "second": joined.second,
+                "rssi": joined.rssi,
+                "phymode": joined.phymode,
+                "disconnects": joined.disconnects,
+            },
         }),
     );
     if plan.rx {
@@ -411,7 +415,7 @@ fn leased(
                 &mut peer,
                 plan,
                 &address,
-                device,
+                &joined,
                 host,
                 &offer,
                 measurements,
@@ -422,115 +426,26 @@ fn leased(
     Ok(())
 }
 
-/// The value of `key` in `report`, which it must hold.
-fn required<T: std::str::FromStr>(report: &peer_line::Report, key: &str) -> Result<T, String> {
-    report
-        .parsed(key)
-        .ok_or_else(|| format!("the peer's {} report holds no valid `{key}`", report.name))
-}
-
-/// The report `name` (of `span`, when given) among `reports`, which must
-/// be of `run` and hold each of `keys`.
-fn report_of<'a>(
-    reports: &'a [peer_line::Report],
-    run: u32,
-    name: &str,
-    span: Option<&str>,
-    keys: &[&str],
-) -> Result<&'a peer_line::Report, String> {
-    let what = span.map_or_else(|| name.to_owned(), |span| format!("{name} span={span}"));
-    let report = reports
-        .iter()
-        .find(|report| {
-            report.name == name && span.is_none_or(|span| report.field("span") == Some(span))
-        })
-        .ok_or_else(|| format!("the peer's report holds no {what} line"))?;
-    let of: u32 = required(report, "run")?;
-    if of != run {
-        return Err(format!("the peer's {what} line is of run {of}, not {run}"));
-    }
-    if let Some(error) = report.field("error") {
-        return Err(format!("the peer's {what} line reports error {error}"));
-    }
-    for key in keys {
-        required::<i64>(report, key).map_err(|error| format!("{error} ({what})"))?;
-    }
-    Ok(report)
-}
-
-/// The fields the comparison reads of each report line.
-const RX_KEYS: [&str; 15] = [
-    "datagrams",
-    "bytes",
-    "window_datagrams",
-    "window_bytes",
-    "lost",
-    "reordered",
-    "duplicates",
-    "untracked",
-    "highest",
-    "foreign",
-    "echoed",
-    "echo_refused",
-    "receive_errors",
-    "window_us",
-    "last_us",
-];
-const SPAN_KEYS: [&str; 3] = ["window_from_us", "window_to_us", "run_to_us"];
-const LWIP_KEYS: [&str; 4] = ["ip_recv", "ip_drop", "udp_recv", "udp_drop"];
-const WIFI_RX_KEYS: [&str; 3] = ["ht", "ht_noeb", "ht_retry"];
-const HW_RX_KEYS: [&str; 4] = ["rx_fcs_err", "rx_mpdu", "rx_buf_fullcnt", "rx_fifo_ovfcnt"];
-
-/// The peer's report of `run`: every mandatory line and field, all of
-/// `run`.
-struct Reported<'a> {
-    rx: &'a peer_line::Report,
-    span: &'a peer_line::Report,
-    lwip_window: &'a peer_line::Report,
-    lwip_run: &'a peer_line::Report,
-    wifi_rx_window: &'a peer_line::Report,
-    wifi_rx_run: &'a peer_line::Report,
-    hw_rx_window: &'a peer_line::Report,
-    link: &'a peer_line::Report,
-}
-
-impl<'a> Reported<'a> {
-    fn of(reports: &'a [peer_line::Report], run: u32) -> Result<Self, String> {
-        Ok(Self {
-            rx: report_of(reports, run, "RX", None, &RX_KEYS)?,
-            span: report_of(reports, run, "SPAN", None, &SPAN_KEYS)?,
-            lwip_window: report_of(reports, run, "LWIP", Some("window"), &LWIP_KEYS)?,
-            lwip_run: report_of(reports, run, "LWIP", Some("run"), &LWIP_KEYS)?,
-            wifi_rx_window: report_of(reports, run, "WIFIRX", Some("window"), &WIFI_RX_KEYS)?,
-            wifi_rx_run: report_of(reports, run, "WIFIRX", Some("run"), &WIFI_RX_KEYS)?,
-            hw_rx_window: report_of(reports, run, "HWRX", Some("window"), &HW_RX_KEYS)?,
-            link: report_of(reports, run, "LINK", None, &[])?,
-        })
-    }
-}
-
 /// The access point's MPDUs to the station against what the peer's driver
 /// counted over the same span (the run's); what neither closes stays as
-/// `unclosed`.
-fn balance(router: &Value, reported: &Reported<'_>) -> Result<Value, String> {
-    let ht: u64 = required(reported.wifi_rx_run, "ht")?;
-    let no_buffer: u64 = required(reported.wifi_rx_run, "ht_noeb")?;
-    let udp: u64 = required(reported.lwip_run, "udp_recv")?;
-    let counted: u64 = required(reported.rx, "datagrams")?;
+/// `unclosed`, with no place of loss named.
+fn balance(router: &Value, report: &report::Report) -> Value {
+    let run = &report.wifi_rx_run;
     let ap = router.pointer("/to_device/packets").and_then(Value::as_u64);
     let failed = router.pointer("/to_device/failed").and_then(Value::as_u64);
-    Ok(json!({
+    let difference = ap.map(|ap| i128::from(ap) - i128::from(run.ht));
+    json!({
         "span": "run: the access point's readings before the RX command and after the drain; the peer's counters from its RX to its drain's end",
         "ap_packets": ap,
         "ap_failed": failed,
-        "driver_ht_mpdus": ht,
-        "ap_minus_driver": ap.map(|ap| i128::from(ap) - i128::from(ht)),
-        "driver_no_buffer": no_buffer,
-        "driver_passed": ht.saturating_sub(no_buffer),
-        "ip_udp_received": udp,
-        "load_counted": counted,
-        "unclosed": ap.map(|ap| i128::from(ap) - i128::from(ht)).filter(|difference| *difference != 0),
-    }))
+        "driver_ht_mpdus": run.ht,
+        "ap_minus_driver": difference,
+        "driver_no_buffer": run.ht_noeb,
+        "driver_passed": run.ht - run.ht_noeb,
+        "ip_udp_received": report.lwip_run.udp_recv,
+        "load_counted": report.rx.datagrams,
+        "unclosed": difference.filter(|difference| *difference != 0),
+    })
 }
 
 /// One RX level against the peer, as [`crate::level`] runs it against the
@@ -541,7 +456,7 @@ fn level(
     peer: &mut Peer,
     plan: &Plan,
     station: &str,
-    device: Ipv4Addr,
+    joined: &report::Joined,
     host: Ipv4Addr,
     offer: &Offer,
     measurements: &mut Vec<(String, Value)>,
@@ -567,7 +482,7 @@ fn level(
         &format!("RX {run} {DEVICE_PORT} {DELAY_MS} {window} {DRAIN_MS}"),
         COMMAND_TIMEOUT,
     )?;
-    let target = SocketAddrV4::new(device, DEVICE_PORT);
+    let target = SocketAddrV4::new(joined.address, DEVICE_PORT);
     let stop = AtomicBool::new(false);
     let (sent, probes) = std::thread::scope(|scope| {
         std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)));
@@ -596,14 +511,28 @@ fn level(
     let after = read(client);
     let span = since.elapsed();
     let reports = peer.command(&format!("REPORT {run}"), REPORT_TIMEOUT)?;
-    let reported = Reported::of(&reports, run)?;
+    let reported = report::decode(
+        &reports,
+        &report::Expect {
+            run,
+            delay_ms: DELAY_MS,
+            window_ms: window,
+            drain_ms: DRAIN_MS,
+            channel: joined.channel,
+            disconnects: joined.disconnects,
+        },
+    )?;
     let dump = peer.dump()?;
     let mut received = endpoint.close();
     received.echoes.sent = probes;
-    let rx = reported.rx;
-    let window_s = required::<u64>(rx, "window_us")? as f64 / 1e6;
-    let datagrams: u64 = required(rx, "datagrams")?;
+    let rx = &reported.rx;
+    let window_s = rx.window_us as f64 / 1e6;
     let router = link::router_window(&before, &after, span);
+    let mut vendor = reported.json();
+    if let Some(object) = vendor.as_object_mut() {
+        object.insert("balance".to_owned(), balance(&router, &reported));
+        object.insert("dump_after_drain_since_boot".to_owned(), dump.into());
+    }
     let value = json!({
         "target": "vendor",
         "image": plan.variant.image(),
@@ -618,60 +547,22 @@ fn level(
             "host_sent_mbps": mbps(sent.bytes, sent.elapsed.as_secs_f64()),
             "host_sent_datagrams": sent.datagrams,
             "host_send_failed": sent.failed,
-            "device_received_mbps": mbps(required(rx, "window_bytes")?, window_s),
-            "device_received_datagrams": datagrams,
-            "device_received_in_window": required::<u64>(rx, "window_datagrams")?,
-            "lost": sent.datagrams.saturating_sub(datagrams),
-            "lost_percent": percent(sent.datagrams.saturating_sub(datagrams), sent.datagrams),
-            "lost_below_highest": required::<u64>(rx, "lost")?,
-            "reordered": required::<u64>(rx, "reordered")?,
-            "duplicates": required::<u64>(rx, "duplicates")?,
-            "untracked": required::<u64>(rx, "untracked")?,
-            "foreign": required::<u64>(rx, "foreign")?,
+            "device_received_mbps": mbps(rx.window_bytes, window_s),
+            "device_received_datagrams": rx.datagrams,
+            "device_received_in_window": rx.window_datagrams,
+            "lost": sent.datagrams.saturating_sub(rx.datagrams),
+            "lost_percent": percent(sent.datagrams.saturating_sub(rx.datagrams), sent.datagrams),
+            "lost_below_highest": rx.lost,
+            "reordered": rx.reordered,
+            "duplicates": rx.duplicates,
+            "untracked": rx.untracked,
+            "foreign": rx.foreign,
         },
         "link": { "router": router },
-        "vendor": {
-            "rx": fields(rx),
-            "span": fields(reported.span),
-            "window": {
-                "lwip": fields(reported.lwip_window),
-                "wifi_rx": fields(reported.wifi_rx_window),
-                "hw_rx": fields(reported.hw_rx_window),
-            },
-            "run": {
-                "lwip": fields(reported.lwip_run),
-                "wifi_rx": fields(reported.wifi_rx_run),
-            },
-            "balance": balance(&router, &reported)?,
-            "link": fields(reported.link),
-            "dump_after_drain_since_boot": dump,
-        },
+        "vendor": vendor,
     });
     measure(measurements, format!("vendor {}", offer.name), value);
     Ok(())
-}
-
-/// A report line's `key=value` fields, numbers as numbers, and its
-/// positional fields in `positional`.
-fn fields(report: &peer_line::Report) -> Value {
-    let mut object = Map::new();
-    let mut positional = Vec::new();
-    for field in &report.fields {
-        match field.split_once('=') {
-            Some((key, value)) => {
-                let value = value
-                    .parse::<i64>()
-                    .map(Value::from)
-                    .unwrap_or_else(|_| Value::from(value));
-                object.insert(key.to_owned(), value);
-            }
-            None => positional.push(Value::from(field.as_str())),
-        }
-    }
-    if !positional.is_empty() {
-        object.insert("positional".to_owned(), positional.into());
-    }
-    object.into()
 }
 
 fn measure(measurements: &mut Vec<(String, Value)>, name: impl Into<String>, value: Value) {
@@ -954,7 +845,7 @@ mod tests {
         let (mut peer, _) = console(
             &[
                 "ESP-ROM:esp32s31",
-                "@READY protocol=2 target=esp32s31 app=wifi-udp-rx variant=fast",
+                "@READY protocol=3 target=esp32s31 app=wifi-udp-rx variant=fast",
                 "@ADDR 02:00:00:00:00:01",
             ],
             &[],
@@ -963,8 +854,8 @@ mod tests {
         assert_eq!(ready[1].positional(0), Some("02:00:00:00:00:01"));
         for other in [
             "@READY protocol=2 target=esp32s31",
-            "@READY protocol=1 target=esp32s31 app=wifi-udp-rx variant=fast",
-            "@READY protocol=2 target=esp32s31 app=wifi-udp-rx variant=socket",
+            "@READY protocol=2 target=esp32s31 app=wifi-udp-rx variant=fast",
+            "@READY protocol=3 target=esp32s31 app=wifi-udp-rx variant=socket",
         ] {
             let (mut peer, _) = console(&[other, "@ADDR 02:00:00:00:00:01"], &[]);
             assert!(
@@ -977,121 +868,95 @@ mod tests {
     }
 
     #[test]
-    fn report_fields_keep_numbers_as_numbers() {
-        let Some(Line::Report(report)) =
-            peer_line::parse("@LINK channel=13 second=2 rssi=-41 state=up down")
-        else {
-            panic!("a report line");
-        };
-        assert_eq!(
-            fields(&report),
-            json!({
-                "channel": 13,
-                "second": 2,
-                "rssi": -41,
-                "state": "up",
-                "positional": ["down"],
-            })
-        );
-    }
-
-    /// A whole report of run 7, each line as the peer prints it.
-    const REPORT: [&str; 9] = [
-        "@RX run=7 datagrams=40 bytes=58880 window_datagrams=39 window_bytes=57408 lost=2 reordered=0 duplicates=0 untracked=0 highest=41 foreign=0 echoed=5 echo_refused=0 receive_errors=0 first_us=300100 last_us=5299000 window_us=5000000",
-        "@SPAN run=7 window_from_us=300000 window_to_us=5300000 run_to_us=5800000",
-        "@LWIP run=7 span=window link_recv=0 link_drop=0 ip_recv=44 ip_drop=0 udp_recv=44 udp_drop=0 udp_memerr=0",
-        "@LWIP run=7 span=run link_recv=0 link_drop=0 ip_recv=45 ip_drop=0 udp_recv=45 udp_drop=0 udp_memerr=0",
-        "@WIFIRX run=7 span=window tid=0 ht=44 ht_noeb=0 ht_retry=1",
-        "@WIFIRX run=7 span=run tid=0 ht=45 ht_noeb=0 ht_retry=1",
-        "@HWRX run=7 span=window rx_fcs_err=3 rx_mpdu=50 rx_buf_fullcnt=0 rx_fifo_ovfcnt=0",
-        "@LINK run=7 channel=13 second=2 rssi=-30 disconnects=0",
-        "@OK REPORT",
-    ];
-
-    fn parsed(lines: &[&str]) -> Vec<peer_line::Report> {
-        lines
-            .iter()
-            .filter_map(|line| match peer_line::parse(line) {
-                Some(Line::Report(report)) => Some(report),
-                _ => None,
-            })
-            .collect()
-    }
-
-    #[test]
-    fn a_whole_report_of_the_run_is_taken() {
-        let reports = parsed(&REPORT);
-        let reported = Reported::of(&reports, 7).unwrap();
-        assert_eq!(required::<u64>(reported.rx, "datagrams").unwrap(), 40);
-        assert_eq!(reported.wifi_rx_run.field("ht"), Some("45"));
-        assert_eq!(reported.lwip_window.field("udp_recv"), Some("44"));
-    }
-
-    #[test]
-    fn a_report_of_another_run_is_an_error() {
-        let stale = REPORT.map(|line| line.replace("run=7", "run=6"));
-        let stale = stale.iter().map(String::as_str).collect::<Vec<_>>();
-        let reports = parsed(&stale);
-        let error = Reported::of(&reports, 7).err().unwrap();
-        assert!(error.contains("of run 6, not 7"), "{error}");
-        // One stale line among the run's own is enough.
-        let mut mixed = REPORT.to_vec();
-        let stale_span = "@SPAN run=6 window_from_us=1 window_to_us=2 run_to_us=3";
-        mixed[1] = stale_span;
-        let error = Reported::of(&parsed(&mixed), 7).err().unwrap();
-        assert!(error.contains("SPAN line is of run 6"), "{error}");
-    }
-
-    #[test]
-    fn a_missing_or_broken_mandatory_field_is_an_error_not_a_zero() {
-        for (line, missing) in [
-            (0, "datagrams=40 "),
-            (0, "window_us=5000000"),
-            (4, "ht_noeb=0 "),
-            (3, "udp_recv=45 "),
-            (6, "rx_fcs_err=3 "),
-        ] {
-            let mut lines = REPORT.map(str::to_owned);
-            lines[line] = lines[line].replace(missing, "");
-            let lines = lines.iter().map(String::as_str).collect::<Vec<_>>();
-            let error = Reported::of(&parsed(&lines), 7).err();
-            assert!(error.is_some(), "without `{missing}`");
-        }
-        let mut lines = REPORT.map(str::to_owned);
-        lines[0] = lines[0].replace("datagrams=40", "datagrams=4x");
-        let lines = lines.iter().map(String::as_str).collect::<Vec<_>>();
-        assert!(Reported::of(&parsed(&lines), 7).is_err());
-        // A line the peer could not fill is an error too.
-        let mut lines = REPORT.to_vec();
-        lines[5] = "@WIFIRX run=7 span=run error=0x102";
-        assert!(
-            Reported::of(&parsed(&lines), 7)
-                .err()
-                .unwrap()
-                .contains("error 0x102")
-        );
-        // A missing span is missing even when the other span is there.
-        let mut lines = REPORT.to_vec();
-        lines.remove(3);
-        assert!(
-            Reported::of(&parsed(&lines), 7)
-                .err()
-                .unwrap()
-                .contains("LWIP span=run")
-        );
-    }
-
-    #[test]
     fn the_balance_names_what_the_access_point_sent_and_the_driver_did_not_count() {
-        let reports = parsed(&REPORT);
-        let reported = Reported::of(&reports, 7).unwrap();
-        let router = json!({"to_device": {"packets": 50, "failed": 1}});
-        let found = balance(&router, &reported).unwrap();
+        let reported = report::Report {
+            rx: report::Rx {
+                datagrams: 40,
+                bytes: 58880,
+                window_datagrams: 39,
+                window_bytes: 57408,
+                lost: 0,
+                reordered: 0,
+                duplicates: 0,
+                untracked: 0,
+                highest: Some(39),
+                foreign: 0,
+                echoed: 5,
+                echo_refused: 0,
+                receive_errors: 0,
+                first_us: Some(1),
+                last_us: Some(2),
+                window_us: 5_000_000,
+            },
+            span: report::Span {
+                window_from_us: 300_000,
+                window_to_us: 5_300_000,
+                run_to_us: 5_800_000,
+            },
+            lwip_window: report::Lwip {
+                link_recv: 0,
+                link_drop: 0,
+                ip_recv: 44,
+                ip_drop: 0,
+                udp_recv: 44,
+                udp_drop: 0,
+                udp_memerr: 0,
+            },
+            lwip_run: report::Lwip {
+                link_recv: 0,
+                link_drop: 0,
+                ip_recv: 45,
+                ip_drop: 0,
+                udp_recv: 45,
+                udp_drop: 0,
+                udp_memerr: 0,
+            },
+            wifi_rx_window: report::WifiRx {
+                legacy: 0,
+                legacy_noeb: 0,
+                ht: 44,
+                ht_noeb: 0,
+                ht_stbc: 0,
+                ht_retry: 0,
+                su: 0,
+                su_retry: 0,
+                rx_isr: 0,
+                rx_nblks: 0,
+                rx_reset_rxbase_cnt: 0,
+                rx_base_null_cnt: 0,
+            },
+            wifi_rx_run: report::WifiRx {
+                legacy: 0,
+                legacy_noeb: 0,
+                ht: 45,
+                ht_noeb: 2,
+                ht_stbc: 0,
+                ht_retry: 0,
+                su: 0,
+                su_retry: 0,
+                rx_isr: 0,
+                rx_nblks: 0,
+                rx_reset_rxbase_cnt: 0,
+                rx_base_null_cnt: 0,
+            },
+            hw_rx: Default::default(),
+            link: report::Link {
+                channel: 13,
+                second: 2,
+                rssi: -30,
+                disconnects: 0,
+            },
+        };
+        let found = balance(
+            &json!({"to_device": {"packets": 50, "failed": 1}}),
+            &reported,
+        );
         assert_eq!(found["ap_minus_driver"], 5);
         assert_eq!(found["unclosed"], 5);
-        let closed = balance(&json!({"to_device": {"packets": 45}}), &reported).unwrap();
+        assert_eq!(found["driver_passed"], 43);
+        let closed = balance(&json!({"to_device": {"packets": 45}}), &reported);
         assert_eq!(closed["unclosed"], Value::Null);
-        let unavailable = balance(&json!({"unavailable": "no router"}), &reported).unwrap();
+        let unavailable = balance(&json!({"unavailable": "no router"}), &reported);
         assert_eq!(unavailable["ap_packets"], Value::Null);
     }
 

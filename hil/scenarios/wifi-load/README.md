@@ -318,8 +318,12 @@ as the image's device counts) and over the run (`run`, from its RX command
 to its drain's end, the span of the access point's readings), the MAC's
 counters over the window, and `balance`, the access point's MPDUs to the
 station against the driver's count over the run, with what it leaves
-`unclosed`. A missing mandatory field or a report of another run ends the
-run as incomplete. Its results go to
+`unclosed`, with no place of loss named. The peer's report is measured whole
+or not at all: every line the protocol names for the run once and of that
+run, nothing else, each with exactly its fields, counts unsigned, the window
+and the run's boundaries as the host asked, and the counts consistent with
+each other (`src/vendor/report.rs`); anything else ends the run as
+incomplete. Its results go to
 `target/hil/results/wifi-load-vendor-<time in ns>.json`.
 
 The host needs, once, a route to the station network through the router's
