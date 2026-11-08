@@ -117,18 +117,6 @@ pub struct Start {
     /// The run's values of a trace image's constants
     /// (`oer_portable_trace::tune`), by position.
     pub tune: [u32; TUNE_KNOBS],
-    /// The address of an image that takes its own from the host; an image
-    /// with a leased one refuses it.
-    pub address: Option<StaticAddress>,
-}
-
-/// A device's IPv4 address, as the host assigns it: reserved, or outside the
-/// DHCP pool of the network it joins.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct StaticAddress {
-    pub address: [u8; 4],
-    pub prefix: u8,
-    pub gateway: [u8; 4],
 }
 
 /// The constants a run names; the image checks them against its own.

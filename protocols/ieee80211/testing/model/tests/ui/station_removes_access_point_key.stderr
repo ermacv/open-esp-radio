@@ -1,0 +1,8 @@
+error[E0308]: mismatched types
+  --> tests/ui/station_removes_access_point_key.rs:16:44
+   |
+16 |     PortCommand::RemoveGroup { permission, key } // ui-error: E0308
+   |                                            ^^^ expected `Station`, found `AccessPoint`
+   |
+   = note: expected struct `ModelGroupKey<'id, ModelBackend<StaticId<UiSlot>>, oer_protocols_ieee80211_contracts_port::Station>`
+              found struct `ModelGroupKey<'id, ModelBackend<StaticId<UiSlot>>, oer_protocols_ieee80211_contracts_port::AccessPoint>`

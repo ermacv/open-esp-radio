@@ -128,6 +128,8 @@
 //! ```
 
 mod block;
+mod dhcp;
+mod echo;
 mod interface;
 mod loans;
 mod machine;
@@ -138,12 +140,14 @@ pub use block::{
     Block, BlockTooShort, BrandRefusal, ClaimRefused, Claimed, CoreBrand, GROUPS, Group,
     GroupsFull, Pool, claim,
 };
-pub use interface::{Interface, InterfaceError};
+pub use dhcp::{DNS_SERVERS, DhcpDrop, DhcpState, Lease, LeaseFault, Servers};
+pub use echo::{ECHOES, IcmpDrop, RATE as ECHO_RATE};
+pub use interface::{Interface, InterfaceError, Ipv4};
 pub use loans::{Loan, Loans, LoansRefused, NotLent};
 pub use machine::{
-    CommandId, CommandState, Core, Datagram, Declined, Demand, Eviction, FillFailed, Grant,
-    NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults, SendRefusal, SendRefused,
-    SocketId, StaleSocket, WorkId,
+    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Eviction, FillFailed,
+    Grant, NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults, SendRefusal,
+    SendRefused, SocketId, StaleSocket, WorkId,
 };
 pub use owner::{NetworkOwner, Retired, Unsent};
 

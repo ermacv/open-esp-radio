@@ -15,9 +15,9 @@ use oer_protocols_network_wire::ip::Dscp;
 
 pub use oer_portable_memory::{AtomicWaker, ClaimCell};
 pub use oer_portable_time::Instant as NetworkInstant;
-pub use oer_protocols_network_core::{Declined, Outcome, Remote, SendRefusal};
+pub use oer_protocols_network_core::{Configuration, Declined, Ipv4, Outcome, Remote, SendRefusal};
 pub use oer_protocols_network_runtime::{
-    Interest, LocalEnd, Next, Offer, Produce, Refusal, Refused, Work,
+    Interest, LocalEnd, Next, Offer, Produce, Refusal, Refused, WatchRefused, Work,
 };
 
 pub struct Brand;
@@ -27,28 +27,37 @@ pub type Socket = oer_protocols_network_runtime::Socket<'static, 'static, Brand,
 pub type NetworkBlock = oer_protocols_network_core::Block<'static, Brand, 1472>;
 pub type Received = oer_protocols_network_core::Datagram<'static, Brand, 1472>;
 
-pub struct NetworkAddress {
-    pub address: [u8; 4],
-    pub prefix: u8,
-    pub gateway: Option<[u8; 4]>,
+/// The ports of a network's sockets, as the chip names them.
+pub struct Ports {
+    pub receiving: u16,
+    pub sending: u16,
 }
 
-/// A network the test built: `configure` hands over its channel socket, and
-/// drops the producer it is given, as the test's service has its own.
+/// A network the test built: its address is the test's to set.
 pub struct Network<P> {
-    pub socket: Option<Socket>,
     pub end: &'static LocalEnd,
+    pub configuration: std::rc::Rc<core::cell::Cell<Option<Configuration>>>,
     pub producer: PhantomData<P>,
 }
 
 impl<P> Network<P> {
-    pub fn configure(&mut self, _: NetworkAddress, _: u16, _: u16, _: P) -> Result<Socket, ()> {
-        self.socket.take().ok_or(())
-    }
-
     pub const fn end(&self) -> &'static LocalEnd {
         self.end
     }
+
+    pub fn configuration(&self) -> Result<Option<Configuration>, WatchRefused> {
+        Ok(self.configuration.get())
+    }
+}
+
+/// An address the test's network holds.
+pub fn holding(address: [u8; 4]) -> Option<Configuration> {
+    Some(Configuration {
+        ipv4: Some(Ipv4::new(address, 24, None).unwrap()),
+        version: 1,
+        lease: None,
+        dhcp: None,
+    })
 }
 
 /// The image's service over `port`, as the chip's network types it.
@@ -72,6 +81,8 @@ pub(crate) type Served<P> = Service<
 /// What [`network`] builds.
 pub(crate) struct Built<P: FramePort + FrameSource> {
     pub service: Served<P>,
+    /// What the facade reads as the network's address.
+    pub address: std::rc::Rc<core::cell::Cell<Option<Configuration>>>,
     pub net: crate::udp::Network,
     pub stop: WakingSpscSender<'static, (), 1>,
     pub end: &'static LocalEnd,
@@ -80,7 +91,8 @@ pub(crate) struct Built<P: FramePort + FrameSource> {
 
 /// A service over `port` at `ours`, whose producer sends from `sending` and
 /// whose channel socket receives on `receiving`, as the chip's
-/// `Network::configure` builds it, and the facade over it.
+/// `Network::start` builds it, and the facade over it, which reads `ours` as
+/// the network's address until the test sets another.
 pub(crate) fn network<P: FramePort + FrameSource>(
     port: P,
     hardware: [u8; 6],
@@ -113,16 +125,19 @@ pub(crate) fn network<P: FramePort + FrameSource>(
         )
         .ok()
         .unwrap();
+    let address = std::rc::Rc::new(core::cell::Cell::new(holding(ours)));
     let net = crate::udp::Network::new(
         Network {
-            socket: Some(socket),
             end,
+            configuration: address.clone(),
             producer: PhantomData,
         },
+        socket,
         source,
     );
     Built {
         service,
+        address,
         net,
         stop,
         end,

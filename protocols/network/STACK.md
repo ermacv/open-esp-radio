@@ -10,8 +10,8 @@ adapter and firmware, outside the protocol cores and runtimes.
 | Path | Responsibility |
 | --- | --- |
 | `port/` | Stack-neutral owned `NetDevice`, Ethernet views, link epochs and typed refusals (`oer-protocols-network-port`) |
-| `wire/` | Ethernet, VLAN, ARP, IP and transport header fields, the Internet checksum (`oer-protocols-network-wire`) |
-| `core/` | A sans-IO core with one owner: ARP, IPv4 and UDP over one interface (`oer-protocols-network-core`). The HIL `wifi-network` image links it through `runtime/` |
+| `wire/` | Ethernet, VLAN, ARP, IP, ICMP echo and transport header fields, DHCP messages, the Internet checksum (`oer-protocols-network-wire`) |
+| `core/` | A sans-IO core with one owner: ARP, IPv4, UDP, a DHCPv4 client and ICMP echo over one interface (`oer-protocols-network-core`). The HIL `wifi-network` image links it through `runtime/` |
 | `runtime/` | The task that owns the core, its channel sockets and its local producer (`oer-protocols-network-runtime`) |
 | `../../portable/embassy/net/` | Maintained Embassy/Xarxa packet-owner contract with explicit pools |
 

@@ -15,14 +15,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct StaticAddress {
-    pub address: [u8; 4],
-    pub prefix: u8,
-    pub gateway: [u8; 4],
-}
 pub struct Start {
-    pub address: Option<StaticAddress>,
     pub port: u16,
 }
 #[derive(Debug)]
@@ -73,6 +66,12 @@ impl FrameSource for Port {
     }
     fn take_notice(&mut self) -> Option<()> {
         None
+    }
+    fn link(&self) -> oer_protocols_network_port::LinkSnapshot {
+        oer_protocols_network_port::LinkSnapshot {
+            state: oer_protocols_network_port::LinkState::Up,
+            epoch: 1,
+        }
     }
     fn register(&mut self, _: &mut Context<'_>) {}
 }
@@ -143,14 +142,7 @@ fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
     let wifi::Built {
         mut service, net, ..
     } = wifi::network(port.clone(), [2; 6], [192, 0, 2, 1], 5001, 5002);
-    let start = Start {
-        address: Some(StaticAddress {
-            address: [192, 0, 2, 1],
-            prefix: 24,
-            gateway: [192, 0, 2, 2],
-        }),
-        port: 5001,
-    };
+    let start = Start { port: 5001 };
     let mut run = udp::open(&net, &start).unwrap();
     let clock = VirtualClock::new();
     // Fill the incoming lane and the core's receive queue independently

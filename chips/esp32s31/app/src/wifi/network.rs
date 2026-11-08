@@ -2,22 +2,23 @@
 //! station's transmit buffers as the port's memory, a channel socket, a local
 //! producer, and the task on the group's executor.
 //!
-//! [`Network::start`] takes the station's device in the group's boot, and the
-//! storage the image lends for its service ([`NetworkStorage`]): the service's
-//! type holds the image's producer, so no static of the library can. The
-//! address comes later, when the image has it: [`Network::configure`] builds
-//! the service with its channel socket and its producer, and hands it to the
-//! task, once. The producer is called in the network task's own turns, on the
-//! group's hart ([`Produce`]): it fills each datagram's data in the station's
-//! transmit buffer itself. A stop ends the sockets, ends each of the
-//! producer's open works `Retired` and sets its end flag, and gives back
-//! every frame in the port's queue, so the station has its received buffers
-//! back. The other owners stay parked for the rest of the boot: nothing
-//! starts a second network, and no contract ends the first one.
+//! [`Network::start`] takes the station's device in the group's boot, the
+//! storage the image lends for its service ([`NetworkStorage`]), its producer
+//! and the two ports: the service's type holds the image's producer, so no
+//! static of the library can. The service starts at once: its DHCP client
+//! leases the interface's address, RFC 2131, from the first link up, with a
+//! seed the station drew at boot, and [`Network::configuration`] tells the
+//! group what it holds. The producer is called in the network task's own
+//! turns, on the group's hart ([`Produce`]): it fills each datagram's data in
+//! the station's transmit buffer itself. A stop ends the sockets, ends each
+//! of the producer's open works `Retired` and sets its end flag, and gives
+//! back every frame in the port's queue, so the station has its received
+//! buffers back. The other owners stay parked for the rest of the boot:
+//! nothing starts a second network, and no contract ends the first one.
 
 use super::*;
 use core::task::{Context as TaskContext, Poll};
-use oer_portable_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::WakingSpscSender;
 use oer_protocols_ieee80211_runtime::station::{TxRefused, TxSupply};
 use oer_protocols_network_core::{
     ClaimRefused, Group, Interface, InterfaceError, NetworkOwner, OpenRefused, Retired, claim,
@@ -26,6 +27,7 @@ use oer_protocols_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, TransmitError, TransmitRefused, TxStorage,
     Unpublished,
 };
+use oer_protocols_network_runtime::ConfigurationWatch;
 use oer_protocols_network_runtime::{
     DevicePort, Direct, EndCause, Ended, LocalRefused, MemoryPolicy, PortRefusal, Producer,
     Service, SocketLanes, StopLane, TxBuffers,
@@ -39,11 +41,12 @@ pub use oer_portable_memory::{AtomicWaker, ClaimCell};
 /// The network's time, which a producer is called with.
 pub use oer_portable_time::Instant as NetworkInstant;
 pub use oer_protocols_network_core::{
-    Block, Datagram, Declined, Outcome, Remote, SendRefusal, WorkId,
+    Block, Configuration, Datagram, Declined, DhcpState, Ipv4, Lease, Outcome, Remote, SendRefusal,
+    WorkId,
 };
 pub use oer_protocols_network_runtime::{
     Interest, LocalEnd, Next, Observer, Offer, Produce, RESERVE_AHEAD, Refusal, Refused,
-    SocketClosed, Work,
+    SocketClosed, WatchRefused, Work,
 };
 
 /// The sockets a network holds: the channel socket and the producer's.
@@ -99,13 +102,13 @@ type Lanes = SocketLanes<'static, 'static, Brand, BLOCK, DEPTH, LANE, CREDITS>;
 type Placed<P> = &'static mut Option<NetService<P>>;
 
 /// What an image lends a network whose producer is `P`, in a static of its
-/// own: where the service stays, the lane that hands it to the network's
-/// task, and the producer's end flag, which the service sets at its end
-/// ([`LocalEnd`]).
+/// own: where the service stays, the producer's end flag, which the service
+/// sets at its end ([`LocalEnd`]), and the watch of the interface's address.
 pub struct NetworkStorage<P: Produce + 'static> {
     service: Option<NetService<P>>,
-    handoff: oer_portable_memory::WakingSpscQueue<Placed<P>, 1>,
     end: LocalEnd,
+    /// Where the service publishes the interface's address.
+    watch: ConfigurationWatch,
 }
 
 impl<P: Produce + 'static> NetworkStorage<P> {
@@ -113,8 +116,8 @@ impl<P: Produce + 'static> NetworkStorage<P> {
     pub const fn new() -> Self {
         Self {
             service: None,
-            handoff: oer_portable_memory::WakingSpscQueue::new(),
             end: LocalEnd::new(),
+            watch: ConfigurationWatch::new(),
         }
     }
 }
@@ -151,16 +154,6 @@ static MEMORY: ConstStaticCell<Memory> = ConstStaticCell::new(Memory {
 /// The channel socket's lanes.
 static LANES: ConstStaticCell<Lanes> = ConstStaticCell::new(SocketLanes::new());
 static STOP: ConstStaticCell<StopLane> = ConstStaticCell::new(StopLane::new());
-/// The port and the service's stop lane until the address comes. In a cell,
-/// as a stop before that has to reach the port too.
-static WAITING: ClaimCell<Waiting> = ClaimCell::new();
-
-/// What [`Network::configure`] finds.
-struct Waiting {
-    port: Port,
-    stopping: WakingSpscReceiver<'static, (), 1>,
-    hardware: [u8; 6],
-}
 
 /// The transmit buffers no frame holds, shared by the supply, which takes
 /// back what the station gave back, and the port, which writes them. Both run
@@ -308,41 +301,47 @@ impl TxBuffers for WifiBuffers {
     }
 }
 
-/// An interface's IPv4 addressing, as the host names it.
+/// The ports a network's sockets hold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NetworkAddress {
-    pub address: [u8; 4],
-    pub prefix: u8,
-    pub gateway: Option<[u8; 4]>,
+pub struct Ports {
+    /// The channel socket's: it receives, and sends what it echoes.
+    pub receiving: u16,
+    /// The producer's send-only socket's.
+    pub sending: u16,
 }
 
-/// Why [`Network::configure`] gave no sockets.
+/// Why [`Network::start`] gave no network.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NetworkError {
-    /// The network has its address, or a stop ended it first.
-    NotWaiting,
-    /// The address is not one an interface can have; the network still waits.
-    Address(InterfaceError),
+    /// The interface cannot be.
+    Interface(InterfaceError),
     /// A port cannot open.
     Port(OpenRefused),
     /// The producer's port cannot open.
     Local(LocalRefused),
+    /// The watch of the address refused its first publication.
+    Watch(WatchRefused),
     /// The network's storage was taken.
     Storage,
 }
 
+impl From<NetworkError> for Error {
+    fn from(error: NetworkError) -> Self {
+        Self::Network(error)
+    }
+}
+
 /// The group's end of the network whose producer is `P`.
 pub struct Network<P: Produce + 'static> {
-    /// Where the service goes, until it does.
-    service: Option<Placed<P>>,
-    handoff: WakingSpscSender<'static, Placed<P>, 1>,
     end: &'static LocalEnd,
+    watch: &'static ConfigurationWatch,
+    producer: core::marker::PhantomData<P>,
 }
 
 /// What the network's task runs: not an API.
 #[doc(hidden)]
 pub struct NetworkStart<P: Produce + 'static> {
-    placed: WakingSpscReceiver<'static, Placed<P>, 1>,
+    service: Placed<P>,
     stop: WakingSpscSender<'static, (), 1>,
     stopper: wifi::NetworkStopper<'static, Notifies>,
 }
@@ -354,40 +353,64 @@ impl<P: Produce + 'static> crate::NetTask for NetworkStart<P> {
 }
 
 impl<P: Produce + 'static> Network<P> {
-    /// Take `device` for the network, whose task waits for its address from
-    /// here on, and `storage` for its service.
+    /// Take `device` for the network and `storage` for its service, open the
+    /// channel socket on `ports.receiving` and `producer`'s send-only socket
+    /// on `ports.sending`: the service runs from the group's start, leases
+    /// its address by DHCP and calls `producer` in its turns. A datagram for
+    /// `ports.sending` is dropped; receiving and echoing stay on the channel
+    /// socket, which comes back here.
     ///
     /// # Errors
-    /// The network started already.
+    /// [`Error::AlreadyStarted`] for a second start; [`Error::Network`] when
+    /// the service refuses its interface, its sockets or its watch.
     pub fn start(
         mut device: Device,
         boot: GroupBoot,
         storage: &'static mut NetworkStorage<P>,
-    ) -> Result<(Self, GroupBoot<NetworkStart<P>>), Error> {
+        producer: P,
+        ports: Ports,
+    ) -> Result<(Self, Socket, GroupBoot<NetworkStart<P>>), Error> {
         let (network, transmit, stopper) = device.network.take().ok_or(Error::AlreadyStarted)?;
-        let stop = STOP.try_take().ok_or(Error::Storage)?;
+        let interface =
+            Interface::dhcp(device.address, MTU, device.seed).map_err(NetworkError::Interface)?;
+        let stop = STOP.try_take().ok_or(NetworkError::Storage)?;
+        let memory = MEMORY.try_take().ok_or(NetworkError::Storage)?;
+        let lanes = LANES.try_take().ok_or(NetworkError::Storage)?;
+        let (pool, brand) = claim::<Brand, BLOCK, BLOCKS>(&mut memory.blocks)
+            .map_err(|_: ClaimRefused<'_, BLOCK, BLOCKS>| NetworkError::Storage)?;
         let NetworkStorage {
             service,
-            handoff,
             end,
+            watch,
         } = storage;
-        let (handoff, placed) = handoff.split();
+        let (end, watch): (&'static LocalEnd, &'static ConfigurationWatch) = (end, watch);
         let (stop, stopping) = stop.split();
-        WAITING
-            .install(Waiting {
-                port: DevicePort::new(network, transmit, WifiBuffers),
-                stopping,
-                hardware: device.address,
-            })
-            .map_err(|_| Error::AlreadyStarted)?;
+        let port = DevicePort::new(network, transmit, WifiBuffers);
+        let owner = NetworkOwner::new(brand, interface, pool, port);
+        let running = service.insert(Service::with_producer(
+            owner,
+            Direct,
+            MemoryPolicy::KEEP,
+            stopping,
+            producer,
+            end,
+        ));
+        running
+            .bind_local(ports.sending, Dscp::default())
+            .map_err(NetworkError::Local)?;
+        let socket = running
+            .bind(ports.receiving, Dscp::default(), Group::shared(), lanes)
+            .map_err(|refused| NetworkError::Port(refused.reason))?;
+        running.watch(watch).map_err(NetworkError::Watch)?;
         Ok((
             Self {
-                service: Some(service),
-                handoff,
                 end,
+                watch,
+                producer: core::marker::PhantomData,
             },
+            socket,
             boot.with_net(NetworkStart {
-                placed,
+                service,
                 stop,
                 stopper,
             }),
@@ -400,82 +423,36 @@ impl<P: Produce + 'static> Network<P> {
         self.end
     }
 
-    /// Give the network its address, once, open the channel socket on
-    /// `receiving` and `producer`'s send-only socket on `sending`: the
-    /// service runs from here on, and calls `producer` in its turns. A
-    /// datagram for `sending` is dropped; receiving and echoing stay on the
-    /// channel socket.
+    /// The interface's address, its version and its lease, as the service
+    /// last published them; `None` once it ended.
     ///
     /// # Errors
-    /// [`NetworkError`]; an address it cannot take leaves it waiting.
-    pub fn configure(
-        &mut self,
-        address: NetworkAddress,
-        receiving: u16,
-        sending: u16,
-        producer: P,
-    ) -> Result<Socket, NetworkError> {
-        let hardware = WAITING
-            .lend(|waiting| waiting.hardware)
-            .map_err(|_| NetworkError::NotWaiting)?;
-        let interface = Interface::new(
-            hardware,
-            address.address,
-            address.prefix,
-            address.gateway,
-            MTU,
-        )
-        .map_err(NetworkError::Address)?;
-        let placed = self.service.take().ok_or(NetworkError::NotWaiting)?;
-        let memory = MEMORY.try_take().ok_or(NetworkError::Storage)?;
-        let lanes = LANES.try_take().ok_or(NetworkError::Storage)?;
-        let (pool, brand) = claim::<Brand, BLOCK, BLOCKS>(&mut memory.blocks)
-            .map_err(|_: ClaimRefused<'_, BLOCK, BLOCKS>| NetworkError::Storage)?;
-        let Waiting { port, stopping, .. } =
-            WAITING.take().map_err(|_| NetworkError::NotWaiting)?;
-        let owner = NetworkOwner::new(brand, interface, pool, port);
-        *placed = Some(Service::with_producer(
-            owner,
-            Direct,
-            MemoryPolicy::KEEP,
-            stopping,
-            producer,
-            self.end,
-        ));
-        let socket = placed.as_mut().map(|service| {
-            service
-                .bind_local(sending, Dscp::default())
-                .map_err(NetworkError::Local)?;
-            service
-                .bind(receiving, Dscp::default(), Group::shared(), lanes)
-                .map_err(|refused| NetworkError::Port(refused.reason))
-        });
-        let socket = socket.ok_or(NetworkError::Storage)?;
-        // The queue is the task's and holds this one value.
-        let _sent = self.handoff.try_send(placed);
-        socket
+    /// [`WatchRefused`]: a publication holds the value at this moment.
+    pub fn configuration(&self) -> Result<Option<Configuration>, WatchRefused> {
+        Ok(self.watch.read()?.configuration)
+    }
+
+    /// A wrapping count of the service's publications.
+    pub fn changes(&self) -> u32 {
+        self.watch.changes()
+    }
+
+    /// Wait until the count of publications is no longer `seen`, and return
+    /// it. One task waits at a time.
+    pub async fn changed(&self, seen: u32) -> u32 {
+        self.watch.changed(seen).await
     }
 }
 
-/// The network's task: its address first, then the service until a stop or
-/// the port's fault, which records and resets. A stop drops the port, with the
-/// frames of the station it still holds, before the station hears of it.
+/// The network's task: the service until a stop or the port's fault, which
+/// records and resets. A stop drops the port, with the frames of the station
+/// it still holds, before the station hears of it.
 async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
     let NetworkStart {
-        mut placed,
+        service,
         stop,
         stopper,
     } = start;
-    let service = match select(configured(&mut placed), stopper.requested()).await {
-        Either::First(service) => service,
-        Either::Second(()) => {
-            if let Ok(mut waiting) = WAITING.take() {
-                waiting.port.give_back_received();
-            }
-            stopper.stopped();
-            return;
-        }
-    };
     let cause = match service.as_mut() {
         Some(running) => {
             // A measuring image counts the turns; a product lends `()`.
@@ -523,16 +500,4 @@ async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
         ));
     }
     stopper.stopped();
-}
-
-/// The service, once it has its address.
-async fn configured<P: Produce + 'static>(
-    placed: &mut WakingSpscReceiver<'static, Placed<P>, 1>,
-) -> Placed<P> {
-    loop {
-        if let Some(service) = placed.try_receive() {
-            return service;
-        }
-        placed.ready().await;
-    }
 }

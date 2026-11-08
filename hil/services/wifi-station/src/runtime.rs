@@ -7,11 +7,11 @@
 
 use oer_protocols_ieee80211_runtime::station::{
     ControlError, Status,
-    contract::{CommandOutcome, CommandRefusal, DisconnectReason, Notice, SaeFailure},
+    contract::{CommandOutcome, CommandRefusal, DisconnectReason, LinkPhy, Notice, SaeFailure},
 };
 use oer_protocols_network_port::LinkState;
 
-use crate::{Joined, Link, StationError};
+use crate::{Joined, Link, Phy, StationError};
 
 /// The class byte of a failure code.
 pub mod class {
@@ -48,9 +48,14 @@ impl StationError {
 /// station is associated and authorized, otherwise refused.
 pub fn joined(outcome: &CommandOutcome) -> Joined {
     match outcome {
-        CommandOutcome::Connected { bssid, channel } => Joined::Linked {
+        CommandOutcome::Connected {
+            bssid,
+            channel,
+            phy: link_phy,
+        } => Joined::Linked {
             bssid: *bssid,
             channel: *channel,
+            phy: phy(*link_phy),
         },
         CommandOutcome::ConnectFailed(reason) | CommandOutcome::Disconnected(reason) => {
             Joined::Refused(connect_failed(reason))
@@ -90,8 +95,19 @@ pub fn connect_failed(reason: &DisconnectReason) -> StationError {
         DisconnectReason::NoAdmittedAccessCategory => (14, 0),
         DisconnectReason::InvalidEapol(_) => (15, 0),
         DisconnectReason::RetainedSecurityIes(_) => (16, 0),
+        DisconnectReason::HeNotGranted => (17, 0),
     };
     StationError::failed(class::CONNECT_FAILED, kind, detail)
+}
+
+/// The service's name of the PHY mode the station associated in.
+pub const fn phy(phy: LinkPhy) -> Phy {
+    match phy {
+        LinkPhy::Legacy => Phy::Legacy,
+        LinkPhy::Ht20 => Phy::Ht20,
+        LinkPhy::Ht40 => Phy::Ht40,
+        LinkPhy::He20 => Phy::He20,
+    }
 }
 
 /// The station refused the connect command.
@@ -118,9 +134,18 @@ pub fn not_admitted(error: ControlError) -> StationError {
 /// notice was the connection.
 pub fn link(status: &Status) -> Option<Link> {
     match (status.link.state, status.notice) {
-        (LinkState::Up, Some(Notice::Connected { bssid, channel })) => {
-            Some(Link { bssid, channel })
-        }
+        (
+            LinkState::Up,
+            Some(Notice::Connected {
+                bssid,
+                channel,
+                phy: link_phy,
+            }),
+        ) => Some(Link {
+            bssid,
+            channel,
+            phy: phy(link_phy),
+        }),
         _ => None,
     }
 }

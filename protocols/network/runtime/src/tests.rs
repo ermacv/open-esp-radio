@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::Wake;
+use std::vec;
 use std::vec::Vec;
 
 use core::pin::pin;
@@ -20,7 +21,8 @@ use oer_protocols_network_core::{
     claim,
 };
 use oer_protocols_network_port::{
-    Candidate, Egress, EthernetFrameView, FramePort, FrameSource, Unpublished,
+    Candidate, Egress, EthernetFrameView, FramePort, FrameSource, LinkSnapshot, LinkState,
+    Unpublished,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
@@ -28,9 +30,13 @@ use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
+use oer_portable_wire::Writer;
+use oer_protocols_network_wire::dhcp::{self, DhcpMessage, Fixed, Flags, MessageType, Op, option};
+
 use crate::{
-    Direct, EndCause, Ended, MemoryPolicy, Observer, RESERVE_AHEAD, Refusal, ReturnLane,
-    ReturnRefusal, Returner, Sent, Service, Socket, SocketClosed, SocketLanes, StopLane,
+    ConfigurationWatch, Direct, EndCause, Ended, MemoryPolicy, Observer, RESERVE_AHEAD, Refusal,
+    ReturnLane, ReturnRefusal, Returner, Sent, Service, Socket, SocketClosed, SocketLanes,
+    StopLane,
 };
 
 /// A brand of the test's own.
@@ -168,6 +174,13 @@ impl FrameSource for WirePort {
         }
     }
 
+    fn link(&self) -> LinkSnapshot {
+        LinkSnapshot {
+            state: LinkState::Up,
+            epoch: 1,
+        }
+    }
+
     fn register(&mut self, cx: &mut Context<'_>) {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
@@ -272,6 +285,76 @@ fn datagrams(wire: &Wire) -> Vec<Vec<u8>> {
                 let packet = Ipv4Header::parse(payload).unwrap();
                 UdpHeader::parse(packet.payload()).unwrap().1.to_vec()
             })
+        })
+        .collect()
+}
+
+/// A server's reply to our station: `kind` of `xid`, leasing [`OUR_IP`] for
+/// `lease` seconds.
+fn dhcp_reply(kind: MessageType, xid: u32, lease: u32) -> Vec<u8> {
+    let mut message = vec![0; 400];
+    let length = {
+        let mut writer = Writer::new(&mut message);
+        let [c0, c1, c2, c3, c4, c5] = LOCAL;
+        Fixed {
+            op: Op::Reply,
+            htype: 1,
+            hlen: 6,
+            hops: 0,
+            xid,
+            secs: 0,
+            flags: Flags::from_bytes([0; 2]),
+            ciaddr: [0; 4],
+            yiaddr: OUR_IP,
+            siaddr: PEER_IP,
+            giaddr: [0; 4],
+            chaddr: [c0, c1, c2, c3, c4, c5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        }
+        .write(&mut writer)
+        .unwrap();
+        let options: [(u8, &[u8]); 4] = [
+            (option::MESSAGE_TYPE, &[kind.encoding()]),
+            (option::SERVER_IDENTIFIER, &PEER_IP),
+            (option::SUBNET_MASK, &[255, 255, 255, 0]),
+            (option::LEASE_TIME, &lease.to_be_bytes()),
+        ];
+        for (code, data) in options {
+            dhcp::write_option(&mut writer, code, data).unwrap();
+        }
+        dhcp::write_end(&mut writer).unwrap();
+        writer.written()
+    };
+    message.truncate(length);
+    let mut frame = udp_frame(dhcp::CLIENT_PORT, &message);
+    // From the server's port, to the offered address.
+    frame[34..36].copy_from_slice(&dhcp::SERVER_PORT.to_be_bytes());
+    let udp_length = u16::try_from(8 + message.len()).unwrap();
+    frame[40..42].copy_from_slice(&[0, 0]);
+    let sum = Checksum::new()
+        .with(&ipv4_pseudo_header(
+            PEER_IP,
+            OUR_IP,
+            PROTOCOL_UDP,
+            udp_length,
+        ))
+        .with(&frame[34..])
+        .finish();
+    frame[40..42]
+        .copy_from_slice(&oer_protocols_network_wire::checksum::udp_field(sum).to_be_bytes());
+    frame
+}
+
+/// The DHCP messages among `sent` frames, by type and xid.
+fn dhcp_messages(sent: &[Vec<u8>]) -> Vec<(MessageType, u32)> {
+    sent.iter()
+        .filter_map(|frame| {
+            let (header, payload) = EthernetHeader::parse(frame).ok()?;
+            (header.ether_type == EtherType::IPV4).then_some(())?;
+            let packet = Ipv4Header::parse(payload).ok()?;
+            let (udp, data) = UdpHeader::parse(packet.payload()).ok()?;
+            (udp.ports.destination == dhcp::SERVER_PORT).then_some(())?;
+            let message = DhcpMessage::parse(data).ok()?;
+            Some((message.message_type()?, message.fixed.xid))
         })
         .collect()
 }
@@ -2946,3 +3029,59 @@ mod local;
 mod paced;
 mod reserve;
 mod turns;
+
+#[test]
+fn a_lease_ends_in_the_service_s_own_wait_and_the_watch_tells() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+    let (pool, brand) = claim::<Net, SIZE, BLOCKS>(memory).unwrap();
+    let wire = WirePort::default();
+    wire.0.borrow_mut().answers = true;
+    let interface = Interface::dhcp(LOCAL, 1500, 3).unwrap();
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let mut bench = bench_on(owner, wire, Direct);
+    let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
+    bench.service.watch(watch).unwrap();
+    let clock = bench.clock;
+    let (_, _, (obtained, ended_at)) = run(bench, async |socket, wire| {
+        // The server: an OFFER to the DISCOVER, an ACK of ten seconds to the
+        // REQUEST, and silence after.
+        let answer = async |kind: MessageType, to: MessageType| {
+            let xid = loop {
+                let sent = dhcp_messages(&wire.0.borrow().sent);
+                if let Some((_, xid)) = sent.iter().find(|(sent, _)| *sent == to) {
+                    break *xid;
+                }
+                drop(sent);
+                yield_now().await;
+            };
+            let mut line = wire.0.borrow_mut();
+            line.incoming.push_back(dhcp_reply(kind, xid, 10));
+            line.wake();
+        };
+        answer(MessageType::Offer, MessageType::Discover).await;
+        answer(MessageType::Ack, MessageType::Request).await;
+        let mut seen = watch.changes();
+        let obtained = loop {
+            seen = watch.changed(seen).await;
+            if let Some(lease) = watch.read().unwrap().configuration.unwrap().lease {
+                break lease.obtained;
+            }
+        };
+        // A send now goes from the leased address.
+        let sent = send_one(socket, b"leased").await;
+        assert_eq!(sent, Sent::Ended(Outcome::Accepted));
+        loop {
+            seen = watch.changed(seen).await;
+            if watch.read().unwrap().configuration.unwrap().ipv4.is_none() {
+                break (obtained, oer_portable_time::Clock::now(clock));
+            }
+        }
+    });
+    // Renewals and rebinds went unanswered: the address went at its end, in
+    // a wait the lease's own times woke.
+    assert_eq!(
+        ended_at,
+        obtained.saturating_add(oer_portable_time::Duration::from_secs(10))
+    );
+}

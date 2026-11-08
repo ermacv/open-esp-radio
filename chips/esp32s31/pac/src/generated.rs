@@ -304926,13 +304926,13 @@ pub mod wifi_mac {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Observed source use; the individual hardware meaning is unknown. The vendor formatter copies TX metadata head bits 26:25 into bits 6:5 (zero when the head's bits 27:25 are 0b100) and head bit 28 into bit 7 (WIFI_TX_METADATA_HEAD.CONTROL.BITS_25_28_OPAQUE); every ordinary vendor TX path clears those head bits, so an ordinary frame's value is zero.
             #[inline]
             pub const fn bits_5_7_opaque(self) -> oer_portable_mmio::Bits<3> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 5)
             }
 
-            /// Bounded HE SU formatter-required low control bit.
+            /// Bounded HE SU formatter-required low control bit: the vendor formatter sets it unless the TX metadata head's bits 27:25 are 0b100, which no ordinary vendor TX path produces.
             #[inline]
             pub const fn control_required_8(self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -304956,7 +304956,7 @@ pub mod wifi_mac {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Observed source use; the individual hardware meaning is unknown. The vendor's TX dump decodes bits 27:11 of this word as one value, WDEV_TXQ_HE_LEN(apep_init_len); whether this bit extends APEP_LENGTH is not established.
             #[inline]
             pub const fn bit_27_opaque(self) -> bool {
                 (self.0 & 0x08000000) != 0
@@ -304985,13 +304985,13 @@ pub mod wifi_mac {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Observed source use; the individual hardware meaning is unknown. The vendor formatter copies TX metadata head bits 26:25 into bits 6:5 (zero when the head's bits 27:25 are 0b100) and head bit 28 into bit 7 (WIFI_TX_METADATA_HEAD.CONTROL.BITS_25_28_OPAQUE); every ordinary vendor TX path clears those head bits, so an ordinary frame's value is zero.
             #[inline]
             pub const fn bits_5_7_opaque(&self) -> oer_portable_mmio::Bits<3> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 5)
             }
 
-            /// Bounded HE SU formatter-required low control bit.
+            /// Bounded HE SU formatter-required low control bit: the vendor formatter sets it unless the TX metadata head's bits 27:25 are 0b100, which no ordinary vendor TX path produces.
             #[inline]
             pub const fn control_required_8(&self) -> bool {
                 (self.0 & 0x00000100) != 0
@@ -305015,7 +305015,7 @@ pub mod wifi_mac {
                 (self.0 & 0x10000000) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Observed source use; the individual hardware meaning is unknown. The vendor's TX dump decodes bits 27:11 of this word as one value, WDEV_TXQ_HE_LEN(apep_init_len); whether this bit extends APEP_LENGTH is not established.
             #[inline]
             pub const fn bit_27_opaque(&self) -> bool {
                 (self.0 & 0x08000000) != 0
@@ -324483,6 +324483,21 @@ pub mod layouts {
         pub const fn rate(self) -> u8 {
             self.0 & 0x1f
         }
+
+        /// Width of `SIG_MODE` in bits.
+        pub const SIG_MODE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `SIG_MODE`.
+        pub const SIG_MODE_MAX: u32 = 0x3;
+        /// SOURCE: BLOB_LIBPP_RX_SIG_MODE_20261108, ESP_WIFI_SYS_S31_RXCTRL.
+        /// Named image of `SIG_MODE`.
+        pub const SIG_MODE_HT: u8 = 1;
+        /// Project-assigned name. Project-assigned name. The received PPDU's signal mode, as the libpp sig_mode diagnostic names it: one for an HT PPDU, whose HE_SIGA1 word is its HT-SIG. Which of two and three an HE PPDU reports is not established; BB_FORMAT names the HE formats. The public esp_wifi_rxctrl_t comments these bits reserved for its interface; the pinned libpp reads them.
+        ///
+        /// `SIG_MODE`, bits 7:6; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_RX_SIG_MODE_20261108, ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn sig_mode(self) -> u8 {
+            self.0 >> 6
+        }
     }
 
     /// Project-assigned name.
@@ -325043,6 +325058,35 @@ pub mod layouts {
             } else {
                 Self(self.0 & 0xfeffffff)
             }
+        }
+
+        /// Width of `BITS_25_28_OPAQUE` in bits.
+        pub const BITS_25_28_OPAQUE_WIDTH: u32 = 4;
+        /// Greatest unsigned image of `BITS_25_28_OPAQUE`.
+        pub const BITS_25_28_OPAQUE_MAX: u32 = 0xf;
+        /// Opaque: meaning not established. The vendor HE SU formatter copies bits 26:25 and 28 into the second HE SU vector word (HE_SU_SIGNAL_A2_LENGTH.BITS_5_7_OPAQUE) and clears that word's bit 8 when bits 27:25 are 0b100; every ordinary vendor TX path writes zero here.
+        ///
+        /// `BITS_25_28_OPAQUE`, bits 28:25; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_HE_SU_A2_METADATA_COPY_20261108.
+        pub const fn bits_25_28_opaque(self) -> u8 {
+            ((self.0 >> 25) & 0xf) as u8
+        }
+
+        /// This value with `BITS_25_28_OPAQUE` set to `value`, or `None` when `value` does not
+        /// fit its 4 bits.
+        pub const fn with_bits_25_28_opaque(self, value: u8) -> Option<Self> {
+            if value > 0xf {
+                None
+            } else {
+                Some(Self((self.0 & 0xe1ffffff) | (value as u32) << 25))
+            }
+        }
+
+        /// This value with `BITS_25_28_OPAQUE` set to `VALUE`, checked at compile time.
+        pub const fn with_bits_25_28_opaque_constant<const VALUE: u8>(self) -> Self {
+            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xe1ffffff) | (value as u32) << 25)
         }
     }
 

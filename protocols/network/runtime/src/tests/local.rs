@@ -24,7 +24,9 @@ use oer_protocols_network_core::{
     Block, Declined, Group, Interface, NetEvent, NetworkOwner, Outcome, Remote, SendRefusal,
     WorkId, claim,
 };
-use oer_protocols_network_port::{Egress, EthernetFrameView, FramePort, FrameSource, Unpublished};
+use oer_protocols_network_port::{
+    Egress, EthernetFrameView, FramePort, FrameSource, LinkSnapshot, LinkState, Unpublished,
+};
 use oer_protocols_network_wire::arp::Operation;
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
@@ -32,11 +34,15 @@ use oer_protocols_network_wire::ip::{Dscp, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, UdpHeader};
 
 use super::{
-    BLOCKS, Count, DEPTH, LOCAL, OUR_IP, PEER, PEER_IP, Policy, RECEIVED, SIZE, counter, udp_frame,
+    BLOCKS, Count, DEPTH, LOCAL, OUR_IP, PEER, PEER_IP, Policy, RECEIVED, SIZE, counter,
+    dhcp_messages, dhcp_reply, udp_frame,
 };
+use oer_protocols_network_wire::dhcp::MessageType;
+
 use crate::{
-    Direct, EndCause, Interest, LocalEnd, LocalRefused, MemoryPolicy, Next, Observer, Offer,
-    Produce, Producer, Sent, Service, ServiceEvent, Socket, SocketLanes, StopLane, Work,
+    ConfigurationWatch, Direct, EndCause, Interest, LocalEnd, LocalRefused, MemoryPolicy, Next,
+    Observer, Offer, Produce, Producer, Sent, Service, ServiceEvent, Socket, SocketLanes, StopLane,
+    WatchRefused, Work,
 };
 
 /// The producer's port.
@@ -217,7 +223,10 @@ impl Produce for Script {
         let item = source.held.remove(at);
         // A temporary refusal keeps the data for the next ask; a final one
         // takes it out of the ready set.
-        if matches!(reason, SendRefusal::NoPlace | SendRefusal::NeighborsFull) {
+        if matches!(
+            reason,
+            SendRefusal::NoPlace | SendRefusal::NeighborsFull | SendRefusal::NoAddress
+        ) {
             source.ready.push_front(item);
         }
     }
@@ -265,6 +274,8 @@ struct Line {
     publishes: usize,
     tickets: u32,
     waker: Option<Waker>,
+    /// The link is down.
+    down: bool,
 }
 
 #[derive(Clone, Default)]
@@ -378,6 +389,17 @@ impl FrameSource for LocalPort {
         self.0.borrow_mut().notices.pop_front()
     }
 
+    fn link(&self) -> LinkSnapshot {
+        if self.0.borrow().down {
+            LinkSnapshot::DOWN
+        } else {
+            LinkSnapshot {
+                state: LinkState::Up,
+                epoch: 1,
+            }
+        }
+    }
+
     fn register(&mut self, cx: &mut Context<'_>) {
         let mut line = self.0.borrow_mut();
         line.waker = Some(cx.waker().clone());
@@ -418,10 +440,19 @@ struct Bench<B: 'static, E: Egress<u32, u32> = Direct, const C: usize = 2> {
 }
 
 fn bench<B: 'static, E: Egress<u32, u32>, const C: usize>(egress: E) -> Bench<B, E, C> {
+    bench_on(
+        egress,
+        Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap(),
+    )
+}
+
+fn bench_on<B: 'static, E: Egress<u32, u32>, const C: usize>(
+    egress: E,
+    interface: Interface,
+) -> Bench<B, E, C> {
     let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, BLOCKS>(memory).unwrap();
     let line = LocalPort::default();
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, line.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let end: &'static LocalEnd = Box::leak(Box::new(LocalEnd::new()));
@@ -1566,4 +1597,211 @@ fn a_counting_sink_hears_each_of_the_producer_s_steps() {
         settle(&mut run, &count, &waker);
     }
     assert_eq!(steps.0.first(), Some(&Declined));
+}
+
+#[test]
+fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_tells() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        line,
+        script,
+        clock,
+        ..
+    } = bench_on::<Net, _, 2>(Direct, Interface::dhcp(LOCAL, 1500, 7).unwrap());
+    let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
+    service.watch(watch).unwrap();
+    assert_eq!(service.watch(watch), Err(WatchRefused::Taken));
+    let first = watch.changes();
+    assert_eq!(watch.read().unwrap().configuration.unwrap().ipv4, None);
+    let mut events = ();
+    {
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        settle(&mut run, &count, &waker);
+        let sent = dhcp_messages(&line.0.borrow().sent);
+        assert_eq!(sent.len(), 1);
+        let (kind, xid) = sent[0];
+        assert_eq!(kind, MessageType::Discover);
+        // The producer's offer meets no address and holds.
+        let a = tag(0, 0);
+        script.push(a, peer(), 16);
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.calls(),
+            [Call::Offered(a), Call::Refused(a, SendRefusal::NoAddress)]
+        );
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(script.calls().len(), 2, "the hold stays without an address");
+        // OFFER, REQUEST, ACK.
+        line.0
+            .borrow_mut()
+            .incoming
+            .push_back(dhcp_reply(MessageType::Offer, xid, 600));
+        line.open(false);
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            dhcp_messages(&line.0.borrow().sent).last(),
+            Some(&(MessageType::Request, xid))
+        );
+        line.0
+            .borrow_mut()
+            .incoming
+            .push_back(dhcp_reply(MessageType::Ack, xid, 600));
+        line.0.borrow_mut().incoming.push_back(peer_asks());
+        line.open(false);
+        settle(&mut run, &count, &waker);
+        // The watch has the address, published at the turn's end.
+        assert_ne!(watch.changes(), first);
+        let configuration = watch.read().unwrap().configuration.unwrap();
+        assert_eq!(configuration.ipv4.unwrap().address(), OUR_IP);
+        assert_eq!(configuration.lease.unwrap().server, PEER_IP);
+        // The address version released the hold: the offer went.
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.calls_from(2),
+            [
+                Call::Offered(a),
+                Call::Filled(a),
+                Call::Ended(a, Outcome::Accepted)
+            ]
+        );
+        // T1 is half of 600 s from the REQUEST.
+        let lease = watch.read().unwrap().configuration.unwrap().lease.unwrap();
+        assert_eq!(lease.obtained, clock.now());
+        assert_eq!(
+            lease.renew,
+            clock.now().saturating_add(Duration::from_secs(300))
+        );
+    }
+    let ended = service.retire();
+    assert_eq!(
+        watch.read().unwrap().configuration,
+        None,
+        "the lease left with the core"
+    );
+    drop(ended);
+}
+
+/// The peer's echo request to us.
+fn peer_pings() -> Vec<u8> {
+    use oer_protocols_network_wire::icmp::{Echo, MessageType as Icmp, PROTOCOL_ICMP};
+    use oer_protocols_network_wire::ip::{DsField, Ipv4Fields};
+    let request = Echo {
+        kind: Icmp::Echo,
+        code: 0,
+        checksum: 0,
+        identifier: 1,
+        sequence: 1,
+        data: b"ping",
+    };
+    let mut message = request.header(Icmp::Echo).to_vec();
+    message.extend_from_slice(b"ping");
+    let mut frame = EthernetHeader {
+        destination: LOCAL,
+        source: PEER,
+        ether_type: EtherType::IPV4,
+    }
+    .to_bytes()
+    .to_vec();
+    frame.extend_from_slice(
+        &Ipv4Fields {
+            services: DsField::from_bytes([0]),
+            total_length: u16::try_from(20 + message.len()).unwrap(),
+            identification: 1,
+            time_to_live: 64,
+            protocol: PROTOCOL_ICMP,
+            source: PEER_IP,
+            destination: OUR_IP,
+        }
+        .to_bytes(),
+    );
+    frame.extend_from_slice(&message);
+    frame
+}
+
+#[test]
+fn an_echo_reply_s_end_releases_a_neighbors_full_hold() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        mut socket,
+        line,
+        script,
+        clock,
+        ..
+    } = direct::<Net>();
+    // The peer is known, and its echo reply waits for a full port: the
+    // reply holds its entry, a channel datagram holds the other.
+    line.0.borrow_mut().incoming.push_back(peer_asks());
+    line.0.borrow_mut().incoming.push_back(peer_pings());
+    line.open(true);
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let (count, waker) = counter();
+    let _asking = channel_send(&mut socket, &mut run, host(7), b"asking");
+    settle(&mut run, &count, &waker);
+    let a = tag(0, 0);
+    script.push(a, host(9), 16);
+    script.wake();
+    settle(&mut run, &count, &waker);
+    assert_eq!(
+        script.calls(),
+        [
+            Call::Offered(a),
+            Call::Refused(a, SendRefusal::NeighborsFull)
+        ]
+    );
+    // The reply goes: its entry is free, and the hold gives way.
+    line.open(false);
+    settle(&mut run, &count, &waker);
+    let replies = line
+        .0
+        .borrow()
+        .sent
+        .iter()
+        .filter(|frame| frame.get(23) == Some(&1))
+        .count();
+    assert_eq!(replies, 1, "the echo reply went");
+    assert_eq!(script.calls_from(2), [Call::Offered(a)], "asked again");
+}
+
+#[test]
+fn dropping_the_service_ends_the_watch_and_wakes_its_reader() {
+    brand!(Net);
+    let Bench {
+        mut service, clock, ..
+    } = direct::<Net>();
+    let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
+    service.watch(watch).unwrap();
+    assert!(watch.read().unwrap().configuration.unwrap().ipv4.is_some());
+    let seen = watch.changes();
+    let (count, waker) = counter();
+    let cx = &mut Context::from_waker(&waker);
+    let mut changed = pin!(watch.changed(seen));
+    assert!(changed.as_mut().poll(cx).is_pending());
+    // A cancelled run keeps the service, and the watch with it.
+    {
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        assert!(run.as_mut().poll(cx).is_pending());
+    }
+    assert!(watch.read().unwrap().configuration.is_some());
+    // The run's first turn published the link it saw: that wait is over, and
+    // the reader waits again.
+    assert!(changed.as_mut().poll(cx).is_ready());
+    let seen = watch.changes();
+    let mut changed = pin!(watch.changed(seen));
+    assert!(changed.as_mut().poll(cx).is_pending());
+    let woken = count.0.load(core::sync::atomic::Ordering::SeqCst);
+    drop(service);
+    assert_eq!(watch.read().unwrap().configuration, None);
+    assert!(
+        count.0.load(core::sync::atomic::Ordering::SeqCst) > woken,
+        "the reader was woken"
+    );
+    assert!(changed.as_mut().poll(cx).is_ready());
 }

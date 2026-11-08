@@ -30,6 +30,7 @@ type TestConfigurationPath<'id> =
     oer_protocols_radio_port::Child<Root<oer_protocols_radio_port::LocalId<'id>>, 1>;
 
 mod block_ack;
+mod he_join;
 mod key_unwrap;
 mod link;
 mod profile;
@@ -600,6 +601,8 @@ impl<'id> World<'id> {
     ) -> World<'id, G> {
         let channels = heapless::Vec::from_slice(&[channel(1), channel(6)]).unwrap();
         let ((gate, gate_issuer, authority), permissions) = mint.into_pools();
+        // The test's one installation issues its permissions.
+        let permissions = permissions.issue(0);
         let (arbiter, place, absence) = Arbiter::new(
             ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(),
             channel(1),
@@ -618,7 +621,7 @@ impl<'id> World<'id> {
             supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
             association: &CAPABILITIES,
             listen_interval: StationListenInterval::new(10).unwrap(),
-            phy: PhyMode::Legacy,
+            phy: StaPhyRequest::Legacy,
             tx_block_ack: None,
             callbacks: Callbacks {
                 nonce_calls: 0,
@@ -1477,7 +1480,8 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
                             .unwrap()
                     )
                     .unwrap(),
-                    channel: 6
+                    channel: 6,
+                    phy: PhyMode::Legacy,
                 }),
                 Seen::Upstream(UpstreamFact::Connected(channel(6))),
             ]
@@ -2708,7 +2712,8 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
                                 .unwrap()
                         )
                         .unwrap(),
-                        channel: 6
+                        channel: 6,
+                        phy: PhyMode::Legacy,
                     }),
                     Seen::Upstream(UpstreamFact::Connected(channel(6))),
                 ]
@@ -3924,7 +3929,8 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
             access_point,
             erp: observation.erp,
             channel: world.station.config.channels[0],
-            phy: world.station.config.phy,
+            phy: PhyMode::Legacy,
+            he_power: None,
             step: JoinStep::Associate(
                 StaAssociationRuntime::new(
                     oer_protocols_ieee80211_wire::address::OwnAddress::new(
@@ -5866,29 +5872,34 @@ fn an_ht40_join_tunes_the_secondary_the_access_point_names() {
     let below = wide(13, ChannelWidth::Mhz40Below);
     let offered = ht_access_point(Some(ChannelWidth::Mhz40Below));
     assert_eq!(
-        join_phy(PhyMode::Ht40, &[below], &offered, scanned),
-        (below, PhyMode::Ht40)
+        join_phy(StaPhyRequest::Ht40, &[below], &offered, scanned),
+        (below, PhyMode::Ht40, None)
     );
     // Without the permitted 40 MHz channel of that secondary, or with an
     // access point at 20 MHz, the join stays on the scanned channel at HT20.
     let above = wide(9, ChannelWidth::Mhz40Above);
     assert_eq!(
-        join_phy(PhyMode::Ht40, &[above], &offered, scanned),
-        (scanned, PhyMode::Ht20)
+        join_phy(StaPhyRequest::Ht40, &[above], &offered, scanned),
+        (scanned, PhyMode::Ht20, None)
     );
     let narrow = ht_access_point(Some(ChannelWidth::Mhz20));
     assert_eq!(
-        join_phy(PhyMode::Ht40, &[below], &narrow, scanned),
-        (scanned, PhyMode::Ht20)
+        join_phy(StaPhyRequest::Ht40, &[below], &narrow, scanned),
+        (scanned, PhyMode::Ht20, None)
     );
     // An access point without HT is legacy.
     assert_eq!(
-        join_phy(PhyMode::Ht40, &[below], &ht_access_point(None), scanned),
-        (scanned, PhyMode::Legacy)
+        join_phy(
+            StaPhyRequest::Ht40,
+            &[below],
+            &ht_access_point(None),
+            scanned
+        ),
+        (scanned, PhyMode::Legacy, None)
     );
     // A station configured for another mode keeps it and its channel.
     assert_eq!(
-        join_phy(PhyMode::Ht20, &[below], &offered, scanned),
-        (scanned, PhyMode::Ht20)
+        join_phy(StaPhyRequest::Ht20, &[below], &offered, scanned),
+        (scanned, PhyMode::Ht20, None)
     );
 }

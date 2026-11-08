@@ -559,6 +559,11 @@ impl FrameSource for Counted {
     fn take_notice(&mut self) -> Option<()> {
         self.inner.as_mut().and_then(FrameSource::take_notice)
     }
+    fn link(&self) -> LinkSnapshot {
+        self.inner
+            .as_ref()
+            .map_or(LinkSnapshot::DOWN, FrameSource::link)
+    }
     fn register(&mut self, cx: &mut Context<'_>) {
         if let Some(inner) = &mut self.inner {
             inner.register(cx);

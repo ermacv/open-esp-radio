@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/access_point_pairwise_station_slot.rs:17:73
+   |
+17 |     let _install = commands.install_access_point_pairwise(&association, slot, peer, Ccmp128Key::new(&[1; 16])); // ui-error: E0308
+   |                             -----------------------------               ^^^^ expected `PairwiseKeySlot<'_, ..., 2, 2, ...>`, found `PairwiseKeySlot<'_, Station, 2, 2, ...>`
+   |                             |
+   |                             arguments to this method are incorrect
+   |
+   = note: expected struct `PairwiseKeySlot<'id, oer_protocols_ieee80211_contracts_port::AccessPoint, 2, 2, oer_protocols_radio_port::Child<Root<StaticId<UiSlot>>, 6>>`
+              found struct `PairwiseKeySlot<'id, oer_protocols_ieee80211_contracts_port::Station, 2, 2, oer_protocols_radio_port::Child<Root<StaticId<UiSlot>>, 5>>`
+note: method defined here
+  --> $WORKSPACE/protocols/ieee80211/contracts/port/src/access_point.rs
+   |
+   |     fn install_access_point_pairwise(
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1599,6 +1599,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_control_required_0(true)
                 .set_fec_coding(matches!(parameters.rate.fec_coding, MacHeFecCoding::Ldpc))
                 .set_control_required_2(true)
+                // SOURCE: BLOB_LIBPP_HE_SU_A2_METADATA_COPY_20261108. The
+                // vendor formatter copies TX metadata head bits 26:25 and 28
+                // here and keeps bit 8 set unless head bits 27:25 are 0b100;
+                // every ordinary vendor TX path clears those head bits, so an
+                // ordinary frame carries zero and bit 8. Their meaning is not
+                // established.
                 .set_bits_5_7_opaque(bits(0))
                 .set_control_required_8(true)
                 .set_descriptor_class_match(false)

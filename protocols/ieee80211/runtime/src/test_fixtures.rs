@@ -8,7 +8,6 @@ use oer_portable_time::Duration;
 use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, SupportedChannel};
 use oer_protocols_ieee80211_core_roles_sta::machine::{StaConfig, StaSecurity};
 use oer_protocols_ieee80211_core_security_rsn::frames::RsnTxFrame;
-use oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode;
 use oer_protocols_ieee80211_testing_model::{AirFrame, ModelCaps24, ModelRxMeta};
 use oer_protocols_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
@@ -133,7 +132,7 @@ pub(crate) fn config(security: StaSecurity) -> TestConfig {
             listen_interval:
                 oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::new(10)
                     .unwrap(),
-            phy: PhyMode::Legacy,
+            phy: oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::Legacy,
             tx_block_ack: None,
             callbacks: Callbacks(oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128),
         },

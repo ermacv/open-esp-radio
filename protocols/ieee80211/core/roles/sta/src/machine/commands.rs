@@ -154,6 +154,8 @@ pub enum StaCommandOutcome {
     Connected {
         bssid: Bssid,
         channel: u8,
+        /// The PHY mode the station associated in.
+        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode,
     },
     ConnectFailed(StaDisconnectReason),
     Disconnected(StaDisconnectReason),

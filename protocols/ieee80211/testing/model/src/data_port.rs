@@ -24,6 +24,12 @@ use super::*;
 use core::task::Context;
 use oer_protocols_ieee80211_contracts_port::Ieee80211Instant;
 use oer_protocols_ieee80211_contracts_port::{
+    AccessPointCapabilities, AccessPointCommand, AccessPointCommandKind, AccessPointCommands,
+    AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
+    AccessPointRefusal, AccessPointSubmission, AccessPointTypes, BeaconParts, BeaconSubmission,
+    TsfControl, first_stale,
+};
+use oer_protocols_ieee80211_contracts_port::{
     AdmittedTxParts, CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts,
     LendRefusal, LendRefused, PairwiseIssue, PortArena, PortCommand, PortCommands, PortCompleted,
     PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartRefused,
@@ -51,6 +57,8 @@ pub const MODEL_STOP_BOUND: oer_portable_time::Duration =
 /// A pairwise installation the issuer accepted.
 pub struct ModelPairwiseInstall<B: ModelComposition> {
     spp: oer_protocols_ieee80211_wire::security::Spp,
+    /// The installation that issued the association.
+    association: u32,
     key: RawKeyIdentity,
     material: Ccmp128Key,
     installed: OwnedInstalledPairwise<'static, B>,
@@ -62,6 +70,20 @@ pub struct ModelGroupInstall<B: ModelComposition>(GroupInstallationCommand<'stat
 impl<'id, B: ModelComposition + 'id> CommandTypes<'id> for ModelTypes<B> {
     type PairwiseInstall = ModelPairwiseInstall<B>;
     type GroupInstall = ModelGroupInstall<B>;
+}
+
+/// An access-point pairwise installation the issuer accepted: the station's
+/// payload does not fit an access-point command.
+pub struct ModelAccessPointPairwiseInstall<B: ModelComposition>(ModelPairwiseInstall<B>);
+
+/// An access-point group installation the issuer accepted.
+pub struct ModelAccessPointGroupInstall<B: ModelComposition>(ModelGroupInstall<B>);
+
+/// The access point's installations run on the station's implementation,
+/// in payload types of their own.
+impl<'id, B: ModelComposition + 'id> AccessPointTypes<'id> for ModelTypes<B> {
+    type AccessPointPairwiseInstall = ModelAccessPointPairwiseInstall<B>;
+    type AccessPointGroupInstall = ModelAccessPointGroupInstall<B>;
 }
 
 /// The lifecycle's issuer of the model port's installation commands.
@@ -94,13 +116,20 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         _peer: IndividualAddress,
         key: Ccmp128Key,
     ) -> PairwiseIssue<'id, Self::Types, C> {
-        let identity = RawKeyIdentity::new(slot.index(), 0, VifRole::Station, &self.air);
+        let identity = RawKeyIdentity::new(
+            slot.index(),
+            slot.generation(),
+            0,
+            VifRole::Station,
+            &self.air,
+        );
         let issued = KeyIdentity {
             owned: identity.clone(),
             loan: PhantomData,
         };
         let install = ModelPairwiseInstall {
             spp: association.owner.spp(),
+            association: association.owner.generation(),
             key: identity.clone(),
             material: key,
             installed: Station::pairwise_installed(ModelPairwiseKey {
@@ -128,11 +157,89 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         PortCommand::InstallGroup(ModelGroupInstall(Station::installation(
             PendingGroupInstall {
                 spp: association.owner.spp(),
+                association: association.owner.generation(),
                 slot: slot.into_owned(&self.loan),
-                permission: self.loan.reclaim_slot(permission),
+                permission: permission.into_owned(&self.loan),
                 key_id,
                 key,
             },
+        )))
+    }
+}
+
+impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContext + 'id>
+    AccessPointCommands<'id> for ModelCommands<'id, Id, C, X>
+{
+    type Types = ModelTypes<Backend<Id, C, X>>;
+    type Caps = C;
+
+    fn install_access_point_pairwise(
+        &mut self,
+        association: &ModelAssociation<'id, Backend<Id, C, X>, AccessPoint>,
+        slot: PairwiseKeySlot<
+            'id,
+            AccessPoint,
+            MODEL_KEY_SLOTS,
+            MODEL_KEY_SLOTS,
+            <AccessPoint as ModelRole>::AssociationPath<Id>,
+        >,
+        _peer: IndividualAddress,
+        key: Ccmp128Key,
+    ) -> AccessPointPairwiseIssue<'id, Self::Types, C> {
+        let identity = RawKeyIdentity::new(
+            slot.index(),
+            slot.generation(),
+            0,
+            VifRole::AccessPoint,
+            &self.air,
+        );
+        let issued = KeyIdentity {
+            owned: identity.clone(),
+            loan: PhantomData,
+        };
+        let install = ModelPairwiseInstall {
+            spp: association.owner.spp(),
+            association: association.owner.generation(),
+            key: identity.clone(),
+            material: key,
+            installed: AccessPoint::pairwise_installed(ModelPairwiseKey {
+                identity,
+                slot: slot.into_owned(&self.loan),
+            }),
+        };
+        (
+            AccessPointCommand::InstallPairwise(ModelAccessPointPairwiseInstall(install)),
+            issued,
+        )
+    }
+
+    fn install_access_point_group(
+        &mut self,
+        association: &ModelAssociation<'id, Backend<Id, C, X>, AccessPoint>,
+        permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+            'id,
+            ModelGroupPermission<AccessPoint>,
+            <AccessPoint as ModelRole>::GroupPermissionPath<Id>,
+        >,
+        slot: GroupKeySlot<
+            'id,
+            AccessPoint,
+            MODEL_KEY_SLOTS,
+            MODEL_KEY_SLOTS,
+            <AccessPoint as ModelRole>::AssociationPath<Id>,
+        >,
+        key_id: GroupKeyId,
+        key: Ccmp128Key,
+    ) -> AccessPointCommand<'id, Self::Types, C> {
+        AccessPointCommand::InstallGroup(ModelAccessPointGroupInstall(ModelGroupInstall(
+            AccessPoint::installation(PendingGroupInstall {
+                spp: association.owner.spp(),
+                association: association.owner.generation(),
+                slot: slot.into_owned(&self.loan),
+                permission: permission.into_owned(&self.loan),
+                key_id,
+                key,
+            }),
         )))
     }
 }
@@ -199,17 +306,33 @@ pub enum ModelPortFault {
         /// When the port first held it.
         since: Instant,
     },
+    /// A held access-point command passed [`MODEL_HELD_COMMAND_BOUND`]; the
+    /// port keeps it.
+    AccessPointCommandStalled {
+        /// The held command.
+        kind: AccessPointCommandKind,
+        /// When the port first held it.
+        since: Instant,
+    },
 }
 
 /// A command of the model port of `(Id, C, X)`.
 type ModelCommand<'id, Id, C, X> = PortCommand<'id, ModelTypes<Backend<Id, C, X>>, C>;
+
+/// An access-point command of the model port of `(Id, C, X)`.
+type ModelAccessPointCommand<'id, Id, C, X> =
+    AccessPointCommand<'id, ModelTypes<Backend<Id, C, X>>, C>;
+
+/// The progress of an access-point command of the model port of `(Id, C, X)`.
+type ModelAccessPointProgress<'id, Id, C, X> =
+    AccessPointProgress<'id, ModelTypes<Backend<Id, C, X>>, C>;
 
 /// A station attempt the model port accepted: the backend's own owners.
 pub type ModelAdmitted<Id, C, X> = AdmittedTxParts<
     ModelContextOf<Backend<Id, C, X>>,
     Slot<'static, ModelTickets, ModelPool<Id, 1>>,
     ModelMpdu<'static, Backend<Id, C, X>>,
-    ModelTxExecution,
+    ModelTxExecution<Backend<Id, C, X>>,
     C,
 >;
 
@@ -282,7 +405,11 @@ pub struct ModelPort<
     radio: Radio,
     deadline: Option<Instant>,
     held_since: Option<(CommandKind, Instant)>,
+    /// The access point's held command, on its own bound: it holds no
+    /// station command.
+    access_point_held_since: Option<(AccessPointCommandKind, Instant)>,
     retained: Vec<ModelCommand<'id, Id, C, X>>,
+    retained_access_point: Vec<ModelAccessPointCommand<'id, Id, C, X>>,
     fault: Option<ModelPortFault>,
 }
 
@@ -315,7 +442,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) -> ModelInstall<'id, Id, C, X> {
         let Minted { mint, installation } = minted;
         let loan: BodyLoan<'id, Id, Backend<Id, C, X>> = installation.loan();
-        let (mut held, resources) = installation::installation_parts(&air, mint);
+        let (mut held, resources) =
+            installation::installation_parts(&air, mint, installation.generation());
         // Units the network still holds count against this installation's
         // lend limit until it drops them.
         held.network = network;
@@ -331,7 +459,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 radio: Radio::Stopped,
                 deadline: None,
                 held_since: None,
+                access_point_held_since: None,
                 retained: Vec::new(),
+                retained_access_point: Vec::new(),
                 fault: None,
             },
             commands: ModelCommands { air, loan },
@@ -369,6 +499,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             channel,
             addresses,
             retained,
+            retained_access_point,
             ..
         } = self;
         match installations.remint(installation) {
@@ -378,6 +509,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     air.remove_key_material(&key);
                 }
                 drop(retained);
+                drop(retained_access_point);
                 Ok(Self::from_mint(
                     minted,
                     channel,
@@ -400,7 +532,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                         radio: Radio::Stopped,
                         deadline: None,
                         held_since: None,
+                        access_point_held_since: None,
                         retained,
+                        retained_access_point,
                         fault: None,
                     },
                     ModelReinstallRefused::Receipt,
@@ -516,13 +650,13 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         &mut self,
         attempt: ModelAdmitted<Id, C, X>,
         reason: SubmitRefusal,
+        cause: WithdrawCause,
         sink: &mut impl PortSink<'id, ModelTypes<Backend<Id, C, X>>>,
     ) -> SubmitRefusal {
         self.held.post(OwnedLowerMacEvent::Terminal(
-            OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::Single(
-                attempt
-                    .operation
-                    .complete(TxOutcome::Withdrawn(WithdrawCause::Disabled)),
+            OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::of(
+                attempt.operation.complete(TxOutcome::Withdrawn(cause)),
+                attempt.execution.beacon,
             )),
         ));
         self.drain(sink);
@@ -668,7 +802,13 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if let Radio::Stopping { since } = self.radio {
             due(since.saturating_add(MODEL_STOP_BOUND));
         }
-        if let Some((_, since)) = self.held_since {
+        for since in [
+            self.held_since.map(|(_, since)| since),
+            self.access_point_held_since.map(|(_, since)| since),
+        ]
+        .into_iter()
+        .flatten()
+        {
             due(since.saturating_add(MODEL_HELD_COMMAND_BOUND));
         }
         self.deadline = deadline;
@@ -748,18 +888,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 CommandProgress::Done
             }
             PortCommand::InstallPairwise(install) => {
-                let ModelPairwiseInstall {
-                    spp,
-                    key,
-                    material,
-                    installed,
-                } = install;
-                self.air.apply_association(key.0.role, spp);
-                self.air.install_material(&key, material);
-                self.driver.keys.push(key);
-                self.held.post(OwnedLowerMacEvent::Terminal(
-                    OwnedLowerMacTerminal::PairwiseKeyInstalled(installed),
-                ));
+                self.install_pairwise_key(install);
                 CommandProgress::Done
             }
             PortCommand::InstallGroup(install) if group_held => {
@@ -788,7 +917,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     &self.held,
                     now.as_micros(),
                     GroupChange::Replace {
-                        permission: self.loan.reclaim_slot(permission),
+                        permission: permission.into_owned(&self.loan),
                         installed: installed.into_owned(&self.loan),
                         key_id,
                         key,
@@ -804,7 +933,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     &self.held,
                     now.as_micros(),
                     GroupChange::Select {
-                        permission: self.loan.reclaim_slot(permission),
+                        permission: permission.into_owned(&self.loan),
                         installed: installed.into_owned(&self.loan),
                     },
                 );
@@ -1193,7 +1322,36 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             Radio::Running => None,
         };
         if let Some(reason) = refusal {
-            return Err(self.withdraw(attempt, reason, sink));
+            return Err(self.withdraw(attempt, reason, WithdrawCause::Disabled, sink));
+        }
+        // An access-point attempt under a key or beacon permission of an
+        // earlier installation is refused for good, with its owners.
+        if attempt.execution.role == VifRole::AccessPoint {
+            let installation = self.installation.generation();
+            let named = [
+                attempt
+                    .execution
+                    .beacon
+                    .as_ref()
+                    .map(|beacon| beacon.generation()),
+                attempt
+                    .execution
+                    .key
+                    .as_ref()
+                    .map(|key| key.identity.0.generation),
+            ];
+            let named: Vec<u32> = named.into_iter().flatten().collect();
+            if let Some(issued) = first_stale(installation, &named) {
+                return Err(self.withdraw(
+                    attempt,
+                    SubmitRefusal::StalePermission {
+                        issued,
+                        installation,
+                    },
+                    WithdrawCause::StalePermission,
+                    sink,
+                ));
+            }
         }
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
@@ -1201,15 +1359,26 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let mpdu = attempt.operation.execute().mpdu;
         mpdu.admit(now);
         if mpdu.project_admission(&air).is_err() {
-            return Err(self.withdraw(attempt, SubmitRefusal::NotEnabled, sink));
+            return Err(self.withdraw(
+                attempt,
+                SubmitRefusal::NotEnabled,
+                WithdrawCause::Disabled,
+                sink,
+            ));
         }
-        let ModelTxExecution { plan, key } = attempt.execution;
+        let ModelTxExecution {
+            plan,
+            key,
+            role,
+            beacon,
+        } = attempt.execution;
         let prepared = Box::new(Prepared {
             operation: attempt.operation,
-            role: VifRole::Station,
+            role,
             queue: attempt.access_category,
             plan,
             key,
+            beacon,
         });
         attempt
             .access_category
@@ -1477,6 +1646,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 // A stopping port refuses the held command back to its
                 // caller: its bound runs again from its next admission.
                 self.held_since = None;
+                self.access_point_held_since = None;
                 now
             }
             Radio::Stopping { since } => since,
@@ -1489,6 +1659,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if self.idle() && self.held.events.is_empty() {
             self.held.draining.set(false);
             self.radio = Radio::Stopped;
+            // The stopped MAC receives for no interface and runs no TSF.
+            self.air
+                .access_point
+                .set(ModelAccessPointInterface::default());
             self.refresh_deadline(now);
             return Poll::Ready(Ok(()));
         }
@@ -1552,3 +1726,5 @@ pub(crate) fn model_ampdu_capabilities(subframes: u8) -> AmpduCapabilities {
 
 #[cfg(test)]
 mod tests;
+
+mod access_point;

@@ -1,0 +1,8 @@
+error[E0271]: type mismatch resolving `<ModelTypes<ModelBackend<StaticId<UiSlot>>> as AccessPointTypes<'_>>::AccessPointPairwiseInstall == ModelPairwiseInstall<ModelBackend<StaticId<UiSlot>>>`
+  --> tests/ui/access_point_command_with_station_install.rs:20:19
+   |
+20 |     let command = AccessPointCommand::InstallPairwise(install); // ui-error: E0271
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `ModelPairwiseInstall<ModelBackend<...>>`, found `ModelAccessPointPairwiseInstall<...>`
+   |
+   = note: expected struct `ModelPairwiseInstall<ModelBackend<StaticId<UiSlot>>>`
+              found struct `ModelAccessPointPairwiseInstall<ModelBackend<StaticId<UiSlot>>>`

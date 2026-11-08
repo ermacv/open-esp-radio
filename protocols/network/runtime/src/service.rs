@@ -24,6 +24,7 @@ use crate::socket::{
     Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, Socket, SocketLanes, drain_requests,
     lanes,
 };
+use crate::watch::{ConfigurationWatch, WatchRefused, Watched};
 
 /// Commands one turn takes from a lane.
 const TURN_COMMANDS: usize = 4;
@@ -173,6 +174,20 @@ impl<
     }
 }
 
+/// A service's watch, which its end, retirement or drop, ends: a cancelled
+/// `run` drops no service, so it ends nothing.
+struct Watching<'a> {
+    watch: &'a ConfigurationWatch,
+    /// The core's count of changes at the last publication.
+    seen: u32,
+}
+
+impl Drop for Watching<'_> {
+    fn drop(&mut self) {
+        self.watch.end();
+    }
+}
+
 /// A socket the core refused, with its storage untouched for another try.
 #[derive(Debug)]
 pub struct BindRefused<'a, T> {
@@ -246,6 +261,9 @@ pub struct Service<
     adopted: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
     returns: Option<ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
     local: L,
+    /// Where the interface's address is published, and the core's count of
+    /// changes at the last publication.
+    watch: Option<Watching<'a>>,
 }
 
 impl<
@@ -384,6 +402,7 @@ impl<
             adopted: [const { None }; SOCKETS],
             returns: None,
             local,
+            watch: None,
         }
     }
 }
@@ -437,6 +456,45 @@ impl<
                 Ok(())
             }
             None => Err(late),
+        }
+    }
+
+    /// Publish the interface's address to `watch` from now on: at once, then
+    /// at the end of each turn that changed it, and at the service's end.
+    ///
+    /// # Errors
+    /// [`WatchRefused::Taken`]: this service or another publishes already.
+    pub fn watch(&mut self, watch: &'a ConfigurationWatch) -> Result<(), WatchRefused> {
+        if self.watch.is_some() {
+            return Err(WatchRefused::Taken);
+        }
+        let changes = self.owner.configuration_changes();
+        watch.begin(Watched {
+            configuration: Some(self.owner.configuration()),
+        })?;
+        self.watch = Some(Watching {
+            watch,
+            seen: changes,
+        });
+        Ok(())
+    }
+
+    /// Publish the address if the turn changed it.
+    fn publish_configuration(&mut self) {
+        let changes = self.owner.configuration_changes();
+        if let Some(Watching { watch, seen }) = &mut self.watch
+            && *seen != changes
+        {
+            // Only this service lends the cell, and readers lend it for a
+            // copy: a refusal leaves the count, and the next turn tries again.
+            if watch
+                .publish(Watched {
+                    configuration: Some(self.owner.configuration()),
+                })
+                .is_ok()
+            {
+                *seen = changes;
+            }
         }
     }
 
@@ -545,7 +603,8 @@ impl<
     ) -> bool {
         let mut moved = false;
         self.local.turn_begins();
-        self.owner.tick(now);
+        self.owner.observe_link(now);
+        self.owner.tick(now, events);
         for index in 0..SOCKETS {
             moved |= self.commands(now, index, events);
         }
@@ -592,6 +651,7 @@ impl<
             moved |= self.relieve(now);
         }
         moved |= self.deliver(events);
+        self.publish_configuration();
         self.turn_ended(events);
         moved
     }
@@ -922,6 +982,9 @@ impl<
     {
         let cause = self.ended.unwrap_or(EndCause::Stopped);
         let mut this = self;
+        // The lease leaves with the core: the watch ends here, as it would
+        // at a drop.
+        drop(this.watch.take());
         while this.take_home() {}
         let adopted = this.adopted;
         let returns = this.returns;

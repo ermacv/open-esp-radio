@@ -395,6 +395,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     type GatePath = Part<Id, 1>;
     type TicketPath = Part<Id, 2>;
     type BlockAckPath = Part<Id, 7>;
+    type BeaconPath = Part<Id, 10>;
     type Fault = Fault;
     type Context = D::Context<'id, Id>;
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, Id, D, B, O, R, K>;

@@ -1036,7 +1036,7 @@ Each register or memory-layout bit has one of four states:
 | --- | --- | --- |
 | Described | Named in an open vendor source, or its meaning is otherwise established | A cited source establishes the name or meaning |
 | Opaque | Absent from open sources; a use is observed, meaning unknown | A cited source establishes the use |
-| Reserved | A source explicitly marks the bit reserved | The register records a cited reserved mask; no field is published |
+| Reserved | A hardware source explicitly marks the bit reserved | The register records a cited reserved mask; no field is published |
 | Absent | No use is observed in the examined corpus and no source marks the bit reserved | No field or reserved annotation is published |
 
 A use is a write of a value different from reset, an explicit masked set in
@@ -1049,6 +1049,17 @@ Absence is relative to the examined corpus, whose inputs and coverage limits
 must accompany a vendor-use check. A use of either a reserved or absent bit
 is an error; the checker reports these two cases separately. A bit named in
 an open vendor source is never opaque.
+
+Reserved means reserved in the hardware: a manual, SVD, register header or
+other description of the hardware marks the bit. A software interface that
+leaves a bit of its own structure unnamed or comments it reserved, such as a
+public C ABI over a hardware-written memory layout, reserves the bit for
+that interface only and does not make it Reserved here. A behavioural reader
+or writer of the bit in a pinned vendor library is then a use, and the bit
+is a Described or Opaque field by that evidence; its review cites both the
+interface's reservation and the use. A value the evidence does not
+distinguish stays unnamed, and a joint decode in a diagnostic does not merge
+fields that have their own uses.
 
 Code preserves reserved and absent bits or writes their reset value, and the
 PAC exposes no field accessor for them. Layouts follow the same rule: CPU operations

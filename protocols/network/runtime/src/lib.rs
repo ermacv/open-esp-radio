@@ -41,6 +41,7 @@ mod observation;
 mod returns;
 mod service;
 mod socket;
+mod watch;
 
 pub use device::{DevicePort, PortRefusal, TxBuffers};
 pub use local::{
@@ -52,6 +53,7 @@ pub use service::{BindRefused, Direct, EndCause, Ended, MemoryPolicy, Service, S
 pub use socket::{
     LateSocket, Observer, RESERVE_AHEAD, Refusal, Refused, Sent, Socket, SocketClosed, SocketLanes,
 };
+pub use watch::{ConfigurationWatch, WatchRefused, Watched};
 
 #[cfg(test)]
 mod tests;

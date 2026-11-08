@@ -591,12 +591,28 @@ impl<'b> World<'b> {
         [probe, authentication, association]
     }
 
+    /// The station's connection to the access point on channel 6, in the
+    /// PHY mode its configuration and the access point make.
     async fn connected(&self) {
-        self.notice(StaNotice::Connected {
-            bssid: BSSID,
-            channel: 6,
-        })
-        .await;
+        for round in 0..2000 {
+            yield_now().await;
+            if round % 20 == 19 {
+                self.advance();
+            }
+            if self.heard.notices.borrow().iter().any(|notice| {
+                matches!(
+                    notice,
+                    StaNotice::Connected {
+                        bssid: BSSID,
+                        channel: 6,
+                        ..
+                    }
+                )
+            }) {
+                return;
+            }
+        }
+        panic!("never connected");
     }
 
     async fn handshake(&self, seen: &mut usize) -> oer_protocols_ieee80211_core_security_rsn::Ptk {
@@ -837,22 +853,32 @@ fn lifecycle_spare<'s, const G: usize>(
     Spare<'s>,
 ) {
     let ModelResources {
-        connection_epoch,
-        block_acks,
-        station_commands,
-        access_point_commands,
-        access_point_group: [access_point_group, _],
-        access_point_group_permission,
-        terminal_access,
-        tickets,
-        small,
-        station_association,
-        station_pairwise,
-        station_group,
-        station_group_permission,
-        gate,
-        arbiter_authority,
-        ..
+        shared:
+            oer_protocols_ieee80211_testing_model::ModelShared {
+                block_acks,
+                terminal_access,
+                tickets,
+                small,
+                gate,
+                arbiter_authority,
+                ..
+            },
+        station:
+            oer_protocols_ieee80211_testing_model::ModelStationPermissions {
+                connection_epoch,
+                commands: station_commands,
+                association: station_association,
+                pairwise: station_pairwise,
+                group: station_group,
+                group_permission: station_group_permission,
+            },
+        access_point:
+            oer_protocols_ieee80211_testing_model::ModelAccessPointPermissions {
+                commands: access_point_commands,
+                group: [access_point_group, _],
+                group_permission: access_point_group_permission,
+                ..
+            },
     } = resources;
     let mut tickets = tickets.into_iter();
     let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
@@ -1244,6 +1270,7 @@ fn an_open_station_joins_through_the_actor_carries_data_both_ways_and_stops() {
                     .notice(StaNotice::Connected {
                         bssid: BSSID,
                         channel: 6,
+                        phy: crate::station::contract::LinkPhy::Legacy,
                     })
                     .await;
                 // The management frames went to the lifecycle and back.
@@ -1367,6 +1394,7 @@ fn a_station_whose_radio_cannot_move_restarts_on_the_next_installation_without_a
                         .notice(StaNotice::Connected {
                             bssid: BSSID,
                             channel: 6,
+                            phy: crate::station::contract::LinkPhy::Legacy,
                         })
                         .await;
                     assert!(world.send_msdu([0x02, 0, 0, 0, 0, 0x07]));
@@ -1407,6 +1435,7 @@ fn steady_transmission_does_not_wake_the_lifecycle_per_ppdu() {
                     .notice(StaNotice::Connected {
                         bssid: BSSID,
                         channel: 6,
+                        phy: crate::station::contract::LinkPhy::Legacy,
                     })
                     .await;
                 world.settle().await;
@@ -1466,6 +1495,7 @@ fn message4_waits_for_the_group_installations_terminal_through_the_actor() {
                     .notice(StaNotice::Connected {
                         bssid: BSSID,
                         channel: 6,
+                        phy: crate::station::contract::LinkPhy::Legacy,
                     })
                     .await;
                 world.stop().await;
@@ -1570,6 +1600,7 @@ fn a_receive_agreement_answers_through_the_station_and_reorders_in_the_actor() {
                     .notice(StaNotice::Connected {
                         bssid: BSSID,
                         channel: 6,
+                        phy: crate::station::contract::LinkPhy::Ht20,
                     })
                     .await;
                 world.air.receive(&addba(7, 0, 4094, 0), meta());
@@ -1632,6 +1663,7 @@ fn a_transmit_agreement_names_the_exact_next_number_and_ends_idle() {
                     .notice(StaNotice::Connected {
                         bssid: BSSID,
                         channel: 6,
+                        phy: crate::station::contract::LinkPhy::Ht20,
                     })
                     .await;
                 assert!(world.send_msdu(BSSID));
@@ -1692,6 +1724,7 @@ fn a_station_frame_the_port_refuses_comes_back_withdrawn_and_the_station_goes_on
                     .notice(StaNotice::Connected {
                         bssid: BSSID,
                         channel: 6,
+                        phy: crate::station::contract::LinkPhy::Legacy,
                     })
                     .await;
                 world.settle().await;

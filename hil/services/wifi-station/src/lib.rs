@@ -76,8 +76,18 @@ pub enum Joined {
     Linked {
         bssid: [u8; 6],
         channel: u8,
+        phy: Phy,
     },
     Refused(StationError),
+}
+
+/// The PHY mode the station associated in.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Phy {
+    Legacy,
+    Ht20,
+    Ht40,
+    He20,
 }
 
 /// Ask what the station and its IPv4 interface know now.
@@ -99,6 +109,7 @@ pub struct Status {
 pub struct Link {
     pub bssid: [u8; 6],
     pub channel: u8,
+    pub phy: Phy,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]

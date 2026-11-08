@@ -321,14 +321,91 @@ pub struct AssociationResponse {
     pub status_code: u16,
     pub association_id: u16,
     pub ht_capability: bool,
-    pub he_capability: bool,
-    pub he_operation: bool,
+    /// The response's HE Capabilities and HE Operation elements.
+    pub he: ResponseHeElements,
     pub wmm: bool,
     pub wmm_parameters: Option<WmmParameterSet>,
     /// Association comeback time in TUs from a Timeout Interval element of
     /// type 3; an access point that refuses a protected association
     /// temporarily (status 30) names it.
     pub association_comeback_tu: Option<u32>,
+}
+
+/// The HE Capabilities and HE Operation elements of an Association
+/// Response, as received: each empty when the response carries none.
+///
+/// An element longer than the response keeps, or a second element of either
+/// kind, makes the pair unusable ([`Self::unusable`]); the bytes kept are
+/// then not the access point's whole statement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ResponseHeElements {
+    capability: [u8; crate::scan::HE_CAPABILITY_IE_CAPACITY],
+    capability_len: oer_portable_wire::PrefixLength<{ crate::scan::HE_CAPABILITY_IE_CAPACITY }>,
+    operation: [u8; crate::scan::HE_OPERATION_IE_CAPACITY],
+    operation_len: oer_portable_wire::PrefixLength<{ crate::scan::HE_OPERATION_IE_CAPACITY }>,
+    unusable: bool,
+}
+
+impl ResponseHeElements {
+    /// A response without HE elements.
+    pub const NONE: Self = Self {
+        capability: [0; crate::scan::HE_CAPABILITY_IE_CAPACITY],
+        capability_len: oer_portable_wire::PrefixLength::ZERO,
+        operation: [0; crate::scan::HE_OPERATION_IE_CAPACITY],
+        operation_len: oer_portable_wire::PrefixLength::ZERO,
+        unusable: false,
+    };
+
+    /// The complete elements `capability` and `operation`, each empty for
+    /// its absence; `None` when one does not fit.
+    pub fn new(capability: &[u8], operation: &[u8]) -> Option<Self> {
+        let mut elements = Self::NONE;
+        elements.capability_len = crate::scan::store_value(&mut elements.capability, capability)?;
+        elements.operation_len = crate::scan::store_value(&mut elements.operation, operation)?;
+        Some(elements)
+    }
+
+    /// The complete HE Capabilities element; empty without one.
+    pub fn capability(&self) -> &[u8] {
+        self.capability_len.borrow(&self.capability)
+    }
+
+    /// The complete HE Operation element; empty without one.
+    pub fn operation(&self) -> &[u8] {
+        self.operation_len.borrow(&self.operation)
+    }
+
+    /// Whether either element was too long to keep or repeated.
+    pub const fn unusable(&self) -> bool {
+        self.unusable
+    }
+
+    /// Keep `element` (header included), the response's HE Capabilities or
+    /// HE Operation by its Element ID Extension; mark the pair unusable for
+    /// a repeated element or one that does not fit.
+    fn record(&mut self, element: &[u8]) {
+        use crate::he::{HE_CAPABILITIES_EXTENSION_ID, HE_OPERATION_EXTENSION_ID};
+        let kept = match *element {
+            [255, _, HE_CAPABILITIES_EXTENSION_ID, ..] if self.capability().is_empty() => {
+                crate::scan::store_value(&mut self.capability, element)
+                    .map(|length| self.capability_len = length)
+            }
+            [255, _, HE_OPERATION_EXTENSION_ID, ..] if self.operation().is_empty() => {
+                crate::scan::store_value(&mut self.operation, element)
+                    .map(|length| self.operation_len = length)
+            }
+            [
+                255,
+                _,
+                HE_CAPABILITIES_EXTENSION_ID | HE_OPERATION_EXTENSION_ID,
+                ..,
+            ] => None,
+            _ => Some(()),
+        };
+        if kept.is_none() {
+            self.unusable = true;
+        }
+    }
 }
 
 impl AssociationResponse {
@@ -371,8 +448,7 @@ pub fn parse_association_response(
     }
 
     let mut ht_capability = false;
-    let mut he_capability = false;
-    let mut he_operation = false;
+    let mut he = ResponseHeElements::NONE;
     let mut wmm = false;
     let mut wmm_parameters = None;
     let mut association_comeback_tu = None;
@@ -383,8 +459,7 @@ pub fn parse_association_response(
         let element = reader.take(length.checked_add(2)?).ok()?;
         let tail = reader.remaining();
         ht_capability |= id == 45 && length == 26;
-        he_capability |= matches!(element, [255, _, 35, ..]);
-        he_operation |= matches!(element, [255, _, 36, ..]);
+        he.record(element);
         let is_wmm = length >= 6 && matches!(element, [221, _, 0x00, 0x50, 0xf2, 0x02, ..]);
         wmm |= is_wmm;
         if is_wmm {
@@ -413,11 +488,10 @@ pub fn parse_association_response(
         association_id: crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
             .aid(),
         ht_capability,
-        he_capability,
-        he_operation,
         // An AP that returned HT Capability accepted the WMM/QoS data path,
         // even if a bounded RX prefix omitted a later vendor WMM element.
-        wmm: wmm || ht_capability || he_capability,
+        wmm: wmm || ht_capability || !he.capability().is_empty(),
+        he,
         wmm_parameters,
         association_comeback_tu,
     })

@@ -5,7 +5,7 @@ extern crate self as oer_hil_services_load;
 
 #[path = "support/load.rs"]
 mod names;
-pub use names::{LoadError, Start, StaticAddress};
+pub use names::{LoadError, Start};
 
 #[path = "support/wifi.rs"]
 pub mod wifi;

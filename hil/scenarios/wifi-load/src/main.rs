@@ -38,11 +38,11 @@ use oer_hil_services_load::{
     DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected, Load,
     MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns, PartWindow,
     PartsCollected, Positions, PositionsCollected, Report, Stall, StallCollected, StallMac,
-    StallMacCollected, Start, Started, StaticAddress, TUNE_KNOBS, TUNE_UNSET, Tracking,
-    TrackingCollected, Transmit,
+    StallMacCollected, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected,
+    Transmit,
 };
 use oer_hil_services_wifi_station::{
-    GetConnectTimes, GetScanVisit, GetStatus, Ipv4, Join, Joined, Leave, Left, ScanVisit,
+    GetConnectTimes, GetScanVisit, GetStatus, Join, Joined, Leave, Left, ScanVisit,
     ScanVisitAnswer, Status,
 };
 use oer_protocols_hil_agent::base::Service as _;
@@ -54,7 +54,8 @@ use oer_tools_hil_harness::{
 const IMAGE: &str = "hil-wifi-station";
 /// The same image on the network core, chosen by [`STACK_ENV`].
 const NETWORK_IMAGE: &str = "hil-wifi-network";
-/// `network` runs the scenario on the network core, at [`NETWORK_ADDRESS`].
+/// `network` runs the scenario on the network core, which leases its address
+/// as the station's IP service does.
 const STACK_ENV: &str = "OER_WIFI_LOAD_STACK";
 
 const fn scenario(image: &'static str) -> Scenario {
@@ -116,13 +117,6 @@ const CASES: [Case; 9] = [
 /// The station network the router serves (`tools/lab/router/README.md`).
 const STATION_NETWORK: &str = "10.231.0.0/24";
 const ROUTER_ADDRESS: [u8; 4] = [10, 231, 0, 1];
-/// The network core's address: below the router's DHCP pool, which starts at
-/// 100 (`tools/lab/router/README.md`).
-const NETWORK_ADDRESS: StaticAddress = StaticAddress {
-    address: [10, 231, 0, 50],
-    prefix: 24,
-    gateway: ROUTER_ADDRESS,
-};
 /// The image's load port.
 const DEVICE_PORT: u16 = 5001;
 /// UDP payload of a load datagram.
@@ -158,7 +152,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     }
-    let scenario = if static_address().is_some() {
+    let scenario = if network_core() {
         &NETWORK_SCENARIO
     } else {
         &SCENARIO
@@ -166,9 +160,9 @@ fn main() -> ExitCode {
     oer_tools_hil_harness::main(scenario, &CASES)
 }
 
-/// The address the host gives the image, when it takes one.
-fn static_address() -> Option<StaticAddress> {
-    (std::env::var(STACK_ENV).as_deref() == Ok("network")).then_some(NETWORK_ADDRESS)
+/// Whether the scenario runs on the network core.
+fn network_core() -> bool {
+    std::env::var(STACK_ENV).as_deref() == Ok("network")
 }
 
 /// The route the host takes to an address of the station network, as
@@ -275,11 +269,9 @@ fn status(cx: &mut Cx<'_>) -> Result<Status, Failure> {
     cx.call(GetStatus, CALL)
 }
 
-/// The image's address once it has one.
+/// The image's address once it has one: the device's own lease, read from
+/// its status.
 fn device_address(cx: &mut Cx<'_>) -> Result<Ipv4Addr, Failure> {
-    if let Some(given) = static_address() {
-        return Ok(Ipv4Addr::from(given.address));
-    }
     status(cx)?
         .ipv4
         .map(|ipv4| Ipv4Addr::from(ipv4.address))
@@ -875,7 +867,14 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         index += 1;
     }
     let (bssid, linked) = match joined {
-        Joined::Linked { bssid, channel } => (bssid, channel),
+        Joined::Linked {
+            bssid,
+            channel,
+            phy,
+        } => {
+            println!("connect: linked phy={phy:?}");
+            (bssid, channel)
+        }
         other => {
             return Err(Failure::Fail(format!(
                 "the station did not join: {other:?}"
@@ -885,14 +884,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let started = Instant::now();
     let (address, ipv4) = loop {
         let status = status(cx)?;
-        let ipv4 = static_address()
-            .map(|given| Ipv4 {
-                address: given.address,
-                prefix: given.prefix,
-                gateway: Some(given.gateway),
-            })
-            .or(status.ipv4);
-        if let Some(ipv4) = ipv4 {
+        if let Some(ipv4) = status.ipv4 {
             break (status.address, ipv4);
         }
         if started.elapsed() >= DHCP_TIMEOUT {
@@ -934,7 +926,6 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             }),
             profile: None,
             tune: [TUNE_UNSET; TUNE_KNOBS],
-            address: static_address(),
         },
         CALL,
     )?;
@@ -1008,7 +999,6 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             transmit: None,
             profile: None,
             tune: [TUNE_UNSET; TUNE_KNOBS],
-            address: static_address(),
         },
         CALL,
     )?;
@@ -1241,7 +1231,6 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
             transmit: None,
             profile: None,
             tune: [TUNE_UNSET; TUNE_KNOBS],
-            address: static_address(),
         },
         CALL,
     )?;
@@ -1457,7 +1446,6 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
             transmit,
             profile,
             tune: offer.tune,
-            address: static_address(),
         },
         CALL,
     )?;
@@ -1535,11 +1523,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         object.insert("addba".to_owned(), addba_measurement(name, &ended));
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
-        let elf = profile::elf(if static_address().is_some() {
-            NETWORK_IMAGE
-        } else {
-            IMAGE
-        });
+        let elf = profile::elf(if network_core() { NETWORK_IMAGE } else { IMAGE });
         let sites = elf
             .as_ref()
             .map_err(Clone::clone)

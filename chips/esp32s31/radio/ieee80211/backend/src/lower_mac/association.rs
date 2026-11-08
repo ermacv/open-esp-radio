@@ -16,7 +16,9 @@
 use super::TransmitKeyScope;
 use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, Station,
-    association::{Association, GroupKeySlot, PairwiseKeySlot, VacantAssociation},
+    association::{
+        Association, AssociationGrant, GroupKeySlot, PairwiseKeySlot, VacantAssociation,
+    },
 };
 use oer_protocols_ieee80211_wire::security::Spp;
 use oer_protocols_radio_port::{Child, PoolPath, Root};
@@ -27,6 +29,13 @@ pub type StationAssociation<'id, P = Root<oer_protocols_radio_port::LocalId<'id>
 /// All AP peers share the interface's one SPP policy.
 pub type AccessPointAssociation<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
     Association<'id, AccessPoint, 15, 3, Child<P, 3>>;
+/// The station's association domain as the mint made it, before the
+/// installation issues it.
+pub type StationAssociationGrant<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
+    AssociationGrant<'id, Station, 1, 1, Child<P, 2>>;
+/// The access point's association domain as the mint made it.
+pub type AccessPointAssociationGrant<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
+    AssociationGrant<'id, AccessPoint, 15, 3, Child<P, 3>>;
 pub type VacantStationAssociation<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
     VacantAssociation<'id, Station, 1, 1, Child<P, 2>>;
 pub type VacantAccessPointAssociation<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =

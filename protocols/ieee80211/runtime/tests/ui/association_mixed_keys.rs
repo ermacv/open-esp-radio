@@ -10,8 +10,8 @@ pub fn keys<'id>(
     resources: ModelResources<'id, Composition>,
     peer: IndividualAddress,
 ) {
-    let [first, second] = resources.station_pairwise;
-    let start = resources.station_association;
+    let [first, second] = resources.station.pairwise;
+    let start = resources.station.association;
     let association = ModelKeys::<'_, Composition, Station>::begin_association(start, Spp::Negotiated);
     let _first = commands.install_pairwise(&association, first, peer, Ccmp128Key::new(&[1; 16]));
     #[cfg(ui_reject)]

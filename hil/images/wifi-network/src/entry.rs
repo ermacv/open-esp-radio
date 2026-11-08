@@ -2,25 +2,25 @@
 // network core in the IP service's place, the HIL agent serving the base
 // module, the Wi-Fi station and load services, and one worker that answers
 // their requests in order beside the load server's relay. The group runs the
-// load server on the network's sockets; the first run's start gives the
-// network its address.
+// load server on the network's sockets, bound at its start; the network leases
+// its address by DHCP, and the station's status reports it from the group.
 
 use core::pin::pin;
 
 use embassy_futures::select::{Either as Raced, select};
 use oer::{
-    AppResult, ApplicationEnd, Boot, Channel, Console, Error, GroupBoot, GroupPeripherals,
-    GroupStarted, Peripherals, Started, observe,
-    wifi::{self, ConnectError, Station, StopError},
+    AppResult, ApplicationEnd, Boot, Channel, Console, Error, GroupBoot, GroupEnd,
+    GroupPeripherals, GroupStarted, Peripherals, Started, observe,
+    wifi::{self, ConnectError, NetworkError, Station, StopError},
 };
-use oer_protocols_hil_agent::base::Either;
 use oer_hil_agent::{Inbox, Mailbox, answer};
-use oer_protocols_hil_protocol::RequestIdentity;
 use oer_hil_services_wifi_station::{
     self as wifi_station, Joined, Left, StationError,
     phase::{Action, Answer, Phase},
     runtime as codes,
 };
+use oer_protocols_hil_agent::base::Either;
+use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
 
 /// The regulatory domain the station installs, every 2.4 GHz channel it
@@ -38,6 +38,9 @@ static NETWORK: ConstStaticCell<wifi::NetworkStorage<udp::LoadProducer>> =
     ConstStaticCell::new(wifi::NetworkStorage::new());
 /// What the load's sender hands the producer.
 static SOURCE: udp::Source = udp::Source::new();
+/// The worker asks the group for the network's address, which only the
+/// group's hart reads.
+static ADDRESSES: Channel<(), Option<wifi_station::Ipv4>, 1> = Channel::new();
 
 oer::entry!(boot, group = network);
 
@@ -49,6 +52,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let console = Console::open(p.console, &mut boot)?;
     let load = load::serve::LOAD.application(&mut boot)?;
     let relay = load::relay::RELAY.application(&mut boot)?;
+    let addresses = ADDRESSES.application(&mut boot)?;
     let hart0 = boot.observe()?;
     let relay_part = observe::Part::claim("relay")?;
     let evidence = boot.evidence();
@@ -56,17 +60,14 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let worker = Worker {
         station,
         load,
+        addresses,
         phase: Phase::Idle,
         requests: inbox,
     };
     Ok(boot.run(move || {
-        oer_hil_agent::serve(
-            console,
-            evidence,
-            services::IMAGE,
-            outbox,
-            move || application(worker, relay, hart0, relay_part),
-        )
+        oer_hil_agent::serve(console, evidence, services::IMAGE, outbox, move || {
+            application(worker, relay, hart0, relay_part)
+        })
     }))
 }
 
@@ -89,29 +90,61 @@ fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted
     let device = p.device.ok_or(Error::NoDevice)?;
     let hart1 = boot.observe().ok_or(Error::ObserveTaken)?;
     let storage = NETWORK.try_take().ok_or(Error::Storage)?;
-    let (net, mut boot) = wifi::Network::start(device, boot, storage)?;
+    let producer = udp::LoadProducer::new(&SOURCE);
+    let (net, socket, mut boot) =
+        wifi::Network::start(device, boot, storage, producer, udp::PORTS)?;
     let load = load::serve::LOAD.group(&mut boot)?;
     let relay = load::relay::RELAY.group(&mut boot)?;
+    let addresses = ADDRESSES.group(&mut boot)?;
     let tally = load::serve::TALLY.try_take().ok_or(Error::Storage)?;
     let turns = udp::TURNS.try_take().ok_or(Error::Storage)?;
     let part = observe::Part::claim("load")?;
-    Ok(boot.run(move || sockets(net, load, relay, hart1, tally, turns, part)))
+    let net = udp::Network::new(net, socket, &SOURCE);
+    Ok(boot.run(move || sockets(net, load, relay, addresses, hart1, tally, turns, part)))
 }
 
-/// The load server, which never ends.
+/// The load server beside the answers of the network's address, which never
+/// end but for a fault.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the group's owners, each moved in once"
+)]
 async fn sockets(
-    net: wifi::Network<udp::LoadProducer>,
+    net: udp::Network,
     load: load::serve::Requests,
     relay: load::relay::Client,
+    addresses: GroupEnd<(), Option<wifi_station::Ipv4>, 1>,
     hart1: observe::Hart1,
     tally: load::serve::RunTally,
     turns: &'static mut udp::Turns,
     part: observe::Part,
 ) -> AppResult {
-    let net = udp::Network::new(net, &SOURCE);
     net.keep_turns(turns);
     let mut server = pin!(load::serve::serve(&net, load, relay, hart1, tally));
-    match part.polled(server.as_mut()).await {}
+    match select(part.polled(server.as_mut()), answer_addresses(&net, addresses)).await {
+        Raced::First(never) => match never {},
+        Raced::Second(fault) => fault,
+    }
+}
+
+/// Answer each ask for the network's address with what the service last
+/// published. A refusal is an impossible state here: the service publishes
+/// within its own turn, on this hart, so no read meets one; it ends the
+/// group, which records it.
+async fn answer_addresses(
+    net: &udp::Network,
+    mut asks: GroupEnd<(), Option<wifi_station::Ipv4>, 1>,
+) -> AppResult {
+    loop {
+        asks.receive().await;
+        let ipv4 = udp::address(net).map_err(|refused| Error::Network(NetworkError::Watch(refused)))?;
+        asks.send(ipv4.map(|ipv4| wifi_station::Ipv4 {
+            address: ipv4.address(),
+            prefix: ipv4.prefix(),
+            gateway: ipv4.gateway(),
+        }))
+        .await;
+    }
 }
 
 /// Answers the services' requests one at a time.
@@ -119,6 +152,8 @@ struct Worker {
     station: Station,
     /// The load server's requests and answers.
     load: ApplicationEnd<(RequestIdentity, oer_hil_services_load::Request), load::serve::Answer, 1>,
+    /// The group's answers of the network's address.
+    addresses: ApplicationEnd<(), Option<wifi_station::Ipv4>, 1>,
     /// Where the Wi-Fi station service's one join per boot is.
     phase: Phase,
     requests: Inbox<'static, Requests>,
@@ -165,8 +200,10 @@ impl Worker {
     /// refuses leave the image idle for another join.
     async fn join(&mut self, join: wifi_station::Join) -> Joined {
         let profile = wifi::Profile::wpa2(join.ssid.as_bytes(), join.passphrase.as_bytes());
-        let (Ok(profile), Ok(_)) = (profile, wifi::Config::new(COUNTRY, join.channel, TX_CAP_DBM))
-        else {
+        let (Ok(profile), Ok(_)) = (
+            profile,
+            wifi::Config::new(COUNTRY, join.channel, TX_CAP_DBM),
+        ) else {
             return Joined::Refused(StationError::InvalidSettings);
         };
         self.phase = Phase::Joined;
@@ -174,6 +211,7 @@ impl Worker {
             Ok(linked) => Joined::Linked {
                 bssid: linked.bssid,
                 channel: linked.channel,
+                phy: wifi_station::runtime::phy(linked.phy),
             },
             Err(error) => {
                 if matches!(error, ConnectError::Failed(_)) {
@@ -196,15 +234,19 @@ impl Worker {
         left
     }
 
-    /// The address is the host's: the station's status names none.
-    async fn station_status(&self) -> wifi_station::Status {
+    /// The station and the address its network leased, which the group
+    /// reads.
+    async fn station_status(&mut self) -> wifi_station::Status {
+        self.addresses.send(()).await;
+        let ipv4 = self.addresses.receive().await;
         wifi_station::Status {
             address: self.station.address(),
             link: self.station.linked().map(|linked| wifi_station::Link {
                 bssid: linked.bssid,
                 channel: linked.channel,
+                phy: wifi_station::runtime::phy(linked.phy),
             }),
-            ipv4: None,
+            ipv4,
         }
     }
 }

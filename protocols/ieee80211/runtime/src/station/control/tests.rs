@@ -264,6 +264,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let connected = Notice::Connected {
         bssid: [2; 6],
         channel: 6,
+        phy: crate::station::contract::LinkPhy::Legacy,
     };
     for epoch in [11, 12] {
         state.epoch(epoch);
@@ -394,6 +395,7 @@ fn terminal(request: Request) -> ServiceOutput<()> {
         outcome: super::super::contract::CommandOutcome::Connected {
             bssid: [2; 6],
             channel: 6,
+            phy: crate::station::contract::LinkPhy::Legacy,
         },
     })
 }
@@ -429,7 +431,8 @@ fn an_operation_resolves_once_to_its_own_terminal_and_returns_the_permission() {
         Poll::Ready(OperationEnd::Completed(
             super::super::contract::CommandOutcome::Connected {
                 bssid: [2; 6],
-                channel: 6
+                channel: 6,
+                phy: crate::station::contract::LinkPhy::Legacy,
             }
         ))
     );
@@ -535,7 +538,8 @@ fn an_operation_of_an_ended_epoch_reads_its_own_result_after_a_restart() {
         Poll::Ready(OperationEnd::Completed(
             super::super::contract::CommandOutcome::Connected {
                 bssid: [2; 6],
-                channel: 6
+                channel: 6,
+                phy: crate::station::contract::LinkPhy::Legacy,
             }
         ))
     );
@@ -619,6 +623,7 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
             outcome: super::super::contract::CommandOutcome::Connected {
                 bssid: [2; 6],
                 channel: 6,
+                phy: crate::station::contract::LinkPhy::Legacy,
             },
         },
     ));

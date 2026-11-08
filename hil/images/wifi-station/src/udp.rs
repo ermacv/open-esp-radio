@@ -46,10 +46,6 @@ pub(crate) struct Run<'a> {
 
 /// A run's socket, on the address the station leased.
 pub(crate) fn open<'a>(net: &'a Network, start: &Start) -> Result<Run<'a>, LoadError> {
-    // This stack leases its address, and never takes the host's.
-    if start.address.is_some() {
-        return Err(LoadError::InvalidParameters);
-    }
     let address = match net.status().ipv4 {
         Ipv4Status::Lease(configuration) | Ipv4Status::Static(configuration) => {
             configuration.address

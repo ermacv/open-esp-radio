@@ -540,7 +540,7 @@ impl HeMcsNssSupport {
         clippy::arithmetic_side_effects
     )]
     const fn one_stream_from_map(map: u16) -> Self {
-        match HeMcsMap::from_bytes(map.to_le_bytes()).nss1() {
+        match HeMcsMap::from_bytes(map.to_le_bytes()).nss1().get() {
             0 => Self::Mcs0To7,
             1 => Self::Mcs0To9,
             2 => Self::Mcs0To11,
@@ -550,6 +550,32 @@ impl HeMcsNssSupport {
 
     pub const fn supports_mcs9(self) -> bool {
         matches!(self, Self::Mcs0To9 | Self::Mcs0To11)
+    }
+
+    /// The two-bit Max HE-MCS For n SS code of this support.
+    const fn encoding(self) -> oer_portable_wire::U8<2> {
+        match self {
+            Self::Mcs0To7 => oer_portable_wire::U8::constant::<0>(),
+            Self::Mcs0To9 => oer_portable_wire::U8::constant::<1>(),
+            Self::Mcs0To11 => oer_portable_wire::U8::constant::<2>(),
+            Self::NotSupported => HeMcsMap::NOT_SUPPORTED,
+        }
+    }
+
+    /// The HE-MCS map of a one-stream device: `self` for one spatial stream,
+    /// every further stream not supported.
+    const fn one_stream_map(self) -> [u8; 2] {
+        let none = HeMcsMap::NOT_SUPPORTED;
+        HeMcsMap::from_bytes([0; 2])
+            .with_nss1(self.encoding())
+            .with_nss2(none)
+            .with_nss3(none)
+            .with_nss4(none)
+            .with_nss5(none)
+            .with_nss6(none)
+            .with_nss7(none)
+            .with_nss8(none)
+            .to_bytes()
     }
 }
 
@@ -578,7 +604,7 @@ impl HeDcmConstellation {
         clippy::arithmetic_side_effects
     )]
     const fn from_encoding(encoding: u8) -> Self {
-        match HeMcsMap::from_bytes([encoding, 0]).nss1() {
+        match HeMcsMap::from_bytes([encoding, 0]).nss1().get() {
             0 => Self::NotSupported,
             1 => Self::Bpsk,
             2 => Self::Qpsk,
@@ -737,6 +763,72 @@ impl He20PeerState {
     }
 }
 
+/// What a 2.4 GHz, 20 MHz-only, one-stream HE station advertises in its HE
+/// Capabilities element: its HE MAC and HE PHY Capabilities Information and
+/// the highest HE-MCS it receives and transmits on one spatial stream.
+///
+/// The caller owns which capabilities it can honour; this type has no
+/// default profile and takes nothing from a peer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct He20LocalCapabilities {
+    pub mac: HeMacCapabilities,
+    pub phy: HePhyCapabilities,
+    /// Rx HE-MCS Map ≤ 80 MHz, one spatial stream.
+    pub receive: HeMcsNssSupport,
+    /// Tx HE-MCS Map ≤ 80 MHz, one spatial stream.
+    pub transmit: HeMcsNssSupport,
+}
+
+/// The complete HE Capabilities element advertising `local`.
+///
+/// The element's 24 octets fix three fields, which the encoder owns whatever
+/// `local` holds: the Channel Width Set of a 20 MHz-only station in the
+/// 2.4 GHz band (every bit clear), PPE Thresholds Present (clear: the element
+/// carries no PPE Thresholds field) and, in both HE-MCS maps, every spatial
+/// stream after the first as not supported. Without a 160 MHz or 80+80 MHz
+/// width the Supported HE-MCS And NSS Set holds only the ≤ 80 MHz maps.
+///
+/// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.1 (HE Capabilities element
+/// format) and 9.4.2.248.4 (Supported HE-MCS And NSS Set field); clause
+/// numbers as Linux `include/linux/ieee80211-he.h` cites them, the standard's
+/// text not consulted.
+pub const fn he20_capability_ie(local: He20LocalCapabilities) -> [u8; HE_CAPABILITIES_IE_MIN_LEN] {
+    let [m0, m1, m2, m3, m4, m5] = local.mac.to_bytes();
+    let [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10] = local
+        .phy
+        .with_channel_width_set(oer_portable_wire::U8::ZERO)
+        .with_ppe_present(false)
+        .to_bytes();
+    let [r0, r1] = local.receive.one_stream_map();
+    let [t0, t1] = local.transmit.one_stream_map();
+    [
+        255,
+        (HE_CAPABILITIES_IE_MIN_LEN - 2) as u8,
+        HE_CAPABILITIES_EXTENSION_ID,
+        m0,
+        m1,
+        m2,
+        m3,
+        m4,
+        m5,
+        p0,
+        p1,
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        p7,
+        p8,
+        p9,
+        p10,
+        r0,
+        r1,
+        t0,
+        t1,
+    ]
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HeElementError {
     WrongElement,
@@ -871,7 +963,7 @@ pub fn parse_he20_peer_state(
         HeOperationFields::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
     let capability_prefix = *capability;
     let packet_padding_eight_us = if !phy.ppe_present() {
-        phy.nominal_padding()
+        phy.nominal_padding().get()
     } else {
         // The PPE Thresholds field follows the fixed prefix.
         let [ppe0, ppe1, ..] = *thresholds else {
@@ -904,21 +996,95 @@ pub fn parse_he20_peer_state(
 }
 
 oer_portable_wire::bitfield! {
-    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.2 (HE MAC Capabilities
+    /// Information field), bit positions as Linux
+    /// `include/linux/ieee80211-he.h` `IEEE80211_HE_MAC_CAP0`..`CAP5` names
+    /// them; B24 is reserved.
+    pub struct HeMacCapabilities[6] (little) {
+        pub htc_he, with_htc_he: bool = 0..1;
+        pub twt_requester, with_twt_requester: bool = 1..2;
+        pub twt_responder, with_twt_responder: bool = 2..3;
+        pub dynamic_fragmentation, with_dynamic_fragmentation: (u8) = 3..5;
+        pub maximum_fragmented_msdus_exponent, with_maximum_fragmented_msdus_exponent: (u8) = 5..8;
+        pub minimum_fragment_size, with_minimum_fragment_size: (u8) = 8..10;
+        pub trigger_frame_mac_padding, with_trigger_frame_mac_padding: (u8) = 10..12;
+        pub multi_tid_aggregation_rx, with_multi_tid_aggregation_rx: (u8) = 12..15;
+        pub link_adaptation, with_link_adaptation: (u8) = 15..17;
+        pub all_ack, with_all_ack: bool = 17..18;
+        pub trs, with_trs: bool = 18..19;
+        pub bsr, with_bsr: bool = 19..20;
+        pub broadcast_twt, with_broadcast_twt: bool = 20..21;
+        pub ba_bitmap_32_bit, with_ba_bitmap_32_bit: bool = 21..22;
+        pub mu_cascading, with_mu_cascading: bool = 22..23;
+        pub ack_enabled_aggregation, with_ack_enabled_aggregation: bool = 23..24;
+        pub om_control, with_om_control: bool = 25..26;
+        pub ofdma_random_access, with_ofdma_random_access: bool = 26..27;
+        pub maximum_ampdu_length_exponent_extension, with_maximum_ampdu_length_exponent_extension: (u8) = 27..29;
+        pub amsdu_fragmentation, with_amsdu_fragmentation: bool = 29..30;
+        pub flexible_twt_schedule, with_flexible_twt_schedule: bool = 30..31;
+        pub rx_control_frame_to_multi_bss, with_rx_control_frame_to_multi_bss: bool = 31..32;
+        pub bsrp_bqrp_ampdu_aggregation, with_bsrp_bqrp_ampdu_aggregation: bool = 32..33;
+        pub qtp, with_qtp: bool = 33..34;
+        pub bqr, with_bqr: bool = 34..35;
+        pub psr_responder, with_psr_responder: bool = 35..36;
+        pub ndp_feedback_report, with_ndp_feedback_report: bool = 36..37;
+        pub ops, with_ops: bool = 37..38;
+        pub amsdu_not_under_ba_in_ack_enabled_ampdu, with_amsdu_not_under_ba_in_ack_enabled_ampdu: bool = 38..39;
+        pub multi_tid_aggregation_tx, with_multi_tid_aggregation_tx: (u8) = 39..42;
+        pub subchannel_selective_transmission, with_subchannel_selective_transmission: bool = 42..43;
+        pub ul_2x996_tone_ru, with_ul_2x996_tone_ru: bool = 43..44;
+        pub om_control_ul_mu_data_disable_rx, with_om_control_ul_mu_data_disable_rx: bool = 44..45;
+        pub dynamic_sm_power_save, with_dynamic_sm_power_save: bool = 45..46;
+        pub punctured_sounding, with_punctured_sounding: bool = 46..47;
+        pub ht_and_vht_trigger_frame_rx, with_ht_and_vht_trigger_frame_rx: bool = 47..48;
+    }
+}
+
+impl HeMacCapabilities {
+    /// Trigger Frame MAC Padding Duration code of 16 us.
+    pub const TRIGGER_FRAME_MAC_PADDING_16_US: oer_portable_wire::U8<2> =
+        oer_portable_wire::U8::constant::<2>();
+}
+
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities
+    /// Information field), bit positions as Linux
+    /// `include/linux/ieee80211-he.h` `IEEE80211_HE_PHY_CAP0`..`CAP10` names
+    /// them. B0 is reserved; B80 is named after Linux
+    /// `IEEE80211_HE_PHY_CAP10_HE_MU_M1RU_MAX_LTF`, the standard's text not
+    /// consulted.
     pub struct HePhyCapabilities[11] (little) {
-        pub one_ltf_800ns_gi, with_one_ltf_800ns_gi: bool = 14..15;
+        pub channel_width_set, with_channel_width_set: (u8) = 1..8;
+        pub device_class_a, with_device_class_a: bool = 12..13;
         pub ldpc_coding_in_payload, with_ldpc_coding_in_payload: bool = 13..14;
+        pub one_ltf_800ns_gi, with_one_ltf_800ns_gi: bool = 14..15;
+        pub ndp_4x_ltf_3200ns_gi, with_ndp_4x_ltf_3200ns_gi: bool = 17..18;
         pub stbc_transmit_under_80_mhz, with_stbc_transmit_under_80_mhz: bool = 18..19;
         pub stbc_receive_under_80_mhz, with_stbc_receive_under_80_mhz: bool = 19..20;
+        pub ul_mu_partial_bandwidth_mu_mimo, with_ul_mu_partial_bandwidth_mu_mimo: bool = 23..24;
         pub dcm_transmit, with_dcm_transmit: u8 = 24..26;
         pub dcm_receive, with_dcm_receive: u8 = 27..29;
+        pub su_beamformee, with_su_beamformee: bool = 32..33;
+        pub beamformee_sts_under_80_mhz, with_beamformee_sts_under_80_mhz: (u8) = 34..37;
+        pub ng16_su_feedback, with_ng16_su_feedback: bool = 46..47;
+        pub ng16_mu_feedback, with_ng16_mu_feedback: bool = 47..48;
+        pub codebook_size_42_su, with_codebook_size_42_su: bool = 48..49;
+        pub codebook_size_75_mu, with_codebook_size_75_mu: bool = 49..50;
         pub triggered_su_beamforming_feedback, with_triggered_su_beamforming_feedback: bool = 50..51;
         pub triggered_mu_beamforming_partial_bandwidth_feedback, with_triggered_mu_beamforming_partial_bandwidth_feedback: bool = 51..52;
         pub triggered_cqi_feedback, with_triggered_cqi_feedback: bool = 52..53;
         pub ppe_present, with_ppe_present: bool = 55..56;
+        pub he_ppdu_20_mhz_in_40_mhz_2g, with_he_ppdu_20_mhz_in_40_mhz_2g: bool = 65..66;
         pub non_triggered_cqi_feedback, with_non_triggered_cqi_feedback: bool = 73..74;
-        pub nominal_padding, with_nominal_padding: u8 = 78..80;
+        pub nominal_padding, with_nominal_padding: (u8) = 78..80;
+        pub mu_ppdu_more_than_one_ru_maximum_ltf, with_mu_ppdu_more_than_one_ru_maximum_ltf: bool = 80..81;
     }
+}
+
+impl HePhyCapabilities {
+    /// Nominal Packet Padding code of 16 us for every constellation.
+    pub const NOMINAL_PADDING_16_US: oer_portable_wire::U8<2> =
+        oer_portable_wire::U8::constant::<2>();
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
@@ -957,8 +1123,20 @@ oer_portable_wire::bitfield! {
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.4 (Supported HE-MCS And NSS Set field).
     pub struct HeMcsMap[2] (little) {
-        pub nss1, with_nss1: u8 = 0..2;
+        pub nss1, with_nss1: (u8) = 0..2;
+        pub nss2, with_nss2: (u8) = 2..4;
+        pub nss3, with_nss3: (u8) = 4..6;
+        pub nss4, with_nss4: (u8) = 6..8;
+        pub nss5, with_nss5: (u8) = 8..10;
+        pub nss6, with_nss6: (u8) = 10..12;
+        pub nss7, with_nss7: (u8) = 12..14;
+        pub nss8, with_nss8: (u8) = 14..16;
     }
+}
+
+impl HeMcsMap {
+    /// The Max HE-MCS For n SS code of a stream that is not supported.
+    pub const NOT_SUPPORTED: oer_portable_wire::U8<2> = oer_portable_wire::U8::constant::<3>();
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
