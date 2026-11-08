@@ -18,8 +18,8 @@ use oer_protocols_network_core::{
     ClaimRefused, Group, Interface, InterfaceError, NetworkOwner, OpenRefused, Retired, claim,
 };
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, SlotTooShort, TransmitError,
-    TransmitRefused, TxStorage,
+    EthernetFrame, EthernetFrameView, FrameLengthError, TransmitError, TransmitRefused, TxStorage,
+    Unpublished,
 };
 use oer_protocols_network_runtime::{
     DevicePort, Direct, EndCause, Ended, MemoryPolicy, PortRefusal, Service, SocketLanes, StopLane,
@@ -246,17 +246,23 @@ impl TxBuffers for WifiBuffers {
             Poll::Pending
         }
     }
-    fn write(
+    fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<WrittenFrame, PortRefusal> {
-        let mut slot = FREE.take().ok_or(PortRefusal::NoRoom)?;
-        match slot.bytes_mut().get_mut(..length).map(fill) {
-            Some(Ok(())) => Ok(WrittenFrame { slot, length }),
-            Some(Err(_)) | None => {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
+        let mut slot = FREE.take().ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
+        // A frame longer than a buffer is the port's refusal, before any
+        // fill; a fill's own failure stays the fill's.
+        let written = match slot.bytes_mut().get_mut(..length) {
+            Some(bytes) => fill(bytes).map_err(Unpublished::Fill),
+            None => Err(Unpublished::Port(PortRefusal::BadFrame)),
+        };
+        match written {
+            Ok(()) => Ok(WrittenFrame { slot, length }),
+            Err(unpublished) => {
                 FREE.give(slot);
-                Err(PortRefusal::BadFrame)
+                Err(unpublished)
             }
         }
     }

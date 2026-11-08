@@ -7,9 +7,10 @@ use oer_protocols_network_wire::ip::Dscp;
 
 use crate::device::EthernetFrameView;
 
-/// Where a frame goes out, and the one answer to it. A port that says `Ok`
-/// without calling `fill` contradicts itself, and whoever publishes treats
-/// that as a fault of the port.
+/// Where a frame goes out, and the one answer to it. Whoever publishes keeps
+/// its own record of what `fill` did, and a port whose answer contradicts that
+/// record is at fault: `Ok` after a failed or missing fill, or `Port` after a
+/// failed one.
 pub trait FramePort {
     /// Why the port took nothing, which names what it waits for.
     type Refusal;
@@ -17,15 +18,36 @@ pub trait FramePort {
     type Ticket;
 
     /// Take room for `length` octets, let `fill` write the frame there and
-    /// accept it. `Ok` says the frame is the port's.
+    /// accept it. `Ok` says the frame is the port's, and only follows a
+    /// `fill` that returned `Ok`.
+    ///
+    /// The port is generic in `E`, so the only `E` it can hand back is the one
+    /// `fill` returned: a port cannot claim a fill failed when it did not.
+    ///
+    /// ```compile_fail,E0308
+    /// use oer_protocols_network_port::{FramePort, Unpublished};
+    /// struct Liar;
+    /// struct Short;
+    /// impl FramePort for Liar {
+    ///     type Refusal = ();
+    ///     type Ticket = ();
+    ///     fn publish<E>(
+    ///         &mut self,
+    ///         _: usize,
+    ///         _: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ///     ) -> Result<(), Unpublished<(), E>> {
+    ///         Err(Unpublished::Fill(Short))
+    ///     }
+    /// }
+    /// ```
     ///
     /// # Errors
-    /// The port accepted nothing: it did not have the room, or `fill` failed.
-    fn publish(
+    /// [`Unpublished`]: the port accepted nothing.
+    fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<Self::Ticket, Self::Refusal>;
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<Self::Ticket, Unpublished<Self::Refusal, E>>;
 
     /// Whether `refusal` is final for that frame: no wake will change it, so
     /// the work ends instead of waiting.
@@ -133,6 +155,12 @@ pub trait Egress<Ticket, Notice> {
     fn notice(&mut self, notice: Notice) -> Result<(), Self::Fault>;
 }
 
-/// The room a port gave does not hold the frame.
+/// Why a port published nothing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SlotTooShort;
+pub enum Unpublished<R, E> {
+    /// The port's own refusal, before `fill` or after it wrote the frame; the
+    /// port took its room back.
+    Port(R),
+    /// `fill` failed with this, and the port took its room back.
+    Fill(E),
+}

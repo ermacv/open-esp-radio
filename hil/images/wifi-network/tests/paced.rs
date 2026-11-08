@@ -23,7 +23,7 @@ use oer_portable_events::EventSink;
 use oer_portable_time::{Clock, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{Group, Interface, NetEvent, NetworkOwner, claim};
-use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, SlotTooShort};
+use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Unpublished};
 use oer_protocols_network_runtime::{
     Direct, MemoryPolicy, RequestKind, Service, ServiceEvent, SocketLanes, StopLane,
 };
@@ -106,13 +106,13 @@ impl FramePort for Port {
     type Refusal = ();
     type Ticket = ();
 
-    fn publish(
+    fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<(), ()> {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<(), Unpublished<(), E>> {
         let mut frame = vec![0; length];
-        fill(&mut frame).map_err(|_| ())?;
+        fill(&mut frame).map_err(Unpublished::Fill)?;
         let mut wire = self.0.borrow_mut();
         match answer_of(&frame) {
             Some(reply) => {

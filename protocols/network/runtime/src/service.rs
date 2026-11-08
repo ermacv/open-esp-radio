@@ -84,10 +84,12 @@ impl MemoryPolicy {
 pub enum EndCause {
     /// A stop was asked, or the service's owner retired it.
     Stopped,
-    /// The port said it took a frame it never filled, so what it does is not
-    /// known. The command that met this ends `Outcome::Unknown`, the others
-    /// `Outcome::Retired`, and the port goes back to its owner in
-    /// [`Ended::retired`].
+    /// The port's answer contradicted what its fill did, so what it does is
+    /// not known. It said it took a frame it never filled, and the command
+    /// that met this ends `Outcome::Unknown`; or it refused a frame whose fill
+    /// failed, and that command ends by the fill's cause, `Outcome::Rejected`.
+    /// The others end `Outcome::Retired`, and the port goes back to its owner
+    /// in [`Ended::retired`].
     PortContract,
     /// The egress policy cannot go on: [`Ended::fault`] says why, and its
     /// account is in [`Ended::egress`].
@@ -657,10 +659,19 @@ impl<
                     let answer = self.egress.accepted(reservation, ticket);
                     self.note(answer);
                 }
-                Err(Unsent::Stale | Unsent::Rejected(_)) => {
+                Err(Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort) => {
                     moved = true;
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
+                }
+                // The port took nothing, by its word, and is at fault: the
+                // work ended by its fill's cause, and the service ends.
+                Err(Unsent::FillMisreported(_)) => {
+                    moved = true;
+                    let answer = self.egress.refused(reservation);
+                    self.note(answer);
+                    end = PublishEnd::Fault;
+                    break;
                 }
                 Err(Unsent::Port(_)) => {
                     let answer = self.egress.refused(reservation);

@@ -100,7 +100,7 @@ use oer_protocols_ieee80211_wire::{
 use oer_protocols_network_core::{Datagram, Group, Interface, NetworkOwner, Outcome, Remote};
 use oer_protocols_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource, LinkSnapshot,
-    LinkState, NetTransmit, SlotTooShort, TransmitError, TransmitRefused, TxStorage,
+    LinkState, NetTransmit, TransmitError, TransmitRefused, TxStorage, Unpublished,
 };
 use oer_protocols_network_runtime::{
     DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, PortRefusal, Sent, Service,
@@ -423,17 +423,26 @@ impl TxBuffers for Buffers {
             Poll::Pending
         }
     }
-    fn write(
+    fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<WrittenFrame, PortRefusal> {
-        let mut slot = self.0.slots.borrow_mut().pop().ok_or(PortRefusal::NoRoom)?;
-        match slot.bytes_mut().get_mut(..length).map(fill) {
-            Some(Ok(())) => Ok(WrittenFrame { slot, length }),
-            Some(Err(_)) | None => {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
+        let mut slot = self
+            .0
+            .slots
+            .borrow_mut()
+            .pop()
+            .ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
+        let written = match slot.bytes_mut().get_mut(..length) {
+            Some(bytes) => fill(bytes).map_err(Unpublished::Fill),
+            None => Err(Unpublished::Port(PortRefusal::BadFrame)),
+        };
+        match written {
+            Ok(()) => Ok(WrittenFrame { slot, length }),
+            Err(unpublished) => {
                 self.0.give(slot);
-                Err(PortRefusal::BadFrame)
+                Err(unpublished)
             }
         }
     }
@@ -484,14 +493,14 @@ struct Counted {
 impl FramePort for Counted {
     type Refusal = PortRefusal;
     type Ticket = ();
-    fn publish(
+    fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<(), PortRefusal> {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<(), Unpublished<PortRefusal, E>> {
         self.inner
             .as_mut()
-            .ok_or(PortRefusal::LinkDown)?
+            .ok_or(Unpublished::Port(PortRefusal::LinkDown))?
             .publish(length, fill)?;
         let mut moved = self.moved.get();
         moved.tx_frames += 1;

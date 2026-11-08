@@ -13,8 +13,15 @@ and the port, and its `transmit` builds the frame, lets the port write and
 accept it, and commits the answer in one call. No frame leaves unknown to the
 core, and the core has no state for work at the port. A datagram's outcome means
 accepted by the port, not delivered: until then its block stays with the core,
-and a refusal moves nothing. A port that contradicts itself ends the work with
-`Outcome::Unknown`, not repeated, and stops all publishing until the core retires.
+and a refusal moves nothing. The owner keeps its own record of what the frame's
+fill did and reads the port's answer against it. A fill that fails comes back as
+the fill's own error, never as a port refusal, and ends a datagram
+`Outcome::Rejected`. A port whose answer contradicts that record stops all
+publishing until the core retires: `Ok` after a failed or missing fill ends the
+work `Outcome::Unknown`, not repeated, whatever the fill's error, and a refusal of
+its own after a failed fill ends the work by the fill's cause. Every end at
+publication, a frame taken or refused for good, passes the turn to the next
+socket.
 
 `tick` comes first at every time `poll_deadline` names and at any later `now`
 before work is asked for: an address past its life is no work until then.

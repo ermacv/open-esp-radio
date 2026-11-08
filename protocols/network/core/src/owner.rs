@@ -4,14 +4,14 @@ use core::task::Context;
 
 use oer_portable_events::EventSink;
 use oer_portable_time::Instant;
-use oer_protocols_network_port::{FramePort, FrameSource};
+use oer_protocols_network_port::{FramePort, FrameSource, Unpublished};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::block::{Block, CoreBrand, Group, Pool};
 use crate::interface::Interface;
 use crate::machine::{
     CommandId, CommandState, Core, Datagram, Demand, Eviction, Grant, NetEvent, OpenRefused,
-    Queued, Remote, RetiredResults, SendRefused, SocketId, StaleSocket,
+    Queued, Remote, RetiredResults, SendRefused, SlotTooShort, SocketId, StaleSocket,
 };
 
 /// What a retired core hands on, each to its own owner.
@@ -45,13 +45,34 @@ pub enum Unsent<R> {
     /// work ended: a datagram's outcome is
     /// [`Outcome::Rejected`](crate::Outcome::Rejected).
     Rejected(R),
+    /// The frame did not fit the room the port gave, and the port took the
+    /// room back: the same frame would meet the same, so its work ended, and a
+    /// datagram's outcome is [`Outcome::Rejected`](crate::Outcome::Rejected).
+    SlotTooShort,
+    /// The fill failed, and the port answered with a refusal of its own rather
+    /// than the fill's error, which breaks [`FramePort::publish`]. The port
+    /// says it took nothing, and the frame was never whole, so the work ended
+    /// by the fill's cause: a datagram's outcome is
+    /// [`Outcome::Rejected`](crate::Outcome::Rejected). From then on every
+    /// `transmit` answers [`Self::PortContract`].
+    FillMisreported(R),
     /// The port said `Ok` though the frame was not written, which breaks
-    /// [`FramePort::publish`]. What reached it is not known, so the work
-    /// ended and is not repeated: a datagram's outcome is
-    /// [`Outcome::Unknown`](crate::Outcome::Unknown). Every later `transmit`
-    /// answers this too, for ARP as well, until the owner retires the core
-    /// and takes the port back.
+    /// [`FramePort::publish`], and wins over any error of the fill. What
+    /// reached it is not known, so the work ended and is not repeated: a
+    /// datagram's outcome is [`Outcome::Unknown`](crate::Outcome::Unknown).
+    /// Every later `transmit` answers this too, for ARP as well, until the
+    /// owner retires the core and takes the port back.
     PortContract,
+}
+
+/// What the owner saw of a fill: its own record, which decides what a port's
+/// answer means.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Filled {
+    /// The port never called it.
+    Never,
+    Wrote,
+    Failed,
 }
 
 /// The sole owner of a core, its pool and its port: the core takes and gives
@@ -104,7 +125,9 @@ impl<
     }
 
     /// Send the granted work: the frame is written in the port's room, and
-    /// the port's answer is committed before this returns.
+    /// the port's answer is committed before this returns. What the fill did
+    /// is this owner's own record, and a port's answer that contradicts it is
+    /// the port's fault, whatever the fill's error.
     ///
     /// # Errors
     /// [`Unsent`].
@@ -117,26 +140,43 @@ impl<
             return Err(Unsent::PortContract);
         }
         let frame = self.core.frame(now, &grant).ok_or(Unsent::Stale)?;
-        let mut written = false;
+        let mut filled = Filled::Never;
         let published = self.port.publish(frame.length(), |slot| {
             let result = frame.write(slot);
-            written = result.is_ok();
+            filled = if result.is_ok() {
+                Filled::Wrote
+            } else {
+                Filled::Failed
+            };
             result
         });
-        let ticket = match published {
-            Ok(ticket) => ticket,
-            Err(refusal) if P::is_final(&refusal) => {
-                self.core.reject(&grant, &mut self.pool);
-                return Err(Unsent::Rejected(refusal));
+        match published {
+            Ok(ticket) => {
+                let written = filled == Filled::Wrote;
+                self.core.commit(now, grant, written, &mut self.pool);
+                if written {
+                    Ok(ticket)
+                } else {
+                    self.broken = true;
+                    Err(Unsent::PortContract)
+                }
             }
-            Err(refusal) => return Err(Unsent::Port(refusal)),
-        };
-        self.core.commit(now, grant, written, &mut self.pool);
-        if written {
-            Ok(ticket)
-        } else {
-            self.broken = true;
-            Err(Unsent::PortContract)
+            // Generic in the fill's error, the port has no `SlotTooShort` but
+            // the one the fill returned.
+            Err(Unpublished::Fill(SlotTooShort)) => {
+                self.core.reject(&grant, &mut self.pool);
+                Err(Unsent::SlotTooShort)
+            }
+            Err(Unpublished::Port(refusal)) if filled == Filled::Failed => {
+                self.core.reject(&grant, &mut self.pool);
+                self.broken = true;
+                Err(Unsent::FillMisreported(refusal))
+            }
+            Err(Unpublished::Port(refusal)) if P::is_final(&refusal) => {
+                self.core.reject(&grant, &mut self.pool);
+                Err(Unsent::Rejected(refusal))
+            }
+            Err(Unpublished::Port(refusal)) => Err(Unsent::Port(refusal)),
         }
     }
 

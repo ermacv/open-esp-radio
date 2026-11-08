@@ -11,7 +11,7 @@ use std::task::{Context, Waker};
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeCandidate;
 use oer_protocols_ieee80211_runtime::egress::{Exchange, PeerAir, RadioNotice};
-use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Ready, SlotTooShort};
+use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Ready, Unpublished};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 use oer_protocols_network_wire::ip::Ipv4Header;
@@ -396,22 +396,22 @@ impl FramePort for Medium {
     type Refusal = NoRoom;
     type Ticket = u32;
 
-    fn publish(
+    fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), SlotTooShort>,
-    ) -> Result<u32, NoRoom> {
+        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ) -> Result<u32, Unpublished<NoRoom, E>> {
         let mut state = self.0.borrow_mut();
         if state.refusals > 0 {
             state.refusals = state.refusals.saturating_sub(1);
             state.refused = state.refused.saturating_add(1);
-            return Err(NoRoom);
+            return Err(Unpublished::Port(NoRoom));
         }
         if state.flights.len() >= state.depth {
-            return Err(NoRoom);
+            return Err(Unpublished::Port(NoRoom));
         }
         let mut frame = vec![0; length];
-        fill(&mut frame).map_err(|_| NoRoom)?;
+        fill(&mut frame).map_err(Unpublished::Fill)?;
         Ok(state.fly(&frame))
     }
 }

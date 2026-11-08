@@ -25,7 +25,7 @@ pub use device::{
     NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused, TxStorage,
 };
 
-pub use frame::{Candidate, Class, Egress, FramePort, FrameSource, Ready, SlotTooShort};
+pub use frame::{Candidate, Class, Egress, FramePort, FrameSource, Ready, Unpublished};
 
 /// Opaque identity of one logical network endpoint sharing a physical radio.
 ///

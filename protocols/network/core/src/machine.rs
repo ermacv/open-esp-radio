@@ -7,7 +7,7 @@ use core::marker::PhantomData;
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
-use oer_protocols_network_port::{Candidate, Class, EthernetFrameView, Ready, SlotTooShort};
+use oer_protocols_network_port::{Candidate, Class, EthernetFrameView, Ready};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::{self, EtherType, EthernetHeader};
@@ -98,6 +98,12 @@ pub(crate) enum Frame<'a> {
         data: &'a [u8],
     },
 }
+
+/// The room a port gave does not hold the frame: the error of the core's own
+/// fill, which the port hands back as
+/// [`Unpublished::Fill`](oer_protocols_network_port::Unpublished::Fill).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SlotTooShort;
 
 impl Frame<'_> {
     pub(crate) fn length(&self) -> usize {
@@ -432,7 +438,8 @@ pub struct Core<
     /// asks again.
     replies: heapless::Vec<Reply, NEIGHBORS>,
     sockets: [Socket<'m, B, SIZE, CREDITS, RECEIVED>; SOCKETS],
-    /// Where the next look for a datagram starts, so sockets take turns.
+    /// Where the next look for a datagram starts, so sockets take turns: every
+    /// end at publication, a commit or a reject, moves it past its socket.
     cursor: usize,
     identification: u16,
     /// The last serial given: 2^64 of them outlast any device.
@@ -1180,8 +1187,9 @@ impl<
 
     /// The port took the granted work, or said it did without a written
     /// frame: then its datagram ends `Unknown`, and nothing is sent again.
-    /// The port refused `grant`'s frame for good: its work ends, and nothing
-    /// offers it again.
+    /// `grant`'s frame was refused for good, by the port or by its own fill:
+    /// its work ends, and nothing offers it again. As a commit, this end moves
+    /// the next socket's turn past a datagram's socket.
     pub(crate) fn reject<const BLOCKS: usize>(
         &mut self,
         grant: &Grant<B>,
@@ -1204,6 +1212,7 @@ impl<
                 serial,
                 ..
             } => {
+                self.cursor = usize::from(socket).wrapping_add(1);
                 if let Some(entry) = self
                     .sockets
                     .get_mut(usize::from(socket))
