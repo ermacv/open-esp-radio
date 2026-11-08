@@ -183,6 +183,17 @@ first datagram after the request. `mac_since_periodic_sample` holds what
 the MAC counted between its last 50 ms sample and the snapshot's own
 reading of the bank.
 
+Each level's `addba`, and the `path` case's `idle addba`, record the
+ADDBA Requests the station took since boot, read at the window's end, and
+print one line (`addba <level>:`); only a trace image counts them. `last`
+holds each TID's last request: the Buffer Size the access point asked for
+as received (`requested`, zero asking the station to choose) and its
+`outcome`: `accepted` with the agreement's `window`, `repeated` (the
+running agreement's own request again) with its `window`, `refused` with
+the IEEE 802.11 `status` code sent, or `unanswered` (no reply place or
+bank remained; the access point asks again). `accepted`, `repeated`,
+`refused` and `unanswered` count the requests by outcome.
+
 `positions` holds the aggregates a BlockAck answered at their first
 transmission, by position on air, the first one at index 0; a lost
 aggregate or BlockAck and a retransmission count in none of it. `sent` has

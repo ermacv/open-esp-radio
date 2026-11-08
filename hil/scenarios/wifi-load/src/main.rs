@@ -14,6 +14,7 @@
 //! image's hart spends its window ([`profile`]).
 #![forbid(unsafe_code)]
 
+mod addba;
 mod link;
 mod ping;
 mod profile;
@@ -29,12 +30,13 @@ use std::{
 };
 
 use oer_hil_services_load::{
-    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectHart1, CollectLink, CollectMac,
-    CollectParts, CollectPositions, CollectStall, CollectStallMac, CollectTracking, Collected,
-    Counters, CountersCollected, DataBus, Hart1Collected, Hart1Window, InstructionBus, Link,
-    LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, PartWindow, PartsCollected,
-    Positions, PositionsCollected, Report, Stall, StallCollected, StallMac, StallMacCollected,
-    Start, Started, StaticAddress, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected, Transmit,
+    Addba, AddbaCollected, CacheGeometry, CacheLevel, Collect, CollectAddba, CollectCounters,
+    CollectHart1, CollectLink, CollectMac, CollectParts, CollectPositions, CollectStall,
+    CollectStallMac, CollectTracking, Collected, Counters, CountersCollected, DataBus,
+    Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected, Load, MAC_COUNT_NAMES,
+    MAX_PARTS, Mac, MacCollected, PartWindow, PartsCollected, Positions, PositionsCollected,
+    Report, Stall, StallCollected, StallMac, StallMacCollected, Start, Started, StaticAddress,
+    TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Ipv4, Join, Joined, Leave, Left, ScanVisit,
@@ -286,6 +288,7 @@ struct Ended {
     tracking: Tracking,
     stall: Stall,
     stall_mac: StallMac,
+    addba: Addba,
 }
 
 fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
@@ -344,8 +347,12 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         StallCollected::Report(stall) => stall,
         other => return Err(Failure::Fail(format!("the image's stall: {other:?}"))),
     };
-    match cx.call(CollectStallMac { run }, CALL)? {
-        StallMacCollected::Report(stall_mac) => Ok(Ended {
+    let stall_mac = match cx.call(CollectStallMac { run }, CALL)? {
+        StallMacCollected::Report(stall_mac) => stall_mac,
+        other => return Err(Failure::Fail(format!("the image's stall MAC: {other:?}"))),
+    };
+    match cx.call(CollectAddba { run }, CALL)? {
+        AddbaCollected::Report(addba) => Ok(Ended {
             report,
             parts,
             counters,
@@ -356,8 +363,11 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             tracking,
             stall,
             stall_mac,
+            addba,
         }),
-        other => Err(Failure::Fail(format!("the image's stall MAC: {other:?}"))),
+        other => Err(Failure::Fail(format!(
+            "the image's ADDBA requests: {other:?}"
+        ))),
     }
 }
 
@@ -390,6 +400,13 @@ fn positions_counts(positions: &Positions) -> serde_json::Value {
 fn tracking_measurement(name: &str, ended: &Ended) -> serde_json::Value {
     println!("  tracking {name}: {}", tracking::summary(&ended.tracking));
     tracking::window(&ended.tracking)
+}
+
+/// The ADDBA Requests the station took since boot, at the window's end; its
+/// one-line summary is printed as `name`'s.
+fn addba_measurement(name: &str, ended: &Ended) -> serde_json::Value {
+    println!("  addba {name}: {}", addba::summary(&ended.addba));
+    addba::window(&ended.addba)
 }
 
 /// Where the receive path last moved and the radio owner's snapshot at the
@@ -991,6 +1008,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     cx.measure("idle link", link);
     let tracking = tracking_measurement("idle", &idle);
     cx.measure("idle tracking", tracking);
+    cx.measure("idle addba", addba_measurement("idle", &idle));
     Ok(())
 }
 
@@ -1484,6 +1502,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         let tracking = tracking_measurement(name, &ended);
         object.insert("tracking".to_owned(), tracking);
         object.insert("stall".to_owned(), stall_measurement(name, &ended));
+        object.insert("addba".to_owned(), addba_measurement(name, &ended));
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
         let elf = profile::elf(if static_address().is_some() {
@@ -1741,6 +1760,7 @@ mod tests {
             tracking: Tracking::default(),
             stall: Stall::default(),
             stall_mac: StallMac::default(),
+            addba: Addba::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
         let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);
@@ -1831,6 +1851,7 @@ mod tests {
             tracking: Tracking::default(),
             stall: Stall::default(),
             stall_mac: StallMac::default(),
+            addba: Addba::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
         let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);

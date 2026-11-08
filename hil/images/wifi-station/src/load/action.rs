@@ -1,7 +1,7 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_hil_services_load::{
-    Collect, CollectCounters, CollectHart1, CollectLink, CollectMac, CollectParts,
+    Collect, CollectAddba, CollectCounters, CollectHart1, CollectLink, CollectMac, CollectParts,
     CollectPositions, CollectSamples, CollectStall, CollectStallMac, CollectTracking, LoadError,
     MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US,
     Request, Start, Started, header,
@@ -36,7 +36,7 @@ pub(crate) enum Action {
 
 /// What a run keeps once it ended: its report, its parts' window, its
 /// counters, its link's rates, its PHY tracking ticks, its receive path's
-/// stall snapshot and its samples.
+/// stall snapshot, the ADDBA Requests at its window's end and its samples.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Kept {
     Report,
@@ -52,6 +52,7 @@ pub(crate) enum Kept {
     Tracking,
     Stall,
     StallMac,
+    Addba,
     /// Hart `hart`'s samples from the one numbered `from`.
     Samples {
         from: u16,
@@ -103,6 +104,7 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
         (phase, Request::CollectStallMac(CollectStallMac { run })) => {
             collect(phase, run, Kept::StallMac)
         }
+        (phase, Request::CollectAddba(CollectAddba { run })) => collect(phase, run, Kept::Addba),
     }
 }
 
@@ -278,7 +280,7 @@ mod tests {
     #[test]
     fn a_collect_answers_running_then_what_its_own_run_kept_only() {
         type Asks = fn(u32) -> Request;
-        let requests: [(Kept, Asks); 11] = [
+        let requests: [(Kept, Asks); 12] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
             (Kept::Parts { from: 12 }, |run| {
                 Request::CollectParts(CollectParts { run, from: 12 })
@@ -309,6 +311,9 @@ mod tests {
             }),
             (Kept::StallMac, |run| {
                 Request::CollectStallMac(CollectStallMac { run })
+            }),
+            (Kept::Addba, |run| {
+                Request::CollectAddba(CollectAddba { run })
             }),
         ];
         for (kind, collect) in requests {

@@ -34,6 +34,7 @@ use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
 
 use super::{Boot, Error, SamplerToken};
+use crate::observe::addba::{Addba, AddbaCounter, Outcome, Request};
 use crate::observe::connect::{
     Connect, ConnectCounter, Heard, Probe, ScanStep, Stage, Step, Visit,
 };
@@ -74,6 +75,9 @@ static TRACKING: TrackingCounter = TrackingCounter::new();
 static LINK: LinkCounter = LinkCounter::new();
 static CONNECT: ConnectCounter = ConnectCounter::new();
 static BRIDGE: BridgeCounter = BridgeCounter::new();
+/// The ADDBA Requests the station took; the station service on hart 0 is
+/// their one writer.
+static ADDBA: AddbaCounter = AddbaCounter::new();
 
 const STATION_KINDS: usize = StationRxKind::ALL.len();
 /// The station's receive decisions by kind; the station service on hart 0
@@ -137,6 +141,12 @@ pub async fn parts() -> [PartReading; PARTS] {
 pub async fn tracking() -> TrackingSample {
     let epoch = EPOCH.load(Ordering::Relaxed);
     settled(|| TRACKING.sample(epoch)).await
+}
+
+/// The ADDBA Requests the station took since boot: each TID's last and
+/// the requests by outcome.
+pub async fn addba_requests() -> Addba {
+    settled(|| ADDBA.read()).await
 }
 
 /// The station's receive decisions.
@@ -319,6 +329,9 @@ impl oer_portable_trace::Observer for Observer {
         if let Some(decision) = Self::decoded::<E, station::StationRx>(event) {
             receive_decision(decision);
         }
+        if let Some(request) = Self::decoded::<E, station::StationAddba>(event) {
+            ADDBA.record(request.tid, addba_request(request));
+        }
         if let Some(answered) = Self::decoded::<E, station::StationTxHoles>(event) {
             LINK.answered(answered.members, answered.holes);
         }
@@ -449,6 +462,20 @@ fn receive_decision(decision: station::StationRx) {
         WINDOW.store(decision.count, Ordering::Relaxed);
     } else if let Some(count) = STATION.get(usize::from(decision.kind as u8)) {
         bump(count, decision.count);
+    }
+}
+
+/// The library's record of one ADDBA Request the station took.
+const fn addba_request(request: station::StationAddba) -> Request {
+    use station::AddbaOutcome as Source;
+    Request {
+        requested: request.requested,
+        outcome: match request.outcome {
+            Source::Accepted { window } => Outcome::Accepted { window },
+            Source::Repeated { window } => Outcome::Repeated { window },
+            Source::Refused { status } => Outcome::Refused { status },
+            Source::Unanswered => Outcome::Unanswered,
+        },
     }
 }
 

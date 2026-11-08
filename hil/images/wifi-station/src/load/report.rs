@@ -5,15 +5,16 @@
 //! readings where the service reports one.
 
 use oer::observe::Bridge;
+use oer::observe::addba;
 use oer::observe::cpu::ExecutorSample;
 use oer::observe::link;
 use oer::observe::parts::{PARTS, PartReading};
 use oer::observe::tracking::TrackingSample;
 use oer_hil_services_load::{
-    CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, ExecutorLoad, HartLoad,
-    InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, Mac, PartWindow, Parts, Positions,
-    Rates, RxCounts, RxLink, Sample, Samples, StallBoundary, StationRx, Tracking, TxAmpdu,
-    TxCounts, TxLink,
+    Addba, AddbaOutcome, AddbaRequest, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx,
+    ExecutorLoad, HartLoad, InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, Mac,
+    PartWindow, Parts, Positions, Rates, RxCounts, RxLink, Sample, Samples, StallBoundary,
+    StationRx, Tracking, TxAmpdu, TxCounts, TxLink,
 };
 use oer_portable_trace::profile::Thinning;
 
@@ -173,9 +174,33 @@ pub(crate) fn tx_ampdu(ampdu: &link::TxAmpdu) -> TxAmpdu {
     }
 }
 
+/// The ADDBA Requests the station took, as the wire names them.
+pub(crate) fn addba(reading: &addba::Addba) -> Addba {
+    let request = |request: &addba::Request| AddbaRequest {
+        requested: request.requested,
+        outcome: match request.outcome {
+            addba::Outcome::Accepted { window } => AddbaOutcome::Accepted { window },
+            addba::Outcome::Repeated { window } => AddbaOutcome::Repeated { window },
+            addba::Outcome::Refused { status } => AddbaOutcome::Refused { status },
+            addba::Outcome::Unanswered => AddbaOutcome::Unanswered,
+        },
+    };
+    Addba {
+        last: reading
+            .last
+            .each_ref()
+            .map(|last| last.as_ref().map(request)),
+        accepted: reading.accepted,
+        repeated: reading.repeated,
+        refused: reading.refused,
+        unanswered: reading.unanswered,
+    }
+}
+
 /// What one end of a window read: the boot hart's counters, the
 /// bridge's, the frames the IP stack took, the cache's, the receive path's,
-/// the transmit agreements' and the link's counts.
+/// the transmit agreements' and the link's counts, and the ADDBA Requests
+/// the station took since boot.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Snapshot {
     pub cycles: u64,
@@ -189,6 +214,7 @@ pub(crate) struct Snapshot {
     pub link: Link,
     pub mac: Mac,
     pub positions: Positions,
+    pub addba: Addba,
 }
 
 fn instruction_window(start: &InstructionBus, end: &InstructionBus) -> InstructionBus {
@@ -418,7 +444,11 @@ mod chip {
     /// One end of a window: the boot hart's `hart` and the library's
     /// `counters`, both read on the boot hart; the IP stack's frames are
     /// hart 1's to count.
-    pub(crate) fn snapshot(hart: HartCounters, counters: Counters) -> Snapshot {
+    pub(crate) fn snapshot(
+        hart: HartCounters,
+        counters: Counters,
+        addba: &oer::observe::addba::Addba,
+    ) -> Snapshot {
         Snapshot {
             cycles: hart.cycles,
             instructions: hart.instructions,
@@ -446,6 +476,7 @@ mod chip {
                 tail_runs: counters.positions.tail_runs,
                 interior: counters.positions.interior,
             },
+            addba: super::addba(addba),
         }
     }
 

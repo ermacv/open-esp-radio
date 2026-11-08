@@ -561,9 +561,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_thirteen_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_fourteen_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 26);
+    assert_eq!(keys.len(), 28);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
@@ -647,5 +647,51 @@ fn hart_1_s_two_ends_round_trip_and_fit_one_response() {
     assert_eq!(
         postcard::from_bytes::<Hart1Collected>(encoded).unwrap(),
         message
+    );
+}
+
+#[test]
+fn the_addba_requests_round_trip_every_outcome_and_fit_one_response() {
+    let outcomes = [
+        AddbaOutcome::Accepted { window: u16::MAX },
+        AddbaOutcome::Repeated { window: u16::MAX },
+        AddbaOutcome::Refused { status: u16::MAX },
+        AddbaOutcome::Unanswered,
+    ];
+    let mut last = [None; ADDBA_TIDS];
+    for (tid, request) in last.iter_mut().enumerate() {
+        *request = Some(AddbaRequest {
+            requested: u16::MAX,
+            outcome: outcomes[tid % outcomes.len()],
+        });
+    }
+    let largest = AddbaCollected::Report(Addba {
+        last,
+        accepted: u32::MAX,
+        repeated: u32::MAX,
+        refused: u32::MAX,
+        unanswered: u32::MAX,
+    });
+    let mut buffer = [0; 1024];
+    let encoded = postcard::to_slice(&largest, &mut buffer).unwrap();
+    assert!(encoded.len() <= 512, "{}", encoded.len());
+    assert_eq!(
+        postcard::from_bytes::<AddbaCollected>(encoded).unwrap(),
+        largest
+    );
+    let requested_zero = AddbaCollected::Report(Addba {
+        last: core::array::from_fn(|tid| {
+            (tid == 0).then_some(AddbaRequest {
+                requested: 0,
+                outcome: AddbaOutcome::Accepted { window: 16 },
+            })
+        }),
+        accepted: 1,
+        ..Addba::default()
+    });
+    let encoded = postcard::to_slice(&requested_zero, &mut buffer).unwrap();
+    assert_eq!(
+        postcard::from_bytes::<AddbaCollected>(encoded).unwrap(),
+        requested_zero
     );
 }

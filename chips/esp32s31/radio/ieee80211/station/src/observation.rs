@@ -740,6 +740,98 @@ impl Event for StationTxAmpdu {
     }
 }
 
+/// One ADDBA Request the station's receive agreements took: its TID, the
+/// Buffer Size the access point asked for as received (zero asks the
+/// station to choose) and what became of it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StationAddba {
+    pub tid: u8,
+    pub requested: u16,
+    pub outcome: AddbaOutcome,
+}
+
+/// What became of one ADDBA Request, as the recipient names it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddbaOutcome {
+    /// A new agreement started with `window`.
+    Accepted { window: u16 },
+    /// The running agreement's own request again, answered with its
+    /// `window`.
+    Repeated { window: u16 },
+    /// Refused with this IEEE 802.11 status code.
+    Refused { status: u16 },
+    /// No reply place or bank remained: the request went unanswered.
+    Unanswered,
+}
+
+impl StationAddba {
+    fn of(
+        tid: u8,
+        requested: u16,
+        outcome: oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaOutcome,
+    ) -> Self {
+        use oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaOutcome as Recipient;
+        Self {
+            tid,
+            requested,
+            outcome: match outcome {
+                Recipient::Accepted { window } => AddbaOutcome::Accepted { window },
+                Recipient::Repeated { window } => AddbaOutcome::Repeated { window },
+                Recipient::Refused(status) => AddbaOutcome::Refused {
+                    status: status as u16,
+                },
+                Recipient::Unanswered => AddbaOutcome::Unanswered,
+            },
+        }
+    }
+}
+
+impl Event for StationAddba {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 44);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        let (code, value) = match self.outcome {
+            AddbaOutcome::Accepted { window } => (0, window),
+            AddbaOutcome::Repeated { window } => (1, window),
+            AddbaOutcome::Refused { status } => (2, status),
+            AddbaOutcome::Unanswered => (3, 0),
+        };
+        let [low, high] = self.requested.to_le_bytes();
+        [
+            u32::from_le_bytes([self.tid, code, low, high]),
+            u32::from(value),
+        ]
+    }
+
+    fn decode([word, value]: [u32; 2]) -> Option<Self> {
+        let [tid, code, low, high] = word.to_le_bytes();
+        let value = u16::try_from(value).ok()?;
+        let outcome = match code {
+            0 => AddbaOutcome::Accepted { window: value },
+            1 => AddbaOutcome::Repeated { window: value },
+            2 => AddbaOutcome::Refused { status: value },
+            3 if value == 0 => AddbaOutcome::Unanswered,
+            _ => return None,
+        };
+        Some(Self {
+            tid,
+            requested: u16::from_le_bytes([low, high]),
+            outcome,
+        })
+    }
+}
+
+impl core::fmt::Display for StationAddba {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "station.addba tid {} asked {} {:?}",
+            self.tid, self.requested, self.outcome
+        )
+    }
+}
+
 /// One answered first transmission of an aggregate: its subframes and the
 /// positions the BlockAck left unacknowledged, bit 0 the first on air.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -906,6 +998,8 @@ fn block_ack_rx(
             emit(StationRxKind::AgreementStarted, window.into());
         }
         RxBlockAckEvent::Stopped { .. } => emit(StationRxKind::AgreementStopped, 1),
+        // A request is a [`StationAddba`], not a receive decision.
+        RxBlockAckEvent::Requested { .. } => {}
     }
 }
 
@@ -950,6 +1044,15 @@ impl<O: oer_portable_trace::Observer>
     const ENABLED: bool = cfg!(oer_trace);
 
     fn event(&mut self, event: oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent) {
+        use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
+        if let RxBlockAckEvent::Requested {
+            tid,
+            requested,
+            outcome,
+        } = event
+        {
+            oer_portable_trace::observe!(self.0, StationAddba::of(tid, requested, outcome));
+        }
         block_ack_rx(event, &mut |kind, count| self.report(kind, count));
     }
 }
@@ -1064,6 +1167,47 @@ mod tests {
     }
 
     #[test]
+    fn a_request_record_round_trips_every_outcome_and_refuses_unknown_words() {
+        use oer_protocols_ieee80211_core_upper_mac::block_ack::{
+            AddbaOutcome as Recipient, AddbaStatus,
+        };
+        for (requested, recipient, outcome) in [
+            (
+                0,
+                Recipient::Accepted { window: 16 },
+                AddbaOutcome::Accepted { window: 16 },
+            ),
+            (
+                64,
+                Recipient::Repeated { window: 1 },
+                AddbaOutcome::Repeated { window: 1 },
+            ),
+            (
+                1023,
+                Recipient::Refused(AddbaStatus::InvalidParameters),
+                AddbaOutcome::Refused {
+                    status: oer_protocols_ieee80211_wire::status::status_code::INVALID_PARAMETERS,
+                },
+            ),
+            (8, Recipient::Unanswered, AddbaOutcome::Unanswered),
+        ] {
+            let record = StationAddba::of(15, requested, recipient);
+            assert_eq!(
+                record,
+                StationAddba {
+                    tid: 15,
+                    requested,
+                    outcome
+                }
+            );
+            assert_eq!(StationAddba::decode(record.encode()), Some(record));
+        }
+        assert_eq!(StationAddba::decode([4 << 8, 0]), None);
+        assert_eq!(StationAddba::decode([3 << 8, 1]), None);
+        assert_eq!(StationAddba::decode([0, 1 << 16]), None);
+    }
+
+    #[test]
     fn every_facade_event_has_its_own_kind() {
         let kinds = [
             StationAuthenticated::KIND,
@@ -1079,6 +1223,7 @@ mod tests {
             TxData::KIND,
             StationTxAmpdu::KIND,
             StationTxHoles::KIND,
+            StationAddba::KIND,
             TxRateSelected::KIND,
         ]
         .map(Kind::raw);
@@ -1150,6 +1295,16 @@ mod tests {
             RxBlockAckEvent::Stopped {
                 tid: 0,
                 reason: AgreementStop::Peer,
+            },
+            &mut emit,
+        );
+        // A request is no receive decision.
+        block_ack_rx(
+            RxBlockAckEvent::Requested {
+                tid: 0,
+                requested: 0,
+                outcome:
+                    oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaOutcome::Unanswered,
             },
             &mut emit,
         );
