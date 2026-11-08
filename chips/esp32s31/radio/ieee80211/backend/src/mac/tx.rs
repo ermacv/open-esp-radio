@@ -3337,12 +3337,13 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         hardware
             .start_bound_tx(publication, index, || slot.queue = queue)
             .map_err(prepare_refusal)?;
-        // HE S-MPDU has a four-byte delimiter and a hardware-generated FCS.
+        // HE S-MPDU has a four-byte delimiter and a hardware-generated FCS;
+        // the published APEP_LENGTH is the HE SU timing's length argument.
         slot.work.record_publication(
             config.apep_length(),
             1,
             None,
-            None,
+            TxPhyRate::He(config.rate).ppdu_timing(),
             Some(TxContention {
                 aifsn: config.aifsn,
                 backoff_slots: config.contention_window,

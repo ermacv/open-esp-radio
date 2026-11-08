@@ -102,8 +102,12 @@ station (P2)
 - `PpduTiming` includes preamble, SERVICE and tail bits, whole-symbol rounding
   and the 2.4 GHz signal extension; HT uses the exact bits per symbol, not
   rounded SGI rates. Supported: DSSS/CCK, ERP-OFDM, HT mixed format with one
-  stream, BCC, no STBC. HE is counted in `unestimated_ppdus`, not
-  approximated; a nonzero count makes totals partial.
+  stream, BCC, no STBC; HE20 SU with one stream, MCS 0-9, every GI/HE-LTF
+  and BCC or LDPC, from the APEP length through pre-FEC padding, the LDPC
+  extra symbol segment and the packet extension. The HE packet extension is
+  bounded by a 16-us nominal padding, since the backend does not program the
+  peer's. HE DCM is counted in `unestimated_ppdus`, not approximated; a
+  nonzero count makes totals partial.
 - `TxCost` separates data PPDU, SIFS plus ACK or BlockAck, CTS-to-self or
   RTS/CTS, and AIFS plus selected backoff. No response is an explicit zero; an
   unknown response rate or missing access facts stay `None`; overflow yields

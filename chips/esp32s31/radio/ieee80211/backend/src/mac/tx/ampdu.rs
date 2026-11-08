@@ -247,7 +247,8 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     }
 
     /// Work published by the retained DMA owner since the last successful
-    /// `begin`. Survives completion, detach and release. HE time is unestimated.
+    /// `begin`. Survives completion, detach and release. HE DCM time is
+    /// unestimated.
     pub const fn work(&self) -> MacTxWork {
         self.work
     }

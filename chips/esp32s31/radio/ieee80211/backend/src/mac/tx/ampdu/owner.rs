@@ -393,11 +393,14 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
             return Err(prepare_refusal(refused));
         }
+        // The aggregate length is the published APEP_LENGTH
+        // (`prepared_he_submission` refuses any other), the HE SU timing's
+        // length argument. Trigger eligibility leaves this an SU PPDU.
         storage.as_mut().project().work.record_publication(
             prepared.aggregate.bytes,
             prepared.aggregate.subframes,
             None,
-            None,
+            crate::mac::tx::TxPhyRate::He(config.rate()).ppdu_timing(),
             Some(TxContention {
                 aifsn: config.aifsn,
                 backoff_slots: config.contention_window,
