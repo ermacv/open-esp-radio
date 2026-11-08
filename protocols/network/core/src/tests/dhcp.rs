@@ -524,6 +524,127 @@ fn an_ack_after_requests_repeated_still_binds() {
     });
 }
 
+/// One pass whose every ready work the port refuses for good: how many it
+/// refused. Nothing is left ready at `now` after it, so the client waits for
+/// a time of its own.
+fn refused_turn<B>(stack: &mut Stack<B>, now: Instant) -> usize {
+    stack.port_mut().rejects = true;
+    stack.observe_link(now);
+    stack.tick(now, &mut Dropped::default());
+    let mut refused = 0;
+    while let Some(demand) = stack.poll_demand(now) {
+        assert!(stack.transmit(now, demand.grant(), unproduced).is_err());
+        refused += 1;
+        assert!(refused < 16, "a refusal is offered again at once");
+    }
+    stack.port_mut().rejects = false;
+    refused
+}
+
+#[test]
+fn final_refusals_of_requests_spend_none_of_the_requesting_tries() {
+    leasing!(|stack| {
+        link_up(stack, 1);
+        let xid = assert_discover(&one(stack, at(0)));
+        give(stack, at(0), &Reply::new(MessageType::Offer, xid).frame());
+        // More refusals than REQUESTING has tries: each REQUEST is refused
+        // for good, and the next waits for its time.
+        let mut now = at(0);
+        for _ in 0..7 {
+            assert_eq!(refused_turn(stack, now), 1);
+            let due = stack.poll_deadline().unwrap();
+            assert!(due > now, "a refusal waits for a time");
+            now = due;
+        }
+        // The port took none, so the client still asks for the OFFER's
+        // address, not for a new one.
+        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Requesting));
+        assert_selecting_request(&one(stack, now), xid);
+    });
+}
+
+#[test]
+fn a_lease_counts_from_the_first_request_the_port_took_not_from_a_refused_one() {
+    leasing!(|stack| {
+        link_up(stack, 1);
+        let xid = assert_discover(&one(stack, at(0)));
+        give(stack, at(0), &Reply::new(MessageType::Offer, xid).frame());
+        let mut now = at(0);
+        while now < at(4000) {
+            assert_eq!(refused_turn(stack, now), 1);
+            now = stack.poll_deadline().unwrap();
+        }
+        // The first REQUEST the port takes, over 4 s after the first refusal.
+        assert_selecting_request(&one(stack, now), xid);
+        let mut ack = Reply::new(MessageType::Ack, xid);
+        ack.options = with(
+            ack_options(),
+            option::LEASE_TIME,
+            Some(1_u32.to_be_bytes().to_vec()),
+        );
+        // An ACK at once grants a lease of 1 s from that REQUEST.
+        assert!(give(stack, now, &ack.frame()).0.is_empty());
+        let lease = configuration(stack).lease.unwrap();
+        assert_eq!(lease.obtained, now);
+        assert_eq!(lease.expires, now.saturating_add(Duration::from_secs(1)));
+        assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
+    });
+}
+
+#[test]
+fn a_renewal_whose_server_never_answers_arp_starts_no_lease_clock() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        // T1: the server's neighbor is asked for, three times a second apart,
+        // and never answers: the REQUEST never went.
+        let frames = turn(stack, secs(500), &mut Dropped::default());
+        assert_eq!(frames.len(), 1, "an ARP request");
+        let mut now = secs(500);
+        for _ in 0..3 {
+            now = stack.poll_deadline().unwrap();
+            assert!(dhcp_turn(stack, now).is_empty());
+        }
+        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Renewing));
+        // The next renewal comes at its time, the server answers its ARP and
+        // takes its REQUEST: the extension counts from that one.
+        let due = stack.poll_deadline().unwrap();
+        assert!(due.as_micros() - now.as_micros() >= 60_000_000, "{due:?}");
+        let frames = turn(stack, due, &mut Dropped::default());
+        assert_eq!(frames.len(), 1, "an ARP request");
+        server_answers_arp(stack, due);
+        let xid = assert_extension(&one(stack, due), false);
+        give(stack, due, &Reply::new(MessageType::Ack, xid).frame());
+        let lease = configuration(stack).lease.unwrap();
+        assert_eq!(lease.obtained, due);
+        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Bound));
+    });
+}
+
+#[test]
+fn a_refused_init_reboot_request_keeps_its_wait_and_starts_no_lease_clock() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        link_down(stack);
+        link_up(stack, 2);
+        // Refused at once, then again at its time: the wait stays at its
+        // first, 250 ms less up to a quarter.
+        let mut now = secs(11);
+        for _ in 0..3 {
+            assert_eq!(refused_turn(stack, now), 1);
+            let due = stack.poll_deadline().unwrap();
+            assert!((187_500..=250_000).contains(&(due.as_micros() - now.as_micros())));
+            now = due;
+        }
+        let first = one(stack, now);
+        give(
+            stack,
+            now,
+            &Reply::new(MessageType::Ack, first.xid()).frame(),
+        );
+        assert_eq!(configuration(stack).lease.unwrap().obtained, now);
+    });
+}
+
 #[test]
 fn a_nak_to_the_request_starts_discovery_over_at_once() {
     leasing!(|stack| {

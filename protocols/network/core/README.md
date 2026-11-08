@@ -55,9 +55,12 @@ address is refused `SendRefusal::NoAddress` until the version moves.
 The client's messages are the core's own control work: no socket, block or
 command place. A message is owed while the link is up (`link`, which the
 owner reads from its port each turn), and built in the port's slot when it is
-chosen. It is sent when the port takes it, or refuses it for good; its
-retransmission time starts then, and a lease counts from its transaction's
-first accepted REQUEST. A first DISCOVER is repeated after 250 ms, doubling to
+chosen. It is sent when the port takes it: its retransmission time starts
+then, it counts toward its phase's backoff and tries, and a lease counts
+from its transaction's first REQUEST the port took. A message the port
+refuses for good, or one whose server's neighbor never answers, was not
+sent: it counts neither as a try nor as a lease's start, and its next
+attempt waits for the phase's present time. A first DISCOVER is repeated after 250 ms, doubling to
 10 s in one transaction, as a lost first one cost 10 s on the stand
 (Xarxa fbebde5); each wait is jittered down by up to a quarter. A REQUEST to
 an OFFER is repeated after 5 s, doubling every two, five in all, then

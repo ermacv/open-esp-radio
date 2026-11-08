@@ -591,23 +591,51 @@ impl Client {
         })
     }
 
-    /// The port took the message of `serial`, or refused it for good: its
-    /// retransmission time starts now.
+    /// The port took the message of `serial`: its retransmission time starts
+    /// now, the attempt counts toward its phase's backoff and tries, and a
+    /// REQUEST's lease counts from the first one the port took.
     pub(crate) fn sent(&mut self, now: Instant, serial: u64) {
-        if self.owed != Some(serial) {
+        if !self.end_attempt(now, serial) {
             return;
         }
-        self.owed = None;
-        let random = &mut self.random;
-        let lease = self.lease;
         match &mut self.phase {
-            Phase::Selecting { next, wait } => {
-                *next = Some(now.saturating_add(random.jitter(*wait)));
+            Phase::Selecting { wait, .. } | Phase::Rebooting { wait, .. } => {
                 *wait = Duration::from_micros(
                     wait.as_micros()
                         .saturating_mul(2)
                         .min(DISCOVER_MOST.as_micros()),
                 );
+            }
+            Phase::Requesting { tries, .. } => *tries = tries.saturating_add(1),
+            Phase::Bound | Phase::Renewing { .. } | Phase::Rebinding { .. } => {}
+        }
+        if !matches!(self.phase, Phase::Selecting { .. } | Phase::Bound) {
+            // The lease of an ACK counts from the first REQUEST taken.
+            self.sent.get_or_insert(now);
+        }
+    }
+
+    /// The message of `serial` was refused for good, by the port or for a
+    /// neighbor that never answered: nothing went, so neither a try nor the
+    /// lease's start counts, and the backoff stays where it is. The next
+    /// attempt still waits for its phase's time, so a refusal neither spins
+    /// nor loses the client's wake.
+    pub(crate) fn refused(&mut self, now: Instant, serial: u64) {
+        let _ended = self.end_attempt(now, serial);
+    }
+
+    /// End the attempt of `serial`, while it is owed: the next one comes at
+    /// the phase's present wait. Whether it was owed.
+    fn end_attempt(&mut self, now: Instant, serial: u64) -> bool {
+        if self.owed != Some(serial) {
+            return false;
+        }
+        self.owed = None;
+        let random = &mut self.random;
+        let lease = self.lease;
+        match &mut self.phase {
+            Phase::Selecting { next, wait } | Phase::Rebooting { next, wait } => {
+                *next = Some(now.saturating_add(random.jitter(*wait)));
             }
             Phase::Requesting { next, tries, .. } => {
                 let doubled = REQUEST_FIRST
@@ -615,18 +643,6 @@ impl Client {
                     .checked_shl(u32::from(*tries / 2))
                     .unwrap_or(u64::MAX);
                 *next = Some(now.saturating_add(random.jitter(Duration::from_micros(doubled))));
-                *tries = tries.saturating_add(1);
-                self.sent.get_or_insert(now);
-            }
-            Phase::Rebooting { next, wait } => {
-                *next = Some(now.saturating_add(random.jitter(*wait)));
-                *wait = Duration::from_micros(
-                    wait.as_micros()
-                        .saturating_mul(2)
-                        .min(DISCOVER_MOST.as_micros()),
-                );
-                // The lease of an ACK counts from the first REQUEST.
-                self.sent.get_or_insert(now);
             }
             // RFC 2131, 4.4.5: half the time left to T2, or to the end, no
             // less than 60 s; a renewal never waits past T2.
@@ -636,17 +652,16 @@ impl Client {
                 });
                 let wait = half(left).max(RENEW_LEAST).min(left);
                 *next = Some(now.saturating_add(wait));
-                self.sent.get_or_insert(now);
             }
             Phase::Rebinding { next } => {
                 let left = lease.map_or(Duration::from_micros(0), |lease| {
                     lease.expires.saturating_duration_since(now)
                 });
                 *next = Some(now.saturating_add(half(left).max(RENEW_LEAST)));
-                self.sent.get_or_insert(now);
             }
             Phase::Bound => {}
         }
+        true
     }
 
     /// A server's message from IPv4 `source`, RFC 2131, 4.4.
