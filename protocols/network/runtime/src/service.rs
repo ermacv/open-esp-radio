@@ -588,14 +588,16 @@ impl<
     }
 
     /// Give waiting sockets a block each: the group holding least first, and
-    /// in turn within a group, the next pass starting after the last one served.
+    /// in turn within a group, each block starting after the last one served.
     /// Each block is chosen anew, so how many a socket asked for gives it no
     /// place ahead of another. This comes after all commands, so a socket's
     /// release gives it no place ahead of another either.
     fn give_blocks(&mut self) -> bool {
-        let first = self.next_block;
         let mut gave = false;
         while self.owner.pool().free() != 0 {
+            // Each block from the cursor the last grant moved: sockets of
+            // one group take turns within a pass too, however much one asks.
+            let first = self.next_block;
             let pool = self.owner.pool();
             let pool = &*pool;
             let bound = &self.bound;

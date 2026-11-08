@@ -62,6 +62,11 @@ impl EventSink<NetEvent> for Asked {
     fn event(&mut self, _: NetEvent) {}
 }
 
+/// The datagrams of `BATCHES` bursts of `bursts`, in turn.
+fn total(bursts: &[usize]) -> usize {
+    (0..BATCHES).map(|batch| bursts[batch % bursts.len()]).sum()
+}
+
 /// What the sender saw: the sends that found no block ready, by batch and
 /// place within it.
 #[derive(Debug, Default)]
@@ -71,7 +76,8 @@ struct Paced {
     turns_to_block: Vec<usize>,
 }
 
-fn paced<B: 'static>(per_batch: usize) -> (Paced, Vec<u8>, usize, Vec<TurnEnd>) {
+/// The sender of `bursts`, one a millisecond, in turn.
+fn paced<B: 'static>(bursts: &[usize]) -> (Paced, Vec<u8>, usize, Vec<TurnEnd>) {
     let memory = Box::leak(Box::new([[0; SIZE]; PACED_BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, PACED_BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
@@ -99,7 +105,7 @@ fn paced<B: 'static>(per_batch: usize) -> (Paced, Vec<u8>, usize, Vec<TurnEnd>) 
         for batch in 0..BATCHES {
             let due = start.saturating_add(Duration::from_micros(1000 * batch as u64));
             clock.wait_until(due).await;
-            for at in 0..per_batch {
+            for at in 0..bursts[batch % bursts.len()] {
                 let mut block = match socket.try_reserve().unwrap() {
                     Some(block) => block,
                     None => {
@@ -115,7 +121,7 @@ fn paced<B: 'static>(per_batch: usize) -> (Paced, Vec<u8>, usize, Vec<TurnEnd>) 
                 drop(socket.send(peer(), block).ok().unwrap());
             }
         }
-        while datagrams(&wire.0.borrow()).len() < BATCHES * per_batch {
+        while datagrams(&wire.0.borrow()).len() < total(bursts) {
             yield_now().await;
         }
         stop.try_send(()).ok().unwrap();
@@ -129,7 +135,7 @@ fn paced<B: 'static>(per_batch: usize) -> (Paced, Vec<u8>, usize, Vec<TurnEnd>) 
 /// A paced sender of `per_batch` datagrams between two turns of the service:
 /// only its first send, before any request, finds none ready.
 fn never_dry<B: 'static>(per_batch: usize) {
-    let (seen, asked, sent, turns_ended) = paced::<B>(per_batch);
+    let (seen, asked, sent, turns_ended) = paced::<B>(&[per_batch]);
     let reserves = asked.len();
     let asked_blocks: usize = asked.iter().map(|blocks| usize::from(*blocks)).sum();
     std::eprintln!(
@@ -157,14 +163,64 @@ fn never_dry<B: 'static>(per_batch: usize) {
     );
 }
 
-#[test]
-fn a_paced_sender_s_look_ahead_is_asked_for_before_it_runs_dry() {
-    brand!(Net);
-    never_dry::<Net>(PER_BATCH);
+/// Each brand's own constant burst.
+macro_rules! constant {
+    ($($brand:ident: $burst:expr),* $(,)?) => {
+        $({
+            brand!($brand);
+            never_dry::<$brand>($burst);
+        })*
+    };
 }
 
 #[test]
-fn a_whole_look_ahead_between_two_turns_never_runs_dry() {
+fn a_constant_burst_that_the_half_look_ahead_covers_never_runs_dry() {
+    // A burst of c a turn leaves a deficit of c, 2c, ... modulo the half
+    // look-ahead of eight once its requests went: at most 8 - gcd(c, 8). The
+    // look-ahead covers the next burst while that is at most 16 - c: for 1
+    // to 10, 12 and 16. Nine is the stand's TX 100; sixteen, the image's
+    // `MAX_BATCH`, the whole look-ahead.
+    constant!(
+        B1: 1, B2: 2, B3: 3, B4: 4, B5: 5, B6: 6, B7: 7, B8: 8,
+        B9: PER_BATCH, B10: 10, B12: 12, B16: MAX_BATCH,
+    );
+}
+
+/// The sends of `bursts` that found none ready, after the first.
+fn dry<B: 'static>(bursts: &[usize]) -> Vec<(usize, usize)> {
+    let (seen, _, sent, _) = paced::<B>(bursts);
+    assert_eq!(sent, total(bursts));
+    assert_eq!(seen.refused_at.first(), Some(&(0, 0)));
+    seen.refused_at[1..].to_vec()
+}
+
+#[test]
+fn a_constant_burst_the_half_look_ahead_does_not_cover_runs_dry_as_counted() {
+    // As it is: 11, 13, 14 and 15 a turn outrun what the half look-ahead
+    // leaves ready, and wait once in so many bursts.
+    brand!(Eleven);
+    brand!(Thirteen);
+    brand!(Fourteen);
+    brand!(Fifteen);
+    let counts = [
+        dry::<Eleven>(&[11]).len(),
+        dry::<Thirteen>(&[13]).len(),
+        dry::<Fourteen>(&[14]).len(),
+        dry::<Fifteen>(&[15]).len(),
+    ];
+    assert_eq!(counts, [16, 32, 32, 48], "of {BATCHES} bursts each");
+}
+
+#[test]
+fn a_burst_of_sixteen_after_nine_waits_once_as_it_is() {
+    // As it is: after a burst of nine, a burst of sixteen finds fifteen or
+    // fewer ready, and its last sends wait for the next request. Seven of
+    // each eight such pairs do.
     brand!(Net);
-    never_dry::<Net>(MAX_BATCH);
+    let dry = dry::<Net>(&[PER_BATCH, MAX_BATCH]);
+    assert_eq!(dry.len(), 28, "{dry:?}");
+    assert!(
+        dry.iter().all(|(batch, _)| batch % 2 == 1),
+        "only bursts of sixteen wait: {dry:?}"
+    );
 }

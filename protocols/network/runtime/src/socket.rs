@@ -628,8 +628,8 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
 
     /// Hold up to `blocks` ready, at most [`RESERVE_AHEAD`] and at least one,
     /// so a sender runs a batch without a turn of the service for each block.
-    /// Taking a block while others are ready asks again once half of them
-    /// are gone.
+    /// Taking a block asks again once half of them are gone, ready or asked
+    /// for.
     /// They count toward this socket's group while they wait here, and stay
     /// out of every other socket's reach.
     pub fn reserve_ahead(&mut self, blocks: usize) {
@@ -660,12 +660,13 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     }
 
     /// A block was taken: ask again once half the look-ahead is gone, ready
-    /// or asked for. The request goes while the rest still cover the
-    /// sender, so a batch never ends waiting for the next one, and with
-    /// half a look-ahead a request, a turn's grants keep up with a sender
-    /// that takes up to half of it, and one more, between two turns. A
-    /// look-ahead of one block asks when it finds none, as before. A closed
-    /// socket asks for nothing.
+    /// or asked for, so the request goes while the rest still cover the
+    /// sender. With a look-ahead of sixteen, a sender that takes the same c
+    /// blocks between two turns never finds none ready after its first for
+    /// c of 1 to 10, 12 and 16; for other bursts, or a larger burst after a
+    /// smaller one (sixteen after nine), a send can still find none and wait
+    /// for the next request. A look-ahead of one block asks when it finds
+    /// none, as before. A closed socket asks for nothing.
     fn refill(&mut self) {
         if self.ahead.blocks() == 1
             || self.closed

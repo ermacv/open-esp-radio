@@ -1,6 +1,8 @@
 //! The load image's paced sender on real sockets: the image's facade
 //! (`udp.rs`) and its schedule (`load/pace.rs`, with its `CATCH_UP` and
-//! batches), over a port that takes every frame and a peer that answers ARP.
+//! batches), over a port that takes every frame and a peer that answers ARP,
+//! at the stand's paced level: about nine datagrams a millisecond, a burst
+//! the half look-ahead covers.
 //! `oer` and the load service stand in for their chip-side names.
 extern crate self as oer;
 extern crate self as oer_hil_services_load;
@@ -261,7 +263,7 @@ struct Sent {
 }
 
 #[test]
-fn the_image_s_paced_sender_never_waits_for_a_block_at_a_batch_boundary() {
+fn at_tx_100_the_image_s_paced_sender_never_waits_for_a_block_after_its_first() {
     let memory = Box::leak(Box::new([[0; 1472]; 64]));
     let (pool, brand) = claim::<wifi::Brand, 1472, 64>(memory).unwrap();
     let interface = Interface::new(LOCAL, OURS, 24, None, 1500).unwrap();

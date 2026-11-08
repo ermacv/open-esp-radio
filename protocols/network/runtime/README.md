@@ -37,7 +37,10 @@ A block comes from the service, which takes a turn. `reserve_ahead` lets a socke
 up to `RESERVE_AHEAD` ready, so a sender runs a batch on one turn. A socket asks for
 what it lacks in one request, of at most `RESERVE_AHEAD` blocks. Taking a block
 asks again once half the look-ahead is out, ready or asked for, so the next request
-goes while the rest still cover the sender and a batch never ends waiting for one; a
+goes while the rest still cover the sender. With the look-ahead of sixteen, a sender
+taking the same c blocks between two turns of the service never finds none ready after
+its first for c of 1 to 10, 12 and 16. Other bursts, and a larger burst after a smaller
+one (sixteen after nine), can still find none and wait for the next request. A
 look-ahead of one block asks when it finds none. The service grants
 them one by one as blocks come free, each chosen anew among the waiting sockets, so a
 larger request gains no place. A block counts toward its group from its grant, not
