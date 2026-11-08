@@ -147,15 +147,22 @@ Tests retain local allowances for assertions and fixture construction. The
 `test-support` feature exposes owned-buffer invalidation only for caller
 regressions; production owners have no such mutator.
 
+The authenticator sends every Message 1 and Message 3, a retransmission
+included, under a new and larger Key Replay Counter taken from its handshake
+state (`state/authenticator.rs::RsnApState::retransmit_message1`,
+`retransmit_message3`); the retry schedule (`retry`) owns only timing and the
+message kind. A counter is never handed out twice, but only a transmission
+whose frame was built (`RsnApState::record_built`) is awaited: a Message 2
+or 4 may answer any of the latest `RSN_AP_REPLAY_WINDOW` built transmissions
+of its step, so a retransmission never invalidates an earlier frame the
+station may have answered, and a frame that failed to build is neither
+awaited nor evicts one; other counters are refused as stale peer input. The window closes when the step completes:
+a later Message 4 neither authorizes nor installs a key again. Message 3
+carries as its Key RSC the packet number the caller names, the last one the
+installed GTK has handed out.
+
 ## Known defects
 
-- **The authenticator reuses the replay counter on M1/M3 retries.**
-  `state/authenticator.rs::RsnApState::retry_transmit` resends the stored
-  counter, and M2/M4 match one stored value, not a window of sent ones.
-  wpa_supplicant drops an M3 whose counter is not greater than the last one,
-  so a lost M4 ends the handshake. Our supplicant hides it:
-  `supplicant.rs::RsnConnectedSupplicant::on_message3` and
-  `state/supplicant.rs` accept an equal counter as a retransmission.
 - **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.

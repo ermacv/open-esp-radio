@@ -376,6 +376,26 @@ pub enum ApWpa2Error {
     Retry(RsnRetryError),
     /// The AES engine refused an EAPOL-Key MIC's key or block.
     Engine(oer_portable_crypto::block::BlockError),
+    /// The installed GTK lent for Message 3's Key RSC is not the GTK
+    /// installation this BSS announces (Key ID or generation differ). The
+    /// call was refused before any handshake state changed.
+    GroupKeyMismatch,
+}
+
+/// The installation of a GTK: its Key ID and the generation the installed
+/// key's owner gave it. A re-installation of the same key bytes is another
+/// generation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApGroupKeyInstallation {
+    pub key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
+    pub generation: u32,
+}
+
+/// The key of an installed GTK transmit owner
+/// (`oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey`):
+/// it names the installation whose packet numbers that owner hands out.
+pub trait ApGroupTransmitKey {
+    fn installation(&self) -> ApGroupKeyInstallation;
 }
 
 impl From<RsnRetryError> for ApWpa2Error {
@@ -679,6 +699,15 @@ fn new_ap_tx_block_ack() -> Result<TxBlockAckOriginator<1>, ApServiceError> {
 
 const fn new_ap_wpa2_retry() -> RsnRetry {
     const {
+        // Every transmission of a step, the original and each retry, stays
+        // in the authenticator's window of awaited replay counters.
+        if AP_WPA2_RETRY_ATTEMPTS as usize + 1
+            > oer_protocols_ieee80211_core_security_rsn::state::RSN_AP_REPLAY_WINDOW
+        {
+            panic!("the AP WPA2 retries exceed the awaited replay window");
+        }
+    }
+    const {
         match RsnRetry::new(RsnRetryConfig {
             first_interval: AP_WPA2_FIRST_RETRY_INTERVAL,
             subsequent_interval: AP_WPA2_SUBSEQUENT_RETRY_INTERVAL,
@@ -770,22 +799,37 @@ pub struct AccessPointService<'peers, S: SppScope> {
 /// peer storage keeps the security associations stations may resume.
 pub enum AccessPointSecurityMaterial {
     Open,
-    Wpa2Personal { pmk: Pmk, gtk: RsnGtk },
-    Wpa3Personal { gtk: RsnGtk, igtk: RsnIgtk },
+    Wpa2Personal {
+        pmk: Pmk,
+        gtk: RsnGtk,
+        gtk_generation: u32,
+    },
+    Wpa3Personal {
+        gtk: RsnGtk,
+        gtk_generation: u32,
+        igtk: RsnIgtk,
+    },
 }
 
 impl<'peers, S: SppScope> AccessPointService<'peers, S> {
+    /// A WPA2-Personal epoch announcing `gtk`, installed by the GTK's owner
+    /// as generation `gtk_generation`.
     pub fn new(
         address: [u8; 6],
         pmk: Pmk,
         gtk: RsnGtk,
+        gtk_generation: u32,
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
     ) -> Result<Self, ApServiceError> {
         Self::with_security(
             address,
-            AccessPointSecurityMaterial::Wpa2Personal { pmk, gtk },
+            AccessPointSecurityMaterial::Wpa2Personal {
+                pmk,
+                gtk,
+                gtk_generation,
+            },
             client_limit,
             inactive_timeout,
             peer_storage,
@@ -797,6 +841,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn new_wpa3(
         address: [u8; 6],
         gtk: RsnGtk,
+        gtk_generation: u32,
         igtk: RsnIgtk,
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
@@ -804,7 +849,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     ) -> Result<Self, ApServiceError> {
         Self::with_security(
             address,
-            AccessPointSecurityMaterial::Wpa3Personal { gtk, igtk },
+            AccessPointSecurityMaterial::Wpa3Personal {
+                gtk,
+                gtk_generation,
+                igtk,
+            },
             client_limit,
             inactive_timeout,
             peer_storage,

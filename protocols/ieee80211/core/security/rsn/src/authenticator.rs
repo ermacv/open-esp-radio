@@ -23,6 +23,7 @@ use oer_portable_crypto::{
     rfc3394::KeyWrapError,
 };
 use oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap;
+use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 
 /// Why the authenticator refused a step.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -86,9 +87,6 @@ pub enum RsnAuthenticatorStep {
     /// Build the first Message 3 from its key data with
     /// [`RsnAuthenticator::complete_message3`].
     PrepareMessage3(RsnMessage3Preparation),
-    /// Send the pending Message 3 again, built by
-    /// [`RsnAuthenticator::message3`].
-    Retransmit(RsnTransmit),
     /// A verified Message 4: the peer is authorized.
     Authorized,
     /// The handshake failed; deauthenticate the peer.
@@ -126,22 +124,30 @@ impl RsnAuthenticator {
         self.pending_ptk.as_ref()
     }
 
-    /// Message 1 and the transmission it is.
+    /// Message 1 and the transmission it is. Its answer is awaited only
+    /// once the frame is built.
     pub fn message1<const N: usize>(
-        &self,
+        &mut self,
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
         let RsnApAction::Transmit(transmit) = self.state.message1(false)? else {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };
-        Ok((self.message1_frame(transmit)?, transmit))
+        let frame = build_ap_action_frame(&self.state, transmit, [0; 8], &[])?;
+        self.state.record_built(transmit)?;
+        Ok((frame, transmit))
     }
 
-    /// The Message 1 frame of `transmit`, the original or a retransmission.
-    pub fn message1_frame<const N: usize>(
-        &self,
-        transmit: RsnTransmit,
-    ) -> Result<RsnTxFrame<N>, RsnAuthenticatorError> {
-        Ok(build_ap_action_frame(&self.state, transmit, [0; 8], &[])?)
+    /// Message 1 again, under the next replay counter, and the transmission
+    /// it is. Once built, Message 2 may answer it or an earlier built
+    /// Message 1 of the window; a counter whose frame fails to build stays
+    /// spent and is never awaited.
+    pub fn retransmit_message1<const N: usize>(
+        &mut self,
+    ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
+        let transmit = self.state.retransmit_message1()?;
+        let frame = build_ap_action_frame(&self.state, transmit, [0; 8], &[])?;
+        self.state.record_built(transmit)?;
+        Ok((frame, transmit))
     }
 
     /// Advance through Message 2 or Message 4 with the association's `pmk`.
@@ -186,7 +192,6 @@ impl RsnAuthenticator {
                     _ => Err(RsnAuthenticatorError::UnexpectedAction),
                 }
             }
-            RsnApAction::Transmit(transmit) => Ok(RsnAuthenticatorStep::Retransmit(transmit)),
             RsnApAction::DeauthenticatePeer => Ok(RsnAuthenticatorStep::Deauthenticate),
             _ => Err(RsnAuthenticatorError::UnexpectedAction),
         }
@@ -248,12 +253,15 @@ impl RsnAuthenticator {
     }
 
     /// Wrap `key_data` under the prepared PTK and build the first Message 3.
-    /// The PTK becomes pending only once the frame exists. The MIC of an
-    /// AES-CMAC suite runs on `engine`; the wrap stays in software.
+    /// Its Key RSC is `group_packet_number`, the last packet number the
+    /// installed GTK in `key_data` has handed out, so the station accepts
+    /// only group frames numbered after it. The PTK becomes pending only once the frame exists. The
+    /// MIC of an AES-CMAC suite runs on `engine`; the wrap stays in software.
     pub fn complete_message3<const N: usize, const K: usize, E: Aes128Engine>(
         &mut self,
         preparation: RsnMessage3Preparation,
         key_data: &RsnPlainKeyData<K>,
+        group_packet_number: CcmpPacketNumber,
         engine: &mut E,
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
         let RsnMessage3Preparation { ticket, ptk } = preparation;
@@ -264,29 +272,45 @@ impl RsnAuthenticator {
         else {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };
-        let frame = build_ap_action_frame(&self.state, transmit, [0; 8], wrapped.as_bytes())?
-            .authenticate(&ptk, engine)?;
+        let frame = build_ap_action_frame(
+            &self.state,
+            transmit,
+            group_packet_number.receive_sequence(),
+            wrapped.as_bytes(),
+        )?
+        .authenticate(&ptk, engine)?;
+        self.state.record_built(transmit)?;
         self.pending_ptk = Some(ptk);
         Ok((frame, transmit))
     }
 
-    /// The pending Message 3 of `transmit` with `key_data`, for a
-    /// retransmission.
-    pub fn message3<const N: usize, const K: usize, E: Aes128Engine>(
-        &self,
-        transmit: RsnTransmit,
+    /// Message 3 again, under the next replay counter, with `key_data`
+    /// wrapped under the pending PTK and the Key RSC `group_packet_number`,
+    /// the last packet number the installed GTK has handed out at this
+    /// retransmission. Once built, Message 4 may answer it or an earlier
+    /// built Message 3 of the window; a counter whose frame fails to build
+    /// stays spent and is never awaited.
+    pub fn retransmit_message3<const N: usize, const K: usize, E: Aes128Engine>(
+        &mut self,
         key_data: &RsnPlainKeyData<K>,
+        group_packet_number: CcmpPacketNumber,
         engine: &mut E,
-    ) -> Result<RsnTxFrame<N>, RsnAuthenticatorError> {
+    ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
         let ptk = self
             .pending_ptk
             .as_ref()
             .ok_or(RsnAuthenticatorError::MissingPairwiseKey)?;
         let wrapped = software_aes128_key_wrap(ptk.kek(), key_data.as_bytes())?;
-        Ok(
-            build_ap_action_frame(&self.state, transmit, [0; 8], wrapped.as_bytes())?
-                .authenticate(ptk, engine)?,
-        )
+        let transmit = self.state.retransmit_message3()?;
+        let frame = build_ap_action_frame(
+            &self.state,
+            transmit,
+            group_packet_number.receive_sequence(),
+            wrapped.as_bytes(),
+        )?
+        .authenticate(ptk, engine)?;
+        self.state.record_built(transmit)?;
+        Ok((frame, transmit))
     }
 
     /// The peer is authorized: drop the handshake's PTK and IE binding.

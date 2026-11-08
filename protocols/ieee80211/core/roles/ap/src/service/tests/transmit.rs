@@ -28,7 +28,9 @@ fn message2_before_message1_terminal_cannot_arm_message3() {
         let mut service = service(&mut storage);
         let (_message1, message1_context) = begin(&mut service, [7; 32], 9).into_parts();
         let message2 = signed_message2(&WPA2_RSN, &[], [7; 32], [8; 32]);
-        let ApWpa2Progress::Transmit(message3) = service.on_eapol(PEER, message2).unwrap() else {
+        let ApWpa2Progress::Transmit(message3) =
+            service.on_eapol(PEER, message2, &gtk_numbers()).unwrap()
+        else {
             panic!("verified Message 2 produces Message 3");
         };
         assert_eq!(service.next_wpa2_retry_deadline(), None);
@@ -66,7 +68,9 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
         .observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(2))
         .unwrap();
     let message2 = signed_message2(&WPA2_RSN, &[], [7; 32], [8; 32]);
-    let ApWpa2Progress::Transmit(message3) = service.on_eapol(PEER, message2).unwrap() else {
+    let ApWpa2Progress::Transmit(message3) =
+        service.on_eapol(PEER, message2, &gtk_numbers()).unwrap()
+    else {
         panic!("verified Message 2 produces Message 3");
     };
     let message4 = RsnTxFrame::<512>::message4(
@@ -81,7 +85,7 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
             .unwrap();
     assert!(matches!(
-        service.on_eapol(PEER, message4).unwrap(),
+        service.on_eapol(PEER, message4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::AuthorizePeer
     ));
     let (_message3, context) = message3.into_parts();
@@ -150,7 +154,10 @@ fn a_retry_terminal_does_not_postpone_its_next_deadline() {
         .observe_wpa2_transmit(context, false, oer_portable_time::Instant::from_micros(10))
         .unwrap();
     let ApWpa2RetryProgress::Transmit(retry) = service
-        .take_due_wpa2_retry::<512>(oer_portable_time::Instant::from_micros(100_010))
+        .take_due_wpa2_retry::<512, _>(
+            oer_portable_time::Instant::from_micros(100_010),
+            &gtk_numbers(),
+        )
         .unwrap()
     else {
         panic!("the first unacknowledged M1 response window expired");

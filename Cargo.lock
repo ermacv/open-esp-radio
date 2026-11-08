@@ -2665,6 +2665,7 @@ dependencies = [
  "oer-portable-crypto",
  "oer-portable-time",
  "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-core-security-cipher",
  "oer-protocols-ieee80211-core-security-rsn",
  "oer-protocols-ieee80211-core-upper-mac",

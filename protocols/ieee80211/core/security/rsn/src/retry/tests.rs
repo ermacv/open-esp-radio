@@ -11,13 +11,7 @@ fn at(micros: u64) -> Instant {
 }
 use crate::state::RsnTxMessage;
 
-fn transmit() -> RsnTransmit {
-    RsnTransmit {
-        message: RsnTxMessage::PairwiseMessage3,
-        replay_counter: 8,
-        retransmission: false,
-    }
-}
+const MESSAGE: RsnTxMessage = RsnTxMessage::PairwiseMessage3;
 
 #[test]
 fn each_alarm_edge_emits_at_most_one_bounded_retransmission() {
@@ -27,17 +21,17 @@ fn each_alarm_edge_emits_at_most_one_bounded_retransmission() {
         attempts: 2,
     })
     .unwrap();
-    let first = retry.arm(transmit(), at(10)).unwrap();
+    let first = retry.arm(MESSAGE, at(10)).unwrap();
     assert_eq!(first.deadline, at(100_010));
 
     let RsnRetryAction::Transmit {
-        frame,
+        message,
         next_alarm: second,
     } = retry.on_alarm(first, first.deadline).unwrap()
     else {
         panic!("first alarm must retransmit and rearm")
     };
-    assert!(frame.retransmission);
+    assert_eq!(message, MESSAGE);
     assert_eq!(second.deadline, at(1_100_010));
 
     assert!(matches!(
@@ -67,7 +61,7 @@ fn cancel_invalidates_an_already_programmed_alarm() {
         attempts: 1,
     })
     .unwrap();
-    let alarm = retry.arm(transmit(), at(0)).unwrap();
+    let alarm = retry.arm(MESSAGE, at(0)).unwrap();
     retry.cancel();
     assert_eq!(retry.on_alarm(alarm, at(1)).unwrap(), RsnRetryAction::Stale);
 }
@@ -80,7 +74,7 @@ fn acknowledged_initial_frame_uses_the_subsequent_response_window() {
         attempts: 3,
     })
     .unwrap();
-    retry.arm(transmit(), at(10)).unwrap();
+    retry.arm(MESSAGE, at(10)).unwrap();
     assert_eq!(
         retry.defer_first_after_ack(at(20)).unwrap(),
         Some(RsnRetryAlarm {

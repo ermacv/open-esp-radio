@@ -23,6 +23,17 @@ each peer is an `oer_protocols_ieee80211_core_security_rsn::authenticator::RsnAu
 this crate drives with the association's PMK and Message 3's key data; the SAE
 responder and the PMKSA cache are `oer-protocols-ieee80211-core-security-rsn`'s too. Transmit sequence
 spaces and the management replay frontier are `oer-protocols-ieee80211-core-upper-mac`'s.
+The GTK's transmit packet numbers belong to the one owner of its installed
+key (`oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey`),
+which `on_eapol` and `take_due_wpa2_retry` borrow for a read. Its key names
+its installation (`ApGroupTransmitKey`: Key ID and generation), which must
+equal the GTK this BSS announces (`group_key_installation`, given at
+construction), or the call is refused with `GroupKeyMismatch` before any
+handshake state changes. The numbering outlives the service while the key
+stays installed. Each Message 3, a retransmission included, carries the last
+packet number that owner has handed out as its Key RSC, and a new replay
+counter; a Message 4 answering any built Message 3 of the window authorizes
+once.
 
 An access point uses 40 MHz in 2.4 GHz only under the 20/40 coexistence rules;
 a station reports 20/40 OBSS as the standard requires.
@@ -31,14 +42,10 @@ a station reports 20/40 OBSS as the standard requires.
 
 **Security**
 
-- **M1/M3 retries reuse the replay counter.**
-  `service/security.rs::message3_transmit` rebuilds the same frame through
-  `rsn`'s `RsnAuthenticator::message3`, and `service/tests.rs` asserts
-  identical retry bytes. A lost M4 ends the handshake with wpa_supplicant.
-- **The M3 Key RSC is all zero** (`rsn`'s `authenticator.rs`
-  `complete_message3` and `message3`); it must carry the GTK's current TX
-  PN, as the IGTK IPN already does. A station may accept replayed group
-  frames.
+- **A retried M3 repeats the first publication's IGTK IPN**
+  (`service/security.rs::message3_key_data`, `message3_management_ipns`),
+  while its GTK Key RSC is read at each build. Only the WPA2 slice without
+  management protection is claimed; WPA3/PMF correctness of the retry is not.
 - **BIP does not guard +HTC** (`service/management.rs::protect_group_management`).
 
 **Timing and protocol**

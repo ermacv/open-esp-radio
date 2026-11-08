@@ -88,6 +88,7 @@ fn exhausted_storage_refuses_every_security_constructor_without_reusing_its_fron
                 AP,
                 Pmk::from_bytes([1; 32]),
                 gtk,
+                0,
                 limit,
                 timeout,
                 storage.lend(),
@@ -95,6 +96,7 @@ fn exhausted_storage_refuses_every_security_constructor_without_reusing_its_fron
             ApSecurityPolicy::Wpa3Personal => AccessPointService::new_wpa3(
                 AP,
                 gtk,
+                0,
                 RsnIgtk::new(4, [0; 6], &[2; 16]).unwrap(),
                 limit,
                 timeout,
