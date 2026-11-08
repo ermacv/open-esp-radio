@@ -15,7 +15,7 @@ use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 use oer_protocols_network_wire::ip::{DsField, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
-use crate::{Start, StaticAddress, header, udp, wifi};
+use crate::{Start, header, udp, wifi};
 
 pub(crate) const OURS: [u8; 4] = [192, 0, 2, 1];
 pub(crate) const THEIRS: [u8; 4] = [192, 0, 2, 2];
@@ -75,6 +75,12 @@ impl FrameSource for Port {
     }
     fn take_notice(&mut self) -> Option<()> {
         None
+    }
+    fn link(&self) -> oer_protocols_network_port::LinkSnapshot {
+        oer_protocols_network_port::LinkSnapshot {
+            state: oer_protocols_network_port::LinkState::Up,
+            epoch: 1,
+        }
     }
     fn register(&mut self, _: &mut Context<'_>) {}
 }
@@ -164,14 +170,7 @@ pub(crate) fn peer_asks() -> Vec<u8> {
 }
 
 pub(crate) fn start() -> Start {
-    Start {
-        address: Some(StaticAddress {
-            address: OURS,
-            prefix: 24,
-            gateway: THEIRS,
-        }),
-        port: 5001,
-    }
+    Start { port: 5001 }
 }
 
 pub(crate) const PEER_PORT: udp::Peer = udp::Peer {
