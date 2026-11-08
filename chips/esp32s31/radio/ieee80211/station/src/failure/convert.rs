@@ -54,6 +54,22 @@ pub(crate) fn backend_fault(
         Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
         Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
         Source::CommandExpired(kind) => BackendFault::CommandExpired(command_kind(kind)),
+        Source::AccessPointCommandExpired(kind) => {
+            BackendFault::AccessPointCommandExpired(access_point_command_kind(kind))
+        }
+    }
+}
+
+pub(super) fn access_point_command_kind(
+    value: oer_protocols_ieee80211_contracts_port::AccessPointCommandKind,
+) -> AccessPointCommandKind {
+    use oer_protocols_ieee80211_contracts_port::AccessPointCommandKind as Source;
+    match value {
+        Source::InstallPairwise => AccessPointCommandKind::InstallPairwise,
+        Source::InstallGroup => AccessPointCommandKind::InstallGroup,
+        Source::RemovePairwise => AccessPointCommandKind::RemovePairwise,
+        Source::RemoveGroup => AccessPointCommandKind::RemoveGroup,
+        Source::Configure => AccessPointCommandKind::Configure,
     }
 }
 

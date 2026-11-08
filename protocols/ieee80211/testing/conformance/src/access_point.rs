@@ -458,18 +458,31 @@ fn run<'id, H: AccessPointHarness<'id>>(
         .map_err(|_| Violation::Fault)
 }
 
-/// Run an access-point command the port must finish at once.
+/// Run an access-point command the port must finish with nothing of the
+/// access point on the air: a hold at a barrier the port itself passes (a
+/// receive cut) runs again after the port's next service.
 fn done<'id, H: AccessPointHarness<'id>>(
     harness: &mut H,
     command: Option<AccessPointCommandOf<'id, H::Port>>,
 ) -> Result<(), Violation> {
-    match run(harness, command)? {
-        AccessPointProgress::Done => Ok(()),
-        AccessPointProgress::Held(command) | AccessPointProgress::Refused(command, _) => {
-            harness.restore(command);
-            Err(Violation::Barrier)
+    let mut command = command;
+    for _ in 0..PROGRESS_STEPS {
+        match run(harness, command.take())? {
+            AccessPointProgress::Done => return Ok(()),
+            AccessPointProgress::Held(held) => {
+                command = Some(held);
+                service(harness)?;
+            }
+            AccessPointProgress::Refused(refused, _) => {
+                harness.restore(refused);
+                return Err(Violation::Barrier);
+            }
         }
     }
+    if let Some(command) = command {
+        harness.restore(command);
+    }
+    Err(Violation::Barrier)
 }
 
 /// Run an access-point command the port must hold at its barrier.
@@ -536,13 +549,23 @@ fn station_command<'id, H: AccessPointHarness<'id>>(
     }
 }
 
-/// Configure the station and take its terminal.
+/// Configure the station and take its terminal, serving the port while
+/// its own barrier holds it.
 fn configure_station<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
-    let configure = harness.station_configure();
-    if station_command(harness, configure)?.is_some() || !harness.take_station_configured() {
-        return Err(Violation::Barrier);
+    let mut command = harness.station_configure();
+    if command.is_none() {
+        return Err(Violation::Fixture);
     }
-    Ok(())
+    for _ in 0..PROGRESS_STEPS {
+        if command.is_some() {
+            command = station_command(harness, command)?;
+        }
+        if command.is_none() && harness.take_station_configured() {
+            return Ok(());
+        }
+        service(harness)?;
+    }
+    Err(Violation::Barrier)
 }
 
 /// Take the transmission terminals and compare them with `expected` in
@@ -619,39 +642,65 @@ fn station_configure_apart<'id, H: AccessPointHarness<'id>>(
 ) -> Result<(), Violation> {
     start(harness)?;
     // A station frame on the air holds the station's configuration; a
-    // second station frame and an access-point frame wait in another queue.
+    // second station frame waits behind an access-point frame on the air in
+    // another queue.
     harness.hold(STATION_QUEUE, true);
     let first = harness.station_frame(STATION_QUEUE, false);
     let first = submit(harness, first)?;
-    service(harness)?;
     let waiting = WmmAccessCategory::Background;
+    harness.hold(waiting, true);
+    let blocker = harness.access_point_frame(None, waiting);
+    let blocker = submit(harness, blocker)?;
+    service(harness)?;
     let queued = harness.station_frame(waiting, false);
     let queued = submit(harness, queued)?;
-    let frame = harness.access_point_frame(None, waiting);
-    let frame = submit(harness, frame)?;
     let configure = harness.station_configure();
-    let Some(configure) = station_command(harness, configure)? else {
-        return Err(Violation::Barrier);
-    };
+    let mut held = station_command(harness, configure)?;
+    // An access-point frame submitted behind the station's configuration
+    // goes out while it waits.
+    let frame = harness.access_point_frame(None, ACCESS_POINT_QUEUE);
+    let frame = submit(harness, frame)?;
     service(harness)?;
-    // The station's queued frame ends withdrawn; the access point's goes
-    // out while the station's configuration is still held.
     let ended = harness.take_ends();
     let ended = ended.as_ref();
-    let withdrawn = ended
+    let mut withdrawn = ended
         .iter()
         .any(|end| matches!(end, Ended::Frame(ticket, End::Withdrawn(_)) if *ticket == queued));
-    let delivered = ended.contains(&Ended::Frame(frame, End::Delivered));
-    if ended.len() != 2 || !withdrawn || !delivered {
+    if !ended.contains(&Ended::Frame(frame, End::Delivered))
+        || ended.len() != 1 + usize::from(withdrawn)
+    {
         return Err(Violation::Ends);
     }
-    harness.hold(STATION_QUEUE, false);
-    service(harness)?;
-    ends(harness, &[Ended::Frame(first, End::Delivered)])?;
-    if station_command(harness, Some(configure))?.is_some() || !harness.take_station_configured() {
+    if harness.take_station_configured() {
         return Err(Violation::Barrier);
     }
-    Ok(())
+    // The air answers: the station's frame ends, the access point's frame
+    // ahead of the queued station frame ends, the queued one ends
+    // withdrawn, never published, and the configuration takes effect.
+    harness.hold(STATION_QUEUE, false);
+    harness.hold(waiting, false);
+    let (mut first_ended, mut blocker_ended, mut configured) = (false, false, false);
+    for _ in 0..PROGRESS_STEPS {
+        service(harness)?;
+        if held.is_some() {
+            held = station_command(harness, held)?;
+        }
+        for end in harness.take_ends().as_ref() {
+            match end {
+                Ended::Frame(ticket, End::Delivered) if *ticket == first => first_ended = true,
+                Ended::Frame(ticket, End::Delivered) if *ticket == blocker => blocker_ended = true,
+                Ended::Frame(ticket, End::Withdrawn(_)) if *ticket == queued => withdrawn = true,
+                _ => return Err(Violation::Ends),
+            }
+        }
+        if held.is_none() && harness.take_station_configured() {
+            configured = true;
+        }
+        if first_ended && blocker_ended && withdrawn && configured {
+            return Ok(());
+        }
+    }
+    Err(Violation::Barrier)
 }
 
 fn configure_barrier<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
@@ -830,14 +879,15 @@ fn stale_configure<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
 
 fn stale_beacon<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     start(harness)?;
-    // The beacon is prepared and sealed under the first installation.
-    let deadline = far(harness);
-    let sealed = harness
-        .beacon(Issued::Current, deadline)
-        .ok_or(Violation::Fixture)?;
-    let ticket = H::ticket(&sealed);
     harness.reinstall()?;
     start(harness)?;
+    // A beacon of the current installation's ticket and buffer under the
+    // earlier installation's beacon permission.
+    let deadline = far(harness);
+    let sealed = harness
+        .beacon(Issued::Earlier, deadline)
+        .ok_or(Violation::Fixture)?;
+    let ticket = H::ticket(&sealed);
     let now = harness.now();
     let (port, sink) = harness.parts();
     match port.submit(sealed, now, sink) {
@@ -960,12 +1010,14 @@ fn stale_frame_key<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
     let install = harness.install_pairwise(Issued::Current, Issued::Current);
     done(harness, install)?;
     terminal(harness, Terminal::PairwiseInstalled(0))?;
-    let sealed = harness
-        .access_point_frame(Some(Issued::Current), ACCESS_POINT_QUEUE)
-        .ok_or(Violation::Fixture)?;
-    let ticket = H::ticket(&sealed);
     harness.reinstall()?;
     start(harness)?;
+    // A frame of the current installation's ticket and buffer under the
+    // earlier installation's key.
+    let sealed = harness
+        .access_point_frame(Some(Issued::Earlier), ACCESS_POINT_QUEUE)
+        .ok_or(Violation::Fixture)?;
+    let ticket = H::ticket(&sealed);
     let now = harness.now();
     let (port, sink) = harness.parts();
     match port.submit(sealed, now, sink) {
@@ -1155,7 +1207,8 @@ fn held_command_apart<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Resul
     }
 }
 
-/// Stop the port and confirm the stop within the case's steps.
+/// Stop the port and confirm the stop within the case's steps, moving
+/// time to the port's deadline while it waits.
 fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
@@ -1164,7 +1217,16 @@ fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violatio
         match port.poll_stop(&mut Context::from_waker(&waker), now) {
             Poll::Ready(Ok(())) => return Ok(()),
             Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
-            Poll::Pending => service(harness)?,
+            Poll::Pending => {
+                service(harness)?;
+                let now = harness.now();
+                let (port, _) = harness.parts();
+                if let Some(at) = port.deadline()
+                    && at > now
+                {
+                    harness.advance(at.saturating_duration_since(now));
+                }
+            }
         }
     }
     Err(Violation::Lifecycle)
@@ -1224,10 +1286,10 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), V
             return Err(Violation::Lifecycle);
         }
     }
-    // What is on the air ends within the publication bound; what waits
-    // behind it ends withdrawn, never published.
-    let bound = harness.publication_bound();
-    harness.advance(bound);
+    // What is on the air ends as the air answers; what waits behind it ends
+    // withdrawn, never published.
+    harness.hold(BEACON_QUEUE, false);
+    harness.hold(STATION_QUEUE, false);
     stop(harness)?;
     let ended = harness.take_ends();
     let ended = ended.as_ref();

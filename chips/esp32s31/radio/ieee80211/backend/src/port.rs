@@ -39,8 +39,9 @@ pub mod device;
 mod driver;
 mod engines;
 pub use engines::{
-    Esp32s31Arena, Esp32s31Commands, Esp32s31Port, GroupInstall, InstallRefused, PairwiseInstall,
-    PortDriver, PortInstallation, ReinstallRefused,
+    AccessPointGroupInstall, AccessPointPairwiseInstall, Esp32s31Arena, Esp32s31Commands,
+    Esp32s31Port, GroupInstall, InstallRefused, PairwiseInstall, PortDriver, PortInstallation,
+    ReinstallRefused,
 };
 mod keys;
 mod lent;
@@ -415,6 +416,9 @@ pub enum Fault {
     /// A command the data port held at its barrier passed its bound; the
     /// port keeps the command with its quarantine.
     CommandExpired(oer_protocols_ieee80211_contracts_port::CommandKind),
+    /// An access-point command the data port held at its barrier passed its
+    /// bound; the port keeps the command with its quarantine.
+    AccessPointCommandExpired(oer_protocols_ieee80211_contracts_port::AccessPointCommandKind),
 }
 
 /// The one-shot fault of a diagnostic image.

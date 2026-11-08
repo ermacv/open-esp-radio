@@ -16,6 +16,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+mod access_point;
 mod keys_receive;
 mod lifecycle;
 mod stale;
@@ -115,6 +116,8 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
     /// The station MPDU the last station terminal returned `Sent`, kept for a
     /// retransmission.
     station: Option<(Ticket<'id, Id>, Sent<'id, Id, TestDevice, 512, Draws>)>,
+    /// The access point's tokens the installation minted.
+    access_point: Option<access_point::ApResources<'id, Id>>,
 }
 
 fn supported(
@@ -176,6 +179,15 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             gate: Some(resources.gate),
             access: Some(resources.terminal_access),
             station: None,
+            access_point: Some(access_point::ApResources {
+                association: resources.access_point_association,
+                configure: resources
+                    .access_point_commands
+                    .configure
+                    .with_context(Tag(8, None)),
+                group_permission: resources.access_point_group_permission,
+                beacon: resources.access_point_beacon,
+            }),
         }
     }
 

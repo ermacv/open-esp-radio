@@ -64,6 +64,20 @@ pub struct GroupKey<'id, Id: SlotIdentity, R> {
     pub(super) identity: RawKeyIdentity,
     pub(super) brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id, R)>,
 }
+#[cfg(test)]
+impl<Id: SlotIdentity, R> PairwiseKey<'_, Id, R> {
+    /// The generation of the installation that issued the key.
+    pub(crate) fn generation(&self) -> u32 {
+        self.identity.generation()
+    }
+}
+#[cfg(test)]
+impl<Id: SlotIdentity, R> GroupKey<'_, Id, R> {
+    /// The generation of the installation that issued the key.
+    pub(crate) fn generation(&self) -> u32 {
+        self.identity.generation()
+    }
+}
 pub struct PortKeys<Id: SlotIdentity, R>(PhantomData<fn(Id) -> (Id, R)>);
 pub(super) type StaPath<Id: SlotIdentity> = Child<CorePath<Id>, 2>;
 pub(super) type ApPath<Id: SlotIdentity> = Child<CorePath<Id>, 3>;

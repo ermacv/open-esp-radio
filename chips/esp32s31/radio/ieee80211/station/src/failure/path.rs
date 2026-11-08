@@ -124,6 +124,16 @@ impl DiagnosticPath for BackendFault {
                     PortCommandKind::SetBssColor => "SetBssColor",
                 });
             }
+            Self::AccessPointCommandExpired(kind) => {
+                path.name("AccessPointCommandExpired");
+                path.name(match kind {
+                    AccessPointCommandKind::InstallPairwise => "InstallPairwise",
+                    AccessPointCommandKind::InstallGroup => "InstallGroup",
+                    AccessPointCommandKind::RemovePairwise => "RemovePairwise",
+                    AccessPointCommandKind::RemoveGroup => "RemoveGroup",
+                    AccessPointCommandKind::Configure => "Configure",
+                });
+            }
         }
     }
 }

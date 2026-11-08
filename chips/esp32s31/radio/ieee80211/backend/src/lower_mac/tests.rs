@@ -95,6 +95,9 @@ struct Hardware {
     access_point_policy: Option<[u8; 6]>,
     access_point_disabled: usize,
     access_point_tsf_resets: usize,
+    /// What the access point's interface does, shared with a fixture that
+    /// lent the hardware to its port.
+    access_point: std::rc::Rc<RefCell<AccessPointObserved>>,
     promiscuous: bool,
     station_tsf: u64,
     tbtt: Option<StaTbttSchedule>,
@@ -376,24 +379,42 @@ impl MacSnifferHardware for Hardware {
     }
 }
 
+/// The access point's interface as the register model holds it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct AccessPointObserved {
+    /// Its receive policy names this address.
+    policy: Option<[u8; 6]>,
+    /// Its TSF runs.
+    tsf_running: bool,
+    tsf_starts: usize,
+    tsf_stops: usize,
+}
+
 impl ApRxPolicyHardware for Hardware {
     fn apply_ap_link_policy(&mut self, access_point: [u8; 6]) {
         self.access_point_policy = Some(access_point);
+        self.access_point.borrow_mut().policy = Some(access_point);
     }
 
     fn disable_ap_link_policy(&mut self) {
         self.access_point_policy = None;
         self.access_point_disabled += 1;
+        self.access_point.borrow_mut().policy = None;
     }
 }
 
 impl ApTsfHardware for Hardware {
     fn reset_and_start_access_point_tsf(&mut self, _: crate::mac::ap_tsf::AccessPointTsfWrite) {
         self.access_point_tsf_resets += 1;
+        let mut observed = self.access_point.borrow_mut();
+        observed.tsf_running = true;
+        observed.tsf_starts += 1;
     }
 
     fn stop_access_point_tsf(&mut self, _: crate::mac::ap_tsf::AccessPointTsfWrite) {
-        unreachable!("the port never stops the access-point TSF")
+        let mut observed = self.access_point.borrow_mut();
+        observed.tsf_running = false;
+        observed.tsf_stops += 1;
     }
 }
 

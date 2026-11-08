@@ -2430,6 +2430,25 @@ where
         self.access_point_tsf.restart(hardware);
     }
 
+    /// Stop the access point's TSF, a new generation of its relation.
+    pub fn stop_access_point_tsf<H: LowerMacHardware>(&mut self, hardware: &mut H) {
+        self.access_point_tsf.stop(hardware);
+    }
+
+    /// Release the access point's interface for a stopped port: close its
+    /// receive policy if it receives and stop its TSF if it runs, in the
+    /// order its own stop takes. A later configuration starts from nothing.
+    pub fn release_access_point<H: LowerMacHardware>(&mut self, hardware: &mut H) {
+        if let Some(vif) = self.vifs[VifRole::AccessPoint as usize].take()
+            && !vif.receive.is_empty()
+        {
+            hardware.disable_ap_link_policy();
+        }
+        if self.access_point_tsf.running() {
+            self.access_point_tsf.stop(hardware);
+        }
+    }
+
     /// Program the station TBTT schedule. The event fires the schedule's
     /// lead before each TBTT; the wake lead published beside it keeps the
     /// vendor's window above the lead.

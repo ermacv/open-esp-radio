@@ -36,8 +36,15 @@ pub(super) struct Pending<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O
     pub published: bool,
     /// What it has put on the air.
     pub air: Option<Air>,
+    /// A beacon's permission, which its terminal returns, and the instant
+    /// it must be published by.
+    pub beacon: Option<(BeaconPermission<'static, Part<Id, 10>>, Instant)>,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_, Id, D, B, O> {
+    /// A beacon's deadline.
+    pub(super) fn deadline(&self) -> Option<Instant> {
+        self.beacon.as_ref().map(|(_, deadline)| *deadline)
+    }
     fn role(&self) -> VifRole {
         self.operation.payload().role
     }
@@ -226,6 +233,9 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     /// queued attempts that name it end withdrawn.
     pub(super) barrier: Option<RawKeyIdentity>,
     pub(super) configuring: Option<brand::OwnedConfigured<'id, Id, D, B>>,
+    /// The access point's configuration waits at its barrier: its queued
+    /// attempts end withdrawn.
+    pub(super) access_point_configuring: bool,
     pub(super) closing: Option<GateOpen<'id, Part<Id, 1>>>,
     pub(super) closed: bool,
     pub(super) keys: [Option<(RawKeyIdentity, Installed<'id, Id>)>; 20],
@@ -296,6 +306,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             arena: None,
             retained_group: None,
             barrier: None,
+            access_point_configuring: false,
             configuring: None,
             closing: None,
             closed: false,
@@ -365,6 +376,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         drop(self.retained_group.take());
         self.barrier = None;
         drop(self.configuring.take());
+        self.access_point_configuring = false;
         drop(self.closing.take());
         self.closed = false;
         self.applied_ba = [None; 8];
@@ -388,10 +400,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             env.count_expired(msdus.count_ones());
         }
         let place = pending.operation.ticket().index();
-        env.tx_completed(
-            place,
-            brand::OwnedTxCompleted::Single(pending.operation.complete(outcome)),
-        );
+        let completed = pending.operation.complete(outcome);
+        let completed = match pending.beacon {
+            Some((permission, _)) => brand::OwnedTxCompleted::Beacon {
+                completed,
+                permission,
+            },
+            None => brand::OwnedTxCompleted::Single(completed),
+        };
+        env.tx_completed(place, completed);
     }
     // The retained barrier is also the withdrawal marker; no owner or result
     // is moved out of its AC while an earlier owner can still complete.
@@ -403,6 +420,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // A configuration is the station's.
         if self.configuring.is_some() && role == VifRole::Station {
             return Some(WithdrawCause::Disabled);
+        }
+        // So is the access point's, which ends its own attempts.
+        if self.access_point_configuring && role == VifRole::AccessPoint {
+            return Some(WithdrawCause::GateClosed);
         }
         (key.is_some() && key == self.barrier).then_some(WithdrawCause::KeyRemoved)
     }
@@ -417,7 +438,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         };
         // Without a global cause, a configuration or a key removal, no
         // owner is withdrawn (`withdrawal` names none): the common turn.
-        let selective = self.configuring.is_some() || self.barrier.is_some();
+        let selective =
+            self.configuring.is_some() || self.access_point_configuring || self.barrier.is_some();
         if global.is_none() && !selective {
             return true;
         }
@@ -455,9 +477,61 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         pending: &Pending<'id, Id, D, B, O>,
         now: Instant,
     ) -> bool {
-        pending.admission().is_some_and(|at| {
-            now.saturating_duration_since(at) >= env.lifetime(vif(pending.role()), pending.category)
-        })
+        pending.deadline().is_some_and(|deadline| now >= deadline)
+            || pending.admission().is_some_and(|at| {
+                now.saturating_duration_since(at)
+                    >= env.lifetime(vif(pending.role()), pending.category)
+            })
+    }
+    /// End the queued beacon of queue `index` whose deadline passed at
+    /// `now`, wherever it waits in the queue; the others keep their order.
+    ///
+    /// # Errors
+    ///
+    /// [`Fault::QueueFull`] when the queue did not take back an attempt it
+    /// held a moment before; the attempt stays in custody with the
+    /// quarantine.
+    pub(super) fn expire_beacons(
+        &mut self,
+        env: &mut impl DriverEnv<'id, Id, D, B, O>,
+        index: usize,
+        now: Instant,
+    ) -> Result<(), Fault> {
+        let Some(queue) = self.queues.get_mut(index) else {
+            return Ok(());
+        };
+        if !queue
+            .iter()
+            .any(|pending| pending.deadline().is_some_and(|deadline| now >= deadline))
+        {
+            return Ok(());
+        }
+        let mut expired = heapless::Vec::<Pending<'id, Id, D, B, O>, 1>::new();
+        for _ in 0..queue.len() {
+            let Some(pending) = queue.pop_front() else {
+                break;
+            };
+            let late = pending.deadline().is_some_and(|deadline| now >= deadline);
+            // One beacon permission exists, so at most one beacon is late;
+            // a refused push keeps the attempt in its queue.
+            let kept = if late {
+                expired.push(pending).err()
+            } else {
+                Some(pending)
+            };
+            if let Some(pending) = kept
+                && let Err(pending) = queue.push_back(pending)
+            {
+                core::mem::forget(pending);
+                return Err(Fault::QueueFull {
+                    queue: u8::try_from(index).unwrap_or(u8::MAX),
+                });
+            }
+        }
+        for pending in expired {
+            self.finish(env, pending, TxOutcome::Expired { msdus: 1 });
+        }
+        Ok(())
     }
     /// A transmission ended without delivery: `end` if the plan is spent, a
     /// withdrawal behind a stop or a gate, otherwise `None` to go again.
@@ -718,15 +792,22 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let role = pending.role();
         // Everything that can refuse without an owner in hand comes first:
         // the MPDU goes back to the head of its queue and nothing was taken.
+        // An open core publishes; a configuration barrier of the other
+        // interface lets this one's attempt through.
+        let core = match self.core.view() {
+            CoreView::Open(core) => Some(core),
+            CoreView::ConfigureOpen(view) => view.other_interface(role).ok(),
+            _ => None,
+        };
         let checked = match (
-            self.core.view(),
+            core,
             pending.admission(),
             admitted_key(&self.keys, pending.key()),
         ) {
-            (CoreView::Open(core), Some(admitted_at), Some(key)) => Ok((core, admitted_at, key)),
-            (CoreView::Open(_), None, _) => Err(Unpublished::Admission),
-            (CoreView::Open(_), Some(_), None) => Err(Unpublished::Key),
-            _ => Err(Unpublished::CoreView),
+            (Some(core), Some(admitted_at), Some(key)) => Ok((core, admitted_at, key)),
+            (Some(_), None, _) => Err(Unpublished::Admission),
+            (Some(_), Some(_), None) => Err(Unpublished::Key),
+            (None, _, _) => Err(Unpublished::CoreView),
         };
         #[cfg(oer_fault_injection)]
         let checked = checked.and_then(|checked| {

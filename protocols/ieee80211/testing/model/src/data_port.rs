@@ -1316,17 +1316,17 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
         self.expire(now);
-        if matches!(
+        // A held configuration withdraws its interface's attempts queued
+        // behind a frame on the air, as its call did.
+        let station = self.held.configuring_station.get();
+        let access_point = matches!(
             self.access_point_held_since,
             Some((AccessPointCommandKind::Configure, _))
-        ) {
-            // A held configuration of the access point withdraws its
-            // attempts queued behind its frame on the air, as its call did.
-            self.driver
-                .publish_before(&self.held, |role| role == VifRole::AccessPoint);
-        } else {
-            self.driver.publish(&self.held);
-        }
+        );
+        self.driver.publish_before(&self.held, |role| match role {
+            VifRole::Station => station,
+            VifRole::AccessPoint => access_point,
+        });
         let done = self.serve_arena(now)?;
         self.close_gate();
         if !self.driver.removing.is_empty() {

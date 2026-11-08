@@ -198,8 +198,11 @@ pub struct Prepared<
     loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
     proof: PhantomData<(&'k (), fn(&'p ()) -> (&'p (), R, K))>,
 }
-pub struct Execution {
+pub struct Execution<Id: SlotIdentity> {
     pub(super) plan: RetryPlan<PhyRate>,
+    /// A beacon's permission, which its terminal returns, and the instant
+    /// it must be published by.
+    pub(super) beacon: Option<(BeaconPermission<'static, Part<Id, 10>>, Instant)>,
 }
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, R, K>
     PreparedTx<'id> for Prepared<'_, '_, 'id, Id, D, B, O, R, K>
@@ -208,7 +211,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations,
     type Backend = Esp32s31Backend<Id, D, B, O>;
     type OwnedContext = D::OwnedContext<Id>;
     type OwnedPayload = Mpdu<'static, Id, D, B, O>;
-    type Execution = Execution;
+    type Execution = Execution<Id>;
     fn into_admission(
         self,
         context: D::Context<'id, Id>,
@@ -218,14 +221,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations,
         Self::OwnedContext,
         Slot<'static, Tickets, Part<Id, 2>>,
         Self::OwnedPayload,
-        Execution,
+        Execution<Id>,
     > {
         let loan = self.loan;
         AdmissionOwners {
             context: context.enclose().into_owned(&loan),
             ticket: loan.reclaim_slot(ticket),
             payload: self.mpdu.into_owned(&loan),
-            execution: Execution { plan: self.plan },
+            execution: Execution {
+                plan: self.plan,
+                beacon: None,
+            },
         }
     }
     fn into_parts(self) -> (AnyBuffer<'id, Id, D, B, O>, Option<D::Body>) {

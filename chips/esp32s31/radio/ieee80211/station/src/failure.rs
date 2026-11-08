@@ -72,6 +72,18 @@ pub enum BackendFault {
     ReceiveAccounting,
     /// A command the data port held at its barrier passed its bound.
     CommandExpired(PortCommandKind),
+    /// An access-point command the data port held at its barrier passed its
+    /// bound.
+    AccessPointCommandExpired(AccessPointCommandKind),
+}
+/// The kind of an access-point command of the data port.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AccessPointCommandKind {
+    InstallPairwise,
+    InstallGroup,
+    RemovePairwise,
+    RemoveGroup,
+    Configure,
 }
 /// The lower-MAC operation a missing core view stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

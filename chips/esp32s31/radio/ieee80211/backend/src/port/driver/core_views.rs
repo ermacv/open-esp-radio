@@ -16,6 +16,22 @@ pub(in crate::port) fn configuring<'id, Id: SlotIdentity, D: Device<B>, const B:
     }
 }
 
+/// The interface a configuration barrier of the core configures.
+#[inline]
+pub(in crate::port) fn configuring_role<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+    view: CoreView<'_, Core<'id, Id, D, B>>,
+) -> Option<VifRole> {
+    match view {
+        CoreView::ConfigureDisabled(view) => Some(view.role()),
+        CoreView::ConfigureDisabledClosing(view) => Some(view.role()),
+        CoreView::ConfigureDisabledClosed(view) => Some(view.role()),
+        CoreView::ConfigureOpen(view) => Some(view.role()),
+        CoreView::ConfigureClosing(view) => Some(view.role()),
+        CoreView::ConfigureClosed(view) => Some(view.role()),
+        _ => None,
+    }
+}
+
 #[inline]
 pub(in crate::port) fn deadline<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,

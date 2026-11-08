@@ -213,6 +213,7 @@ impl<'p, Id: SlotIdentity> GroupCommand<'p, Id> {
 }
 pub(super) enum OwnedConfigured<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
     Station(ConfigurePermission<'o, Station, Part<Id, 8>, D::OwnedConfigureContext<Id>>),
+    AccessPoint(ConfigurePermission<'o, AccessPoint, Part<Id, 9>, D::OwnedConfigureContext<Id>>),
 }
 pub(super) enum RemovedOwners<S, A, G, P> {
     Pairwise { slot: S, association: A },
@@ -272,15 +273,21 @@ pub(super) enum OwnedTxCompleted<
     const B: usize,
     O: Observations,
 > {
-    Single(
-        Completed<
-            D::OwnedContext<Id>,
-            Slot<'o, Tickets, Part<Id, 2>>,
-            Mpdu<'o, Id, D, B, O>,
-            SingleOutcome<Ack, Infallible>,
-        >,
-    ),
+    Single(OwnedSingle<'o, Id, D, B, O>),
+    /// The access point's beacon and the beacon permission its admission
+    /// took.
+    Beacon {
+        completed: OwnedSingle<'o, Id, D, B, O>,
+        permission: BeaconPermission<'static, Part<Id, 10>>,
+    },
 }
+/// A single MPDU's end with its owners, as the driver builds it.
+pub(super) type OwnedSingle<'o, Id, D, const B: usize, O> = Completed<
+    <D as Device<B>>::OwnedContext<Id>,
+    Slot<'o, Tickets, Part<Id, 2>>,
+    Mpdu<'o, Id, D, B, O>,
+    SingleOutcome<Ack, Infallible>,
+>;
 /// A published data arena's end, which carries its arena right and no
 /// body-loaned owner.
 pub(super) type ArenaDone =
@@ -310,6 +317,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedConfigured<'static, Id
     {
         match self {
             Self::Station(p) => Configured::Station(p.lend(loan)),
+            Self::AccessPoint(p) => Configured::AccessPoint(p.lend(loan)),
         }
     }
 }
@@ -404,7 +412,15 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     where
         Id: 'p,
     {
-        let Self::Single(t) = self;
-        LowerMacTerminal::TxCompleted(TxCompleted::Single(t.lend(loan)))
+        match self {
+            Self::Single(t) => LowerMacTerminal::TxCompleted(TxCompleted::Single(t.lend(loan))),
+            Self::Beacon {
+                completed,
+                permission,
+            } => LowerMacTerminal::TxCompleted(TxCompleted::Beacon {
+                completed: completed.lend(loan),
+                permission: permission.lend(loan),
+            }),
+        }
     }
 }

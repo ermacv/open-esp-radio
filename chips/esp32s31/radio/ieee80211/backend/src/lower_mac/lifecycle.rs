@@ -160,6 +160,12 @@ impl<V> ConfiguringView<V> {
             policy,
         }
     }
+
+    /// The interface this barrier configures.
+    #[inline]
+    pub const fn role(&self) -> VifRole {
+        self.config.role
+    }
 }
 /// Configuration returns its original lifecycle view exactly once.
 #[must_use]
@@ -649,6 +655,25 @@ impl<
         frame: &NormalizedRxFrame<'frame>,
     ) -> Option<(&'frame [u8], Esp32s31RxMeta)> {
         self.core.received(hardware, frame)
+    }
+
+    /// The enabled core for an attempt of `role`, when `role` is another
+    /// interface than the one this barrier configures: the barrier waits
+    /// for its own interface's attempts only, so the other interface's
+    /// attempts publish meanwhile. The phase stays the barrier's.
+    #[inline]
+    pub fn other_interface(
+        self,
+        role: VifRole,
+    ) -> Result<
+        EnabledView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>, G>,
+        Self,
+    > {
+        if role == self.config.role {
+            Err(self)
+        } else {
+            Ok(self.core)
+        }
     }
 }
 
