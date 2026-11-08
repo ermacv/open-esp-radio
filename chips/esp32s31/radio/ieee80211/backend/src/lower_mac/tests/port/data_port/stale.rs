@@ -346,3 +346,32 @@ fn a_station_frame_under_a_key_of_an_earlier_installation_is_refused_at_submit()
         );
     });
 }
+
+#[test]
+fn a_frame_under_an_earlier_key_is_refused_as_stale_while_the_radio_is_stopped() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        let (_association, key, _group, _permission) = fixture.installed_keys();
+        fixture.stop();
+        let mut fixture = reinstall(fixture, installations).expect("reinstalled");
+        // Not started. The current installation's ticket and buffer, the
+        // earlier installation's key: the stale refusal comes first, as no
+        // start answers it.
+        let sealed = fixture.protected_mpdu(&key).expect("a frame");
+        let now = fixture.now();
+        assert_eq!(
+            fixture.port.submit(sealed, now, &mut fixture.outbox),
+            Err(SubmitRefusal::StalePermission {
+                issued: 0,
+                installation: 1,
+            })
+        );
+        match fixture.outbox.terminals.as_slice() {
+            [LowerMacTerminal::TxCompleted(TxCompleted::Single(completed))] => assert!(matches!(
+                completed.outcome(),
+                TxOutcome::Withdrawn(WithdrawCause::StalePermission)
+            )),
+            _ => panic!("its withdrawn terminal returns its owners"),
+        }
+    });
+}

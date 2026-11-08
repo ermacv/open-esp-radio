@@ -1363,24 +1363,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<(), SubmitRefusal> {
-        let refusal = match self.radio {
-            Radio::Stopped => Some(SubmitRefusal::NotEnabled),
-            Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
-            Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
-                Some(SubmitRefusal::Stopping)
-            }
-            // The admission instant projects into radio time; without the
-            // relation the radio does not run for this attempt.
-            Radio::Running if self.air.project_time(now).is_err() => {
-                Some(SubmitRefusal::NotEnabled)
-            }
-            Radio::Running => None,
-        };
-        if let Some(reason) = refusal {
-            return Err(self.withdraw(attempt, reason, WithdrawCause::Disabled, sink));
-        }
         // An attempt under a key or beacon permission of an earlier
-        // installation is refused for good, with its owners.
+        // installation is refused for good, with its owners, before the
+        // radio's own state is asked.
         {
             let installation = self.installation.generation();
             let named = [
@@ -1407,6 +1392,22 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     sink,
                 ));
             }
+        }
+        let refusal = match self.radio {
+            Radio::Stopped => Some(SubmitRefusal::NotEnabled),
+            Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
+            Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
+                Some(SubmitRefusal::Stopping)
+            }
+            // The admission instant projects into radio time; without the
+            // relation the radio does not run for this attempt.
+            Radio::Running if self.air.project_time(now).is_err() => {
+                Some(SubmitRefusal::NotEnabled)
+            }
+            Radio::Running => None,
+        };
+        if let Some(reason) = refusal {
+            return Err(self.withdraw(attempt, reason, WithdrawCause::Disabled, sink));
         }
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);

@@ -354,3 +354,43 @@ fn a_station_frame_under_a_key_of_an_earlier_installation_is_refused_at_submit()
         drop(key);
     }));
 }
+
+#[test]
+fn a_frame_under_an_earlier_key_is_refused_as_stale_while_the_radio_is_stopped() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let mut harness = Harness::new(claim);
+        harness.start();
+        let (start, [group_slot, _], permission, [slot, _]) = harness.group.take().unwrap();
+        let association = ModelKeys::<B<'_>, Station>::begin_association(start, Spp::NotNegotiated);
+        let (key, _group, _permission) =
+            install_keys(&mut harness, &association, slot, group_slot, permission);
+        let (mut harness, resources) = reinstall(harness);
+        // Not started. The current installation's ticket and buffer, the
+        // earlier installation's key: the stale refusal comes first, as no
+        // start answers it.
+        let mut tickets = resources.shared.tickets;
+        let mut small = resources.shared.small;
+        let ticket = tickets.pop().unwrap();
+        let buffer = small.pop().unwrap();
+        let attempt = harness.admitted_under_number(ticket, buffer, &key, 1);
+        let ticket = attempt.operation.ticket().index();
+        let now = harness.clock.now();
+        assert_eq!(
+            harness.port.submit(attempt, now, &mut harness.sink),
+            Err(SubmitRefusal::StalePermission {
+                issued: 0,
+                installation: 1,
+            })
+        );
+        harness.tickets = tickets;
+        harness.small = small;
+        let mut beacon = None;
+        assert_eq!(
+            settle(&mut harness, &mut beacon),
+            [Ended::Frame(
+                ticket,
+                End::Withdrawn(WithdrawCause::StalePermission)
+            )]
+        );
+    }));
+}
