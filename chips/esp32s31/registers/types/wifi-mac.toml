@@ -6254,7 +6254,7 @@ accuracy = "exact"
 completeness = "partial"
 
 [review.entity."HE_SCRATCH%s"]
-sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_DBG_READ_TX_MPLEN", "BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB"]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_DBG_READ_TX_MPLEN", "BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB", "BLOB_LIBPP_HAL_HE_INIT_PIN_20261108"]
 provenance = "observed"
 accuracy = "exact"
 completeness = "complete"

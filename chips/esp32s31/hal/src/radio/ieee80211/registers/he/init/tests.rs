@@ -109,7 +109,10 @@ fn the_prefix_from_ones_clears_its_bits_and_keeps_the_others() {
     let prefix = &registers.mac.wifi_mac_he_init_prefix;
     let timing = prefix.read_bf_timing_control();
     assert!(!timing.non_tb_beam_ru_select() && !timing.bit_23_opaque());
-    assert!(!timing.bf_memory_write_enable());
+    assert!(
+        timing.bf_memory_write_enable(),
+        "the timeout edge replaces bits 7:1 and keeps bit 0"
+    );
     assert!(timing.he_beam_enable() && timing.bit_24_opaque());
     assert_eq!(timing.bits_26_31_opaque().get(), 0x3f);
     assert!(!prefix.read_bf_mode_control().high_selector_class());

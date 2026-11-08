@@ -486,3 +486,24 @@ values two and three. ESP-IDF esp_wifi_he_types.h for
 SOC_WIFI_MAC_VERSION_NUM 3 (ESP_WIFI_SYS_S31_RXCTRL) declares byte 1 bits
 7:5 as unnamed bit-fields commented reserved in its public structure; the
 library reads bits 7:6."""
+
+# SOURCE(esp32s31): libpp[hal_mac_ctl.o]::hal_he_init,
+# libpp[hal_mac_ctl.o]::hal_init_bf.
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_INIT_PIN_20261108"
+description = """
+Blobray, espressif/esp32-wifi-lib f856b5db55cb18e2d1826044430f3f4089e47cf9,
+esp32s31/libpp.a sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391.
+Complete libpp[hal_mac_ctl.o]::hal_he_init (0x1a0) clears 0x20104c80 bit 31
+by a read, shift-left-one, shift-right-one, store at +0x0e..0x18, then in a
+second fresh read-modify-write ANDs the word with 0xbfffffff, clearing bit 30
+alone, at +0x1a..0x24. At +0xa0..0xb2 it stores a whole zero word to each of
+the 120 words from 0x201055f0 through 0x201057cc in ascending order. Complete
+libpp[hal_mac_ctl.o]::hal_init_bf, reached from hal_he_init, ANDs 0x20104c78
+with 0xffffff01 and ORs 0x20 at +0x46..0x56: bits 7:1 become 0x10, bit 0 and
+bits 31:8 are kept. The older libpp of BLOB_LIBPP_HAL_HE_INIT_PREFIX and
+BLOB_LIBPP_HAL_HE_INIT_SUFFIX (sha256 f863c65c...) cleared bits 31:30 in the
+second 0xc80 edge, replaced the whole 0xc78 low byte and kept scratch bits
+31:21; that sequence stays recorded there. The pinned library is the
+repository's reference; it does not by itself prove the older sequence
+wrong."""
