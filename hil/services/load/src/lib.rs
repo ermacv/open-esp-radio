@@ -1042,8 +1042,9 @@ pub struct NetworkTurns {
     pub blocks_out: u32,
     pub credits_out: u32,
     /// Passes after a turn that moved, yielded to the executor: all, and
-    /// those after a turn known to leave work (a spent budget, a full
-    /// intake, publishing at its budget or deferred).
+    /// those after a turn with signs of possible work left (a spent budget,
+    /// a full intake, publishing at its budget or deferred); a spent frame
+    /// budget does not prove that a next frame exists.
     pub yields: u32,
     pub yields_with_work: u32,
     /// Waits after a turn that moved nothing: those that found nothing as

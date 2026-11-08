@@ -74,7 +74,7 @@ pub fn summary(turns: &NetworkTurns) -> String {
          budget spent in {} turns ({} sockets, share {}); intake full {}; \
          accepted {} ({} per turn; {bins}); publish chose {} refused {} budget {} \
          deferred {} fault {}; out at end: blocks {} credits {}; yields {} \
-         ({} with work), waits pending {} ready {}",
+         ({} with possible work), waits pending {} ready {}",
         turns.turns,
         turns.reserves,
         turns.sends,
@@ -136,7 +136,7 @@ mod tests {
              budget spent in 7 turns (7 sockets, share 0.88); intake full 0; \
              accepted 16 (2.00 per turn; 0:4 1:0 2:0 3:0 4:4 5-8:0 9+:0); publish chose 8 \
              refused 0 budget 0 deferred 0 fault 0; out at end: blocks 0 credits 0; \
-             yields 8 (7 with work), waits pending 0 ready 0"
+             yields 8 (7 with possible work), waits pending 0 ready 0"
         );
     }
 

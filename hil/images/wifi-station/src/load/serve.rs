@@ -455,12 +455,13 @@ async fn measure(
     let end_us = now_us();
     let hart1_end = report::hart_count(hart1.counters());
     window.end_us.set(Some(end_us));
+    // Before the first await: the service keeps turning while it runs.
+    udp::close_turns(net);
     relay::request_stop(hart0).await;
     hart1.sampler().request_stop();
     let cpu_end = cpu_load().await;
     let (parts_end, tracking_end) = readings(false).await;
     let counters_end = snapshot(hart0, false, net).await;
-    udp::close_turns(net);
     let sampled = match sampling {
         Some(Ok(())) => Some(relay::stop_sampler(hart0).await),
         other => other,
