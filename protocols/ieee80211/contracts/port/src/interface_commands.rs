@@ -8,10 +8,11 @@
 //! returns it unchanged with the permission: a station's connection epoch does
 //! not wait in a second table indexed by a runtime role. Unconsumed context
 //! cannot be overwritten; consuming `into_parts` recovers both values.
+use crate::issued::{IssuedSlot, IssuedSlots, SlotGrant};
 use crate::{AccessPoint, InterfaceRole, PortTypes, Station, VifRole};
 use core::marker::PhantomData;
 use oer_protocols_radio_port::{BodyLoan, LoanedContext, PortContext};
-use oer_protocols_radio_port::{PoolPath, PoolSet, Root, Slot, Slots};
+use oer_protocols_radio_port::{PoolPath, PoolSet, Root};
 
 const CONFIGURE_PER_INTERFACE: usize = 1;
 
@@ -26,11 +27,32 @@ impl<R: InterfaceRole> InterfaceCommandPool<R> {
     pub const TERMINAL_CAPACITY: usize = Self::COMMAND_CAPACITY;
 }
 impl<R: InterfaceRole> PoolSet for InterfaceCommandPool<R> {
-    type Pools<'id, Path: PoolPath> = InterfacePermissions<'id, R, Path>;
+    type Pools<'id, Path: PoolPath> = InterfaceGrant<'id, R, Path>;
     fn build<'id, Path: PoolPath>(
         builder: oer_protocols_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
-        let [configure] = builder.into_pools::<Slots<ConfigureKind<R>, CONFIGURE_PER_INTERFACE>>();
+        InterfaceGrant {
+            configure: builder
+                .into_pools::<IssuedSlots<ConfigureKind<R>, CONFIGURE_PER_INTERFACE>>(),
+        }
+    }
+}
+
+/// An interface's permissions a mint made, before their backend issues
+/// them to its installation.
+#[must_use = "the backend issues the grant to its installation"]
+pub struct InterfaceGrant<
+    'id,
+    R: InterfaceRole,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
+    configure: SlotGrant<'id, ConfigureKind<R>, CONFIGURE_PER_INTERFACE, Path>,
+}
+
+impl<'id, R: InterfaceRole, Path: PoolPath> InterfaceGrant<'id, R, Path> {
+    /// Issue the permissions to the installation `generation`.
+    pub fn issue(self, generation: u32) -> InterfacePermissions<'id, R, Path> {
+        let [configure] = self.configure.issue(generation);
         InterfacePermissions {
             configure: ConfigurePermission {
                 slot: configure,
@@ -58,8 +80,15 @@ pub struct ConfigurePermission<
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
     C = (),
 > {
-    slot: Slot<'id, ConfigureKind<R>, Path>,
+    slot: IssuedSlot<'id, ConfigureKind<R>, Path>,
     context: C,
+}
+
+impl<R: InterfaceRole, Path: PoolPath, C> ConfigurePermission<'_, R, Path, C> {
+    /// The generation of the installation that issued it.
+    pub const fn generation(&self) -> u32 {
+        self.slot.generation()
+    }
 }
 
 impl<'p, R: InterfaceRole, Path: PoolPath, C: LoanedContext<'p, Path::Identity>>
@@ -71,7 +100,7 @@ impl<'p, R: InterfaceRole, Path: PoolPath, C: LoanedContext<'p, Path::Identity>>
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> ConfigurePermission<'static, R, Path, C::Owned> {
         ConfigurePermission {
-            slot: loan.reclaim_slot(self.slot),
+            slot: self.slot.into_owned(loan),
             context: self.context.enclose().into_owned(loan),
         }
     }
@@ -84,7 +113,7 @@ impl<R: InterfaceRole, Path: PoolPath, C> ConfigurePermission<'static, R, Path, 
         loan: &BodyLoan<'p, Path::Identity, S>,
     ) -> ConfigurePermission<'p, R, Path, X> {
         ConfigurePermission {
-            slot: loan.lend_slot(self.slot),
+            slot: self.slot.lend(loan),
             context: X::restore(PortContext::from_owned(self.context, loan)),
         }
     }

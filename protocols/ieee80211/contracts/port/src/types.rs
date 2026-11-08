@@ -370,6 +370,14 @@ pub enum LowerMacTerminal<'id, P: PortTypes<'id>> {
 pub enum TxCompleted<'id, P: PortTypes<'id>> {
     /// Exactly one submitted MPDU, including its original body owner.
     Single(SingleCompleted<'id, P>),
+    /// The access point's beacon, however it ended: its single MPDU's
+    /// terminal and the beacon permission its admission took.
+    Beacon {
+        /// The beacon's MPDU, as [`Self::Single`] carries one.
+        completed: SingleCompleted<'id, P>,
+        /// The installation's one beacon permission.
+        permission: crate::BeaconPermission<'id, P::BeaconPath>,
+    },
 }
 
 /// A backend's single terminal, with its original accepted owner.
@@ -631,6 +639,9 @@ pub trait PortTypes<'id>: Sized {
     type TicketPath: PoolPath;
     /// Nominal authority of this backend's receive Block Ack component.
     type BlockAckPath: PoolPath;
+    /// Nominal authority of this backend's beacon component
+    /// ([`BeaconPool`](crate::BeaconPool)).
+    type BeaconPath: PoolPath;
     /// The backend fault shared by the event stream and every interface.
     type Fault: Copy + core::fmt::Debug;
     /// The composition's operation context. The backend owns and returns

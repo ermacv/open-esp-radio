@@ -12,6 +12,6 @@ type Other<'k, 'phase, 'p> = ModelPrepared<'k, 'phase, 'p, oer_protocols_ieee802
 #[cfg(not(ui_reject))]
 type Other<'k, 'phase, 'p> = Source<'k, 'phase, 'p>;
 
-pub fn forward<'k, 'phase, 'p>(source: Source<'k, 'phase, 'p>, ticket: Slot<'p, ModelTickets, ModelPool<Id, 1>>, authority: Admission<Other<'k, 'phase, 'p>>) -> AdmissionOwners<(), Slot<'static, ModelTickets, ModelPool<Id, 1>>, ModelMpdu<'static, Backend>, ModelTxExecution> {
+pub fn forward<'k, 'phase, 'p>(source: Source<'k, 'phase, 'p>, ticket: Slot<'p, ModelTickets, ModelPool<Id, 1>>, authority: Admission<Other<'k, 'phase, 'p>>) -> AdmissionOwners<(), Slot<'static, ModelTickets, ModelPool<Id, 1>>, ModelMpdu<'static, Backend>, ModelTxExecution<Backend>> {
     source.into_admission((), ticket, authority) // ui-error: E0308
 }

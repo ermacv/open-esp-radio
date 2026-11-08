@@ -9,7 +9,7 @@ warning: unused import: `oer_protocols_ieee80211_contracts_port::TxBufferMemory`
 warning: variable does not need to be mutable
   --> tests/ui/static_body_resource_escape.rs:16:9
    |
-16 |     let mut buffer = resources.small.pop().expect("one model resource");
+16 |     let mut buffer = resources.shared.small.pop().expect("one model resource");
    |         ----^^^^^^
    |         |
    |         help: remove this `mut`

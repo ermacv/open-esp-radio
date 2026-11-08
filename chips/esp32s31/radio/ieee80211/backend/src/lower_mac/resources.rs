@@ -20,8 +20,10 @@ pub struct CoreResources<
     pub authority: CoreAuthority<'core, Path, TICKETS>,
     /// One admission credit for each TX ticket in the backend layout.
     pub tickets: [TxTicket<'core, Path>; TICKETS],
-    pub station_association: super::association::VacantStationAssociation<'core, Path>,
-    pub access_point_association: super::association::VacantAccessPointAssociation<'core, Path>,
+    /// The association domains, which the installation issues with its
+    /// generation.
+    pub station_association: super::association::StationAssociationGrant<'core, Path>,
+    pub access_point_association: super::association::AccessPointAssociationGrant<'core, Path>,
     pub queues: [FreeQueue<'core, Path>; 4],
 }
 

@@ -425,11 +425,19 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
             resources,
         } = install;
         let ModelResources {
-            tickets,
-            small,
-            block_acks,
-            station_association,
-            station_pairwise,
+            shared:
+                oer_protocols_ieee80211_testing_model::ModelShared {
+                    tickets,
+                    small,
+                    block_acks,
+                    ..
+                },
+            station:
+                oer_protocols_ieee80211_testing_model::ModelStationPermissions {
+                    association: station_association,
+                    pairwise: station_pairwise,
+                    ..
+                },
             ..
         } = resources;
         let storage = Box::leak(Box::new(
@@ -1401,7 +1409,7 @@ fn a_stopped_port_reinstalls_under_the_same_actor_without_a_reset() {
         } = install;
         let storage = Box::leak(Box::new(
             crate::station::RxBlockAckStorage::<Types<'_>, 2, 4>::new(
-                resources.block_acks,
+                resources.shared.block_acks,
                 oer_portable_time::Duration::from_millis(100),
             ),
         ));
@@ -1508,7 +1516,7 @@ fn a_reinstall_in_place_runs_on_the_placed_port_and_a_refusal_leaves_the_actor()
         } = install;
         let storage = Box::leak(Box::new(
             crate::station::RxBlockAckStorage::<Types<'_>, 2, 4>::new(
-                resources.block_acks,
+                resources.shared.block_acks,
                 oer_portable_time::Duration::from_millis(100),
             ),
         ));

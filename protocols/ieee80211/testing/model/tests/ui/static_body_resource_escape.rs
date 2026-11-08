@@ -13,7 +13,7 @@ type Backend = ModelBackend<Id>;
 // An installation's tokens carry its brand `'p` even under a static
 // identity: none escapes into an owner without that brand.
 pub fn escape<'p>(mut resources: ModelResources<'p, Backend>) -> Box<dyn Any> {
-    let mut buffer = resources.small.pop().expect("one model resource");
+    let mut buffer = resources.shared.small.pop().expect("one model resource");
     #[cfg(ui_reject)]
     return Box::new(buffer); // ui-error: lifetime may not live long enough
     #[cfg(not(ui_reject))]

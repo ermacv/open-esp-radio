@@ -37,8 +37,10 @@
 //!
 //! The port is the contract between portable Wi-Fi MAC logic and the
 //! backend that puts frames on the air, whether a chip, a family driver or
-//! a host model. The station's datapath actor owns the radio as a
-//! [`DataPort`] and runs the lifecycle's [`PortCommand`]s in its turns.
+//! a host model. One actor owns the radio as a [`DataPort`], the shared
+//! physical owner, and runs the station lifecycle's [`PortCommand`]s and
+//! the access point's [`AccessPointCommand`]s ([`AccessPointPort`]) in its
+//! turns.
 //! One submitted operation owns its context, ticket and MPDU until its
 //! terminal. The backend executes the retry plan; a barrier waits for the
 //! current publication alone. Portable code selects rates and describes
@@ -62,6 +64,17 @@ pub use in_flight::{
     TerminalAccess, TerminalParts, TransmitPool, TxMpdu,
 };
 
+mod issued;
+pub use issued::{IssuedSlot, IssuedSlots, SlotGrant, first_stale};
+pub mod access_point;
+pub use access_point::{
+    AccessPointCapabilities, AccessPointCommand, AccessPointCommandKind, AccessPointCommands,
+    AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
+    AccessPointRefusal, AccessPointServices, AccessPointSubmission, AccessPointTypes,
+    AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant, BeaconParts,
+    BeaconPermission, BeaconPool, BeaconStamp, BeaconSubmission, BeaconTimestamp,
+    SealedBeaconParts, SupportedTsfControl, TsfControl,
+};
 pub mod arena;
 pub use arena::{
     ARENA_FRAMES, Arena, ArenaCompleted, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd,
@@ -155,7 +168,7 @@ pub use owner::{
 };
 mod interface_commands;
 pub use interface_commands::{
-    ConfigurePermission, Configured, InterfaceCommandPool, InterfacePermissions,
+    ConfigurePermission, Configured, InterfaceCommandPool, InterfaceGrant, InterfacePermissions,
 };
 pub use rx::{
     AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus,

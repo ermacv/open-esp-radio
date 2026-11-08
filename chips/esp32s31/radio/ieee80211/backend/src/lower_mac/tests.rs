@@ -836,9 +836,10 @@ fn slot() -> Pin<&'static mut TxSlot<512>> {
 
 fn core(resources: CoreResources<'_>) -> Core<'_> {
     Core {
+        // The test's one installation issues its association domains.
         associations: TestAssociations::new(
-            resources.station_association,
-            resources.access_point_association,
+            resources.station_association.issue(0),
+            resources.access_point_association.issue(0),
         ),
         free: resources.queues.map(Some),
         tickets: resources.tickets.map(Some),
@@ -3732,7 +3733,7 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
             let CoreView::Disabled(mut core) = owner.view() else {
                 panic!("fresh owner is disabled")
             };
-            let (start, bank) = resources.station_association.into_parts();
+            let (start, bank) = resources.station_association.issue(0).into_parts();
             let association =
                 start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
             let ([slot], [_group]) = bank.into_parts();

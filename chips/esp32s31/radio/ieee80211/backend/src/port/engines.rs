@@ -1391,6 +1391,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             block_acks,
             station_commands,
             access_point_commands,
+            beacon,
         ) = mint.into_pools();
         let CoreResources {
             authority,
@@ -1420,13 +1421,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             terminal_access: terminal_access.lend(&loan),
             buffers: buffers.map(|buffer| buffer.lend(&loan)),
             connection_epoch: loan.lend_slot(connection_epoch),
-            station_association: station_association.lend(&loan),
-            access_point_association: access_point_association.lend(&loan),
-            station_commands: station_commands.lend(&loan),
-            access_point_commands: access_point_commands.lend(&loan),
+            // Every token names this installation: a later one refuses it.
+            station_association: station_association.issue(generation).lend(&loan),
+            access_point_association: access_point_association.issue(generation).lend(&loan),
+            station_commands: station_commands.issue(generation).lend(&loan),
+            access_point_commands: access_point_commands.issue(generation).lend(&loan),
             block_acks: block_acks.map(|slot| slot.lend(&loan)),
             station_group_permission: loan.lend_slot(station_group_permission),
             access_point_group_permission: loan.lend_slot(access_point_group_permission),
+            access_point_beacon: beacon.issue(generation).lend(&loan),
             gate: gate.lend(&loan),
             arbiter_authority: arbiter_authority.lend(&loan),
         };

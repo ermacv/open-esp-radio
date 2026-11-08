@@ -143,37 +143,49 @@ impl<B: ModelComposition, R: ModelRole> ModelGroupKey<'static, B, R> {
 }
 impl<B: ModelComposition> ModelResources<'static, B> {
     pub(super) fn lend<'p>(self, loan: &BodyLoan<'p, B::Identity, B>) -> ModelResources<'p, B> {
+        let Self {
+            shared,
+            station,
+            access_point,
+        } = self;
         ModelResources {
-            station_association: self.station_association.lend(loan),
-            access_point_association: self.access_point_association.lend(loan),
-            station_commands: self.station_commands.lend(loan),
-            access_point_commands: self.access_point_commands.lend(loan),
-            connection_epoch: loan.lend_slot(self.connection_epoch),
-            tickets: self
-                .tickets
-                .into_iter()
-                .map(|slot| loan.lend_slot(slot))
-                .collect(),
-            terminal_access: self.terminal_access.lend(loan),
-            small: self
-                .small
-                .into_iter()
-                .map(|buffer| buffer.lend(loan))
-                .collect(),
-            large: self
-                .large
-                .into_iter()
-                .map(|buffer| buffer.lend(loan))
-                .collect(),
-            station_pairwise: self.station_pairwise.map(|slot| slot.lend(loan)),
-            station_group: self.station_group.map(|slot| slot.lend(loan)),
-            access_point_pairwise: self.access_point_pairwise.map(|slot| slot.lend(loan)),
-            access_point_group: self.access_point_group.map(|slot| slot.lend(loan)),
-            block_acks: self.block_acks.map(|slot| slot.lend(loan)),
-            station_group_permission: loan.lend_slot(self.station_group_permission),
-            access_point_group_permission: loan.lend_slot(self.access_point_group_permission),
-            gate: self.gate.lend(loan),
-            arbiter_authority: self.arbiter_authority.lend(loan),
+            shared: ModelShared {
+                tickets: shared
+                    .tickets
+                    .into_iter()
+                    .map(|slot| loan.lend_slot(slot))
+                    .collect(),
+                terminal_access: shared.terminal_access.lend(loan),
+                small: shared
+                    .small
+                    .into_iter()
+                    .map(|buffer| buffer.lend(loan))
+                    .collect(),
+                large: shared
+                    .large
+                    .into_iter()
+                    .map(|buffer| buffer.lend(loan))
+                    .collect(),
+                block_acks: shared.block_acks.map(|slot| slot.lend(loan)),
+                gate: shared.gate.lend(loan),
+                arbiter_authority: shared.arbiter_authority.lend(loan),
+            },
+            station: ModelStationPermissions {
+                association: station.association.lend(loan),
+                commands: station.commands.lend(loan),
+                connection_epoch: loan.lend_slot(station.connection_epoch),
+                pairwise: station.pairwise.map(|slot| slot.lend(loan)),
+                group: station.group.map(|slot| slot.lend(loan)),
+                group_permission: station.group_permission.lend(loan),
+            },
+            access_point: ModelAccessPointPermissions {
+                association: access_point.association.lend(loan),
+                commands: access_point.commands.lend(loan),
+                pairwise: access_point.pairwise.map(|slot| slot.lend(loan)),
+                group: access_point.group.map(|slot| slot.lend(loan)),
+                group_permission: access_point.group_permission.lend(loan),
+                beacon: access_point.beacon.lend(loan),
+            },
         }
     }
 }

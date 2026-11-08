@@ -837,22 +837,32 @@ fn lifecycle_spare<'s, const G: usize>(
     Spare<'s>,
 ) {
     let ModelResources {
-        connection_epoch,
-        block_acks,
-        station_commands,
-        access_point_commands,
-        access_point_group: [access_point_group, _],
-        access_point_group_permission,
-        terminal_access,
-        tickets,
-        small,
-        station_association,
-        station_pairwise,
-        station_group,
-        station_group_permission,
-        gate,
-        arbiter_authority,
-        ..
+        shared:
+            oer_protocols_ieee80211_testing_model::ModelShared {
+                block_acks,
+                terminal_access,
+                tickets,
+                small,
+                gate,
+                arbiter_authority,
+                ..
+            },
+        station:
+            oer_protocols_ieee80211_testing_model::ModelStationPermissions {
+                connection_epoch,
+                commands: station_commands,
+                association: station_association,
+                pairwise: station_pairwise,
+                group: station_group,
+                group_permission: station_group_permission,
+            },
+        access_point:
+            oer_protocols_ieee80211_testing_model::ModelAccessPointPermissions {
+                commands: access_point_commands,
+                group: [access_point_group, _],
+                group_permission: access_point_group_permission,
+                ..
+            },
     } = resources;
     let mut tickets = tickets.into_iter();
     let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());

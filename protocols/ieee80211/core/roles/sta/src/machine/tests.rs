@@ -600,6 +600,8 @@ impl<'id> World<'id> {
     ) -> World<'id, G> {
         let channels = heapless::Vec::from_slice(&[channel(1), channel(6)]).unwrap();
         let ((gate, gate_issuer, authority), permissions) = mint.into_pools();
+        // The test's one installation issues its permissions.
+        let permissions = permissions.issue(0);
         let (arbiter, place, absence) = Arbiter::new(
             ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(),
             channel(1),

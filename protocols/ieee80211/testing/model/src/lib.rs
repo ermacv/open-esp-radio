@@ -122,6 +122,17 @@
 //! Only that clock's owner advances time. Radio instants are projections
 //! through an affine, zero-drift relation with a sampled nonzero offset.
 //! Hardware backends declare their own PPDU plus response/timeout bound.
+//!
+//! The access point uses the same port ([`ModelPort`] implements
+//! `AccessPointPort`): its attempts share the queues and the key table, its
+//! commands keep their own held bound, its configuration withdraws and waits
+//! for its own interface only, and [`ModelAir::access_point`] shows its
+//! receive rules and TSF. A confirmed stop leaves its interface receiving
+//! nothing and its TSF stopped. [`ModelResources`] groups the shared tokens
+//! and each role's own permissions. Every token of its pools, its group
+//! permissions included, names its installation; the access point's
+//! commands and its beacons and keyed attempts at `submit` refuse a token of
+//! an earlier installation with its owners.
 
 pub mod air_time;
 pub use air_time::{
@@ -238,6 +249,25 @@ pub struct ModelCaps;
 impl Ieee80211Capabilities for ModelCaps {
     type SppScope = oer_protocols_ieee80211_wire::security::spp::Interface;
     const CAPS: LowerMacCapabilities = MODEL_CAPABILITIES;
+}
+
+/// What the model serves of the access-point role: the field of a beacon
+/// goes on its air as the caller wrote it, and its TSF restarts and stops
+/// as the commands say. These are the model's own rules, not a chip's.
+pub const MODEL_ACCESS_POINT: oer_protocols_ieee80211_contracts_port::AccessPointServices =
+    oer_protocols_ieee80211_contracts_port::AccessPointServices {
+        beacon_timestamp: Some(oer_protocols_ieee80211_contracts_port::BeaconTimestamp::Caller),
+        tsf_control: true,
+    };
+
+impl oer_protocols_ieee80211_contracts_port::AccessPointCapabilities for ModelCaps {
+    const ACCESS_POINT: oer_protocols_ieee80211_contracts_port::AccessPointServices =
+        MODEL_ACCESS_POINT;
+}
+
+impl oer_protocols_ieee80211_contracts_port::AccessPointCapabilities for ModelCaps24 {
+    const ACCESS_POINT: oer_protocols_ieee80211_contracts_port::AccessPointServices =
+        MODEL_ACCESS_POINT;
 }
 
 /// The model's capabilities without its 5 GHz band, for host tests of
@@ -624,6 +654,8 @@ struct RawKeyIdentity(Rc<KeyInstall>);
 #[derive(Debug)]
 struct KeyInstall {
     index: u8,
+    /// The installation that issued the key's slot.
+    generation: u32,
     key_id: u8,
     active: Cell<bool>,
     group_role: Option<VifRole>,
@@ -647,9 +679,10 @@ impl PartialEq for RawKeyIdentity {
 impl Eq for RawKeyIdentity {}
 
 impl RawKeyIdentity {
-    fn new(index: u8, key_id: u8, role: VifRole, air: &Rc<ModelAir>) -> Self {
+    fn new(index: u8, generation: u32, key_id: u8, role: VifRole, air: &Rc<ModelAir>) -> Self {
         Self(Rc::new(KeyInstall {
             index,
+            generation,
             key_id,
             active: Cell::new(true),
             group_role: None,
@@ -661,6 +694,7 @@ impl RawKeyIdentity {
     }
     fn group(
         index: u8,
+        generation: u32,
         key_id: GroupKeyId,
         role: VifRole,
         key: Ccmp128Key,
@@ -668,6 +702,7 @@ impl RawKeyIdentity {
     ) -> Self {
         let identity = Self(Rc::new(KeyInstall {
             index,
+            generation,
             key_id: key_id.get(),
             active: Cell::new(true),
             group_role: Some(role),
@@ -1033,6 +1068,10 @@ type ModelStationContextOf<B> =
     <<B as ModelComposition>::Contexts as ModelContext>::OwnedStationConfigureContext<
         <B as ModelComposition>::Identity,
     >;
+type ModelAccessPointContextOf<B> =
+    <<B as ModelComposition>::Contexts as ModelContext>::OwnedAccessPointConfigureContext<
+        <B as ModelComposition>::Identity,
+    >;
 
 /// The types the model's events carry.
 pub struct ModelTypes<B: ModelComposition>(PhantomData<fn() -> B>);
@@ -1052,6 +1091,7 @@ impl<'id, B: ModelComposition + 'id> PortTypes<'id> for ModelTypes<B> {
     type GatePath = ModelPool<<B as ModelComposition>::Identity, 0>;
     type TicketPath = ModelPool<<B as ModelComposition>::Identity, 1>;
     type BlockAckPath = ModelPool<<B as ModelComposition>::Identity, 7>;
+    type BeaconPath = ModelBeaconPath<B>;
     type Fault = ModelFault;
     type Context = <B::Contexts as ModelContext>::Context<'id, B::Identity>;
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = ModelPrepared<'k, 'p, 'id, R, K, B>;
@@ -1144,7 +1184,11 @@ impl<'id, B: ModelComposition + 'id, R: ModelRole + 'id> KeyTypes<'id> for Model
         GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>;
     type PairwiseKey = ModelPairwiseKey<'id, B, R>;
     type GroupKey = ModelGroupKey<'id, B, R>;
-    type GroupPermission = Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>;
+    type GroupPermission = oer_protocols_ieee80211_contracts_port::IssuedSlot<
+        'id,
+        ModelGroupPermission<R>,
+        R::GroupPermissionPath<B::Identity>,
+    >;
     type Identity = KeyIdentity<'id, B::Identity>;
     type GroupSlotIdentity = u8;
     fn pairwise_identity(key: &Self::PairwiseKey) -> Self::Identity {
@@ -1367,39 +1411,21 @@ impl TxBody for ModelBody {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ModelFault;
 
-/// The tokens the install gives the body once.
+/// The tokens the install gives the body once: what both roles share of
+/// the one physical owner, and each role's own permissions.
 pub struct ModelResources<'id, B: ModelComposition> {
-    /// Station's unique association-mode selection permission.
-    pub station_association: AssociationStart<
-        'id,
-        Station,
-        MODEL_KEY_SLOTS,
-        MODEL_KEY_SLOTS,
-        ModelPool<<B as ModelComposition>::Identity, 5>,
-    >,
-    /// AP's interface-wide association-mode selection permission.
-    pub access_point_association: AssociationStart<
-        'id,
-        AccessPoint,
-        MODEL_KEY_SLOTS,
-        MODEL_KEY_SLOTS,
-        ModelPool<<B as ModelComposition>::Identity, 6>,
-    >,
-    /// Station command admission from its own installation component.
-    pub station_commands: InterfacePermissions<
-        'id,
-        Station,
-        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
-    >,
-    /// Access-point command admission from its own installation component.
-    pub access_point_commands: InterfacePermissions<
-        'id,
-        AccessPoint,
-        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
-    >,
-    /// The install's single epoch-source slot; Station constructs its source.
-    pub connection_epoch:
-        Slot<'id, ConnectionEpochKind, ModelPool<<B as ModelComposition>::Identity, 4>>,
+    /// The transmit capacity, the receive Block Ack slots and the gate both
+    /// roles share.
+    pub shared: ModelShared<'id, B>,
+    /// The station's own permissions.
+    pub station: ModelStationPermissions<'id, B>,
+    /// The access point's own permissions.
+    pub access_point: ModelAccessPointPermissions<'id, B>,
+}
+
+/// What both roles share of the one physical owner: tickets, buffers, the
+/// receive Block Ack slots and the gate its arbiter holds.
+pub struct ModelShared<'id, B: ModelComposition> {
     /// The transmit tickets.
     pub tickets: Vec<Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>>,
     /// Sole permission for the body to unpack TX terminals.
@@ -1412,47 +1438,6 @@ pub struct ModelResources<'id, B: ModelComposition> {
     pub small: Vec<ModelBuffer<'id, B, ModelSmall>>,
     /// The large transmit buffers.
     pub large: Vec<ModelBuffer<'id, B, ModelLarge>>,
-    /// The station's pairwise key slots.
-    pub station_pairwise: [PairwiseKeySlot<
-        'id,
-        Station,
-        MODEL_KEY_SLOTS,
-        MODEL_KEY_SLOTS,
-        ModelPool<<B as ModelComposition>::Identity, 5>,
-    >; MODEL_KEY_SLOTS],
-    /// The station's group key slots.
-    pub station_group: [GroupKeySlot<
-        'id,
-        Station,
-        MODEL_KEY_SLOTS,
-        MODEL_KEY_SLOTS,
-        ModelPool<<B as ModelComposition>::Identity, 5>,
-    >; MODEL_KEY_SLOTS],
-    /// The access point's pairwise key slots.
-    pub access_point_pairwise: [PairwiseKeySlot<
-        'id,
-        AccessPoint,
-        MODEL_KEY_SLOTS,
-        MODEL_KEY_SLOTS,
-        ModelPool<<B as ModelComposition>::Identity, 6>,
-    >; MODEL_KEY_SLOTS],
-    /// The access point's group key slots.
-    pub access_point_group: [GroupKeySlot<
-        'id,
-        AccessPoint,
-        MODEL_KEY_SLOTS,
-        MODEL_KEY_SLOTS,
-        ModelPool<<B as ModelComposition>::Identity, 6>,
-    >; MODEL_KEY_SLOTS],
-    /// The station's sole GTK mutation permission.
-    pub station_group_permission:
-        Slot<'id, ModelGroupPermission<Station>, ModelPool<<B as ModelComposition>::Identity, 8>>,
-    /// The access point's sole GTK mutation permission.
-    pub access_point_group_permission: Slot<
-        'id,
-        ModelGroupPermission<AccessPoint>,
-        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 0>,
-    >,
     /// The receive Block Ack slots both roles share.
     pub block_acks: [ModelBlockAckSlot<'id, B>; MODEL_BLOCK_ACK_SLOTS],
     /// The sole authority to construct this installation's arbiter.
@@ -1462,6 +1447,117 @@ pub struct ModelResources<'id, B: ModelComposition> {
     >,
     /// The open transmit gate.
     pub gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>,
+}
+
+/// The station's own permissions.
+pub struct ModelStationPermissions<'id, B: ModelComposition> {
+    /// Its unique association-mode selection permission.
+    pub association: AssociationStart<
+        'id,
+        Station,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 5>,
+    >,
+    /// Its command admission from its own installation component.
+    pub commands: InterfacePermissions<
+        'id,
+        Station,
+        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
+    >,
+    /// The install's single epoch-source slot; Station constructs its source.
+    pub connection_epoch:
+        Slot<'id, ConnectionEpochKind, ModelPool<<B as ModelComposition>::Identity, 4>>,
+    /// Its pairwise key slots.
+    pub pairwise: [PairwiseKeySlot<
+        'id,
+        Station,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 5>,
+    >; MODEL_KEY_SLOTS],
+    /// Its group key slots.
+    pub group: [GroupKeySlot<
+        'id,
+        Station,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 5>,
+    >; MODEL_KEY_SLOTS],
+    /// Its sole GTK mutation permission.
+    pub group_permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+        'id,
+        ModelGroupPermission<Station>,
+        ModelPool<<B as ModelComposition>::Identity, 8>,
+    >,
+}
+
+/// The access point's own permissions.
+pub struct ModelAccessPointPermissions<'id, B: ModelComposition> {
+    /// Its interface-wide association-mode selection permission.
+    pub association: AssociationStart<
+        'id,
+        AccessPoint,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 6>,
+    >,
+    /// Its command admission from its own installation component.
+    pub commands: InterfacePermissions<
+        'id,
+        AccessPoint,
+        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
+    >,
+    /// Its pairwise key slots, one per association identifier.
+    pub pairwise: [PairwiseKeySlot<
+        'id,
+        AccessPoint,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 6>,
+    >; MODEL_KEY_SLOTS],
+    /// Its group key slots.
+    pub group: [GroupKeySlot<
+        'id,
+        AccessPoint,
+        MODEL_KEY_SLOTS,
+        MODEL_KEY_SLOTS,
+        ModelPool<<B as ModelComposition>::Identity, 6>,
+    >; MODEL_KEY_SLOTS],
+    /// Its sole GTK mutation permission.
+    pub group_permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+        'id,
+        ModelGroupPermission<AccessPoint>,
+        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 0>,
+    >,
+    /// The installation's one beacon permission.
+    pub beacon: oer_protocols_ieee80211_contracts_port::BeaconPermission<'id, ModelBeaconPath<B>>,
+}
+
+/// The model's beacon component.
+pub type ModelBeaconPath<B> =
+    oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 3>;
+
+/// The access point's interface as the modeled hardware holds it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ModelAccessPointInterface {
+    /// Its receive rules, `None` while it receives nothing.
+    pub receive: Option<ReceiveFilter>,
+    /// Its TSF.
+    pub tsf: ModelAccessPointTsf,
+}
+
+/// The access point's TSF in the model.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ModelAccessPointTsf {
+    /// Stopped.
+    #[default]
+    Stopped,
+    /// Running from zero since the instant of its restart.
+    Running {
+        /// The model instant it restarted at.
+        since: Instant,
+    },
 }
 
 /// One transmission the air saw.
@@ -1661,6 +1757,8 @@ impl ModelTime {
 /// The air and the world of a model: shared by the backend's driver and
 /// the test.
 pub struct ModelAir {
+    /// What the access point's interface receives and its TSF.
+    access_point: Cell<ModelAccessPointInterface>,
     sent: Cell<Vec<AirFrame>>,
     /// The answers of the next transmissions, in order; once none is
     /// queued, each is acknowledged.
@@ -1726,6 +1824,7 @@ pub struct ModelAir {
 impl ModelAir {
     fn new(clock: Rc<dyn Clock>) -> Self {
         Self {
+            access_point: Default::default(),
             sent: Default::default(),
             answers: Default::default(),
             #[cfg(feature = "test-support")]
@@ -2254,6 +2353,12 @@ impl ModelAir {
             .set(self.expired_msdus.get().saturating_add(mask.count_ones()));
     }
 
+    /// What the access point's interface receives and its TSF, as the
+    /// modeled hardware holds them.
+    pub fn access_point(&self) -> ModelAccessPointInterface {
+        self.access_point.get()
+    }
+
     /// The complete EDCA set currently installed for this interface.
     pub fn edca(&self, role: VifRole) -> EdcaParameterSet {
         self.edca.parameters(role)
@@ -2363,13 +2468,22 @@ impl ResponsePolicy {
 #[derive(Debug)]
 struct AnswerShapeMismatch;
 
-type StationGroupPermission<'id, B> =
-    Slot<'id, ModelGroupPermission<Station>, ModelPool<<B as ModelComposition>::Identity, 8>>;
+type StationGroupPermission<'id, B> = oer_protocols_ieee80211_contracts_port::IssuedSlot<
+    'id,
+    ModelGroupPermission<Station>,
+    ModelPool<<B as ModelComposition>::Identity, 8>,
+>;
 
 struct PendingGroupInstall<'id, B: ModelComposition, R: ModelRole> {
     spp: oer_protocols_ieee80211_wire::security::Spp,
+    /// The installation that issued the association.
+    association: u32,
     slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
-    permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
+    permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+        'id,
+        ModelGroupPermission<R>,
+        R::GroupPermissionPath<B::Identity>,
+    >,
     key_id: GroupKeyId,
     key: Ccmp128Key,
 }
@@ -2385,7 +2499,11 @@ trait GroupInstallationRole: ModelRole + Sized {
     ) -> GroupInstallationCommand<'_, B>;
     fn installed<'o, B: ModelComposition>(
         key: ModelGroupKey<'o, B, Self>,
-        permission: Slot<'o, ModelGroupPermission<Self>, Self::GroupPermissionPath<B::Identity>>,
+        permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
+            'o,
+            ModelGroupPermission<Self>,
+            Self::GroupPermissionPath<B::Identity>,
+        >,
     ) -> OwnedInstalledGroup<'o, B>;
     fn pairwise_installed<'o, B: ModelComposition>(
         key: ModelPairwiseKey<'o, B, Self>,
@@ -2417,7 +2535,7 @@ impl GroupInstallationRole for AccessPoint {
     }
     fn installed<'o, B: ModelComposition>(
         key: ModelGroupKey<'o, B, Self>,
-        permission: Slot<
+        permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
             ModelGroupPermission<Self>,
             oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
@@ -2467,6 +2585,8 @@ struct Prepared<'id, B: ModelComposition> {
     queue: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
     plan: oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
+    /// A beacon's permission, which its terminal returns.
+    beacon: Option<OwnedBeacon<B>>,
 }
 
 impl<B: ModelComposition> Prepared<'_, B> {
@@ -2554,8 +2674,9 @@ mod installation;
 pub use installation::{ModelBackend, ModelPools};
 mod data_port;
 pub use data_port::{
-    MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAdmitted, ModelCommands, ModelGroupInstall,
-    ModelInstall, ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
+    MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAccessPointGroupInstall,
+    ModelAccessPointPairwiseInstall, ModelAdmitted, ModelCommands, ModelGroupInstall, ModelInstall,
+    ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
     ModelPortObservation, ModelReinstallRefused,
 };
 
@@ -2629,6 +2750,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         held.air.apply_association(R::ROLE, pending.spp);
         let identity = RawKeyIdentity::group(
             pending.slot.index(),
+            pending.slot.generation(),
             pending.key_id,
             R::ROLE,
             pending.key,
@@ -2676,6 +2798,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                 self.keys.retain(|key| *key != installed.identity);
                 let identity = RawKeyIdentity::group(
                     installed.slot.index(),
+                    installed.slot.generation(),
                     key_id,
                     VifRole::Station,
                     key,
@@ -3167,8 +3290,9 @@ fn terminal<'id, B: ModelComposition>(
     outcome: ModelSingleOutcome,
 ) {
     held.post(OwnedLowerMacEvent::Terminal(
-        OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::Single(
+        OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::of(
             prepared.operation.complete(outcome),
+            prepared.beacon,
         )),
     ));
 }
@@ -3256,23 +3380,31 @@ type ModelPreparation<'k, 'p, 'id, R, K, B, C> = Result<
 /// the backend identity, never a reference to a portable machine.
 pub struct ModelPrepared<'k, 'p, 'id, R, K, B: ModelComposition> {
     loan: BodyLoan<'id, B::Identity, B>,
+    role: VifRole,
     mpdu: ModelMpdu<'id, B>,
     plan: oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
     key_borrow: PhantomData<&'k ()>,
     proof: PhaseProof<'p, (R, K, B)>,
 }
-/// Metadata lowered before single-MPDU admission; it owns no payload.
-pub struct ModelTxExecution {
+/// Metadata lowered before single-MPDU admission; it owns no payload. A
+/// beacon's admission adds the beacon permission its terminal returns.
+pub struct ModelTxExecution<B: ModelComposition> {
     plan: oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
+    role: VifRole,
+    beacon: Option<OwnedBeacon<B>>,
 }
+
+/// The beacon permission while the model holds its beacon.
+type OwnedBeacon<B> =
+    oer_protocols_ieee80211_contracts_port::BeaconPermission<'static, ModelBeaconPath<B>>;
 impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_, '_, 'id, R, K, B> {
     type Types = ModelTypes<B>;
     type Backend = B;
     type OwnedContext = ModelContextOf<B>;
     type OwnedPayload = ModelMpdu<'static, B>;
-    type Execution = ModelTxExecution;
+    type Execution = ModelTxExecution<B>;
     fn into_admission(
         self,
         context: <Self::Types as PortTypes<'id>>::Context,
@@ -3292,6 +3424,8 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
             execution: ModelTxExecution {
                 plan: self.plan,
                 key: self.key,
+                role: self.role,
+                beacon: None,
             },
         }
     }
@@ -3492,6 +3626,7 @@ fn prepare_model<
     };
     Ok(ModelPrepared {
         loan,
+        role: R::ROLE,
         mpdu,
         plan,
         key: key.map(PreparedKey::new),

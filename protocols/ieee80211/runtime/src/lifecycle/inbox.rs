@@ -556,7 +556,8 @@ where
                     }
                 }
             }
-            terminal @ (LowerMacTerminal::Configured(Configured::AccessPoint(_))
+            terminal @ (LowerMacTerminal::TxCompleted(TxCompleted::Beacon { .. })
+            | LowerMacTerminal::Configured(Configured::AccessPoint(_))
             | LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(
                 _,
             ))
