@@ -10,6 +10,13 @@ use crate::radio::ieee80211::registers::{
 
 /// The entries of the hardware TX MPDU-length link table.
 const MPDU_LENGTH_LINK_COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::he_scratch::COUNT;
+// The init clears every link word by one `clear_he_mpdu_length_links`
+// step each, written out below.
+const _: () = {
+    if MPDU_LENGTH_LINK_COUNT != 120 {
+        panic!("the HE init clears each of the 120 MPDU-length link words");
+    }
+};
 
 /// One hardware TX MPDU-length link-table entry.
 ///
@@ -149,14 +156,130 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_mpdu_length_offset(Bits::constant::<0x17c>());
         });
 
-        // The parent clears this complete 120-word aperture in ascending
-        // order: each word's two fields, the bits above them kept.
-        for word in 0..MPDU_LENGTH_LINK_COUNT {
-            init.modify_he_scratch(element(word), |w| {
-                w.set_mpdu_length(Bits::constant::<0>())
-                    .set_next_link(Bits::constant::<0>());
-            });
-        }
+        // SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108, `hal_he_init`
+        // +0xa0..0xb2: a whole zero word to each of the 120 MPDU-length link
+        // words, in ascending order (`clear_he_mpdu_length_links`). The older
+        // oracle (BLOB_LIBPP_HAL_HE_INIT_SUFFIX) kept bits 31:21.
+        init.clear_he_mpdu_length_links_he_scratch0();
+        init.clear_he_mpdu_length_links_he_scratch1();
+        init.clear_he_mpdu_length_links_he_scratch2();
+        init.clear_he_mpdu_length_links_he_scratch3();
+        init.clear_he_mpdu_length_links_he_scratch4();
+        init.clear_he_mpdu_length_links_he_scratch5();
+        init.clear_he_mpdu_length_links_he_scratch6();
+        init.clear_he_mpdu_length_links_he_scratch7();
+        init.clear_he_mpdu_length_links_he_scratch8();
+        init.clear_he_mpdu_length_links_he_scratch9();
+        init.clear_he_mpdu_length_links_he_scratch10();
+        init.clear_he_mpdu_length_links_he_scratch11();
+        init.clear_he_mpdu_length_links_he_scratch12();
+        init.clear_he_mpdu_length_links_he_scratch13();
+        init.clear_he_mpdu_length_links_he_scratch14();
+        init.clear_he_mpdu_length_links_he_scratch15();
+        init.clear_he_mpdu_length_links_he_scratch16();
+        init.clear_he_mpdu_length_links_he_scratch17();
+        init.clear_he_mpdu_length_links_he_scratch18();
+        init.clear_he_mpdu_length_links_he_scratch19();
+        init.clear_he_mpdu_length_links_he_scratch20();
+        init.clear_he_mpdu_length_links_he_scratch21();
+        init.clear_he_mpdu_length_links_he_scratch22();
+        init.clear_he_mpdu_length_links_he_scratch23();
+        init.clear_he_mpdu_length_links_he_scratch24();
+        init.clear_he_mpdu_length_links_he_scratch25();
+        init.clear_he_mpdu_length_links_he_scratch26();
+        init.clear_he_mpdu_length_links_he_scratch27();
+        init.clear_he_mpdu_length_links_he_scratch28();
+        init.clear_he_mpdu_length_links_he_scratch29();
+        init.clear_he_mpdu_length_links_he_scratch30();
+        init.clear_he_mpdu_length_links_he_scratch31();
+        init.clear_he_mpdu_length_links_he_scratch32();
+        init.clear_he_mpdu_length_links_he_scratch33();
+        init.clear_he_mpdu_length_links_he_scratch34();
+        init.clear_he_mpdu_length_links_he_scratch35();
+        init.clear_he_mpdu_length_links_he_scratch36();
+        init.clear_he_mpdu_length_links_he_scratch37();
+        init.clear_he_mpdu_length_links_he_scratch38();
+        init.clear_he_mpdu_length_links_he_scratch39();
+        init.clear_he_mpdu_length_links_he_scratch40();
+        init.clear_he_mpdu_length_links_he_scratch41();
+        init.clear_he_mpdu_length_links_he_scratch42();
+        init.clear_he_mpdu_length_links_he_scratch43();
+        init.clear_he_mpdu_length_links_he_scratch44();
+        init.clear_he_mpdu_length_links_he_scratch45();
+        init.clear_he_mpdu_length_links_he_scratch46();
+        init.clear_he_mpdu_length_links_he_scratch47();
+        init.clear_he_mpdu_length_links_he_scratch48();
+        init.clear_he_mpdu_length_links_he_scratch49();
+        init.clear_he_mpdu_length_links_he_scratch50();
+        init.clear_he_mpdu_length_links_he_scratch51();
+        init.clear_he_mpdu_length_links_he_scratch52();
+        init.clear_he_mpdu_length_links_he_scratch53();
+        init.clear_he_mpdu_length_links_he_scratch54();
+        init.clear_he_mpdu_length_links_he_scratch55();
+        init.clear_he_mpdu_length_links_he_scratch56();
+        init.clear_he_mpdu_length_links_he_scratch57();
+        init.clear_he_mpdu_length_links_he_scratch58();
+        init.clear_he_mpdu_length_links_he_scratch59();
+        init.clear_he_mpdu_length_links_he_scratch60();
+        init.clear_he_mpdu_length_links_he_scratch61();
+        init.clear_he_mpdu_length_links_he_scratch62();
+        init.clear_he_mpdu_length_links_he_scratch63();
+        init.clear_he_mpdu_length_links_he_scratch64();
+        init.clear_he_mpdu_length_links_he_scratch65();
+        init.clear_he_mpdu_length_links_he_scratch66();
+        init.clear_he_mpdu_length_links_he_scratch67();
+        init.clear_he_mpdu_length_links_he_scratch68();
+        init.clear_he_mpdu_length_links_he_scratch69();
+        init.clear_he_mpdu_length_links_he_scratch70();
+        init.clear_he_mpdu_length_links_he_scratch71();
+        init.clear_he_mpdu_length_links_he_scratch72();
+        init.clear_he_mpdu_length_links_he_scratch73();
+        init.clear_he_mpdu_length_links_he_scratch74();
+        init.clear_he_mpdu_length_links_he_scratch75();
+        init.clear_he_mpdu_length_links_he_scratch76();
+        init.clear_he_mpdu_length_links_he_scratch77();
+        init.clear_he_mpdu_length_links_he_scratch78();
+        init.clear_he_mpdu_length_links_he_scratch79();
+        init.clear_he_mpdu_length_links_he_scratch80();
+        init.clear_he_mpdu_length_links_he_scratch81();
+        init.clear_he_mpdu_length_links_he_scratch82();
+        init.clear_he_mpdu_length_links_he_scratch83();
+        init.clear_he_mpdu_length_links_he_scratch84();
+        init.clear_he_mpdu_length_links_he_scratch85();
+        init.clear_he_mpdu_length_links_he_scratch86();
+        init.clear_he_mpdu_length_links_he_scratch87();
+        init.clear_he_mpdu_length_links_he_scratch88();
+        init.clear_he_mpdu_length_links_he_scratch89();
+        init.clear_he_mpdu_length_links_he_scratch90();
+        init.clear_he_mpdu_length_links_he_scratch91();
+        init.clear_he_mpdu_length_links_he_scratch92();
+        init.clear_he_mpdu_length_links_he_scratch93();
+        init.clear_he_mpdu_length_links_he_scratch94();
+        init.clear_he_mpdu_length_links_he_scratch95();
+        init.clear_he_mpdu_length_links_he_scratch96();
+        init.clear_he_mpdu_length_links_he_scratch97();
+        init.clear_he_mpdu_length_links_he_scratch98();
+        init.clear_he_mpdu_length_links_he_scratch99();
+        init.clear_he_mpdu_length_links_he_scratch100();
+        init.clear_he_mpdu_length_links_he_scratch101();
+        init.clear_he_mpdu_length_links_he_scratch102();
+        init.clear_he_mpdu_length_links_he_scratch103();
+        init.clear_he_mpdu_length_links_he_scratch104();
+        init.clear_he_mpdu_length_links_he_scratch105();
+        init.clear_he_mpdu_length_links_he_scratch106();
+        init.clear_he_mpdu_length_links_he_scratch107();
+        init.clear_he_mpdu_length_links_he_scratch108();
+        init.clear_he_mpdu_length_links_he_scratch109();
+        init.clear_he_mpdu_length_links_he_scratch110();
+        init.clear_he_mpdu_length_links_he_scratch111();
+        init.clear_he_mpdu_length_links_he_scratch112();
+        init.clear_he_mpdu_length_links_he_scratch113();
+        init.clear_he_mpdu_length_links_he_scratch114();
+        init.clear_he_mpdu_length_links_he_scratch115();
+        init.clear_he_mpdu_length_links_he_scratch116();
+        init.clear_he_mpdu_length_links_he_scratch117();
+        init.clear_he_mpdu_length_links_he_scratch118();
+        init.clear_he_mpdu_length_links_he_scratch119();
 
         self.initialize_mac_software_cts();
 

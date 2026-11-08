@@ -93,6 +93,7 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
             })
         );
     }
+
     for physical in 0..4 {
         let protection = registers
             .mac
@@ -118,6 +119,19 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
         control.bit_22_opaque(),
         "the current vendor VHT disable preserves the unclassified lane"
     );
+}
+
+#[test]
+fn every_link_word_is_stored_whole() {
+    // From all ones, each of the 120 link words reads zero in every bit, not
+    // only in its two link fields: the init stores the whole word.
+    let (words, _) = run(u32::MAX);
+    let zero_words = words
+        .wifi_mac_he_init_suffix
+        .iter()
+        .filter(|word| **word == 0)
+        .count();
+    assert!(zero_words >= 120, "{zero_words} whole zero words");
 }
 
 #[test]

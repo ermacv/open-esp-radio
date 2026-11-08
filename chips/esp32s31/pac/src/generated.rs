@@ -311405,6 +311405,966 @@ pub mod wifi_mac {
             change(&mut value);
             self.0.write_indexed::<0x15f0, 0x4, 120>(index, value.0);
         }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH0`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch0(&mut self) {
+            self.0.write::<0x15f0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH1`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch1(&mut self) {
+            self.0.write::<0x15f4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH2`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch2(&mut self) {
+            self.0.write::<0x15f8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH3`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch3(&mut self) {
+            self.0.write::<0x15fc>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH4`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch4(&mut self) {
+            self.0.write::<0x1600>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH5`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch5(&mut self) {
+            self.0.write::<0x1604>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH6`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch6(&mut self) {
+            self.0.write::<0x1608>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH7`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch7(&mut self) {
+            self.0.write::<0x160c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH8`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch8(&mut self) {
+            self.0.write::<0x1610>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH9`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch9(&mut self) {
+            self.0.write::<0x1614>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH10`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch10(&mut self) {
+            self.0.write::<0x1618>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH11`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch11(&mut self) {
+            self.0.write::<0x161c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH12`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch12(&mut self) {
+            self.0.write::<0x1620>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH13`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch13(&mut self) {
+            self.0.write::<0x1624>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH14`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch14(&mut self) {
+            self.0.write::<0x1628>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH15`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch15(&mut self) {
+            self.0.write::<0x162c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH16`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch16(&mut self) {
+            self.0.write::<0x1630>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH17`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch17(&mut self) {
+            self.0.write::<0x1634>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH18`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch18(&mut self) {
+            self.0.write::<0x1638>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH19`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch19(&mut self) {
+            self.0.write::<0x163c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH20`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch20(&mut self) {
+            self.0.write::<0x1640>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH21`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch21(&mut self) {
+            self.0.write::<0x1644>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH22`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch22(&mut self) {
+            self.0.write::<0x1648>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH23`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch23(&mut self) {
+            self.0.write::<0x164c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH24`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch24(&mut self) {
+            self.0.write::<0x1650>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH25`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch25(&mut self) {
+            self.0.write::<0x1654>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH26`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch26(&mut self) {
+            self.0.write::<0x1658>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH27`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch27(&mut self) {
+            self.0.write::<0x165c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH28`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch28(&mut self) {
+            self.0.write::<0x1660>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH29`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch29(&mut self) {
+            self.0.write::<0x1664>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH30`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch30(&mut self) {
+            self.0.write::<0x1668>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH31`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch31(&mut self) {
+            self.0.write::<0x166c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH32`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch32(&mut self) {
+            self.0.write::<0x1670>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH33`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch33(&mut self) {
+            self.0.write::<0x1674>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH34`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch34(&mut self) {
+            self.0.write::<0x1678>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH35`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch35(&mut self) {
+            self.0.write::<0x167c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH36`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch36(&mut self) {
+            self.0.write::<0x1680>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH37`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch37(&mut self) {
+            self.0.write::<0x1684>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH38`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch38(&mut self) {
+            self.0.write::<0x1688>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH39`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch39(&mut self) {
+            self.0.write::<0x168c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH40`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch40(&mut self) {
+            self.0.write::<0x1690>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH41`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch41(&mut self) {
+            self.0.write::<0x1694>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH42`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch42(&mut self) {
+            self.0.write::<0x1698>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH43`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch43(&mut self) {
+            self.0.write::<0x169c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH44`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch44(&mut self) {
+            self.0.write::<0x16a0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH45`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch45(&mut self) {
+            self.0.write::<0x16a4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH46`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch46(&mut self) {
+            self.0.write::<0x16a8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH47`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch47(&mut self) {
+            self.0.write::<0x16ac>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH48`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch48(&mut self) {
+            self.0.write::<0x16b0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH49`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch49(&mut self) {
+            self.0.write::<0x16b4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH50`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch50(&mut self) {
+            self.0.write::<0x16b8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH51`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch51(&mut self) {
+            self.0.write::<0x16bc>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH52`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch52(&mut self) {
+            self.0.write::<0x16c0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH53`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch53(&mut self) {
+            self.0.write::<0x16c4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH54`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch54(&mut self) {
+            self.0.write::<0x16c8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH55`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch55(&mut self) {
+            self.0.write::<0x16cc>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH56`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch56(&mut self) {
+            self.0.write::<0x16d0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH57`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch57(&mut self) {
+            self.0.write::<0x16d4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH58`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch58(&mut self) {
+            self.0.write::<0x16d8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH59`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch59(&mut self) {
+            self.0.write::<0x16dc>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH60`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch60(&mut self) {
+            self.0.write::<0x16e0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH61`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch61(&mut self) {
+            self.0.write::<0x16e4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH62`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch62(&mut self) {
+            self.0.write::<0x16e8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH63`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch63(&mut self) {
+            self.0.write::<0x16ec>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH64`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch64(&mut self) {
+            self.0.write::<0x16f0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH65`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch65(&mut self) {
+            self.0.write::<0x16f4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH66`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch66(&mut self) {
+            self.0.write::<0x16f8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH67`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch67(&mut self) {
+            self.0.write::<0x16fc>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH68`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch68(&mut self) {
+            self.0.write::<0x1700>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH69`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch69(&mut self) {
+            self.0.write::<0x1704>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH70`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch70(&mut self) {
+            self.0.write::<0x1708>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH71`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch71(&mut self) {
+            self.0.write::<0x170c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH72`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch72(&mut self) {
+            self.0.write::<0x1710>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH73`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch73(&mut self) {
+            self.0.write::<0x1714>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH74`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch74(&mut self) {
+            self.0.write::<0x1718>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH75`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch75(&mut self) {
+            self.0.write::<0x171c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH76`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch76(&mut self) {
+            self.0.write::<0x1720>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH77`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch77(&mut self) {
+            self.0.write::<0x1724>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH78`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch78(&mut self) {
+            self.0.write::<0x1728>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH79`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch79(&mut self) {
+            self.0.write::<0x172c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH80`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch80(&mut self) {
+            self.0.write::<0x1730>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH81`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch81(&mut self) {
+            self.0.write::<0x1734>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH82`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch82(&mut self) {
+            self.0.write::<0x1738>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH83`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch83(&mut self) {
+            self.0.write::<0x173c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH84`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch84(&mut self) {
+            self.0.write::<0x1740>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH85`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch85(&mut self) {
+            self.0.write::<0x1744>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH86`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch86(&mut self) {
+            self.0.write::<0x1748>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH87`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch87(&mut self) {
+            self.0.write::<0x174c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH88`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch88(&mut self) {
+            self.0.write::<0x1750>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH89`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch89(&mut self) {
+            self.0.write::<0x1754>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH90`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch90(&mut self) {
+            self.0.write::<0x1758>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH91`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch91(&mut self) {
+            self.0.write::<0x175c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH92`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch92(&mut self) {
+            self.0.write::<0x1760>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH93`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch93(&mut self) {
+            self.0.write::<0x1764>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH94`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch94(&mut self) {
+            self.0.write::<0x1768>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH95`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch95(&mut self) {
+            self.0.write::<0x176c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH96`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch96(&mut self) {
+            self.0.write::<0x1770>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH97`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch97(&mut self) {
+            self.0.write::<0x1774>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH98`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch98(&mut self) {
+            self.0.write::<0x1778>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH99`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch99(&mut self) {
+            self.0.write::<0x177c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH100`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch100(&mut self) {
+            self.0.write::<0x1780>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH101`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch101(&mut self) {
+            self.0.write::<0x1784>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH102`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch102(&mut self) {
+            self.0.write::<0x1788>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH103`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch103(&mut self) {
+            self.0.write::<0x178c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH104`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch104(&mut self) {
+            self.0.write::<0x1790>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH105`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch105(&mut self) {
+            self.0.write::<0x1794>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH106`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch106(&mut self) {
+            self.0.write::<0x1798>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH107`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch107(&mut self) {
+            self.0.write::<0x179c>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH108`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch108(&mut self) {
+            self.0.write::<0x17a0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH109`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch109(&mut self) {
+            self.0.write::<0x17a4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH110`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch110(&mut self) {
+            self.0.write::<0x17a8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH111`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch111(&mut self) {
+            self.0.write::<0x17ac>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH112`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch112(&mut self) {
+            self.0.write::<0x17b0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH113`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch113(&mut self) {
+            self.0.write::<0x17b4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH114`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch114(&mut self) {
+            self.0.write::<0x17b8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH115`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch115(&mut self) {
+            self.0.write::<0x17bc>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH116`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch116(&mut self) {
+            self.0.write::<0x17c0>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH117`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch117(&mut self) {
+            self.0.write::<0x17c4>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH118`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch118(&mut self) {
+            self.0.write::<0x17c8>(0x00000000);
+        }
+
+        /// Write the vendor's whole-word image `0x00000000`, undeclared bits included: one step of `clear_he_mpdu_length_links`, which the HAL orders (`WIFI_MAC.HE_SCRATCH119`).
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108.
+        #[inline]
+        pub fn clear_he_mpdu_length_links_he_scratch119(&mut self) {
+            self.0.write::<0x17cc>(0x00000000);
+        }
     }
 
     /// The `WifiMacHeMuEdcaTimer` part of `WIFI_MAC`.

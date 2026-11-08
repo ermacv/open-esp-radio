@@ -8,18 +8,23 @@ use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters};
 impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Apply the complete prefix through `hal_init_tb_tx`.
     ///
-    /// SOURCE: complete pinned `libpp.a[hal_mac_ctl.o]` parent and
-    /// leaves recorded as `BLOB_LIBPP_HAL_HE_INIT_PREFIX`. The transaction is
+    /// SOURCE: complete `libpp.a[hal_mac_ctl.o]` parent and leaves recorded
+    /// as `BLOB_LIBPP_HAL_HE_INIT_PREFIX` (an older libpp), with the pinned
+    /// library's differences `BLOB_LIBPP_HAL_HE_INIT_PIN_20261108`. The transaction is
     /// twenty-two fresh-read RMW edges plus one final volatile status/sync read
     /// of the shared PHY's AGC word, which `agc` lends.
     /// It stops immediately before the parent calls `hal_init_tx_pwr`.
     pub fn initialize_mac_he_prefix<A: Placement>(&mut self, agc: &PhyAgcOracleWifiBb<A>) {
         let options = &mut self.mac.wifi_mac_he_init_suffix;
+        // SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108, `hal_he_init`
+        // +0x0e..0x18 clears bit 31, then +0x1a..0x24 clears bit 30 alone.
+        // The older oracle (BLOB_LIBPP_HAL_HE_INIT_PREFIX) cleared bits 31:30
+        // in the second edge.
         options.modify_he_default_control(|w| {
             w.set_ul_mu_disable(false);
         });
         options.modify_he_default_control(|w| {
-            w.set_ul_mu_disable(false).set_ul_mu_data_disable(false);
+            w.set_ul_mu_data_disable(false);
         });
 
         let init = &mut self.mac.wifi_mac_he_init_prefix;
@@ -35,9 +40,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         init.modify_bf_timing_control(|w| {
             w.set_he_beam_ndp_time(0x71);
         });
+        // SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108, `hal_init_bf`
+        // +0x46..0x56 replaces bits 7:1 with 0x10 and keeps bit 0. The older
+        // oracle (BLOB_LIBPP_HAL_HE_INIT_PREFIX) replaced the whole low byte.
         init.modify_bf_timing_control(|w| {
-            w.set_bf_memory_write_enable(false)
-                .set_rx_bfrp_timeout_ms(Bits::constant::<0x10>());
+            w.set_rx_bfrp_timeout_ms(Bits::constant::<0x10>());
         });
         init.modify_bf_timing_control(|w| {
             w.set_he_beam_hw_sequence_select(Bits::constant::<5>());
