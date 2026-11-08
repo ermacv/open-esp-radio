@@ -148,6 +148,9 @@ pub enum LeaseFault {
     Router,
     /// A domain name server option not of whole addresses, RFC 2132, 3.8.
     Servers,
+    /// The lease, counted from its REQUEST, ended before its ACK came:
+    /// RFC 2131, 4.4.5 has its address no longer used.
+    Expired,
 }
 
 /// What a message or a time did to the interface's address.
@@ -333,6 +336,12 @@ impl Client {
 
     pub(crate) const fn lease(&self) -> Option<&Lease> {
         self.lease.as_ref()
+    }
+
+    /// Whether the lease the address stands on is over at `now`, though no
+    /// tick has taken it away yet.
+    pub(crate) fn expired(&self, now: Instant) -> bool {
+        self.lease.is_some_and(|lease| now >= lease.expires)
     }
 
     pub(crate) const fn state(&self) -> DhcpState {
@@ -682,6 +691,11 @@ impl Client {
             ) => {
                 let obtained = self.sent.unwrap_or(now);
                 let lease = lease(&message, server, obtained).map_err(DhcpDrop::Lease)?;
+                // RFC 2131, 4.4.5: a lease counts from its REQUEST, and one
+                // already over grants no use; the client goes on as it was.
+                if now >= lease.expires {
+                    return Err(DhcpDrop::Lease(LeaseFault::Expired));
+                }
                 self.lease = Some(lease);
                 self.phase = Phase::Bound;
                 self.owed = None;
@@ -788,10 +802,13 @@ fn lease(
     })
 }
 
-/// T1 and T2 of a lease of `length`, RFC 2131, 4.4.5: the server's when T1 <
-/// T2 < the lease; with T1 alone, T2 three quarters of the way from it to the
-/// end; with T2 alone, T1 the lesser of half the lease and T2; else the
-/// defaults, half and seven eighths (Xarxa fbebde5).
+/// T1 and T2 of a lease of `length`, always T1 < T2 < the lease, as RFC 2131,
+/// 4.4.5 requires: the server's when they are so ordered; with T1 alone below
+/// the lease, T2 three quarters of the way from it to the end (Xarxa
+/// fbebde5); with T2 alone above zero and below the lease, T1 half the lease,
+/// or half T2 when T2 comes first; otherwise, values out of that order
+/// included, the defaults, half and seven eighths. A lease is at least one
+/// second, so each of these is strict.
 fn times(length: Duration, t1: Option<Duration>, t2: Option<Duration>) -> (Duration, Duration) {
     let (total, half_lease) = (length.as_micros(), length.as_micros() / 2);
     match (t1, t2) {
@@ -803,8 +820,13 @@ fn times(length: Duration, t1: Option<Duration>, t2: Option<Duration>) -> (Durat
                 Duration::from_micros(t1.as_micros().saturating_add((gap / 4).saturating_mul(3))),
             )
         }
-        (None, Some(t2)) if t2 < length => {
-            (Duration::from_micros(half_lease.min(t2.as_micros())), t2)
+        (None, Some(t2)) if t2.as_micros() > 0 && t2 < length => {
+            let t1 = if half_lease < t2.as_micros() {
+                half_lease
+            } else {
+                t2.as_micros() / 2
+            };
+            (Duration::from_micros(t1), t2)
         }
         _ => (
             Duration::from_micros(half_lease),

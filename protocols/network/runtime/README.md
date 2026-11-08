@@ -145,8 +145,10 @@ delivered before the last await, so every work still open never went out.
 
 `Service::watch` gives the service a `ConfigurationWatch` to publish the
 core's `Configuration` to: at once, then at the end of each turn in which the
-core's `configuration_changes` moved, and once more, empty, at `retire`, as the
-lease leaves with its core. `changes` counts publications, and `changed` waits
+core's `configuration_changes` moved. The service's end, `retire` or a drop
+of the service, ends the watch for good, as the lease leaves with its core:
+reads find no configuration and the waiter wakes, by a flag that borrows no
+value cell. A cancelled `run` ends nothing. `changes` counts publications, and `changed` waits
 for the next; one task waits at a time. A read meets a publication in progress
 only from another hart, and is refused for it, never handed an old value as
 new.

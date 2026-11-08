@@ -866,6 +866,13 @@ impl<
         self.configured();
     }
 
+    /// The address a send may use at `now`: none past its lease's end, even
+    /// before a tick has taken it away, RFC 2131, 4.4.5.
+    fn usable(&self, now: Instant) -> Option<Ipv4> {
+        self.ipv4
+            .filter(|_| !self.dhcp.as_ref().is_some_and(|client| client.expired(now)))
+    }
+
     /// The address a frame goes out from: 0 before the interface has one.
     fn source(&self) -> [u8; 4] {
         self.ipv4.map_or(UNSPECIFIED, |ipv4| ipv4.address())
@@ -879,15 +886,18 @@ impl<
                 .is_some_and(|ipv4| ipv4.is_directed_broadcast(address))
     }
 
-    /// Whether data may take another neighbor entry for `hop`: with a DHCP
-    /// client, data and echo replies hold at most all entries but one, so a
-    /// renewal always finds one, RFC 2131, 4.4.5's unicast.
+    /// Whether data may protect `hop`'s neighbor entry: with a DHCP client,
+    /// data and echo replies protect at most all entries but one, so a
+    /// renewal always finds one, RFC 2131, 4.4.5's unicast. What counts is
+    /// the protection a send acquires, not the entry's presence: an entry
+    /// data protects already stays its own, cached or expired, and one that
+    /// is merely cached costs a place like any other.
     fn data_may_resolve(&self, hop: [u8; 4]) -> bool {
-        if self.dhcp.is_none() || self.neighbors.holds(hop) {
-            return true;
-        }
         let sockets = &self.sockets;
         let echoes = &self.echoes;
+        if self.dhcp.is_none() || data_needs(sockets, echoes, hop) {
+            return true;
+        }
         self.neighbors
             .count(|address| data_needs(sockets, echoes, address))
             < NEIGHBORS.saturating_sub(1)
@@ -1059,7 +1069,7 @@ impl<
             .position(|place| matches!(place.run, Run::Free))
             .ok_or(SendRefusal::NoPlace)?;
         let number = u8::try_from(free).map_err(|_| SendRefusal::NoPlace)?;
-        let ipv4 = self.ipv4.ok_or(SendRefusal::NoAddress)?;
+        let ipv4 = self.usable(now).ok_or(SendRefusal::NoAddress)?;
         let hop = if self.is_broadcast(remote.address) {
             None
         } else {
@@ -1107,7 +1117,8 @@ impl<
     /// free for a new send: an ARP answer, an entry asked for again past its
     /// life, a resolution given up or refused, and every end of running work
     /// that held a neighbor (a commit, a reject, a decline, a withdrawal, a
-    /// close, an eviction, `Unreachable`). A waiter for
+    /// close, an eviction, `Unreachable`, an echo reply's end, an address
+    /// change). A waiter for
     /// [`SendRefusal::NeighborsFull`] keeps the value it saw; reading it
     /// resets nothing.
     pub const fn neighbors_changed(&self) -> u32 {
@@ -1555,7 +1566,7 @@ impl<
             return Err(IcmpDrop::Malformed);
         }
         let ipv4 = self
-            .ipv4
+            .usable(now)
             .filter(|ipv4| ipv4.address() == destination)
             .ok_or(IcmpDrop::Broadcast)?;
         if !is_unicast(source) {
@@ -1938,7 +1949,7 @@ impl<
         let mut headers = [0; ECHO_HEADERS];
         self.ip_headers(
             peer,
-            self.ipv4?.address(),
+            self.usable(now)?.address(),
             owed.to,
             PROTOCOL_ICMP,
             owed.block.octets().len(),
@@ -1987,6 +1998,8 @@ impl<
         serial: u64,
         peer: [u8; 6],
     ) -> Option<Frame<'_>> {
+        // No frame leaves from an address past its lease's end.
+        let source = self.usable(now)?.address();
         let open = self.sockets.get(usize::from(socket))?;
         let source_port = open.port?;
         let entry = open
@@ -2020,7 +2033,7 @@ impl<
             length: wire_length,
             checksum: 0,
         };
-        let pseudo = ipv4_pseudo_header(self.source(), remote.address, PROTOCOL_UDP, wire_length);
+        let pseudo = ipv4_pseudo_header(source, remote.address, PROTOCOL_UDP, wire_length);
         // A block's data is here to sum; a producer's is summed in the slot.
         let udp = match data {
             Some(data) => UdpHeader {
@@ -2052,7 +2065,7 @@ impl<
                     identification: self.identification,
                     time_to_live: TIME_TO_LIVE,
                     protocol: PROTOCOL_UDP,
-                    source: self.source(),
+                    source,
                     destination: remote.address,
                 }
                 .to_bytes(),
@@ -2102,13 +2115,19 @@ impl<
             }
             Work::Datagram { .. } => self.end_published(grant, Outcome::Rejected, pool),
             Work::Dhcp { serial, .. } => self.dhcp_sent(now, serial),
-            Work::Echo { serial, .. } => {
-                if let Some(owed) = self.echoes.take(serial) {
-                    pool.give(owed.block);
-                }
-                self.forget_unneeded();
-            }
+            Work::Echo { serial, .. } => self.end_echo(serial, pool),
         }
+    }
+
+    /// The echo reply of `serial` ends at its publication, taken or refused
+    /// for good: its block goes home, and the neighbor it protected may serve
+    /// a new send, which [`Self::neighbors_changed`] tells.
+    fn end_echo<const BLOCKS: usize>(&mut self, serial: u64, pool: &mut Pool<'m, B, SIZE, BLOCKS>) {
+        if let Some(owed) = self.echoes.take(serial) {
+            pool.give(owed.block);
+            self.neighbors_moved();
+        }
+        self.forget_unneeded();
     }
 
     /// The port took the client's message of `serial`, or refused it for
@@ -2182,10 +2201,7 @@ impl<
             }
             Work::Echo { serial, .. } => {
                 self.identification = self.identification.wrapping_add(1);
-                if let Some(owed) = self.echoes.take(serial) {
-                    pool.give(owed.block);
-                }
-                self.forget_unneeded();
+                self.end_echo(serial, pool);
             }
             Work::Datagram { socket, place, .. } => {
                 self.cursor = usize::from(socket).wrapping_add(1);

@@ -6,6 +6,7 @@
 use super::*;
 use crate::{Configuration, DhcpDrop, DhcpState, Ipv4, LeaseFault};
 use oer_portable_wire::Writer;
+use oer_protocols_network_port::Class;
 use oer_protocols_network_wire::dhcp::{
     self as wire, DhcpMessage, Fixed, Flags, MessageType, Op, option,
 };
@@ -949,14 +950,30 @@ macro_rules! times {
     }};
 }
 
+fn micros_of<B>(stack: &mut Stack<B>, t1: Option<u32>, t2: Option<u32>) -> (u64, u64) {
+    times_of(stack, t1, t2);
+    let lease = configuration(stack).lease.unwrap();
+    (lease.renew.as_micros(), lease.rebind.as_micros())
+}
+
+macro_rules! times_micros {
+    ($t1:expr, $t2:expr) => {{
+        brand!(Net);
+        let mut times = (0, 0);
+        run::<Net>(dhcp_interface(), |stack| times = micros_of(stack, $t1, $t2));
+        times
+    }};
+}
+
 #[test]
 fn a_lease_takes_the_servers_t1_and_t2_when_they_are_in_order() {
     // A lease of 1000 s.
     assert_eq!(times!(Some(100), Some(200)), (100, 200));
     // T1 alone: T2 three quarters of the way from it to the end.
     assert_eq!(times!(Some(200), None), (200, 800));
-    // T2 alone: T1 the lesser of half the lease and T2.
-    assert_eq!(times!(None, Some(300)), (300, 300));
+    // T2 alone: T1 half the lease, or half T2 when T2 comes first, so T1
+    // stays before T2.
+    assert_eq!(times!(None, Some(300)), (150, 300));
     assert_eq!(times!(None, Some(900)), (500, 900));
     // Out of order, or past the end: the defaults.
     assert_eq!(times!(Some(900), Some(200)), (500, 875));
@@ -1115,4 +1132,244 @@ fn a_neighbor_data_holds_takes_no_second_entry_even_once_expired() {
         let block = filled(stack.pool(), b"two");
         stack.send(secs(100), &socket, peer(), block).unwrap();
     });
+}
+
+// Review of #1187 at cdf1ecc74: its seven counterexamples, as regressions.
+
+#[test]
+fn an_echo_s_end_releases_the_neighbors_wait_counter() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let now = secs(10);
+        let reply = arp_frame(Operation::Reply, (PEER, PEER_IP), OFFERED);
+        stack.input(now, &reply, &mut ());
+        let request = super::echo::icmp_frame(OFFERED, &super::echo::echo(1, b"ping"));
+        stack.input(now, &request, &mut ());
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let next = Remote {
+            address: [192, 0, 2, 3],
+            port: 7,
+        };
+        assert_eq!(
+            stack.declare(now, &socket, next, 16).err(),
+            Some(SendRefusal::NeighborsFull)
+        );
+        let seen = stack.neighbors_changed();
+        let demand = stack.poll_demand(now).unwrap();
+        assert_eq!(demand.ready.class, Class::Control);
+        stack.transmit(now, demand.grant(), unproduced).unwrap();
+        assert_ne!(
+            stack.neighbors_changed(),
+            seen,
+            "a held producer learns that a neighbor can be used"
+        );
+        assert!(stack.declare(now, &socket, next, 16).is_ok());
+    });
+}
+
+#[test]
+fn an_echo_refused_for_good_releases_the_neighbors_wait_counter() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let now = secs(10);
+        let reply = arp_frame(Operation::Reply, (PEER, PEER_IP), OFFERED);
+        stack.input(now, &reply, &mut ());
+        let request = super::echo::icmp_frame(OFFERED, &super::echo::echo(1, b"ping"));
+        stack.input(now, &request, &mut ());
+        let seen = stack.neighbors_changed();
+        stack.port_mut().rejects = true;
+        let demand = stack.poll_demand(now).unwrap();
+        assert!(stack.transmit(now, demand.grant(), unproduced).is_err());
+        assert_ne!(stack.neighbors_changed(), seen);
+        assert_eq!(stack.poll_demand(now), None);
+    });
+}
+
+#[test]
+fn a_cached_neighbor_data_does_not_hold_takes_the_reserve_like_any_other() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let now = secs(10);
+        let other_ip = [192, 0, 2, 3];
+        for (hardware, ip) in [(PEER, PEER_IP), (MOVED, other_ip)] {
+            stack.input(
+                now,
+                &arp_frame(Operation::Reply, (hardware, ip), OFFERED),
+                &mut (),
+            );
+        }
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let _first = stack.declare(now, &socket, peer(), 16).unwrap();
+        let second = stack.declare(
+            now,
+            &socket,
+            Remote {
+                address: other_ip,
+                port: 7,
+            },
+            16,
+        );
+        assert_eq!(second.err(), Some(SendRefusal::NeighborsFull));
+        // The entry data holds stays its own, expired too.
+        assert!(stack.declare(secs(100), &socket, peer(), 16).is_ok());
+    });
+}
+
+#[test]
+fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let now = secs(490);
+        let other_ip = [192, 0, 2, 3];
+        for (hardware, ip) in [(PEER, PEER_IP), (MOVED, other_ip)] {
+            stack.input(
+                now,
+                &arp_frame(Operation::Reply, (hardware, ip), OFFERED),
+                &mut (),
+            );
+        }
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let _first = stack.declare(now, &socket, peer(), 16).unwrap();
+        let _second = stack.declare(
+            now,
+            &socket,
+            Remote {
+                address: other_ip,
+                port: 7,
+            },
+            16,
+        );
+        stack.tick(secs(500), &mut ());
+        assert_eq!(stack.configuration().dhcp, Some(DhcpState::Renewing));
+        let ready: Vec<_> = stack.demands(secs(500)).collect();
+        assert!(
+            ready.iter().any(|work| work.ready.class == Class::Control),
+            "T1 owes a renewal or its server's ARP: {ready:?}"
+        );
+    });
+}
+
+#[test]
+fn an_ack_already_expired_from_its_request_enables_no_address() {
+    leasing!(|stack| {
+        let xid = requesting(stack, at(0));
+        let now = secs(2);
+        // A tick comes before intake, as in a service's turn.
+        stack.tick(now, &mut ());
+        let mut ack = Reply::new(MessageType::Ack, xid);
+        ack.options = with(
+            ack_options(),
+            option::LEASE_TIME,
+            Some(1_u32.to_be_bytes().to_vec()),
+        );
+        assert_eq!(
+            give(stack, now, &ack.frame()).0,
+            [NetEvent::Dhcp(DhcpDrop::Lease(LeaseFault::Expired))]
+        );
+        assert!(stack.configuration().ipv4.is_none());
+        assert_eq!(stack.configuration().dhcp, Some(DhcpState::Requesting));
+    });
+}
+
+#[test]
+fn a_late_expired_ack_publishes_no_user_data_before_the_next_tick() {
+    leasing!(|stack| {
+        let xid = requesting(stack, at(0));
+        let now = secs(2);
+        stack.tick(now, &mut ());
+        let mut ack = Reply::new(MessageType::Ack, xid);
+        ack.options = with(
+            ack_options(),
+            option::LEASE_TIME,
+            Some(1_u32.to_be_bytes().to_vec()),
+        );
+        give(stack, now, &ack.frame());
+        let socket = stack.open(7, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"expired");
+        let to = Remote {
+            address: [255; 4],
+            port: 7,
+        };
+        let refused = stack.send(now, &socket, to, block).unwrap_err();
+        assert_eq!(refused.reason, SendRefusal::NoAddress);
+        stack.pool().give(refused.block);
+    });
+}
+
+#[test]
+fn a_renewal_ack_already_past_its_end_keeps_the_lease_to_its_own_end() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        // A rebind REQUEST at T2, its ACK of a 100 s lease 200 s late.
+        let xid = assert_extension(&one(stack, secs(875)), true);
+        let mut ack = Reply::new(MessageType::Ack, xid);
+        ack.options = with(
+            ack_options(),
+            option::LEASE_TIME,
+            Some(100_u32.to_be_bytes().to_vec()),
+        );
+        assert_eq!(
+            give(stack, secs(990), &ack.frame()).0,
+            [NetEvent::Dhcp(DhcpDrop::Lease(LeaseFault::Expired))]
+        );
+        assert_eq!(configuration(stack).lease.unwrap().expires, secs(1000));
+        // At the old lease's end the address goes, as without the ACK.
+        one(stack, secs(1000));
+        assert_eq!(configuration(stack).ipv4, None);
+    });
+}
+
+#[test]
+fn a_lease_at_its_exact_end_carries_no_send() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let socket = stack.open(7, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"late");
+        // No tick at 1000 s yet: the send itself meets the end.
+        let refused = stack.send(secs(1000), &socket, peer(), block).unwrap_err();
+        assert_eq!(refused.reason, SendRefusal::NoAddress);
+        stack.pool().give(refused.block);
+        let block = filled(stack.pool(), b"in time");
+        assert!(stack.send(at(999_999), &socket, peer(), block).is_ok());
+    });
+}
+
+#[test]
+fn an_ack_with_only_an_early_t2_still_renews_before_it_rebinds() {
+    leasing!(|stack| {
+        bound_with(
+            stack,
+            at(0),
+            with(
+                ack_options(),
+                option::REBINDING_TIME,
+                Some(300_u32.to_be_bytes().to_vec()),
+            ),
+        );
+        let lease = stack.configuration().lease.unwrap();
+        assert!(lease.renew < lease.rebind, "{lease:?}");
+        turn(stack, secs(150), &mut Dropped::default());
+        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Renewing));
+    });
+}
+
+#[test]
+fn t1_and_t2_stay_in_order_at_their_bounds() {
+    // T2 of one second: T1 half of it.
+    assert_eq!(times_micros!(None, Some(1)), (500_000, 1_000_000));
+    // T2 at half the lease: T1 half of T2, not equal to it.
+    assert_eq!(times_micros!(None, Some(500)), (250_000_000, 500_000_000));
+    // A zero T2 cannot follow any T1: the defaults.
+    assert_eq!(times_micros!(None, Some(0)), (500_000_000, 875_000_000));
+    // T1 a second before the end: T2 three quarters of that second on.
+    assert_eq!(times_micros!(Some(999), None), (999_000_000, 999_750_000));
+    // T2 equal to T1, or to the end: the defaults.
+    assert_eq!(
+        times_micros!(Some(300), Some(300)),
+        (500_000_000, 875_000_000)
+    );
+    assert_eq!(
+        times_micros!(Some(300), Some(1000)),
+        (500_000_000, 875_000_000)
+    );
 }

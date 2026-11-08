@@ -174,6 +174,20 @@ impl<
     }
 }
 
+/// A service's watch, which its end, retirement or drop, ends: a cancelled
+/// `run` drops no service, so it ends nothing.
+struct Watching<'a> {
+    watch: &'a ConfigurationWatch,
+    /// The core's count of changes at the last publication.
+    seen: u32,
+}
+
+impl Drop for Watching<'_> {
+    fn drop(&mut self) {
+        self.watch.end();
+    }
+}
+
 /// A socket the core refused, with its storage untouched for another try.
 #[derive(Debug)]
 pub struct BindRefused<'a, T> {
@@ -249,7 +263,7 @@ pub struct Service<
     local: L,
     /// Where the interface's address is published, and the core's count of
     /// changes at the last publication.
-    watch: Option<(&'a ConfigurationWatch, u32)>,
+    watch: Option<Watching<'a>>,
 }
 
 impl<
@@ -458,14 +472,17 @@ impl<
         watch.begin(Watched {
             configuration: Some(self.owner.configuration()),
         })?;
-        self.watch = Some((watch, changes));
+        self.watch = Some(Watching {
+            watch,
+            seen: changes,
+        });
         Ok(())
     }
 
     /// Publish the address if the turn changed it.
     fn publish_configuration(&mut self) {
         let changes = self.owner.configuration_changes();
-        if let Some((watch, seen)) = &mut self.watch
+        if let Some(Watching { watch, seen }) = &mut self.watch
             && *seen != changes
         {
             // Only this service lends the cell, and readers lend it for a
@@ -965,14 +982,9 @@ impl<
     {
         let cause = self.ended.unwrap_or(EndCause::Stopped);
         let mut this = self;
-        if let Some((watch, _)) = this.watch.take() {
-            // The lease leaves with the core. A reader holding the cell now
-            // finds the last address until its next read; nothing else
-            // publishes here.
-            let _published = watch.publish(Watched {
-                configuration: None,
-            });
-        }
+        // The lease leaves with the core: the watch ends here, as it would
+        // at a drop.
+        drop(this.watch.take());
         while this.take_home() {}
         let adopted = this.adopted;
         let returns = this.returns;

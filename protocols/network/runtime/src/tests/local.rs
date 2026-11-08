@@ -1685,3 +1685,123 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
     );
     drop(ended);
 }
+
+/// The peer's echo request to us.
+fn peer_pings() -> Vec<u8> {
+    use oer_protocols_network_wire::icmp::{Echo, MessageType as Icmp, PROTOCOL_ICMP};
+    use oer_protocols_network_wire::ip::{DsField, Ipv4Fields};
+    let request = Echo {
+        kind: Icmp::Echo,
+        code: 0,
+        checksum: 0,
+        identifier: 1,
+        sequence: 1,
+        data: b"ping",
+    };
+    let mut message = request.header(Icmp::Echo).to_vec();
+    message.extend_from_slice(b"ping");
+    let mut frame = EthernetHeader {
+        destination: LOCAL,
+        source: PEER,
+        ether_type: EtherType::IPV4,
+    }
+    .to_bytes()
+    .to_vec();
+    frame.extend_from_slice(
+        &Ipv4Fields {
+            services: DsField::from_bytes([0]),
+            total_length: u16::try_from(20 + message.len()).unwrap(),
+            identification: 1,
+            time_to_live: 64,
+            protocol: PROTOCOL_ICMP,
+            source: PEER_IP,
+            destination: OUR_IP,
+        }
+        .to_bytes(),
+    );
+    frame.extend_from_slice(&message);
+    frame
+}
+
+#[test]
+fn an_echo_reply_s_end_releases_a_neighbors_full_hold() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        mut socket,
+        line,
+        script,
+        clock,
+        ..
+    } = direct::<Net>();
+    // The peer is known, and its echo reply waits for a full port: the
+    // reply holds its entry, a channel datagram holds the other.
+    line.0.borrow_mut().incoming.push_back(peer_asks());
+    line.0.borrow_mut().incoming.push_back(peer_pings());
+    line.open(true);
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let (count, waker) = counter();
+    let _asking = channel_send(&mut socket, &mut run, host(7), b"asking");
+    settle(&mut run, &count, &waker);
+    let a = tag(0, 0);
+    script.push(a, host(9), 16);
+    script.wake();
+    settle(&mut run, &count, &waker);
+    assert_eq!(
+        script.calls(),
+        [
+            Call::Offered(a),
+            Call::Refused(a, SendRefusal::NeighborsFull)
+        ]
+    );
+    // The reply goes: its entry is free, and the hold gives way.
+    line.open(false);
+    settle(&mut run, &count, &waker);
+    let replies = line
+        .0
+        .borrow()
+        .sent
+        .iter()
+        .filter(|frame| frame.get(23) == Some(&1))
+        .count();
+    assert_eq!(replies, 1, "the echo reply went");
+    assert_eq!(script.calls_from(2), [Call::Offered(a)], "asked again");
+}
+
+#[test]
+fn dropping_the_service_ends_the_watch_and_wakes_its_reader() {
+    brand!(Net);
+    let Bench {
+        mut service, clock, ..
+    } = direct::<Net>();
+    let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
+    service.watch(watch).unwrap();
+    assert!(watch.read().unwrap().configuration.unwrap().ipv4.is_some());
+    let seen = watch.changes();
+    let (count, waker) = counter();
+    let cx = &mut Context::from_waker(&waker);
+    let mut changed = pin!(watch.changed(seen));
+    assert!(changed.as_mut().poll(cx).is_pending());
+    // A cancelled run keeps the service, and the watch with it.
+    {
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        assert!(run.as_mut().poll(cx).is_pending());
+    }
+    assert!(watch.read().unwrap().configuration.is_some());
+    // The run's first turn published the link it saw: that wait is over, and
+    // the reader waits again.
+    assert!(changed.as_mut().poll(cx).is_ready());
+    let seen = watch.changes();
+    let mut changed = pin!(watch.changed(seen));
+    assert!(changed.as_mut().poll(cx).is_pending());
+    let woken = count.0.load(core::sync::atomic::Ordering::SeqCst);
+    drop(service);
+    assert_eq!(watch.read().unwrap().configuration, None);
+    assert!(
+        count.0.load(core::sync::atomic::Ordering::SeqCst) > woken,
+        "the reader was woken"
+    );
+    assert!(changed.as_mut().poll(cx).is_ready());
+}

@@ -63,20 +63,29 @@ first accepted REQUEST. A first DISCOVER is repeated after 250 ms, doubling to
 an OFFER is repeated after 5 s, doubling every two, five in all, then
 discovery starts over. At T1 the client renews by unicast to the server
 identifier, at T2 it rebinds by broadcast, each after half the time left and
-no less than 60 s, and at the lease's end the address goes. A NAK starts
+no less than 60 s, and at the lease's end the address goes. T1 < T2 < the
+lease always holds: the server's when so ordered, else T2 three quarters of
+the way from a lone T1, T1 half the lease or half a lone T2 when T2 comes
+first, else half and seven eighths. An ACK whose lease, counted from its
+REQUEST, is already over is dropped (`LeaseFault::Expired`), and no send
+or frame uses an address past its lease's end, before any tick too. A NAK starts
 discovery over. A link that comes back at a new epoch runs INIT-REBOOT with a
 lease, keeping the address meanwhile, and five unanswered REQUESTs keep the
 lease for its time (RFC 2131, 3.2); without one, discovery starts over at
-once. While a client runs, data and echo replies hold at most all neighbor
-entries but one, so a renewal always finds one. Messages the client does not
+once. While a client runs, data and echo replies protect at most all
+neighbor entries but one, so a renewal always finds one: a send that would
+protect an entry data does not protect yet costs a place, cached or not. Messages the client does not
 take are counted (`NetEvent::Dhcp`) and change nothing.
 
 An echo request for the interface's own address owes a reply from that
 address with all its data (RFC 792, RFC 1122, 3.2.2.6): its ICMP message is
 copied into a block, never the pool's last free one, at most `ECHOES` owed
 and `ECHO_RATE` accepted a second. A reply waits for its neighbor as a
-datagram does, and ends with its block home when the port takes it, its
-neighbor never answers, the address changes or the core retires. Everything
+datagram does, and ends with its block home when the port takes it or
+refuses it for good, its neighbor never answers, the address changes or the
+core retires; each end that freed its neighbor moves `neighbors_changed`. The
+infinite lease of RFC 2131, 3.3 is kept as its value, some 136 years, not as
+a lease without end. Everything
 else (broadcast echoes, other types, malformed, too long, over a bound) is
 counted (`NetEvent::Icmp`) and never answered.
 

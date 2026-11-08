@@ -1,7 +1,7 @@
 //! What a service tells applications of the interface's address.
 
 use core::future::poll_fn;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::task::Poll;
 
 use oer_portable_memory::{AtomicWaker, Claim, ClaimCell};
@@ -38,14 +38,18 @@ impl From<Claim> for WatchRefused {
 }
 
 /// Where a service publishes the interface's address at the end of every
-/// turn that changed it ([`Core::configuration_changes`]), and at its end.
-/// One task waits for a change at a time.
+/// turn that changed it ([`Core::configuration_changes`]). The service's end,
+/// by retirement or drop, ends the watch for good: every read from then on
+/// finds no configuration, and the waiter wakes, whatever the value cell
+/// holds. One task waits for a change at a time.
 ///
 /// [`Core::configuration_changes`]: oer_protocols_network_core::Core::configuration_changes
 pub struct ConfigurationWatch {
     value: ClaimCell<Watched>,
     /// Publications so far.
     changes: AtomicU32,
+    /// The service ended: the lease left with its core.
+    ended: AtomicBool,
     waker: AtomicWaker,
 }
 
@@ -55,16 +59,29 @@ impl ConfigurationWatch {
         Self {
             value: ClaimCell::new(),
             changes: AtomicU32::new(0),
+            ended: AtomicBool::new(false),
             waker: AtomicWaker::new(),
         }
     }
 
-    /// The last publication.
+    /// The last publication, or none once the service ended.
     ///
     /// # Errors
     /// [`WatchRefused`].
     pub fn read(&self) -> Result<Watched, WatchRefused> {
+        if self.ended.load(Ordering::Acquire) {
+            return Ok(Watched {
+                configuration: None,
+            });
+        }
         Ok(self.value.lend(|watched| *watched)?)
+    }
+
+    /// The service ended: a flag, a count and a wake, none of which borrows
+    /// the value cell.
+    pub(crate) fn end(&self) {
+        self.ended.store(true, Ordering::Release);
+        self.told();
     }
 
     /// A wrapping count of publications.
