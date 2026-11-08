@@ -1066,6 +1066,20 @@ pub struct NetworkTurns {
     /// many ([`RESERVE_BINS`]): with `reserves`, the mean request size.
     pub reserve_blocks: u32,
     pub reserve_by_size: [u32; RESERVE_BINS],
+    /// The local producer's steps: its offers, the core's final refusals
+    /// and holds of them, declining fills, withdrawals of stale works, and
+    /// the waits that registered it for new offers or for changes only.
+    pub local_offered: u32,
+    pub local_refused: u32,
+    pub local_held: u32,
+    pub local_declined: u32,
+    pub local_withdrawn: u32,
+    pub local_waits_offers: u32,
+    pub local_waits_changes: u32,
+    /// The producer's own counts: the wakes it gave the network's task, and
+    /// its datagrams whose end is not known.
+    pub producer_wakes: u32,
+    pub producer_unknown: u32,
 }
 
 impl NetworkTurns {
@@ -1104,6 +1118,15 @@ impl NetworkTurns {
                 let at = |turns: &Self| turns.reserve_by_size.get(bin).copied().unwrap_or(0);
                 at(end).wrapping_sub(at(start))
             }),
+            local_offered: count(|turns| turns.local_offered),
+            local_refused: count(|turns| turns.local_refused),
+            local_held: count(|turns| turns.local_held),
+            local_declined: count(|turns| turns.local_declined),
+            local_withdrawn: count(|turns| turns.local_withdrawn),
+            local_waits_offers: count(|turns| turns.local_waits_offers),
+            local_waits_changes: count(|turns| turns.local_waits_changes),
+            producer_wakes: count(|turns| turns.producer_wakes),
+            producer_unknown: count(|turns| turns.producer_unknown),
         }
     }
 }

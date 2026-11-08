@@ -18,7 +18,7 @@ use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::local::{LocalEnd, LocalRefused, Produce, Producer, Producers};
-use crate::observation::{PublishEnd, ServiceEvent, TurnEnd, seen};
+use crate::observation::{LocalEvent, PublishEnd, ServiceEvent, TurnEnd, seen};
 use crate::returns::ReturnEnd;
 use crate::socket::{
     Answer, Inbound, LateSocket, Request, Sent, ServiceEnd, Socket, SocketLanes, drain_requests,
@@ -577,7 +577,7 @@ impl<
             // Nothing more is offered or published: the epilogue delivers.
             report(events, || ServiceEvent::Published(PublishEnd::Fault));
         } else if told_all {
-            moved |= self.local.offers(now, &mut self.owner);
+            moved |= self.local.offers(now, &mut self.owner, events);
             moved |= self.publish(now, events);
         } else {
             // A policy chooses knowing all the port has said: a later notice
@@ -586,22 +586,24 @@ impl<
             report(events, || ServiceEvent::Published(PublishEnd::Deferred));
             moved = true;
         }
-        moved |= self.deliver();
+        // Eviction ends commands too, so it comes before the delivery: the
+        // epilogue's delivery is the turn's last step that can learn a result.
         if self.fault.is_none() && !self.owner.port_broken() {
             moved |= self.relieve(now);
         }
+        moved |= self.deliver(events);
         self.turn_ended(events);
         moved
     }
 
     /// The turn's epilogue: hand every result the core knows to its client,
     /// the channel sockets' places and the producer alike; whether any went.
-    fn deliver(&mut self) -> bool {
+    fn deliver(&mut self, events: &mut impl EventSink<ServiceEvent>) -> bool {
         let mut moved = false;
         for bound in self.bound.iter_mut().flatten() {
             moved |= bound.hand_back(&mut self.owner);
         }
-        moved |= self.local.deliver(&mut self.owner);
+        moved |= self.local.deliver(&mut self.owner, events);
         moved
     }
 
@@ -819,6 +821,7 @@ impl<
                 // the rest of it, so its declines never stop another's work.
                 Err(Unsent::Declined) => {
                     moved = true;
+                    report(events, || ServiceEvent::Local(LocalEvent::Declined));
                     self.local.declined();
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
@@ -884,7 +887,7 @@ impl<
             }
             let mut ready = pin!(stop.ready()).poll(cx).is_ready();
             owner.register_port(cx);
-            local.register(cx);
+            local.register(cx, events);
             for bound in bound.iter_mut().flatten() {
                 ready |= bound.poll_lanes(cx);
             }

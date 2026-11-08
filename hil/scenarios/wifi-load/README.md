@@ -130,7 +130,14 @@ after a turn known to leave work (a spent budget, a full intake,
 publishing at its budget or deferred); `waits_pending` the waits that
 found nothing as they registered, which end the poll unless a deadline
 was due, and `waits_ready` those that found something and turned again in
-the same poll. Nothing counts which source woke a poll.
+the same poll. Nothing counts which source woke a poll. `producer`
+counts a local producer's steps: its offers (`offered`), the core's final
+refusals (`refused`) and holds (`held`) of them, declining fills
+(`declined`), withdrawals of stale works (`withdrawn`), the waits that
+registered it for new offers (`waits_offers`) or for changes only
+(`waits_changes`), the wakes the producer itself gave the network's task
+(`wakes`, with `producer_wakes_per_offer`) and its datagrams of unknown end
+(`unknown`).
 
 Each level's `link`, and the `path` case's `idle link` over the idle
 window, record what the link ran, and print one line (`link <level>:`):

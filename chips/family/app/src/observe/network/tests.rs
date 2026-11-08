@@ -174,3 +174,37 @@ fn an_ended_turn_starts_the_next_afresh() {
     assert_eq!(read.accepted_by_turn, [1, 0, 0, 1, 0, 0, 0]);
     assert_eq!((read.intake_full, read.budget_turns), (1, 1));
 }
+
+#[test]
+fn a_producer_s_steps_count_each_in_its_own_word() {
+    let counter = NetworkCounter::new();
+    let mut tally = TurnTally::new();
+    let steps = [
+        (Local::Offered, 7),
+        (Local::Refused, 1),
+        (Local::Held, 2),
+        (Local::Declined, 3),
+        (Local::Withdrawn, 4),
+        (Local::WaitsOffers, 5),
+        (Local::WaitsChanges, 6),
+    ];
+    for (local, times) in steps {
+        for _ in 0..times {
+            tally.local(&counter, local);
+        }
+    }
+    let read = counter.read();
+    assert_eq!(
+        [
+            read.local_offered,
+            read.local_refused,
+            read.local_held,
+            read.local_declined,
+            read.local_withdrawn,
+            read.local_waits_offers,
+            read.local_waits_changes,
+        ],
+        [7, 1, 2, 3, 4, 5, 6]
+    );
+    assert_eq!((read.turns, read.waits_pending), (0, 0), "nothing else");
+}

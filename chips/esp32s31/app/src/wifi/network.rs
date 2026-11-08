@@ -42,7 +42,8 @@ pub use oer_protocols_network_core::{
     Block, Datagram, Declined, Outcome, Remote, SendRefusal, WorkId,
 };
 pub use oer_protocols_network_runtime::{
-    LocalEnd, Next, Observer, Offer, Produce, RESERVE_AHEAD, Refusal, Refused, SocketClosed, Work,
+    Interest, LocalEnd, Next, Observer, Offer, Produce, RESERVE_AHEAD, Refusal, Refused,
+    SocketClosed, Work,
 };
 
 /// The sockets a network holds: the channel socket and the producer's.

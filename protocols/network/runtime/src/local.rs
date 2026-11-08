@@ -13,6 +13,7 @@ use core::future::poll_fn;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll};
 
+use oer_portable_events::{EventSink, report};
 use oer_portable_memory::AtomicWaker;
 use oer_portable_time::Instant;
 use oer_protocols_network_core::{
@@ -21,6 +22,7 @@ use oer_protocols_network_core::{
 };
 use oer_protocols_network_port::FramePort;
 
+use crate::observation::{LocalEvent, ServiceEvent};
 use crate::service::TURN_FRAMES;
 
 /// A source of datagrams the network owner calls in its own turn, on its own
@@ -80,9 +82,25 @@ pub trait Produce {
     /// service.
     fn ended(&mut self, work: Work<Self::Tag>, outcome: Outcome);
 
-    /// Make `cx` the one new data wakes: at once if any came since
-    /// [`Self::offer`] last answered [`Next`].
-    fn register(&mut self, cx: &mut Context<'_>);
+    /// Make `cx` the one the source's next change wakes, as `interest`
+    /// names: with [`Interest::Offers`] new data too, and at once if some
+    /// came since [`Self::offer`] last answered [`Next`]; with
+    /// [`Interest::Changes`] only a move of [`Self::generation`] or an open or
+    /// held tag no longer [`Self::current`], never new data alone.
+    fn register(&mut self, cx: &mut Context<'_>, interest: Interest);
+}
+
+/// What a waiting service can act on, which its producer's wake is for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Interest {
+    /// The service asks for offers at its next turn: new data is a reason
+    /// to wake.
+    Offers,
+    /// The service cannot declare a next offer now: a refused offer holds,
+    /// or its open works are at the turn's budget. What frees it is a place,
+    /// the neighbor counter or a publication, each in a turn of its own; the
+    /// producer wakes only when it makes an open or held work stale.
+    Changes,
 }
 
 /// A datagram a producer has ready: where it goes, its length and its tag.
@@ -134,7 +152,8 @@ impl LocalEnd {
         self.ended.load(Ordering::Acquire)
     }
 
-    /// Wait until the service ended.
+    /// Wait until the service ended. The flag has one waiter's cell: one
+    /// task waits here at a time.
     pub async fn ended(&self) {
         poll_fn(|cx| {
             self.waker.register(cx.waker());
@@ -239,8 +258,8 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
 
 pub(crate) mod sealed {
     use super::{
-        CommandId, CommandState, Context, Declined, Instant, Remote, RetiredResults, SendRefusal,
-        SocketId, WorkId,
+        CommandId, CommandState, Context, Declined, EventSink, Instant, Remote, RetiredResults,
+        SendRefusal, ServiceEvent, SocketId, WorkId,
     };
 
     /// What a producer's part of the service asks of the core.
@@ -268,7 +287,12 @@ pub(crate) mod sealed {
         /// The offer step: withdraw what a new generation left stale,
         /// deliver what ended, then ask and declare within the hold rules
         /// and the turn's budget. Whether anything moved.
-        fn offers(&mut self, now: Instant, owner: &mut impl Owner<B>) -> bool;
+        fn offers(
+            &mut self,
+            now: Instant,
+            owner: &mut impl Owner<B>,
+            events: &mut impl EventSink<ServiceEvent>,
+        ) -> bool;
 
         /// Fill `work`'s data in the port's slot, while its tag is current.
         ///
@@ -284,9 +308,14 @@ pub(crate) mod sealed {
         fn filtered(&self) -> Option<u8>;
 
         /// Deliver every outcome the core knows; whether any came.
-        fn deliver(&mut self, owner: &mut impl Owner<B>) -> bool;
+        fn deliver(
+            &mut self,
+            owner: &mut impl Owner<B>,
+            events: &mut impl EventSink<ServiceEvent>,
+        ) -> bool;
 
-        fn register(&mut self, cx: &mut Context<'_>);
+        /// Register the producer for what the service can act on now.
+        fn register(&mut self, cx: &mut Context<'_>, events: &mut impl EventSink<ServiceEvent>);
 
         /// When the producer said it has more.
         fn deadline(&self) -> Option<Instant>;
@@ -351,7 +380,12 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     fn turn_begins(&mut self) {}
 
     #[inline(always)]
-    fn offers(&mut self, _now: Instant, _owner: &mut impl Owner<B>) -> bool {
+    fn offers(
+        &mut self,
+        _now: Instant,
+        _owner: &mut impl Owner<B>,
+        _events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
         false
     }
 
@@ -371,12 +405,16 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     }
 
     #[inline(always)]
-    fn deliver(&mut self, _owner: &mut impl Owner<B>) -> bool {
+    fn deliver(
+        &mut self,
+        _owner: &mut impl Owner<B>,
+        _events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
         false
     }
 
     #[inline(always)]
-    fn register(&mut self, _cx: &mut Context<'_>) {}
+    fn register(&mut self, _cx: &mut Context<'_>, _events: &mut impl EventSink<ServiceEvent>) {}
 
     #[inline(always)]
     fn deadline(&self) -> Option<Instant> {
@@ -394,7 +432,12 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         self.declined = false;
     }
 
-    fn offers(&mut self, now: Instant, owner: &mut impl Owner<B>) -> bool {
+    fn offers(
+        &mut self,
+        now: Instant,
+        owner: &mut impl Owner<B>,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
         self.at = None;
         if self.socket.is_none() {
             return false;
@@ -405,13 +448,14 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             self.generation = generation;
             let producer = &self.producer;
             for (command, tag) in self.works.iter().flatten() {
-                if !producer.current(*tag) {
-                    moved |= owner.withdraw(command);
+                if !producer.current(*tag) && owner.withdraw(command) {
+                    report(events, || ServiceEvent::Local(LocalEvent::Withdrawn));
+                    moved = true;
                 }
             }
         }
         // What a withdrawal or a tick ended frees its place first.
-        moved |= self.deliver(owner);
+        moved |= self.deliver(owner, events);
         if let Some(hold) = &self.hold {
             let released = match hold.waits {
                 Waits::Place => self.open < CREDITS,
@@ -441,6 +485,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             };
             // A refusal handled is progress too: the next pass yields.
             moved = true;
+            report(events, || ServiceEvent::Local(LocalEvent::Offered));
             match owner.declare(now, socket, offer.remote, offer.length) {
                 Ok(command) => {
                     // The core numbers this socket's places below `CREDITS`.
@@ -455,9 +500,11 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
                         SendRefusal::NoPlace => Waits::Place,
                         SendRefusal::NeighborsFull => Waits::Neighbors(owner.neighbors_changed()),
                         SendRefusal::TooLong | SendRefusal::NoRoute | SendRefusal::Stale => {
+                            report(events, || ServiceEvent::Local(LocalEvent::Refused));
                             continue;
                         }
                     };
+                    report(events, || ServiceEvent::Local(LocalEvent::Held));
                     self.hold = Some(Hold {
                         tag: offer.tag,
                         generation,
@@ -498,7 +545,11 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             .map(SocketId::flow)
     }
 
-    fn deliver(&mut self, owner: &mut impl Owner<B>) -> bool {
+    fn deliver(
+        &mut self,
+        owner: &mut impl Owner<B>,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
         if self.open == 0 {
             return false;
         }
@@ -524,8 +575,19 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         moved
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
-        self.producer.register(cx);
+    fn register(&mut self, cx: &mut Context<'_>, events: &mut impl EventSink<ServiceEvent>) {
+        if self.socket.is_none() {
+            return;
+        }
+        // Held, or at the budget of open works, the service asks nothing at
+        // its next turn: what frees it comes in a turn of its own.
+        let interest = if self.hold.is_some() || self.open >= TURN_FRAMES {
+            Interest::Changes
+        } else {
+            Interest::Offers
+        };
+        report(events, || ServiceEvent::Local(LocalEvent::Waits(interest)));
+        self.producer.register(cx, interest);
     }
 
     fn deadline(&self) -> Option<Instant> {

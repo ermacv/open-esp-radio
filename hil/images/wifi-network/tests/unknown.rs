@@ -32,7 +32,6 @@ fn an_unknown_end_is_counted_and_not_sent_again() {
         let mut wire = port.0.borrow_mut();
         wire.incoming.push_back(peer_asks());
         wire.open = true;
-        wire.lazy = true;
     }
     let wifi::Built {
         mut service,
@@ -41,7 +40,10 @@ fn an_unknown_end_is_counted_and_not_sent_again() {
         ..
     } = wifi::network(port.clone(), LOCAL, OURS, 5001, 5002);
     let clock = VirtualClock::new();
+    // The peer is known, and the port answers our reply to it; from here on
+    // it says it took what it never filled.
     turn(&mut service, &clock);
+    port.0.borrow_mut().lazy = true;
     let start = start();
     let mut run = udp::open(&net, &start).unwrap();
     {
@@ -59,6 +61,6 @@ fn an_unknown_end_is_counted_and_not_sent_again() {
         core::task::Poll::Ready(_)
     ));
     assert_eq!(source.unknown(), 1);
-    assert!(port.0.borrow().sent.is_empty());
+    assert!(sent(&port).is_empty(), "no load datagram went whole");
     drop(run);
 }

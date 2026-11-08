@@ -12,13 +12,15 @@
 
 use core::cell::{Cell, RefCell, RefMut};
 use core::future::poll_fn;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::task::{Context, Poll};
 
+use embassy_futures::select::{Either, select};
 use heapless::Vec;
 use oer::wifi::{
-    self, AtomicWaker, ClaimCell, Declined, LocalEnd, NetworkAddress, NetworkBlock, NetworkInstant,
-    Next, Offer, Outcome, Produce, Received, Refusal, Refused, Remote, SendRefusal, Socket, Work,
+    self, AtomicWaker, ClaimCell, Declined, Interest, LocalEnd, NetworkAddress, NetworkBlock,
+    NetworkInstant, Next, Offer, Outcome, Produce, Received, Refusal, Refused, Remote, SendRefusal,
+    Socket, Work,
 };
 use oer_hil_services_load::header::{self, Header};
 use oer_hil_services_load::{LoadError, Start};
@@ -100,10 +102,18 @@ pub(crate) struct Source {
     /// The run's generation: a new run moves it, so a datagram of an earlier
     /// one still waiting is no longer current.
     generation: AtomicU32,
-    /// The network's task waits here for datagrams.
+    /// The network's task waits here, for new datagrams while it can
+    /// declare one ([`Interest::Offers`]) and for a new run always.
     network: AtomicWaker,
+    /// The network last registered for offers, not only for changes.
+    wants_offers: AtomicBool,
     /// A sender waits here for room.
     room: AtomicWaker,
+    /// Wakes the source gave the network's task, for a trace's report.
+    wakes: AtomicU32,
+    /// Datagrams whose end is not known ([`Outcome::Unknown`]): they leave
+    /// and are never sent again.
+    unknown: AtomicU32,
 }
 
 impl Source {
@@ -112,8 +122,29 @@ impl Source {
             datagrams: ClaimCell::new(),
             generation: AtomicU32::new(0),
             network: AtomicWaker::new(),
+            wants_offers: AtomicBool::new(false),
             room: AtomicWaker::new(),
+            wakes: AtomicU32::new(0),
+            unknown: AtomicU32::new(0),
         }
+    }
+
+    /// Wake the network's task, if it waits.
+    fn wake_network(&self) {
+        if let Some(waker) = self.network.take() {
+            self.wakes.fetch_add(1, Ordering::Relaxed);
+            waker.wake();
+        }
+    }
+
+    /// The wakes the source gave the network's task.
+    pub(crate) fn wakes(&self) -> u32 {
+        self.wakes.load(Ordering::Relaxed)
+    }
+
+    /// The datagrams whose end is not known.
+    pub(crate) fn unknown(&self) -> u32 {
+        self.unknown.load(Ordering::Relaxed)
     }
 
     /// Lend the datagrams to `use_them`; `None` before they are installed.
@@ -126,6 +157,9 @@ impl Source {
     fn begin(&self) {
         let _cleared = self.lend(|datagrams| datagrams.pending.clear());
         self.generation.fetch_add(1, Ordering::AcqRel);
+        // The network's open works of the earlier run are stale now, whatever
+        // it waits for.
+        self.wake_network();
         self.room.wake();
     }
 
@@ -134,8 +168,10 @@ impl Source {
         let taken = self
             .lend(|datagrams| datagrams.pending.push(pending).is_ok())
             .unwrap_or(false);
-        if taken {
-            self.network.wake();
+        // A datagram the network cannot declare yet is no reason to wake it:
+        // what frees it comes in a turn of its own.
+        if taken && self.wants_offers.load(Ordering::Acquire) {
+            self.wake_network();
         }
         taken
     }
@@ -145,11 +181,16 @@ impl Source {
 /// handed over into the slot the network grants it.
 pub(crate) struct LoadProducer {
     source: &'static Source,
+    /// The generation at the last registration.
+    registered: u32,
 }
 
 impl LoadProducer {
     pub(crate) const fn new(source: &'static Source) -> Self {
-        Self { source }
+        Self {
+            source,
+            registered: 0,
+        }
     }
 
     /// The datagram of `tag` leaves, and its room is a sender's.
@@ -248,18 +289,29 @@ impl Produce for LoadProducer {
         }
     }
 
-    fn ended(&mut self, work: Work<Tag>, _outcome: Outcome) {
+    fn ended(&mut self, work: Work<Tag>, outcome: Outcome) {
+        if outcome == Outcome::Unknown {
+            self.source.unknown.fetch_add(1, Ordering::Relaxed);
+        }
         self.forget(work.tag);
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
+    fn register(&mut self, cx: &mut Context<'_>, interest: Interest) {
+        let offers = interest == Interest::Offers;
+        self.source.wants_offers.store(offers, Ordering::Release);
         self.source.network.register(cx.waker());
-        let waiting = self
-            .source
-            .lend(|datagrams| datagrams.pending.iter().any(|pending| !pending.offered))
-            .unwrap_or(false);
-        if waiting {
-            cx.waker().wake_by_ref();
+        // Check again after registering: a new run since the last
+        // registration, or, while the network can declare one, a datagram
+        // not yet offered.
+        let generation = self.generation();
+        let moved = core::mem::replace(&mut self.registered, generation) != generation;
+        let waiting = offers
+            && self
+                .source
+                .lend(|datagrams| datagrams.pending.iter().any(|pending| !pending.offered))
+                .unwrap_or(false);
+        if moved || waiting {
+            self.source.wake_network();
         }
     }
 }
@@ -372,6 +424,15 @@ const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::N
     waits_ready: 0,
     reserve_blocks: 0,
     reserve_by_size: [0; oer_hil_services_load::RESERVE_BINS],
+    local_offered: 0,
+    local_refused: 0,
+    local_held: 0,
+    local_declined: 0,
+    local_withdrawn: 0,
+    local_waits_offers: 0,
+    local_waits_changes: 0,
+    producer_wakes: 0,
+    producer_unknown: 0,
 };
 
 /// The network core's turns at the open window's start, and the last closed
@@ -413,7 +474,7 @@ impl Network {
 /// Open a window of the network core's turns.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn open_turns(net: &Network) {
-    net.turns(|turns| turns.start = network_turns());
+    net.turns(|turns| turns.start = network_turns(net.source));
 }
 
 /// Close the open window of the network core's turns, which
@@ -421,7 +482,8 @@ pub(crate) fn open_turns(net: &Network) {
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn close_turns(net: &Network) {
     net.turns(|turns| {
-        turns.window = oer_hil_services_load::NetworkTurns::window(&turns.start, &network_turns());
+        turns.window =
+            oer_hil_services_load::NetworkTurns::window(&turns.start, &network_turns(net.source));
     });
 }
 
@@ -435,7 +497,7 @@ pub(crate) fn network_window(net: &Network) -> oer_hil_services_load::NetworkTur
 /// What the network core's turns did since boot, as the load service names
 /// it: the chip's observation, which the host's tests of this facade lack.
 #[cfg(target_arch = "riscv32")]
-fn network_turns() -> oer_hil_services_load::NetworkTurns {
+fn network_turns(source: &Source) -> oer_hil_services_load::NetworkTurns {
     let turns = oer::observe::network_turns();
     oer_hil_services_load::NetworkTurns {
         available: true,
@@ -462,6 +524,15 @@ fn network_turns() -> oer_hil_services_load::NetworkTurns {
         waits_ready: turns.waits_ready,
         reserve_blocks: turns.reserve_blocks,
         reserve_by_size: turns.reserve_by_size,
+        local_offered: turns.local_offered,
+        local_refused: turns.local_refused,
+        local_held: turns.local_held,
+        local_declined: turns.local_declined,
+        local_withdrawn: turns.local_withdrawn,
+        local_waits_offers: turns.local_waits_offers,
+        local_waits_changes: turns.local_waits_changes,
+        producer_wakes: source.wakes(),
+        producer_unknown: source.unknown(),
     }
 }
 
@@ -655,16 +726,20 @@ impl Sending<'_> {
     }
 
     /// As [`Self::try_send`], once the producer has room; whether it took it.
+    /// The network's end ends the wait too: the end flag wakes it.
     pub(crate) async fn send(&mut self, size: usize, peer: Peer, header: Header) -> bool {
-        poll_fn(|cx| {
+        let end = self.end;
+        let room = poll_fn(|cx| {
             self.source.room.register(cx.waker());
             match self.try_send(size, peer, header) {
                 Attempt::Taken => Poll::Ready(true),
                 Attempt::Lost => Poll::Ready(false),
-                Attempt::NoRoom if self.end.is_ended() => Poll::Ready(false),
                 Attempt::NoRoom => Poll::Pending,
             }
-        })
-        .await
+        });
+        match select(room, end.ended()).await {
+            Either::First(taken) => taken,
+            Either::Second(()) => false,
+        }
     }
 }

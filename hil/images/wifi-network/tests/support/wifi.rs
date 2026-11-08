@@ -16,7 +16,9 @@ use oer_protocols_network_wire::ip::Dscp;
 pub use oer_portable_memory::{AtomicWaker, ClaimCell};
 pub use oer_portable_time::Instant as NetworkInstant;
 pub use oer_protocols_network_core::{Declined, Outcome, Remote, SendRefusal};
-pub use oer_protocols_network_runtime::{LocalEnd, Next, Offer, Produce, Refusal, Refused, Work};
+pub use oer_protocols_network_runtime::{
+    Interest, LocalEnd, Next, Offer, Produce, Refusal, Refused, Work,
+};
 
 pub struct Brand;
 pub const BLOCKS: usize = 64;

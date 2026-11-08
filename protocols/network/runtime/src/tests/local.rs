@@ -35,8 +35,8 @@ use super::{
     BLOCKS, Count, DEPTH, LOCAL, OUR_IP, PEER, PEER_IP, Policy, RECEIVED, SIZE, counter, udp_frame,
 };
 use crate::{
-    Direct, EndCause, Interest, LocalEnd, LocalRefused, MemoryPolicy, Next, Observer, Offer, Produce,
-    Producer, Sent, Service, ServiceEvent, Socket, SocketLanes, StopLane, Work,
+    Direct, EndCause, Interest, LocalEnd, LocalRefused, MemoryPolicy, Next, Observer, Offer,
+    Produce, Producer, Sent, Service, ServiceEvent, Socket, SocketLanes, StopLane, Work,
 };
 
 /// The producer's port.
@@ -1488,4 +1488,82 @@ fn a_producer_at_its_open_budget_waits_for_changes_only() {
     assert_eq!(offered(&script), 9, "the ninth once places came back");
     assert_eq!(line.produced().len(), 9);
     assert_eq!(script.interest(), Some(Interest::Offers));
+}
+
+/// What the service told a sink of its producer.
+#[derive(Default)]
+struct Steps(Vec<crate::LocalEvent>);
+
+impl EventSink<ServiceEvent> for Steps {
+    fn event(&mut self, event: ServiceEvent) {
+        if let ServiceEvent::Local(local) = event {
+            self.0.push(local);
+        }
+    }
+}
+
+impl EventSink<NetEvent> for Steps {
+    const ENABLED: bool = false;
+    fn event(&mut self, _: NetEvent) {}
+}
+
+/// A sink that counts hears each of the producer's steps as it happens: an
+/// offer, a final refusal, a hold, a withdrawal, a declining fill, and what
+/// each wait registered the producer for.
+#[test]
+fn a_counting_sink_hears_each_of_the_producer_s_steps() {
+    use crate::LocalEvent::{Declined, Held, Offered, Refused, Waits, Withdrawn};
+    brand!(Net);
+    let Bench {
+        mut service,
+        line,
+        script,
+        clock,
+        ..
+    } = direct::<Net>();
+    line.open(true);
+    script.push(tag(0, 9), broadcast(), 2000);
+    for index in 0..3 {
+        script.push(tag(0, index), broadcast(), 16);
+    }
+    let mut steps = Steps::default();
+    let (count, waker) = counter();
+    {
+        let mut run = pin!(service.run(clock, &mut steps));
+        settle(&mut run, &count, &waker);
+    }
+    assert_eq!(
+        core::mem::take(&mut steps.0),
+        [
+            Offered,
+            Refused,
+            Offered,
+            Offered,
+            Offered,
+            Held,
+            Waits(Interest::Changes)
+        ]
+    );
+    {
+        let mut source = script.0.borrow_mut();
+        source.generation = 1;
+        source.held.clear();
+        source.ready.clear();
+    }
+    script.push(tag(1, 0), broadcast(), 16);
+    {
+        let mut run = pin!(service.run(clock, &mut steps));
+        settle(&mut run, &count, &waker);
+    }
+    assert_eq!(
+        core::mem::take(&mut steps.0),
+        [Withdrawn, Withdrawn, Offered, Waits(Interest::Offers)]
+    );
+    script.0.borrow_mut().declines = true;
+    line.open(false);
+    {
+        let mut run = pin!(service.run(clock, &mut steps));
+        settle(&mut run, &count, &waker);
+    }
+    assert_eq!(steps.0.first(), Some(&Declined));
 }

@@ -37,6 +37,23 @@ pub enum PublishEnd {
     Fault,
 }
 
+/// What a turn did with its local producer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LocalEvent {
+    /// The producer offered a datagram.
+    Offered,
+    /// The core refused an offer for good.
+    Refused,
+    /// The core refused an offer for now: the producer's offers hold.
+    Held,
+    /// A fill declined.
+    Declined,
+    /// A declared work was withdrawn, its source having moved on.
+    Withdrawn,
+    /// A wait registered the producer's waker, for this.
+    Waits(crate::Interest),
+}
+
 /// What was free when a turn ended.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TurnEnd {
@@ -51,6 +68,8 @@ pub struct TurnEnd {
 /// requests in, then [`Self::IntakeFull`] when it took in its whole budget of
 /// received frames, one [`Self::Accepted`] for each frame the port took, one
 /// [`Self::Published`] and last [`Self::TurnEnded`]. Between turns,
+/// [`Self::Local`] counts what a turn did with its producer, and what a
+/// wait registered it for.
 /// [`Self::Yielded`] or [`Self::Waited`] says how the pass after the turn
 /// went on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -68,6 +87,8 @@ pub enum ServiceEvent {
     Published(PublishEnd),
     /// The turn ended.
     TurnEnded(TurnEnd),
+    /// What the turn, or the wait after it, did with its producer.
+    Local(LocalEvent),
     /// After a turn that moved something, the task gave its executor a turn:
     /// its poll ends here, the task woken again.
     Yielded,
