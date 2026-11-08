@@ -1,7 +1,8 @@
 # oer-protocols-network-testing-model
 
 One shared medium with several peers, for checking the network's egress on the
-host. No product package depends on it.
+host, and the end-to-end simulation of the station and the network. No product
+package depends on it.
 
 `Medium` is a port and the radio's view of its peers at once: a frame holds the air
 for a time set by its peer's rate and retries, one frame at a time, and completes
@@ -17,3 +18,29 @@ nothing.
 It models contention for one radio's air: rates and retries are fixed per peer, and
 it has no loss, aggregation, collisions or other stations' traffic. Its shares are checks
 of the scheduler's arithmetic and ownership, not claims about real air.
+
+## Station simulation
+
+`tests/station/` composes the station and the network as the `hil-wifi-network`
+image does, minus the hardware: the real station lifecycle, station and arbiter
+cores and datapath actor over the IEEE 802.11 reference model's data port, the
+station's neutral network end, and the network core, service and one channel
+socket, all on one virtual clock. In place of the product it has the model's port
+for the S31 backend, the software AES for the accelerator, a one-channel scan of the
+test domain, no transmit Block Ack, and the facade's network stop and the
+application's transmit memory without their statics.
+
+The access point is a test peer on the model's air, not access point code. It
+answers the station's probe with a beacon, its open authentication and its
+association, and runs the authenticator's side of the four-way handshake with the
+RSN authenticator, which checks the station's MICs. Once the port is open it relays
+MSDUs to the wired side: a router that is the DHCP server, whose answer to each
+REQUEST a case chooses, and a peer that answers ARP, pings and exchanges UDP. Its
+protected frames reach the station as the model's hardware hands them up, decrypted
+and verified.
+
+A case is a script over the application's control, socket and address watch, the
+access point and the clock. Tasks are polled only once woken; with nothing woken the
+script looks again, then time moves to the next deadline, so a lost wake ends a case.
+After the script the harness stops the station gracefully, runs every task to its
+end and accounts for the network's blocks and transmit memory.

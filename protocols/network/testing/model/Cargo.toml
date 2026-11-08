@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
-description = "Host model of one shared medium with several peers, for the network's egress"
+description = "Host model of one shared medium with several peers, for the network's egress, and the end-to-end station and network simulation"
 readme = "README.md"
 
 [dependencies]

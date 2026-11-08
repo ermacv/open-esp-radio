@@ -35,7 +35,7 @@ use std::task::{Context, Poll, Wake, Waker};
 use embassy_futures::select::{Either, select};
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
-use oer_portable_time::{Clock, Duration, Instant, Timer};
+use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{RegulatedChannel, SupportedChannel};
 use oer_protocols_ieee80211_core_arbiter::ArbiterPolicy;
@@ -69,8 +69,8 @@ use oer_protocols_network_core::{
     Configuration, Datagram, Group, Interface, NetworkOwner, Remote, claim,
 };
 use oer_protocols_network_port::{
-    EthernetFrameView, FramePort, FrameSource, LinkSnapshot, LinkState, NetTransmit,
-    TransmitRefused, Unpublished,
+    EthernetFrameView, FramePort, FrameSource, LinkSnapshot, NetTransmit, TransmitRefused,
+    Unpublished,
 };
 use oer_protocols_network_runtime::{
     ConfigurationWatch, DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, PortRefusal,
@@ -79,7 +79,7 @@ use oer_protocols_network_runtime::{
 use oer_protocols_network_wire::ip::Dscp;
 use oer_protocols_radio_port::{Installations, LocalId, with_local_slot};
 
-use access_point::{AccessPoint, ApConfig, BSSID, PMK, SSID};
+use access_point::{AccessPoint, ApConfig, PMK, SSID};
 use composition::{
     Buffers, Counts, FreeMemory, Memory, NetworkStopState, Observed, StationPort, Supply,
     WrittenFrame,
@@ -117,8 +117,8 @@ pub const LANE: usize = 32;
 pub const DEPTH: usize = 32;
 const NEIGHBORS: usize = 4;
 const MTU: u16 = 1500;
-/// The network's transmit memory: the buffers the network holds beside the
-/// port's.
+/// The network's transmit memory: this composition's choice, fewer buffers
+/// than the S31 pool gives the network.
 pub const NETWORK_BUFFERS: usize = 32;
 
 /// Executor passes before a run counts as spinning.
@@ -230,12 +230,12 @@ fn station_config() -> StaConfig<ModelCaps24, Callbacks> {
 }
 
 /// The network a case's connect names.
-fn profile(protected: bool) -> StaProfile {
+fn profile(protected: bool, pmk: [u8; 32]) -> StaProfile {
     StaProfile {
         ssid: heapless::Vec::from_slice(SSID).expect("an SSID"),
         security: if protected {
             StaSecurity::Wpa2Personal {
-                pmk: Pmk::from_bytes(PMK),
+                pmk: Pmk::from_bytes(pmk),
             }
         } else {
             StaSecurity::Open
@@ -278,6 +278,8 @@ pub struct Setup {
     pub reconnect: Option<Duration>,
     /// The DHCP client's seed.
     pub seed: u64,
+    /// The PMK the station's profile names: the network's by default.
+    pub pmk: [u8; 32],
 }
 
 impl Default for Setup {
@@ -287,6 +289,7 @@ impl Default for Setup {
             dhcp: DhcpServer::default(),
             reconnect: None,
             seed: 0x5eed,
+            pmk: PMK,
         }
     }
 }
@@ -302,20 +305,30 @@ pub struct Report {
     pub network: Option<EndCause>,
     /// The network's blocks in its pool after the run.
     pub blocks_free: usize,
-    /// The network's transmit memory free after the run, of its total.
+    /// The network's transmit memory free after the run, once the harness
+    /// took back what the station returned, of its total.
     pub memory_free: usize,
+    /// The network's memory left in the station's transmit queue: MSDUs the
+    /// station never took.
+    pub memory_queued: usize,
     pub memory: usize,
     pub counts: Counts,
     pub heard: Rc<Heard>,
     pub access_point: Rc<RefCell<AccessPoint>>,
-    /// When the run ended.
-    pub ended_at: Instant,
 }
 
 impl Report {
     /// The station stopped as the application asked, and every owner the
     /// network and the station hold came home.
     pub fn assert_stopped_with_every_owner(&self) {
+        self.assert_stopped();
+        self.assert_transmit_memory_home();
+    }
+
+    /// The station stopped as the application asked: the lifecycle ended,
+    /// the actor retired, the network's service stopped with every block in
+    /// its pool, and no station token was lost.
+    pub fn assert_stopped(&self) {
         assert!(
             matches!(self.lifecycle, Some(LifecycleEnd::Stopped)),
             "the lifecycle stopped: {:?}",
@@ -328,11 +341,16 @@ impl Report {
         );
         assert_eq!(self.network, Some(EndCause::Stopped), "the network stopped");
         assert_eq!(self.blocks_free, BLOCKS, "every block is in the pool");
-        assert_eq!(
-            self.memory_free, self.memory,
-            "every transmit buffer is free"
-        );
         assert_eq!(self.counts.tokens_lost, 0, "no station token is lost");
+    }
+
+    /// Every transmit buffer of the network is free again.
+    pub fn assert_transmit_memory_home(&self) {
+        assert_eq!(
+            (self.memory_free, self.memory_queued),
+            (self.memory, 0),
+            "every transmit buffer is free, none left in the station's queue"
+        );
     }
 }
 
@@ -356,6 +374,7 @@ struct Task<'t> {
     flag: Arc<Flag>,
     waker: Waker,
     done: bool,
+    polls: u64,
 }
 
 impl<'t> Task<'t> {
@@ -368,6 +387,7 @@ impl<'t> Task<'t> {
             flag,
             waker,
             done: false,
+            polls: 0,
         }
     }
 
@@ -376,6 +396,7 @@ impl<'t> Task<'t> {
         if self.done || !self.flag.0.swap(false, Ordering::SeqCst) {
             return false;
         }
+        self.polls += 1;
         let mut cx = Context::from_waker(&self.waker);
         if self.future.as_mut().poll(&mut cx).is_ready() {
             self.done = true;
@@ -494,11 +515,15 @@ pub struct World<'b, T: 'static> {
     pub heard: Rc<Heard>,
     control: RefCell<Option<StationControl<'b>>>,
     socket: RefCell<Option<Sock<T>>>,
+    /// Datagrams the application still holds at its end, for the pool's
+    /// holder.
+    held: RefCell<Vec<NetDatagram<T>>>,
     watch: &'static ConfigurationWatch,
     idle: Rc<Idle>,
     free: Rc<FreeMemory>,
     observed: Observed,
     protected: bool,
+    pmk: [u8; 32],
     stopping: Cell<bool>,
 }
 
@@ -538,12 +563,6 @@ impl<'b, T: 'static> World<'b, T> {
         }
     }
 
-    /// Let `duration` of virtual time pass.
-    pub async fn sleep(&self, duration: Duration) {
-        let at = self.now().saturating_add(duration);
-        self.clock.wait_until(at).await;
-    }
-
     /// Run `f` on the application's control.
     pub fn with_control<R>(&self, f: impl FnOnce(&mut StationControl<'b>) -> R) -> R {
         let mut control = self.control.borrow_mut();
@@ -558,7 +577,7 @@ impl<'b, T: 'static> World<'b, T> {
     /// connect's terminal.
     pub async fn connect(&self) -> OperationEnd {
         let mut control = self.control.borrow_mut().take().expect("the control");
-        let operation = control.connect(profile(self.protected)).await;
+        let operation = control.connect(profile(self.protected, self.pmk)).await;
         *self.control.borrow_mut() = Some(control);
         operation.expect("the connect is admitted").await
     }
@@ -638,17 +657,35 @@ impl<'b, T: 'static> World<'b, T> {
     /// The result of `observer`'s command.
     pub async fn result(&self, mut observer: Observer<'static>) -> Sent {
         observer.finished().await;
-        observer
-            .take()
-            .ok()
-            .expect("a finished command has a result")
+        let Ok(sent) = observer.take() else {
+            panic!("a finished command has a result");
+        };
+        sent
     }
 
     /// Stop the station gracefully, by `within` from now.
+    /// Keep `datagram` in the application's hands to its end.
+    pub fn hold(&self, datagram: NetDatagram<T>) {
+        self.held.borrow_mut().push(datagram);
+    }
+
+    /// Whether the station's service stopped.
+    pub fn stopped(&self) -> bool {
+        self.with_control(|control| control.status().stopped)
+    }
+
     pub fn stop(&self, within: Duration) {
         self.stopping.set(true);
         let deadline = self.now().saturating_add(within);
         self.with_control(|control| control.stop_gracefully(deadline));
+    }
+
+    /// Stop the station's service at once, without the graceful stop's
+    /// Disconnect, by `within` from now.
+    pub fn stop_now(&self, within: Duration) {
+        self.stopping.set(true);
+        let deadline = self.now().saturating_add(within);
+        self.with_control(|control| control.stop(deadline));
     }
 }
 
@@ -714,7 +751,9 @@ async fn run<'s, T: 'static>(
     } = resources;
     let mut tickets = tickets.into_iter();
     let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().expect("a ticket"));
-    let small: [_; 4] = small.try_into().ok().expect("four station buffers");
+    let Ok(small) = <[_; 4]>::try_from(small) else {
+        panic!("four station buffers");
+    };
     let config = station_config();
     let channel = config.channels[0];
     let (arbiter, place, absence) = LifecycleArbiter::<P<'s>>::new(
@@ -839,7 +878,7 @@ async fn run<'s, T: 'static>(
     // The network, as the application's `Network::start` builds it.
     let memory = Box::leak(Box::new([[0_u8; BLOCK]; BLOCKS]));
     let (pool, brand) = claim::<T, BLOCK, BLOCKS>(memory)
-        .ok()
+        .map_err(|refused| refused.reason)
         .expect("the network's brand");
     let interface = Interface::dhcp(STATION, MTU, setup.seed).expect("the interface");
     let port_end = Held(Some(DevicePort::new(
@@ -906,6 +945,8 @@ async fn run<'s, T: 'static>(
         free: free.clone(),
         observed: observed.clone(),
         protected: setup.access_point.protected,
+        pmk: setup.pmk,
+        held: RefCell::new(Vec::new()),
         stopping: Cell::new(false),
     };
 
@@ -913,60 +954,69 @@ async fn run<'s, T: 'static>(
     let actor_end = RefCell::new(None);
     let lifecycle_end = RefCell::new(None);
     let network_end: RefCell<Option<NetEnded<'_, T>>> = RefCell::new(None);
-    let actor_task = async {
-        let end = actor.run(&mut actor_ends, &mut network_ends, &*clock).await;
-        *actor_end.borrow_mut() = Some(end);
-    };
-    let lifecycle_task = async {
-        let completed = lifecycle.run(&mut lifecycle_ends, &mut io, &*clock).await;
-        *lifecycle_end.borrow_mut() = Some(completed.end);
-    };
-    let network_task = async {
-        let cause = {
-            let mut events = ();
-            let mut run = core::pin::pin!(service.run(&*clock, &mut events));
-            match select(run.as_mut(), network_stop.requested()).await {
-                Either::First(cause) => cause,
-                Either::Second(()) => {
-                    // The lane holds this one word.
-                    let _sent = stop_lane.try_send(());
-                    run.await
+    {
+        let actor_task = async {
+            let end = actor.run(&mut actor_ends, &mut network_ends, &*clock).await;
+            *actor_end.borrow_mut() = Some(end);
+        };
+        let lifecycle_task = async {
+            let completed = lifecycle.run(&mut lifecycle_ends, &mut io, &*clock).await;
+            *lifecycle_end.borrow_mut() = Some(completed.end);
+        };
+        let network_task = async {
+            let cause = {
+                let mut events = ();
+                let mut run = core::pin::pin!(service.run(&*clock, &mut events));
+                match select(run.as_mut(), network_stop.requested()).await {
+                    Either::First(cause) => cause,
+                    Either::Second(()) => {
+                        // The lane holds this one word.
+                        let _sent = stop_lane.try_send(());
+                        run.await
+                    }
                 }
+            };
+            let mut ended = service.retire();
+            // The queue outlives the port, so its frames go back first, as the
+            // application's stop gives them.
+            if let Some(port) = ended.retired.port.0.as_mut() {
+                port.give_back_received();
+            }
+            ended.retired.port.0 = None;
+            assert_eq!(ended.cause, cause);
+            *network_end.borrow_mut() = Some(ended);
+            network_stop.stopped();
+        };
+        let script_task = async {
+            script(&world).await;
+            if !world.stopping.get() {
+                world.stop(Duration::from_secs(10));
             }
         };
-        let mut ended = service.retire();
-        // The queue outlives the port, so its frames go back first, as the
-        // application's stop gives them.
-        if let Some(port) = ended.retired.port.0.as_mut() {
-            port.give_back_received();
-        }
-        ended.retired.port.0 = None;
-        assert_eq!(ended.cause, cause);
-        *network_end.borrow_mut() = Some(ended);
-        network_stop.stopped();
-    };
-    let script_task = async {
-        script(&world).await;
-        if !world.stopping.get() {
-            world.stop(Duration::from_secs(10));
-        }
-    };
-    let mut actor_task = core::pin::pin!(actor_task);
-    let mut lifecycle_task = core::pin::pin!(lifecycle_task);
-    let mut network_task = core::pin::pin!(network_task);
-    let mut script_task = core::pin::pin!(script_task);
-    let mut tasks = [
-        Task::new("actor", actor_task.as_mut()),
-        Task::new("lifecycle", lifecycle_task.as_mut()),
-        Task::new("network", network_task.as_mut()),
-        Task::new("script", script_task.as_mut()),
-    ];
-    execute(&mut tasks, &clock, &air, &access_point, &idle);
-    drop(tasks);
+        let mut actor_task = core::pin::pin!(actor_task);
+        let mut lifecycle_task = core::pin::pin!(lifecycle_task);
+        let mut network_task = core::pin::pin!(network_task);
+        let mut script_task = core::pin::pin!(script_task);
+        let mut tasks = [
+            Task::new("actor", actor_task.as_mut()),
+            Task::new("lifecycle", lifecycle_task.as_mut()),
+            Task::new("network", network_task.as_mut()),
+            Task::new("script", script_task.as_mut()),
+        ];
+        execute(&mut tasks, &clock, &air, &access_point, &idle);
+    }
+    // The network's memory the station never took from its queue.
+    let mut queued = 0;
+    while let Ok(Some(_memory)) = network_ends.transmit.try_receive_with(Option::take) {
+        queued += 1;
+    }
 
     // The account: what the station gave back, and every block.
     let mut ended = network_end.borrow_mut().take().expect("the network ended");
     let mut socket = world.socket.borrow_mut().take().expect("the socket");
+    for datagram in world.held.borrow_mut().drain(..) {
+        ended.retired.pool.give(datagram.block);
+    }
     while let Some(block) = socket.reclaim() {
         ended.retired.pool.give(block);
     }
@@ -979,17 +1029,18 @@ async fn run<'s, T: 'static>(
         network: Some(ended.cause),
         blocks_free: ended.retired.pool.free(),
         memory_free: free.free(),
+        memory_queued: queued,
         memory: free.total(),
         counts: observed.counts(),
         heard,
         access_point,
-        ended_at: clock.now(),
     }
 }
 
 /// Run `tasks` to their ends: woken tasks are polled, the access point
-/// answers what the station sent, a waiting script looks again once all
-/// settled, and only then time moves to the next deadline.
+/// answers what the station sent, a waiting script (the last task) looks
+/// again once the others settled, and only then time moves to the next
+/// deadline.
 fn execute(
     tasks: &mut [Task<'_>],
     clock: &VirtualClock,
@@ -1000,8 +1051,12 @@ fn execute(
     let mut announced = false;
     for _ in 0..PASSES {
         let mut progress = false;
-        for task in tasks.iter_mut() {
-            progress |= task.run();
+        let script = tasks.len() - 1;
+        for (index, task) in tasks.iter_mut().enumerate() {
+            let ran = task.run();
+            // The script's own look after a settle is no progress of the
+            // world's.
+            progress |= ran && !(announced && index == script);
         }
         progress |= access_point.borrow_mut().serve();
         if tasks.iter().all(|task| task.done) {
@@ -1009,6 +1064,12 @@ fn execute(
         }
         if progress {
             announced = false;
+            continue;
+        }
+        if tasks
+            .iter()
+            .any(|task| !task.done && task.flag.0.load(Ordering::SeqCst))
+        {
             continue;
         }
         if !announced && idle.announce() {
@@ -1026,5 +1087,12 @@ fn execute(
         }
         air.clock_advanced();
     }
-    panic!("{PASSES} passes without an end: a task spins");
+    let polls: Vec<_> = tasks
+        .iter()
+        .map(|task| (task.name, task.polls, task.done))
+        .collect();
+    panic!(
+        "{PASSES} passes without an end at {:?}: a task spins: {polls:?}",
+        clock.now()
+    );
 }

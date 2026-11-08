@@ -24,9 +24,7 @@ use oer_protocols_ieee80211_testing_model::{
     MODEL_MAX_MPDU, ModelAck, ModelAnyBuffer, ModelBackend, ModelBlockAckEvidence, ModelCaps24,
     ModelLentRx, ModelNetworkMemory, ModelPort, ModelSmall, ModelTypes,
 };
-use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, TransmitError, TransmitRefused, Unpublished,
-};
+use oer_protocols_network_port::{EthernetFrame, EthernetFrameView, FrameLengthError, Unpublished};
 use oer_protocols_network_runtime::{PortRefusal, TxBuffers};
 use oer_protocols_network_wire::ethernet::EthernetHeader;
 use oer_protocols_radio_port::{LocalId, SlotIdentity};
@@ -138,7 +136,6 @@ impl EventSink<ActorEvent> for Observed {
 pub struct NetworkStopState {
     requested: Cell<bool>,
     stopped: Cell<bool>,
-    lost: Cell<bool>,
     network: Cell<Option<Waker>>,
     station: Cell<Option<Waker>>,
 }
@@ -168,12 +165,6 @@ impl NetworkStopState {
         self.stopped.set(true);
         Self::wake(&self.station);
     }
-
-    /// The network side ended without answering.
-    pub fn lost(&self) {
-        self.lost.set(true);
-        Self::wake(&self.station);
-    }
 }
 
 impl NetworkStop for NetworkStopState {
@@ -188,8 +179,6 @@ impl NetworkStop for NetworkStopState {
         self.station.set(Some(cx.waker().clone()));
         if self.stopped.get() {
             Poll::Ready(Ok(()))
-        } else if self.lost.get() {
-            Poll::Ready(Err(NetworkStopLost))
         } else {
             Poll::Pending
         }
@@ -322,10 +311,4 @@ impl TxBuffers for Buffers {
     fn restore(&mut self, frame: WrittenFrame) {
         self.0.give(frame.memory);
     }
-}
-
-/// The frame a full or downed station refused: its memory goes back.
-pub fn refused_memory(refused: TransmitRefused<WrittenFrame>, free: &FreeMemory) -> TransmitError {
-    free.give(refused.frame.memory);
-    refused.reason
 }

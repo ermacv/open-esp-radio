@@ -188,7 +188,7 @@ impl AccessPoint {
         let mut sent = false;
         for msdu in pending {
             if self.port_open() {
-                self.to_station(&msdu);
+                self.relay(&msdu);
                 sent = true;
             } else {
                 self.dropped_to_station += 1;
@@ -317,7 +317,7 @@ impl AccessPoint {
             return false;
         }
         let now = self.clock.now();
-        self.wired.from_station(
+        self.wired.take(
             Msdu {
                 destination: msdu.destination,
                 source: msdu.source,
@@ -396,12 +396,12 @@ impl AccessPoint {
 
     /// An EAPOL frame to the station, never protected: Messages 1 and 3.
     fn eapol(&mut self, station: [u8; 6], eapol: &[u8]) {
-        let frame = self.from_ds(station, BSSID, ETHERTYPE_EAPOL, eapol, None);
+        let frame = self.data_frame(station, BSSID, ETHERTYPE_EAPOL, eapol, None);
         self.receive(&frame, false);
     }
 
     /// Relay `msdu` to the open station, protected on a protected link.
-    fn to_station(&mut self, msdu: &Msdu) {
+    fn relay(&mut self, msdu: &Msdu) {
         let protected = self.config.protected;
         let Some(association) = self.association.as_mut() else {
             return;
@@ -411,7 +411,7 @@ impl AccessPoint {
             association.packet_number += 1;
             number
         });
-        let frame = self.from_ds(
+        let frame = self.data_frame(
             msdu.destination,
             msdu.source,
             msdu.ether_type,
@@ -423,7 +423,7 @@ impl AccessPoint {
 
     /// A data MPDU from the DS (9.3.2.1): to `destination` from `source`,
     /// under CCMP's header of `packet_number` when protected.
-    fn from_ds(
+    fn data_frame(
         &mut self,
         destination: [u8; 6],
         source: [u8; 6],

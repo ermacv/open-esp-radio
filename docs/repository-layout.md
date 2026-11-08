@@ -157,8 +157,8 @@ network contract on the codec.
 
 ## Known deviations
 
-- `protocols/ieee80211/runtime` has a dev-dependency on
-  `chips/family/radio/ieee80211/policy`.
+- `protocols/ieee80211/runtime` and `protocols/network/testing/model` have a
+  dev-dependency on `chips/family/radio/ieee80211/policy`.
 - `chips/family/radio/ieee80211/policy` has a dev-dependency on
   `chips/esp32s31/radio/ieee80211/backend`.
 - Normal dependencies outside their role:

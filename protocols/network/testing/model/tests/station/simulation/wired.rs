@@ -10,7 +10,7 @@ use oer_portable_wire::Writer;
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::dhcp::{self, DhcpMessage, Fixed, Flags, MessageType, Op, option};
-use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
+use oer_protocols_network_wire::ethernet::EtherType;
 use oer_protocols_network_wire::icmp::{self, Echo, PROTOCOL_ICMP};
 use oer_protocols_network_wire::ip::{DsField, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
@@ -192,7 +192,7 @@ impl Wired {
     }
 
     /// An MSDU from the station.
-    pub fn from_station(&mut self, msdu: Msdu, now: Instant) {
+    pub fn take(&mut self, msdu: Msdu, now: Instant) {
         self.station = Some(msdu.source);
         let taken = match EtherType::new(msdu.ether_type) {
             EtherType::ARP => self.arp(&msdu),
@@ -487,18 +487,4 @@ impl Wired {
         packet.extend_from_slice(payload);
         packet
     }
-}
-
-/// An Ethernet frame of `msdu`, as a test reads one.
-#[allow(dead_code, reason = "a case's reading")]
-pub fn ethernet(msdu: &Msdu) -> Vec<u8> {
-    let mut frame = EthernetHeader {
-        destination: msdu.destination,
-        source: msdu.source,
-        ether_type: EtherType::new(msdu.ether_type),
-    }
-    .to_bytes()
-    .to_vec();
-    frame.extend_from_slice(&msdu.payload);
-    frame
 }
