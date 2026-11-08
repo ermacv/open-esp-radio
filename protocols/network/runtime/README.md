@@ -175,3 +175,12 @@ ends the commands it had not seen `Outcome::Closed`, closes the socket in the
 core, and gives every block in the lanes to the pool; observers still read their
 results. A socket dropped after a stop gives the same to `LateSocket::collect`. A
 block in the application's own hands stays there, for the pool's holder.
+
+## The device port
+
+`DevicePort` is a service's port over a `NetDevice` and its `NetTransmit`. Each
+registration asks the transmit half for the memory the device returned, so that
+memory comes home whether or not the service sends; only a refused frame waiting for
+room is woken by room. `give_back` ends the exchange before the port ends: it gives
+back every frame the device's queue holds and takes back the memory the device
+returned, as the device's queues outlive the port.

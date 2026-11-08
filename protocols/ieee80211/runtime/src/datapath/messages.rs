@@ -304,6 +304,10 @@ pub struct StopObserved {
     pub network_lost: bool,
     /// Receive units the network still holds.
     pub lent: u16,
+    /// The network's transmit memory the station still holds: ended
+    /// frames' memory the return queue had no room for, and MSDUs left in
+    /// the transmit queue.
+    pub memory_held: u16,
 }
 
 /// A broken contract that ends the actor: the port's named fault, or one

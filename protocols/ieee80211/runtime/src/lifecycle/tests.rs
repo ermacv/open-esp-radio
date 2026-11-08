@@ -500,11 +500,20 @@ impl<'b> World<'b> {
         *self.control.borrow_mut() = Some(control);
     }
 
+    /// Stop, the network taking back its memory meanwhile: a stop that
+    /// stops the network waits for its memory to be home.
     async fn stop(&self) {
         let mut control = self.control.borrow_mut().take().unwrap();
         // A lifecycle that already ended refuses it.
         let _refused = control.command(ControlCommand::Stop).await;
         *self.control.borrow_mut() = Some(control);
+        for _ in 0..2000 {
+            self.take_back_memory();
+            if self.status().stopped {
+                return;
+            }
+            yield_now().await;
+        }
     }
 
     fn status(&self) -> Status {

@@ -114,6 +114,16 @@ impl Policy {
             (self.active && !linked).then_some(Command::Connect)
         }
     }
+    /// Whether [`Self::command`] at `now` gives a command: the check a
+    /// lifecycle makes after it registered for the policy, so that a
+    /// change the lifecycle's own step made is not left for a wake that
+    /// came before the registration.
+    pub fn pending(&self, now: Instant, linked: bool) -> bool {
+        if self.stopping {
+            return !self.disconnect_sent || !linked;
+        }
+        self.ready(now, linked) && self.retry && self.ready && !linked
+    }
     pub fn deadline(&self) -> Option<Instant> {
         if self.active { self.next } else { None }
     }

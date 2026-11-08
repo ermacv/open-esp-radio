@@ -288,6 +288,12 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
         self.state.policy_waker.register(cx.waker());
         self.state.operations.register_released(cx);
     }
+    /// Whether the policy has a command at `now`, looked at after
+    /// [`Self::policy_register`]: a wake of the policy that came before the
+    /// registration found no waker.
+    pub(crate) fn policy_pending(&self, now: oer_portable_time::Instant) -> bool {
+        self.policy_admissible() && self.state.policy.get().pending(now, self.linked())
+    }
     /// The policy's next command; a station request takes its kind's
     /// permission, the one admission it shares with operations.
     pub(crate) fn policy_command<K>(

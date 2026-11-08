@@ -89,11 +89,14 @@ impl<D, T, X> DevicePort<D, T, X> {
 }
 
 impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
-    /// Give back every frame the device's queue holds. Its queue outlives this
-    /// port, so dropping the port returns none of them: a stop calls this
-    /// before it tells the device it is over.
-    pub fn give_back_received(&mut self) {
+    /// Give back every frame the device's queue holds and take back the
+    /// memory the device returned. The device's queues outlive this port,
+    /// so dropping the port returns none of them: a stop calls this before
+    /// it tells the device it is over.
+    pub fn give_back(&mut self) {
         while self.take_frame(|_| {}) {}
+        // Asking the transmit half takes back what the device returned.
+        let _room = self.transmit.has_room();
     }
 }
 
@@ -187,12 +190,17 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
     fn register(&mut self, cx: &mut Context<'_>) {
         let received = self.device.poll_receive_ready(cx).is_ready();
         let link = self.device.poll_link(cx).is_ready();
+        // The transmit half takes back the memory the device returned and
+        // registers for the next return, sending or not: an idle port's
+        // memory comes home too. Its room wakes only a refused frame that
+        // waits for room.
+        let has_room = self.transmit.poll_room(cx).is_ready();
         // Only what a refused frame needs: a free queue with the link down
         // or no buffer would wake the service to the same refusal, for ever,
         // and an idle port needs nothing.
         let room = match self.waiting {
             Waiting::Nothing | Waiting::Link => false,
-            Waiting::Room => self.transmit.poll_room(cx).is_ready(),
+            Waiting::Room => has_room,
             Waiting::Buffer => self.buffers.poll_free(cx).is_ready(),
         };
         if received || link || room {

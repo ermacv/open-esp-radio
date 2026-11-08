@@ -943,6 +943,12 @@ where
                 again = true;
             }
             io.control.policy_register(cx);
+            // Looked at after the registration: the policy's own wake from
+            // this poll's step (a refused Disconnect of the stop, a notice)
+            // found no waker, as the wake that brought this poll took it.
+            if io.control.policy_pending(self.inner.now) {
+                again = true;
+            }
         }
         let deadline = self.deadline(io).filter(|at| *at > self.inner.now);
         if deadline != self.inner.armed {

@@ -152,8 +152,21 @@ The policy never connects first: it becomes active at the application's
 first admitted connect, which named the network, and its reconnections use
 the profile the station kept; they publish none.
 Explicit Disconnect pauses the policy and Connect resumes it. Graceful Stop
-has its own wake, admits one disconnect and retires after link-down. The raw
+has its own wake, admits one disconnect and retires after link-down; a
+station without a link refuses that disconnect and the lifecycle then takes
+the stop. The lifecycle looks at the policy again after it registers for it,
+so a policy change its own step made needs no later wake. The raw
 runtime `Control::stop` still requests immediate cooperative retirement.
+
+A stop that stops the network returns the network's transmit memory before
+it asks the network to stop: once the radio stopped and its arenas settled,
+the ended frames' memory and every MSDU left in the transmit queue (each as
+data left behind) go back through the return queue, as its room allows, and
+only then does the actor ask the network to stop. The network takes that
+memory back before its port ends, so a confirmed stop leaves none of it with
+the station. A network that never takes it back ends the stop at its
+deadline, unconfirmed, with the memory held in `StopObserved::memory_held`.
+A stop for the next installation keeps the network and its MSDUs.
 Policy deadline exhaustion is a typed station failure. No policy timer
 exists when reconnect is disabled.
 

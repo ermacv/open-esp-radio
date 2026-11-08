@@ -293,6 +293,10 @@ impl<K> Radio<K> {
 enum NetworkStopping {
     /// No stop asked it to stop.
     NotAsked,
+    /// A stop owes it its stop once the station holds none of the
+    /// network's transmit memory: the stopped radio's ended frames and the
+    /// MSDUs left in the transmit queue went back through `returned`.
+    Owed,
     /// Asked, and it has not reported.
     Asked,
     /// It reported its stop; lent units are still out.
@@ -407,6 +411,10 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     frames_out: u8,
     /// The network side's stop.
     network_stopping: NetworkStopping,
+    /// The network's MSDUs a stop found left in the transmit queue, at its
+    /// last count: what a stop still holds of the network's memory beside
+    /// the ended frames' (`DataTx::freed`).
+    queued: usize,
     /// The reply offered to the lifecycle, until it answers.
     reply_out: Option<ReplyPlace>,
     owed: Owed<'id, D>,
@@ -492,6 +500,7 @@ where
             },
             frames_out: 0,
             network_stopping: NetworkStopping::NotAsked,
+            queued: 0,
             reply_out: None,
             owed: Owed::new(),
             facts: Facts::default(),
@@ -556,6 +565,7 @@ where
                 },
                 frames_out: 0,
                 network_stopping: NetworkStopping::NotAsked,
+                queued: 0,
                 reply_out: None,
                 owed: Owed::new(),
                 facts: Facts::default(),

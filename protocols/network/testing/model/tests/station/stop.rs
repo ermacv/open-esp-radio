@@ -1,7 +1,6 @@
 //! A graceful stop under load: the station leaves, the network ends every
-//! command and brings every block home, and the station's owners return.
-//! The network's transmit memory the station still holds at its end does
-//! not all come back: the two ignored cases name that defect.
+//! command and brings every block home, the station's owners return, and
+//! every transmit buffer of the network is free again.
 
 use oer_portable_time::Duration;
 use oer_protocols_ieee80211_runtime::station::contract::{DisconnectReason, Notice};
@@ -99,16 +98,15 @@ fn a_stop_under_load_ends_every_command_and_brings_every_block_home() {
             stop_and_read(world, observers).await;
         })
     });
-    report.assert_stopped();
+    report.assert_stopped_with_every_owner();
     left_the_network(&report);
 }
 
-/// DEFECT: MSDUs the network handed to the station's transmit queue and the
-/// actor never took stay in that queue after a graceful stop: the actor
-/// retires without giving their memory back (`NetworkEnds::returned`), so
-/// the network's transmit memory does not all come home.
+/// MSDUs the network handed to the station's transmit queue and the actor
+/// never took go back with the stop: the actor hands their memory back
+/// before it asks the network to stop, and the network takes it back at its
+/// end.
 #[test]
-#[ignore = "defect: a stop leaves the network's MSDUs in the station's transmit queue"]
 fn a_stop_gives_back_the_memory_of_msdus_still_in_the_station_s_queue() {
     struct Net;
     let report = simulate::<Net>(Setup::default(), |world| {
@@ -123,13 +121,11 @@ fn a_stop_gives_back_the_memory_of_msdus_still_in_the_station_s_queue() {
     report.assert_transmit_memory_home();
 }
 
-/// DEFECT: the network takes ended frames' memory back from the station
-/// only when it sends (`DeviceTransmit::has_room`, `poll_room`); while it
-/// is idle the return queue fills at `TX_DEPTH` and the actor keeps the
-/// rest in its own deque, which a graceful stop retires with the actor, so
-/// the network's transmit memory does not all come home.
+/// Ended frames' memory comes home while the network is idle: the network
+/// takes it back whenever the station returns some, not only when it sends,
+/// so the actor holds none beyond the return queue, and a stop after an
+/// idle stretch finds every buffer home.
 #[test]
-#[ignore = "defect: a stop retires the actor holding ended frames' memory beyond the return queue"]
 fn a_stop_after_an_idle_network_gives_back_every_ended_frame_s_memory() {
     struct Net;
     const BURST: u16 = 24;

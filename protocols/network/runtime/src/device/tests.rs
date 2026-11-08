@@ -144,14 +144,26 @@ struct Transmit {
     full: bool,
     flushes: u32,
     room_polls: u32,
+    /// Memory the device returned that the stack has not taken back.
+    returned: u32,
+    /// Memory the stack took back.
+    taken_back: u32,
+}
+
+impl Transmit {
+    fn take_back(&mut self) {
+        self.taken_back += core::mem::take(&mut self.returned);
+    }
 }
 
 impl NetTransmit for Transmit {
     type Frame = Written;
     fn has_room(&mut self) -> bool {
+        self.take_back();
         !self.full
     }
     fn poll_room(&mut self, _: &mut Context<'_>) -> Poll<()> {
+        self.take_back();
         self.room_polls += 1;
         if self.full {
             Poll::Pending
@@ -354,6 +366,17 @@ fn an_idle_port_with_room_wakes_nobody() {
     assert!(!wakes_at_once(&mut port()));
 }
 
+/// The memory the device returned comes back at each registration, with no
+/// frame to send, and wakes nobody by itself.
+#[test]
+fn an_idle_port_takes_back_the_memory_the_device_returned() {
+    let mut port = port();
+    port.transmit.returned = 3;
+    assert!(!wakes_at_once(&mut port));
+    assert_eq!(port.transmit.taken_back, 3);
+    assert!(port.transmit.sent.is_empty());
+}
+
 #[test]
 fn room_wakes_only_a_frame_that_met_none() {
     let mut port = port();
@@ -387,7 +410,10 @@ fn a_down_link_with_a_free_queue_wakes_nobody_until_it_changes() {
         Err(Unpublished::Port(PortRefusal::LinkDown))
     );
     assert!(!wakes_at_once(&mut port), "room is not what it waits for");
-    assert_eq!(port.transmit.room_polls, 0);
+    assert_eq!(
+        port.transmit.room_polls, 1,
+        "asked for returned memory only"
+    );
     port.device.link_changed = true;
     assert!(wakes_at_once(&mut port));
 }
@@ -440,7 +466,11 @@ fn a_write_refused_for_the_link_waits_for_the_link() {
         Err(Unpublished::Port(PortRefusal::LinkDown))
     );
     assert!(!wakes_at_once(&mut port));
-    assert_eq!(port.transmit.room_polls + port.buffers.free_polls, 0);
+    assert_eq!(
+        (port.transmit.room_polls, port.buffers.free_polls),
+        (1, 0),
+        "asked for returned memory only"
+    );
 }
 
 #[test]
@@ -462,7 +492,7 @@ fn a_bad_frame_waits_for_nothing() {
 }
 
 #[test]
-fn a_stop_gives_back_every_frame_the_queue_holds() {
+fn a_stop_gives_back_every_frame_and_takes_back_the_returned_memory() {
     let returned = Arc::new(AtomicU32::new(0));
     let mut port = port();
     for _ in 0..3 {
@@ -470,7 +500,12 @@ fn a_stop_gives_back_every_frame_the_queue_holds() {
         port.device.incoming.push_back(lent_from(storage));
     }
     port.device.incoming.push_back(Incoming::Copied);
-    port.give_back_received();
+    port.transmit.returned = 2;
+    port.give_back();
     assert_eq!(returned.load(Ordering::SeqCst), 3);
     assert_eq!(port.device.incoming.len(), 0);
+    assert_eq!(
+        port.transmit.taken_back, 2,
+        "and takes back the returned memory"
+    );
 }

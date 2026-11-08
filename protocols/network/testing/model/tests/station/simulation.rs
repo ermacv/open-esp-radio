@@ -69,8 +69,7 @@ use oer_protocols_network_core::{
     Configuration, Datagram, Group, Interface, NetworkOwner, Remote, claim,
 };
 use oer_protocols_network_port::{
-    EthernetFrameView, FramePort, FrameSource, LinkSnapshot, NetTransmit, TransmitRefused,
-    Unpublished,
+    EthernetFrameView, FramePort, FrameSource, LinkSnapshot, Unpublished,
 };
 use oer_protocols_network_runtime::{
     ConfigurationWatch, DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, PortRefusal,
@@ -132,7 +131,7 @@ type StationLifecycle<'s> =
 pub type StationControl<'c> = Control<'c, ModelCaps24, COMMANDS>;
 type Device<'c> = runtime::Device<'c, ModelLentRx, RX_DEPTH>;
 type StationTransmit<'c> = DeviceTransmit<'c, WrittenFrame, Supply, TX_DEPTH>;
-type Inner<'c> = DevicePort<Device<'c>, Transmit<'c>, Buffers>;
+type Inner<'c> = DevicePort<Device<'c>, StationTransmit<'c>, Buffers>;
 type NetService<'c, T> = Service<
     'static,
     'static,
@@ -305,8 +304,7 @@ pub struct Report {
     pub network: Option<EndCause>,
     /// The network's blocks in its pool after the run.
     pub blocks_free: usize,
-    /// The network's transmit memory free after the run, once the harness
-    /// took back what the station returned, of its total.
+    /// The network's transmit memory free after the run, of its total.
     pub memory_free: usize,
     /// The network's memory left in the station's transmit queue: MSDUs the
     /// station never took.
@@ -436,27 +434,6 @@ impl Idle {
             }
             None => false,
         }
-    }
-}
-
-/// The station's transmit end, held beside the port so that the harness
-/// still takes back what the station gives back after the network ended.
-#[derive(Clone)]
-pub struct Transmit<'c>(Rc<RefCell<StationTransmit<'c>>>);
-
-impl NetTransmit for Transmit<'_> {
-    type Frame = WrittenFrame;
-    fn has_room(&mut self) -> bool {
-        self.0.borrow_mut().has_room()
-    }
-    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.0.borrow_mut().poll_room(cx)
-    }
-    fn try_transmit(&mut self, frame: WrittenFrame) -> Result<(), TransmitRefused<WrittenFrame>> {
-        self.0.borrow_mut().try_transmit(frame)
-    }
-    fn flush(&mut self) {
-        self.0.borrow_mut().flush();
     }
 }
 
@@ -679,14 +656,6 @@ impl<'b, T: 'static> World<'b, T> {
         let deadline = self.now().saturating_add(within);
         self.with_control(|control| control.stop_gracefully(deadline));
     }
-
-    /// Stop the station's service at once, without the graceful stop's
-    /// Disconnect, by `within` from now.
-    pub fn stop_now(&self, within: Duration) {
-        self.stopping.set(true);
-        let deadline = self.now().saturating_add(within);
-        self.with_control(|control| control.stop(deadline));
-    }
 }
 
 /// Run the station and the network of `setup` on a fresh model with
@@ -868,12 +837,7 @@ async fn run<'s, T: 'static>(
     };
     let free = FreeMemory::new(NETWORK_BUFFERS);
     let device = Device::new(delivered, copies, &state);
-    let transmit = Transmit(Rc::new(RefCell::new(DeviceTransmit::new(
-        stack,
-        returned,
-        Supply(free.clone()),
-        &state,
-    ))));
+    let transmit = DeviceTransmit::new(stack, returned, Supply(free.clone()), &state);
 
     // The network, as the application's `Network::start` builds it.
     let memory = Box::leak(Box::new([[0_u8; BLOCK]; BLOCKS]));
@@ -883,7 +847,7 @@ async fn run<'s, T: 'static>(
     let interface = Interface::dhcp(STATION, MTU, setup.seed).expect("the interface");
     let port_end = Held(Some(DevicePort::new(
         device,
-        transmit.clone(),
+        transmit,
         Buffers(free.clone()),
     )));
     let owner = NetworkOwner::new(brand, interface, pool, port_end);
@@ -980,7 +944,7 @@ async fn run<'s, T: 'static>(
             // The queue outlives the port, so its frames go back first, as the
             // application's stop gives them.
             if let Some(port) = ended.retired.port.0.as_mut() {
-                port.give_back_received();
+                port.give_back();
             }
             ended.retired.port.0 = None;
             assert_eq!(ended.cause, cause);
@@ -1022,7 +986,6 @@ async fn run<'s, T: 'static>(
     }
     ended.collect();
     ended.close_returns();
-    let _room = transmit.0.borrow_mut().has_room();
     Report {
         lifecycle: lifecycle_end.borrow_mut().take(),
         actor: actor_end.borrow_mut().take(),
