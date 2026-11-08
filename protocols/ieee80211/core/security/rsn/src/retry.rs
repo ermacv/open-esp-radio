@@ -1,6 +1,6 @@
 //! Event-driven WPA2 retransmission state without sleeps or timer polling.
 
-use crate::state::{RsnTransmit, RsnTxMessage};
+use crate::state::RsnTxMessage;
 use oer_portable_time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,8 +29,10 @@ pub struct RsnRetryAlarm {
 pub enum RsnRetryAction {
     Stale,
     Exhausted,
+    /// Retransmit `message`. The handshake state, not this schedule, owns
+    /// the replay counter: each retransmission takes a new one from it.
     Transmit {
-        frame: RsnTransmit,
+        message: RsnTxMessage,
         next_alarm: RsnRetryAlarm,
     },
 }
@@ -43,7 +45,7 @@ pub enum RsnRetryAction {
 pub struct RsnRetry {
     config: RsnRetryConfig,
     generation: u32,
-    pending: Option<RsnTransmit>,
+    pending: Option<RsnTxMessage>,
     attempts_left: u8,
 }
 
@@ -66,19 +68,17 @@ impl RsnRetry {
         })
     }
 
+    /// Open the response window of `message`'s original transmission.
     pub fn arm(
         &mut self,
-        original: RsnTransmit,
+        message: RsnTxMessage,
         now: Instant,
     ) -> Result<RsnRetryAlarm, RsnRetryError> {
         let deadline = now
             .checked_add(self.config.first_interval)
             .ok_or(RsnRetryError::DeadlineOverflow)?;
         self.generation = next_generation(self.generation);
-        self.pending = Some(RsnTransmit {
-            retransmission: true,
-            ..original
-        });
+        self.pending = Some(message);
         self.attempts_left = self.config.attempts;
         Ok(RsnRetryAlarm {
             generation: self.generation,
@@ -115,7 +115,7 @@ impl RsnRetry {
         if alarm.generation != self.generation {
             return Ok(RsnRetryAction::Stale);
         }
-        let Some(frame) = self.pending else {
+        let Some(message) = self.pending else {
             return Ok(RsnRetryAction::Stale);
         };
 
@@ -131,7 +131,10 @@ impl RsnRetry {
         // alarm reports explicit exhaustion instead of silently leaving the
         // handshake pending forever after the retry budget is consumed.
         let next_alarm = self.alarm_after(now)?;
-        Ok(RsnRetryAction::Transmit { frame, next_alarm })
+        Ok(RsnRetryAction::Transmit {
+            message,
+            next_alarm,
+        })
     }
 
     pub const fn is_armed(&self) -> bool {
@@ -139,10 +142,7 @@ impl RsnRetry {
     }
 
     pub const fn pending_message(&self) -> Option<RsnTxMessage> {
-        match self.pending {
-            Some(transmit) => Some(transmit.message),
-            None => None,
-        }
+        self.pending
     }
 
     fn alarm_after(&self, now: Instant) -> Result<RsnRetryAlarm, RsnRetryError> {

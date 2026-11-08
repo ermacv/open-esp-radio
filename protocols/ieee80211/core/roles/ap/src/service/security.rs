@@ -3,6 +3,7 @@
 
 use super::*;
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpTxPacketNumber;
 use oer_protocols_ieee80211_wire::security::{SppCapability, SppError, rsn::rsnx_capabilities};
 
 /// Why an association cannot use the advertised RSN profile.
@@ -194,7 +195,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         if state.phase() == RsnApPhase::Authorized || state.phase() == RsnApPhase::Failed {
             return Ok(ApEapolTxCompletion::Superseded);
         }
-        let current = state.retry_transmit()?;
+        let current = state.outstanding_transmit()?;
         if current.message != transmit.message || current.replay_counter != transmit.replay_counter
         {
             return Ok(ApEapolTxCompletion::Superseded);
@@ -203,7 +204,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         let armed = stage_changed || !transmit.retransmission;
         if armed {
             existing.wpa2_retry.cancel();
-            let mut alarm = existing.wpa2_retry.arm(transmit, now)?;
+            let mut alarm = existing.wpa2_retry.arm(transmit.message, now)?;
             // hostapd extends only the acknowledged initial M1 window. M3
             // retains the short first timeout, then uses the subsequent one.
             if acknowledged
@@ -236,9 +237,15 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     }
 
     /// Consume at most one due authenticator retry edge.
+    ///
+    /// A retransmission takes the handshake's next replay counter; the
+    /// station answers only that one. A Message 3 carries as its Key RSC the
+    /// last packet number of `group_packet_numbers`, the numbering of the
+    /// installed GTK that the advertised key data names.
     pub fn take_due_wpa2_retry<const N: usize>(
         &mut self,
         now: oer_portable_time::Instant,
+        group_packet_numbers: &CcmpTxPacketNumber,
     ) -> Result<ApWpa2RetryProgress<N>, ApWpa2Error> {
         let Some(peer) = self.storage_mut().peers.iter_mut().flatten().find(|peer| {
             peer.wpa2_retry_alarm
@@ -256,16 +263,20 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         };
         match action {
             RsnRetryAction::Stale => Ok(ApWpa2RetryProgress::None),
-            RsnRetryAction::Transmit { frame, next_alarm } => {
+            RsnRetryAction::Transmit {
+                message,
+                next_alarm,
+            } => {
                 self.checked_peer_mut(peer_address)?.wpa2_retry_alarm = Some(next_alarm);
-                let frame = match frame.message {
-                    oer_protocols_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage1 => self
-                        .bind_eapol(
-                            self.authenticator(peer_address)?.message1_frame(frame)?,
-                            frame,
-                        )?,
+                let frame = match message {
+                    oer_protocols_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage1 => {
+                        let (frame, transmit) = self
+                            .authenticator_mut(peer_address)?
+                            .retransmit_message1()?;
+                        self.bind_eapol(frame, transmit)?
+                    }
                     oer_protocols_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage3 => {
-                        self.message3_transmit(peer_address, frame)?
+                        self.retransmit_message3(peer_address, group_packet_numbers)?
                     }
                     _ => return Err(ApWpa2Error::UnexpectedAction),
                 };
@@ -290,11 +301,14 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     ///
     /// PTK derivation, MIC verification and GTK wrapping are pure bounded
     /// operations of `oer-protocols-ieee80211-core-security-rsn`. Hardware key installation remains an
-    /// explicit later edge in the chip AP engine.
+    /// explicit later edge in the chip AP engine. Message 3 carries as its
+    /// Key RSC the last packet number of `group_packet_numbers`, the
+    /// numbering of the installed GTK that its key data names.
     pub fn on_eapol<const N: usize>(
         &mut self,
         peer: [u8; 6],
         frame: OwnedEapolFrame<N>,
+        group_packet_numbers: &CcmpTxPacketNumber,
     ) -> Result<ApWpa2Progress<N>, ApWpa2Error> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch.into());
@@ -323,7 +337,12 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                     .authenticator
                     .as_mut()
                     .ok_or(ApServiceError::WrongPeerPhase)?
-                    .complete_message3(preparation, &plain, &mut SoftwareAes128)?;
+                    .complete_message3(
+                        preparation,
+                        &plain,
+                        group_packet_numbers.last(),
+                        &mut SoftwareAes128,
+                    )?;
                 // Valid M2 closes the Message-1 response window. Message 3
                 // receives a fresh schedule only after its own terminal TX
                 // completion.
@@ -331,9 +350,6 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 existing.wpa2_retry_alarm = None;
                 Ok(ApWpa2Progress::Transmit(self.bind_eapol(frame, transmit)?))
             }
-            RsnAuthenticatorStep::Retransmit(transmit) => Ok(ApWpa2Progress::Transmit(
-                self.message3_transmit(peer, transmit)?,
-            )),
             RsnAuthenticatorStep::Authorized => {
                 let existing = self.checked_peer_mut(peer)?;
                 existing.wpa2_retry.cancel();
@@ -344,20 +360,23 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         }
     }
 
-    /// The pending Message 3 of `transmit`, with the key data of its first
-    /// publication.
-    fn message3_transmit<const N: usize>(
-        &self,
+    /// The pending Message 3 again under the next replay counter, with the
+    /// key data of its first publication and the GTK's current packet
+    /// number as its Key RSC.
+    fn retransmit_message3<const N: usize>(
+        &mut self,
         peer: [u8; 6],
-        transmit: oer_protocols_ieee80211_core_security_rsn::state::RsnTransmit,
+        group_packet_numbers: &CcmpTxPacketNumber,
     ) -> Result<ApEapolTransmit<N>, ApWpa2Error> {
         if self.authenticator(peer)?.pending_ptk().is_none() {
             return Err(ApWpa2Error::MissingPairwiseKey);
         }
         let plain = self.message3_key_data(peer)?;
-        let frame = self
-            .authenticator(peer)?
-            .message3(transmit, &plain, &mut SoftwareAes128)?;
+        let (frame, transmit) = self.authenticator_mut(peer)?.retransmit_message3(
+            &plain,
+            group_packet_numbers.last(),
+            &mut SoftwareAes128,
+        )?;
         self.bind_eapol(frame, transmit)
     }
 
@@ -371,6 +390,16 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         self.checked_peer(peer)?
             .authenticator
             .as_ref()
+            .ok_or(ApServiceError::WrongPeerPhase)
+    }
+
+    fn authenticator_mut(
+        &mut self,
+        peer: [u8; 6],
+    ) -> Result<&mut RsnAuthenticator, ApServiceError> {
+        self.checked_peer_mut(peer)?
+            .authenticator
+            .as_mut()
             .ok_or(ApServiceError::WrongPeerPhase)
     }
 

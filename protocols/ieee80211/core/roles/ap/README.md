@@ -23,6 +23,11 @@ each peer is an `oer_protocols_ieee80211_core_security_rsn::authenticator::RsnAu
 this crate drives with the association's PMK and Message 3's key data; the SAE
 responder and the PMKSA cache are `oer-protocols-ieee80211-core-security-rsn`'s too. Transmit sequence
 spaces and the management replay frontier are `oer-protocols-ieee80211-core-upper-mac`'s.
+The GTK's transmit packet numbers belong to its installed key's owner
+(`oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpTxPacketNumber`), which
+`on_eapol` and `take_due_wpa2_retry` borrow: each Message 3, a retransmission
+included, carries that numbering's last packet number as its Key RSC and a
+new replay counter.
 
 An access point uses 40 MHz in 2.4 GHz only under the 20/40 coexistence rules;
 a station reports 20/40 OBSS as the standard requires.
@@ -31,14 +36,6 @@ a station reports 20/40 OBSS as the standard requires.
 
 **Security**
 
-- **M1/M3 retries reuse the replay counter.**
-  `service/security.rs::message3_transmit` rebuilds the same frame through
-  `rsn`'s `RsnAuthenticator::message3`, and `service/tests.rs` asserts
-  identical retry bytes. A lost M4 ends the handshake with wpa_supplicant.
-- **The M3 Key RSC is all zero** (`rsn`'s `authenticator.rs`
-  `complete_message3` and `message3`); it must carry the GTK's current TX
-  PN, as the IGTK IPN already does. A station may accept replayed group
-  frames.
 - **BIP does not guard +HTC** (`service/management.rs::protect_group_management`).
 
 **Timing and protocol**

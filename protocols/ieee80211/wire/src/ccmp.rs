@@ -50,6 +50,13 @@ impl CcmpPacketNumber {
         ]))
     }
 
+    /// Encode this packet number as an EAPOL-Key Key RSC: six little-endian
+    /// octets and two zero octets, the inverse of
+    /// [`Self::from_receive_sequence`].
+    pub const fn receive_sequence(self) -> [u8; 8] {
+        self.0.to_le_bytes()
+    }
+
     /// Decode the little-endian six-octet packet number carried by an EAPOL
     /// Key RSC. The two unused high octets must be zero; accepting them would
     /// silently truncate an install-time replay frontier.

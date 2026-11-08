@@ -47,3 +47,22 @@ fn receive_sequence_rejects_truncating_high_bits() {
         Err(CcmpReceiveSequenceError::HighBitsSet)
     );
 }
+
+#[test]
+fn receive_sequence_round_trips_every_packet_number_width() {
+    for value in [0, 1, 0x0605_0403_0201, CCMP_PACKET_NUMBER_MAX] {
+        let packet_number = CcmpPacketNumber::new(value).unwrap();
+        let sequence = packet_number.receive_sequence();
+        assert_eq!(sequence[6..], [0, 0]);
+        assert_eq!(
+            CcmpPacketNumber::from_receive_sequence(sequence),
+            Ok(packet_number)
+        );
+    }
+    assert_eq!(
+        CcmpPacketNumber::new(0x0605_0403_0201)
+            .unwrap()
+            .receive_sequence(),
+        [1, 2, 3, 4, 5, 6, 0, 0]
+    );
+}

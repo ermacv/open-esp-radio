@@ -237,6 +237,133 @@ fn ap_orders_crypto_install_transmit_and_authorization() {
 }
 
 #[test]
+fn ap_retransmissions_take_new_counters_and_await_only_the_latest() {
+    let ap = [1; 6];
+    let station = [2; 6];
+    let mut state = RsnApState::new(crate::Akm::Psk, ap, station, [3; 32], 20).unwrap();
+    // Before Message 3 exists there is no Message 3 to retransmit.
+    assert_eq!(state.retransmit_message3(), Err(RsnStateError::WrongPhase));
+    let retry = state.retransmit_message1().unwrap();
+    assert_eq!(
+        retry,
+        RsnTransmit {
+            message: RsnTxMessage::PairwiseMessage1,
+            replay_counter: 21,
+            retransmission: true,
+        }
+    );
+    assert_eq!(state.outstanding_transmit(), Ok(retry));
+    // The station's answer to the first Message 1 is no longer awaited.
+    let stale_message2 = frame(
+        RsnInterface::AccessPoint,
+        station,
+        PAIRWISE | MIC,
+        20,
+        [4; 32],
+    );
+    assert_eq!(
+        state.on_frame(stale_message2),
+        Err(RsnStateError::ReplayCounterMismatch)
+    );
+    let message2 = frame(
+        RsnInterface::AccessPoint,
+        station,
+        PAIRWISE | MIC,
+        21,
+        [4; 32],
+    );
+    let (ticket, retained) = match state.on_frame(message2).unwrap() {
+        RsnApAction::DerivePtk {
+            ticket, message2, ..
+        } => (ticket, message2),
+        action => panic!("unexpected action: {action:?}"),
+    };
+    assert_eq!(state.retransmit_message1(), Err(RsnStateError::WrongPhase));
+    let (ticket, retained) = match state.complete_ptk(ticket, retained, true).unwrap() {
+        RsnApAction::VerifyMessage2Mic { ticket, message2 } => (ticket, message2),
+        action => panic!("unexpected action: {action:?}"),
+    };
+    let ticket = match state.complete_message2_mic(ticket, retained, true).unwrap() {
+        RsnApAction::PrepareMessage3 { ticket } => ticket,
+        action => panic!("unexpected action: {action:?}"),
+    };
+    assert_eq!(
+        state
+            .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket, true)
+            .unwrap(),
+        RsnApAction::Transmit(RsnTransmit {
+            message: RsnTxMessage::PairwiseMessage3,
+            replay_counter: 22,
+            retransmission: false,
+        })
+    );
+    // Message 3 opens a new window: Message 1's retransmission is behind it.
+    assert_eq!(
+        state.outstanding_transmit(),
+        Ok(RsnTransmit {
+            message: RsnTxMessage::PairwiseMessage3,
+            replay_counter: 22,
+            retransmission: false,
+        })
+    );
+    let retry = state.retransmit_message3().unwrap();
+    assert_eq!(
+        retry,
+        RsnTransmit {
+            message: RsnTxMessage::PairwiseMessage3,
+            replay_counter: 23,
+            retransmission: true,
+        }
+    );
+    assert_eq!(state.outstanding_transmit(), Ok(retry));
+    let stale_message4 = frame(
+        RsnInterface::AccessPoint,
+        station,
+        PAIRWISE | MIC | SECURE,
+        22,
+        [0; 32],
+    );
+    assert_eq!(
+        state.on_frame(stale_message4),
+        Err(RsnStateError::ReplayCounterMismatch)
+    );
+    let message4 = frame(
+        RsnInterface::AccessPoint,
+        station,
+        PAIRWISE | MIC | SECURE,
+        23,
+        [0; 32],
+    );
+    assert!(matches!(
+        state.on_frame(message4).unwrap(),
+        RsnApAction::VerifyMessage4Mic { .. }
+    ));
+}
+
+#[test]
+fn ap_message1_retransmission_keeps_a_counter_for_message3() {
+    let mut state =
+        RsnApState::new(crate::Akm::Psk, [1; 6], [2; 6], [3; 32], u64::MAX - 2).unwrap();
+    assert_eq!(
+        state
+            .retransmit_message1()
+            .map(|transmit| transmit.replay_counter),
+        Ok(u64::MAX - 1)
+    );
+    // One more would leave Message 3 without a larger counter.
+    assert_eq!(
+        state.retransmit_message1(),
+        Err(RsnStateError::ReplayCounterExhausted)
+    );
+    assert_eq!(
+        state
+            .outstanding_transmit()
+            .map(|transmit| transmit.replay_counter),
+        Ok(u64::MAX - 1)
+    );
+}
+
+#[test]
 fn ap_peer_table_is_fixed_and_reports_full() {
     let mut peers = RsnApPeers::<2>::new();
     peers

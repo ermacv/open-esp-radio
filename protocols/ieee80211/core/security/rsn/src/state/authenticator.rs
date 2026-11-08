@@ -48,6 +48,9 @@ pub struct RsnApState {
     phase: RsnApPhase,
     message1_replay: u64,
     message3_replay: u64,
+    /// Whether the counter of the current response window belongs to a
+    /// retransmission.
+    retransmitted: bool,
     active_ticket: RsnTicket,
     next_ticket: u32,
 }
@@ -75,6 +78,7 @@ impl RsnApState {
             phase: RsnApPhase::AwaitingMessage2,
             message1_replay: initial_replay_counter,
             message3_replay: 0,
+            retransmitted: false,
             active_ticket: RsnTicket(0),
             next_ticket: 1,
         })
@@ -115,25 +119,71 @@ impl RsnApState {
         }))
     }
 
-    /// Return the authenticator frame that owns the current response window.
+    /// The authenticator frame that owns the current response window: its
+    /// message and the replay counter its response must echo.
     ///
     /// Timing and retry budgets belong to the AP service. The WPA state only
-    /// exposes the protocol-correct message and replay counter for its current
-    /// phase; it never reads time or schedules work itself.
-    pub const fn retry_transmit(&self) -> Result<RsnTransmit, RsnStateError> {
+    /// exposes the message and replay counter of its current phase; it never
+    /// reads time or schedules work itself.
+    pub const fn outstanding_transmit(&self) -> Result<RsnTransmit, RsnStateError> {
         match self.phase {
             RsnApPhase::AwaitingMessage2 => Ok(RsnTransmit {
                 message: RsnTxMessage::PairwiseMessage1,
                 replay_counter: self.message1_replay,
-                retransmission: true,
+                retransmission: self.retransmitted,
             }),
             RsnApPhase::AwaitingMessage4 => Ok(RsnTransmit {
                 message: RsnTxMessage::PairwiseMessage3,
                 replay_counter: self.message3_replay,
-                retransmission: true,
+                retransmission: self.retransmitted,
             }),
             _ => Err(RsnStateError::WrongPhase),
         }
+    }
+
+    /// Retransmit Message 1 under the next replay counter.
+    ///
+    /// Every EAPOL-Key frame the authenticator sends carries a new, larger
+    /// counter, and only the latest is awaited: Message 2 must echo it. The
+    /// counter after it stays free for Message 3, so a retransmission that
+    /// would leave none is refused with `ReplayCounterExhausted` and the
+    /// state is unchanged.
+    pub fn retransmit_message1(&mut self) -> Result<RsnTransmit, RsnStateError> {
+        if !matches!(self.phase, RsnApPhase::AwaitingMessage2) {
+            return Err(RsnStateError::WrongPhase);
+        }
+        let replay_counter = self
+            .message1_replay
+            .checked_add(1)
+            .filter(|counter| *counter != u64::MAX)
+            .ok_or(RsnStateError::ReplayCounterExhausted)?;
+        self.message1_replay = replay_counter;
+        self.retransmitted = true;
+        Ok(RsnTransmit {
+            message: RsnTxMessage::PairwiseMessage1,
+            replay_counter,
+            retransmission: true,
+        })
+    }
+
+    /// Retransmit Message 3 under the next replay counter. Message 4 must
+    /// echo it; the earlier Message 3 counters are no longer awaited. On
+    /// `ReplayCounterExhausted` the state is unchanged.
+    pub fn retransmit_message3(&mut self) -> Result<RsnTransmit, RsnStateError> {
+        if !matches!(self.phase, RsnApPhase::AwaitingMessage4) {
+            return Err(RsnStateError::WrongPhase);
+        }
+        let replay_counter = self
+            .message3_replay
+            .checked_add(1)
+            .ok_or(RsnStateError::ReplayCounterExhausted)?;
+        self.message3_replay = replay_counter;
+        self.retransmitted = true;
+        Ok(RsnTransmit {
+            message: RsnTxMessage::PairwiseMessage3,
+            replay_counter,
+            retransmission: true,
+        })
     }
 
     pub fn on_frame<const N: usize>(
@@ -269,6 +319,7 @@ impl RsnApState {
             .message1_replay
             .checked_add(1)
             .ok_or(RsnStateError::ReplayCounterExhausted)?;
+        self.retransmitted = false;
         self.phase = RsnApPhase::AwaitingMessage4;
         Ok(RsnApAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage3,
