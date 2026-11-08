@@ -110,9 +110,8 @@ fn the_station_answers_echo_requests_on_its_leased_address() {
 /// The station's profile names another PMK: the access point's
 /// authenticator drops Message 2, whose MIC fails, the station's handshake
 /// times out and its connect ends failed. The port never opens, nothing reaches the
-/// wired side and no address is leased; the service's stop still brings
-/// every owner home. It stops at once: the graceful stop of a station
-/// without a link is the defect of the case below.
+/// wired side and no address is leased; the graceful stop of the station,
+/// now without a link, still ends and brings every owner home.
 #[test]
 fn a_wrong_key_never_opens_the_port_and_the_connect_fails() {
     struct Net;
@@ -134,7 +133,6 @@ fn a_wrong_key_never_opens_the_port_and_the_connect_fails() {
             );
             assert!(!world.ap().port_open());
             assert_eq!(world.address(), None);
-            world.stop_now(Duration::from_secs(10));
         })
     });
     report.assert_stopped_with_every_owner();
@@ -154,14 +152,11 @@ fn a_wrong_key_never_opens_the_port_and_the_connect_fails() {
     assert!(ap.wired.dhcp.seen.is_empty(), "no DHCP message got through");
 }
 
-/// DEFECT: the graceful stop of a station without a link never ends. The
-/// stop policy first issues its Disconnect, which the idle station refuses
-/// (`NotConnected`); the refusal's wake of the policy finds no waker, as the
-/// wake that brought the lifecycle here took it, and the lifecycle registers
-/// for the policy only after that without looking at it again, so the
-/// policy's Stop is never taken: no task is woken and no time is due.
+/// The graceful stop of a station that never had a link ends: the stop's
+/// Disconnect is refused (`NotConnected`), and the lifecycle takes the
+/// policy's Stop though the refusal's wake of the policy came before the
+/// lifecycle registered for it.
 #[test]
-#[ignore = "defect: a graceful stop of a station without a link loses the lifecycle's wake"]
 fn a_graceful_stop_of_a_station_without_a_link_ends() {
     struct Net;
     let report = simulate::<Net>(Setup::default(), |world| {

@@ -175,3 +175,21 @@ ends the commands it had not seen `Outcome::Closed`, closes the socket in the
 core, and gives every block in the lanes to the pool; observers still read their
 results. A socket dropped after a stop gives the same to `LateSocket::collect`. A
 block in the application's own hands stays there, for the pool's holder.
+
+## The device port
+
+`DevicePort` is a service's port over a `NetDevice` and its `NetTransmit`. Each
+registration asks the transmit half for the memory the device returned, so that
+memory comes home whether or not the service sends; only a refused frame waiting for
+room is woken by room. `give_back` ends the exchange before the port ends: it gives
+back every frame the device's queue holds and takes back the memory the device
+returned, as the device's queues outlive the port, and leaves no refused frame
+waiting, so a next service over the same port starts idle. `serve_returns` is the
+return path of a port whose service no longer runs, for a composition that cancels
+its network: an owner that outlives the cancelled future keeps the service
+(`retire` takes it whenever) and drives the port's returns, frames given back and
+memory taken back with a registration for the next of each, until the device's
+owner says it is done. Nothing serves the returns of a composition without such an
+owner. The S31 application does not cancel its network task: that task is a root
+pinned in an executor frame that never returns, and it has no such owner. A change
+that cancels it must bring a working return path with it.

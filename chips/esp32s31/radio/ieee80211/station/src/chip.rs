@@ -559,6 +559,11 @@ pub(crate) struct ServiceRunner<W: Binding> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationExit {
     Stopped,
+    /// Stopped and released, every owner back, but the network's stop
+    /// participant was lost, so the network never confirmed its stop: a
+    /// software error this exit records. The radio's stop was confirmed;
+    /// nothing resets for it.
+    StoppedNetworkLost,
     /// The lifecycle or the datapath actor under it ended terminally.
     Failed(crate::failure::LifecycleFailure),
     /// Stopped, but the Wi-Fi radio release did not complete.

@@ -490,8 +490,9 @@ async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
             brand,
             mut port,
         } = retired;
-        // The queue outlives the port, so dropping it returns no frame.
-        port.give_back_received();
+        // The queues outlive the port, so dropping it returns no frame and
+        // takes back no memory: both happen here first.
+        port.give_back();
         drop(port);
         // Memory, lanes and result places are all static, so what a late
         // socket or observer reaches stays.

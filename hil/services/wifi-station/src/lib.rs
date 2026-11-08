@@ -131,6 +131,10 @@ pub struct Leave;
 pub enum Left {
     /// The link is down and the station stopped.
     Down,
+    /// The link is down and the radio's stop was confirmed, but the
+    /// network's stop participant was lost: the network never confirmed its
+    /// stop. A handled software error; nothing was reset.
+    DownNetworkLost,
     Refused(StationError),
 }
 

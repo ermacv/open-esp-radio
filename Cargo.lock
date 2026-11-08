@@ -1987,14 +1987,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-images-wifi-network"
+name = "oer-hil-images-wifi-station"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
  "heapless",
  "oer",
  "oer-hil-agent",
+ "oer-hil-services-fault",
  "oer-hil-services-load",
+ "oer-hil-services-sdk-station",
  "oer-hil-services-wifi-station",
  "oer-portable-events",
  "oer-portable-memory",
@@ -2007,24 +2009,6 @@ dependencies = [
  "oer-protocols-network-port",
  "oer-protocols-network-runtime",
  "oer-protocols-network-wire",
- "static_cell",
-]
-
-[[package]]
-name = "oer-hil-images-wifi-station"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "heapless",
- "oer",
- "oer-hil-agent",
- "oer-hil-services-fault",
- "oer-hil-services-load",
- "oer-hil-services-sdk-station",
- "oer-hil-services-wifi-station",
- "oer-portable-trace",
- "oer-protocols-hil-agent",
- "oer-protocols-hil-protocol",
  "postcard",
  "static_cell",
 ]

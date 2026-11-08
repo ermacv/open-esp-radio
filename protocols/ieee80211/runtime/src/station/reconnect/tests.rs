@@ -151,3 +151,63 @@ fn disabled_policy_has_no_timer_or_initial_connect_and_deadline_exhaustion_is_ty
         Err(DeadlineOverflow)
     ));
 }
+
+/// `pending` tells exactly whether `command` gives one, at every step of a
+/// retry and of a stop: its Disconnect, its wait for the link and its Stop.
+#[test]
+fn pending_tells_whether_the_next_command_gives_one() {
+    let time = clock();
+    let agrees = |policy: &Policy, linked: bool| {
+        let mut copy = *policy;
+        let gives = copy.command::<()>(time.now(), linked).unwrap().is_some();
+        assert_eq!(policy.pending(time.now(), linked), gives);
+        gives
+    };
+    let mut policy = Policy::new(ReconnectPolicy::every(Duration::from_secs(1)).unwrap());
+    assert!(!agrees(&policy, false));
+    policy.admitted(Command::Connect);
+    assert!(!agrees(&policy, false));
+    policy.observe(&linked(7), true);
+    assert!(!agrees(&policy, true));
+    policy.observe(&lost(), false);
+    assert!(agrees(&policy, false), "the first retry goes at once");
+    assert_eq!(connect::<()>(policy.command(time.now(), false).unwrap()), 1);
+    assert!(!agrees(&policy, false), "the attempt runs");
+    policy.observe(&lost(), false);
+    policy.observe(&failed(1), false);
+    assert!(!agrees(&policy, false), "the retry waits for its tick");
+    time.advance(Duration::from_secs(1)).unwrap();
+    assert!(agrees(&policy, false));
+    // A stop: its Disconnect, then the Stop once the link is down.
+    policy.stop();
+    assert!(agrees(&policy, true));
+    assert!(matches!(
+        policy.command::<()>(time.now(), true).unwrap(),
+        Some(ServiceCommand::Station(request)) if request.command() == Command::Disconnect
+    ));
+    assert!(!agrees(&policy, true), "the link is still up");
+    assert!(agrees(&policy, false));
+    assert!(matches!(
+        policy.command::<()>(time.now(), false).unwrap(),
+        Some(ServiceCommand::Stop)
+    ));
+}
+
+/// A new control epoch's policy keeps the configuration and forgets the
+/// ended epoch's stop and network: it issues nothing until the new epoch's
+/// application connects, and then retries as configured.
+#[test]
+fn a_new_epoch_s_policy_keeps_the_configuration_and_forgets_the_stop() {
+    let time = clock();
+    let mut policy = Policy::new(ReconnectPolicy::every(Duration::from_secs(1)).unwrap());
+    policy.admitted(Command::Connect);
+    policy.observe(&linked(7), true);
+    policy.stop();
+    let mut next = policy.next_epoch();
+    assert!(!next.pending(time.now(), false), "no stop and no network");
+    assert!(next.command::<()>(time.now(), false).unwrap().is_none());
+    next.admitted(Command::Connect);
+    next.observe(&linked(8), true);
+    next.observe(&lost(), false);
+    assert_eq!(connect::<()>(next.command(time.now(), false).unwrap()), 1);
+}

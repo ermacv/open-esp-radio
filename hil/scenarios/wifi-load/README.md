@@ -1,7 +1,7 @@
 # Wi-Fi station load scenario
 
 `cargo hil run wifi-load` measures UDP load between this host and the
-product Wi-Fi station of the `hil-wifi-station` image, through the lab
+product Wi-Fi station and network core of the `hil-wifi-station` image, through the lab
 router: host → Ethernet → OpenWrt AP → Wi-Fi → station, one hop over the
 air. The host sends and receives the load; the image counts its end through
 the [load service](../../services/load) and reports its CPU. Only parameters
@@ -13,11 +13,11 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 | `rx` | The host sends to the image |
 | `tx` | The image sends to the host |
 | `rx-tx` | Both at once, half the total each way |
-| `ping` | The host's own `ping`, 120 requests of 56 bytes 100 ms apart over the idle link, answered by the image's IP stack. Fails above a median of 3 ms |
+| `ping` | The host's own `ping`, 120 requests of 56 bytes 113 ms apart over the idle link, answered by the network core's ICMP echo. Fails above a median of 3 ms; fewer than 30 replies leave it incomplete |
 | `combined` | 65 Mbit/s each way at once, 130 in all, RTT probes and a `ping` beside them |
 | `overload` | 130 Mbit/s each way at once, more than the air holds either way, RTT probes and a `ping` beside them |
-| `sparse` | Each shape both ways at once with a `ping` beside it and no RTT probes: 1 and 2 datagrams every 100 ms, 1 every 1 ms, bursts of 8 every 20 ms and of 32 every 50 ms, and 8 of 200 bytes every 20 ms. Fails above a median ping of 3 ms |
-| `stop` | Leaves 2 s into an RX run of 65 Mbit/s and records how long the leave took. Fails unless the station answers `Down`: the IP service stops and closes the load socket, every lent receive buffer returns by the stop's 2 s deadline, and the radio retires; the run itself ends at its time without the socket. Runs last, because the image serves no station after a leave |
+| `sparse` | Each shape both ways at once with a `ping` beside it and no RTT probes: 1 and 2 datagrams every 100 ms, 1 every 1 ms, bursts of 8 every 20 ms and of 32 every 50 ms, and 8 of 200 bytes every 20 ms. Fails above a median ping of 3 ms; a shape's ping of fewer than 30 replies leaves the case incomplete. The ping's 113 ms, a prime number of milliseconds, is no divisor or multiple of any shape's period, so its requests meet each shape at changing phases (13 ms further each in a 20, 50 or 100 ms period), not always at one |
+| `stop` | Leaves 2 s into an RX run of 65 Mbit/s and records how long the leave took. Fails unless the station answers `Down`: the network stops and closes the load socket, every lent receive buffer returns by the stop's 2 s deadline, and the radio retires; the run itself ends at its time without the socket. Runs last, because the image serves no station after a leave |
 
 Each load case offers 10, 30, 50 and 65 Mbit/s in total (1472-byte
 datagrams); `OER_WIFI_LOAD_MBPS=10,65,100` replaces the levels (and `OER_WIFI_LOAD_WIDTH=ht20` the 40 MHz channel the path case asks the router for), e.g. to
@@ -39,7 +39,7 @@ futures and the datapath actor's spans: count, rate, share of the window
 with an open poll's part, and the mean and longest of the ended polls), and
 the window's counters (the boot hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the network bridge's taken and refused
-frames, the IP stack's received frames with the hart's instructions over
+frames, the datagrams the network delivered with the hart's instructions over
 them, the L1 cache's `cache` counts and the receive path's `rx` counts), and
 hart 1's own counters in `hart1`.
 The idle baseline records the parts, counters, link and PHY tracking too.
@@ -110,8 +110,7 @@ conversion is established. `tick_us` is the ticks' whole time and
 
 Each level's `network_turns` records what the network core's service did
 in its turns over the window, and prints one line (`network turns
-<level>:`); only a trace image on the network core (`hil-wifi-network`)
-counts them (`available` false otherwise). `requests` counts the requests
+<level>:`); only a trace build counts them (`available` false otherwise). `requests` counts the requests
 the turns took from the sockets' lanes by kind, with `reserve_per_send`.
 One reservation asks for several blocks: `reserve_blocks` counts the blocks
 the reservations asked for, `blocks_per_reserve` their mean and
@@ -252,7 +251,7 @@ caused), a data bus also `next_level_writes` (write-backs), and
 `overflowed`: a 32-bit count of the bus passed its range, the counts are
 not exact and every derived value is null. Derived: `miss_percent` (misses
 of hits and misses), and per 1000 of the serving hart's (hart 0's)
-retired instructions and per frame the IP stack took,
+retired instructions and per datagram the network delivered,
 `misses_per_1000_instructions`, `misses_per_stack_frame`,
 `next_level_reads_per_…` and a data bus's `next_level_writes_per_…`, to
 four decimals; null without the denominator. Only accesses that reach

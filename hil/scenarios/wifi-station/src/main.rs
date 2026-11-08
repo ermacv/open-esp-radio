@@ -316,7 +316,12 @@ fn leave(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let answer = cx.call(Leave, LEAVE_TIMEOUT)?;
     check(
         answer == Left::Down,
-        format!("the leave answered {answer:?}"),
+        match answer {
+            Left::DownNetworkLost => {
+                "the leave stopped the radio, but the network's stop participant was lost".into()
+            }
+            answer => format!("the leave answered {answer:?}"),
+        },
     )?;
     let after = status(cx)?;
     check(after.link.is_none(), format!("after leaving: {after:?}"))?;
