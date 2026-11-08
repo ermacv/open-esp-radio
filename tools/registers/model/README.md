@@ -999,8 +999,10 @@ What a write does with the lanes it does not set:
   `whole-word` fixed images, each `whole-word` step of a fixed sequence
   (one method per image, `<sequence>_<element>`; the HAL orders the
   steps), an element range (one method named after its sequence that
-  stores every element of the range in ascending order through the
-  array's indexed word, its order and count from the geometry), fixed images with a `masks` (masked first, whole-word or not) or
+  stores every element of the range in ascending order through an indexed
+  word array of exactly those elements, its order and count from the
+  geometry, so its owner holds the range and need not hold the rest of the
+  array), fixed images with a `masks` (masked first, whole-word or not) or
   `consumed-event` proof, interrupt snapshots (with the consumed field as
   an `Option` argument; the token reads back its sampled `bits()` and has
   no constructor), zero-based writes with `whole-word-bits` and

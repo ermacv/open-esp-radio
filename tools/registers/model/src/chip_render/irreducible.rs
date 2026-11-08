@@ -119,7 +119,7 @@ fn doc(body: &mut String, summary: &str, register: &str, sources: &[String]) {
 
 /// One accessor named after `sequence` that writes `step`'s whole-word
 /// image to elements `first..first + count` of its template, in ascending
-/// order, through the template's indexed word array.
+/// order, through an indexed word array of exactly those elements.
 fn render_element_range(
     body: &mut String,
     plan: &TypePlan<'_>,
@@ -166,9 +166,15 @@ fn render_element_range(
         }
         array = Some((offset, stride, elements));
     }
-    let Some((offset, stride, elements)) = array else {
+    let Some((offset, stride, _)) = array else {
         return Err(Error::new(entity, "an element range selects no element"));
     };
+    // The write names only the selected elements, from element `first`: the
+    // owner needs to hold exactly those words, not the whole array.
+    let base = u64::from(first)
+        .checked_mul(stride)
+        .and_then(|from| offset.checked_add(from))
+        .ok_or_else(|| Error::new(entity, "the element range overflows its block"))?;
     doc(
         body,
         &format!(
@@ -182,7 +188,7 @@ fn render_element_range(
     );
     let _ = writeln!(
         body,
-        "#[inline]\npub fn {}(&mut self) {{\nfor element in {first}..{end} {{\nif let Ok(index) = oer_portable_mmio::Index::<{elements}>::new(element) {{\nself.0.write_indexed::<0x{offset:x}, 0x{stride:x}, {elements}>(index, 0x{:08x});\n}}\n}}\n}}\n",
+        "#[inline]\npub fn {}(&mut self) {{\nfor element in 0..{count} {{\nif let Ok(index) = oer_portable_mmio::Index::<{count}>::new(element) {{\nself.0.write_indexed::<0x{base:x}, 0x{stride:x}, {count}>(index, 0x{:08x});\n}}\n}}\n}}\n",
         names::ident(entity),
         step.value
     );
