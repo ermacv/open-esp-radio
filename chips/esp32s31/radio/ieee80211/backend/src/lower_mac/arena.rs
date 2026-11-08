@@ -1063,9 +1063,13 @@ where
             Ok(None) => return Ok(None),
             Err(fault) => return Err(self.arenas.quarantine(fault)),
         };
-        // This publication's end: its cost counts once it reached the air.
+        // This publication's end: its cost counts once it reached the air,
+        // and an aborted one may have, which no model can tell: the
+        // attempt's cost is unknown from here, whatever comes after.
         if end.air().is_some() {
             on_air.spent = on_air.spent.add(on_air.pending);
+        } else if end.may_have_reached_air() {
+            on_air.spent = on_air.spent.add(TxEstimate::Unknown);
         }
         on_air.pending = TxEstimate::NONE;
         let end = match on_air

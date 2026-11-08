@@ -1578,3 +1578,42 @@ fn a_single_arena_s_cost_sums_each_publication_at_its_own_rate() {
         let _first = fixture.port.arena().release(done, drop).expect("released");
     });
 }
+
+impl<Id: radio::SlotIdentity> Fixture<'_, Id> {
+    /// The arena's end, letting a hardware timeout's abort settle.
+    fn arena_end_through_abort(&mut self) -> Completed<'_, Id> {
+        for _ in 0..16 {
+            if let Some(done) = self.turn() {
+                return done;
+            }
+            self.advance(crate::ordinary_tx::TX_ABORT_SETTLE);
+        }
+        panic!("the arena ends");
+    }
+}
+
+/// An aborted publication may have reached the air, so its attempt's cost
+/// is unknown, never zero: first alone, and after a publication of known
+/// cost, which the unknown one makes unknown too.
+#[test]
+fn an_aborted_publication_makes_its_attempt_s_cost_unknown() {
+    let histories: [&[(u8, u8)]; 2] = [&[TIMEOUT_EDGE], &[ACK_TIMEOUT, TIMEOUT_EDGE]];
+    for statuses in histories {
+        with_fixture(|fixture| {
+            fixture.start();
+            fixture.observed.borrow_mut().statuses = statuses.to_vec();
+            let [first, _second] = fixture.arenas();
+            fixture.fill(&first, &[10], plain);
+            let transmissions = u8::try_from(statuses.len()).expect("a short plan");
+            fixture.publish_single(first, transmissions);
+            let done = fixture.arena_end_through_abort();
+            assert!(matches!(done.end(), AttemptEnd::Aborted), "{statuses:?}");
+            assert_eq!(
+                done.cost(),
+                oer_protocols_ieee80211_contracts_port::TxEstimate::Unknown,
+                "{statuses:?}"
+            );
+            let _first = fixture.port.arena().release(done, drop).expect("released");
+        });
+    }
+}

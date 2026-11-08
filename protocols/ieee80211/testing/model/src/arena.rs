@@ -523,8 +523,12 @@ impl ModelArenas {
             return Err(self.quarantine(ModelArenaFault::State));
         };
         slots.state = State::Completed { aggregate };
+        // An aborted publication may have reached the air: its cost is not
+        // known.
         let cost = if end.air().is_some() {
             self.cost
+        } else if end.may_have_reached_air() {
+            TxEstimate::Unknown
         } else {
             TxEstimate::NONE
         };
