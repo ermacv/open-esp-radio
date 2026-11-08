@@ -553,10 +553,18 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) -> Result<Option<PortCompleted<'id, Self>>, ModelPortFault> {
         let results = self.air.held_results.get();
         let abort = self.held.draining.get();
-        let served =
-            self.held.arenas.try_borrow_mut().map(|mut arenas| {
-                arenas.serve::<C>(now, |category| *category.select(&results), abort)
-            });
+        let ticket = self.arena_ticket();
+        let progress = ticket.map(|ticket| self.air.air_progress(ticket));
+        let on_air = progress == Some(AirProgress::Pending);
+        let collided = progress == Some(AirProgress::Collided);
+        let served = self.held.arenas.try_borrow_mut().map(|mut arenas| {
+            arenas.serve::<C>(
+                now,
+                |category| *category.select(&results) || on_air,
+                abort,
+                collided,
+            )
+        });
         let Ok(served) = served else {
             return Err(self.fail(ModelPortFault::Arena {
                 fault: None,
@@ -564,7 +572,12 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             }));
         };
         match served {
-            Ok(Some((done, _))) => Ok(Some(done)),
+            Ok(Some((done, _))) => {
+                if let Some(ticket) = ticket {
+                    self.air.forget_air(ticket);
+                }
+                Ok(Some(done))
+            }
             Ok(None) => Ok(None),
             Err(fault) => {
                 let on_air = self.held.arenas.try_borrow().ok().and_then(|a| a.on_air());
@@ -574,6 +587,33 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 }))
             }
         }
+    }
+
+    /// The exchange of the data arena on a timed air.
+    fn arena_ticket(&self) -> Option<AirTicket> {
+        self.held
+            .arenas
+            .try_borrow()
+            .ok()
+            .and_then(|arenas| arenas.on_air_ticket())
+    }
+
+    /// Whether the air still owes the data arena its end.
+    fn arena_waits_for_air(&self) -> bool {
+        self.arena_ticket()
+            .is_some_and(|ticket| self.air.air_progress(ticket) == AirProgress::Pending)
+    }
+
+    /// Whether the single MPDUs have nothing to serve but ends the air owes.
+    fn singles_wait_for_air(&self) -> bool {
+        self.driver.queues.iter().all(|queue| {
+            queue.waiting.is_empty()
+                && queue.air.as_ref().is_none_or(|publication| {
+                    publication
+                        .air
+                        .is_some_and(|ticket| self.air.air_progress(ticket) == AirProgress::Pending)
+                })
+        })
     }
 
     /// Recompute the cached deadline after the queues changed at `now`.
@@ -587,9 +627,15 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
         let busy = self.air.held.get();
         let results = self.air.held_results.get();
+        let arena_waits = self.arena_waits_for_air();
         for ((queue, busy), result_held) in self.driver.queues.iter().zip(busy).zip(results) {
             if let Some(publication) = &queue.air {
-                if result_held {
+                if publication
+                    .air
+                    .is_some_and(|ticket| self.air.air_progress(ticket) == AirProgress::Pending)
+                {
+                    // The air's end wakes the actor.
+                } else if result_held {
                     due(Instant::from_micros(publication.started)
                         .saturating_add(MODEL_PUBLICATION_BOUND));
                 } else {
@@ -613,7 +659,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if let Ok(arenas) = self.held.arenas.try_borrow()
             && let Some(at) = arenas.due(
                 now,
-                |category| *category.select(&results),
+                |category| *category.select(&results) || arena_waits,
                 self.held.draining.get(),
             )
         {
@@ -985,7 +1031,7 @@ impl<'t, 'id: 't, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: Mod
     }
 
     fn ampdu_capabilities(&self) -> AmpduCapabilities {
-        model_ampdu_capabilities()
+        model_ampdu_capabilities(self.air.arena_frames.get())
     }
 }
 
@@ -1013,7 +1059,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
 
     fn poll_facts(&mut self, cx: &mut Context<'_>) -> Facts {
         self.air.actor.set(Some(cx.waker().clone()));
-        let tx = !self.idle() || !self.held.events.is_empty();
+        let arena_waits = self.arena_waits_for_air();
+        // Only the air's end moves work that waits for it: its wake brings
+        // the next facts.
+        let air_owes = self.singles_wait_for_air() && (arena_waits || !self.arena_on_air());
+        let tx = (!self.idle() && !air_owes) || !self.held.events.is_empty();
         let group_ready = {
             let captured = self.air.group_rx.take_batch();
             let ready = captured
@@ -1037,7 +1087,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             .arenas
             .try_borrow()
             .is_ok_and(|a| a.on_air().is_some())
-            && !self.air.held_results.get().contains(&true);
+            && !self.air.held_results.get().contains(&true)
+            && !arena_waits;
         Facts {
             tx: tx.then_some(if completion {
                 TxFacts::events(MODEL_TX_COMPLETION)
@@ -1161,7 +1212,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
 
     fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, ModelPortFault> {
         self.check(ModelPortCall::Receive)?;
-        if room == 0 || self.radio != Radio::Running || self.held.rx_out.get() >= MODEL_RX_EVENTS {
+        if room == 0
+            || self.radio != Radio::Running
+            || self.held.rx_out.get() >= self.air.rx_limits.get().held
+        {
             return Ok(RxPull::Empty);
         }
         let air = self.air.clone();
@@ -1225,7 +1279,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) -> Result<ModelLentRx, LendRefused<PortRxBuffer<'id, Self>>> {
         let reason = if self.fault.is_some() || self.air.failed() {
             Some(LendRefusal::Stopping)
-        } else if self.held.network.held() >= MODEL_RX_EVENTS {
+        } else if !self.lend_room() {
             Some(LendRefusal::Capacity)
         } else {
             None
@@ -1255,7 +1309,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     }
 
     fn lend_room(&self) -> bool {
-        self.held.network.held() < MODEL_RX_EVENTS
+        self.held.network.held() < self.air.rx_limits.get().lent
     }
 
     fn lent(&self) -> usize {
@@ -1474,11 +1528,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     }
 }
 
-/// What the model aggregates: up to [`MODEL_AMPDU_SUBFRAMES`] subframes at
-/// HT and HE rates.
-pub(crate) fn model_ampdu_capabilities() -> AmpduCapabilities {
+/// What the model aggregates: up to `subframes` at HT and HE rates.
+pub(crate) fn model_ampdu_capabilities(subframes: u8) -> AmpduCapabilities {
     AmpduCapabilities {
-        max_subframes: MODEL_AMPDU_SUBFRAMES as u16,
+        max_subframes: subframes as u16,
         formats: PhyFormatSet::HT.union(PhyFormatSet::HE),
         max_length: &MODEL_AMPDU_LENGTHS,
     }

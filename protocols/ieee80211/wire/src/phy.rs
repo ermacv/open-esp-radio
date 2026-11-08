@@ -691,6 +691,95 @@ impl PhyRate {
             Some(micros as u32)
         }
     }
+
+    /// The instant, in nanoseconds from the start of a PPDU at this rate, at
+    /// which octet `offset` (from 0) of its PSDU has been transmitted: the
+    /// end of the data symbol that carries it, or of its last bit at a
+    /// DSSS or CCK rate.
+    ///
+    /// The instant counts the preamble and the data up to that octet, with
+    /// the 16-bit SERVICE field ahead of the PSDU. It leaves out what
+    /// follows the PSDU: the tail and pad bits, the 6 us signal extension,
+    /// an HE packet extension and the 4-us rounding of a short-GI PPDU's
+    /// end, which [`Self::max_ppdu_duration_micros`] adds. The preamble and
+    /// symbol terms are that function's TXTIME terms (IEEE Std 802.11-2020
+    /// 15.4.3, 17.4.3, 19.4.3 and 802.11ax-2021 27.4.3). `None` refuses an
+    /// instant a `u64` of nanoseconds cannot hold.
+    pub const fn psdu_octet_sent_nanos(self, offset: u32) -> Option<u64> {
+        macro_rules! checked {
+            ($value:expr) => {
+                match $value {
+                    Some(value) => value,
+                    None => return None,
+                }
+            };
+        }
+        const SERVICE_BITS: u64 = 16;
+        // The bits of the PSDU through this octet.
+        let bits = checked!(checked!((offset as u64).checked_add(1)).checked_mul(8));
+        let data = checked!(bits.checked_add(SERVICE_BITS));
+        let nanos = match self {
+            Self::Legacy(rate) if !rate.is_ofdm() => {
+                // No SERVICE field: the PLCP header lies in the preamble.
+                let preamble: u64 = match rate {
+                    LegacyRate::Dsss2M(DsssPreamble::Short)
+                    | LegacyRate::Cck5M5(DsssPreamble::Short)
+                    | LegacyRate::Cck11M(DsssPreamble::Short) => 96,
+                    _ => 192,
+                };
+                checked!(
+                    checked!(preamble.checked_mul(1_000)).checked_add(checked!(ceil_div(
+                        checked!(bits.checked_mul(1_000_000)),
+                        rate.kbps() as u64
+                    )))
+                )
+            }
+            Self::Legacy(rate) => {
+                // L-STF, L-LTF and L-SIG, then 4 us symbols (17.4.3).
+                let bits_per_symbol = checked!((rate.kbps() as u64).checked_mul(4)) / 1_000;
+                let symbols = checked!(ceil_div(data, bits_per_symbol));
+                checked!(20_000_u64.checked_add(checked!(symbols.checked_mul(4_000))))
+            }
+            Self::Ht(rate) => {
+                // HT-mixed preamble and its HT-LTFs, then 4 us or 3.6 us
+                // symbols of N_DBPS bits (19.4.3).
+                let streams = rate.mcs.spatial_streams() as u64;
+                let ltfs = if streams > 2 { 4 } else { streams };
+                let preamble =
+                    checked!(
+                        checked!(36_u64.checked_add(checked!(
+                            4_u64.checked_mul(checked!(ltfs.checked_sub(1)))
+                        )))
+                        .checked_mul(1_000)
+                    );
+                let symbols = checked!(ceil_div(data, rate.parameters().2));
+                let symbol_ns: u64 = if rate.short_gi { 3_600 } else { 4_000 };
+                checked!(preamble.checked_add(checked!(symbols.checked_mul(symbol_ns))))
+            }
+            Self::He(rate) => {
+                // L-STF to HE-STF, the HE-LTFs, then symbols of 12.8 us
+                // plus the guard interval over exact N_DBPS (27.4.3).
+                let (numerator, denominator) = rate.data_bits_per_symbol();
+                let streams = rate.spatial_streams.0 as u64;
+                let guard_ns = rate.gi_ltf.guard_interval_ns() as u64;
+                let ltf: u64 = match rate.gi_ltf {
+                    HeGiLtf::Ltf1xGi800Ns => 3_200,
+                    HeGiLtf::Ltf2xGi800Ns | HeGiLtf::Ltf2xGi1600Ns => 6_400,
+                    HeGiLtf::Ltf4xGi3200Ns => 12_800,
+                };
+                let ltf_ns = checked!(ltf.checked_add(guard_ns));
+                let preamble = checked!(36_000_u64.checked_add(checked!(
+                    (if streams > 2 { 4 } else { streams }).checked_mul(ltf_ns)
+                )));
+                let symbols =
+                    checked!(ceil_div(checked!(data.checked_mul(denominator)), numerator));
+                checked!(preamble.checked_add(checked!(
+                    symbols.checked_mul(checked!(12_800_u64.checked_add(guard_ns)))
+                )))
+            }
+        };
+        Some(nanos)
+    }
 }
 
 oer_portable_wire::bitfield! {

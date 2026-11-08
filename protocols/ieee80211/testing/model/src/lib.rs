@@ -48,6 +48,13 @@
 //! hardware saw; the port's own queues, key table and receive rules are
 //! cells of the one host thread a test runs on.
 //!
+//! Publications are answered at once and take no time, unless the test
+//! gives the air a channel ([`ModelAir::set_air_time`], [`air_time`]): each
+//! then ends with its exchange on a shared medium, an access point sends the
+//! other way and the receive path takes its limits as separate inputs. The
+//! clock's owner drives that air ([`ModelAir::next_air_event`],
+//! [`ModelAir::clock_advanced`]).
+//!
 //! `ModelAir::answer` queues one `AirAnswer` per publication: ACK, BA
 //! bitmap, missing response, collision or hardware timeout. A single MPDU's
 //! checked frame determines whether it expects no response, an ACK or a
@@ -56,7 +63,8 @@
 //!
 //! The station's data goes out on its two data arenas
 //! ([`ModelDataArena`], lent as [`ModelPortArena`]) of up to
-//! [`MODEL_AMPDU_SUBFRAMES`] frames each, as single MPDUs or A-MPDUs. Each
+//! [`MODEL_AMPDU_SUBFRAMES`] frames each, unless a timed air sets another
+//! number, as single MPDUs or A-MPDUs. Each
 //! publication takes the next `AirAnswer` of the same FIFO: a BlockAck's
 //! bit n acknowledges arena position n, by the frames' sequence numbers,
 //! and no queued answer acknowledges every frame. The air records each sent
@@ -103,9 +111,9 @@
 //!
 //! Capacity is the tokens': every terminal returns a ticket, so no terminal
 //! is ever lost; at most [`MODEL_RX_EVENTS`] received frames are out at
-//! once. The host fixture's VecDeque cannot express the token/capacity
-//! equation in its type: a broken equation retains the offending owner and
-//! quarantines the installation. A received owner dropped without recycle
+//! once, unless a timed air sets another limit. The host fixture's VecDeque
+//! cannot express the token/capacity equation in its type: a broken equation
+//! retains the offending owner and quarantines the installation. A received owner dropped without recycle
 //! likewise quarantines this fixture.
 //!
 //! Publication and completion are separate owners. Tests may hold a result
@@ -115,6 +123,13 @@
 //! through an affine, zero-drift relation with a sampled nonzero offset.
 //! Hardware backends declare their own PPDU plus response/timeout bound.
 
+pub mod air_time;
+pub use air_time::{
+    AirAccess, AirConfig, AirConfigRefused, AirExchange, AirHolder, AirPeer, AirProgress,
+    AirReport, AirResponse, AirSideReport, AirSpan, AirTicket, AirTimeError, AirTiming,
+    BusyChannel, ModelRxLimits, Offered, PeerBounds, PeerWindow, ampdu_psdu_octets,
+};
+use air_time::{AirWorld, Medium};
 pub mod arena;
 pub use arena::{
     MODEL_ARENA_CHANNEL, MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, ModelArena, ModelArenaAnswer,
@@ -175,7 +190,7 @@ use oer_protocols_ieee80211_contracts_port::{
     AckSnr, Air, BlockAckSnr, SingleEnd, SingleOutcome, SingleResponse, SnrSample,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduCapabilities, AmpduLengthTable, BlockAckReport, Tid,
+    AmpduCapabilities, AmpduLengthTable, BlockAckReport, Protection, Tid,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
@@ -1694,6 +1709,15 @@ pub struct ModelAir {
     /// Frames that land once a receive pull found the ring empty, without
     /// a wake.
     landing: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
+    /// The shared channel of a timed air: without it, publications are
+    /// answered at once.
+    medium: Cell<Option<Box<Medium>>>,
+    /// The rule the medium could not compute, which poisoned the model.
+    air_fault: Cell<Option<AirTimeError>>,
+    /// The limits of the receive path.
+    rx_limits: Cell<ModelRxLimits>,
+    /// The subframes one data arena holds.
+    arena_frames: Cell<u8>,
 }
 impl ModelAir {
     fn new(clock: Rc<dyn Clock>) -> Self {
@@ -1726,6 +1750,14 @@ impl ModelAir {
             rx_later: Cell::new(None),
             kept_due: Cell::new(None),
             landing: Default::default(),
+            medium: Default::default(),
+            air_fault: Default::default(),
+            rx_limits: Cell::new(ModelRxLimits {
+                ring: usize::MAX,
+                held: MODEL_RX_EVENTS,
+                lent: MODEL_RX_EVENTS,
+            }),
+            arena_frames: Cell::new(arena::MODEL_ARENA_FRAMES as u8),
         }
     }
 
@@ -1741,9 +1773,132 @@ impl ModelAir {
     }
 
     /// Wake the data port's actor after the clock owner advances virtual
-    /// time. This notification never changes the clock.
+    /// time, and on a timed air serve what happened on the channel up to
+    /// that time. This notification never changes the clock.
     pub fn clock_advanced(&self) {
+        let now = self.monotonic_now().as_micros();
+        if let Some(Err(fault)) = self.with_medium(|medium| medium.advance(now, self)) {
+            self.air_fault.set(Some(fault));
+            self.poison();
+        }
         self.wake_world();
+    }
+
+    /// Run every later publication on a channel with time, from now on
+    /// ([`air_time`]).
+    ///
+    /// # Errors
+    ///
+    /// The input the medium cannot run on; nothing changes.
+    pub fn set_air_time(&self, config: AirConfig) -> Result<(), AirConfigRefused> {
+        let AirConfig {
+            seed,
+            timing,
+            arena_frames,
+            rx_limits,
+            busy,
+            peer,
+        } = config;
+        if arena_frames == 0
+            || arena_frames > oer_protocols_ieee80211_contracts_port::arena::ARENA_FRAMES
+        {
+            return Err(AirConfigRefused::ArenaFrames);
+        }
+        if busy.is_some_and(|busy| busy.busy_micros >= busy.period_micros.get()) {
+            return Err(AirConfigRefused::BusyPeriod);
+        }
+        if peer.as_ref().is_some_and(|peer| peer.max_subframes == 0) {
+            return Err(AirConfigRefused::PeerSubframes);
+        }
+        let medium = self.medium.take();
+        if medium.is_some() {
+            self.medium.set(medium);
+            return Err(AirConfigRefused::AlreadyTimed);
+        }
+        let now = self.monotonic_now().as_micros();
+        self.medium
+            .set(Some(Box::new(Medium::new(now, seed, timing, busy, peer))));
+        self.rx_limits.set(rx_limits);
+        self.arena_frames.set(arena_frames);
+        Ok(())
+    }
+
+    /// The next instant the channel changes, for the clock's owner, who
+    /// calls [`Self::clock_advanced`] there; `None` on an air without time
+    /// or a channel with nothing left to do.
+    pub fn next_air_event(&self) -> Option<Instant> {
+        self.with_medium(|medium| medium.next_event())
+            .flatten()
+            .map(Instant::from_micros)
+    }
+
+    /// What the medium did since its last reset; `None` without time.
+    pub fn air_report(&self) -> Option<AirReport> {
+        self.with_medium(|medium| medium.report())
+    }
+
+    /// Start the medium's counts and spans anew.
+    pub fn reset_air_report(&self) {
+        let _reset: Option<()> = self.with_medium(Medium::reset_report);
+    }
+
+    /// Every transmission since the last reset, in order.
+    pub fn air_spans(&self) -> Vec<AirSpan> {
+        self.with_medium(|medium| medium.spans().to_vec())
+            .unwrap_or_default()
+    }
+
+    /// The rule the medium could not compute, when it poisoned the model.
+    pub fn air_fault(&self) -> Option<AirTimeError> {
+        self.air_fault.get()
+    }
+
+    /// `run` over the medium, which leaves its cell meanwhile: nothing it
+    /// calls reenters this method.
+    fn with_medium<R>(&self, run: impl FnOnce(&mut Medium) -> R) -> Option<R> {
+        let mut medium = self.medium.take()?;
+        let result = run(&mut medium);
+        self.medium.set(Some(medium));
+        Some(result)
+    }
+
+    /// Ask the medium for a station exchange at the turn's instant; `None`
+    /// on an air without time.
+    fn request_air(
+        &self,
+        rate: PhyRate,
+        psdu_octets: u32,
+        protection: Protection,
+        response: AirResponse,
+        access_category: WmmAccessCategory,
+        subframes: u8,
+    ) -> Result<Option<AirTicket>, AirTimeError> {
+        let now = self.monotonic_now().as_micros();
+        let parameters = self
+            .edca(VifRole::Station)
+            .access_category(access_category)
+            .wmm;
+        self.with_medium(|medium| {
+            medium.request(
+                now,
+                rate,
+                psdu_octets,
+                protection,
+                response,
+                parameters,
+                subframes,
+            )
+        })
+        .transpose()
+    }
+
+    fn air_progress(&self, ticket: AirTicket) -> AirProgress {
+        self.with_medium(|medium| medium.progress(ticket))
+            .unwrap_or(AirProgress::Answered)
+    }
+
+    fn forget_air(&self, ticket: AirTicket) {
+        let _forgotten: Option<()> = self.with_medium(|medium| medium.forget(ticket));
     }
 
     /// Project the image clock into the model radio domain.
@@ -1758,6 +1913,26 @@ impl ModelAir {
             .project(at, sample.generation, &sample)
             .map(|p| p.at)
             .map_err(|_| ClockError::EpochExhausted)
+    }
+}
+
+impl AirWorld for ModelAir {
+    fn agreed_window(&self, tid: Tid) -> Option<u16> {
+        let agreements = self.receive_agreements.take();
+        let window = agreements
+            .values()
+            .find(|agreement| agreement.role == VifRole::Station && agreement.tid == tid)
+            .map(|agreement| agreement.window);
+        self.receive_agreements.set(agreements);
+        window
+    }
+
+    fn land(&self, frame: Vec<u8>, meta: ModelRxMeta) -> bool {
+        if self.rx.len() >= self.rx_limits.get().ring {
+            return false;
+        }
+        self.rx.push_back((frame, meta));
+        true
     }
 }
 
@@ -2335,7 +2510,7 @@ impl<'id, B: ModelComposition> ModelHeld<'id, B> {
     /// with none charged does.
     fn charge_rx(&self) -> bool {
         let out = self.rx_out.get();
-        if out >= MODEL_RX_EVENTS {
+        if out >= self.air.rx_limits.get().held {
             return false;
         }
         match out.checked_add(1) {
@@ -2560,9 +2735,14 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                         .monotonic_now()
                         .as_micros()
                         .saturating_sub(publication.started);
-                    if result_held && elapsed < MODEL_PUBLICATION_BOUND.as_micros() {
+                    let progress = publication.air.map(|ticket| held.air.air_progress(ticket));
+                    let on_air = progress == Some(AirProgress::Pending) && !held.draining.get();
+                    if on_air || (result_held && elapsed < MODEL_PUBLICATION_BOUND.as_micros()) {
                         queue.air = Some(publication);
                         break;
+                    }
+                    if let Some(ticket) = publication.air {
+                        held.air.forget_air(ticket);
                     }
                     let cause =
                         withdrawal(held, &self.gate, publication.work.key(), &self.removing)
@@ -2572,6 +2752,8 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                             });
                     let work = if result_held {
                         publication.work.timed_out()
+                    } else if progress == Some(AirProgress::Collided) {
+                        publication.work.unanswered()
                     } else {
                         publication.work
                     };
@@ -2659,6 +2841,8 @@ struct TxQueue<'id, B: ModelComposition> {
 }
 struct Publication<'id, B: ModelComposition> {
     started: u64,
+    /// Its exchange on a timed air.
+    air: Option<AirTicket>,
     work: Published<'id, B>,
 }
 struct SinglePlan<'id, B: ModelComposition> {
@@ -2703,6 +2887,13 @@ impl<'id, B: ModelComposition> Published<'id, B> {
         Self {
             plan: self.plan,
             answer: SingleAnswer::HardwareTimeout,
+        }
+    }
+    /// The publication after a collision on the air: no response came.
+    fn unanswered(self) -> Self {
+        Self {
+            plan: self.plan,
+            answer: SingleAnswer::Unanswered,
         }
     }
     fn complete(
@@ -2888,6 +3079,15 @@ fn publish_single<'id, B: ModelComposition>(
             return None;
         }
     };
+    let air = match single_air(held, &plan, &frame, answer) {
+        Ok(air) => air,
+        Err(fault) => {
+            held.air.air_fault.set(Some(fault));
+            let _fault = held.quarantined.push(plan.prepared);
+            held.poison();
+            return None;
+        }
+    };
     // A denied PPDU or a data frame behind a missing CTS never reached the
     // air the journal records.
     if !matches!(answer, SingleAnswer::AirDenied | SingleAnswer::CtsTimeout) {
@@ -2895,8 +3095,46 @@ fn publish_single<'id, B: ModelComposition>(
     }
     Some(Publication {
         started: held.air.monotonic_now().as_micros(),
+        air,
         work: Published { plan, answer },
     })
+}
+
+/// The exchange of a single MPDU on a timed air: `frame` as it went, under
+/// the plan's first protection. An answer that ends the attempt before the
+/// air takes no time.
+fn single_air<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    plan: &SinglePlan<'id, B>,
+    frame: &AirFrame,
+    answer: SingleAnswer,
+) -> Result<Option<AirTicket>, AirTimeError> {
+    let response = match answer {
+        SingleAnswer::Unsolicited | SingleAnswer::Unanswered => AirResponse::None,
+        SingleAnswer::Ack => AirResponse::Ack,
+        SingleAnswer::BlockAck(_) => AirResponse::BlockAck,
+        // A missing CTS ends the attempt before its data reached the air;
+        // the RTS's own time is not modelled.
+        SingleAnswer::Collision
+        | SingleAnswer::AirDenied
+        | SingleAnswer::HardwareTimeout
+        | SingleAnswer::CtsTimeout
+        | SingleAnswer::KeyRefused => {
+            return Ok(None);
+        }
+    };
+    let octets = u32::try_from(frame.frame.len())
+        .ok()
+        .and_then(|length| length.checked_add(air_time::FCS_OCTETS))
+        .ok_or(AirTimeError::Unrepresentable)?;
+    held.air.request_air(
+        plan.rate,
+        octets,
+        plan.prepared.plan.first().protection,
+        response,
+        plan.prepared.queue,
+        1,
+    )
 }
 
 /// Preserve every owner of `work` on withdrawal.
