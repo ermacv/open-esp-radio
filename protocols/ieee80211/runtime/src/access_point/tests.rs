@@ -533,6 +533,38 @@ fn a_probe_response_waiting_for_its_queue_waits_without_turning() {
 }
 
 #[test]
+fn a_unit_the_group_removal_cuts_is_read_and_recycled() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        let script = async {
+            counted.idle(64).await;
+            assert!(shared.status().running);
+            // A group frame the hardware holds under the installed GTK when
+            // the stop removes it: the removal's cut hands it over first.
+            let mut frame = std::vec![0x08, 0x02, 0, 0];
+            frame.extend_from_slice(&[0xff; 6]);
+            frame.extend_from_slice(&ACCESS_POINT);
+            frame.extend_from_slice(&PEER);
+            frame.extend_from_slice(&[0, 0]);
+            assert!(air.receive_group(
+                &frame,
+                ModelRxMeta::new(channel(), -40, -90),
+                oer_protocols_ieee80211_contracts_port::VifRole::AccessPoint,
+                GroupKeyId::new(GROUP_KEY_ID).unwrap(),
+                &[0x55; 16],
+                oer_protocols_ieee80211_testing_model::GroupRxStage::Dma,
+            ));
+            stop_and_finish(&counted, &air, &shared).await;
+        };
+        // The stop ends with every owner: a cut unit kept from the port
+        // would have quarantined it.
+        let runner = stopped(drive(runner.run(&shared, &counted), script).await);
+        assert!(runner.group_slot.is_some() && runner.group_permission.is_some());
+    }));
+}
+
+#[test]
 fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let counted = Counted::new();

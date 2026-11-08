@@ -431,7 +431,15 @@ enum Phase {
 struct Sink<'id, T: PortTypes<'id>> {
     terminals: heapless::Deque<LowerMacTerminal<'id, T>, 24>,
     overflow: bool,
+    /// The units a receive cut handed over, read and recycled before the
+    /// terminals of the same call.
+    cut: heapless::Deque<(T::RxBuffer, T::RxMeta), CUT_UNITS>,
+    /// The units a receive cut handed over: a cut that moves is progress.
+    cut_units: u32,
 }
+
+/// The units of a receive cut one port call hands over at most.
+const CUT_UNITS: usize = 16;
 
 impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Sink<'id, T> {
     fn terminal(&mut self, terminal: LowerMacTerminal<'id, T>) {
@@ -443,10 +451,14 @@ impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Sink<'id, T> {
         }
     }
     fn tbtt(&mut self, _: TbttEvent) {}
-    fn received(&mut self, frame: T::RxBuffer, _: T::RxMeta) {
-        // A receive cut's unit: the access point's group mutation precedes
-        // nothing it receives, so the unit goes as an unread one.
-        drop(frame);
+    fn received(&mut self, frame: T::RxBuffer, meta: T::RxMeta) {
+        self.cut_units = self.cut_units.wrapping_add(1);
+        // A receive cut's unit precedes the mutation's terminal: the runner
+        // reads and recycles it before the call's terminals.
+        if let Err(unit) = self.cut.push_back((frame, meta)) {
+            let _kept = core::mem::ManuallyDrop::new(unit);
+            self.overflow = true;
+        }
     }
 }
 
@@ -609,6 +621,8 @@ where
             sink: Sink {
                 terminals: heapless::Deque::new(),
                 overflow: false,
+                cut: heapless::Deque::new(),
+                cut_units: 0,
             },
             stop: false,
             refused: None,
@@ -791,7 +805,7 @@ where
             ],
             network: self.network.waiting(),
             deadlines: [self.port.deadline(), self.engine.deadline()],
-            taken: self.taken,
+            taken: self.taken.wrapping_add(self.sink.cut_units),
         }
     }
 
@@ -974,6 +988,15 @@ where
     fn terminals(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         if self.sink.overflow {
             return Err(Halt::Contract(ApContract::UnknownTicket(u8::MAX)));
+        }
+        while let Some((frame, meta)) = self.sink.cut.pop_front() {
+            let result = self.received(
+                oer_protocols_ieee80211_contracts_port::RxBuffer::bytes(&frame),
+                integrity(&meta),
+                now,
+            );
+            self.port.recycle(frame);
+            result?;
         }
         while let Some(terminal) = self.sink.terminals.pop_front() {
             self.taken = self.taken.wrapping_add(1);
