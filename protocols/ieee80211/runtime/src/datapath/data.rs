@@ -439,8 +439,9 @@ where
                     oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
                 )
             });
-            // The deque is empty, so it holds this one memory.
-            free(&mut self.data.freed, memory);
+            // The deque is empty, so it holds this one memory. The station
+            // never took it: it never went.
+            free(&mut self.data.freed, memory, TxEstimate::NONE);
             self.return_freed(network);
         }
         self.queued = network.transmit.len();
