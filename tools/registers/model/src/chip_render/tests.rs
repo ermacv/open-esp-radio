@@ -1270,6 +1270,39 @@ fn a_whole_word_sequence_step_is_one_method_and_a_snapshot_reads_its_bits() {
     );
 }
 
+/// An element-range sequence step: one accessor named after its sequence
+/// that stores the whole word to the selected elements in ascending order.
+fn with_element_range() -> String {
+    rendered_with(&[(
+        "policy.toml",
+        "[[fixed-register-sequences]]\nname = \"initialize_vendor_words\"",
+        "[[fixed-register-sequences]]\nname = \"store_slots\"\nsteps = [{ register = \"RADIO0.RAD_SLOT%s\", first = 1, count = 2, value = 0xdeadbeef, whole-word = true }]\nsources = [\"SRC_VENDOR\"]\n\n[[fixed-register-sequences]]\nname = \"initialize_vendor_words\"",
+    )])
+}
+
+#[test]
+fn an_element_range_is_one_accessor_over_its_elements_in_order() {
+    let rust = with_element_range();
+    assert_eq!(rust.matches("pub fn store_slots(").count(), 1, "{rust}");
+    assert!(!rust.contains("pub fn store_slots_rad_slot"), "{rust}");
+    let output = run(
+        &rust,
+        r#"
+fn main() {
+    let mut memory = [0x1111_1111_u32; 0x40];
+    {
+        let (mut task, _irq) = radio::radio0_host(&mut memory).expect("memory holds the block");
+        task.store_slots();
+    }
+    println!("{:08x?}", &memory[0x40 / 4..0x50 / 4]);
+}
+"#,
+    );
+    // Elements 1 and 2 hold the whole image, undeclared bits included;
+    // elements 0 and 3 are untouched.
+    assert_eq!(output.trim(), "[11111111, deadbeef, deadbeef, 11111111]");
+}
+
 #[test]
 fn a_partition_image_reads_each_part_s_readable_words_whole() {
     let rust = rendered_with(&[(
