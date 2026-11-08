@@ -165,7 +165,8 @@ pub fn send(
     burst: u16,
     duration: Duration,
 ) -> Sent {
-    let mut buffer = vec![0x5a; payload.max(header::LENGTH)];
+    // The filler stays in place; each datagram rewrites only its header.
+    let mut buffer = vec![header::FILLER; payload.max(header::LENGTH)];
     let interval = Duration::from_secs_f64(payload as f64 * 8.0 / rate_bps.max(1) as f64);
     let started = Instant::now();
     let mut sent = Sent::default();

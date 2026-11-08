@@ -586,8 +586,8 @@ fn millis(ms: u32) -> u64 {
 
 /// Send `transmit`'s datagrams from `begin` until `end`: paced to its rate,
 /// or as fast as the socket takes them. Each datagram is built where it
-/// leaves: the header in place, the payload behind it as the packet buffer
-/// last held it, and the clock read once per batch.
+/// leaves, every octet written in place ([`write`]), and the clock read once
+/// per batch.
 async fn send(
     socket: &mut Sending<'_>,
     run: u32,
@@ -710,8 +710,10 @@ async fn unpaced(
     select(sending, wait_until(end)).await;
 }
 
-/// The header of sequence `sequence` sent at `now`, at the front of
-/// `payload`; `None` when it is shorter.
+/// Datagram `sequence` sent at `now`, in place in `payload`: the header at
+/// its front and the filler behind it. The generator writes every octet of
+/// the payload it sends, on both stacks alike; `None` when the payload is
+/// shorter than the header.
 fn write(payload: &mut [u8], run: u32, sequence: u64, now: u64) -> Option<()> {
     Header {
         run,
@@ -720,7 +722,7 @@ fn write(payload: &mut [u8], run: u32, sequence: u64, now: u64) -> Option<()> {
         echo_request: false,
         echo_reply: false,
     }
-    .write(payload)
+    .write_datagram(payload)
 }
 
 /// The socket took a datagram of `bytes` at `now`.
