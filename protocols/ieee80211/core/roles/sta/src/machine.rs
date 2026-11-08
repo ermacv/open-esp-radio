@@ -1531,6 +1531,14 @@ pub struct StaConfigurationContext<
     epoch: Option<LinkEpoch<'id, Path>>,
 }
 
+impl<'id, Path: PoolPath> StaConfigurationContext<'id, Path> {
+    /// The context of a configuration no link epoch follows: another
+    /// interface's, which shares the port's configure context type.
+    pub const fn detached() -> Self {
+        Self { epoch: None }
+    }
+}
+
 impl<'p, Path: PoolPath + 'p> oer_protocols_radio_port::LoanedContext<'p, Path::Identity>
     for StaConfigurationContext<'p, Path>
 where

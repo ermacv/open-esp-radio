@@ -54,6 +54,7 @@
 //! check. Cancelling the wait or dropping the permit consumes neither a
 //! value nor queue capacity; the receiver may run on another thread.
 
+pub mod access_point;
 pub mod datapath;
 pub mod egress;
 pub mod lifecycle;

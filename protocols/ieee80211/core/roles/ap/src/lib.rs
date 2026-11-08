@@ -45,6 +45,7 @@
 extern crate std;
 
 pub mod beacon;
+pub mod engine;
 pub mod limits;
 pub mod security_policy;
 pub mod service;

@@ -309,6 +309,14 @@ impl<'storage> ApBeacon<'storage> {
         self.next_publication = None;
     }
 
+    /// Start the TBTT schedule at `first`: the first beacon is due then, and
+    /// every later TBTT lies a whole number of intervals after it. A BSS
+    /// whose TSF restarted from zero starts it at zero, so its TBTTs are the
+    /// TSF's multiples of the interval (IEEE Std 802.11-2020, 11.1.3.2).
+    pub fn start_schedule(&mut self, first: Instant) {
+        self.next_publication = Some(first);
+    }
+
     /// The beacon interval.
     pub const fn interval(&self) -> Duration {
         self.interval

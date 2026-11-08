@@ -157,6 +157,31 @@ impl<I: PartialEq> PendingCcmpTxKey<I> {
     }
 }
 
+impl<I: PartialEq> PendingCcmpTxKey<I> {
+    /// Pair the group key an installation terminal returned with its new PN
+    /// allocator, under the owner `wrap` makes of it; the token is spent.
+    /// The token names the vacant group slot the installation took
+    /// ([`KeyTypes::vacant_group_slot_identity`](oer_protocols_ieee80211_contracts_port::KeyTypes::vacant_group_slot_identity)):
+    /// a key of another slot is refused with both owners.
+    pub fn installed_group<
+        'id,
+        Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, GroupSlotIdentity = I>,
+        K,
+    >(
+        self,
+        key: Keys::GroupKey,
+        wrap: impl FnOnce(Keys::GroupKey) -> K,
+    ) -> Result<InstalledCcmpTxKey<K>, ForeignCcmpTxKey<I, Keys::GroupKey>> {
+        if Keys::group_slot_identity(&key) != self.installation {
+            return Err(ForeignCcmpTxKey { pending: self, key });
+        }
+        Ok(InstalledCcmpTxKey {
+            key: wrap(key),
+            packet_numbers: CcmpTxPacketNumber::new(self.step),
+        })
+    }
+}
+
 /// The unique allocator of one installed key's transmit packet numbers.
 ///
 /// A new key has emitted no PN; its first MPDU carries `step`. Each call
