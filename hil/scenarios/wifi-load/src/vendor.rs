@@ -138,8 +138,8 @@ fn bundle(root: &std::path::Path) -> Result<std::path::PathBuf, String> {
     Ok(bundle.directory().to_owned())
 }
 
-fn text(error: impl std::fmt::Debug) -> String {
-    format!("{error:?}")
+fn text(error: impl std::fmt::Display) -> String {
+    error.to_string()
 }
 
 fn failure(failure: Failure) -> String {
