@@ -252,13 +252,12 @@ impl Random {
         z ^ (z >> 31)
     }
 
-    /// `wait` less up to a quarter of it.
+    /// `wait` less up to a quarter of it: the draw's high half scales the
+    /// quarter, so no 64-bit division runs.
     fn jitter(&mut self, wait: Duration) -> Duration {
-        let quarter = wait.as_micros() / 4;
-        let less = self
-            .next()
-            .checked_rem(quarter.saturating_add(1))
-            .unwrap_or(0);
+        let quarter = u32::try_from(wait.as_micros() / 4).unwrap_or(u32::MAX);
+        let draw = u32::try_from(self.next() >> 32).unwrap_or(0);
+        let less = u64::from(draw).saturating_mul(u64::from(quarter)) >> 32;
         Duration::from_micros(wait.as_micros().saturating_sub(less))
     }
 }
