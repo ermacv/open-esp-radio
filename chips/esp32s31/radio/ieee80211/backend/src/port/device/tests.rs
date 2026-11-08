@@ -122,6 +122,8 @@ struct Bench {
     stall: &'static RxStall,
     wakes: Arc<Count>,
     sequence: u16,
+    /// The test's handle on what the device's registers touch.
+    atoms: Atoms,
 }
 
 fn channel() -> oer_protocols_ieee80211_wire::channel::WifiChannel {
@@ -174,7 +176,7 @@ impl Bench {
         }));
         let bench = Self {
             device,
-            rx: ModelRx::new(storage, walker, atoms),
+            rx: ModelRx::new(storage, walker, atoms.clone()),
             line,
             power,
             clock,
@@ -182,6 +184,7 @@ impl Bench {
             stall,
             wakes: Arc::new(Count(AtomicUsize::new(0))),
             sequence: 0,
+            atoms,
         };
         let waker = bench.waker();
         let started = <Model as Device<TX>>::poll_start(
@@ -252,6 +255,43 @@ impl Bench {
 /// one does while the actor's turn runs: the next facts call sees its fact
 /// but leaves it raised, so the executor's next round still wakes the task,
 /// whether or not the caller turns again. The pull that serves it takes it.
+#[test]
+fn the_detach_of_a_retired_installation_erases_every_key_it_can_program() {
+    use oer_chips_esp32s31_hal::types::MacCcmpKeyIdentity;
+    let bench = Bench::new();
+    // The station's group and pairwise entries and the access point's
+    // first and last peers, as an earlier installation left them.
+    for (index, identity) in [
+        (1, MacCcmpKeyIdentity::Group { key_id: 1 }),
+        (
+            4,
+            MacCcmpKeyIdentity::Pairwise {
+                peer: [2, 0, 0, 0, 0, 9],
+            },
+        ),
+        (
+            8,
+            MacCcmpKeyIdentity::Pairwise {
+                peer: [2, 0, 0, 0, 0, 10],
+            },
+        ),
+        (
+            22,
+            MacCcmpKeyIdentity::Pairwise {
+                peer: [2, 0, 0, 0, 0, 11],
+            },
+        ),
+    ] {
+        bench.atoms.seed_key(index, identity);
+    }
+    <Model as Device<TX>>::detach(bench.device);
+    assert!(
+        bench.atoms.installed_keys().is_empty(),
+        "{:?}",
+        bench.atoms.installed_keys()
+    );
+}
+
 #[test]
 fn a_receive_fact_stays_raised_until_the_pull_that_serves_it() {
     let mut bench = Bench::new();

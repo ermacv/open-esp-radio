@@ -523,8 +523,11 @@ impl Device<512> for TestDevice {
         self.assert_task_context();
         self.observed.borrow_mut().returned += 1;
     }
+    /// As the radio device does: the retired installation's keys leave the
+    /// key table.
     fn detach(&mut self) {
         self.assert_task_context();
+        crate::mac::crypto::erase_lower_mac_keys(&mut self.hardware);
         self.observed.borrow_mut().detached = true;
     }
 }
