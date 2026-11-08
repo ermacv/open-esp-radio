@@ -529,15 +529,7 @@ impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath, BeaconPath: PoolPath>
     pub fn into_parts(
         self,
         loan: &BodyLoan<'id, Path::Identity, M::Backend>,
-    ) -> BeaconParts<
-        'id,
-        M::OwnedContext,
-        Slot<'static, T, Path>,
-        M::OwnedPayload,
-        M::Execution,
-        K,
-        BeaconPath,
-    > {
+    ) -> SealedBeaconParts<'id, T, M, K, Path, BeaconPath> {
         BeaconParts {
             attempt: self.attempt.into_parts(loan),
             permission: self.permission,
@@ -546,8 +538,29 @@ impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath, BeaconPath: PoolPath>
     }
 }
 
+/// What a backend takes from a sealed beacon of the preparation `M`.
+pub type SealedBeaconParts<'id, T, M, K, Path, BeaconPath> = BeaconParts<
+    'id,
+    <M as PreparedTx<'id>>::OwnedContext,
+    Slot<'static, T, Path>,
+    <M as PreparedTx<'id>>::OwnedPayload,
+    <M as PreparedTx<'id>>::Execution,
+    K,
+    BeaconPath,
+>;
+
 /// The types of a port `P`.
 type Types<'id, P> = <P as DataPort<'id>>::Types;
+
+/// The beacon component of the port `P`.
+type PortBeaconPath<'id, P> = <Types<'id, P> as PortTypes<'id>>::BeaconPath;
+
+/// A beacon permission check of the port `P`: the permission lent for the
+/// borrow `'p`, or refused with the permission.
+pub type BeaconCheck<'p, 'id, P> = Result<
+    CurrentBeacon<'p, 'id, PortBeaconPath<'id, P>>,
+    BeaconRefused<'id, PortBeaconPath<'id, P>>,
+>;
 
 /// A sealed single MPDU of the access point's interface on the port `P`.
 pub type AccessPointSubmission<'k, 'p, 'id, P> = AdmittedAttempt<
@@ -734,11 +747,8 @@ pub trait AccessPointPort<'id>:
     /// The permission, unchanged, when an earlier installation issued it.
     fn current_beacon(
         &self,
-        permission: BeaconPermission<'id, <Self::Types as PortTypes<'id>>::BeaconPath>,
-    ) -> Result<
-        CurrentBeacon<'_, 'id, <Self::Types as PortTypes<'id>>::BeaconPath>,
-        BeaconRefused<'id, <Self::Types as PortTypes<'id>>::BeaconPath>,
-    > {
+        permission: BeaconPermission<'id, PortBeaconPath<'id, Self>>,
+    ) -> BeaconCheck<'_, 'id, Self> {
         let installation = self.installation_generation();
         if permission.generation == installation {
             Ok(CurrentBeacon {

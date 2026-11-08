@@ -69,9 +69,9 @@ pub use access_point::{
     AccessPointCapabilities, AccessPointCommand, AccessPointCommandKind, AccessPointCommands,
     AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
     AccessPointServices, AccessPointSubmission, AccessPointTypes, AdmittedBeacon,
-    BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant, BeaconParts, BeaconPermission, BeaconPool,
-    BeaconRefusal, BeaconRefused, BeaconStamp, BeaconSubmission, BeaconTimestamp, CurrentBeacon,
-    SupportedTsfControl, TsfControl,
+    BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconCheck, BeaconGrant, BeaconParts, BeaconPermission,
+    BeaconPool, BeaconRefusal, BeaconRefused, BeaconStamp, BeaconSubmission, BeaconTimestamp,
+    CurrentBeacon, SealedBeaconParts, SupportedTsfControl, TsfControl,
 };
 pub mod arena;
 pub use arena::{
