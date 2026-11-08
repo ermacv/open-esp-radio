@@ -15,16 +15,40 @@ fn software_key_unwrap(
 
 /// A GTK whose only owner is software, numbered as the installed group key
 /// a composition would hold.
-struct TestGroupKey;
+struct TestGroupKey {
+    installation: ApGroupKeyInstallation,
+}
 
 impl oer_protocols_ieee80211_core_upper_mac::ccmp::SoftwareCcmpKey for TestGroupKey {}
 
-/// The numbering of a GTK that has transmitted nothing yet.
-fn gtk_numbers() -> oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey<TestGroupKey> {
+impl ApGroupTransmitKey for TestGroupKey {
+    fn installation(&self) -> ApGroupKeyInstallation {
+        self.installation
+    }
+}
+
+/// The installation generation the test services announce their GTK under.
+const TEST_GTK_GENERATION: u32 = 7;
+
+/// An installed GTK of `key_id` and `generation` that has numbered nothing.
+fn test_group_key(
+    key_id: u8,
+    generation: u32,
+) -> oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey<TestGroupKey> {
     oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey::install(
-        TestGroupKey,
+        TestGroupKey {
+            installation: ApGroupKeyInstallation {
+                key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(key_id).unwrap(),
+                generation,
+            },
+        },
         oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
     )
+}
+
+/// The installed GTK of the test services (Key ID 1).
+fn gtk_numbers() -> oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey<TestGroupKey> {
+    test_group_key(1, TEST_GTK_GENERATION)
 }
 
 const TEST_HT_CAPABILITIES: oer_protocols_ieee80211_wire::ht::HtLocalCapabilities =
@@ -168,6 +192,7 @@ fn service(
             true,
             &[0x55; 16],
         ),
+        TEST_GTK_GENERATION,
         AccessPointClientLimit::new(2).unwrap(),
         AccessPointInactiveTimeout::default(),
         storage.lend(),
@@ -603,6 +628,7 @@ fn associated_activity_refreshes_the_configured_inactivity_frontier() {
                 true,
                 &[0x55; 16],
             ),
+            TEST_GTK_GENERATION,
             AccessPointClientLimit::new(2).unwrap(),
             AccessPointInactiveTimeout::new(10).unwrap(),
             storage.lend(),
@@ -771,9 +797,9 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         Some(oer_portable_time::Instant::from_micros(1_000_010))
     );
     let ApWpa2RetryProgress::Transmit(retried_message1) = service
-        .take_due_wpa2_retry::<512>(
+        .take_due_wpa2_retry::<512, _>(
             oer_portable_time::Instant::from_micros(1_000_010),
-            gtk_numbers().packet_numbers(),
+            &gtk_numbers(),
         )
         .unwrap()
     else {
@@ -822,9 +848,8 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     let message2 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes())
             .unwrap();
-    let ApWpa2Progress::Transmit(message3) = service
-        .on_eapol(PEER, message2, gtk_numbers().packet_numbers())
-        .unwrap()
+    let ApWpa2Progress::Transmit(message3) =
+        service.on_eapol(PEER, message2, &gtk_numbers()).unwrap()
     else {
         panic!("message 2 must produce message 3");
     };
@@ -864,9 +889,9 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         Some(oer_portable_time::Instant::from_micros(2_100_000))
     );
     let ApWpa2RetryProgress::Transmit(retried_message3) = service
-        .take_due_wpa2_retry::<512>(
+        .take_due_wpa2_retry::<512, _>(
             oer_portable_time::Instant::from_micros(2_100_000),
-            gtk_numbers().packet_numbers(),
+            &gtk_numbers(),
         )
         .unwrap()
     else {
@@ -900,9 +925,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
             .unwrap();
     assert!(matches!(
-        service
-            .on_eapol(PEER, message4, gtk_numbers().packet_numbers())
-            .unwrap(),
+        service.on_eapol(PEER, message4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::AuthorizePeer
     ));
     assert_eq!(service.next_wpa2_retry_deadline(), None);
@@ -946,7 +969,7 @@ fn message2_must_echo_the_exact_association_rsn() {
             .on_eapol(
                 PEER,
                 signed_message2(&WPA2_RSN, &[], ANONCE, SNONCE),
-                gtk_numbers().packet_numbers()
+                &gtk_numbers()
             )
             .unwrap(),
         ApWpa2Progress::DeauthenticatePeer
@@ -991,7 +1014,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
     .unwrap();
     assert!(matches!(
         service
-            .on_eapol(PEER, replay_mismatch, gtk_numbers().packet_numbers())
+            .on_eapol(PEER, replay_mismatch, &gtk_numbers())
             .unwrap(),
         ApWpa2Progress::None
     ));
@@ -1007,9 +1030,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, unsupported.as_bytes())
             .unwrap();
     assert!(matches!(
-        service
-            .on_eapol(PEER, unsupported, gtk_numbers().packet_numbers())
-            .unwrap(),
+        service.on_eapol(PEER, unsupported, &gtk_numbers()).unwrap(),
         ApWpa2Progress::None
     ));
 
@@ -1017,9 +1038,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
     // mismatch is not actionable because this candidate's MIC is bad.
     let forged_m2 = corrupt_mic(signed_message2(&WPA2_RSN, &[], ANONCE, SNONCE));
     assert!(matches!(
-        service
-            .on_eapol(PEER, forged_m2, gtk_numbers().packet_numbers())
-            .unwrap(),
+        service.on_eapol(PEER, forged_m2, &gtk_numbers()).unwrap(),
         ApWpa2Progress::None
     ));
     assert_eq!(
@@ -1035,9 +1054,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
 
     let valid_m2 = signed_message2(&SUPPLICANT_RSN, &[], ANONCE, SNONCE);
     assert!(matches!(
-        service
-            .on_eapol(PEER, valid_m2, gtk_numbers().packet_numbers())
-            .unwrap(),
+        service.on_eapol(PEER, valid_m2, &gtk_numbers()).unwrap(),
         ApWpa2Progress::Transmit(_)
     ));
     assert_eq!(
@@ -1050,7 +1067,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
     let duplicate_m2 = signed_message2(&SUPPLICANT_RSN, &[], ANONCE, SNONCE);
     assert!(matches!(
         service
-            .on_eapol(PEER, duplicate_m2, gtk_numbers().packet_numbers())
+            .on_eapol(PEER, duplicate_m2, &gtk_numbers())
             .unwrap(),
         ApWpa2Progress::None
     ));
@@ -1086,9 +1103,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, valid_m4.as_bytes()).unwrap();
     let forged_m4 = corrupt_mic(valid_m4.clone());
     assert!(matches!(
-        service
-            .on_eapol(PEER, forged_m4, gtk_numbers().packet_numbers())
-            .unwrap(),
+        service.on_eapol(PEER, forged_m4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::None
     ));
     assert_eq!(
@@ -1096,9 +1111,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         RsnApPhase::AwaitingMessage4
     );
     assert!(matches!(
-        service
-            .on_eapol(PEER, valid_m4, gtk_numbers().packet_numbers())
-            .unwrap(),
+        service.on_eapol(PEER, valid_m4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::AuthorizePeer
     ));
 }
@@ -1129,7 +1142,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
             .on_eapol(
                 PEER,
                 signed_message2(&SUPPLICANT_RSN, &[], ANONCE, SNONCE),
-                gtk_numbers().packet_numbers()
+                &gtk_numbers()
             )
             .unwrap(),
         ApWpa2Progress::DeauthenticatePeer
@@ -1155,7 +1168,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
             .on_eapol(
                 PEER,
                 signed_message2(&SUPPLICANT_RSN, &RSNXE, ANONCE, SNONCE),
-                gtk_numbers().packet_numbers()
+                &gtk_numbers()
             )
             .unwrap(),
         ApWpa2Progress::Transmit(_)
@@ -1187,16 +1200,16 @@ fn exhausted_pairwise_update_count_closes_the_peer() {
     for deadline in [1_000_000, 2_000_000, 3_000_000] {
         assert!(matches!(
             service
-                .take_due_wpa2_retry::<512>(oer_portable_time::Instant::from_micros(deadline), gtk_numbers().packet_numbers())
+                .take_due_wpa2_retry::<512, _>(oer_portable_time::Instant::from_micros(deadline), &gtk_numbers())
                 .unwrap(),
             ApWpa2RetryProgress::Transmit(frame) if *frame.frame().peer() == PEER
         ));
     }
     assert!(matches!(
         service
-            .take_due_wpa2_retry::<512>(
+            .take_due_wpa2_retry::<512, _>(
                 oer_portable_time::Instant::from_micros(4_000_000),
-                gtk_numbers().packet_numbers()
+                &gtk_numbers()
             )
             .unwrap(),
         ApWpa2RetryProgress::Close(ApPeerClose {
@@ -1279,6 +1292,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
                 true,
                 &[0x55; 16],
             ),
+            TEST_GTK_GENERATION,
             AccessPointClientLimit::new(15).unwrap(),
             AccessPointInactiveTimeout::default(),
             storage.lend(),
@@ -1765,6 +1779,7 @@ fn a_station_resuming_a_pmksa_is_refused_by_an_access_point_without_a_cache() {
                 true,
                 &[0x55; 16],
             ),
+            TEST_GTK_GENERATION,
             AccessPointClientLimit::new(2).unwrap(),
             AccessPointInactiveTimeout::new(10).unwrap(),
             storage.lend(),
@@ -1803,6 +1818,7 @@ fn wpa3_service(
             true,
             &[0x55; 16],
         ),
+        TEST_GTK_GENERATION,
         RsnIgtk::new(4, [0; 6], &[0x66; 16]).unwrap(),
         AccessPointClientLimit::new(2).unwrap(),
         AccessPointInactiveTimeout::default(),
@@ -1882,9 +1898,8 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     let message2 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes())
             .unwrap();
-    let ApWpa2Progress::Transmit(message3) = service
-        .on_eapol(PEER, message2, gtk_numbers().packet_numbers())
-        .unwrap()
+    let ApWpa2Progress::Transmit(message3) =
+        service.on_eapol(PEER, message2, &gtk_numbers()).unwrap()
     else {
         panic!("message 2 must produce message 3");
     };
@@ -2058,9 +2073,8 @@ fn begin_management_handshake(
     let message2 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, peer, message2.as_bytes())
             .unwrap();
-    let ApWpa2Progress::Transmit(message3) = service
-        .on_eapol(peer, message2, gtk_numbers().packet_numbers())
-        .unwrap()
+    let ApWpa2Progress::Transmit(message3) =
+        service.on_eapol(peer, message2, &gtk_numbers()).unwrap()
     else {
         panic!("verified Message 2 produces Message 3");
     };
@@ -2093,9 +2107,7 @@ fn authorize_management_peer(
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, peer, message4.as_bytes())
             .unwrap();
     assert!(matches!(
-        service
-            .on_eapol(peer, message4, gtk_numbers().packet_numbers())
-            .unwrap(),
+        service.on_eapol(peer, message4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::AuthorizePeer
     ));
     service.authorize(peer, now).unwrap();
@@ -2280,10 +2292,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     );
     assert_eq!(service.igtk().unwrap().packet_number(), [3, 0, 0, 0, 0, 0]);
     let ApWpa2RetryProgress::Transmit(repeated) = service
-        .take_due_wpa2_retry::<512>(
-            service.next_wpa2_retry_deadline().unwrap(),
-            gtk_numbers().packet_numbers(),
-        )
+        .take_due_wpa2_retry::<512, _>(service.next_wpa2_retry_deadline().unwrap(), &gtk_numbers())
         .unwrap()
     else {
         panic!("Message 3 response timeout must retransmit");
@@ -2358,6 +2367,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                 true,
                 &[0x55; 16],
             ),
+            TEST_GTK_GENERATION,
             AccessPointClientLimit::new(2).unwrap(),
             AccessPointInactiveTimeout::default(),
             storage.lend(),

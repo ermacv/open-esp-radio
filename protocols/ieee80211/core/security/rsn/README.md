@@ -151,10 +151,13 @@ The authenticator sends every Message 1 and Message 3, a retransmission
 included, under a new and larger Key Replay Counter taken from its handshake
 state (`state/authenticator.rs::RsnApState::retransmit_message1`,
 `retransmit_message3`); the retry schedule (`retry`) owns only timing and the
-message kind. Only the latest counter is awaited: a Message 2 or 4 answering
-an earlier transmission is refused as stale peer input, and the next
-retransmission's answer completes the step. Message 3 carries as its Key RSC
-the packet number the caller names, the last one its GTK transmitted.
+message kind. A Message 2 or 4 may answer any of the latest
+`RSN_AP_REPLAY_WINDOW` transmissions of its step, so a retransmission never
+invalidates an earlier frame the station may have answered; other counters
+are refused as stale peer input. The window closes when the step completes:
+a later Message 4 neither authorizes nor installs a key again. Message 3
+carries as its Key RSC the packet number the caller names, the last one the
+installed GTK has handed out.
 
 ## Known defects
 

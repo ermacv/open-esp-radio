@@ -236,11 +236,53 @@ fn ap_orders_crypto_install_transmit_and_authorization() {
     assert_eq!(state.phase(), RsnApPhase::Authorized);
 }
 
+/// The state of a handshake whose Message 2 (counter `answered`) verified,
+/// awaiting Message 4 of the Message 3 it returns.
+fn ap_awaiting_message4(state: &mut RsnApState, station: [u8; 6], answered: u64) -> RsnTransmit {
+    let message2 = frame(
+        RsnInterface::AccessPoint,
+        station,
+        PAIRWISE | MIC,
+        answered,
+        [4; 32],
+    );
+    let (ticket, retained) = match state.on_frame(message2).unwrap() {
+        RsnApAction::DerivePtk {
+            ticket, message2, ..
+        } => (ticket, message2),
+        action => panic!("unexpected action: {action:?}"),
+    };
+    let (ticket, retained) = match state.complete_ptk(ticket, retained, true).unwrap() {
+        RsnApAction::VerifyMessage2Mic { ticket, message2 } => (ticket, message2),
+        action => panic!("unexpected action: {action:?}"),
+    };
+    let ticket = match state.complete_message2_mic(ticket, retained, true).unwrap() {
+        RsnApAction::PrepareMessage3 { ticket } => ticket,
+        action => panic!("unexpected action: {action:?}"),
+    };
+    match state
+        .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket, true)
+        .unwrap()
+    {
+        RsnApAction::Transmit(transmit) => transmit,
+        action => panic!("unexpected action: {action:?}"),
+    }
+}
+
+fn message4(station: [u8; 6], replay: u64) -> OwnedEapolFrame<EAPOL_KEY_PACKET_LEN> {
+    frame(
+        RsnInterface::AccessPoint,
+        station,
+        PAIRWISE | MIC | SECURE,
+        replay,
+        [0; 32],
+    )
+}
+
 #[test]
-fn ap_retransmissions_take_new_counters_and_await_only_the_latest() {
-    let ap = [1; 6];
+fn ap_retransmissions_take_new_counters() {
     let station = [2; 6];
-    let mut state = RsnApState::new(crate::Akm::Psk, ap, station, [3; 32], 20).unwrap();
+    let mut state = RsnApState::new(crate::Akm::Psk, [1; 6], station, [3; 32], 20).unwrap();
     // Before Message 3 exists there is no Message 3 to retransmit.
     assert_eq!(state.retransmit_message3(), Err(RsnStateError::WrongPhase));
     let retry = state.retransmit_message1().unwrap();
@@ -253,59 +295,19 @@ fn ap_retransmissions_take_new_counters_and_await_only_the_latest() {
         }
     );
     assert_eq!(state.outstanding_transmit(), Ok(retry));
-    // The station's answer to the first Message 1 is no longer awaited.
-    let stale_message2 = frame(
-        RsnInterface::AccessPoint,
-        station,
-        PAIRWISE | MIC,
-        20,
-        [4; 32],
-    );
+    // Message 3 takes a counter above every Message 1 sent, and opens a new
+    // window: Message 1's retransmission is behind it.
+    let message3 = ap_awaiting_message4(&mut state, station, 21);
     assert_eq!(
-        state.on_frame(stale_message2),
-        Err(RsnStateError::ReplayCounterMismatch)
+        message3,
+        RsnTransmit {
+            message: RsnTxMessage::PairwiseMessage3,
+            replay_counter: 22,
+            retransmission: false,
+        }
     );
-    let message2 = frame(
-        RsnInterface::AccessPoint,
-        station,
-        PAIRWISE | MIC,
-        21,
-        [4; 32],
-    );
-    let (ticket, retained) = match state.on_frame(message2).unwrap() {
-        RsnApAction::DerivePtk {
-            ticket, message2, ..
-        } => (ticket, message2),
-        action => panic!("unexpected action: {action:?}"),
-    };
+    assert_eq!(state.outstanding_transmit(), Ok(message3));
     assert_eq!(state.retransmit_message1(), Err(RsnStateError::WrongPhase));
-    let (ticket, retained) = match state.complete_ptk(ticket, retained, true).unwrap() {
-        RsnApAction::VerifyMessage2Mic { ticket, message2 } => (ticket, message2),
-        action => panic!("unexpected action: {action:?}"),
-    };
-    let ticket = match state.complete_message2_mic(ticket, retained, true).unwrap() {
-        RsnApAction::PrepareMessage3 { ticket } => ticket,
-        action => panic!("unexpected action: {action:?}"),
-    };
-    assert_eq!(
-        state
-            .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket, true)
-            .unwrap(),
-        RsnApAction::Transmit(RsnTransmit {
-            message: RsnTxMessage::PairwiseMessage3,
-            replay_counter: 22,
-            retransmission: false,
-        })
-    );
-    // Message 3 opens a new window: Message 1's retransmission is behind it.
-    assert_eq!(
-        state.outstanding_transmit(),
-        Ok(RsnTransmit {
-            message: RsnTxMessage::PairwiseMessage3,
-            replay_counter: 22,
-            retransmission: false,
-        })
-    );
     let retry = state.retransmit_message3().unwrap();
     assert_eq!(
         retry,
@@ -316,28 +318,153 @@ fn ap_retransmissions_take_new_counters_and_await_only_the_latest() {
         }
     );
     assert_eq!(state.outstanding_transmit(), Ok(retry));
-    let stale_message4 = frame(
+}
+
+#[test]
+fn ap_message2_answering_an_earlier_message1_stays_awaited() {
+    let station = [2; 6];
+    let mut state = RsnApState::new(crate::Akm::Psk, [1; 6], station, [3; 32], 20).unwrap();
+    state.retransmit_message1().unwrap();
+    // The station answered the first Message 1; the retransmission did not
+    // reach it. Message 3 still takes a counter above both.
+    let message3 = ap_awaiting_message4(&mut state, station, 20);
+    assert_eq!(message3.replay_counter, 22);
+}
+
+#[test]
+fn ap_completion_binds_the_answer_it_verifies() {
+    let station = [2; 6];
+    let mut state = RsnApState::new(crate::Akm::Psk, [1; 6], station, [3; 32], 20).unwrap();
+    state.retransmit_message1().unwrap();
+    let (ticket, _) = match state
+        .on_frame(frame(
+            RsnInterface::AccessPoint,
+            station,
+            PAIRWISE | MIC,
+            20,
+            [4; 32],
+        ))
+        .unwrap()
+    {
+        RsnApAction::DerivePtk {
+            ticket, message2, ..
+        } => (ticket, message2),
+        action => panic!("unexpected action: {action:?}"),
+    };
+    // Another awaited Message 2 cannot stand in for the one being verified.
+    let other = frame(
         RsnInterface::AccessPoint,
         station,
-        PAIRWISE | MIC | SECURE,
-        22,
-        [0; 32],
+        PAIRWISE | MIC,
+        21,
+        [4; 32],
     );
     assert_eq!(
-        state.on_frame(stale_message4),
+        state.complete_ptk(ticket, other, true),
+        Err(RsnStateError::RetainedFrameMismatch)
+    );
+
+    let mut state = RsnApState::new(crate::Akm::Psk, [1; 6], station, [3; 32], 20).unwrap();
+    ap_awaiting_message4(&mut state, station, 20);
+    state.retransmit_message3().unwrap();
+    let ticket = match state.on_frame(message4(station, 21)).unwrap() {
+        RsnApAction::VerifyMessage4Mic { ticket, .. } => ticket,
+        action => panic!("unexpected action: {action:?}"),
+    };
+    assert_eq!(
+        state.complete_message4_mic(ticket, message4(station, 22), true),
+        Err(RsnStateError::RetainedFrameMismatch)
+    );
+}
+
+#[test]
+fn ap_message4_answering_an_earlier_message3_stays_awaited_until_completion() {
+    let station = [2; 6];
+    let mut state = RsnApState::new(crate::Akm::Psk, [1; 6], station, [3; 32], 20).unwrap();
+    assert_eq!(
+        ap_awaiting_message4(&mut state, station, 20).replay_counter,
+        21
+    );
+    assert_eq!(state.retransmit_message3().unwrap().replay_counter, 22);
+    assert_eq!(state.retransmit_message3().unwrap().replay_counter, 23);
+    // Message 1's counter is not a Message 3 counter, though it is near.
+    assert_eq!(
+        state.on_frame(message4(station, 20)),
         Err(RsnStateError::ReplayCounterMismatch)
     );
-    let message4 = frame(
-        RsnInterface::AccessPoint,
-        station,
-        PAIRWISE | MIC | SECURE,
-        23,
-        [0; 32],
+    // Message 4 of the first Message 3, after both retries were prepared.
+    let (ticket, retained) = match state.on_frame(message4(station, 21)).unwrap() {
+        RsnApAction::VerifyMessage4Mic { ticket, message4 } => (ticket, message4),
+        action => panic!("unexpected action: {action:?}"),
+    };
+    // A duplicate while its MIC is verified changes nothing.
+    assert_eq!(state.on_frame(message4(station, 23)), Ok(RsnApAction::None));
+    assert_eq!(
+        state.complete_message4_mic(ticket, retained, true).unwrap(),
+        RsnApAction::AuthorizePeer
     );
+    // The window closed with the step: no later Message 4 authorizes again,
+    // whatever its counter.
+    for replay in [21, 22, 23, 24] {
+        assert_eq!(
+            state.on_frame(message4(station, replay)),
+            Ok(RsnApAction::None)
+        );
+    }
+    assert_eq!(state.phase(), RsnApPhase::Authorized);
+}
+
+#[test]
+fn ap_replay_window_holds_only_the_latest_counters() {
+    let station = [2; 6];
+    let mut state = RsnApState::new(crate::Akm::Psk, [1; 6], station, [3; 32], 20).unwrap();
+    assert_eq!(
+        ap_awaiting_message4(&mut state, station, 20).replay_counter,
+        21
+    );
+    for _ in 0..RSN_AP_REPLAY_WINDOW {
+        state.retransmit_message3().unwrap();
+    }
+    let latest = 21 + RSN_AP_REPLAY_WINDOW;
+    assert_eq!(
+        state
+            .outstanding_transmit()
+            .map(|transmit| transmit.replay_counter),
+        Ok(latest)
+    );
+    // The first Message 3 fell out of the window, and no counter above the
+    // latest was ever sent.
+    for replay in [21, latest + 1, 0, u64::MAX] {
+        assert_eq!(
+            state.on_frame(message4(station, replay)),
+            Err(RsnStateError::ReplayCounterMismatch)
+        );
+    }
     assert!(matches!(
-        state.on_frame(message4).unwrap(),
-        RsnApAction::VerifyMessage4Mic { .. }
+        state.on_frame(message4(station, latest + 1 - RSN_AP_REPLAY_WINDOW)),
+        Ok(RsnApAction::VerifyMessage4Mic { .. })
     ));
+}
+
+#[test]
+fn ap_message2_outside_the_message1_window_is_refused() {
+    let station = [2; 6];
+    let mut state = RsnApState::new(crate::Akm::Psk, [1; 6], station, [3; 32], 20).unwrap();
+    for _ in 0..RSN_AP_REPLAY_WINDOW {
+        state.retransmit_message1().unwrap();
+    }
+    for replay in [20, 21 + RSN_AP_REPLAY_WINDOW] {
+        assert_eq!(
+            state.on_frame(frame(
+                RsnInterface::AccessPoint,
+                station,
+                PAIRWISE | MIC,
+                replay,
+                [4; 32]
+            )),
+            Err(RsnStateError::ReplayCounterMismatch)
+        );
+    }
 }
 
 #[test]

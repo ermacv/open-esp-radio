@@ -39,6 +39,17 @@ pub enum RsnApAction<const N: usize = DEFAULT_EAPOL_FRAME_CAPACITY> {
     DeauthenticatePeer,
 }
 
+/// How many of the latest replay counters of one handshake message stay
+/// awaited.
+///
+/// Every Message 1 and Message 3, a retransmission included, takes a new
+/// counter; an answer to any of the latest `RSN_AP_REPLAY_WINDOW` of them
+/// completes the step, so a retransmission never invalidates an earlier
+/// frame the station may already have answered. The window closes when the
+/// step completes. hostapd keeps a bounded history of expected counters the
+/// same way (`src/ap/wpa_auth.c`, `wpa_replay_counter_valid`).
+pub const RSN_AP_REPLAY_WINDOW: u64 = 4;
+
 pub struct RsnApState {
     akm: Akm,
     authenticator: [u8; 6],
@@ -46,8 +57,14 @@ pub struct RsnApState {
     authenticator_nonce: [u8; RSN_NONCE_LEN],
     supplicant_nonce: [u8; RSN_NONCE_LEN],
     phase: RsnApPhase,
+    /// The first and the latest counter of the Message 1 transmissions.
+    message1_first: u64,
     message1_replay: u64,
+    /// The first and the latest counter of the Message 3 transmissions.
+    message3_first: u64,
     message3_replay: u64,
+    /// The counter of the Message 2 or 4 whose verification is in progress.
+    answered_replay: u64,
     /// Whether the counter of the current response window belongs to a
     /// retransmission.
     retransmitted: bool,
@@ -76,8 +93,11 @@ impl RsnApState {
             authenticator_nonce,
             supplicant_nonce: [0; RSN_NONCE_LEN],
             phase: RsnApPhase::AwaitingMessage2,
+            message1_first: initial_replay_counter,
             message1_replay: initial_replay_counter,
+            message3_first: 0,
             message3_replay: 0,
+            answered_replay: 0,
             retransmitted: false,
             active_ticket: RsnTicket(0),
             next_ticket: 1,
@@ -144,10 +164,11 @@ impl RsnApState {
     /// Retransmit Message 1 under the next replay counter.
     ///
     /// Every EAPOL-Key frame the authenticator sends carries a new, larger
-    /// counter, and only the latest is awaited: Message 2 must echo it. The
-    /// counter after it stays free for Message 3, so a retransmission that
-    /// would leave none is refused with `ReplayCounterExhausted` and the
-    /// state is unchanged.
+    /// counter; Message 2 may answer any of the latest
+    /// [`RSN_AP_REPLAY_WINDOW`] Message 1 counters. The counter after the
+    /// latest stays free for Message 3, so a retransmission that would leave
+    /// none is refused with `ReplayCounterExhausted` and the state is
+    /// unchanged.
     pub fn retransmit_message1(&mut self) -> Result<RsnTransmit, RsnStateError> {
         if !matches!(self.phase, RsnApPhase::AwaitingMessage2) {
             return Err(RsnStateError::WrongPhase);
@@ -166,9 +187,9 @@ impl RsnApState {
         })
     }
 
-    /// Retransmit Message 3 under the next replay counter. Message 4 must
-    /// echo it; the earlier Message 3 counters are no longer awaited. On
-    /// `ReplayCounterExhausted` the state is unchanged.
+    /// Retransmit Message 3 under the next replay counter. Message 4 may
+    /// answer any of the latest [`RSN_AP_REPLAY_WINDOW`] Message 3 counters.
+    /// On `ReplayCounterExhausted` the state is unchanged.
     pub fn retransmit_message3(&mut self) -> Result<RsnTransmit, RsnStateError> {
         if !matches!(self.phase, RsnApPhase::AwaitingMessage4) {
             return Err(RsnStateError::WrongPhase);
@@ -209,7 +230,7 @@ impl RsnApState {
         let key = frame.key_frame()?;
         let replay = key.replay_counter();
         let nonce = *key.nonce();
-        if replay != self.message1_replay {
+        if !awaited(self.message1_first, self.message1_replay, replay) {
             return Err(RsnStateError::ReplayCounterMismatch);
         }
         if nonce.iter().all(|byte| *byte == 0) {
@@ -219,6 +240,7 @@ impl RsnApState {
         match self.phase {
             RsnApPhase::AwaitingMessage2 => {
                 self.supplicant_nonce = nonce;
+                self.answered_replay = replay;
                 self.phase = RsnApPhase::DerivingPtk;
                 let ticket = self.issue_ticket();
                 Ok(RsnApAction::DerivePtk {
@@ -251,11 +273,19 @@ impl RsnApState {
         frame: OwnedEapolFrame<N>,
     ) -> Result<RsnApAction<N>, RsnStateError> {
         let replay = frame.key_frame()?.replay_counter();
-        if replay != self.message3_replay {
+        match self.phase {
+            // The window closed with the step: a later Message 4 neither
+            // authorizes nor installs a key again.
+            RsnApPhase::Authorized => return Ok(RsnApAction::None),
+            RsnApPhase::AwaitingMessage4 | RsnApPhase::VerifyingMessage4 => {}
+            _ => return Err(RsnStateError::UnexpectedMessage),
+        }
+        if !awaited(self.message3_first, self.message3_replay, replay) {
             return Err(RsnStateError::ReplayCounterMismatch);
         }
         match self.phase {
             RsnApPhase::AwaitingMessage4 => {
+                self.answered_replay = replay;
                 self.phase = RsnApPhase::VerifyingMessage4;
                 let ticket = self.issue_ticket();
                 Ok(RsnApAction::VerifyMessage4Mic {
@@ -263,8 +293,7 @@ impl RsnApState {
                     message4: frame,
                 })
             }
-            RsnApPhase::VerifyingMessage4 | RsnApPhase::Authorized => Ok(RsnApAction::None),
-            _ => Err(RsnStateError::UnexpectedMessage),
+            _ => Ok(RsnApAction::None),
         }
     }
 
@@ -319,6 +348,7 @@ impl RsnApState {
             .message1_replay
             .checked_add(1)
             .ok_or(RsnStateError::ReplayCounterExhausted)?;
+        self.message3_first = self.message3_replay;
         self.retransmitted = false;
         self.phase = RsnApPhase::AwaitingMessage4;
         Ok(RsnApAction::Transmit(RsnTransmit {
@@ -376,7 +406,7 @@ impl RsnApState {
         self.validate_frame(frame)?;
         let key = frame.key_frame()?;
         if key.message() != EapolKeyMessage::PairwiseMessage2
-            || key.replay_counter() != self.message1_replay
+            || key.replay_counter() != self.answered_replay
             || key.nonce() != &self.supplicant_nonce
         {
             return Err(RsnStateError::RetainedFrameMismatch);
@@ -391,7 +421,7 @@ impl RsnApState {
         self.validate_frame(frame)?;
         let key = frame.key_frame()?;
         if key.message() != EapolKeyMessage::PairwiseMessage4
-            || key.replay_counter() != self.message3_replay
+            || key.replay_counter() != self.answered_replay
         {
             return Err(RsnStateError::RetainedFrameMismatch);
         }
@@ -416,6 +446,18 @@ impl RsnApState {
         }
         self.active_ticket = ticket;
         ticket
+    }
+}
+
+/// Whether `replay` is one of the latest [`RSN_AP_REPLAY_WINDOW`] counters
+/// sent from `first` up to `latest`.
+const fn awaited(first: u64, latest: u64, replay: u64) -> bool {
+    if replay < first {
+        return false;
+    }
+    match latest.checked_sub(replay) {
+        Some(behind) => behind < RSN_AP_REPLAY_WINDOW,
+        None => false,
     }
 }
 

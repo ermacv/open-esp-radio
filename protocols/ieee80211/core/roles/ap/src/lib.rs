@@ -58,8 +58,9 @@ pub use service::{
     AccessPointPeers, AccessPointService, AccessPointServiceStatus, ApAssociationCapabilities,
     ApAssociationIdentity, ApBufferedGroupRelease, ApBufferedUnicastRelease, ApDownlinkAdmission,
     ApDownlinkDisposition, ApEapolTransmit, ApEapolTxCompletion, ApEapolTxContext,
-    ApGroupManagementError, ApManagementAction, ApManagementProtection, ApManagementRejection,
-    ApManagementRx, ApManagementRxProtection, ApMlmeAction, ApPeerBinding, ApPeerClose,
-    ApPeerCloseKind, ApPeerPhase, ApPeerPowerState, ApPeerStatus, ApPowerSaveAction,
-    ApServiceError, ApWpa2Error, ApWpa2Progress, ApWpa2RetryProgress,
+    ApGroupKeyInstallation, ApGroupManagementError, ApGroupTransmitKey, ApManagementAction,
+    ApManagementProtection, ApManagementRejection, ApManagementRx, ApManagementRxProtection,
+    ApMlmeAction, ApPeerBinding, ApPeerClose, ApPeerCloseKind, ApPeerPhase, ApPeerPowerState,
+    ApPeerStatus, ApPowerSaveAction, ApServiceError, ApWpa2Error, ApWpa2Progress,
+    ApWpa2RetryProgress,
 };

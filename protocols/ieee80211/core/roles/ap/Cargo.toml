@@ -16,6 +16,7 @@ oer-protocols-ieee80211-core-security-rsn = { path = "../../security/rsn" }
 oer-portable-time = { path = "../../../../../portable/time" }
 
 [dev-dependencies]
+oer-protocols-ieee80211-contracts-security = { path = "../../../contracts/security" }
 oer-portable-wire = { path = "../../../../../portable/wire" }
 
 [lints]

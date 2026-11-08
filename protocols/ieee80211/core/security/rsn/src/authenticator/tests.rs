@@ -127,38 +127,28 @@ fn a_verified_handshake_wraps_message3_and_authorizes_on_message4() {
     let again_plain = crate::test_unwrap_bytes(ptk.kek(), again_frame.key_data()).unwrap();
     assert_eq!(again_plain.as_bytes(), plain.as_bytes());
 
-    // Message 4 of the first Message 3 is no longer awaited.
-    let stale_message4 = RsnTxFrame::<512>::message4(Akm::Psk, AP, REPLAY + 1)
-        .unwrap()
-        .authenticate(&ptk, &mut SoftwareAes128)
-        .unwrap();
-    let stale_message4 = OwnedEapolFrame::<512>::try_copy(
-        RsnInterface::AccessPoint,
-        PEER,
-        stale_message4.as_bytes(),
-    )
-    .unwrap();
-    assert!(matches!(
-        authenticator.on_frame(&pmk(), stale_message4, &mut SoftwareAes128),
-        Err(RsnAuthenticatorError::Rejected(
-            RsnStateError::ReplayCounterMismatch
-        ))
-    ));
-
-    let message4 = RsnTxFrame::<512>::message4(Akm::Psk, AP, REPLAY + 2)
-        .unwrap()
-        .authenticate(&ptk, &mut SoftwareAes128)
-        .unwrap();
-    let message4 =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
+    // Message 4 of the first Message 3 is still awaited after the retry;
+    // the retry's own Message 4 then arrives after completion.
+    let signed_message4 = |replay| {
+        let frame = RsnTxFrame::<512>::message4(Akm::Psk, AP, replay)
+            .unwrap()
+            .authenticate(&ptk, &mut SoftwareAes128)
             .unwrap();
+        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
+    };
     assert!(matches!(
         authenticator
-            .on_frame(&pmk(), message4, &mut SoftwareAes128)
+            .on_frame(&pmk(), signed_message4(REPLAY + 1), &mut SoftwareAes128)
             .unwrap(),
         RsnAuthenticatorStep::Authorized
     ));
     assert_eq!(authenticator.phase(), RsnApPhase::Authorized);
+    assert!(matches!(
+        authenticator
+            .on_frame(&pmk(), signed_message4(REPLAY + 2), &mut SoftwareAes128)
+            .unwrap(),
+        RsnAuthenticatorStep::None
+    ));
     authenticator.forget_handshake_keys();
     assert!(authenticator.pending_ptk().is_none());
 }
@@ -228,7 +218,7 @@ fn message4_before_message3_is_refused_and_unsolicited_frames_are_rejected() {
 }
 
 #[test]
-fn a_retransmitted_message1_takes_the_next_counter_and_message2_must_echo_it() {
+fn a_retransmitted_message1_takes_the_next_counter_and_an_earlier_answer_stays_awaited() {
     let mut authenticator = authenticator(&STATION_RSN);
     let (retry, transmit) = authenticator.retransmit_message1::<512>().unwrap();
     assert!(transmit.retransmission);
@@ -236,15 +226,23 @@ fn a_retransmitted_message1_takes_the_next_counter_and_message2_must_echo_it() {
     assert_eq!(retry.key_frame().unwrap().replay_counter(), REPLAY + 1);
     assert_eq!(retry.key_frame().unwrap().nonce(), &ANONCE);
     let ptk = ptk();
-    // Message 2 answering the first Message 1 is refused as stale input.
+    // A counter that was never sent is refused as stale input.
+    let rsn = OwnedRsnIe::<64>::try_copy(&STATION_RSN).unwrap();
+    let unsent = RsnTxFrame::<512>::message2(Akm::Psk, AP, REPLAY + 2, SNONCE, &rsn)
+        .unwrap()
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap();
+    let unsent =
+        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, unsent.as_bytes())
+            .unwrap();
     assert!(matches!(
-        authenticator.on_frame(&pmk(), message2(&STATION_RSN, &ptk), &mut SoftwareAes128),
+        authenticator.on_frame(&pmk(), unsent, &mut SoftwareAes128),
         Err(RsnAuthenticatorError::Rejected(
             RsnStateError::ReplayCounterMismatch
         ))
     ));
-    let rsn = OwnedRsnIe::<64>::try_copy(&STATION_RSN).unwrap();
-    let answer = RsnTxFrame::<512>::message2(Akm::Psk, AP, REPLAY + 1, SNONCE, &rsn)
+    // Message 2 answering the first Message 1 prepares Message 3.
+    let answer = RsnTxFrame::<512>::message2(Akm::Psk, AP, REPLAY, SNONCE, &rsn)
         .unwrap()
         .authenticate(&ptk, &mut SoftwareAes128)
         .unwrap();
@@ -255,7 +253,7 @@ fn a_retransmitted_message1_takes_the_next_counter_and_message2_must_echo_it() {
         .on_frame(&pmk(), answer, &mut SoftwareAes128)
         .unwrap()
     else {
-        panic!("Message 2 echoing the retransmitted counter prepares Message 3");
+        panic!("Message 2 answering an awaited Message 1 prepares Message 3");
     };
     let (message3, _) = authenticator
         .complete_message3::<512, _, _>(

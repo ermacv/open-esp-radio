@@ -3,7 +3,7 @@
 
 use super::*;
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
-use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpTxPacketNumber;
+use oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpTxPacketNumber, InstalledCcmpTxKey};
 use oer_protocols_ieee80211_wire::security::{SppCapability, SppError, rsn::rsnx_capabilities};
 
 /// Why an association cannot use the advertised RSN profile.
@@ -239,14 +239,17 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// Consume at most one due authenticator retry edge.
     ///
     /// A retransmission takes the handshake's next replay counter; the
-    /// station answers only that one. A Message 3 carries as its Key RSC the
-    /// last packet number of `group_packet_numbers`, the numbering of the
-    /// installed GTK that the advertised key data names.
-    pub fn take_due_wpa2_retry<const N: usize>(
+    /// station may answer it or an earlier transmission of the same step. A
+    /// Message 3 carries as its Key RSC the last packet number `group_key`
+    /// has handed out; `group_key` must be the installation of the GTK this
+    /// BSS announces, or the call is refused with `GroupKeyMismatch` before
+    /// any alarm is consumed.
+    pub fn take_due_wpa2_retry<const N: usize, K: ApGroupTransmitKey>(
         &mut self,
         now: oer_portable_time::Instant,
-        group_packet_numbers: &CcmpTxPacketNumber,
+        group_key: &InstalledCcmpTxKey<K>,
     ) -> Result<ApWpa2RetryProgress<N>, ApWpa2Error> {
+        let group_packet_numbers = self.group_packet_numbers(group_key)?;
         let Some(peer) = self.storage_mut().peers.iter_mut().flatten().find(|peer| {
             peer.wpa2_retry_alarm
                 .is_some_and(|alarm| alarm.deadline <= now)
@@ -302,17 +305,19 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// PTK derivation, MIC verification and GTK wrapping are pure bounded
     /// operations of `oer-protocols-ieee80211-core-security-rsn`. Hardware key installation remains an
     /// explicit later edge in the chip AP engine. Message 3 carries as its
-    /// Key RSC the last packet number of `group_packet_numbers`, the
-    /// numbering of the installed GTK that its key data names.
-    pub fn on_eapol<const N: usize>(
+    /// Key RSC the last packet number `group_key` has handed out; `group_key`
+    /// must be the installation of the GTK its key data names, or the frame
+    /// is refused with `GroupKeyMismatch` before any handshake state changes.
+    pub fn on_eapol<const N: usize, K: ApGroupTransmitKey>(
         &mut self,
         peer: [u8; 6],
         frame: OwnedEapolFrame<N>,
-        group_packet_numbers: &CcmpTxPacketNumber,
+        group_key: &InstalledCcmpTxKey<K>,
     ) -> Result<ApWpa2Progress<N>, ApWpa2Error> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch.into());
         }
+        let group_packet_numbers = self.group_packet_numbers(group_key)?;
         let (authenticator, pmk) = self.authenticator_and_pmk(peer)?;
         let step = match authenticator.on_frame(pmk, frame, &mut SoftwareAes128) {
             Ok(step) => step,
@@ -437,6 +442,38 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             .as_mut()
             .ok_or(ApServiceError::WrongPeerPhase)?;
         Ok((authenticator, pmk))
+    }
+
+    /// The installation of the GTK this BSS announces in Message 3.
+    pub fn group_key_installation(&self) -> Result<ApGroupKeyInstallation, ApServiceError> {
+        match &self.security {
+            AccessPointSecurityMaterial::Open => Err(ApServiceError::SecurityModeMismatch),
+            AccessPointSecurityMaterial::Wpa2Personal {
+                gtk,
+                gtk_generation,
+                ..
+            }
+            | AccessPointSecurityMaterial::Wpa3Personal {
+                gtk,
+                gtk_generation,
+                ..
+            } => Ok(ApGroupKeyInstallation {
+                key_id: gtk.key_id(),
+                generation: *gtk_generation,
+            }),
+        }
+    }
+
+    /// The packet numbers of `group_key` when it is the installation of the
+    /// announced GTK. Reading them allocates none.
+    fn group_packet_numbers<'k, K: ApGroupTransmitKey>(
+        &self,
+        group_key: &'k InstalledCcmpTxKey<K>,
+    ) -> Result<&'k CcmpTxPacketNumber, ApWpa2Error> {
+        if group_key.key().installation() != self.group_key_installation()? {
+            return Err(ApWpa2Error::GroupKeyMismatch);
+        }
+        Ok(group_key.packet_numbers())
     }
 
     pub fn gtk(&self) -> Result<&RsnGtk, ApServiceError> {

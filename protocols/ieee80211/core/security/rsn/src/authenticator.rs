@@ -138,8 +138,8 @@ impl RsnAuthenticator {
     }
 
     /// Message 1 again, under the next replay counter, and the transmission
-    /// it is. The state awaits only this counter from here on; the counter
-    /// stays spent if the frame cannot be built.
+    /// it is. Message 2 may answer it or an earlier Message 1 of the window;
+    /// the counter stays spent if the frame cannot be built.
     pub fn retransmit_message1<const N: usize>(
         &mut self,
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
@@ -253,9 +253,9 @@ impl RsnAuthenticator {
     }
 
     /// Wrap `key_data` under the prepared PTK and build the first Message 3.
-    /// Its Key RSC is `group_packet_number`, the last packet number the GTK
-    /// in `key_data` has transmitted, so the station accepts only later
-    /// group frames. The PTK becomes pending only once the frame exists. The
+    /// Its Key RSC is `group_packet_number`, the last packet number the
+    /// installed GTK in `key_data` has handed out, so the station accepts
+    /// only group frames numbered after it. The PTK becomes pending only once the frame exists. The
     /// MIC of an AES-CMAC suite runs on `engine`; the wrap stays in software.
     pub fn complete_message3<const N: usize, const K: usize, E: Aes128Engine>(
         &mut self,
@@ -285,9 +285,9 @@ impl RsnAuthenticator {
 
     /// Message 3 again, under the next replay counter, with `key_data`
     /// wrapped under the pending PTK and the Key RSC `group_packet_number`,
-    /// the GTK's last transmitted packet number at this retransmission.
-    /// The state awaits only this counter's Message 4 from here on; the
-    /// counter stays spent if the frame cannot be built.
+    /// the last packet number the installed GTK has handed out at this
+    /// retransmission. Message 4 may answer it or an earlier Message 3 of
+    /// the window; the counter stays spent if the frame cannot be built.
     pub fn retransmit_message3<const N: usize, const K: usize, E: Aes128Engine>(
         &mut self,
         key_data: &RsnPlainKeyData<K>,

@@ -116,7 +116,9 @@ impl RsnStateError {
 mod authenticator;
 mod supplicant;
 
-pub use authenticator::{RsnApAction, RsnApPeerError, RsnApPeers, RsnApPhase, RsnApState};
+pub use authenticator::{
+    RSN_AP_REPLAY_WINDOW, RsnApAction, RsnApPeerError, RsnApPeers, RsnApPhase, RsnApState,
+};
 pub use supplicant::{RsnStaAction, RsnStaPhase, RsnStaState};
 
 const fn nonce_is_zero(nonce: &[u8; RSN_NONCE_LEN]) -> bool {
