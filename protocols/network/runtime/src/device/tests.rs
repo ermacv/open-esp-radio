@@ -609,3 +609,17 @@ fn a_waiting_end_wakes_the_service() {
     assert_eq!(port.take_notice(), Some(first));
     assert!(!wakes_at_once(&mut port));
 }
+
+/// After its service ended, the port's give-back frees the buffers whose
+/// ends no policy will settle.
+#[test]
+fn a_give_back_frees_the_buffers_of_ends_no_policy_settles() {
+    let mut port = port();
+    let first = sent(&mut port);
+    let second = sent(&mut port);
+    port.buffers.ended.extend([first, second]);
+    assert_eq!(port.buffers.free, 0);
+    port.give_back();
+    assert_eq!(port.buffers.free, 2);
+    assert_eq!(port.take_notice(), None);
+}

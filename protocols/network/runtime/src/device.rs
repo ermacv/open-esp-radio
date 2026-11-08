@@ -106,13 +106,18 @@ impl<D, T, X> DevicePort<D, T, X> {
 
 impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
     /// Give back every frame the device's queue holds and take back the
-    /// memory the device returned. The device's queues outlive this port,
+    /// memory the device returned, each frame's end freeing its buffer with
+    /// no policy to settle it: the service that published it ended, its
+    /// account with it. The device's queues outlive this port,
     /// so dropping the port returns none of them: a stop calls this before
     /// it tells the device it is over.
     pub fn give_back(&mut self) {
         while self.take_frame(|_| {}) {}
         // Asking the transmit half takes back what the device returned.
         let _room = self.transmit.has_room();
+        // The service whose policy those frames' ends settle has ended, its
+        // account with it: each end frees its buffer and goes to no policy.
+        while self.buffers.take_notice().is_some() {}
         // The exchange ended: no refused frame waits for anything, so a next
         // service over this port is not woken for one.
         self.waiting = Waiting::Nothing;
