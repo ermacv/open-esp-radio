@@ -628,6 +628,8 @@ async fn install<W: Binding>(
                 doorbell: boot.bell,
                 domain,
                 power_limits: limits,
+                #[cfg(oer_trace)]
+                stall: &crate::RX_STALL,
             }))
         })
         .ok_or(InitializationError::Storage)?;

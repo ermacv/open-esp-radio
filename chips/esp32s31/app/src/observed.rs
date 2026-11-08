@@ -50,6 +50,10 @@ pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
 };
 pub use oer_chips_esp32s31_radio_ieee80211_station::WifiRxReport;
 pub use oer_chips_esp32s31_radio_ieee80211_station::observation::StationRxKind;
+pub use oer_chips_esp32s31_radio_ieee80211_station::{
+    MacBank, MacSample, RxDescriptorCounts, RxDeviceView, RxHardwareView, RxProgress, RxRingView,
+    RxSessionView, RxStallReading, RxStallResume, RxStallSnapshot, RxStallTicket, RxWalkerView,
+};
 pub use oer_portable_trace::profile::{PcSample, Thinning};
 
 /// The library's executors.
@@ -643,6 +647,19 @@ impl Hart0 {
     /// The PC sampler.
     pub fn sampler(&mut self) -> &mut Sampler {
         &mut self.sampler
+    }
+
+    /// Ask the station's radio device for a stall snapshot of its receive
+    /// path: it takes it at its next turn, before that turn's receive
+    /// service, and records how the path went on after the service. The
+    /// station's device runs on the boot hart, whose task the request wakes.
+    pub fn request_rx_snapshot(&mut self) -> RxStallTicket {
+        oer_chips_esp32s31_radio_ieee80211_station::request_rx_snapshot()
+    }
+
+    /// The snapshot taken for `ticket`; `None` before the device took it.
+    pub fn rx_snapshot(&mut self, ticket: RxStallTicket) -> Option<RxStallReading> {
+        oer_chips_esp32s31_radio_ieee80211_station::rx_snapshot(ticket)
     }
 }
 

@@ -363,6 +363,16 @@ impl ReceiveRegisters for ModelRegisters {
     }
     #[cfg(oer_trace)]
     fn sample_mac_counts(&mut self, _now_us: u32) {}
+    /// The model has no statistics bank.
+    #[cfg(oer_trace)]
+    fn mac_banks(
+        &mut self,
+    ) -> (
+        Option<crate::rx::counters::mac::MacBank>,
+        Option<crate::rx::counters::mac::MacSample>,
+    ) {
+        (None, None)
+    }
 }
 
 impl MacRuntimeStartHardware for ModelMac<'_> {

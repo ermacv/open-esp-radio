@@ -277,6 +277,25 @@ before it stops the walker, and queued frames are staged: the actor keeps
 receiving and dropping frames after it requests the stop, until the exit
 is published; otherwise the epoch ends quarantined with `DrainTimeout`.
 
+A trace build (`cfg(oer_trace)`) keeps a stall record beside the device
+(`rx::counters::stall::RxStall`, lent through `RadioParts::stall`; the
+station facade holds one static). The device stamps two boundaries with the
+turn's instant: the descriptors a service pass observed (DMA) and the units
+it hands to the port (driver). A diagnostic reader on the device's hart asks
+for a snapshot (`RxStall::request`), which wakes the actor's task through
+the waker the device registers at every `poll_rx_work`. At the first port
+facts after the request, before the receive facts are taken and before the
+turn's receive pull, the device reads, without writing a register, moving a
+descriptor or taking a fact: both stamps, its own ring work, the walker's
+registers, the ring's view, every descriptor's `OWNER` and `RX_DONE`, the
+session's buffers and the software side of the interrupt line, and the
+MAC statistics bank beside its last periodic sample. The request counts as
+a receive fact, so the turn runs, and leaves `rx_pending` as it was: the
+turn's pull serves only what the device already knew of. At each facts
+after the snapshot the device records the stamps again, and for the last
+time once the turn's receive pull ran. A product build has neither the
+record nor the stamps.
+
 ## Lower-MAC core
 
 The driver core `LowerMacCore` lives in [`src/lower_mac.rs`](src/lower_mac.rs).

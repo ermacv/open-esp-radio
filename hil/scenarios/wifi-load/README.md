@@ -159,6 +159,30 @@ responses it counted and `frequency_offset` at the window's end. The
 image samples the bank every 50 ms from the port's turn, so a window's
 ends lag by up to that much.
 
+`stall` localizes where reception last moved, by boundary, and prints one
+line (`stall <level>:`). Times are milliseconds from the image's window
+start (`window_ms` its length), on the image's clock. `last_progress_ms`
+holds the DMA boundary's (descriptors of completed units a receive service
+pass observed), the driver's (units the radio device handed to the station)
+and the socket's (load datagrams the load server received). After the
+window's own readings the image asks its radio owner for a snapshot
+(`requested_ms`), which the owner takes at the turn the request wakes,
+before that turn's receive service: `snapshot` holds the device's own ring
+work (`rx_pending`, a `continuation`, a `cut`, staged units `queued`), the
+walker's registers (enable, reload doorbell, NEXT, LAST, BASE, the MAC's
+buffer-full count and runtime state), the ring's view, the descriptors by
+their first word (`armed`, `done`, with `software`) and the reserved one,
+the released, detached and staged buffers, and the software side of the
+interrupt line (a request its handler has not applied, a receive fact not
+taken yet, handler entries, unmasks and service passes). The MAC's interrupt
+registers belong to the radio handler and are not read. `resume` holds the
+boundaries at the owner's facts after the turn's receive pull
+(`after_receive_pull` false when none ran within the image's 200 ms wait):
+a boundary `resumed` when it moved after the snapshot; the socket's is its
+first datagram after the request. `mac_since_periodic_sample` holds what
+the MAC counted between its last 50 ms sample and the snapshot's own
+reading of the bank.
+
 `positions` holds the aggregates a BlockAck answered at their first
 transmission, by position on air, the first one at index 0; a lost
 aggregate or BlockAck and a retransmission count in none of it. `sent` has

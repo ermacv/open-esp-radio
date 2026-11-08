@@ -12,7 +12,8 @@ use oer::observe::tracking::TrackingSample;
 use oer_hil_services_load::{
     CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, ExecutorLoad, HartLoad,
     InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, Mac, PartWindow, Parts, Positions,
-    Rates, RxCounts, RxLink, Sample, Samples, StationRx, Tracking, TxAmpdu, TxCounts, TxLink,
+    Rates, RxCounts, RxLink, Sample, Samples, StallBoundary, StationRx, Tracking, TxAmpdu,
+    TxCounts, TxLink,
 };
 use oer_portable_trace::profile::Thinning;
 
@@ -291,19 +292,120 @@ pub(crate) fn samples<const N: usize>(
     }
 }
 
+/// The image's time of a radio owner's stamp read `age` microseconds before
+/// the image read its own clock at `now_us`: both clocks count the one
+/// system timer, so an age carries over from one to the other.
+pub(crate) fn stamped(now_us: u64, age: u32) -> u64 {
+    now_us.saturating_sub(u64::from(age))
+}
+
+/// A boundary that took `count` steps, its last `age` microseconds before
+/// `now_us`; without a step it has no time.
+pub(crate) fn boundary(now_us: u64, count: u32, age: u32) -> StallBoundary {
+    StallBoundary {
+        count,
+        last_us: (count != 0).then(|| stamped(now_us, age)),
+    }
+}
+
 #[cfg(target_arch = "riscv32")]
-pub(crate) use chip::{hart_count, snapshot};
+pub(crate) use chip::{hart_count, snapshot, stall};
 
 /// The chip's own types: the cache's, the driver's and the station's.
 #[cfg(target_arch = "riscv32")]
 mod chip {
     use oer::observe::{
         CacheGeometry, CacheLevel, Counters, DataBus, HartClock, HartCounters, InstructionBus,
-        StationRxCounts, StationRxKind, WifiRxReport,
+        MacBank, RxProgress, RxStallReading, StationRxCounts, StationRxKind, WifiRxReport,
     };
     use oer_hil_services_load as wire;
 
     use super::Snapshot;
+
+    /// The radio owner's stall `reading`, taken with the image's clock at
+    /// `now_us`: the snapshot and the MAC's banks as the wire names them.
+    pub(crate) fn stall(
+        reading: &RxStallReading,
+        now_us: u64,
+    ) -> (wire::RxSnapshot, wire::StallMac) {
+        let at = |stamp: u32| super::stamped(now_us, reading.age(stamp));
+        let boundary = |progress: RxProgress| {
+            super::boundary(now_us, progress.count, reading.age(progress.at))
+        };
+        let taken = &reading.snapshot;
+        let hardware = taken.hardware.map(|hardware| {
+            let (walker, session) = (hardware.walker, hardware.session);
+            let descriptors = session.descriptors;
+            wire::StallHardware {
+                walker: wire::StallWalker {
+                    enabled: walker.enabled,
+                    reload_doorbell: walker.reload_doorbell,
+                    next_low: walker.next_low,
+                    next_upper: walker.next_upper,
+                    last_low: walker.last_low,
+                    base: walker.base,
+                    buffer_full: walker.buffer_full,
+                    runtime_state: walker.runtime_state,
+                },
+                ring: hardware.ring.map(|ring| wire::StallRing {
+                    base: ring.base,
+                    recycle_start: ring.recycle_start,
+                    accepted_tail: ring.accepted_tail,
+                    observed: ring.observed,
+                    completed: ring.completed,
+                    remaining: ring.remaining,
+                    reload_pending: ring.reload_pending,
+                }),
+                session: wire::StallSession {
+                    descriptors: descriptors.total,
+                    armed: descriptors.armed,
+                    done: descriptors.done,
+                    software: descriptors.software,
+                    reserved_owner: descriptors.reserved_owner,
+                    reserved_done: descriptors.reserved_done,
+                    released: session.released,
+                    detached: session.detached,
+                    staged: session.staged,
+                    masked: session.masked,
+                    frozen: session.frozen,
+                    line_request_pending: session.line_request_pending,
+                    receive_fact_pending: session.receive_fact_pending,
+                    mac_irqs: session.mac_irqs,
+                    doorbell_unmasks: session.doorbell_unmasks,
+                    ignored_unmasks: session.ignored_unmasks,
+                    service_passes: session.service_passes,
+                },
+            }
+        });
+        let device = taken.device;
+        let snapshot = wire::RxSnapshot {
+            at_us: at(taken.at),
+            dma: boundary(taken.dma),
+            driver: boundary(taken.driver),
+            device: wire::StallDevice {
+                rx_pending: device.rx_pending,
+                continuation: device.continuation,
+                cut: device.cut,
+                pausing: device.pausing,
+                paused: device.paused,
+                queued: device.queued,
+            },
+            hardware,
+            resume: reading.resume.map(|resume| wire::StallResume {
+                checked_us: at(resume.at),
+                dma: boundary(resume.dma),
+                driver: boundary(resume.driver),
+                serviced: resume.serviced,
+            }),
+        };
+        let bank = |bank: &MacBank| wire::Mac::new(bank.counts, bank.frequency_offset);
+        let mac = wire::StallMac {
+            fresh: taken.mac.as_ref().map(bank),
+            periodic: taken.periodic.as_ref().map(|sample| bank(&sample.bank)),
+            periodic_us: taken.periodic.map(|sample| at(sample.at)),
+        };
+        (snapshot, mac)
+    }
 
     /// A hart's `clock` as the wire names it.
     pub(crate) fn hart_count(clock: HartClock) -> wire::HartCount {

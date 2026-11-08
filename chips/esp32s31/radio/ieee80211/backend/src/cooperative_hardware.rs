@@ -39,6 +39,16 @@ pub trait ReceiveRegisters {
     /// Sample the MAC's statistics for a trace build's counters.
     #[cfg(oer_trace)]
     fn sample_mac_counts(&mut self, now_us: u32);
+    /// A trace build's stall snapshot of the MAC's statistics: the bank
+    /// read now and the counters' last periodic sample. Only reads; `None`
+    /// where the owner has no bank or no sample yet.
+    #[cfg(oer_trace)]
+    fn mac_banks(
+        &mut self,
+    ) -> (
+        Option<crate::rx::counters::mac::MacBank>,
+        Option<crate::rx::counters::mac::MacSample>,
+    );
 }
 
 impl ReceiveRegisters for RadioAccess {
@@ -56,6 +66,19 @@ impl ReceiveRegisters for RadioAccess {
     #[cfg(oer_trace)]
     fn sample_mac_counts(&mut self, now_us: u32) {
         crate::rx::counters::mac::MAC_COUNTS.sample(&self.wifi_mac_hal(), now_us);
+    }
+    #[cfg(oer_trace)]
+    fn mac_banks(
+        &mut self,
+    ) -> (
+        Option<crate::rx::counters::mac::MacBank>,
+        Option<crate::rx::counters::mac::MacSample>,
+    ) {
+        use crate::rx::counters::mac;
+        (
+            Some(mac::bank(&self.wifi_mac_hal())),
+            mac::MAC_COUNTS.last_sample(),
+        )
     }
 }
 
