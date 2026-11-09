@@ -131,6 +131,8 @@ use crate::{
     },
 };
 
+mod access_point;
+
 /// The product's ring and frame geometry (`chip.rs`).
 const N: usize = 96;
 const B: usize = FRAME_CAPACITY;
