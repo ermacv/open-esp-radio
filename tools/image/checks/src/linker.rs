@@ -121,6 +121,22 @@ pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
     }
 }
 
+/// Run the first-pass analysis of a runtime link on a saved first ELF,
+/// with the specification the image build wrote beside it; no link runs.
+/// Input sections are not inspected: the result's placement is not used.
+pub fn analyze_saved(spec_path: &std::path::Path, elf: &std::path::Path) -> crate::Result<()> {
+    let mut inputs = oer_tools_os_durable::inputs::Inputs::tracked();
+    let spec = strict::Spec::read(spec_path, &mut inputs)?;
+    let placement = strict::analyze(&spec, elf, &[], &mut inputs)?;
+    eprintln!(
+        "oer-image-analyze-saved: analysis completed: {} strict functions, {} IRQ stacks, {} task stacks",
+        placement.functions.len(),
+        placement.irq_stacks.len(),
+        placement.task_stacks.len()
+    );
+    Ok(())
+}
+
 fn link(
     arguments: &mut Vec<OsString>,
     sections: &[InputSection],

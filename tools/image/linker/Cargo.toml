@@ -13,6 +13,11 @@ description = "The image linker: input checks and analysis-driven strict code pl
 name = "oer-image-linker"
 path = "src/main.rs"
 
+# The first-pass analysis of a saved runtime ELF, without a link.
+[[bin]]
+name = "oer-image-analyze-saved"
+path = "src/bin/analyze_saved.rs"
+
 [dependencies]
 oer-tools-image-checks = { path = "../checks" }
 

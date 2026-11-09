@@ -34,12 +34,14 @@ impl<'m> Ledger<'m> {
     }
 
     /// Admit `bytes` more.
+    #[track_caller]
     pub fn admit(&mut self, bytes: usize, control: &mut dyn RunControl) -> Result<()> {
         self.reserved.grow(bytes as u64, control.position())
     }
 
     /// Push `value` onto `vector`, admitting a grown capacity before the
     /// vector reallocates, with the old buffer admitted while both exist.
+    #[track_caller]
     pub fn push<T>(
         &mut self,
         vector: &mut Vec<T>,
@@ -49,8 +51,23 @@ impl<'m> Ledger<'m> {
         if vector.len() == vector.capacity() {
             let more = vector.capacity().max(4);
             let old = vector.capacity() * size_of::<T>();
-            let _both = self.memory.reserve(old as u64, control.position())?;
-            self.admit(more * size_of::<T>(), control)?;
+            // A refused growth names the collection it would have grown.
+            let growth = |mut error: Error| {
+                error.message = format!(
+                    "{}; growing Vec<{}> of {} -byte elements from capacity {} to {}",
+                    error.message,
+                    std::any::type_name::<T>(),
+                    size_of::<T>(),
+                    vector.capacity(),
+                    vector.capacity() + more
+                );
+                error
+            };
+            let _both = self
+                .memory
+                .reserve(old as u64, control.position())
+                .map_err(growth)?;
+            self.admit(more * size_of::<T>(), control).map_err(growth)?;
             vector.try_reserve_exact(more).map_err(|_| refused())?;
         }
         vector.push(value);
@@ -59,6 +76,7 @@ impl<'m> Ledger<'m> {
 
     /// Insert `key` into `map`, admitting the entry when it is new; the
     /// value it replaces, if any.
+    #[track_caller]
     pub fn insert<K: Ord, V>(
         &mut self,
         map: &mut BTreeMap<K, V>,
@@ -74,6 +92,7 @@ impl<'m> Ledger<'m> {
 
     /// The entry of `key` in `map`, inserted with `value()` and admitted when
     /// it is new.
+    #[track_caller]
     pub fn entry<'a, K: Ord, V>(
         &mut self,
         map: &'a mut BTreeMap<K, V>,
@@ -88,6 +107,7 @@ impl<'m> Ledger<'m> {
     }
 
     /// Insert `value` into `set`, admitting it when it is new.
+    #[track_caller]
     pub fn add<T: Ord>(
         &mut self,
         set: &mut BTreeSet<T>,
@@ -102,6 +122,7 @@ impl<'m> Ledger<'m> {
     }
 
     /// An owned copy of `text`, admitted before it is made.
+    #[track_caller]
     pub fn string(&mut self, text: &str, control: &mut dyn RunControl) -> Result<String> {
         self.admit(text.len(), control)?;
         let mut out = String::new();
@@ -158,6 +179,32 @@ mod tests {
         assert_eq!(error.code, ErrorCode::ResourceLimited);
         assert_eq!((values.len(), values.capacity()), (4, 4));
         assert_eq!(ledger.bytes(), 4 * 8);
+    }
+
+    #[test]
+    fn a_refused_push_names_its_caller_the_limit_and_the_collection() {
+        let memory = WorkingMemory::new(4 * 8 + 4 * 8).unwrap();
+        let mut ledger = Ledger::new(&memory, &mut control()).unwrap();
+        let mut values: Vec<u64> = Vec::new();
+        for value in 0..4 {
+            ledger.push(&mut values, value, &mut control()).unwrap();
+        }
+        let line = line!() + 1;
+        let error = ledger.push(&mut values, 4, &mut control()).unwrap_err();
+        let site = format!("{}:{line}:", file!());
+        assert!(error.message.contains(&site), "{}", error.message);
+        assert!(
+            error.message.contains("of limit 64 bytes"),
+            "{}",
+            error.message
+        );
+        assert!(
+            error
+                .message
+                .contains("growing Vec<u64> of 8 -byte elements from capacity 4 to 8"),
+            "{}",
+            error.message
+        );
     }
 
     #[test]

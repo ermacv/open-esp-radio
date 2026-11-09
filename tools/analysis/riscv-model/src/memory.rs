@@ -65,15 +65,21 @@ impl WorkingMemory {
             peak_reserved_bytes: self.peak(),
         }
     }
+    #[track_caller]
     pub fn reserve(&self, bytes: u64, position: RunPosition) -> Result<MemoryReservation<'_>> {
         self.observe_phase(position.phase);
         let available = self.limit - self.used.get();
         if bytes > available {
+            let site = std::panic::Location::caller().to_string();
             let mut error = Error::new(
                 ErrorCode::ResourceLimited,
                 format!(
-                    "working memory exhausted: requested {bytes} bytes; available {available} bytes; phase {:?}; input {:?}; member {:?}",
-                    position.phase, position.input, position.member
+                    "working memory exhausted: requested {bytes} bytes; available {available} bytes; reserved {} of limit {} bytes; site {site}; phase {:?}; input {:?}; member {:?}",
+                    self.used.get(),
+                    self.limit,
+                    position.phase,
+                    position.input,
+                    position.member
                 ),
             );
             error.memory = Some(MemoryFailure {
@@ -97,6 +103,7 @@ impl WorkingMemory {
     }
     /// Initialized, fallibly allocated scratch. Its capacity and lifetime remain
     /// attached to the reservation; dropping on any path returns the capacity.
+    #[track_caller]
     pub fn bytes(&self, size: usize, position: RunPosition) -> Result<ScratchBytes<'_>> {
         let reservation = self.reserve(size as u64, position)?;
         let mut bytes = Vec::new();
@@ -121,6 +128,7 @@ pub struct MemoryReservation<'a> {
 impl MemoryReservation<'_> {
     /// Admit `bytes` more before the allocation they account for is made:
     /// a structure that grows entry by entry holds one reservation.
+    #[track_caller]
     pub fn grow(&mut self, bytes: u64, position: RunPosition) -> Result<()> {
         let mut more = self.memory.reserve(bytes, position)?;
         // The admitted bytes move into this reservation.
