@@ -437,3 +437,121 @@ fn a_full_intake_says_so() {
         "only the first turn met more than it takes"
     );
 }
+
+/// An egress whose reservations are all out: it chooses nothing until a
+/// notice, which never comes here.
+struct Exhausted;
+
+impl Egress<u32, u32> for Exhausted {
+    type Reservation = ();
+    type Fault = core::convert::Infallible;
+
+    fn choose<C: Candidate>(
+        &mut self,
+        _ready: impl Iterator<Item = C> + Clone,
+    ) -> Result<Option<(C, ())>, core::convert::Infallible> {
+        Ok(None)
+    }
+
+    fn accepted(&mut self, (): (), _ticket: u32) -> Result<(), core::convert::Infallible> {
+        Ok(())
+    }
+
+    fn refused(&mut self, (): ()) -> Result<(), core::convert::Infallible> {
+        Ok(())
+    }
+
+    fn unknown(&mut self, (): ()) -> Result<(), core::convert::Infallible> {
+        Ok(())
+    }
+
+    fn notice(&mut self, _notice: u32) -> Result<(), core::convert::Infallible> {
+        Ok(())
+    }
+}
+
+/// Work is ready and the egress chooses none: the service turns once and
+/// waits for an event, with no wake of its own and no turn more, however
+/// often it is polled.
+#[test]
+fn ready_work_the_egress_does_not_choose_leaves_the_service_waiting() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; FLOW_BLOCKS]));
+    let (pool, brand) = claim::<Net, SIZE, FLOW_BLOCKS>(memory).unwrap();
+    let wire = WirePort::default();
+    wire.0.borrow_mut().answers = true;
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service: Service<
+        'static,
+        'static,
+        Net,
+        SIZE,
+        1,
+        FLOW_CREDITS,
+        RECEIVED,
+        2,
+        FLOW_BLOCKS,
+        FLOW_DEPTH,
+        RECEIVED,
+        WirePort,
+        Exhausted,
+    > = Service::new(owner, Exhausted, MemoryPolicy::KEEP, stopping);
+    let mut socket = service
+        .bind(
+            5000,
+            Dscp::default(),
+            Group::shared(),
+            Box::leak(Box::new(SocketLanes::new())),
+        )
+        .ok()
+        .unwrap();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut seen = Seen::default();
+    let woken = Arc::new(Woken(AtomicBool::new(false)));
+    let waker = Waker::from(woken.clone());
+    let cx = &mut Context::from_waker(&waker);
+    {
+        let mut run = core::pin::pin!(service.run(clock, &mut seen));
+        // The block comes in the turns a reservation takes.
+        let block = loop {
+            if let Some(block) = socket.try_reserve().unwrap() {
+                break block;
+            }
+            assert!(run.as_mut().poll(cx).is_pending());
+        };
+        let _observer = socket.send(peer(), block).ok().unwrap();
+        // The send's wake, and the turns it brings.
+        let mut quiet = false;
+        for _ in 0..8 {
+            woken.0.store(false, Ordering::SeqCst);
+            assert!(run.as_mut().poll(cx).is_pending());
+            if !woken.0.load(Ordering::SeqCst) {
+                quiet = true;
+                break;
+            }
+        }
+        assert!(quiet, "the service waits");
+        // However often it is polled from here, it neither wakes itself.
+        for _ in 0..16 {
+            woken.0.store(false, Ordering::SeqCst);
+            assert!(run.as_mut().poll(cx).is_pending());
+            assert!(!woken.0.load(Ordering::SeqCst), "no wake of its own");
+        }
+    }
+    let turns = turns(&seen.0);
+    assert!(
+        turns.len() <= 8 + 16 + 8,
+        "one turn a poll at most: {}",
+        turns.len()
+    );
+    assert!(
+        seen.0
+            .iter()
+            .rev()
+            .take(3)
+            .any(|event| matches!(event, ServiceEvent::Waited { ready: false })),
+        "it waits, nothing ready"
+    );
+}

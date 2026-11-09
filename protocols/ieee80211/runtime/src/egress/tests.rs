@@ -426,3 +426,97 @@ fn a_late_return_after_its_account_closed_charges_nothing_twice() {
     );
     assert_eq!((policy.unsettled(), policy.in_flight()), (1, 1));
 }
+
+/// An [`Air`] that counts the candidates it was asked for.
+#[derive(Default)]
+struct Counting {
+    asked: core::cell::Cell<usize>,
+}
+
+impl PeerAir for Counting {
+    type Key = u8;
+
+    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<u8>> {
+        self.asked.set(self.asked.get() + 1);
+        Some(AirtimeCandidate {
+            key: ready.peer[5],
+            minimum_micros: micros(COST),
+        })
+    }
+
+    fn ceiling(&self, _ready: &Ready) -> NonZeroU32 {
+        micros(CEILING)
+    }
+}
+
+/// A ready list that counts the works it yields, over every pass.
+#[derive(Clone)]
+struct Yielded<'r> {
+    works: core::slice::Iter<'r, Work>,
+    yielded: &'r core::cell::Cell<usize>,
+}
+
+impl Iterator for Yielded<'_> {
+    type Item = Work;
+
+    fn next(&mut self) -> Option<Work> {
+        let work = self.works.next().copied()?;
+        self.yielded.set(self.yielded.get() + 1);
+        Some(work)
+    }
+}
+
+/// Each choice reads each ready work once and asks its candidate once,
+/// however long the list: what is ready is the network's whole backlog, and
+/// a second pass over it doubles each frame's cost.
+#[test]
+fn a_choice_reads_each_ready_work_once_and_asks_its_candidate_once() {
+    let mut storage = AirtimeStorage::<u8, 4, 64>::new(micros(QUANTUM));
+    let mut policy =
+        AirtimeEgress::<'_, Counting, u32, 4, 64>::new(&mut storage, Counting::default());
+    let ready: Vec<Work> = (0..32).map(|flow| data(1, flow)).collect();
+    let yielded = core::cell::Cell::new(0);
+    for ticket in 0..8 {
+        yielded.set(0);
+        policy.air().asked.set(0);
+        let works = Yielded {
+            works: ready.iter(),
+            yielded: &yielded,
+        };
+        let (_, held) = policy.choose(works).unwrap().unwrap();
+        policy.accepted(held, ticket).unwrap();
+        assert_eq!(yielded.get(), ready.len(), "one pass over the ready work");
+        assert_eq!(policy.air().asked.get(), ready.len(), "one candidate each");
+    }
+}
+
+/// The single pass keeps the choice: a peer's flows still take turns, and
+/// control still goes first.
+#[test]
+fn a_single_pass_serves_the_same_turns_and_control_first() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0), data(1, 1), data(1, 2), control(1), data(2, 0)];
+    let first = exchange(&mut policy, &ready, 0, COST);
+    assert_eq!(first, control(1), "control first");
+    let ready = [data(1, 0), data(1, 1), data(1, 2)];
+    let flows: Vec<u8> = (1..7)
+        .map(|ticket| exchange(&mut policy, &ready, ticket, COST).0.flow.unwrap())
+        .collect();
+    assert_eq!(flows, [0, 1, 2, 0, 1, 2]);
+}
+
+/// More accounts ready than the policy keeps: the scheduler's own answer,
+/// as before the single pass.
+#[test]
+fn more_peers_ready_than_accounts_is_the_scheduler_s_refusal() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready: Vec<Work> = (1..=5).map(|peer| data(peer, 0)).collect();
+    assert!(matches!(
+        policy.choose(ready.iter().copied()),
+        Err(AirtimeFault::Airtime(
+            oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeError::AccountCapacity
+        ))
+    ));
+}
