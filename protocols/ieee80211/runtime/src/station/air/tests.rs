@@ -294,3 +294,57 @@ fn a_returned_frame_s_rate_goes_with_its_end() {
         ))
     );
 }
+
+/// A frame of association 1 that completes after association 2 began
+/// changes nothing of association 2's rate: none while 2 has reported none,
+/// and 2's own once it has.
+#[test]
+fn a_late_completion_of_an_earlier_association_leaves_the_current_rate() {
+    let link = NetworkLink::new();
+    link.publish(up(1));
+    let asked = Asked::default();
+    let mut air = StationAir::new(&link, &asked);
+    air.reported(1, ht(7, true));
+    link.publish(up(2));
+    air.reported(1, ht(3, true));
+    air.candidate(&ready(1514)).unwrap();
+    air.reported(2, ht(5, false));
+    air.reported(1, ht(1, false));
+    air.candidate(&ready(1514)).unwrap();
+    assert_eq!(*asked.0.borrow(), [None, Some(ht(5, false))]);
+}
+
+/// The same through the policy: association 1's frame is still open when
+/// association 2 begins, and its completion settles on association 1's
+/// account with its rate, which association 2's grants never take.
+#[test]
+fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
+    use crate::egress::AirtimeEgress;
+    use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
+    use oer_protocols_network_port::Egress;
+    let link = NetworkLink::new();
+    link.publish(up(1));
+    let asked = Asked::default();
+    let mut storage = AirtimeStorage::<StationKey, 2, 2>::new(NonZeroU32::new(10_000).unwrap());
+    let mut egress =
+        AirtimeEgress::<'_, _, u8, 2, 2>::new(&mut storage, StationAir::new(&link, &asked));
+    let (_, held) = egress
+        .choose([Frame(ready(1514))].into_iter())
+        .unwrap()
+        .expect("association 1's account");
+    egress.accepted(held, 1).unwrap();
+    link.publish(up(2));
+    egress
+        .notice(RadioNotice::Ended(Exchange {
+            ticket: 1,
+            charged: NonZeroU32::new(500),
+            rate: Some(ht(7, true)),
+        }))
+        .unwrap();
+    asked.0.borrow_mut().clear();
+    let _chosen = egress
+        .choose([Frame(ready(1514))].into_iter())
+        .unwrap()
+        .expect("association 2's account");
+    assert_eq!(*asked.0.borrow(), [None], "association 2 has no rate yet");
+}

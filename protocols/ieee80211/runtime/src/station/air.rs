@@ -86,8 +86,13 @@ impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
         self.ceiling.ceiling(ready.length)
     }
 
+    /// A report keeps its frame's own epoch, and only one of the
+    /// association that runs now counts: a late completion of an earlier
+    /// association never changes the current one's rate.
     fn reported(&mut self, key: StationKey, rate: PhyRate) {
-        self.last = Some((key, rate));
+        if key == self.link.snapshot().epoch {
+            self.last = Some((key, rate));
+        }
     }
 }
 
