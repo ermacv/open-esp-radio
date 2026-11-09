@@ -764,6 +764,12 @@ struct Bench<'b, 's, T: 'static> {
     faulted: bool,
     /// Terminals of the lifecycle's commands.
     configured: u32,
+    /// The lifecycle reads no return: it counts their announcements.
+    hold_returns: bool,
+    /// Returns announced and not read.
+    unread_returns: usize,
+    /// Commands the actor returned unrun.
+    commands_back: usize,
     /// What a poll costs of the model's time.
     poll_micros: u64,
     /// From asking the radio to start until it had.
@@ -856,6 +862,26 @@ fn joined<T: 'static>(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's, T>)) {
 
 /// [`joined`], each poll costing `poll_micros` of the model's time.
 fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's, T>)) {
+    joined_with::<T>(poll_micros, Setup::Connected, test);
+}
+
+/// How far the bench sets the station up before the test.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Setup {
+    /// Started, configured and connected.
+    Connected,
+    /// The lifecycle reads none of its returns: before the start, commands
+    /// the stopped port refuses fill the return queue; then the radio
+    /// starts and the station's configuration is asked, whose terminal the
+    /// full queue refuses and the port keeps. Not connected.
+    ReturnsFull,
+}
+
+fn joined_with<T: 'static>(
+    poll_micros: u64,
+    setup: Setup,
+    test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's, T>),
+) {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Clocked::new();
         let reader = clock.clock.clone();
@@ -1133,9 +1159,20 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
             stopped: None,
             faulted: false,
             configured: 0,
+            hold_returns: setup == Setup::ReturnsFull,
+            unread_returns: 0,
+            commands_back: 0,
             poll_micros,
             start_took: Duration::from_micros(0),
         };
+        if setup == Setup::ReturnsFull {
+            let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+            for _ in 0..RETURNS {
+                bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+                bench.settle();
+            }
+            assert_eq!(bench.unread_returns, RETURNS, "the return queue is full");
+        }
         let asked = bench.clock.now();
         bench.send(ToActor::Start(supported()));
         bench.until("the radio starts", |bench| bench.started);
@@ -1147,8 +1184,12 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
                 filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).unwrap(),
             },
         }));
-        bench.until("the station is configured", |bench| bench.configured == 1);
-        bench.connect();
+        if setup == Setup::Connected {
+            bench.until("the station is configured", |bench| bench.configured == 1);
+            bench.connect();
+        } else {
+            bench.settle();
+        }
         test(&mut bench);
         let _held = (control, tickets);
     }));
@@ -1213,11 +1254,16 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
                     self.started = true;
                 }
                 FromActor::Stopped(outcome) => self.stopped = Some(outcome),
+                FromActor::Returned if self.hold_returns => self.unread_returns += 1,
                 FromActor::Returned => match self.returns.try_receive() {
                     Some(Returned::Terminal { terminal, .. }) => {
                         if let LowerMacTerminal::Configured(_) = terminal {
                             self.configured += 1;
                         }
+                    }
+                    Some(Returned::Command { .. }) if self.unread_returns > 0 => {
+                        // One the held queue announced before.
+                        self.commands_back += 1;
                     }
                     Some(_) => panic!("the lifecycle's command came back"),
                     None => panic!("a return without its owner"),
@@ -1582,6 +1628,58 @@ fn one_datagram_out<T: 'static>(bench: &mut Bench<'_, '_, T>) {
 fn a_datagram_leaves_as_a_psdu_the_air_reads_and_ends_with_its_completion() {
     struct Network;
     joined::<Network>(|bench| one_datagram_out(bench));
+}
+
+/// The station path over the real S31 port: a terminal the actor's full
+/// return queue refused stays with the port through the confirmed stop; a
+/// freed cell lets the actor's `take_unconsumed` give it once; nothing
+/// comes again, and the retire's cleanup and release then end the port.
+#[test]
+fn a_terminal_the_s31_port_keeps_through_the_confirmed_stop_comes_once_and_the_port_retires() {
+    struct Network;
+    joined_with::<Network>(0, Setup::ReturnsFull, |bench| {
+        assert_eq!(bench.configured, 0, "the full queue refused the terminal");
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stops,
+        });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
+        assert_eq!(bench.configured, 0, "kept through the stop");
+        // The lifecycle reads what it held back: every refused command, then
+        // the kept terminal once, through the stopped port's
+        // `take_unconsumed`.
+        bench.hold_returns = false;
+        while bench.unread_returns > 0 {
+            match bench.returns.try_receive() {
+                Some(Returned::Command { .. }) => bench.commands_back += 1,
+                Some(_) => panic!("only the refused commands were held"),
+                None => panic!("an announced return is in its queue"),
+            }
+            bench.unread_returns -= 1;
+        }
+        assert_eq!(bench.commands_back, RETURNS);
+        bench.until("the kept terminal comes", |bench| bench.configured == 1);
+        for _ in 0..4 {
+            bench.clock.pass(1_000);
+            bench.settle();
+        }
+        assert_eq!(bench.configured, 1, "it comes once");
+        assert!(bench.returns.try_receive().is_none(), "nothing comes again");
+        bench.send(ToActor::Retire);
+        bench.until("the actor ends", |bench| {
+            bench.ends.borrow().actor.is_some()
+        });
+        let ends = bench.ends.borrow();
+        assert_eq!(ends.actor, Some(ActorEndSeen::Retired));
+        assert_eq!(
+            ends.released,
+            Some(true),
+            "the cleanup finished and the port retired"
+        );
+        assert!(!bench.faulted);
+    });
 }
 
 /// The cost of a poll is an input of a cost scenario: it changes no outcome.
