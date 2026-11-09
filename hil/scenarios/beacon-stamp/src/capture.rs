@@ -124,37 +124,56 @@ struct Radiotap {
     mcs: Option<[u8; 3]>,
 }
 
+/// The radiotap header of `packet`, every read bounded by its `it_len`:
+/// the presence words and each field must lie inside the header. A
+/// presence word past `it_len` leaves every field unknown; a field past it
+/// leaves that field and every later one unknown, never a value from the
+/// frame body. `None` only for a header that is no radiotap header: an
+/// unknown version, an `it_len` shorter than its first presence word or
+/// longer than the packet.
 fn radiotap(packet: &[u8]) -> Option<Radiotap> {
     if *packet.first()? != 0 {
         return None;
     }
     let length = usize::from(u16_at(packet, 2, false)?);
-    if length > packet.len() {
+    if length < 8 || length > packet.len() {
         return None;
     }
-    let present = u32_at(packet, 4, false)?;
-    let mut words = 1usize;
-    let mut last = present;
-    while last & 0x8000_0000 != 0 {
-        last = u32_at(packet, 4usize.checked_add(words.checked_mul(4)?)?, false)?;
-        words = words.checked_add(1)?;
-    }
-    let mut at = 4usize.checked_add(words.checked_mul(4)?)?;
+    let bounded = packet.get(..length)?;
     let mut header = Radiotap {
         length,
         ..Radiotap::default()
     };
+    let Some(present) = u32_at(bounded, 4, false) else {
+        return Some(header);
+    };
+    let mut words = 1usize;
+    let mut last = present;
+    while last & 0x8000_0000 != 0 {
+        let Some(next) = words
+            .checked_mul(4)
+            .and_then(|offset| offset.checked_add(4))
+            .and_then(|at| u32_at(bounded, at, false))
+        else {
+            return Some(header);
+        };
+        last = next;
+        words = words.checked_add(1)?;
+    }
+    let mut at = 4usize.checked_add(words.checked_mul(4)?)?;
     for (bit, (align, size)) in FIELDS.iter().enumerate() {
         if present & (1 << bit) == 0 {
             continue;
         }
         at = at.checked_add(align - 1)? / align * align;
-        let field = packet.get(at..at.checked_add(*size)?)?;
+        let Some(field) = at.checked_add(*size).and_then(|end| bounded.get(at..end)) else {
+            break;
+        };
         match bit {
-            0 => header.tsft = Some(u64_le(field, 0)?),
-            1 => header.flags = *field.first()?,
-            2 => header.rate = Some(*field.first()?),
-            19 => header.mcs = Some(field.try_into().ok()?),
+            0 => header.tsft = u64_le(field, 0),
+            1 => header.flags = field.first().copied().unwrap_or(0),
+            2 => header.rate = field.first().copied(),
+            19 => header.mcs = field.try_into().ok(),
             _ => {}
         }
         at = at.checked_add(*size)?;
@@ -487,6 +506,78 @@ mod tests {
             phy(synthetic::record_with(1, Some(5), None, 0, &mpdu)),
             ObservedPhy::Unsupported
         );
+    }
+
+    /// A record of a radiotap header of `it_len` octets whose words are
+    /// `header` (padded to `it_len`), then the MPDU.
+    fn record_of(header: &[u8], it_len: u16, mpdu: &[u8]) -> Vec<u8> {
+        let mut packet = header.to_vec();
+        packet.resize(usize::from(it_len), 0);
+        packet[2..4].copy_from_slice(&it_len.to_le_bytes());
+        packet.extend_from_slice(mpdu);
+        packet
+    }
+
+    #[test]
+    fn the_owners_rate_past_it_len_is_no_rate_from_the_frame_body() {
+        // 17 octets: version, pad, length, presence (TSFT, Flags, Rate),
+        // TSFT at 8..16, Flags at 16; the Rate would be at 17, past it_len.
+        let mut header = vec![0, 0, 0, 0];
+        header.extend_from_slice(&0b111u32.to_le_bytes());
+        header.extend_from_slice(&77u64.to_le_bytes());
+        header.push(0);
+        // The MPDU's first octet, 0x02 (1 Mb/s as a Rate), right after.
+        let mut mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
+        mpdu[0] = 0x02;
+        let capture = parse(&synthetic::file(&[record_of(&header, 17, &mpdu)])).unwrap();
+        let frame = &capture.frames[0];
+        assert_eq!(frame.tsft, 77);
+        assert_eq!(frame.phy, ObservedPhy::Missing);
+        assert_eq!(frame.frame_control, 0x02);
+    }
+
+    #[test]
+    fn extended_presence_words_past_it_len_leave_every_field_unknown() {
+        // A first word announcing a second one, with it_len 8: the second
+        // word, and the TSFT, would lie in the frame body.
+        let mut header = vec![0, 0, 0, 0];
+        header.extend_from_slice(&(0x8000_0007u32).to_le_bytes());
+        let mut mpdu = 0x0000_0001u32.to_le_bytes().to_vec();
+        mpdu.extend_from_slice(&synthetic::mpdu(0x80, TA, 1, TAG));
+        let capture = parse(&synthetic::file(&[record_of(&header, 8, &mpdu)])).unwrap();
+        assert!(capture.frames.is_empty());
+        assert_eq!(capture.without_tsft, 1);
+    }
+
+    #[test]
+    fn an_mcs_field_cut_by_it_len_is_no_phy() {
+        // TSFT 8..16, Flags 16, MCS 17..20, but it_len 19.
+        let mut header = vec![0, 0, 0, 0];
+        header.extend_from_slice(&(0x3u32 | 1 << 19).to_le_bytes());
+        header.extend_from_slice(&5u64.to_le_bytes());
+        header.extend_from_slice(&[0, 0x07, 0x00]);
+        let mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
+        let capture = parse(&synthetic::file(&[record_of(&header, 19, &mpdu)])).unwrap();
+        assert_eq!(capture.frames[0].phy, ObservedPhy::Missing);
+        assert_eq!(capture.frames[0].tsft, 5);
+        // Whole, the same field is read.
+        let mut whole = header.clone();
+        whole.push(0);
+        let capture = parse(&synthetic::file(&[record_of(&whole, 20, &mpdu)])).unwrap();
+        assert_eq!(
+            capture.frames[0].phy,
+            ObservedPhy::Phy(Phy::HtMixed { mcs: 0 })
+        );
+    }
+
+    #[test]
+    fn a_tsft_past_it_len_is_no_tsft() {
+        let mut header = vec![0, 0, 0, 0];
+        header.extend_from_slice(&1u32.to_le_bytes());
+        let mut mpdu = 9u64.to_le_bytes().to_vec();
+        mpdu.extend_from_slice(&synthetic::mpdu(0x80, TA, 1, TAG));
+        let capture = parse(&synthetic::file(&[record_of(&header, 8, &mpdu)])).unwrap();
+        assert_eq!(capture.without_tsft, 1);
     }
 
     #[test]
