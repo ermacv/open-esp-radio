@@ -3,7 +3,10 @@
 //! takes them back. These are those conversions, and the `'static` forms
 //! of the terminals the driver builds.
 use super::*;
-use keys::{ApPermission, GroupCommand, Installation, Removal, StaPermission};
+use keys::{
+    AccessPointGroupInstallation, ApPermission, Installation, StaPermission,
+    StationGroupInstallation,
+};
 
 impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Buffer<'p, Id, D, B, O> {
     pub(super) fn into_owned(
@@ -144,73 +147,26 @@ impl<'p, Id: SlotIdentity> Installation<'p, Id> {
         }
     }
 }
-impl<'p, Id: SlotIdentity> Removal<'p, Id> {
-    pub(super) fn into_owned<D: Device<B>, const B: usize, O: Observations>(
-        self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
-    ) -> Removal<'static, Id> {
-        match self {
-            Self::StationPairwise(a) => Removal::StationPairwise(a.into_owned(loan)),
-            Self::AccessPointPairwise(a) => Removal::AccessPointPairwise(a.into_owned(loan)),
-            Self::StationGroup(p) => Removal::StationGroup(p.into_owned(loan)),
-            Self::AccessPointGroup(p) => Removal::AccessPointGroup(p.into_owned(loan)),
+macro_rules! group_installation {
+    ($installation:ident) => {
+        impl<'p, Id: SlotIdentity> $installation<'p, Id> {
+            pub(super) fn into_owned<D: Device<B>, const B: usize, O: Observations>(
+                self,
+                loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+            ) -> $installation<'static, Id> {
+                keys::GroupInstallation {
+                    spp: self.spp,
+                    slot: self.slot.into_owned(loan),
+                    permission: self.permission.into_owned(loan),
+                    key_id: self.key_id,
+                    material: self.material,
+                }
+            }
         }
-    }
+    };
 }
-impl<'p, Id: SlotIdentity> GroupCommand<'p, Id> {
-    pub(super) fn into_owned<D: Device<B>, const B: usize, O: Observations>(
-        self,
-        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
-    ) -> GroupCommand<'static, Id> {
-        match self {
-            Self::InstallStation {
-                spp,
-                slot,
-                permission,
-                key_id,
-                material,
-            } => GroupCommand::InstallStation {
-                spp,
-                slot: slot.into_owned(loan),
-                permission: permission.into_owned(loan),
-                key_id,
-                material,
-            },
-            Self::InstallAccessPoint {
-                spp,
-                slot,
-                permission,
-                key_id,
-                material,
-            } => GroupCommand::InstallAccessPoint {
-                spp,
-                slot: slot.into_owned(loan),
-                permission: permission.into_owned(loan),
-                key_id,
-                material,
-            },
-            Self::Replace {
-                permission,
-                key,
-                key_id,
-                material,
-            } => GroupCommand::Replace {
-                permission: permission.into_owned(loan),
-                key: key.into_owned(),
-                key_id,
-                material,
-            },
-            Self::Select { permission, key } => GroupCommand::Select {
-                permission: permission.into_owned(loan),
-                key: key.into_owned(),
-            },
-            Self::Remove { identity, removal } => GroupCommand::Remove {
-                identity,
-                removal: removal.into_owned(loan),
-            },
-        }
-    }
-}
+group_installation!(StationGroupInstallation);
+group_installation!(AccessPointGroupInstallation);
 pub(super) enum OwnedConfigured<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
     Station(ConfigurePermission<'o, Station, Part<Id, 8>, D::OwnedConfigureContext<Id>>),
     AccessPoint(ConfigurePermission<'o, AccessPoint, Part<Id, 9>, D::OwnedConfigureContext<Id>>),

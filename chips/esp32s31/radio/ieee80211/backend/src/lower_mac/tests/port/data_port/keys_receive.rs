@@ -1185,7 +1185,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// The slot and permission a returned station group command holds.
     fn group_owners(command: &Command<'id, Id>) -> Option<(u8, u8)> {
         match command {
-            PortCommand::InstallGroup(install) => install.owners_for_test(),
+            PortCommand::InstallGroup(install) => Some(install.owners_for_test()),
             PortCommand::SelectGroup {
                 permission,
                 installed,

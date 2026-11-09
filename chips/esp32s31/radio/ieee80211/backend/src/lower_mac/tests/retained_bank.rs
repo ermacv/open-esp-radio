@@ -239,7 +239,7 @@ fn a_disabled_bank_stays_in_place_while_a_removal_receipt_waits() {
             refuse_removals: 1,
             ..Events::default()
         };
-        fixture.remove_checked_key(&mut hardware, key, &mut refusing);
+        fixture.remove_key_for_test(&mut hardware, key, &mut refusing);
         assert!(refusing.removed.is_empty());
         // The receipt keeps the bank in place: it does not end with it.
         assert_eq!(

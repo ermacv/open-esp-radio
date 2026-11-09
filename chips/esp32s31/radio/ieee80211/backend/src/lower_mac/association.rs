@@ -23,31 +23,69 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_wire::security::Spp;
 use oer_protocols_radio_port::{Child, PoolPath, Root};
 
+/// The station's pairwise key slots.
+pub const STATION_PAIRWISE_SLOTS: usize = 1;
+/// The station's receive-only group key slots.
+pub const STATION_GROUP_SLOTS: usize = 1;
+/// The access point's pairwise key slots, one per association.
+pub const ACCESS_POINT_PAIRWISE_SLOTS: usize = 15;
+/// The access point's group key slots.
+pub const ACCESS_POINT_GROUP_SLOTS: usize = 3;
+
 /// The STA interface owns one PTK and one receive-only GTK slot.
 pub type StationAssociation<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    Association<'id, Station, 1, 1, Child<P, 2>>;
+    Association<'id, Station, STATION_PAIRWISE_SLOTS, STATION_GROUP_SLOTS, Child<P, 2>>;
 /// All AP peers share the interface's one SPP policy.
 pub type AccessPointAssociation<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    Association<'id, AccessPoint, 15, 3, Child<P, 3>>;
+    Association<
+        'id,
+        AccessPoint,
+        ACCESS_POINT_PAIRWISE_SLOTS,
+        ACCESS_POINT_GROUP_SLOTS,
+        Child<P, 3>,
+    >;
 /// The station's association domain as the mint made it, before the
 /// installation issues it.
 pub type StationAssociationGrant<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    AssociationGrant<'id, Station, 1, 1, Child<P, 2>>;
+    AssociationGrant<'id, Station, STATION_PAIRWISE_SLOTS, STATION_GROUP_SLOTS, Child<P, 2>>;
 /// The access point's association domain as the mint made it.
 pub type AccessPointAssociationGrant<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    AssociationGrant<'id, AccessPoint, 15, 3, Child<P, 3>>;
+    AssociationGrant<
+        'id,
+        AccessPoint,
+        ACCESS_POINT_PAIRWISE_SLOTS,
+        ACCESS_POINT_GROUP_SLOTS,
+        Child<P, 3>,
+    >;
 pub type VacantStationAssociation<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    VacantAssociation<'id, Station, 1, 1, Child<P, 2>>;
+    VacantAssociation<'id, Station, STATION_PAIRWISE_SLOTS, STATION_GROUP_SLOTS, Child<P, 2>>;
 pub type VacantAccessPointAssociation<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    VacantAssociation<'id, AccessPoint, 15, 3, Child<P, 3>>;
+    VacantAssociation<
+        'id,
+        AccessPoint,
+        ACCESS_POINT_PAIRWISE_SLOTS,
+        ACCESS_POINT_GROUP_SLOTS,
+        Child<P, 3>,
+    >;
 pub type StationPairwiseSlot<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    PairwiseKeySlot<'id, Station, 1, 1, Child<P, 2>>;
+    PairwiseKeySlot<'id, Station, STATION_PAIRWISE_SLOTS, STATION_GROUP_SLOTS, Child<P, 2>>;
 pub type StationGroupSlot<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    GroupKeySlot<'id, Station, 1, 1, Child<P, 2>>;
+    GroupKeySlot<'id, Station, STATION_PAIRWISE_SLOTS, STATION_GROUP_SLOTS, Child<P, 2>>;
 pub type AccessPointPairwiseSlot<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    PairwiseKeySlot<'id, AccessPoint, 15, 3, Child<P, 3>>;
-pub type AccessPointGroupSlot<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> =
-    GroupKeySlot<'id, AccessPoint, 15, 3, Child<P, 3>>;
+    PairwiseKeySlot<
+        'id,
+        AccessPoint,
+        ACCESS_POINT_PAIRWISE_SLOTS,
+        ACCESS_POINT_GROUP_SLOTS,
+        Child<P, 3>,
+    >;
+pub type AccessPointGroupSlot<'id, P = Root<oer_protocols_radio_port::LocalId<'id>>> = GroupKeySlot<
+    'id,
+    AccessPoint,
+    ACCESS_POINT_PAIRWISE_SLOTS,
+    ACCESS_POINT_GROUP_SLOTS,
+    Child<P, 3>,
+>;
 
 /// An installation cannot name material without the association and its slot.
 pub enum TransmitKeyInstallation<

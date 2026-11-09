@@ -429,6 +429,21 @@ removal once with those rights (`deliver_removals`); a receipt of another
 key never answers the command at hand. A port with a waiting removal does
 not retire.
 
+A removal names its slot kind in its types: the core keeps each removal
+in a place of its key's slot kind (`RemovalPlace<S>`, one array per kind,
+as long as that kind's pool) and its receipt is of that kind
+(`KeyRemoved<S>`); the port's rights of each kind (`RemovalRights`) take
+only a receipt of their own kind. A key of another kind than the rights
+is refused before anything is taken (`RemovalMismatch`, the command back
+whole).
+
+A station group key mutation and an access point's are commands of their
+own role (`StationGroupCommand`, `AccessPointGroupCommand`). A step of
+the driver that refuses returns the command whole: the engine converts
+it back to the caller's form and the frozen receive cut resumes. Only a
+replacement the hardware rejects keeps its owners in the port's
+quarantine (`retained_group`).
+
 The port exposes ordinary MPDUs, the station's data arenas (with their
 A-MPDU rates) and RX BlockAck agreements. It does not expose beacon
 timing, monitor or air reservation.

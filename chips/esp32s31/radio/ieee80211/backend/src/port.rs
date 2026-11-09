@@ -361,7 +361,8 @@ pub enum Fault {
         /// The step.
         step: PublishStep,
     },
-    /// A removal's terminal names another slot than the key held.
+    /// A removal's rights are of another slot kind than the key it
+    /// names: refused before anything is taken.
     RemovalMismatch,
     /// A group command named a key index the access point's group has not.
     GroupKeyIdRange,

@@ -13,7 +13,10 @@
 //! answers each later call with the same fault.
 
 use super::driver::{self, Driver, DriverEnv, Pending, Sink, core_views, queue, settle_lent};
-use super::keys::{GroupCommand, Installation, KeyIdentity, PortKeys, RawKeyIdentity, Role};
+use super::keys::{
+    AccessPointGroupCommand, AccessPointGroupInstallation, GroupInstallation, Installation,
+    KeyIdentity, PortKeys, RawKeyIdentity, Role, StationGroupCommand, StationGroupInstallation,
+};
 use super::*;
 use crate::lower_mac::arena::{ArenaFault, ArenaPort};
 use oer_protocols_ieee80211_contracts_port::arena::{
@@ -59,7 +62,7 @@ pub struct PairwiseInstall<Id: SlotIdentity> {
 
 /// An accepted group installation. Only [`Esp32s31Commands`] makes one.
 pub struct GroupInstall<Id: SlotIdentity> {
-    command: GroupCommand<'static, Id>,
+    install: StationGroupInstallation<'static, Id>,
     /// The installation that issued its association.
     association: u32,
 }
@@ -67,16 +70,8 @@ pub struct GroupInstall<Id: SlotIdentity> {
 impl<Id: SlotIdentity> GroupInstall<Id> {
     /// The slot and permission indices of the installation.
     #[cfg(test)]
-    pub(crate) fn owners_for_test(&self) -> Option<(u8, u8)> {
-        match &self.command {
-            GroupCommand::InstallStation {
-                slot, permission, ..
-            } => Some((slot.index(), permission.index())),
-            GroupCommand::InstallAccessPoint {
-                slot, permission, ..
-            } => Some((slot.index(), permission.index())),
-            _ => None,
-        }
+    pub(crate) fn owners_for_test(&self) -> (u8, u8) {
+        (self.install.slot.index(), self.install.permission.index())
     }
 }
 
@@ -167,8 +162,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> PortCommand<'id, Self::Types, Self::Caps> {
         PortCommand::InstallGroup(GroupInstall {
             association: association.generation(),
-            command: <Station as Role<'id, Id>>::group(association, slot, permission, key_id, key)
-                .into_owned(&self.loan),
+            install: GroupInstallation {
+                spp: association.spp(),
+                slot,
+                permission,
+                key_id,
+                material: key,
+            }
+            .into_owned(&self.loan),
         })
     }
 }
@@ -189,24 +190,11 @@ fn station_generations<
             let [association, slot] = install.issued;
             [Some(association), Some(slot), None]
         }
-        PortCommand::InstallGroup(install) => match &install.command {
-            GroupCommand::InstallStation {
-                slot, permission, ..
-            } => [
-                Some(install.association),
-                Some(slot.generation()),
-                Some(permission.generation()),
-            ],
-            GroupCommand::InstallAccessPoint {
-                slot, permission, ..
-            } => [
-                Some(install.association),
-                Some(slot.generation()),
-                Some(permission.generation()),
-            ],
-            // The issuer makes installations only.
-            _ => [Some(install.association), None, None],
-        },
+        PortCommand::InstallGroup(install) => [
+            Some(install.association),
+            Some(install.install.slot.generation()),
+            Some(install.install.permission.generation()),
+        ],
         PortCommand::ReplaceGroup {
             permission,
             installed,
@@ -897,7 +885,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> Result<(), Fault> {
         for place in 0..self.driver.keys.len() {
             if let Some(terminal) = self.driver.finished_removal(place) {
-                sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal?).lend(&self.loan));
+                sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
             }
         }
         Ok(())
@@ -1397,13 +1385,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 now,
                 sink,
                 |command, loan| match command {
-                    PortCommand::InstallGroup(GroupInstall { command, .. }) => Ok(command),
+                    PortCommand::InstallGroup(GroupInstall { install, .. }) => {
+                        Ok(StationGroupCommand::Install(install))
+                    }
                     PortCommand::ReplaceGroup {
                         permission,
                         installed,
                         key_id,
                         key,
-                    } => Ok(GroupCommand::Replace {
+                    } => Ok(StationGroupCommand::Replace {
                         permission: permission.into_owned(loan),
                         key: installed.into_owned(),
                         key_id,
@@ -1412,22 +1402,46 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     PortCommand::SelectGroup {
                         permission,
                         installed,
-                    } => Ok(GroupCommand::Select {
+                    } => Ok(StationGroupCommand::Select {
                         permission: permission.into_owned(loan),
                         key: installed.into_owned(),
                     }),
-                    PortCommand::RemoveGroup { permission, key } => Ok(GroupCommand::Remove {
-                        identity: <Station as Role<'id, Id>>::group_identity(key),
-                        removal: <Station as Role<'id, Id>>::remove_group(permission)
-                            .into_owned(loan),
-                    }),
+                    PortCommand::RemoveGroup { permission, key } => {
+                        Ok(StationGroupCommand::Remove {
+                            permission: permission.into_owned(loan),
+                            key: key.into_owned(),
+                        })
+                    }
                     other => Err(other),
                 },
-                |command, association| {
-                    PortCommand::InstallGroup(GroupInstall {
-                        command,
-                        association,
-                    })
+                // The inverse of the conversion above: a command the driver
+                // refused goes back to the caller as it came.
+                |command, loan, association| match command {
+                    StationGroupCommand::Install(install) => {
+                        PortCommand::InstallGroup(GroupInstall {
+                            install,
+                            association,
+                        })
+                    }
+                    StationGroupCommand::Replace {
+                        permission,
+                        key,
+                        key_id,
+                        material,
+                    } => PortCommand::ReplaceGroup {
+                        permission: permission.lend(loan),
+                        installed: key.lend(),
+                        key_id,
+                        key: material,
+                    },
+                    StationGroupCommand::Select { permission, key } => PortCommand::SelectGroup {
+                        permission: permission.lend(loan),
+                        installed: key.lend(),
+                    },
+                    StationGroupCommand::Remove { permission, key } => PortCommand::RemoveGroup {
+                        permission: permission.lend(loan),
+                        key: key.lend(),
+                    },
                 },
             )
             .map_err(CommandFailed::Taken)?;
@@ -1446,7 +1460,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// cut. `uses` is the installed key no published attempt may name;
     /// `removal` the key whose queued attempts end withdrawn.
     #[allow(clippy::too_many_arguments, reason = "one step of one mutation")]
-    pub(super) fn group_mutation<S, C>(
+    pub(super) fn group_mutation<S, C, G>(
         &mut self,
         command: C,
         mutator: Mutator,
@@ -1454,11 +1468,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         removal: Option<RawKeyIdentity>,
         now: Instant,
         sink: &mut S,
-        into_owned: impl FnOnce(C, &Loan<'id, Id, D, B, O>) -> Result<GroupCommand<'static, Id>, C>,
-        reinstall: impl FnOnce(GroupCommand<'static, Id>, u32) -> C,
+        into_owned: impl FnOnce(C, &Loan<'id, Id, D, B, O>) -> Result<G, C>,
+        restore: impl FnOnce(G, &Loan<'id, Id, D, B, O>, u32) -> C,
     ) -> Result<GroupStep<C>, Fault>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
+        G: driver::GroupMutation<'static, Id, D, B, O>,
     {
         // The other role's mutation holds the receive cut.
         if self.group_mutator.is_some_and(|running| running != mutator) {
@@ -1543,18 +1558,23 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 };
                 let terminal = {
                     let (driver, device, mut env) = self.parts(sink);
-                    driver.group(&mut env, device, owned)
+                    owned.run(driver, &mut env, device)
                 };
                 let terminal = match terminal {
                     Ok(terminal) => terminal,
-                    Err(driver::GroupFailed::Install(command, fault)) => {
-                        // The core did not take the installation's slot:
-                        // the command comes back whole.
+                    Err(driver::GroupFailed::Returned(command, fault)) => {
+                        // The driver's step took none of the command's
+                        // owners: the command comes back whole, an
+                        // installation with its installation's generation
+                        // (the command's: its stale check passed).
                         self.unfreeze_mutation(mutator, removal);
                         let generation = self.serials.generation;
-                        return Ok(GroupStep::Failed(reinstall(command, generation), fault));
+                        return Ok(GroupStep::Failed(
+                            restore(command, &loan, generation),
+                            fault,
+                        ));
                     }
-                    Err(driver::GroupFailed::Taken(fault)) => {
+                    Err(driver::GroupFailed::Retained(fault)) => {
                         // The mutation failed with its fault; the receive
                         // path it froze resumes, so a failed command leaves
                         // no frozen receive behind. The first fault stays
@@ -1863,11 +1883,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         key,
                     }));
                 }
-                let removed = match self.driver.remove(
-                    self.device,
-                    identity,
-                    core_mac::association::KeySlotKind::StationPairwise,
-                ) {
+                let removed = match self
+                    .driver
+                    .remove::<core_mac::association::StationAssociation<'static, CorePath<Id>>>(
+                        self.device,
+                        identity,
+                    ) {
                     Ok(removed) => removed,
                     Err(fault) => {
                         return Err(CommandFailed::Returned {
@@ -1876,9 +1897,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         });
                     }
                 };
-                let removal =
-                    <Station as Role<'id, Id>>::removal(association).into_owned(&self.loan);
-                let terminal = removed.settle(removal).map_err(CommandFailed::Taken)?;
+                let terminal = removed.settle(association.into_owned(&self.loan));
                 self.driver.barrier = None;
                 self.holding = None;
                 // A removal whose key's last use is out ends at a later

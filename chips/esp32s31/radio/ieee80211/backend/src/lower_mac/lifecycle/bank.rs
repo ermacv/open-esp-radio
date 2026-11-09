@@ -281,13 +281,27 @@ impl<
 {
     /// The finished receipt of the removal at `place`, in whichever phase
     /// the core is.
-    pub fn take_removed(self, place: usize) -> Option<KeyRemoved<'core, Path>> {
-        self.arena_core()?.core.take_removed(place)
+    ///
+    /// # Errors
+    ///
+    /// It waits for a use, or the phase holds no core: the place comes
+    /// back.
+    pub fn take_removed<S: crate::lower_mac::RemovableSlot<'core, Path>>(
+        self,
+        place: crate::lower_mac::RemovalPlace<'core, Path, S>,
+    ) -> Result<KeyRemoved<'core, Path, S>, crate::lower_mac::RemovalPlace<'core, Path, S>> {
+        match self.arena_core() {
+            Some(core) => core.core.take_removed(place),
+            None => Err(place),
+        }
     }
 
     /// Whether the removal at `place` finished and its receipt waits, in
     /// whichever phase the core is.
-    pub fn removed_ready(self, place: usize) -> bool {
+    pub fn removed_ready<S: crate::lower_mac::RemovableSlot<'core, Path>>(
+        self,
+        place: &crate::lower_mac::RemovalPlace<'core, Path, S>,
+    ) -> bool {
         self.arena_core()
             .is_some_and(|core| core.core.removed_ready(place))
     }

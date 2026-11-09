@@ -206,42 +206,89 @@ impl<'id, Id: SlotIdentity> KeyPlace<'id, Id> {
     }
 }
 /// What a removal's command left: the receipt now, or the core place where
-/// it finishes once the key's last use returns. Either way it holds the
-/// key's table place, which this removal emptied: the only place its
-/// command's rights can wait in, and no other removal can name it.
-pub(super) struct Removing<'a, 'id, Id: SlotIdentity> {
+/// it finishes once the key's last use returns, both of the slot kind its
+/// rights `R` take. Either way it holds the key's table place, which this
+/// removal emptied: the only place its command's rights can wait in, and no
+/// other removal can name it.
+pub(super) struct Removing<'a, 'id, Id: SlotIdentity, R: RemovalRights<'id, Id>> {
     pub(super) place: &'a mut Option<KeyPlace<'id, Id>>,
-    pub(super) ended: Removed<'id, Id>,
+    pub(super) ended: Removed<'id, Id, R::Slot>,
 }
-pub(super) enum Removed<'id, Id: SlotIdentity> {
-    Now(core_mac::KeyRemoved<'id, CorePath<Id>>),
-    Waiting(usize),
+pub(super) enum Removed<'id, Id: SlotIdentity, S> {
+    Now(core_mac::KeyRemoved<'id, CorePath<Id>, S>),
+    Waiting(core_mac::RemovalPlace<'id, CorePath<Id>, S>),
 }
 /// A removal its command left waiting in its key's table place: the core
 /// place where it finishes and the command's rights, which its terminal
 /// returns.
-pub(super) struct WaitingRemoval<'id, Id: SlotIdentity> {
-    pub(super) core: usize,
-    pub(super) removal: Removal<'id, Id>,
+pub(super) struct Waiting<'id, Id: SlotIdentity, R: RemovalRights<'id, Id>> {
+    pub(super) core: core_mac::RemovalPlace<'id, CorePath<Id>, R::Slot>,
+    pub(super) rights: R,
 }
-pub(super) enum Removal<'id, Id: SlotIdentity> {
-    StationPairwise(core_mac::association::StationAssociation<'id, CorePath<Id>>),
-    AccessPointPairwise(core_mac::association::AccessPointAssociation<'id, CorePath<Id>>),
-    StationGroup(StaPermission<'id, Id>),
-    AccessPointGroup(ApPermission<'id, Id>),
+/// A waiting removal, of each kind of rights.
+pub(super) enum WaitingRemoval<'id, Id: SlotIdentity> {
+    StationPairwise(Waiting<'id, Id, core_mac::association::StationAssociation<'id, CorePath<Id>>>),
+    AccessPointPairwise(
+        Waiting<'id, Id, core_mac::association::AccessPointAssociation<'id, CorePath<Id>>>,
+    ),
+    StationGroup(Waiting<'id, Id, StaPermission<'id, Id>>),
+    AccessPointGroup(Waiting<'id, Id, ApPermission<'id, Id>>),
 }
-impl<Id: SlotIdentity> Removal<'_, Id> {
-    /// The kind of slot whose receipt these rights take.
-    pub(super) const fn kind(&self) -> core_mac::association::KeySlotKind {
-        use core_mac::association::KeySlotKind;
-        match self {
-            Self::StationPairwise(_) => KeySlotKind::StationPairwise,
-            Self::AccessPointPairwise(_) => KeySlotKind::AccessPointPairwise,
-            Self::StationGroup(_) => KeySlotKind::StationGroup,
-            Self::AccessPointGroup(_) => KeySlotKind::AccessPointGroup,
+/// A removal command's rights: the slot kind whose receipt they take, and
+/// the terminal the receipt's slot ends with them in.
+pub(super) trait RemovalRights<'id, Id: SlotIdentity>: Sized {
+    /// The slot kind of the key these rights remove.
+    type Slot: core_mac::RemovableSlot<'id, CorePath<Id>>;
+    /// The terminal of the removal: the receipt's slot with these rights.
+    fn terminal(self, slot: Self::Slot) -> brand::OwnedRemoved<'id, Id>;
+    /// These rights waiting at `core` for the receipt.
+    fn waiting(waiting: Waiting<'id, Id, Self>) -> WaitingRemoval<'id, Id>;
+}
+macro_rules! rights {
+    ($rights:ty, $slot:ident, $waiting:ident, $role:ident, $owners:ident, $field:ident) => {
+        impl<'id, Id: SlotIdentity> RemovalRights<'id, Id> for $rights {
+            type Slot = core_mac::association::$slot<'id, CorePath<Id>>;
+            fn terminal(self, slot: Self::Slot) -> brand::OwnedRemoved<'id, Id> {
+                brand::OwnedRemoved::$role(brand::RemovedOwners::$owners { slot, $field: self })
+            }
+            fn waiting(waiting: Waiting<'id, Id, Self>) -> WaitingRemoval<'id, Id> {
+                WaitingRemoval::$waiting(waiting)
+            }
         }
-    }
+    };
 }
+rights!(
+    core_mac::association::StationAssociation<'id, CorePath<Id>>,
+    StationPairwiseSlot,
+    StationPairwise,
+    Station,
+    Pairwise,
+    association
+);
+rights!(
+    core_mac::association::AccessPointAssociation<'id, CorePath<Id>>,
+    AccessPointPairwiseSlot,
+    AccessPointPairwise,
+    AccessPoint,
+    Pairwise,
+    association
+);
+rights!(
+    StaPermission<'id, Id>,
+    StationGroupSlot,
+    StationGroup,
+    Station,
+    Group,
+    permission
+);
+rights!(
+    ApPermission<'id, Id>,
+    AccessPointGroupSlot,
+    AccessPointGroup,
+    AccessPoint,
+    Group,
+    permission
+);
 impl<Id: SlotIdentity> Installed<'_, Id> {
     /// The kind of slot the installed key holds.
     pub(super) const fn kind(&self) -> core_mac::association::KeySlotKind {
@@ -251,21 +298,28 @@ impl<Id: SlotIdentity> Installed<'_, Id> {
         }
     }
 }
-pub(super) enum GroupCommand<'id, Id: SlotIdentity> {
-    InstallStation {
-        spp: Spp,
-        slot: core_mac::association::StationGroupSlot<'id, CorePath<Id>>,
-        permission: StaPermission<'id, Id>,
-        key_id: GroupKeyId,
-        material: Ccmp128Key,
-    },
-    InstallAccessPoint {
-        spp: Spp,
-        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath<Id>>,
-        permission: ApPermission<'id, Id>,
-        key_id: GroupKeyId,
-        material: Ccmp128Key,
-    },
+/// A group key installation of one role: the role's group slot and
+/// permission, with the key.
+pub(super) struct GroupInstallation<S, P> {
+    pub(super) spp: Spp,
+    pub(super) slot: S,
+    pub(super) permission: P,
+    pub(super) key_id: GroupKeyId,
+    pub(super) material: Ccmp128Key,
+}
+/// The station's group key installation.
+pub(super) type StationGroupInstallation<'id, Id> = GroupInstallation<
+    core_mac::association::StationGroupSlot<'id, CorePath<Id>>,
+    StaPermission<'id, Id>,
+>;
+/// The access point's group key installation.
+pub(super) type AccessPointGroupInstallation<'id, Id> = GroupInstallation<
+    core_mac::association::AccessPointGroupSlot<'id, CorePath<Id>>,
+    ApPermission<'id, Id>,
+>;
+/// A station group key mutation, with its owners.
+pub(super) enum StationGroupCommand<'id, Id: SlotIdentity> {
+    Install(StationGroupInstallation<'id, Id>),
     Replace {
         permission: StaPermission<'id, Id>,
         key: GroupKey<'id, Id, Station>,
@@ -277,8 +331,16 @@ pub(super) enum GroupCommand<'id, Id: SlotIdentity> {
         key: GroupKey<'id, Id, Station>,
     },
     Remove {
-        identity: RawKeyIdentity,
-        removal: Removal<'id, Id>,
+        permission: StaPermission<'id, Id>,
+        key: GroupKey<'id, Id, Station>,
+    },
+}
+/// An access-point group key mutation, with its owners.
+pub(super) enum AccessPointGroupCommand<'id, Id: SlotIdentity> {
+    Install(AccessPointGroupInstallation<'id, Id>),
+    Remove {
+        permission: ApPermission<'id, Id>,
+        key: GroupKey<'id, Id, AccessPoint>,
     },
 }
 
@@ -297,23 +359,10 @@ where
         slot: <PortKeys<Id, Self> as KeyTypes<'id>>::PairwiseSlot,
         peer: IndividualAddress,
     ) -> Installation<'id, Id>;
-    fn group(
-        association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
-        slot: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupSlot,
-        permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
-        key_id: GroupKeyId,
-        material: Ccmp128Key,
-    ) -> GroupCommand<'id, Id>;
-    fn removal(association: <PortKeys<Id, Self> as KeyTypes<'id>>::Association)
-    -> Removal<'id, Id>;
-    fn remove_group(
-        permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
-    ) -> Removal<'id, Id>;
-    fn group_identity(key: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupKey) -> RawKeyIdentity;
 }
 
 macro_rules! role {
-    ($role:ty, $p:literal, $g:literal, $path:ty, $install:ident, $remove:ident, $group_remove:ident) => {
+    ($role:ty, $install:ident) => {
         impl<'id, Id: SlotIdentity + 'id> Role<'id, Id> for $role {
             fn identity(
                 _association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
@@ -346,93 +395,8 @@ macro_rules! role {
                 .into_parts();
                 Installation::Transmit { spp, scope, slot }
             }
-            fn removal(
-                association: <PortKeys<Id, Self> as KeyTypes<'id>>::Association,
-            ) -> Removal<'id, Id> {
-                Removal::$remove(association)
-            }
-            fn remove_group(
-                permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
-            ) -> Removal<'id, Id> {
-                Removal::$group_remove(permission)
-            }
-            fn group_identity(key: GroupKey<'id, Id, Self>) -> RawKeyIdentity {
-                key.identity
-            }
-            fn group(
-                association: &<PortKeys<Id, Self> as KeyTypes<'id>>::Association,
-                slot: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupSlot,
-                permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
-                key_id: GroupKeyId,
-                material: Ccmp128Key,
-            ) -> GroupCommand<'id, Id> {
-                Self::group_command(association.spp(), slot, permission, key_id, material)
-            }
         }
     };
 }
-role!(
-    Station,
-    1,
-    1,
-    StaPath<Id>,
-    StationPairwise,
-    StationPairwise,
-    StationGroup
-);
-role!(
-    AccessPoint,
-    15,
-    3,
-    ApPath<Id>,
-    AccessPointPairwise,
-    AccessPointPairwise,
-    AccessPointGroup
-);
-
-trait GroupRole<'id, Id: SlotIdentity + 'id>: InterfaceRole + Sized
-where
-    PortKeys<Id, Self>: KeyTypes<'id>,
-{
-    fn group_command(
-        spp: Spp,
-        slot: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupSlot,
-        permission: <PortKeys<Id, Self> as KeyTypes<'id>>::GroupPermission,
-        key_id: GroupKeyId,
-        material: Ccmp128Key,
-    ) -> GroupCommand<'id, Id>;
-}
-impl<'id, Id: SlotIdentity + 'id> GroupRole<'id, Id> for Station {
-    fn group_command(
-        spp: Spp,
-        slot: core_mac::association::StationGroupSlot<'id, CorePath<Id>>,
-        permission: StaPermission<'id, Id>,
-        key_id: GroupKeyId,
-        material: Ccmp128Key,
-    ) -> GroupCommand<'id, Id> {
-        GroupCommand::InstallStation {
-            spp,
-            slot,
-            permission,
-            key_id,
-            material,
-        }
-    }
-}
-impl<'id, Id: SlotIdentity + 'id> GroupRole<'id, Id> for AccessPoint {
-    fn group_command(
-        spp: Spp,
-        slot: core_mac::association::AccessPointGroupSlot<'id, CorePath<Id>>,
-        permission: ApPermission<'id, Id>,
-        key_id: GroupKeyId,
-        material: Ccmp128Key,
-    ) -> GroupCommand<'id, Id> {
-        GroupCommand::InstallAccessPoint {
-            spp,
-            slot,
-            permission,
-            key_id,
-            material,
-        }
-    }
-}
+role!(Station, StationPairwise);
+role!(AccessPoint, AccessPointPairwise);

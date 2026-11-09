@@ -44,7 +44,11 @@ pub struct AccessPointPairwiseInstall<Id: SlotIdentity>(PairwiseInstall<Id>);
 
 /// An accepted group installation of the access point. Only
 /// [`Esp32s31Commands`] makes one.
-pub struct AccessPointGroupInstall<Id: SlotIdentity>(GroupInstall<Id>);
+pub struct AccessPointGroupInstall<Id: SlotIdentity> {
+    install: AccessPointGroupInstallation<'static, Id>,
+    /// The installation that issued its association.
+    association: u32,
+}
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     AccessPointTypes<'id> for Types<Id, D, B, O>
@@ -119,17 +123,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         key_id: GroupKeyId,
         key: Ccmp128Key,
     ) -> AccessPointCommand<'id, Self::Types, Self::Caps> {
-        AccessPointCommand::InstallGroup(AccessPointGroupInstall(GroupInstall {
+        AccessPointCommand::InstallGroup(AccessPointGroupInstall {
             association: association.generation(),
-            command: <AccessPoint as Role<'id, Id>>::group(
-                association,
+            install: GroupInstallation {
+                spp: association.spp(),
                 slot,
                 permission,
                 key_id,
-                key,
-            )
+                material: key,
+            }
             .into_owned(&self.loan),
-        }))
+        })
     }
 }
 
@@ -146,10 +150,8 @@ fn unsupported_group_key_id<
 ) -> bool {
     matches!(
         command,
-        AccessPointCommand::InstallGroup(AccessPointGroupInstall(GroupInstall {
-            command: GroupCommand::InstallAccessPoint { key_id, .. },
-            ..
-        })) if crate::mac::crypto::ApGroupKeyId::new(key_id.get()).is_none()
+        AccessPointCommand::InstallGroup(AccessPointGroupInstall { install, .. })
+            if crate::mac::crypto::ApGroupKeyId::new(install.key_id.get()).is_none()
     )
 }
 
@@ -169,19 +171,11 @@ fn access_point_generations<
             let [association, slot] = install.issued;
             [Some(association), Some(slot), None]
         }
-        AccessPointCommand::InstallGroup(AccessPointGroupInstall(install)) => {
-            match &install.command {
-                GroupCommand::InstallAccessPoint {
-                    slot, permission, ..
-                } => [
-                    Some(install.association),
-                    Some(slot.generation()),
-                    Some(permission.generation()),
-                ],
-                // The issuer makes the access point's installations only.
-                _ => [Some(install.association), None, None],
-            }
-        }
+        AccessPointCommand::InstallGroup(install) => [
+            Some(install.association),
+            Some(install.install.slot.generation()),
+            Some(install.install.permission.generation()),
+        ],
         AccessPointCommand::RemovePairwise { association, key } => [
             Some(association.generation()),
             Some(key.identity.generation()),
@@ -461,11 +455,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         now,
                     ));
                 }
-                let removed = match self.driver.remove(
-                    self.device,
-                    identity,
-                    core_mac::association::KeySlotKind::AccessPointPairwise,
-                ) {
+                let removed = match self
+                    .driver
+                    .remove::<core_mac::association::AccessPointAssociation<'static, CorePath<Id>>>(
+                        self.device,
+                        identity,
+                    ) {
                     Ok(removed) => removed,
                     Err(fault) => {
                         return Err(CommandFailed::Returned {
@@ -474,9 +469,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         });
                     }
                 };
-                let removal =
-                    <AccessPoint as Role<'id, Id>>::removal(association).into_owned(&self.loan);
-                let terminal = removed.settle(removal).map_err(CommandFailed::Taken)?;
+                let terminal = removed.settle(association.into_owned(&self.loan));
                 self.driver.barrier = None;
                 self.access_point_holding = None;
                 self.access_point_since = None;
@@ -503,27 +496,32 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         now,
                         sink,
                         |command, loan| match command {
-                            AccessPointCommand::InstallGroup(AccessPointGroupInstall(
-                                GroupInstall { command, .. },
-                            )) => Ok(command),
+                            AccessPointCommand::InstallGroup(AccessPointGroupInstall {
+                                install,
+                                ..
+                            }) => Ok(AccessPointGroupCommand::Install(install)),
                             AccessPointCommand::RemoveGroup { permission, key } => {
-                                Ok(GroupCommand::Remove {
-                                    identity: <AccessPoint as Role<'id, Id>>::group_identity(key),
-                                    removal: <AccessPoint as Role<'id, Id>>::remove_group(
-                                        permission,
-                                    )
-                                    .into_owned(loan),
+                                Ok(AccessPointGroupCommand::Remove {
+                                    permission: permission.into_owned(loan),
+                                    key: key.into_owned(),
                                 })
                             }
                             other => Err(other),
                         },
-                        |command, association| {
-                            AccessPointCommand::InstallGroup(AccessPointGroupInstall(
-                                GroupInstall {
-                                    command,
+                        // The inverse of the conversion above.
+                        |command, loan, association| match command {
+                            AccessPointGroupCommand::Install(install) => {
+                                AccessPointCommand::InstallGroup(AccessPointGroupInstall {
+                                    install,
                                     association,
-                                },
-                            ))
+                                })
+                            }
+                            AccessPointGroupCommand::Remove { permission, key } => {
+                                AccessPointCommand::RemoveGroup {
+                                    permission: permission.lend(loan),
+                                    key: key.lend(),
+                                }
+                            }
                         },
                     )
                     .map_err(CommandFailed::Taken)?;

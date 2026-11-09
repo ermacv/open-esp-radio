@@ -131,7 +131,7 @@
 use oer_protocols_ieee80211_wire::address::AddressFlags;
 use oer_protocols_ieee80211_wire::frame::{FrameControlFields, FrameType};
 
-use core::pin::Pin;
+use core::{marker::PhantomData, pin::Pin};
 use oer_protocols_radio_port::{PoolPath, Root};
 
 use oer_portable_events::{EventSink, report};
@@ -215,9 +215,9 @@ pub use lifecycle::{
 mod keys;
 pub use keys::{
     KeyAdmissionError, KeyAdmissionRefused, KeyHandle, KeyRemoved, KeyUse, ReceiveKeyHandle,
-    RemovingKey, TransmitKeyScope, TxAdmission,
+    RemovableSlot, RemovalPlace, RemovingKey, TransmitKeyScope, TxAdmission,
 };
-use keys::{KeyUseCount, TransmitKeyToken};
+use keys::{KeyUseCount, TransmitKeyToken, removals::Removal};
 
 pub use ampdu::{
     AmpduFormat, AmpduPublication, ESP32S31_AMPDU_LENGTHS, ESP32S31_AMPDU_MAX_LENGTH,
@@ -618,10 +618,10 @@ pub trait LowerMacSink<
     /// The sink does not take it now: the receipt comes back, and the core
     /// keeps it in its removal's place, offering it again without clearing
     /// the key a second time.
-    fn key_removed(
+    fn key_removed<S: RemovableSlot<'core, Path>>(
         &mut self,
-        removed: KeyRemoved<'core, Path>,
-    ) -> Result<(), KeyRemoved<'core, Path>>;
+        removed: KeyRemoved<'core, Path, S>,
+    ) -> Result<(), KeyRemoved<'core, Path, S>>;
     /// A disable the core started has ended: no attempt is left.
     fn disabled(&mut self);
     /// The station's TBTT event announced the TBTT `event` names.
@@ -913,16 +913,69 @@ impl KeyToken {
 struct KeyBank<'core, Path: PoolPath, const TICKETS: usize> {
     installed: [Option<CheckedKeyScope>; LOWER_MAC_KEY_SLOTS],
     uses: [KeyUseCount<TICKETS>; LOWER_MAC_KEY_SLOTS],
-    removals: [Option<Removal<'core, Path>>; LOWER_MAC_KEY_SLOTS],
+    removals: keys::removals::Removals<'core, Path>,
 }
 
-/// A key's removal in its place: waiting for its last use, or finished
-/// with a receipt its sink has not taken yet.
-enum Removal<'core, Path: PoolPath> {
-    /// The consumed handle, waiting for the key's last admitted use.
-    Pending(RemovingKey<'core, Path>),
-    /// The key is cleared; the receipt waits for its sink.
-    Finished(KeyRemoved<'core, Path>),
+/// Offer every finished receipt of kind `S` to `sink`; one it refuses waits
+/// in its place.
+fn offer_removed<'core, 'slot, const BUFFER_SIZE: usize, Path, K, S>(
+    removals: &mut keys::removals::Removals<'core, Path>,
+    sink: &mut K,
+    _kind: PhantomData<S>,
+) where
+    Path: PoolPath,
+    K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    S: RemovableSlot<'core, Path>,
+{
+    for removal in S::places(removals) {
+        if !matches!(removal, Some(Removal::Finished(_))) {
+            continue;
+        }
+        let Some(Removal::Finished(removed)) = removal.take() else {
+            continue;
+        };
+        if let Err(removed) = sink.key_removed(removed) {
+            *removal = Some(Removal::Finished(removed));
+        }
+    }
+}
+
+/// Clear the key `index` when its removal of kind `S` is pending, and offer
+/// its receipt to `sink`; refused, the receipt waits in the removal's
+/// place: the key is cleared once, and only the receipt is offered again.
+/// Whether a removal of this kind was pending for it.
+fn finish_removal<'core, 'slot, const BUFFER_SIZE: usize, Path, H, K, S>(
+    removals: &mut keys::removals::Removals<'core, Path>,
+    index: usize,
+    hardware: &mut H,
+    sink: &mut K,
+    _kind: PhantomData<S>,
+) -> bool
+where
+    Path: PoolPath,
+    H: CcmpKeyHardware,
+    K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    S: RemovableSlot<'core, Path>,
+{
+    let Some(removal) = S::places(removals)
+        .iter_mut()
+        .find(|removal| matches!(removal, Some(Removal::Pending(key)) if key.index == index))
+    else {
+        return false;
+    };
+    let Some(Removal::Pending(key)) = removal.take() else {
+        return false;
+    };
+    key.token.clear(hardware);
+    let removed = KeyRemoved {
+        slot: key.slot,
+        scope: key.scope,
+        brand: key.brand,
+    };
+    if let Err(removed) = sink.key_removed(removed) {
+        *removal = Some(Removal::Finished(removed));
+    }
+    true
 }
 
 impl<Path: PoolPath, const TICKETS: usize> KeyBank<'_, Path, TICKETS> {
@@ -930,7 +983,7 @@ impl<Path: PoolPath, const TICKETS: usize> KeyBank<'_, Path, TICKETS> {
         Self {
             installed: [None; LOWER_MAC_KEY_SLOTS],
             uses: [const { KeyUseCount::new() }; LOWER_MAC_KEY_SLOTS],
-            removals: [const { None }; LOWER_MAC_KEY_SLOTS],
+            removals: keys::removals::Removals::new(),
         }
     }
 }
@@ -1885,23 +1938,32 @@ where
             };
             self.offer_completion(ended, sink);
         }
-        for removal in &mut self.keys.removals {
-            if !matches!(removal, Some(Removal::Finished(_))) {
-                continue;
-            }
-            let Some(Removal::Finished(removed)) = removal.take() else {
-                continue;
-            };
-            if let Err(removed) = sink.key_removed(removed) {
-                *removal = Some(Removal::Finished(removed));
-            }
-        }
+        let removals = &mut self.keys.removals;
+        offer_removed(
+            removals,
+            sink,
+            PhantomData::<association::StationPairwiseSlot<'core, Path>>,
+        );
+        offer_removed(
+            removals,
+            sink,
+            PhantomData::<association::StationGroupSlot<'core, Path>>,
+        );
+        offer_removed(
+            removals,
+            sink,
+            PhantomData::<association::AccessPointPairwiseSlot<'core, Path>>,
+        );
+        offer_removed(
+            removals,
+            sink,
+            PhantomData::<association::AccessPointGroupSlot<'core, Path>>,
+        );
     }
 
     /// Whether the core keeps a result its sink refused, or a removal.
     pub fn keeps_results(&self) -> bool {
-        self.attempts().any(|attempt| attempt.work.done())
-            || self.keys.removals.iter().any(Option::is_some)
+        self.attempts().any(|attempt| attempt.work.done()) || self.keys.removals.any()
     }
 
     /// The owned view of one received MPDU, or `None` while the port does
@@ -2557,47 +2619,116 @@ where
 
     /// Consume the sole installed handle at removal's FIFO position. The
     /// programmed material stays until the last admitted use returns. No
-    /// further right can be obtained from the moved handle. Its place: the
-    /// receipt a sink refused waits there for [`Self::take_removed`].
+    /// further right can be obtained from the moved handle. Its place, of
+    /// the key's slot kind: the receipt a sink refused waits there for
+    /// [`Self::take_removed`].
     pub fn remove_checked_key<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        S: RemovableSlot<'core, Path>,
+    >(
+        &mut self,
+        hardware: &mut H,
+        key: RemovingKey<'core, Path, S>,
+        sink: &mut K,
+    ) -> RemovalPlace<'core, Path, S> {
+        let index = key.index;
+        // A kind's places are as many as its pool's slots, and each kept
+        // removal holds one of them: the slot of `key` finds a free one.
+        let places = S::places(&mut self.keys.removals);
+        let length = places.len();
+        let Some((position, removal)) = places
+            .iter_mut()
+            .enumerate()
+            .find(|(_, removal)| removal.is_none())
+        else {
+            // No position can retain it; the poisoned core keeps the
+            // programmed material until reset.
+            self.fault.get_or_insert(LowerMacFault::KeyBank);
+            return RemovalPlace {
+                position: length,
+                brand: core::marker::PhantomData,
+            };
+        };
+        *removal = Some(Removal::Pending(key));
+        let place = RemovalPlace {
+            position,
+            brand: core::marker::PhantomData,
+        };
+        self.finish_key_removal(hardware, index, sink);
+        place
+    }
+
+    /// Remove an installed key of any kind, as [`Self::remove_checked_key`]
+    /// does with the kind its slot holds.
+    #[cfg(test)]
+    pub(crate) fn remove_key_for_test<
         H: CcmpKeyHardware,
         K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
     >(
         &mut self,
         hardware: &mut H,
-        key: impl Into<RemovingKey<'core, Path>>,
+        key: impl Into<keys::InstalledForTest<'core, Path>>,
         sink: &mut K,
-    ) -> usize {
-        let key = key.into();
-        let index = key.index;
-        let Some(removal) = self.keys.removals.get_mut(index) else {
-            // No position can retain it; the poisoned core keeps the
-            // programmed material until reset.
-            self.fault.get_or_insert(LowerMacFault::KeyBank);
-            return index;
+    ) {
+        use association::{
+            AccessPointGroupSlot, AccessPointPairwiseSlot, StationGroupSlot, StationPairwiseSlot,
         };
-        *removal = Some(Removal::Pending(key));
-        self.finish_key_removal(hardware, index, sink);
-        index
+        match key.into() {
+            keys::InstalledForTest::Transmit(key) => match key.slot_kind() {
+                association::KeySlotKind::StationPairwise => {
+                    let removing = key.into_removing::<StationPairwiseSlot<'core, Path>>();
+                    let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+                }
+                association::KeySlotKind::StationGroup => {
+                    let removing = key.into_removing::<StationGroupSlot<'core, Path>>();
+                    let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+                }
+                association::KeySlotKind::AccessPointPairwise => {
+                    let removing = key.into_removing::<AccessPointPairwiseSlot<'core, Path>>();
+                    let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+                }
+                association::KeySlotKind::AccessPointGroup => {
+                    let removing = key.into_removing::<AccessPointGroupSlot<'core, Path>>();
+                    let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+                }
+            },
+            keys::InstalledForTest::Receive(key) => {
+                let removing = key.into_removing::<StationGroupSlot<'core, Path>>();
+                let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+            }
+        }
     }
 
     /// The receipt of the removal at `place`, once its key is cleared and
-    /// its sink refused it; nothing while it waits for a use or was taken.
-    pub fn take_removed(&mut self, place: usize) -> Option<KeyRemoved<'core, Path>> {
-        let removal = self.keys.removals.get_mut(place)?;
+    /// its sink refused it.
+    ///
+    /// # Errors
+    ///
+    /// It waits for a use: the place comes back.
+    pub fn take_removed<S: RemovableSlot<'core, Path>>(
+        &mut self,
+        place: RemovalPlace<'core, Path, S>,
+    ) -> Result<KeyRemoved<'core, Path, S>, RemovalPlace<'core, Path, S>> {
+        let Some(removal) = S::places(&mut self.keys.removals).get_mut(place.position) else {
+            return Err(place);
+        };
         match removal.take() {
-            Some(Removal::Finished(removed)) => Some(removed),
+            Some(Removal::Finished(removed)) => Ok(removed),
             other => {
                 *removal = other;
-                None
+                Err(place)
             }
         }
     }
 
     /// Whether the removal at `place` finished and its receipt waits.
-    pub fn removed_ready(&self, place: usize) -> bool {
+    pub fn removed_ready<S: RemovableSlot<'core, Path>>(
+        &self,
+        place: &RemovalPlace<'core, Path, S>,
+    ) -> bool {
         matches!(
-            self.keys.removals.get(place),
+            S::places_ref(&self.keys.removals).get(place.position),
             Some(Some(Removal::Finished(_)))
         )
     }
@@ -2608,9 +2739,8 @@ where
         index: usize,
         sink: &mut K,
     ) {
-        let (Some(uses), Some(removal), Some(installed)) = (
+        let (Some(uses), Some(installed)) = (
             self.keys.uses.get(index),
-            self.keys.removals.get_mut(index),
             self.keys.installed.get_mut(index),
         ) else {
             return;
@@ -2618,23 +2748,35 @@ where
         if self.fault.is_some() || !uses.is_empty() {
             return;
         }
-        if !matches!(removal, Some(Removal::Pending(_))) {
-            return;
-        }
-        let Some(Removal::Pending(key)) = removal.take() else {
-            return;
-        };
-        key.token.clear(hardware);
-        *installed = None;
-        let removed = KeyRemoved {
-            slot: key.slot,
-            scope: key.scope,
-            brand: key.brand,
-        };
-        // Refused, the receipt waits in the removal's place: the key is
-        // cleared once, and only the receipt is offered again.
-        if let Err(removed) = sink.key_removed(removed) {
-            *removal = Some(Removal::Finished(removed));
+        // The key `index` is pending in the places of its own kind only.
+        let removals = &mut self.keys.removals;
+        let cleared = finish_removal(
+            removals,
+            index,
+            hardware,
+            sink,
+            PhantomData::<association::StationPairwiseSlot<'core, Path>>,
+        ) || finish_removal(
+            removals,
+            index,
+            hardware,
+            sink,
+            PhantomData::<association::StationGroupSlot<'core, Path>>,
+        ) || finish_removal(
+            removals,
+            index,
+            hardware,
+            sink,
+            PhantomData::<association::AccessPointPairwiseSlot<'core, Path>>,
+        ) || finish_removal(
+            removals,
+            index,
+            hardware,
+            sink,
+            PhantomData::<association::AccessPointGroupSlot<'core, Path>>,
+        );
+        if cleared {
+            *installed = None;
         }
     }
 

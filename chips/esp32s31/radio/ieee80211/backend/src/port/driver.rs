@@ -2,8 +2,9 @@ use super::*;
 use super::{
     installation::PortCoreOwner,
     keys::{
-        GroupCommand, Installation, Installed, KeyPlace, RawKeyIdentity, Removal, Removed,
-        Removing, WaitingRemoval,
+        AccessPointGroupCommand, ApPermission, GroupInstallation, Installation, Installed,
+        KeyPlace, RawKeyIdentity, RemovalRights, Removed, Removing, StaPermission,
+        StationGroupCommand, Waiting, WaitingRemoval,
     },
 };
 use crate::ordinary_tx::sets_retry_bit;
@@ -14,18 +15,6 @@ pub(super) use arena::DataArenas;
 pub(super) mod core_views;
 #[cfg(oer_debug_control)]
 mod key_replacement;
-// The idle core lends the shared command set; a core in another view is a
-// typed refusal.
-macro_rules! idle_command {
-    ($owner:expr, |$view:ident| $command:expr) => {{
-        let mut $view = $owner
-            .view()
-            .commands()
-            .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
-        $command
-    }};
-}
-
 pub(super) struct Pending<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub operation: Single<'id, Id, D, B, O>,
     pub plan: RetryPlan<PhyRate>,
@@ -139,10 +128,10 @@ impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePa
         }
         self.completed.push(completion)
     }
-    fn key_removed(
+    fn key_removed<S: core_mac::RemovableSlot<'id, CorePath<Id>>>(
         &mut self,
-        removed: KeyRemoved<'id, CorePath<Id>>,
-    ) -> Result<(), KeyRemoved<'id, CorePath<Id>>> {
+        removed: KeyRemoved<'id, CorePath<Id>, S>,
+    ) -> Result<(), KeyRemoved<'id, CorePath<Id>, S>> {
         // The core keeps it in its removal's place, where the removal that
         // waits for it takes it: no other command answers with it.
         Err(removed)
@@ -333,7 +322,7 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     pub(super) arena: Option<DataArenas<'id, Id, B>>,
     /// A group key replacement the hardware refused, kept with the port's
     /// quarantine.
-    pub(super) retained_group: Option<GroupCommand<'id, Id>>,
+    pub(super) retained_group: Option<StationGroupCommand<'id, Id>>,
     /// The key of a removal the data port's caller holds at its barrier:
     /// queued attempts that name it end withdrawn.
     pub(super) barrier: Option<RawKeyIdentity>,
@@ -1504,31 +1493,30 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             Err(refused) => Err((refused.slot, Fault::Core(refused.fault))),
         }
     }
-    /// Remove the installed key `identity`: its receipt now, or its core
-    /// place while its last use is out, with the key's table place this
-    /// removal empties.
-    pub(super) fn remove(
+    /// Remove the installed key `identity`, whose slot must be of the kind
+    /// its rights `R` take: its receipt now, or its core place while its
+    /// last use is out, with the key's table place this removal empties.
+    ///
+    /// # Errors
+    ///
+    /// The key is not installed, is of another slot kind, or the registers
+    /// or the core's command view are unavailable: nothing is taken, and
+    /// the installed key stays in its place.
+    pub(super) fn remove<R: RemovalRights<'id, Id>>(
         &mut self,
         device: &mut D,
         identity: RawKeyIdentity,
-        kind: core_mac::association::KeySlotKind,
-    ) -> Result<Removing<'_, 'id, Id>, Fault> {
-        let index = self
+    ) -> Result<Removing<'_, 'id, Id, R>, Fault> {
+        let place = self
             .keys
-            .iter()
-            .position(|entry| {
+            .iter_mut()
+            .find(|entry| {
                 entry
                     .as_ref()
                     .and_then(KeyPlace::installed)
                     .is_some_and(|(key, _)| *key == identity)
             })
             .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
-        // The rights must be of the key's own slot kind, which its receipt
-        // returns: checked before anything is taken, so the removal's
-        // terminal pairs them with the receipt's slot.
-        if self.installed_kind(identity) != Some(kind) {
-            return Err(Fault::RemovalMismatch);
-        }
         // The registers and the core's command view first: a removal they
         // refuse leaves the installed key in its place.
         let hardware = device.hardware()?;
@@ -1537,27 +1525,33 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .view()
             .commands()
             .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
-        let place = self
-            .keys
-            .get_mut(index)
-            .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
-        let installed = match place.take() {
-            Some(KeyPlace::Installed(_, installed)) => installed,
+        let (identity, installed) = match place.take() {
+            Some(KeyPlace::Installed(identity, installed)) => (identity, installed),
             other => {
                 *place = other;
                 return Err(Fault::KeySlotMissing(KeyOp::Remove));
             }
         };
-        let mut sink = Sink::refusing();
-        let core = match installed {
-            Installed::Transmit(key) => view.remove_checked_key(hardware, key, &mut sink),
-            Installed::Receive(key) => view.remove_checked_key(hardware, key, &mut sink),
+        // The key's slot must be of the rights' own kind, which its receipt
+        // returns: a key of another kind comes back to its place whole.
+        let removing = match installed {
+            Installed::Transmit(key) => key.into_removing().map_err(Installed::Transmit),
+            Installed::Receive(key) => key.into_removing().map_err(Installed::Receive),
         };
+        let removing = match removing {
+            Ok(removing) => removing,
+            Err(installed) => {
+                *place = Some(KeyPlace::Installed(identity, installed));
+                return Err(Fault::RemovalMismatch);
+            }
+        };
+        let mut sink = Sink::refusing();
+        let core = view.remove_checked_key(hardware, removing, &mut sink);
         // This removal's own core place: a receipt of another key stays in
         // its place for its own removal.
         let ended = match self.core.view().take_removed(core) {
-            Some(removed) => Removed::Now(removed),
-            None => Removed::Waiting(core),
+            Ok(removed) => Removed::Now(removed),
+            Err(core) => Removed::Waiting(core),
         };
         Ok(Removing { place, ended })
     }
@@ -1566,7 +1560,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn finished_removal(
         &mut self,
         index: usize,
-    ) -> Option<Result<brand::OwnedRemoved<'id, Id>, Fault>> {
+    ) -> Option<brand::OwnedRemoved<'id, Id>> {
         let place = self.keys.get_mut(index)?;
         let waiting = match place.take() {
             Some(KeyPlace::Removing(waiting)) => waiting,
@@ -1575,9 +1569,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 return None;
             }
         };
-        match self.core.view().take_removed(waiting.core) {
-            Some(removed) => Some(removed_terminal(waiting.removal, removed)),
-            None => {
+        let finished = match waiting {
+            WaitingRemoval::StationPairwise(waiting) => {
+                finish::<Id, D, B, _>(&mut self.core, waiting)
+            }
+            WaitingRemoval::AccessPointPairwise(waiting) => {
+                finish::<Id, D, B, _>(&mut self.core, waiting)
+            }
+            WaitingRemoval::StationGroup(waiting) => finish::<Id, D, B, _>(&mut self.core, waiting),
+            WaitingRemoval::AccessPointGroup(waiting) => {
+                finish::<Id, D, B, _>(&mut self.core, waiting)
+            }
+        };
+        match finished {
+            Ok(removed) => Some(removed),
+            Err(waiting) => {
                 *place = Some(KeyPlace::Removing(waiting));
                 None
             }
@@ -1623,7 +1629,18 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn removal_ready(&mut self) -> bool {
         let core = &mut self.core;
         self.keys.iter().any(|place| match place {
-            Some(KeyPlace::Removing(waiting)) => core.view().removed_ready(waiting.core),
+            Some(KeyPlace::Removing(WaitingRemoval::StationPairwise(waiting))) => {
+                core.view().removed_ready(&waiting.core)
+            }
+            Some(KeyPlace::Removing(WaitingRemoval::AccessPointPairwise(waiting))) => {
+                core.view().removed_ready(&waiting.core)
+            }
+            Some(KeyPlace::Removing(WaitingRemoval::StationGroup(waiting))) => {
+                core.view().removed_ready(&waiting.core)
+            }
+            Some(KeyPlace::Removing(WaitingRemoval::AccessPointGroup(waiting))) => {
+                core.view().removed_ready(&waiting.core)
+            }
             _ => false,
         })
     }
@@ -1646,20 +1663,34 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .iter()
             .any(|place| matches!(place, Some(KeyPlace::Removing(_))))
     }
-    pub(super) fn group(
+    /// Run a station group mutation whose cut drained.
+    ///
+    /// # Errors
+    ///
+    /// [`GroupFailed::Returned`]: a step refused before it took the
+    /// command's owners, which come back whole; [`GroupFailed::Retained`]:
+    /// the hardware rejected a replacement, whose owners the port keeps.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refusal returns the command by value, as a hold does"
+    )]
+    pub(super) fn group_station(
         &mut self,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         device: &mut D,
-        command: GroupCommand<'id, Id>,
-    ) -> Result<Option<brand::OwnedTerminal<'id, Id, D, B>>, GroupFailed<'id, Id>> {
+        command: StationGroupCommand<'id, Id>,
+    ) -> Result<
+        Option<brand::OwnedTerminal<'id, Id, D, B>>,
+        GroupFailed<StationGroupCommand<'id, Id>>,
+    > {
         match command {
-            GroupCommand::InstallStation {
+            StationGroupCommand::Install(GroupInstallation {
                 spp,
                 slot,
                 permission,
                 key_id,
                 material,
-            } => {
+            }) => {
                 let identity = RawKeyIdentity {
                     role: VifRole::Station,
                     slot: slot.index(),
@@ -1670,19 +1701,19 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 if let Err((slot, fault)) =
                     self.install_receive(device, identity, spp, slot, key_id, &material)
                 {
-                    return Err(GroupFailed::Install(
-                        GroupCommand::InstallStation {
+                    return Err(GroupFailed::Returned(
+                        StationGroupCommand::Install(GroupInstallation {
                             spp,
                             slot,
                             permission,
                             key_id,
                             material,
-                        },
+                        }),
                         fault,
                     ));
                 }
                 identity.activity.set(identity.serial);
-                return Ok(Some(brand::OwnedTerminal::GroupKeyInstalled(
+                Ok(Some(brand::OwnedTerminal::GroupKeyInstalled(
                     brand::OwnedInstalledGroup::Station {
                         key: GroupKey {
                             identity,
@@ -1690,102 +1721,66 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         },
                         permission,
                     },
-                )));
+                )))
             }
-            GroupCommand::InstallAccessPoint {
-                spp,
-                slot,
-                permission,
-                key_id,
-                material,
-            } => {
-                // The access point's checks refuse both before the command
-                // reaches here; refused, the command comes back whole.
-                let (Some(activity), Some(ap_key_id)) = (
-                    env.shared().key_live.get(17 + usize::from(slot.index())),
-                    crate::mac::crypto::ApGroupKeyId::new(key_id.get()),
-                ) else {
-                    return Err(GroupFailed::Install(
-                        GroupCommand::InstallAccessPoint {
-                            spp,
-                            slot,
-                            permission,
-                            key_id,
-                            material,
-                        },
-                        Fault::GroupKeyIdRange,
-                    ));
-                };
-                let identity = RawKeyIdentity {
-                    role: VifRole::AccessPoint,
-                    slot: slot.index(),
-                    serial: env.serial(),
-                    key_id,
-                    activity,
-                };
-                if let Err((slot, fault)) = self.install_transmit(
-                    device,
-                    identity,
-                    spp,
-                    TransmitKeyScope::AccessPointGroup { key_id: ap_key_id },
-                    slot,
-                    &material,
-                ) {
-                    return Err(GroupFailed::Install(
-                        GroupCommand::InstallAccessPoint {
-                            spp,
-                            slot,
-                            permission,
-                            key_id,
-                            material,
-                        },
-                        fault,
-                    ));
-                }
-                identity.activity.set(identity.serial);
-                return Ok(Some(brand::OwnedTerminal::GroupKeyInstalled(
-                    brand::OwnedInstalledGroup::AccessPoint {
-                        key: GroupKey {
-                            identity,
-                            brand: PhantomData,
-                        },
-                        permission,
-                    },
-                )));
-            }
-            GroupCommand::Replace {
+            StationGroupCommand::Replace {
                 permission,
                 key,
                 key_id,
                 material,
             } => {
+                let back = |permission, key, material, fault| {
+                    GroupFailed::Returned(
+                        StationGroupCommand::Replace {
+                            permission,
+                            key,
+                            key_id,
+                            material,
+                        },
+                        fault,
+                    )
+                };
                 let entry = self
                     .keys
                     .iter_mut()
                     .flatten()
                     .filter_map(KeyPlace::installed_mut)
-                    .find(|(identity, _)| **identity == key.identity)
-                    .ok_or(Fault::KeySlotMissing(KeyOp::Replace))?;
-                let Installed::Receive(installed) = entry.1 else {
-                    return Err(GroupFailed::Taken(Fault::KeySlotMissing(KeyOp::Replace)));
+                    .find(|(identity, _)| **identity == key.identity);
+                let Some((entry_identity, Installed::Receive(installed))) = entry else {
+                    return Err(back(
+                        permission,
+                        key,
+                        material,
+                        Fault::KeySlotMissing(KeyOp::Replace),
+                    ));
+                };
+                let hardware = match device.hardware() {
+                    Ok(hardware) => hardware,
+                    Err(fault) => return Err(back(permission, key, material, fault)),
                 };
                 #[cfg(oer_debug_control)]
                 let mut hardware = key_replacement::RejectOnce {
-                    hardware: device.hardware()?,
+                    hardware,
                     reject: env.reject_group_replacement(),
                 };
                 #[cfg(oer_debug_control)]
                 let hardware = &mut hardware;
-                #[cfg(not(oer_debug_control))]
-                let hardware = device.hardware()?;
-                let result = idle_command!(self.core, |view| view.replace_station_group_key(
+                let Some(mut view) = self.core.view().commands() else {
+                    return Err(back(
+                        permission,
+                        key,
+                        material,
+                        Fault::CoreViewUnavailable(CoreOp::Command),
+                    ));
+                };
+                let result = view.replace_station_group_key(
                     hardware,
                     installed,
                     key_id,
                     material.as_bytes(),
-                ));
+                );
                 if let Err(_error) = result {
-                    self.retained_group = Some(GroupCommand::Replace {
+                    self.retained_group = Some(StationGroupCommand::Replace {
                         permission,
                         key,
                         key_id,
@@ -1794,7 +1789,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     // Observe actual quarantined owners after moving them to
                     // permanent custody, never a synthetic success terminal.
                     #[cfg(test)]
-                    if let Some(GroupCommand::Replace {
+                    if let Some(StationGroupCommand::Replace {
                         permission,
                         key,
                         key_id,
@@ -1817,7 +1812,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         ));
                     }
                     #[cfg(all(oer_trace, oer_debug_control))]
-                    if let Some(GroupCommand::Replace {
+                    if let Some(StationGroupCommand::Replace {
                         permission,
                         key,
                         key_id,
@@ -1836,7 +1831,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                             ),
                         });
                     }
-                    return Err(GroupFailed::Taken(Fault::Core(
+                    return Err(GroupFailed::Retained(Fault::Core(
                         core_mac::LowerMacFault::Key(
                             crate::mac::crypto::CryptoKeyError::HardwareRejected,
                         ),
@@ -1847,17 +1842,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     key_id,
                     ..key.identity
                 };
-                *entry.0 = identity;
+                *entry_identity = identity;
                 identity.activity.set(identity.serial);
-                return Ok(Some(brand::OwnedTerminal::GroupKeyReplaced {
+                Ok(Some(brand::OwnedTerminal::GroupKeyReplaced {
                     key: GroupKey {
                         identity,
                         brand: PhantomData,
                     },
                     permission,
-                }));
+                }))
             }
-            GroupCommand::Select { permission, key } => {
+            StationGroupCommand::Select { permission, key } => {
                 if !self
                     .keys
                     .iter()
@@ -1865,18 +1860,110 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     .filter_map(KeyPlace::installed)
                     .any(|(identity, _)| *identity == key.identity)
                 {
-                    return Err(GroupFailed::Taken(Fault::KeySlotMissing(KeyOp::Select)));
+                    return Err(GroupFailed::Returned(
+                        StationGroupCommand::Select { permission, key },
+                        Fault::KeySlotMissing(KeyOp::Select),
+                    ));
                 }
-                return Ok(Some(brand::OwnedTerminal::GroupKeySelected {
+                Ok(Some(brand::OwnedTerminal::GroupKeySelected {
                     key,
                     permission,
-                }));
+                }))
             }
-            GroupCommand::Remove { identity, removal } => {
-                return Ok(self
-                    .remove(device, identity, removal.kind())?
-                    .settle(removal)?
-                    .map(brand::OwnedTerminal::KeyRemoved));
+            StationGroupCommand::Remove { permission, key } => {
+                match self.remove::<StaPermission<'id, Id>>(device, key.identity) {
+                    Ok(removing) => Ok(removing
+                        .settle(permission)
+                        .map(brand::OwnedTerminal::KeyRemoved)),
+                    Err(fault) => Err(GroupFailed::Returned(
+                        StationGroupCommand::Remove { permission, key },
+                        fault,
+                    )),
+                }
+            }
+        }
+    }
+    /// Run an access-point group mutation whose cut drained.
+    ///
+    /// # Errors
+    ///
+    /// A step refused before it took the command's owners: they come back
+    /// whole.
+    pub(super) fn group_access_point(
+        &mut self,
+        env: &mut impl DriverEnv<'id, Id, D, B, O>,
+        device: &mut D,
+        command: AccessPointGroupCommand<'id, Id>,
+    ) -> Result<
+        Option<brand::OwnedTerminal<'id, Id, D, B>>,
+        GroupFailed<AccessPointGroupCommand<'id, Id>>,
+    > {
+        match command {
+            AccessPointGroupCommand::Install(GroupInstallation {
+                spp,
+                slot,
+                permission,
+                key_id,
+                material,
+            }) => {
+                let back = |slot, permission, material, fault| {
+                    GroupFailed::Returned(
+                        AccessPointGroupCommand::Install(GroupInstallation {
+                            spp,
+                            slot,
+                            permission,
+                            key_id,
+                            material,
+                        }),
+                        fault,
+                    )
+                };
+                // The access point's checks refuse both before the command
+                // reaches here; refused, the command comes back whole.
+                let (Some(activity), Some(ap_key_id)) = (
+                    env.shared().key_live.get(17 + usize::from(slot.index())),
+                    crate::mac::crypto::ApGroupKeyId::new(key_id.get()),
+                ) else {
+                    return Err(back(slot, permission, material, Fault::GroupKeyIdRange));
+                };
+                let identity = RawKeyIdentity {
+                    role: VifRole::AccessPoint,
+                    slot: slot.index(),
+                    serial: env.serial(),
+                    key_id,
+                    activity,
+                };
+                if let Err((slot, fault)) = self.install_transmit(
+                    device,
+                    identity,
+                    spp,
+                    TransmitKeyScope::AccessPointGroup { key_id: ap_key_id },
+                    slot,
+                    &material,
+                ) {
+                    return Err(back(slot, permission, material, fault));
+                }
+                identity.activity.set(identity.serial);
+                Ok(Some(brand::OwnedTerminal::GroupKeyInstalled(
+                    brand::OwnedInstalledGroup::AccessPoint {
+                        key: GroupKey {
+                            identity,
+                            brand: PhantomData,
+                        },
+                        permission,
+                    },
+                )))
+            }
+            AccessPointGroupCommand::Remove { permission, key } => {
+                match self.remove::<ApPermission<'id, Id>>(device, key.identity) {
+                    Ok(removing) => Ok(removing
+                        .settle(permission)
+                        .map(brand::OwnedTerminal::KeyRemoved)),
+                    Err(fault) => Err(GroupFailed::Returned(
+                        AccessPointGroupCommand::Remove { permission, key },
+                        fault,
+                    )),
+                }
             }
         }
     }
@@ -1998,63 +2085,91 @@ fn bubble<T>(slice: &mut [T], at: usize) {
     }
 }
 
-/// Why a group mutation failed in the driver.
-pub(super) enum GroupFailed<'id, Id: SlotIdentity> {
-    /// An installation the core did not take: its command, whole.
-    Install(GroupCommand<'id, Id>, Fault),
-    /// A replacement, selection or removal whose step faulted after the
-    /// port's checks of its key, registers and command view passed
-    /// ([`super::engines`]' group mutation runs them first): its owners
-    /// are taken.
-    Taken(Fault),
+/// A group mutation of one role, as the driver runs it once its receive cut
+/// drained.
+pub(super) trait GroupMutation<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>:
+    Sized
+{
+    /// Run the mutation.
+    ///
+    /// # Errors
+    ///
+    /// The mutation's [`GroupFailed`].
+    fn run(
+        self,
+        driver: &mut Driver<'id, Id, D, B, O>,
+        env: &mut impl DriverEnv<'id, Id, D, B, O>,
+        device: &mut D,
+    ) -> Result<Option<brand::OwnedTerminal<'id, Id, D, B>>, GroupFailed<Self>>;
 }
-impl<Id: SlotIdentity> From<Fault> for GroupFailed<'_, Id> {
-    fn from(fault: Fault) -> Self {
-        Self::Taken(fault)
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    GroupMutation<'id, Id, D, B, O> for StationGroupCommand<'id, Id>
+{
+    fn run(
+        self,
+        driver: &mut Driver<'id, Id, D, B, O>,
+        env: &mut impl DriverEnv<'id, Id, D, B, O>,
+        device: &mut D,
+    ) -> Result<Option<brand::OwnedTerminal<'id, Id, D, B>>, GroupFailed<Self>> {
+        driver.group_station(env, device, self)
+    }
+}
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    GroupMutation<'id, Id, D, B, O> for AccessPointGroupCommand<'id, Id>
+{
+    fn run(
+        self,
+        driver: &mut Driver<'id, Id, D, B, O>,
+        env: &mut impl DriverEnv<'id, Id, D, B, O>,
+        device: &mut D,
+    ) -> Result<Option<brand::OwnedTerminal<'id, Id, D, B>>, GroupFailed<Self>> {
+        driver.group_access_point(env, device, self)
     }
 }
 
-impl<'id, Id: SlotIdentity> Removing<'_, 'id, Id> {
-    /// The terminal of a removal its command made: now, or, while its key's
-    /// last use is out, with the command's rights kept in the key's table
-    /// place this removal emptied until [`Driver::finished_removal`]
-    /// delivers it.
-    pub(super) fn settle(
-        self,
-        removal: Removal<'id, Id>,
-    ) -> Result<Option<brand::OwnedRemoved<'id, Id>>, Fault> {
+/// Why a group mutation failed in the driver.
+pub(super) enum GroupFailed<C> {
+    /// A step refused before it took the command's owners: the command,
+    /// whole.
+    Returned(C, Fault),
+    /// The hardware rejected a station group key replacement: the port
+    /// keeps its owners with its quarantine ([`Driver::retained_group`]).
+    Retained(Fault),
+}
+
+impl<'id, Id: SlotIdentity, R: RemovalRights<'id, Id>> Removing<'_, 'id, Id, R> {
+    /// The terminal of a removal its command made, with the command's
+    /// `rights`: now, or, while its key's last use is out, with the rights
+    /// kept in the key's table place this removal emptied until
+    /// [`Driver::finished_removal`] delivers it.
+    pub(super) fn settle(self, rights: R) -> Option<brand::OwnedRemoved<'id, Id>> {
         match self.ended {
-            Removed::Now(removed) => removed_terminal(removal, removed).map(Some),
+            Removed::Now(removed) => Some(rights.terminal(removed.into_slot())),
             Removed::Waiting(core) => {
-                *self.place = Some(KeyPlace::Removing(WaitingRemoval { core, removal }));
-                Ok(None)
+                *self.place = Some(KeyPlace::Removing(R::waiting(Waiting { core, rights })));
+                None
             }
         }
     }
 }
 
-/// The terminal of a removal: its receipt's slot with its command's rights.
-pub(super) fn removed_terminal<'id, Id: SlotIdentity>(
-    removal: Removal<'id, Id>,
-    removed: KeyRemoved<'id, CorePath<Id>>,
-) -> Result<brand::OwnedRemoved<'id, Id>, Fault> {
-    use core_mac::association::VacantKeySlot as Slot;
-    let removed = match (removal, removed.into_slot()) {
-        (Removal::StationPairwise(association), Slot::StationPairwise(slot)) => {
-            brand::OwnedRemoved::Station(brand::RemovedOwners::Pairwise { slot, association })
-        }
-        (Removal::AccessPointPairwise(association), Slot::AccessPointPairwise(slot)) => {
-            brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Pairwise { slot, association })
-        }
-        (Removal::StationGroup(permission), Slot::StationGroup(slot)) => {
-            brand::OwnedRemoved::Station(brand::RemovedOwners::Group { slot, permission })
-        }
-        (Removal::AccessPointGroup(permission), Slot::AccessPointGroup(slot)) => {
-            brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Group { slot, permission })
-        }
-        _ => return Err(Fault::RemovalMismatch),
-    };
-    Ok(removed)
+/// The terminal of a waiting removal whose receipt the core has, with its
+/// rights; otherwise the waiting removal, unchanged.
+fn finish<'id, Id: SlotIdentity, D: Device<B>, const B: usize, R: RemovalRights<'id, Id>>(
+    core: &mut PortCoreOwner<'id, Id, D, B>,
+    waiting: Waiting<'id, Id, R>,
+) -> Result<brand::OwnedRemoved<'id, Id>, WaitingRemoval<'id, Id>> {
+    let Waiting {
+        core: place,
+        rights,
+    } = waiting;
+    match core.view().take_removed(place) {
+        Ok(removed) => Ok(rights.terminal(removed.into_slot())),
+        Err(place) => Err(R::waiting(Waiting {
+            core: place,
+            rights,
+        })),
+    }
 }
 
 #[cfg(test)]
