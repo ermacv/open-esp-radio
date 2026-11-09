@@ -20,8 +20,7 @@ use oer_protocols_ieee80211_contracts_port::{
     AccessPointCapabilities, AccessPointCommand, AccessPointCommandFailed, AccessPointCommands,
     AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
     AccessPointRefusal, AccessPointServices, AccessPointSubmission, AccessPointTypes, BeaconParts,
-    BeaconSubmission, BeaconTimestamp, CommandFailed, ConfigurePermission, SupportedTsfControl,
-    TsfControl,
+    BeaconSubmission, CommandFailed, ConfigurePermission, SupportedTsfControl, TsfControl,
 };
 
 /// An access-point command of the port's types.
@@ -56,17 +55,18 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 
 impl<const B: usize> AccessPointCapabilities for Esp32s31Caps<B> {
     const ACCESS_POINT: AccessPointServices = AccessPointServices {
-        // The caller writes the Timestamp field; the S31 publishes the MPDU
-        // as written. SOURCE(esp32s31): complete pinned
+        // No Timestamp rule is sourced, so no beacon stamp exists and the
+        // port takes no beacon. SOURCE(esp32s31): complete pinned
         // `libnet80211[ieee80211_hostap.o]::ieee80211_hostap_send_beacon_process`
-        // stores the MAC local-time counter (`hal_now`, MODEM_PWR+0x800) into
-        // the frame's Timestamp in software before `ic_tx_pkt`, and no
-        // function of the examined TX path (`ppTxPkt`, `ppTxProtoProc`,
-        // `lmacSetTxFrame`, `hal_mac_tx_set_ppdu`, `mac_tx_set_plcp0`) sets a
-        // timestamp-insertion bit or rewrites the field; the S31 TX
-        // descriptor model has no such field. Whether the MAC rewrites the
-        // bytes on air is not established by these sources.
-        beacon_timestamp: Some(BeaconTimestamp::Caller),
+        // stores the MAC local-time counter (`hal_now`, MODEM_PWR+0x800),
+        // not the access point's TSF, into the frame's Timestamp in software
+        // before `ic_tx_pkt`; no function of the examined TX path
+        // (`ppTxPkt`, `ppTxProtoProc`, `lmacSetTxFrame`,
+        // `hal_mac_tx_set_ppdu`, `mac_tx_set_plcp0`) sets a
+        // timestamp-insertion bit, and the S31 TX descriptor model has no
+        // such field. Whether the MAC replaces the field on the air is not
+        // established.
+        beacon_timestamp: None,
         // SOURCE(esp32s31): complete pinned `libpp[hal_mac.o]::hal_mac_tsf_reset`
         // (the SoftAP restart) and `libpp[hal_tsf.o]::hal_disable_softap_tsf`,
         // the HAL's `reset_and_start_access_point_tsf` and

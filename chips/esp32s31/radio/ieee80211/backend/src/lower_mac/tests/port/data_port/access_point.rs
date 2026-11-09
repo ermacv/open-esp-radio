@@ -296,7 +296,8 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> ApFixture<'a, 'id, Id> {
         Some(admitted)
     }
 
-    /// A Beacon under the beacon permission `of`, fresh until `deadline`.
+    /// A Beacon under the beacon permission `of`, fresh until `deadline`;
+    /// none while the S31 declares no Timestamp rule.
     fn beacon_mpdu(&mut self, of: Issued, deadline: Instant) -> Option<Admitted<'id, Id>> {
         let permission = self.tokens(of).beacon.take()?;
         let fixture = self.fixture.as_mut()?;
@@ -340,7 +341,7 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> ApFixture<'a, 'id, Id> {
             source: prepared,
             power: SupportedPower::new(TxPower::Calibrated).expect("power"),
             permission,
-            stamp: BeaconStamp::new(BeaconTimestamp::Caller).expect("the S31 stamp"),
+            stamp: BeaconStamp::new(BeaconTimestamp::Caller)?,
             deadline,
         }
         .admit();
@@ -759,12 +760,36 @@ fn an_expired_configuration_and_pairwise_removal_undo_their_barriers_on_the_s31_
     }
 }
 
+/// The cases that submit a beacon: the S31 declares no Timestamp rule, so
+/// no beacon stamp exists and the fixture builds no beacon.
+const BEACON_CASES: [ap_cases::Case; 6] = [
+    ap_cases::Case::BeaconPermission,
+    ap_cases::Case::StoppedBeacon,
+    ap_cases::Case::BeaconExpires,
+    ap_cases::Case::StaleBeacon,
+    ap_cases::Case::StopsAlone,
+    ap_cases::Case::SharedStop,
+];
+
 #[test]
-fn every_access_point_case_passes_on_the_s31_port() {
+fn the_s31_declares_no_beacon_timestamp_rule() {
+    for source in [BeaconTimestamp::Caller, BeaconTimestamp::Transmitter] {
+        assert!(BeaconStamp::<Caps>::new(source).is_none(), "{source:?}");
+    }
+}
+
+#[test]
+fn every_access_point_case_without_a_beacon_passes_on_the_s31_port() {
     let failed: Vec<_> = ap_cases::Case::ALL
         .into_iter()
         .map(|case| (case, run_case(case)))
-        .filter(|(_, result)| result.is_err())
+        .filter(|(case, result)| {
+            if BEACON_CASES.contains(case) {
+                *result != Err(ap_cases::Violation::Fixture)
+            } else {
+                result.is_err()
+            }
+        })
         .collect();
     assert!(failed.is_empty(), "{failed:?}");
 }

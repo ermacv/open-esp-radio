@@ -111,10 +111,12 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   point, the station's attempts still publish (`ConfiguringView::other_interface`).
   Its group key installs and removes through the same RX cut as the
   station's. A beacon queued on VO past its deadline ends `Expired` with
-  its permission (`expire_beacons`). Its Timestamp is written by the
-  caller (`BeaconTimestamp::Caller`): the vendor's beacon path writes the
-  MAC's local-time count into the frame in software, and whether the
-  hardware rewrites the field at transmission is not established.
+  its permission (`expire_beacons`). No Timestamp rule is declared
+  (`AccessPointServices::beacon_timestamp` is `None`), so no `BeaconStamp`
+  exists for the S31 and the port takes no beacon: the vendor's beacon path
+  writes the MAC's local-time count, not the access point's TSF, into the
+  frame in software, no timestamp-insertion control is known, and whether
+  the hardware replaces the field at transmission is not established.
 - **Publication observations.** `Esp32s31Port`'s last parameter `O` is
   the port's observation receiver (`port::Observations`, an
   `oer_portable_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
