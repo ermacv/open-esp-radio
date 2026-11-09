@@ -1,0 +1,65 @@
+//! The image's USB Serial/JTAG console: the early writer until the console
+//! opens, then the duplex endpoint of the core-0 executor and its interrupt,
+//! which raises the endpoint's static signal.
+
+use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::{
+    ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
+};
+use oer_chips_esp32s31_platform_runtime::Esp32s31;
+use oer_chips_family_drivers_usb_serial_jtag::{Endpoint, Interrupt};
+use oer_chips_family_platform_executor::Executor;
+use oer_chips_family_platform_interrupt_table::{Controller, Router};
+
+/// The console's endpoint, polled by the core-0 executor's task.
+pub(crate) type Console = Endpoint<Executor<Esp32s31, 0>, ConsoleEndpoint>;
+
+oer_chips_family_platform_runtime::placed_static! {
+    /// The console's interrupt: the endpoint's signal.
+    static INTERRUPT: Interrupt<Executor<Esp32s31, 0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
+}
+
+/// The console's `Hardware` interrupt handler, over the part its entry
+/// holds: it acknowledges the events it read and raises them to the
+/// console's task, calling no waker.
+pub(crate) fn interrupt(part: &mut ConsoleInterrupt) {
+    INTERRUPT.service(part);
+}
+
+/// Writes `bytes` as they are on the open console.
+pub(crate) async fn text(console: &mut Console, bytes: &[u8]) {
+    use embedded_io_async::Write as _;
+    let _ = console.write_all(bytes).await;
+}
+
+/// Why the console did not open.
+pub(crate) enum OpenError {
+    /// The early writer kept the block.
+    Retire,
+}
+
+impl OpenError {
+    /// The reason the image's failure names.
+    pub(crate) const fn reason(&self) -> oer_portable_diagnostics::Name<32> {
+        match self {
+            Self::Retire => oer_portable_diagnostics::name!("console-retire"; 32),
+        }
+    }
+}
+
+/// Opens the console over the block the early writer retires: the router
+/// moves the interrupt's part to its handler and routes it. The pads stay
+/// apart, held so that nothing switches them off.
+pub(crate) fn open<const H: u8, C: Controller>(
+    router: &mut Router<C, H>,
+    token: crate::ConsoleUsb,
+) -> Result<(Console, UsbPads), OpenError> {
+    let (endpoint, interrupt, pads) =
+        retire_early_writer().map_err(|_held: RetireError| OpenError::Retire)?;
+    let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
+        oer_chips_family_platform_runtime::interrupts::reset_binding::<
+            oer_chips_esp32s31_hal::system::platform::Port,
+            _,
+        >(error)
+    });
+    Ok((Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads))
+}

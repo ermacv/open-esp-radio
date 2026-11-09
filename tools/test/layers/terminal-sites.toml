@@ -392,6 +392,32 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 # hil/probes/esp32s31-rx-chain/src/usb.rs
 "hil/probes/esp32s31-rx-chain/src/usb.rs:crate::usb::open:terminal-reference:reset_binding:1" = { owner = "hil/probes/esp32s31-rx-chain", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 
+# hil/probes/esp32s31-rx-rebind/src/diagnostic.rs
+"hil/probes/esp32s31-rx-rebind/src/diagnostic.rs:crate::diagnostic:retained-slot:retained_static:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot", "cpu-exception", "rust-panic"] }
+"hil/probes/esp32s31-rx-rebind/src/diagnostic.rs:crate::diagnostic::report_previous:terminal-reference:fatal_halt:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["cpu-exception", "rust-panic"] }
+
+# hil/probes/esp32s31-rx-rebind/src/image.rs
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image:terminal-binding:phy_fault_reporter:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image:terminal-reference:reset:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image:terminal-binding:entry:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["rust-panic"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image::main:terminal-entry:main:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image::main:terminal-reference:reset:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image::main:reset-method:reset:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image::main:reset-method:reset:2" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image::main:reset-method:reset:3" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image::main:reset-method:reset:4" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-rx-rebind/src/image.rs:crate::image::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot"] }
+
+# hil/probes/esp32s31-rx-rebind/src/phy_pilot.rs
+"hil/probes/esp32s31-rx-rebind/src/phy_pilot.rs:crate::phy_pilot::init:terminal-reference:reset_binding:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+"hil/probes/esp32s31-rx-rebind/src/phy_pilot.rs:crate::phy_pilot::interrupt:terminal-reference:reset:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"hil/probes/esp32s31-rx-rebind/src/phy_pilot.rs:crate::phy_pilot::reset:terminal-entry:reset:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"hil/probes/esp32s31-rx-rebind/src/phy_pilot.rs:crate::phy_pilot::reset:terminal-reference:reset:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+
+# hil/probes/esp32s31-rx-rebind/src/usb.rs
+"hil/probes/esp32s31-rx-rebind/src/usb.rs:crate::usb::open:terminal-reference:reset_binding:1" = { owner = "hil/probes/esp32s31-rx-rebind", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+
 # chips/family/platform/runtime/src/placement.rs
 "chips/family/platform/runtime/src/placement.rs:crate::placement::__exception_handler:terminal-reference:handle:1" = { owner = "chips/family/platform/runtime", classes = ["cpu-exception"] }
 

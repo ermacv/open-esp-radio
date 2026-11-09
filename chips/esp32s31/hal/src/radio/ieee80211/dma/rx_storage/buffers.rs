@@ -411,6 +411,10 @@ impl<
         if self.unit.descriptor_count() != 1 {
             return Err(RxRingError::Count);
         }
+        // TEMPORARY experiment: a rebound descriptor's buffer is never leased.
+        if self.storage.rebind_published(self.unit.head_index()) != Some(RxBinding::Placed) {
+            return Err(RxRingError::BufferOwnershipConflict);
+        }
         // A single descriptor's length always fits its own length field.
         let descriptor_word0 = self.unit.staged_word0().ok_or(RxRingError::Size)?;
         let index = self.unit.head_index();

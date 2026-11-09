@@ -11,7 +11,9 @@ use core::{
 
 use crate::layouts::{DmaWindowAddress, WifiRxDmaDescriptorControl};
 use crate::system::memory::dma_static::Placed;
-use oer_portable_memory::{ExternalRxBuffer, ExternalRxReturnState};
+use oer_portable_memory::{ExternalRxBuffer, ExternalRxReturnState, OnceValue};
+
+use crate::radio::ieee80211::dma::rx_rebind::{RX_REBIND_SPARES, RxBinding, RxSpareBank};
 
 use crate::radio::ieee80211::dma::{
     descriptor::RxDescriptor,
@@ -101,6 +103,8 @@ pub struct RxDmaCompletedUnit<
     storage: &'storage RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
     ring: Option<&'owner mut RxRingLive<'ring, COUNT>>,
     requires_recycle: bool,
+    /// TEMPORARY experiment: [`Self::detach_before_last`] cleared its owner bit.
+    detached_before_last: bool,
     // Keep physical descriptor credit on the core-local DMA owner. The
     // consuming detach transition deliberately returns a separate Send-able
     // packet-buffer type.
@@ -257,6 +261,51 @@ impl<
         self.requires_recycle = false;
     }
 
+    /// TEMPORARY experiment: detach this completed single-descriptor unit in
+    /// place (owner bit clear, fence) when it lies strictly before the LAST
+    /// of `cursor`, the current frozen cursor. The unit then recycles through
+    /// [`Self::retain_discard`] and the production append, which sets the
+    /// owner bit again.
+    ///
+    /// # Errors
+    ///
+    /// A chain, a stale cursor, LAST, the descriptor NEXT names, or an
+    /// unobserved descriptor; nothing is written then.
+    pub fn detach_before_last<M: RxDma>(
+        &mut self,
+        mmio: &mut M,
+        cursor: RxFrozenCursor,
+    ) -> Result<(), RxRingError> {
+        if self.unit.descriptor_count() != 1 {
+            return Err(RxRingError::Count);
+        }
+        let index = self.unit.head_index();
+        self.ring
+            .as_deref_mut()
+            .ok_or(RxRingError::ResetRequired)?
+            .detach_before_last(mmio, cursor, index)?;
+        self.detached_before_last = true;
+        Ok(())
+    }
+
+    /// TEMPORARY experiment: bind the next re-arm of this unit's descriptor,
+    /// detached by [`Self::detach_before_last`], to unbound spare `spare`,
+    /// retiring the buffer its BUFFER word names.
+    ///
+    /// # Errors
+    ///
+    /// The unit was not detached before LAST, the spare is bound or retired,
+    /// or a rebind is already pending.
+    pub fn rebind_next(&mut self, spare: usize) -> Result<(), RxRingError> {
+        if !self.detached_before_last {
+            return Err(RxRingError::Corrupt);
+        }
+        self.storage
+            .arena
+            .rebind
+            .bind_next(self.unit.head_index(), spare)
+    }
+
     /// Retain a discard, returning append authority only when this unit is
     /// already at the recycle frontier. A preceding detached upper owner
     /// leaves it deferred; that owner's release must advance the frontier.
@@ -329,6 +378,9 @@ pub struct RxDmaStorage<
     /// when the storage is placed ([`RxDmaStorage::place`]).
     buffer_addresses: RxDmaBufferAddresses<COUNT>,
     arena: RxArenaWords,
+    /// TEMPORARY experiment (`rx_rebind`, branch only): the attached spare
+    /// buffers.
+    spare_buffers: OnceValue<&'static [RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>; RX_REBIND_SPARES]>,
     space: PhantomData<S>,
 }
 
@@ -433,6 +485,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             descriptor_buffer_offsets: [const { AtomicU8::new(0) }; COUNT],
             buffer_addresses: RxDmaBufferAddresses::new(),
             arena: RxArenaWords::new(),
+            spare_buffers: OnceValue::new(),
             space: PhantomData,
         }
     }
@@ -589,11 +642,80 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             .map(|offset| (descriptor_index + usize::from(offset.load(Ordering::Acquire))) % COUNT)
     }
 
+    /// The buffer descriptor `descriptor_index`'s BUFFER word names by the
+    /// binding accounting (TEMPORARY experiment: a rebound descriptor reads
+    /// its spare).
     fn buffer_for_descriptor(
         &self,
         descriptor_index: usize,
     ) -> Option<&RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>> {
-        self.buffer_by_id(self.descriptor_buffer_id(descriptor_index)?)
+        match self.arena.rebind.published(descriptor_index)? {
+            RxBinding::Placed => self.buffer_by_id(self.descriptor_buffer_id(descriptor_index)?),
+            RxBinding::Spare(spare) => self.spare_buffers.get()?.get(spare),
+        }
+    }
+
+    /// TEMPORARY experiment: attach the spare bank before the first ring,
+    /// painting each spare while it is still the CPU's. The bank stays with
+    /// this arena until reset; its buffers are never leased.
+    ///
+    /// # Errors
+    ///
+    /// The arena is not reusable, the ring exceeds the rebind table, spares
+    /// were already attached, or an address does not fit the DMA window.
+    pub fn attach_rebind_spares(
+        &self,
+        spares: Placed<RxSpareBank<BUFFER_SIZE, STORAGE_SIZE>>,
+        mut paint: impl FnMut(usize, &mut [u8; BUFFER_SIZE]),
+    ) -> Result<&'static RxSpareBank<BUFFER_SIZE, STORAGE_SIZE>, RxDmaStorageError> {
+        if COUNT > crate::radio::ieee80211::dma::rx_rebind::RX_REBIND_DESCRIPTORS
+            || self.lifecycle_state() != RxDmaArenaState::Reusable
+        {
+            return Err(RxDmaStorageError::Count);
+        }
+        let (bank, _range, projection) = spares
+            .into_dma_parts::<S>()
+            .ok_or(RxDmaStorageError::AddressWidth)?;
+        for (spare, buffer) in bank.buffers.iter_mut().enumerate() {
+            let address = projection
+                .address(&*buffer)
+                .map_err(|_| RxDmaStorageError::AddressWidth)?;
+            if !bank.addresses.record(spare, address) {
+                return Err(RxDmaStorageError::Count);
+            }
+            paint(spare, buffer.cpu_owned_mut());
+        }
+        let bank: &'static RxSpareBank<BUFFER_SIZE, STORAGE_SIZE> = bank;
+        self.spare_buffers
+            .set(&bank.buffers)
+            .map_err(|_| RxDmaStorageError::Count)?;
+        self.arena
+            .rebind
+            .attach(&bank.addresses)
+            .map_err(|_| RxDmaStorageError::Count)?;
+        Ok(bank)
+    }
+
+    /// TEMPORARY experiment: the binding descriptor `index`'s BUFFER word
+    /// names.
+    pub fn rebind_published(&self, index: usize) -> Option<RxBinding> {
+        self.arena.rebind.published(index)
+    }
+
+    /// TEMPORARY experiment: whether descriptor `index`'s placed buffer was
+    /// rebound away.
+    pub fn rebind_placed_retired(&self, index: usize) -> bool {
+        self.arena.rebind.placed_retired(index)
+    }
+
+    /// TEMPORARY experiment: whether spare `spare` is retired.
+    pub fn rebind_spare_retired(&self, spare: usize) -> bool {
+        self.arena.rebind.spare_retired(spare)
+    }
+
+    /// TEMPORARY experiment: whether spare `spare` was never bound.
+    pub fn rebind_spare_unbound(&self, spare: usize) -> bool {
+        self.arena.rebind.spare_unbound(spare)
     }
 
     fn any_buffer_in_state(&self, state: ExternalRxReturnState) -> bool {
@@ -659,6 +781,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         mmio: &mut M,
     ) -> Result<RxRingStopped<'storage, COUNT>, (RxRingHalted<'storage, COUNT>, RxRingError)> {
         let binding = BoundBuffers::halted(self, ring)?;
+        // TEMPORARY experiment: an arena with a rebind is never rebuilt.
+        if self.arena.rebind.any() {
+            return Err((binding.into_parts().1, RxRingError::ResetRequired));
+        }
         if self.any_buffer_in_state(ExternalRxReturnState::Detached) {
             return Err((binding.into_parts().1, RxRingError::OutstandingLeases));
         }
@@ -973,6 +1099,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             storage: self,
             ring: Some(ring),
             requires_recycle: true,
+            detached_before_last: false,
             _not_send: PhantomData,
         }))
     }

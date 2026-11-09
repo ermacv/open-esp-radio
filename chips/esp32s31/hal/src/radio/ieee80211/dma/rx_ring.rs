@@ -249,6 +249,8 @@ pub struct RxArenaWords {
     reserved_landings: AtomicU32,
     reserved_late_landings: AtomicU32,
     walker_on_detached: AtomicU32,
+    /// TEMPORARY experiment binding table (`rx_rebind`, branch only).
+    pub(crate) rebind: crate::radio::ieee80211::dma::rx_rebind::RxRebindTable,
     /// Descriptors the ring has handed the CPU, as its observed mask says, for
     /// the model of the DMA engine, which holds no ring.
     #[cfg(any(test, feature = "test-support"))]
@@ -280,6 +282,7 @@ impl RxArenaWords {
             reserved_landings: AtomicU32::new(0),
             reserved_late_landings: AtomicU32::new(0),
             walker_on_detached: AtomicU32::new(0),
+            rebind: crate::radio::ieee80211::dma::rx_rebind::RxRebindTable::new(),
             #[cfg(any(test, feature = "test-support"))]
             host_taken: [const { AtomicU32::new(0) }; 3],
             #[cfg(any(test, feature = "test-support"))]
@@ -1252,13 +1255,44 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         self.descriptors
     }
 
+    /// The address descriptor `index`'s BUFFER word holds by the binding
+    /// accounting (TEMPORARY experiment: the rebind table's `published`).
     fn bound_buffer_address(&self, index: usize) -> Option<u32> {
-        self.buffer_addresses.bits().get(index).copied()
+        self.arena
+            .rebind
+            .published_address(index, self.buffer_addresses)
     }
 
-    /// The typed DMA address of the buffer bound to descriptor `index`.
+    /// The typed DMA address the next re-arm of descriptor `index` publishes
+    /// (TEMPORARY experiment: the rebind table's `next`).
     fn bound_buffer(&self, index: usize) -> Option<DmaWindowAddress> {
-        self.buffer_addresses.get(index)
+        self.arena.rebind.next_address(index, self.buffer_addresses)
+    }
+
+    /// TEMPORARY experiment: clear the owner bit of the completed, observed
+    /// single descriptor `index` and fence, when `cursor` is current and
+    /// `index` lies strictly before its LAST. LAST, the descriptor NEXT
+    /// names and R are refused before any write.
+    pub(crate) fn detach_before_last<M: RxDma>(
+        &mut self,
+        mmio: &mut M,
+        cursor: RxFrozenCursor,
+        index: usize,
+    ) -> Result<(), RxRingError> {
+        if !self.frozen_cursor_releases_index(cursor, index) {
+            return Err(RxRingError::Corrupt);
+        }
+        let last =
+            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_table.base())
+                .ok_or(RxRingError::Corrupt)?;
+        let next =
+            descriptor_index::<COUNT>(cursor.next_descriptor_low, self.descriptor_table.base());
+        if last.get() == index || next.is_some_and(|next| next.get() == index) {
+            return Err(RxRingError::Corrupt);
+        }
+        let word0 = self.detached_word(index)?;
+        self.publish_detached(mmio, index, word0);
+        Ok(())
     }
 
     pub const fn buffer_addresses(&self) -> &RxDmaBufferAddresses<COUNT> {
@@ -1289,7 +1323,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// `valid` still proves the address, link, buffer and terminal topology
     /// observed during this finite walk.
     pub fn topology_snapshot(&self) -> RxRingTopologySnapshot {
-        let buffer_addresses = rx_buffer_address_snapshot(self.buffer_addresses());
+        // TEMPORARY experiment: compare against the published bindings.
+        let buffer_addresses: [u32; COUNT] =
+            core::array::from_fn(|index| self.bound_buffer_address(index).unwrap_or(0));
         ring_topology_snapshot(
             self.descriptors,
             self.descriptor_table.base(),
@@ -2301,6 +2337,8 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
                 buffer,
                 next,
             );
+            // TEMPORARY experiment: the BUFFER word now names `next`.
+            self.ring.arena.rebind.commit(index.get());
         }
 
         let accepted_tail = self
