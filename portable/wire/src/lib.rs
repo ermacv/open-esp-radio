@@ -328,6 +328,13 @@ pub fn aligned_words(bytes: &[u8]) -> (&[u8], &[u32], &[u8]) {
     bytemuck::pod_align_to(bytes)
 }
 
+/// [`aligned_words`] of octets to write: a writer that stores whole words
+/// on a target without unaligned access needs no byte stores this way.
+#[must_use]
+pub fn aligned_words_mut(bytes: &mut [u8]) -> (&mut [u8], &mut [u32], &mut [u8]) {
+    bytemuck::pod_align_to_mut(bytes)
+}
+
 #[cfg(test)]
 mod tests;
 

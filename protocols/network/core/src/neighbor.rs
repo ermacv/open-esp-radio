@@ -39,29 +39,68 @@ pub(crate) enum Lookup {
     Full,
 }
 
+/// What a look at the table found of an address, and while it holds: until
+/// its entry expires, as long as no known entry changed meanwhile.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Found {
+    pub(crate) hardware: [u8; 6],
+    known: u32,
+    expires: Instant,
+}
+
 /// The table.
 #[derive(Debug)]
 pub(crate) struct Neighbors<const N: usize> {
     entries: [Entry; N],
+    /// Moves with every write of a known entry and every replacement of one:
+    /// while it stands, the known entries are as they were.
+    known: u32,
 }
 
 impl<const N: usize> Neighbors<N> {
     pub(crate) const fn new() -> Self {
         Self {
             entries: [Entry::Free; N],
+            known: 0,
         }
+    }
+
+    /// Forget every entry, as a new network's table: what was found in it
+    /// holds no more.
+    pub(crate) fn forget(&mut self) {
+        self.entries = [Entry::Free; N];
+        self.moved();
+    }
+
+    fn moved(&mut self) {
+        self.known = self.known.wrapping_add(1);
     }
 
     /// Where `address` is, while that is known.
     pub(crate) fn hardware(&self, now: Instant, address: [u8; 4]) -> Option<[u8; 6]> {
+        self.find(now, address).map(|found| found.hardware)
+    }
+
+    /// Where `address` is, while that is known, and while that holds.
+    pub(crate) fn find(&self, now: Instant, address: [u8; 4]) -> Option<Found> {
         self.entries.iter().find_map(|entry| match *entry {
             Entry::Known {
                 address: known,
                 hardware,
                 expires,
-            } if known == address && now < expires => Some(hardware),
+            } if known == address && now < expires => Some(Found {
+                hardware,
+                known: self.known,
+                expires,
+            }),
             _ => None,
         })
+    }
+
+    /// Whether `found` still holds at `now`: no known entry changed since,
+    /// and its entry has not expired. A look then would find the same.
+    pub(crate) fn holds_still(&self, found: &Found, now: Instant) -> bool {
+        found.known == self.known && now < found.expires
     }
 
     /// Find `address`, or begin asking for it: in its own expired entry, a
@@ -109,7 +148,11 @@ impl<const N: usize> Neighbors<N> {
         else {
             return Lookup::Full;
         };
+        let replaced = matches!(entry, Entry::Known { .. });
         *entry = Self::asking(now, address, serial);
+        if replaced {
+            self.moved();
+        }
         Lookup::Asking
     }
 
@@ -168,6 +211,7 @@ impl<const N: usize> Neighbors<N> {
                 && now >= expires
             {
                 *entry = Self::asking(now, address, serial);
+                self.moved();
                 return true;
             }
         }
@@ -189,22 +233,23 @@ impl<const N: usize> Neighbors<N> {
             hardware,
             expires: now.saturating_add(LIFETIME),
         };
-        for entry in &mut self.entries {
-            match *entry {
-                Entry::Asking { address: held, .. } | Entry::Known { address: held, .. }
-                    if held == address =>
-                {
-                    *entry = known;
-                    return true;
-                }
-                _ => {}
+        let held = self.entries.iter_mut().find(|entry| match **entry {
+            Entry::Asking { address: held, .. } | Entry::Known { address: held, .. } => {
+                held == address
             }
-        }
-        if make && let Some(entry) = self.entries.iter_mut().find(|entry| **entry == Entry::Free) {
-            *entry = known;
-            return true;
-        }
-        false
+            Entry::Free => false,
+        });
+        let entry = match held {
+            Some(entry) => entry,
+            None if make => match self.entries.iter_mut().find(|entry| **entry == Entry::Free) {
+                Some(entry) => entry,
+                None => return false,
+            },
+            None => return false,
+        };
+        *entry = known;
+        self.moved();
+        true
     }
 
     /// The requests owed: each entry with its address and resolution.
