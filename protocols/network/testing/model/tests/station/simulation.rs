@@ -43,6 +43,7 @@ use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelect
 use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_contracts_port::TxEstimate;
 use oer_protocols_ieee80211_contracts_port::{RegulatedChannel, SupportedChannel};
 use oer_protocols_ieee80211_core_arbiter::ArbiterPolicy;
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame as StationFrame;
@@ -51,23 +52,25 @@ use oer_protocols_ieee80211_core_roles_sta::machine::{
 };
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_protocols_ieee80211_core_security_rsn::Pmk;
+use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep;
 use oer_protocols_ieee80211_runtime::datapath::{
     Actor, ActorEnd, ActorEpochPath, ActorLink, FromActor, GroupPending, LifecycleEnds,
     NetworkEnds, PARCELS, Parcel, Returned, ToActor,
 };
+use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, AirtimeFault};
 use oer_protocols_ieee80211_runtime::lifecycle::{
     ActorEnds, Lifecycle, LifecycleArbiter, LifecycleEnd, LifecycleIo, LifecycleTxContext,
 };
 use oer_protocols_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
 use oer_protocols_ieee80211_runtime::station::{
-    self as runtime, Control, DeviceTransmit, OperationEnd, Outgoing, RX_COPIED_DEPTH,
+    self as runtime, Control, DeviceTransmit, FrameCost, OperationEnd, Outgoing, RX_COPIED_DEPTH,
     Received as StationReceived, ReconnectPolicy, RxBlockAckStorage, ServiceCommand, ServiceOutput,
-    State, StopPolicy,
+    State, StationAir, StopPolicy, TxEnded,
 };
 use oer_protocols_ieee80211_testing_model::{
-    MODEL_PUBLICATION_BOUND, MODEL_TICKETS, ModelAir, ModelCaps24, ModelCommands, ModelInstall,
-    ModelLentRx, ModelPort, ModelPortFault, ModelResources,
+    MODEL_PUBLICATION_BOUND, MODEL_PUBLICATION_COST, MODEL_TICKETS, ModelAir, ModelCaps24,
+    ModelCommands, ModelInstall, ModelLentRx, ModelPort, ModelPortFault, ModelResources,
 };
 use oer_protocols_ieee80211_wire::address::{IndividualAddress, OwnAddress};
 use oer_protocols_ieee80211_wire::station::AssociationCapabilities;
@@ -78,8 +81,8 @@ use oer_protocols_network_port::{
     EthernetFrameView, FramePort, FrameSource, LinkSnapshot, Unpublished,
 };
 use oer_protocols_network_runtime::{
-    ConfigurationWatch, DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, PortRefusal,
-    Sent, Service, Socket, SocketLanes, StopLane,
+    ConfigurationWatch, DevicePort, EndCause, Ended, MemoryPolicy, Observer, PortRefusal, Sent,
+    Service, Socket, SocketLanes, StopLane,
 };
 use oer_protocols_network_wire::ip::Dscp;
 use oer_protocols_radio_port::{Installations, LocalId, with_local_slot};
@@ -137,7 +140,40 @@ type StationLifecycle<'s> =
 pub type StationControl<'c> = Control<'c, ModelCaps24, COMMANDS>;
 type Device<'c> = runtime::Device<'c, ModelLentRx, RX_DEPTH>;
 type StationTransmit<'c> = DeviceTransmit<'c, WrittenFrame, Supply, TX_DEPTH>;
-type Inner<'c> = DevicePort<Device<'c>, StationTransmit<'c>, Buffers>;
+type Inner<'c> = DevicePort<Device<'c>, StationTransmit<'c>, Buffers<'c>>;
+/// The queued egress, as the product's `Queued` network: the station's air
+/// as one account per association, frames in flight bounded by the
+/// network's buffers.
+type Queued<'c> = AirtimeEgress<
+    'static,
+    StationAir<'c, <runtime::SameHart as runtime::Notifies>::NetworkWaker, ModelCeiling>,
+    composition::Ticket,
+    PEERS,
+    NETWORK_BUFFERS,
+>;
+/// Accounts the egress keeps: this association's, and earlier ones whose
+/// frames have not settled.
+const PEERS: usize = 4;
+
+/// What a frame of unknown cost is charged here: the model's publications
+/// cost [`MODEL_PUBLICATION_COST`] each, and no plan of the model's makes
+/// more than 64.
+struct ModelCeiling;
+
+impl FrameCost for ModelCeiling {
+    fn least(&self, _frame_octets: usize) -> core::num::NonZeroU32 {
+        let TxEstimate::Estimated { micros } = MODEL_PUBLICATION_COST else {
+            return core::num::NonZeroU32::MIN;
+        };
+        core::num::NonZeroU32::new(micros).unwrap_or(core::num::NonZeroU32::MIN)
+    }
+    fn ceiling(&self, _frame_octets: usize) -> core::num::NonZeroU32 {
+        let TxEstimate::Estimated { micros } = MODEL_PUBLICATION_COST else {
+            return core::num::NonZeroU32::MAX;
+        };
+        core::num::NonZeroU32::new(micros.saturating_mul(64)).unwrap_or(core::num::NonZeroU32::MAX)
+    }
+}
 type NetService<'c, T> = Service<
     'static,
     'static,
@@ -151,7 +187,7 @@ type NetService<'c, T> = Service<
     DEPTH,
     LANE,
     Held<Inner<'c>>,
-    Direct,
+    Queued<'c>,
 >;
 type NetEnded<'c, T> = Ended<
     'static,
@@ -164,8 +200,8 @@ type NetEnded<'c, T> = Ended<
     DEPTH,
     LANE,
     Held<Inner<'c>>,
-    Direct,
-    core::convert::Infallible,
+    Queued<'c>,
+    AirtimeFault,
 >;
 /// The application's socket.
 pub type Sock<T> = Socket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS>;
@@ -319,6 +355,11 @@ pub struct Report {
     /// station never took.
     pub memory_queued: usize,
     pub memory: usize,
+    /// Frames the egress policy still holds reservations of at its end:
+    /// accepted by the port, their ends not handed on.
+    pub in_flight: usize,
+    /// Frames' ends the port handed on, with a known cost and without.
+    pub settled: (usize, usize),
     pub counts: Counts,
     pub heard: Rc<Heard>,
     pub access_point: Rc<RefCell<AccessPoint>>,
@@ -918,7 +959,7 @@ async fn run<'s, T: 'static>(
     // The station's channels to the network, as the facade's `Channels`
     // split them.
     let mut transmit_queue = WakingSlotQueue::<Option<Outgoing<Memory>>, TX_DEPTH>::new();
-    let mut returned_queue = WakingSlotQueue::<Option<Memory>, TX_DEPTH>::new();
+    let mut returned_queue = WakingSlotQueue::<Option<TxEnded<Memory>>, TX_DEPTH>::new();
     let mut receive_queue = WakingSpscQueue::<StationReceived<ModelLentRx>, RX_DEPTH>::new();
     let mut copies_queue = WakingSpscQueue::<StationFrame, RX_COPIED_DEPTH>::new();
     let mut command_queue = WakingSpscQueue::<ServiceCommand<ModelCaps24>, COMMANDS>::new();
@@ -939,7 +980,15 @@ async fn run<'s, T: 'static>(
     let free = FreeMemory::new(NETWORK_BUFFERS);
     let device = Device::new(delivered, copies, &state);
     let transmit = DeviceTransmit::new(stack, returned, Supply(free.clone()), &state);
-    let mut port = Some(DevicePort::new(device, transmit, Buffers(free.clone())));
+    let link = device.link_source();
+    let mut port = Some(DevicePort::new(
+        device,
+        transmit,
+        Buffers {
+            free: free.clone(),
+            link,
+        },
+    ));
 
     // The network's memory, claimed once for every session's core.
     let memory = Box::leak(Box::new([[0_u8; BLOCK]; BLOCKS]));
@@ -1058,8 +1107,12 @@ async fn run<'s, T: 'static>(
         let interface = Interface::dhcp(STATION, MTU, seed).expect("the interface");
         let owner = NetworkOwner::new(brand, interface, pool, Held(port.take()));
         let (stop_lane, stopping) = Box::leak(Box::new(StopLane::new())).split();
+        let airtime = Box::leak(Box::new(AirtimeStorage::new(
+            core::num::NonZeroU32::new(1_000).expect("a quantum"),
+        )));
+        let egress = AirtimeEgress::new(airtime, StationAir::new(link, ModelCeiling));
         let mut service: NetService<'_, T> =
-            Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+            Service::new(owner, egress, MemoryPolicy::KEEP, stopping);
         let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
         service.watch(watch).expect("the first publication");
         let socket = service
@@ -1220,6 +1273,8 @@ async fn run<'s, T: 'static>(
             memory_free: free.free(),
             memory_queued: network_ends.transmit.len(),
             memory: free.total(),
+            in_flight: ended.egress.in_flight(),
+            settled: free.settled(),
             counts: observed.counts(),
             heard,
             access_point: access_point.clone(),

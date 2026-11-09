@@ -12,13 +12,16 @@ use std::task::{Context, Poll, Waker};
 
 use oer_portable_events::EventSink;
 use oer_protocols_ieee80211_contracts_port::ReturnedMpdu;
+use oer_protocols_ieee80211_contracts_port::TxEstimate;
 use oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET;
 use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
 use oer_protocols_ieee80211_runtime::datapath::{ActorEvent, DatapathPort};
+use oer_protocols_ieee80211_runtime::egress::RadioNotice;
 use oer_protocols_ieee80211_runtime::lifecycle::{LifecyclePort, LifecycleTxBuffer};
 use oer_protocols_ieee80211_runtime::station::{
-    NetworkStop, NetworkStopLost, ServiceEvent, TxRefused, TxSupply,
+    Completions, NetworkLink, NetworkStop, NetworkStopLost, ServiceEvent, StationKey, TxRefused,
+    TxSupply,
 };
 use oer_protocols_ieee80211_testing_model::{
     MODEL_MAX_MPDU, ModelAck, ModelAnyBuffer, ModelBackend, ModelBlockAckEvidence, ModelCaps24,
@@ -209,8 +212,24 @@ impl NetworkStop for NetworkStopState {
 /// ([`Supply`]) and the port's ([`Buffers`]), both on the network's task.
 pub struct FreeMemory {
     free: RefCell<Vec<Memory>>,
+    /// What the station gave back, each with its frame's end, until the
+    /// port hands the end on.
+    ended: RefCell<Completions<Memory, Ticket, { super::NETWORK_BUFFERS }>>,
     total: usize,
     waker: Cell<Option<Waker>>,
+    /// Frames' ends the port handed on, with a known cost and without.
+    settled: Cell<(usize, usize)>,
+}
+
+/// The name of a frame in transmit memory: its buffer's address, which no
+/// other buffer has while the station holds this one.
+pub type Ticket = usize;
+
+/// What the port tells the egress policy.
+pub type Notice = RadioNotice<Ticket, StationKey>;
+
+fn ticket_of(memory: &Memory) -> Ticket {
+    memory.as_ptr().addr()
 }
 
 impl FreeMemory {
@@ -218,17 +237,27 @@ impl FreeMemory {
     pub fn new(total: usize) -> Rc<Self> {
         Rc::new(Self {
             free: RefCell::new((0..total).map(|_| Box::new([0; MODEL_MAX_MPDU])).collect()),
+            ended: RefCell::new(Completions::new()),
+            settled: Cell::new((0, 0)),
             total,
             waker: Cell::new(None),
         })
     }
 
+    /// The memory no frame holds: free, or given back with an end the port
+    /// has not handed on.
     pub fn free(&self) -> usize {
-        self.free.borrow().len()
+        self.free.borrow().len() + self.ended.borrow().len()
     }
 
     pub const fn total(&self) -> usize {
         self.total
+    }
+
+    /// Frames' ends handed on to the egress policy: with an estimated cost,
+    /// and with none known.
+    pub fn settled(&self) -> (usize, usize) {
+        self.settled.get()
     }
 
     fn take(&self) -> Option<Memory> {
@@ -277,26 +306,63 @@ pub struct Supply(pub Rc<FreeMemory>);
 impl TxSupply<WrittenFrame> for Supply {
     type Memory = Memory;
     fn available(&self) -> bool {
-        self.0.free() != 0
+        !self.0.free.borrow().is_empty()
     }
     fn write(&mut self, frame: WrittenFrame) -> Result<Memory, TxRefused<WrittenFrame>> {
         Ok(frame.memory)
     }
-    fn give(&mut self, memory: Memory) {
-        self.0.give(memory);
+    fn give(&mut self, memory: Memory, cost: TxEstimate) {
+        let ticket = ticket_of(&memory);
+        // One end a buffer, and the queue holds every buffer.
+        if let Err(memory) = self.0.ended.borrow_mut().returned(memory, ticket, cost) {
+            self.0.give(memory);
+        }
+        if let Some(waker) = self.0.waker.take() {
+            waker.wake();
+        }
     }
 }
 
-/// The port's end of the memory, where the network core writes its frames.
-pub struct Buffers(pub Rc<FreeMemory>);
+/// The port's end of the memory, where the network core writes its frames,
+/// and the link the station publishes, whose epoch keys its air.
+pub struct Buffers<'c> {
+    pub free: Rc<FreeMemory>,
+    pub link: &'c NetworkLink,
+}
 
-impl TxBuffers for Buffers {
+impl TxBuffers for Buffers<'_> {
     type Frame = WrittenFrame;
+    type Ticket = Ticket;
+    type Notice = Notice;
+    fn ticket(&self, frame: &WrittenFrame) -> Ticket {
+        ticket_of(&frame.memory)
+    }
+    fn take_notice(&mut self) -> Option<Notice> {
+        let (notice, memory) = self
+            .free
+            .ended
+            .borrow_mut()
+            .take_notice(self.link.snapshot())?;
+        if let Some(memory) = memory {
+            self.free.give(memory);
+        }
+        if let RadioNotice::Ended(exchange) = notice {
+            let (known, unknown) = self.free.settled.get();
+            self.free.settled.set(match exchange.charged {
+                Some(_) => (known + 1, unknown),
+                None => (known, unknown + 1),
+            });
+        }
+        Some(notice)
+    }
+    fn notice_waiting(&self) -> bool {
+        self.free.ended.borrow().waiting(self.link.snapshot())
+    }
     fn available(&self) -> bool {
-        self.0.free() != 0
+        !self.free.free.borrow().is_empty()
     }
     fn poll_free(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.0.waker.set(Some(cx.waker().clone()));
+        self.free.waker.set(Some(cx.waker().clone()));
         if self.available() {
             Poll::Ready(())
         } else {
@@ -309,7 +375,7 @@ impl TxBuffers for Buffers {
         fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
     ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
         let mut memory = self
-            .0
+            .free
             .take()
             .ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
         let written = match MSDU_ETHERNET_OFFSET
@@ -322,12 +388,12 @@ impl TxBuffers for Buffers {
         match written {
             Ok(()) => Ok(WrittenFrame { memory, length }),
             Err(unpublished) => {
-                self.0.give(memory);
+                self.free.give(memory);
                 Err(unpublished)
             }
         }
     }
     fn restore(&mut self, frame: WrittenFrame) {
-        self.0.give(frame.memory);
+        self.free.give(frame.memory);
     }
 }

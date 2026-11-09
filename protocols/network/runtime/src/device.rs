@@ -12,6 +12,10 @@ use oer_protocols_network_port::{
 pub trait TxBuffers {
     /// A written frame, as the device takes it.
     type Frame: EthernetFrame;
+    /// Names one frame the device took.
+    type Ticket;
+    /// The end of a frame the device took, as the egress policy hears it.
+    type Notice;
 
     /// Whether a buffer is free.
     fn available(&self) -> bool;
@@ -32,6 +36,18 @@ pub trait TxBuffers {
 
     /// A frame the device did not take: its buffer is free again.
     fn restore(&mut self, frame: Self::Frame);
+
+    /// The ticket of `frame`, which the device is about to take: it names
+    /// the frame's end in a later [`Self::Notice`].
+    fn ticket(&self, frame: &Self::Frame) -> Self::Ticket;
+
+    /// The next end of a frame the device took, for the egress policy. A
+    /// buffer the device gave back is free again only here, when its end is
+    /// handed on: so no more frames are unsettled than there are buffers.
+    fn take_notice(&mut self) -> Option<Self::Notice>;
+
+    /// Whether [`Self::take_notice`] has one.
+    fn notice_waiting(&self) -> bool;
 }
 
 /// Why a frame did not go to the device.
@@ -90,13 +106,18 @@ impl<D, T, X> DevicePort<D, T, X> {
 
 impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
     /// Give back every frame the device's queue holds and take back the
-    /// memory the device returned. The device's queues outlive this port,
+    /// memory the device returned, each frame's end freeing its buffer with
+    /// no policy to settle it: the service that published it ended, its
+    /// account with it. The device's queues outlive this port,
     /// so dropping the port returns none of them: a stop calls this before
     /// it tells the device it is over.
     pub fn give_back(&mut self) {
         while self.take_frame(|_| {}) {}
         // Asking the transmit half takes back what the device returned.
         let _room = self.transmit.has_room();
+        // The service whose policy those frames' ends settle has ended, its
+        // account with it: each end frees its buffer and goes to no policy.
+        while self.buffers.take_notice().is_some() {}
         // The exchange ended: no refused frame waits for anything, so a next
         // service over this port is not woken for one.
         self.waiting = Waiting::Nothing;
@@ -124,14 +145,15 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
 
 impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort<D, T, X> {
     type Refusal = PortRefusal;
-    /// The device says nothing of a frame's end to this stack.
-    type Ticket = ();
+    /// The buffers' name of the frame, which their notice of its end
+    /// carries.
+    type Ticket = X::Ticket;
 
     fn publish<E>(
         &mut self,
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
-    ) -> Result<(), Unpublished<PortRefusal, E>> {
+    ) -> Result<X::Ticket, Unpublished<PortRefusal, E>> {
         // The queue first: asking it is where a device takes back what it
         // finished, which may be the buffer asked for next.
         if !self.transmit.has_room() {
@@ -157,10 +179,11 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
                 return Err(unpublished);
             }
         };
+        let ticket = self.buffers.ticket(&frame);
         match self.transmit.try_transmit(frame) {
             Ok(()) => {
                 self.waiting = Waiting::Nothing;
-                Ok(())
+                Ok(ticket)
             }
             Err(refused) => {
                 self.buffers.restore(refused.frame);
@@ -185,7 +208,8 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
 }
 
 impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T, X> {
-    type Notice = ();
+    /// The buffers' notice of a frame's end.
+    type Notice = X::Notice;
 
     fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
         let Some(frame) = self.device.try_receive() else {
@@ -201,8 +225,11 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
         true
     }
 
-    fn take_notice(&mut self) -> Option<()> {
-        None
+    fn take_notice(&mut self) -> Option<X::Notice> {
+        // Asking the transmit half takes back what the device returned, which
+        // becomes the buffers' notices first.
+        let _room = self.transmit.has_room();
+        self.buffers.take_notice()
     }
 
     fn link(&self) -> LinkSnapshot {
@@ -217,6 +244,7 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
         // memory comes home too. Its room wakes only a refused frame that
         // waits for room.
         let has_room = self.transmit.poll_room(cx).is_ready();
+        let ended = self.buffers.notice_waiting();
         // Only what a refused frame needs: a free queue with the link down
         // or no buffer would wake the service to the same refusal, for ever,
         // and an idle port needs nothing.
@@ -225,7 +253,7 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
             Waiting::Room => has_room,
             Waiting::Buffer => self.buffers.poll_free(cx).is_ready(),
         };
-        if received || link || room {
+        if received || link || room || ended {
             cx.waker().wake_by_ref();
         }
     }

@@ -443,8 +443,8 @@ pub struct NetworkEnds<
 > {
     /// The MSDUs the network stack sends, in the network's memory.
     pub transmit: SlotReceiver<'c, Option<Outgoing<M>>, TX_DEPTH, N::Station, N::Network>,
-    /// The network's memory, back once its MSDU ended.
-    pub returned: SlotSender<'c, Option<M>, TX_DEPTH, N::Network, N::Station>,
+    /// The network's memory, back once its MSDU ended, with its cost.
+    pub returned: SlotSender<'c, Option<TxEnded<M>>, TX_DEPTH, N::Network, N::Station>,
     /// The MSDUs received for the network stack.
     pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH, N::Network, N::Station>,
     /// The copies `receive`'s marks stand for.

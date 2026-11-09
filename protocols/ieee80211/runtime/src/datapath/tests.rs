@@ -188,7 +188,7 @@ struct Bench<'b, 's> {
     link: WakingSpscSender<'b, ActorLink<'s, P<'s>>, 1>,
     link_return: WakingSpscReceiver<'b, LinkReturn, 1>,
     transmit: SlotSender<'b, Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>,
-    returned: SlotReceiver<'b, Option<ModelNetworkMemory>, TX_DEPTH>,
+    returned: SlotReceiver<'b, Option<TxEnded<ModelNetworkMemory>>, TX_DEPTH>,
     receive: WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>,
     tickets: Vec<ActorTicket<'s, P<'s>>>,
     small: Vec<ActorStationBuffer<'s, P<'s>>>,
@@ -466,7 +466,8 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
         let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue =
             WakingSlotQueue::<Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>::new();
-        let mut returned_queue = WakingSlotQueue::<Option<ModelNetworkMemory>, TX_DEPTH>::new();
+        let mut returned_queue =
+            WakingSlotQueue::<Option<TxEnded<ModelNetworkMemory>>, TX_DEPTH>::new();
         let mut receive_queue = WakingSpscQueue::<Received<ModelLentRx>, RX_DEPTH>::new();
         let mut copies_queue = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
         let (to_actor, to_actor_end) = to_queue.split();

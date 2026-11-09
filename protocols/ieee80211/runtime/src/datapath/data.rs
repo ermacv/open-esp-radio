@@ -15,17 +15,19 @@
 
 use super::turn::Failed;
 use super::*;
+use oer_protocols_ieee80211_contracts_port::TxEstimate;
 use oer_protocols_ieee80211_contracts_port::arena::{ArenaFormat, PublishError, TxArena};
 use oer_protocols_ieee80211_contracts_port::{PortArena, PortCompleted};
 use oer_protocols_ieee80211_core_roles_sta::data::plane::{
     AggregateRate, Intake, PpduKind, SettleError,
 };
 
-/// Keep `memory` for the network; the bound holds every memory the plane can
-/// hold, so a refusal keeps it quarantined rather than dropping it.
-fn free<M>(freed: &mut heapless::Deque<M, HELD>, memory: M) {
-    if let Err(memory) = freed.push_back(memory) {
-        let _quarantined = core::mem::ManuallyDrop::new(memory);
+/// Keep `memory`, whose MSDU ended at `cost`, for the network; the bound
+/// holds every memory the plane can hold, so a refusal keeps it quarantined
+/// rather than dropping it.
+fn free<M>(freed: &mut heapless::Deque<TxEnded<M>, HELD>, memory: M, cost: TxEstimate) {
+    if let Err(ended) = freed.push_back(TxEnded { memory, cost }) {
+        let _quarantined = core::mem::ManuallyDrop::new(ended);
     }
 }
 
@@ -170,7 +172,8 @@ where
                     }
                     Intake::Refused { memory, reason } => {
                         owed.refused(reason.into());
-                        free(freed, memory);
+                        // Refused before any arena: it never went.
+                        free(freed, memory, TxEstimate::NONE);
                     }
                 }
                 // The air waits for a completion, not for the next frame.
@@ -296,7 +299,13 @@ where
         };
         let settled = {
             let mut arena = port.arena();
-            plane.completed(&mut arena, done, *now, |memory| free(freed, memory), events)
+            plane.completed(
+                &mut arena,
+                done,
+                *now,
+                |memory, cost| free(freed, memory, cost),
+                events,
+            )
         };
         let settled = match settled {
             Ok(settled) => settled,
@@ -368,14 +377,15 @@ where
                     oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
                 )
             });
-            free(freed, msdu.memory);
+            // It waited for the standby: it never went.
+            free(freed, msdu.memory, TxEstimate::NONE);
         }
         let Some(plane) = plane.as_mut() else {
             return Ok(());
         };
         let mut arena = port.arena();
         plane
-            .stop(&mut arena, |memory| free(freed, memory), events)
+            .stop(&mut arena, |memory, cost| free(freed, memory, cost), events)
             .map(drop)
             .map_err(ActorFault::Port)
     }
@@ -394,7 +404,7 @@ where
         };
         let mut arena = port.arena();
         plane
-            .withdraw_unpublished(&mut arena, |memory| free(freed, memory), events)
+            .withdraw_unpublished(&mut arena, |memory, cost| free(freed, memory, cost), events)
             .map_err(ActorFault::Port)
     }
 
@@ -429,8 +439,9 @@ where
                     oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
                 )
             });
-            // The deque is empty, so it holds this one memory.
-            free(&mut self.data.freed, memory);
+            // The deque is empty, so it holds this one memory. The station
+            // never took it: it never went.
+            free(&mut self.data.freed, memory, TxEstimate::NONE);
             self.return_freed(network);
         }
         self.queued = network.transmit.len();

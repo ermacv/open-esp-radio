@@ -584,8 +584,13 @@ pub trait TxSupply<P> {
     /// the memory does not hold ([`TransmitError::InvalidLength`]) keeps the
     /// frame; a pool that refuses its own written memory loses both.
     fn write(&mut self, frame: P) -> Result<Self::Memory, TxRefused<P>>;
-    /// Memory the station gave back: free again.
-    fn give(&mut self, memory: Self::Memory);
+    /// Memory the station gave back, its MSDU ended at `cost`: free again
+    /// once the network settled that end.
+    fn give(
+        &mut self,
+        memory: Self::Memory,
+        cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
+    );
 }
 
 /// A frame [`TxSupply::write`] did not hand over.
@@ -620,6 +625,11 @@ impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
             link: state.network_link(),
             observed: LinkSnapshot::DOWN,
         }
+    }
+
+    /// The link this end reads, for another reader on the network's side.
+    pub const fn link_source(&self) -> &'c super::NetworkLink<N::NetworkWaker> {
+        self.link
     }
 }
 impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N: Notifies>
@@ -671,7 +681,7 @@ pub struct DeviceTransmit<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies = 
     /// station writes its MPDU header in place.
     transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
     /// The memory the station gave back, free for the next frames.
-    returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
+    returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
     supply: S,
     link: &'c super::NetworkLink<N::NetworkWaker>,
     packet: core::marker::PhantomData<fn(P)>,
@@ -681,7 +691,7 @@ impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, 
     /// link.
     pub fn new(
         transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
-        returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
+        returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
         supply: S,
         state: &'c State<N>,
     ) -> Self {
@@ -696,8 +706,8 @@ impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, 
     /// Take back every memory the station returned, here on the network's
     /// executor.
     fn take_returned(&mut self) {
-        while let Ok(Some(memory)) = self.returned.try_receive_with(Option::take) {
-            self.supply.give(memory);
+        while let Ok(Some(ended)) = self.returned.try_receive_with(Option::take) {
+            self.supply.give(ended.memory, ended.cost);
         }
     }
 }

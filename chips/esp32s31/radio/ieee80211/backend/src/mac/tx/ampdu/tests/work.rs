@@ -76,3 +76,47 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
     assert_eq!(owner.work(), submitted);
     assert_eq!(pool.claimed_slots(), 0);
 }
+
+/// Publish one 32-byte MPDU as an HE A-MPDU at `rate`; return its work.
+fn he_publication_work(rate: HeRate) -> (HtAmpduLength, MacTxWork) {
+    let mut storage = core::pin::pin!(HtAmpduTxStorage::<2>::new());
+    let pool = frame_pool::<256, 1>();
+    let mut retention = RetainedAmpduDmaStorage::new();
+    let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
+    let cookie = owner.begin().unwrap();
+    let density = HtAmpduDensity::NoRestriction;
+    commit(&mut owner, cookie, frame(&pool, 0, 32, |_| {}), 32, 8).unwrap();
+    let aggregate = prepared_he(&mut owner, cookie, rate, density).unwrap();
+    let mut hardware = DetachingCompletionHardware::successful();
+    owner
+        .submit_he(
+            &mut hardware,
+            cookie,
+            LegacyTxQueue::BestEffort,
+            HeAmpduTxConfig::new(rate, 0, aggregate.bytes, aggregate.subframes, density).unwrap(),
+        )
+        .unwrap();
+    let work = owner.work();
+    owner.acknowledge_completion(&mut hardware).unwrap();
+    owner.detach_completed(&mut hardware, cookie).unwrap();
+    (aggregate, work)
+}
+
+#[test]
+fn he_publication_records_its_su_ppdu_duration_and_dcm_stays_unestimated() {
+    let gi = crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf1600Ns;
+    let (aggregate, work) = he_publication_work(HeRate::ldpc(crate::mac::tx::HeMcs::Mcs0, gi));
+    assert_eq!(aggregate.bytes, 48);
+    // 48-byte APEP, LDPC MCS0: 400 bits = 3 x 117 + 49, a_init = 2. N_pld
+    // 411, N_avbits 822 < 411 + 1464/2, so one 1296-bit codeword: N_shrt
+    // 237, N_punc 237 > 64.8 and 237 < 1.2 x 237: extra segment, a = 3.
+    // 44 + 4 x 14.4 + 12 + 6 = 119.6 us.
+    assert_eq!(work.ppdu_micros, 120);
+    assert_eq!(work.unestimated_ppdus, 0);
+    assert_eq!(work.psdu_bytes, 48);
+
+    let dcm = HeRate::ldpc_dcm(crate::mac::tx::HeLdpcDcmMcs::Mcs0, gi);
+    let (_, work) = he_publication_work(dcm);
+    assert_eq!(work.ppdu_micros, 0);
+    assert_eq!(work.unestimated_ppdus, 1);
+}

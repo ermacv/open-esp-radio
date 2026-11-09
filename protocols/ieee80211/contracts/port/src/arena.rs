@@ -38,7 +38,7 @@
 
 use crate::{
     Air, AmpduRate, BlockAckReport, Ieee80211Capabilities, MpduProtection, MpduStartSpacing,
-    PhyRate, PortRate, Protection, RetryPlan, SupportedPower,
+    PhyRate, PortRate, Protection, RetryPlan, SupportedPower, TxEstimate,
 };
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
@@ -489,12 +489,21 @@ pub struct Completion<R, D> {
     arena: Arena,
     frames: u8,
     end: AttemptEnd<R, D>,
+    cost: TxEstimate,
 }
 
 impl<R, D> Completion<R, D> {
-    /// The end of the published `arena`, which still holds `frames` frames.
-    pub const fn new(arena: Arena, frames: u8, end: AttemptEnd<R, D>) -> Self {
-        Self { arena, frames, end }
+    /// The end of the published `arena`, which still holds `frames` frames,
+    /// and what its publications cost by the backend's model
+    /// ([`TxEstimate`]): every publication of the attempt that reached the
+    /// air, a single MPDU's retries included.
+    pub const fn new(arena: Arena, frames: u8, end: AttemptEnd<R, D>, cost: TxEstimate) -> Self {
+        Self {
+            arena,
+            frames,
+            end,
+            cost,
+        }
     }
 }
 
@@ -508,6 +517,7 @@ pub struct ArenaCompleted<R, D> {
     arena: Arena,
     frames: u8,
     end: AttemptEnd<R, D>,
+    cost: TxEstimate,
 }
 
 impl<R, D> ArenaCompleted<R, D> {
@@ -529,6 +539,13 @@ impl<R, D> ArenaCompleted<R, D> {
     /// The transmission, when the end establishes one.
     pub const fn air(&self) -> Option<Air> {
         self.end.air()
+    }
+
+    /// What the attempt's publications cost by the backend's model. A
+    /// single MPDU's attempt carried position 0 alone; an aggregate's
+    /// carried every position `0..frames`.
+    pub const fn cost(&self) -> TxEstimate {
+        self.cost
     }
 }
 
@@ -736,9 +753,19 @@ pub trait TxArena<'p, 'id: 'p> {
         events: Self::Events,
         now: Instant,
     ) -> Result<Option<CompletedOf<'p, 'id, Self>>, Self::Fault> {
-        Ok(self
-            .complete(events, now)?
-            .map(|Completion { arena, frames, end }| ArenaCompleted { arena, frames, end }))
+        Ok(self.complete(events, now)?.map(
+            |Completion {
+                 arena,
+                 frames,
+                 end,
+                 cost,
+             }| ArenaCompleted {
+                arena,
+                frames,
+                end,
+                cost,
+            },
+        ))
     }
 
     /// Settle `done` keeping the frames of `retry` for another publication,
@@ -759,7 +786,9 @@ pub trait TxArena<'p, 'id: 'p> {
         if !retry.is_within(done.frames) {
             return Err(RetainError::Outside(done));
         }
-        let ArenaCompleted { arena, frames, end } = done;
+        let ArenaCompleted {
+            arena, frames, end, ..
+        } = done;
         let settlement = Settlement {
             arena: arena.id(),
             frames,
@@ -782,7 +811,9 @@ pub trait TxArena<'p, 'id: 'p> {
         done: CompletedOf<'p, 'id, Self>,
         returned: impl FnMut(Self::Memory),
     ) -> Result<Arena, Self::Fault> {
-        let ArenaCompleted { arena, frames, end } = done;
+        let ArenaCompleted {
+            arena, frames, end, ..
+        } = done;
         let settlement = Settlement {
             arena: arena.id(),
             frames,

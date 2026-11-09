@@ -248,6 +248,24 @@ fn a_frame_of_unknown_end_is_charged_and_not_refunded() {
 }
 
 #[test]
+fn a_lost_frame_settles_its_reservation_at_the_ceiling_and_frees_its_place() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0)];
+    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    policy.accepted(held, 7).unwrap();
+    policy.notice(RadioNotice::Lost(7)).unwrap();
+    let left = i64::from(QUANTUM) - i64::from(CEILING);
+    assert_eq!(policy.balance_micros(1), Some(left));
+    assert_eq!(policy.in_flight(), 0, "nothing waits for its completion");
+    assert_eq!(
+        policy.notice(RadioNotice::Lost(7)),
+        Err(AirtimeFault::UnknownTicket),
+        "settled once"
+    );
+}
+
+#[test]
 fn a_completion_of_no_frame_is_a_fault() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
@@ -262,26 +280,28 @@ fn a_completion_of_no_frame_is_a_fault() {
 }
 
 #[test]
-fn a_retired_peers_frame_settles_on_its_old_account() {
+fn a_retired_peers_frame_settles_at_its_ceiling_and_its_return_closes_it() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
     let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
     policy.accepted(held, 3).unwrap();
-    policy.retire(1);
+    policy.retire(1).unwrap();
+    assert_eq!(policy.balance_micros(1), None, "the account ended with it");
+    assert_eq!((policy.unsettled(), policy.in_flight()), (0, 1));
     let done = Exchange {
         ticket: 3,
         charged: Some(micros(COST)),
     };
     policy.notice(RadioNotice::Ended(done)).unwrap();
-    assert_eq!(policy.balance_micros(1), None, "the account ended with it");
+    assert_eq!(policy.in_flight(), 0, "its return closed the ticket");
 }
 
 #[test]
 fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
     let mut storage = AirtimeStorage::<u8, 1, 2>::new(micros(QUANTUM));
     let mut policy = AirtimeEgress::<'_, Air, u32, 1, 2>::new(&mut storage, Air::default());
-    let mut go = |policy: &mut AirtimeEgress<'_, Air, u32, 1, 2>, ready: &[Work], ticket| {
+    let go = |policy: &mut AirtimeEgress<'_, Air, u32, 1, 2>, ready: &[Work], ticket| {
         let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
         policy.accepted(held, ticket).unwrap();
         let done = Exchange {
@@ -292,7 +312,7 @@ fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
         work.0.flow.unwrap()
     };
     go(&mut policy, &[data(1, 5)], 0);
-    policy.retire(1);
+    policy.retire(1).unwrap();
     let ready = [data(2, 0), data(2, 1)];
     let flows: Vec<_> = (1..5)
         .map(|ticket| go(&mut policy, &ready, ticket))
@@ -325,24 +345,84 @@ fn an_unknown_cost_buys_no_air_when_the_estimate_is_low() {
 fn a_peer_that_left_frees_its_account() {
     let mut storage = AirtimeStorage::<u8, 1, 2>::new(micros(QUANTUM));
     let mut policy = AirtimeEgress::<'_, Air, u32, 1, 2>::new(&mut storage, Air::default());
-    let mut go = |policy: &mut AirtimeEgress<'_, Air, u32, 1, 2>, peer, ticket| {
+    let go = |policy: &mut AirtimeEgress<'_, Air, u32, 1, 2>, peer, ticket| {
         let ready = [data(peer, 0)];
         let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
         policy.accepted(held, ticket).unwrap();
     };
     go(&mut policy, 1, 0);
-    // Its frame is in flight when it leaves: the account stays until it ends.
+    // Its frame is in flight when it leaves: the frame settles at once and
+    // the account goes, while the buffer is still the port's.
     policy.notice(RadioNotice::Left(1)).unwrap();
+    assert_eq!(policy.balance_micros(1), None);
+    go(&mut policy, 2, 1);
     let ended = Exchange {
         ticket: 0,
         charged: Some(micros(CEILING)),
     };
     policy.notice(RadioNotice::Ended(ended)).unwrap();
-    assert_eq!(policy.balance_micros(1), None);
-    go(&mut policy, 2, 1);
     assert_eq!(
         policy.in_flight(),
         1,
         "the next peer has the account's place"
     );
+}
+
+/// Five associations in turn, each leaving a frame whose completion is
+/// late: every association has its account, though only one fits beside
+/// the next, since each departure settles its frames and frees it.
+#[test]
+fn late_completions_across_many_associations_never_exhaust_the_accounts() {
+    const RESERVATIONS: usize = 8;
+    let mut storage = AirtimeStorage::<u8, 2, RESERVATIONS>::new(micros(QUANTUM));
+    let mut policy =
+        AirtimeEgress::<'_, Air, u32, 2, RESERVATIONS>::new(&mut storage, Air::default());
+    for peer in 1..=5_u8 {
+        let ready = [data(peer, 0)];
+        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        policy.accepted(held, u32::from(peer)).unwrap();
+        policy.notice(RadioNotice::Left(peer)).unwrap();
+    }
+    assert_eq!(policy.unsettled(), 0);
+    assert_eq!(policy.in_flight(), 5, "every buffer is still out");
+    // The late returns close their tickets, with no account to charge.
+    for ticket in 1..=5 {
+        let done = Exchange {
+            ticket,
+            charged: Some(micros(COST)),
+        };
+        policy.notice(RadioNotice::Ended(done)).unwrap();
+    }
+    assert_eq!(policy.in_flight(), 0);
+}
+
+/// A frame of a departed association comes back after the next one began:
+/// its return closes its ticket, charges neither account and is no stray.
+#[test]
+fn a_late_return_after_its_account_closed_charges_nothing_twice() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let (_, held) = policy.choose([data(1, 0)].into_iter()).unwrap().unwrap();
+    policy.accepted(held, 7).unwrap();
+    policy.notice(RadioNotice::Left(1)).unwrap();
+    let (_, held) = policy.choose([data(2, 0)].into_iter()).unwrap().unwrap();
+    policy.accepted(held, 8).unwrap();
+    let new_account = policy.balance_micros(2);
+    let late = Exchange {
+        ticket: 7,
+        charged: Some(micros(COST)),
+    };
+    policy.notice(RadioNotice::Ended(late)).unwrap();
+    assert_eq!(policy.balance_micros(1), None, "no account comes back");
+    assert_eq!(
+        policy.balance_micros(2),
+        new_account,
+        "the new one untouched"
+    );
+    assert_eq!(
+        policy.notice(RadioNotice::Ended(late)),
+        Err(AirtimeFault::UnknownTicket),
+        "closed once"
+    );
+    assert_eq!((policy.unsettled(), policy.in_flight()), (1, 1));
 }

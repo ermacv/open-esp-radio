@@ -133,6 +133,8 @@ struct World<'p, 'id> {
     arena: ModelArena<ModelCaps>,
     plane: DataPlane,
     returned: Vec<ModelNetworkMemory>,
+    /// The cost each returned memory came back with, in the same order.
+    costs: Vec<TxEstimate>,
     micros: u64,
 }
 
@@ -155,6 +157,7 @@ impl<'p, 'id: 'p> World<'p, 'id> {
             arena,
             plane,
             returned: Vec::new(),
+            costs: Vec::new(),
             micros: 1,
         }
     }
@@ -241,13 +244,16 @@ impl<'p, 'id: 'p> World<'p, 'id> {
 
     fn settle_ended(&mut self, done: Done<'p, 'id>) {
         let now = self.now();
-        let returned = &mut self.returned;
+        let (returned, costs) = (&mut self.returned, &mut self.costs);
         self.plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory| returned.push(memory),
+                |memory, cost| {
+                    returned.push(memory);
+                    costs.push(cost);
+                },
                 &mut (),
             )
             .ok()
@@ -263,13 +269,16 @@ impl<'p, 'id: 'p> World<'p, 'id> {
     fn settle(&mut self) -> Settled<ModelBlockAckEvidence, ModelAirDenied> {
         let now = self.now();
         let done = self.arena.service((), now).unwrap().unwrap();
-        let returned = &mut self.returned;
+        let (returned, costs) = (&mut self.returned, &mut self.costs);
         self.plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory| returned.push(memory),
+                |memory, cost| {
+                    returned.push(memory);
+                    costs.push(cost);
+                },
                 &mut (),
             )
             .ok()
@@ -280,14 +289,17 @@ impl<'p, 'id: 'p> World<'p, 'id> {
     fn settled_holes(&mut self) -> Option<u32> {
         let now = self.now();
         let done = self.arena.service((), now).unwrap().unwrap();
-        let returned = &mut self.returned;
+        let (returned, costs) = (&mut self.returned, &mut self.costs);
         let mut holes = Holes(Some(None));
         self.plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory| returned.push(memory),
+                |memory, cost| {
+                    returned.push(memory);
+                    costs.push(cost);
+                },
                 &mut holes,
             )
             .ok()
@@ -343,6 +355,89 @@ cases! {
     a_whole_block_ack_puts_the_standby_on_the_air_before_the_settlement => ahead_whole,
     a_partial_block_ack_leaves_the_order_to_the_settlement => ahead_partial,
     nothing_goes_ahead_of_a_settlement_without_frames_in_the_other_arena => ahead_empty,
+    an_aggregate_s_cost_is_split_once_among_its_frames_and_retries_add_theirs => cost_split,
+    a_single_mpdu_s_cost_is_its_first_frame_s_and_the_rest_leave_with_none => cost_single,
+    an_unknown_attempt_leaves_its_frames_unknown_for_good => cost_unknown,
+}
+
+const fn micros(micros: u32) -> TxEstimate {
+    TxEstimate::Estimated { micros }
+}
+
+fn cost_split<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..3 {
+        world.taken(tag, BE);
+    }
+    world.arena.set_cost(micros(100));
+    world.publish();
+    // Frames 0 and 2 are acknowledged; 1 goes again alone in the arena.
+    world.block_ack(mask(&[0, 2]));
+    world.settle();
+    assert_eq!(world.returned_sequences(), [0, 2]);
+    // 100 among three: the first takes the remainder.
+    assert_eq!(world.costs, [micros(34), micros(33)]);
+    world.costs.clear();
+    world.arena.set_cost(micros(70));
+    world.taken(3, BE);
+    let (retry, _) = world.publish();
+    assert_eq!(retry.frames, 1);
+    world.arena.answer(ModelArenaAnswer::Ack);
+    world.settle();
+    assert_eq!(world.returned_sequences(), [1]);
+    // Its part of the first attempt, then the whole of the second.
+    assert_eq!(world.costs, [micros(33 + 70)]);
+}
+
+fn cost_single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.taken(0, BE);
+    world.arena.set_cost(micros(250));
+    world.publish();
+    world.arena.answer(ModelArenaAnswer::Ack);
+    world.settle();
+    assert_eq!(world.returned_sequences(), [0]);
+    assert_eq!(world.costs, [micros(250)]);
+    world.costs.clear();
+    // Withdrawn frames that never went leave with no cost.
+    world.taken(1, BE);
+    let returned = &mut world.returned;
+    let costs = &mut world.costs;
+    world
+        .plane
+        .withdraw_unpublished(
+            &mut world.arena,
+            |memory, cost| {
+                returned.push(memory);
+                costs.push(cost);
+            },
+            &mut (),
+        )
+        .unwrap();
+    assert_eq!(world.returned_sequences(), [1]);
+    assert_eq!(world.costs, [TxEstimate::NONE]);
+}
+
+fn cost_unknown<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..2 {
+        world.taken(tag, BE);
+    }
+    world.arena.set_cost(TxEstimate::Unknown);
+    world.publish();
+    world.block_ack(mask(&[0]));
+    world.settle();
+    assert_eq!(world.costs, [TxEstimate::Unknown]);
+    world.costs.clear();
+    // The retry is estimated, but its frame's first attempt was not.
+    world.arena.set_cost(micros(10));
+    world.publish();
+    world.arena.answer(ModelArenaAnswer::Ack);
+    world.settle();
+    assert_eq!(world.returned_sequences(), [0, 1]);
+    assert_eq!(world.costs, [TxEstimate::Unknown]);
 }
 
 fn standby_room<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
@@ -656,7 +751,7 @@ fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert!(
         world
             .plane
-            .stop(&mut world.arena, |memory| returned.push(memory), &mut ())
+            .stop(&mut world.arena, |memory, _| returned.push(memory), &mut ())
             .unwrap()
             .is_some()
     );
@@ -682,7 +777,7 @@ fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let returned = &mut world.returned;
     let link = world
         .plane
-        .stop(&mut world.arena, |memory| returned.push(memory), &mut ())
+        .stop(&mut world.arena, |memory, _| returned.push(memory), &mut ())
         .unwrap()
         .unwrap();
     assert_eq!(world.returned_sequences(), [0, 1, 2]);
@@ -862,7 +957,7 @@ fn withdraw_unpublished<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let returned = &mut world.returned;
     world
         .plane
-        .withdraw_unpublished(&mut world.arena, |memory| returned.push(memory), &mut ())
+        .withdraw_unpublished(&mut world.arena, |memory, _| returned.push(memory), &mut ())
         .unwrap();
     // The standby's frame goes back; the A-MPDU on the air settles later.
     assert_eq!(world.returned_sequences(), [2]);

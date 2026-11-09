@@ -95,6 +95,17 @@ turn goes through that last part, a fault's too: after a policy or port fault th
 turn publishes nothing more, and only hands back what it knows, so at an await
 each open work truly was not published.
 
+## The device port
+
+`DevicePort` publishes into the device's own transmit buffers (`TxBuffers`)
+and hands each frame to the device (`NetTransmit`). A frame the device took
+carries the buffers' ticket, and the buffers' notices are those frames' ends,
+which the egress policy settles its reservations by: a buffer the device gave
+back is free again only when its end is handed on, so no more frames are
+unsettled than there are buffers. The port takes what the device returned at
+every look for notices and registers for the next, whether or not it has a
+frame to send.
+
 ## Local producer
 
 `Service::with_producer` owns a `Produce` by value, and `bind_local` gives it a
