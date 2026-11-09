@@ -295,8 +295,9 @@ pub enum ApEnd<F> {
     /// command the port gave back beside it among them
     /// ([`ApRunner::take_returned`]).
     Faulted(F),
-    /// A terminal named an owner the runner did not send, or the engine
-    /// refused one of the runner's own steps; every owner is in the runner,
+    /// A terminal named an owner the runner did not send or one whose home
+    /// was taken, refused whole and kept by the port, or the engine refused
+    /// one of the runner's own steps; every other owner is in the runner,
     /// the ones without a place among its kept ([`ApRunner::take_kept`]).
     Contract(ApContract),
     /// The port refused one of the access point's commands for its
@@ -322,12 +323,14 @@ enum Halt<F> {
     Refused(AccessPointRefusal),
 }
 
-/// An owner a terminal brought that has no home of the runner's: the port
-/// returned an owner the runner never lent it, or one of a kind the
-/// access point never sends. Every owner the runner lends has its home
-/// held for it, so a port that keeps its contract brings none; the run
-/// ends on the break ([`ApEnd::Contract`]) and the owner comes back with
-/// the runner ([`ApRunner::take_kept`]), `KEPT` of them at most.
+/// An owner without a home of the runner's: what a submission the port or
+/// the runner's own checks refused returned that the runner cannot use, or
+/// a terminal's owner whose home [`Homes::admit`] found free and the home
+/// then refused (excluded: nothing runs between the check and the take).
+/// A terminal whose owners have no home is refused whole, and the port
+/// keeps it. The run ends on the break ([`ApEnd::Contract`]) and the owner
+/// comes back with the runner ([`ApRunner::take_kept`]), `KEPT` of them at
+/// most.
 pub enum Kept<'id, P, C>
 where
     P: AccessPointPort<'id>,
@@ -781,9 +784,9 @@ where
     fn keep(&mut self, owner: Kept<'id, P, C>, contract: ApContract) {
         self.broken.get_or_insert(contract);
         if let Err(owner) = self.kept.push_back(owner) {
-            // More than KEPT owners the runner never lent came back: the
-            // one place this runner has none for. Open: a sink cannot
-            // refuse a terminal to its port.
+            // More than KEPT owners without a home: the one place this
+            // runner has none for. A terminal's owners reach here only past
+            // `admit`'s check of their homes.
             drop(owner);
         }
     }

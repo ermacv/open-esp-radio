@@ -68,12 +68,18 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   every protected protocol RX frame. This validation path has a 1056-byte
   additional SRAM placement budget; other SRAM sections and allocated stacks
   retain their existing limits.
-- **GTK replacement.** The station keeps one physical group-key slot. A key
-  table write failure is the port's named fault even when an internal
-  rollback restores the old material; the port keeps the command, and no
-  success terminal or reusable old GTK is returned.
-  The receive handle retains zeroizing rollback material until removal or
-  reset. Recovery starts a new association.
+- **GTK replacement.** The station keeps one physical group-key slot. A
+  replacement the key table refuses before it changes, or whose new write
+  the hardware rejects and whose rollback restores the previous entry,
+  returns its command whole beside `Fault::GroupReplacement` (`Refused`,
+  `RolledBack`): the previous key stands with its identity, and the core
+  runs on. A replacement whose rollback fails keeps the command's owners in
+  the port with both causes (`RollbackFailed`); the previous key is not
+  live, and the port does not retire. The stopped port's service clears the
+  entry once and reads it back: cleared, the key's removal returns the slot
+  and the permission (`KeyRemoved`); not cleared, nothing is freed and the
+  fault is `GroupEntryUnconfirmed`. The receive handle retains zeroizing
+  rollback material until removal or reset.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole.
 - **HE service.** The lower-MAC port accepts caller-selected HE SU attempts,
@@ -451,10 +457,11 @@ unique) is the contract fault `UnconsumedPlace`.
 
 A station group key mutation and an access point's are commands of their
 own role (`StationGroupCommand`, `AccessPointGroupCommand`). A step of
-the driver that refuses returns the command whole: the engine converts
-it back to the caller's form and the frozen receive cut resumes. Only a
-replacement the hardware rejects keeps its owners in the port's
-quarantine (`retained_group`).
+the driver that refuses, and a replacement the hardware rolled back,
+return the command whole: the engine converts it back to the caller's
+form and the frozen receive cut resumes. Only a replacement whose
+rollback failed keeps its owners in the port (`retained_group`) until the
+stopped port's cleanup above.
 
 The port exposes ordinary MPDUs, the station's data arenas (with their
 A-MPDU rates) and RX BlockAck agreements. It does not expose beacon
