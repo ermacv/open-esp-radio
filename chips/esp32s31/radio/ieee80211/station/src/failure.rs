@@ -64,6 +64,24 @@ pub enum BackendFault {
     ReceiveAccounting,
     /// An HE association the MAC's fields do not hold.
     HeAssociationRange,
+    /// A station group key replacement the hardware did not take.
+    GroupReplacement(GroupReplacement),
+    /// The stopped port's clear of a failed rollback's group key entry did
+    /// not read back cleared.
+    GroupEntryUnconfirmed,
+}
+/// How a station group key replacement the hardware did not take ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GroupReplacement {
+    /// Refused before the key table changed.
+    Refused,
+    /// The new key was rejected and the previous key is installed again.
+    RolledBack(CryptoKeyError),
+    /// Neither key is installed: both causes.
+    RollbackFailed {
+        replacement: CryptoKeyError,
+        rollback: CryptoKeyError,
+    },
 }
 /// The lower-MAC operation a missing core view stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

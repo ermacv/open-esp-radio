@@ -90,6 +90,8 @@ struct Hardware {
     installed_keys: Vec<(u8, MacCcmpKeyIdentity)>,
     key_material: Vec<(u8, [u8; 16])>,
     reject_key_writes: usize,
+    /// The key table reads every entry valid however it was cleared.
+    key_entries_stuck: bool,
     crypto_order: Vec<CryptoOperation>,
     cleared_keys: Vec<u8>,
     rx_block_acks: Vec<S31RxBlockAckAgreement>,
@@ -277,6 +279,10 @@ impl CcmpKeyHardware for Hardware {
         self.key_material.retain(|(slot, _)| *slot != index);
         self.crypto_order.push(CryptoOperation::Remove(index));
         self.cleared_keys.push(index);
+    }
+
+    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
+        Some(self.key_entries_stuck || self.installed_keys.iter().any(|(slot, _)| *slot == index))
     }
 }
 
@@ -4357,7 +4363,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
 }
 
 #[test]
-fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_rollback() {
+fn group_replacement_keeps_exact_material_and_the_core_runs_on_after_every_failed_replacement() {
     use crate::mac::crypto::StaGroupCcmpReplaceError;
     use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
     for rejected in 0..=2 {
@@ -4377,14 +4383,16 @@ fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_ro
                     assert_eq!(key.key_id, new_id);
                     assert_eq!(hardware.key_material, [(1, [2; 16])]);
                     assert!(core.fault.is_none());
-                    // A later rejected update must restore the newly committed key.
+                    // A later rejected update restores the newly committed
+                    // key, and the core runs on.
                     hardware.reject_key_writes = 1;
                     assert!(matches!(
                         core.replace_station_group_key(&mut hardware, &mut key, old_id, &[3; 16]),
                         Err(StaGroupCcmpReplaceError::ReplacementRolledBack(_))
                     ));
                     assert_eq!(hardware.key_material, [(1, [2; 16])]);
-                    assert!(core.fault.is_some());
+                    assert_eq!(key.key_id, new_id);
+                    assert!(core.fault.is_none(), "a rollback proves the previous key");
                 }
                 1 => {
                     assert!(matches!(
@@ -4393,7 +4401,7 @@ fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_ro
                     ));
                     assert_eq!(key.key_id, old_id);
                     assert_eq!(hardware.key_material, [(1, [1; 16])]);
-                    assert!(core.fault.is_some());
+                    assert!(core.fault.is_none(), "a rollback proves the previous key");
                 }
                 _ => {
                     assert!(matches!(
@@ -4401,7 +4409,22 @@ fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_ro
                         Err(StaGroupCcmpReplaceError::RollbackFailed { .. })
                     ));
                     assert!(hardware.key_material.is_empty());
-                    assert!(core.fault.is_some());
+                    assert!(core.fault.is_none(), "the key's removal still runs");
+                    // A further replacement is refused before the table
+                    // changes: nothing is written or cleared.
+                    let writes = hardware.crypto_order.len();
+                    assert_eq!(
+                        core.replace_station_group_key(&mut hardware, &mut key, new_id, &[4; 16]),
+                        Err(StaGroupCcmpReplaceError::CurrentMaterialMismatch)
+                    );
+                    assert_eq!(hardware.crypto_order.len(), writes);
+                    assert!(core.fault.is_none());
+                    // The cleanup clears the entry and reads it cleared;
+                    // a table that still reads it valid is not confirmed.
+                    hardware.key_entries_stuck = true;
+                    assert!(!core.clear_failed_station_group(&mut hardware, &mut key));
+                    hardware.key_entries_stuck = false;
+                    assert!(core.clear_failed_station_group(&mut hardware, &mut key));
                 }
             }
         });

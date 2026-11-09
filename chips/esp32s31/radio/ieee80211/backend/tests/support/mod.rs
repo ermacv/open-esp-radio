@@ -320,7 +320,7 @@ impl CcmpKeyHardware for MockMmio {
         }
     }
 
-    fn ccmp_entry_is_valid(&self, index: u8) -> Option<bool> {
+    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
         self.ccmp_valid.get(usize::from(index)).copied()
     }
 }

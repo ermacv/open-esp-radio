@@ -886,6 +886,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             && self.fault.is_none()
             && self.rx_out.get() == 0
             && !self.driver.removal_waits()
+            && self.driver.retained_group.is_none()
             && self.unconsumed.is_empty()
             && self.shared.returned.none_out()
             && self.driver.queues.iter().all(|queue| queue.is_empty())
@@ -910,6 +911,24 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     ),
                 );
             }
+        }
+        Ok(())
+    }
+
+    /// The stopped port's cleanup of a station group replacement whose
+    /// rollback failed: its removal's terminal returns the slot and the
+    /// permission once the key table reads the entry cleared.
+    fn clean_retained_group(
+        &mut self,
+        sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
+    ) -> Result<(), Fault> {
+        if let Some(terminal) = self.driver.clean_retained_group(self.device)? {
+            self.unconsumed.deliver(
+                sink,
+                unconsumed::Item::Terminal(
+                    brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
+                ),
+            );
         }
         Ok(())
     }
@@ -2180,9 +2199,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.state,
             PortState::Running | PortState::Recovering | PortState::Stopping { .. }
         ) {
-            // A stopped port still ends the removals the stop finished.
+            // A stopped port cleans up a replacement whose rollback failed,
+            // then ends the removals the stop finished.
             let delivered = self
-                .deliver_removals(sink)
+                .clean_retained_group(sink)
+                .and_then(|()| self.deliver_removals(sink))
                 .map_err(|fault| self.record(fault));
             self.recompute_deadline();
             return delivered.map(|()| None);

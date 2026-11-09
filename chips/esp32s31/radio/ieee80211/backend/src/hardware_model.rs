@@ -671,6 +671,12 @@ impl CcmpKeyHardware for ModelRegisters {
         self.atoms
             .with(|state| state.keys.retain(|(slot, _)| *slot != index));
     }
+    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
+        Some(
+            self.atoms
+                .with(|state| state.keys.iter().any(|(slot, _)| *slot == index)),
+        )
+    }
 }
 
 impl RxBlockAckHardware for ModelRegisters {

@@ -108,7 +108,36 @@ impl DiagnosticPath for BackendFault {
             }
             Self::ReceiveAccounting => path.name("ReceiveAccounting"),
             Self::HeAssociationRange => path.name("HeAssociationRange"),
+            Self::GroupReplacement(ended) => {
+                path.name("GroupReplacement");
+                match ended {
+                    GroupReplacement::Refused => path.name("Refused"),
+                    GroupReplacement::RolledBack(cause) => {
+                        path.name("RolledBack");
+                        path.name(crypto_key_error_name(*cause));
+                    }
+                    GroupReplacement::RollbackFailed {
+                        replacement,
+                        rollback,
+                    } => {
+                        path.name("RollbackFailed");
+                        path.name(crypto_key_error_name(*replacement));
+                        path.name(crypto_key_error_name(*rollback));
+                    }
+                }
+            }
+            Self::GroupEntryUnconfirmed => path.name("GroupEntryUnconfirmed"),
         }
+    }
+}
+
+/// The name of a key table error.
+const fn crypto_key_error_name(error: CryptoKeyError) -> &'static str {
+    match error {
+        CryptoKeyError::InvalidGroupKeyId => "InvalidGroupKeyId",
+        CryptoKeyError::InvalidAccessPointAssociationId => "InvalidAccessPointAssociationId",
+        CryptoKeyError::Occupied => "Occupied",
+        CryptoKeyError::HardwareRejected => "HardwareRejected",
     }
 }
 
@@ -154,14 +183,7 @@ impl DiagnosticPath for LowerMacFault {
             Self::RxBlockAckReadback => path.name("RxBlockAckReadback"),
             Self::Key(error) => {
                 path.name("Key");
-                path.name(match error {
-                    CryptoKeyError::InvalidGroupKeyId => "InvalidGroupKeyId",
-                    CryptoKeyError::InvalidAccessPointAssociationId => {
-                        "InvalidAccessPointAssociationId"
-                    }
-                    CryptoKeyError::Occupied => "Occupied",
-                    CryptoKeyError::HardwareRejected => "HardwareRejected",
-                });
+                path.name(crypto_key_error_name(*error));
             }
             Self::RxBlockAck(error) => {
                 path.name("RxBlockAck");

@@ -85,6 +85,8 @@ struct Observed {
     fail_poll: Option<Fault>,
     /// Key writes the hardware rejects from the next register access on.
     reject_key_writes: usize,
+    /// The key table reads every entry valid however it was cleared.
+    key_entries_stuck: bool,
     /// The receive Block Ack banks refuse every agreement.
     reject_rx_block_acks: bool,
     /// Frames on air with the material byte they are protected under (0
@@ -313,6 +315,7 @@ impl Device<512> for TestDevice {
         self.hardware.reject_key_writes +=
             core::mem::take(&mut self.observed.borrow_mut().reject_key_writes);
         self.hardware.reject_rx_block_acks = self.observed.borrow().reject_rx_block_acks;
+        self.hardware.key_entries_stuck = self.observed.borrow().key_entries_stuck;
         Ok(&mut self.hardware)
     }
     fn next_deadline(&self) -> Option<Instant> {

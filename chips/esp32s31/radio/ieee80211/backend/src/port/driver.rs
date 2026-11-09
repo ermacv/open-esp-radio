@@ -7,6 +7,7 @@ use super::{
         StationGroupCommand, Waiting, WaitingRemoval,
     },
 };
+use crate::mac::crypto::{CryptoKeyError, StaGroupCcmpReplaceError as ReplaceError};
 use crate::ordinary_tx::sets_retry_bit;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
@@ -320,8 +321,9 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     /// The station's two data arenas over the A-MPDU chains, from
     /// preparation until retirement returns their chains and tickets.
     pub(super) arena: Option<DataArenas<'id, Id, B>>,
-    /// A group key replacement the hardware refused, kept with the port's
-    /// quarantine.
+    /// A station group key replacement whose rollback failed: its
+    /// command's owners, until the stopped port's cleanup confirms the
+    /// key's entry cleared and removes the key ([`Driver::clean_retained_group`]).
     pub(super) retained_group: Option<StationGroupCommand<'id, Id>>,
     /// The key of a removal the data port's caller holds at its barrier:
     /// queued attempts that name it end withdrawn.
@@ -458,7 +460,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         for key in &mut self.keys {
             drop(key.take());
         }
-        drop(self.retained_group.take());
         self.barrier = None;
         drop(self.configuring.take());
         self.access_point_configuring = false;
@@ -1779,63 +1780,51 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     key_id,
                     material.as_bytes(),
                 );
-                if let Err(_error) = result {
-                    self.retained_group = Some(StationGroupCommand::Replace {
-                        permission,
-                        key,
-                        key_id,
-                        material,
-                    });
-                    // Observe actual quarantined owners after moving them to
-                    // permanent custody, never a synthetic success terminal.
+                if let Err(error) = result {
                     #[cfg(test)]
-                    if let Some(StationGroupCommand::Replace {
-                        permission,
-                        key,
-                        key_id,
-                        ..
-                    }) = &self.retained_group
-                    {
-                        let shared = env.shared();
-                        let _first = shared
-                            .retained_group
-                            .set((key.identity.slot, permission.index()));
-                        let _first = shared.rolled_back.set((
-                            key.identity.key_id.get(),
-                            key_id.get(),
-                            matches!(
-                                _error,
-                                crate::mac::crypto::StaGroupCcmpReplaceError::ReplacementRolledBack(
-                                    _
-                                )
-                            ),
-                        ));
-                    }
+                    let _first = env.shared().rolled_back.set((
+                        key.identity.key_id.get(),
+                        key_id.get(),
+                        matches!(error, ReplaceError::ReplacementRolledBack(_)),
+                    ));
                     #[cfg(all(oer_trace, oer_debug_control))]
-                    if let Some(StationGroupCommand::Replace {
-                        permission,
-                        key,
-                        key_id,
-                        ..
-                    }) = &self.retained_group
-                    {
-                        oer_portable_trace_recorder::emit(&trace::GroupRollback {
-                            owners: [key.identity.slot, permission.index()],
-                            previous_key_id: key.identity.key_id.get(),
-                            attempted_key_id: key_id.get(),
-                            restored: matches!(
-                                _error,
-                                crate::mac::crypto::StaGroupCcmpReplaceError::ReplacementRolledBack(
-                                    _
-                                )
-                            ),
-                        });
-                    }
-                    return Err(GroupFailed::Retained(Fault::Core(
-                        core_mac::LowerMacFault::Key(
-                            crate::mac::crypto::CryptoKeyError::HardwareRejected,
+                    oer_portable_trace_recorder::emit(&trace::GroupRollback {
+                        owners: [key.identity.slot, permission.index()],
+                        previous_key_id: key.identity.key_id.get(),
+                        attempted_key_id: key_id.get(),
+                        restored: matches!(error, ReplaceError::ReplacementRolledBack(_)),
+                    });
+                    return Err(match replacement_failed(error) {
+                        Err(failure) => back(
+                            permission,
+                            key,
+                            material,
+                            Fault::GroupReplacement(failure),
                         ),
-                    )));
+                        Ok((replacement, rollback)) => {
+                            // Neither key's entry is installed: the previous
+                            // key is not live, and its slot stays with the
+                            // port until its stop confirms the entry cleared.
+                            key.identity.activity.set(0);
+                            #[cfg(test)]
+                            let _first = env
+                                .shared()
+                                .retained_group
+                                .set((key.identity.slot, permission.index()));
+                            self.retained_group = Some(StationGroupCommand::Replace {
+                                permission,
+                                key,
+                                key_id,
+                                material,
+                            });
+                            GroupFailed::Retained(Fault::GroupReplacement(
+                                GroupReplacement::RollbackFailed {
+                                    replacement,
+                                    rollback,
+                                },
+                            ))
+                        }
+                    });
                 }
                 let identity = RawKeyIdentity {
                     serial: env.serial(),
@@ -1880,6 +1869,68 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         fault,
                     )),
                 }
+            }
+        }
+    }
+    /// The stopped port's cleanup of a station group replacement whose
+    /// rollback failed: clear the key's entry, and once the key table reads
+    /// it cleared, remove the key, its terminal returning the slot and the
+    /// command's permission. The cleanup clears the entry each time it
+    /// runs; nothing else repeats.
+    ///
+    /// # Errors
+    ///
+    /// The registers, the core's command view or the key's place are not
+    /// there, or the table does not read the entry cleared
+    /// ([`Fault::GroupEntryUnconfirmed`]): the owners stay retained and the
+    /// slot is not free.
+    pub(super) fn clean_retained_group(
+        &mut self,
+        device: &mut D,
+    ) -> Result<Option<brand::OwnedRemoved<'id, Id>>, Fault> {
+        let Some(StationGroupCommand::Replace {
+            permission,
+            key,
+            key_id,
+            material,
+        }) = self.retained_group.take()
+        else {
+            return Ok(None);
+        };
+        let cleared = (|| {
+            let hardware = device.hardware()?;
+            let installed = self
+                .keys
+                .iter_mut()
+                .flatten()
+                .filter_map(KeyPlace::installed_mut)
+                .find_map(|(identity, installed)| match installed {
+                    Installed::Receive(installed) if *identity == key.identity => Some(installed),
+                    _ => None,
+                })
+                .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
+            let mut view = self
+                .core
+                .view()
+                .commands()
+                .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
+            if view.clear_failed_station_group(hardware, installed) {
+                Ok(())
+            } else {
+                Err(Fault::GroupEntryUnconfirmed)
+            }
+        })();
+        let removed = cleared.and_then(|()| self.remove::<StaPermission<'id, Id>>(device, key.identity));
+        match removed {
+            Ok(removing) => Ok(removing.settle(permission)),
+            Err(fault) => {
+                self.retained_group = Some(StationGroupCommand::Replace {
+                    permission,
+                    key,
+                    key_id,
+                    material,
+                });
+                Err(fault)
             }
         }
     }
@@ -2129,12 +2180,32 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 
 /// Why a group mutation failed in the driver.
 pub(super) enum GroupFailed<C> {
-    /// A step refused before it took the command's owners: the command,
-    /// whole.
+    /// A step refused before it took the command's owners, or a station
+    /// group key replacement the hardware rolled back: the command, whole.
     Returned(C, Fault),
-    /// The hardware rejected a station group key replacement: the port
-    /// keeps its owners with its quarantine ([`Driver::retained_group`]).
+    /// A station group key replacement whose rollback failed: the port
+    /// keeps its owners until its stop's cleanup returns them
+    /// ([`Driver::clean_retained_group`]).
     Retained(Fault),
+}
+
+/// Why a station group key replacement failed: `Err` when the previous key
+/// stands (refused before the table changed, or rolled back), `Ok` with the
+/// replacement's and the rollback's causes when neither key's entry is
+/// installed.
+pub(super) const fn replacement_failed(
+    error: ReplaceError,
+) -> Result<(CryptoKeyError, CryptoKeyError), GroupReplacement> {
+    match error {
+        ReplaceError::InvalidReplacement(_) | ReplaceError::CurrentMaterialMismatch => {
+            Err(GroupReplacement::Refused)
+        }
+        ReplaceError::ReplacementRolledBack(cause) => Err(GroupReplacement::RolledBack(cause)),
+        ReplaceError::RollbackFailed {
+            replacement,
+            rollback,
+        } => Ok((replacement, rollback)),
+    }
 }
 
 impl<'id, Id: SlotIdentity, R: RemovalRights<'id, Id>> Removing<'_, 'id, Id, R> {
@@ -2193,5 +2264,37 @@ mod tests {
         assert_eq!(moved(&[1, 2], &[], 1), [2, 1]);
         // Past the end, nothing moves.
         assert_eq!(moved(&[1, 2], &[3], 3), [1, 2, 3]);
+    }
+}
+
+#[cfg(test)]
+mod replacement_tests {
+    use super::{CryptoKeyError, GroupReplacement, ReplaceError, replacement_failed};
+
+    /// A refusal before the table changed and a rollback both leave the
+    /// previous key standing, so their command comes back whole; only a
+    /// failed rollback is retained, with both causes.
+    #[test]
+    fn a_replacement_is_retained_only_when_its_rollback_failed() {
+        let cause = CryptoKeyError::HardwareRejected;
+        assert_eq!(
+            replacement_failed(ReplaceError::CurrentMaterialMismatch),
+            Err(GroupReplacement::Refused)
+        );
+        assert_eq!(
+            replacement_failed(ReplaceError::InvalidReplacement(cause)),
+            Err(GroupReplacement::Refused)
+        );
+        assert_eq!(
+            replacement_failed(ReplaceError::ReplacementRolledBack(cause)),
+            Err(GroupReplacement::RolledBack(cause))
+        );
+        assert_eq!(
+            replacement_failed(ReplaceError::RollbackFailed {
+                replacement: cause,
+                rollback: CryptoKeyError::Occupied,
+            }),
+            Ok((cause, CryptoKeyError::Occupied))
+        );
     }
 }

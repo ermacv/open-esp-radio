@@ -54,6 +54,25 @@ pub(crate) fn backend_fault(
         Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
         Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
         Source::HeAssociationRange => BackendFault::HeAssociationRange,
+        Source::GroupReplacement(ended) => BackendFault::GroupReplacement(group_replacement(ended)),
+        Source::GroupEntryUnconfirmed => BackendFault::GroupEntryUnconfirmed,
+    }
+}
+
+fn group_replacement(
+    value: oer_chips_esp32s31_radio_ieee80211_backend::port::GroupReplacement,
+) -> GroupReplacement {
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::GroupReplacement as Source;
+    match value {
+        Source::Refused => GroupReplacement::Refused,
+        Source::RolledBack(cause) => GroupReplacement::RolledBack(crypto_key_error(cause)),
+        Source::RollbackFailed {
+            replacement,
+            rollback,
+        } => GroupReplacement::RollbackFailed {
+            replacement: crypto_key_error(replacement),
+            rollback: crypto_key_error(rollback),
+        },
     }
 }
 

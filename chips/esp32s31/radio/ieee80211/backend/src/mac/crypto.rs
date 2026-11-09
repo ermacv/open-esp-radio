@@ -52,7 +52,7 @@ pub trait CcmpKeyHardware {
     fn clear_ccmp_entry(&mut self, index: u8);
 
     /// Query one hardware entry when the implementation exposes validity.
-    fn ccmp_entry_is_valid(&self, _index: u8) -> Option<bool> {
+    fn ccmp_entry_is_valid(&mut self, _index: u8) -> Option<bool> {
         None
     }
 }
@@ -100,7 +100,7 @@ impl CcmpKeyHardware for WifiMacHal<'_> {
         WifiMacHal::clear_ccmp_entry(self, index);
     }
 
-    fn ccmp_entry_is_valid(&self, index: u8) -> Option<bool> {
+    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
         WifiMacHal::ccmp_entry_is_valid(self, index)
     }
 }
@@ -146,8 +146,8 @@ impl CcmpKeyHardware for RadioAccess {
         CcmpKeyHardware::clear_ccmp_entry(&mut self.wifi_mac_hal(), index);
     }
 
-    fn ccmp_entry_is_valid(&self, _index: u8) -> Option<bool> {
-        None
+    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
+        self.wifi_mac_hal().ccmp_entry_is_valid(index)
     }
 }
 
@@ -309,6 +309,15 @@ impl StaGroupCcmpSlot {
         if self.installed {
             hardware.clear_ccmp_entry(STA_GROUP_HARDWARE_INDEX);
         }
+    }
+
+    /// Clear the slot's entry whatever a failed rollback left in it, and
+    /// read whether the key table holds it no more: `false` when it still
+    /// does or the hardware does not say. The slot stays not installed.
+    pub fn clear_confirmed<H: CcmpKeyHardware>(&mut self, hardware: &mut H) -> bool {
+        hardware.clear_ccmp_entry(STA_GROUP_HARDWARE_INDEX);
+        self.installed = false;
+        hardware.ccmp_entry_is_valid(STA_GROUP_HARDWARE_INDEX) == Some(false)
     }
 }
 

@@ -2346,14 +2346,29 @@ where
             &installed.material,
             &replacement,
         );
+        // A refusal changed nothing, and a rollback put the previous entry
+        // back: the previous key stands in both, and the core runs on. A
+        // failed rollback leaves the entry cleared (`token` says so) and the
+        // key in its place for the port's cleanup, which clears the entry
+        // again and confirms it before the key's removal frees the slot.
         if result.is_ok() {
             installed.material = replacement;
             installed.key_id = key_id;
             *scope = Some(CheckedKeyScope::StationGroup { key_id });
-        } else {
-            self.fault = Some(LowerMacFault::Key(CryptoKeyError::HardwareRejected));
         }
         result
+    }
+
+    /// Clear the station group key entry of `installed`, whose replacement's
+    /// rollback failed, and read whether the key table holds it no more:
+    /// `false` when the table still holds it or does not say. The key stays
+    /// in its place either way; only its removal frees the slot.
+    pub(crate) fn clear_failed_station_group<H: CcmpKeyHardware>(
+        &mut self,
+        hardware: &mut H,
+        installed: &mut ReceiveKeyHandle<'core, Path>,
+    ) -> bool {
+        installed.token.clear_confirmed(hardware)
     }
 
     fn vacant_key(

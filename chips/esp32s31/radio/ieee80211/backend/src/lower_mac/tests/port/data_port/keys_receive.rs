@@ -661,56 +661,192 @@ fn every_stalled_gtk_mutation_is_refused_expired_at_its_own_deadline_and_runs_ag
     }
 }
 
-#[test]
-fn a_rejected_gtk_replacement_is_a_named_key_fault_without_a_success_terminal() {
-    with_fixture(|fixture| {
-        fixture.start();
-        let (key, permission) = fixture.installed_group();
-        let permission_index = permission.index();
-        let cuts = fixture.observed.borrow().resumed_cuts;
-        // The new write is rejected; the old entry's restoration is not.
-        fixture.observed.borrow_mut().reject_key_writes = 1;
+/// The replacement's KeyID and material the tests attempt.
+const REPLACEMENT: (u8, u8) = (2, 2);
+
+impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
+    /// The installed first GTK's replacement, with the slot and
+    /// permission it holds.
+    fn replacement(&mut self) -> (Command<'id, Id>, (u8, u8)) {
+        let (key, permission) = self.installed_group();
+        let owners = (
+            <Keys<Id> as KeyTypes<'id>>::group_slot_identity(&key),
+            permission.index(),
+        );
         let replace = PortCommand::ReplaceGroup {
             permission,
             installed: key,
-            key_id: key_id(2),
-            key: group_key(2),
+            key_id: key_id(REPLACEMENT.0),
+            key: group_key(REPLACEMENT.1),
         };
-        assert!(matches!(fixture.run(replace), Err(found) if found == KEY_REJECTED));
-        assert_eq!(fixture.port.fault(), Some(KEY_REJECTED));
-        // The driver keeps the replacement's owners, and the rollback
-        // restored the previous KeyID's entry.
-        let (retained, rolled_back) = fixture.port.retained_group();
-        assert_eq!(
-            retained.map(|(_, permission)| permission),
-            Some(permission_index)
-        );
-        assert_eq!(rolled_back, Some((1, 2, true)));
-        assert!(
-            fixture.group_terminals().is_empty(),
-            "no terminal returns the replacement's owners"
-        );
-        // The failed mutation's receive cut resumes; the fault stays.
-        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
-        let now = fixture.now();
-        assert!(matches!(fixture.port.receive(4, now), Err(found) if found == KEY_REJECTED));
-        let color = BssColor::new(5).expect("color");
-        assert!(matches!(
-            fixture
-                .port
-                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox),
-            Err(CommandFailed::Returned { fault, .. }) if fault == KEY_REJECTED
-        ));
-        let waker = fixture.waker();
-        assert!(matches!(
-            fixture
-                .port
-                .poll_stop(&mut Context::from_waker(&waker), now),
-            Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device,
+        (replace, owners)
+    }
+
+    /// Whether the stopped port refuses its release once the fixture's
+    /// transmit buffers went home.
+    fn stopped_release_refused(&mut self) -> bool {
+        drop(core::mem::take(&mut self.buffers));
+        self.port.release().is_none()
+    }
+
+    /// One service of the stopped port: its result as the port gave it.
+    fn stopped_service(&mut self) -> Result<(), Fault> {
+        let now = self.now();
+        self.port
+            .service_tx(TxFacts::DUE, false, now, &mut self.outbox)
+            .map(|completed| assert!(completed.is_none()))
+    }
+}
+
+/// Whether the stopped port retires once the fixture's transmit buffers
+/// went home, as every retire check needs.
+fn retires<Id: radio::SlotIdentity>(fixture: &mut Fixture<'_, Id>) {
+    drop(core::mem::take(&mut fixture.buffers));
+    assert!(fixture.port.release().is_some(), "the stopped port retires");
+}
+
+/// A replacement the hardware rejects and rolls back is a named fault with
+/// its command whole: the previous key, its identity and its slot and
+/// permission come back, its entry is in the table again, the receive cut
+/// resumes, and a stop recovers the port, which retires.
+#[test]
+fn a_gtk_replacement_the_hardware_rolls_back_comes_back_whole_beside_its_fault() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        let cuts = fixture.observed.borrow().resumed_cuts;
+        // The new write is rejected; the old entry's restoration is not.
+        fixture.observed.borrow_mut().reject_key_writes = 1;
+        let returned = match fixture.run_failed(replace) {
+            Err(CommandFailed::Returned { command, fault }) => {
+                assert_eq!(
+                    fault,
+                    Fault::GroupReplacement(GroupReplacement::RolledBack(
+                        crate::mac::crypto::CryptoKeyError::HardwareRejected
+                    ))
+                );
+                command
+            }
+            _ => panic!("the replacement comes back beside its fault"),
+        };
+        match returned {
+            PortCommand::ReplaceGroup {
+                permission,
+                installed,
+                key_id: attempted,
                 ..
-            }))
+            } => {
+                assert_eq!(
+                    (
+                        <Keys<_> as KeyTypes<'_>>::group_slot_identity(&installed),
+                        permission.index()
+                    ),
+                    owners,
+                    "the very key and permission"
+                );
+                assert_eq!(attempted.get(), REPLACEMENT.0);
+                drop((permission, installed));
+            }
+            _ => panic!("the replacement itself"),
+        }
+        // Nothing is retained; the rollback restored the previous KeyID.
+        assert_eq!(fixture.port.retained_group(), (None, Some((1, 2, true))));
+        assert!(fixture.group_terminals().is_empty(), "no terminal");
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
+        // The stop takes the fault back and the stopped port retires.
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        assert!(fixture.stopped_service().is_ok());
+        assert!(fixture.group_terminals().is_empty());
+        retires(fixture);
+    });
+}
+
+/// A replacement whose rollback fails keeps both causes and its owners in
+/// the port: no terminal, and the stopped port does not retire until its
+/// cleanup cleared the entry and read it cleared; then the key's removal
+/// returns its slot and the command's permission, once, and the port
+/// retires.
+#[test]
+fn a_gtk_replacement_whose_rollback_fails_returns_its_owners_through_the_stop_once() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        let cuts = fixture.observed.borrow().resumed_cuts;
+        // The new write and the old entry's restoration are both rejected.
+        fixture.observed.borrow_mut().reject_key_writes = 2;
+        let rejected = crate::mac::crypto::CryptoKeyError::HardwareRejected;
+        let failed = Fault::GroupReplacement(GroupReplacement::RollbackFailed {
+            replacement: rejected,
+            rollback: rejected,
+        });
+        assert!(matches!(
+            fixture.run_failed(replace),
+            Err(CommandFailed::Taken(fault)) if fault == failed
         ));
+        assert_eq!(fixture.port.fault(), Some(failed));
+        assert_eq!(
+            fixture.port.retained_group(),
+            (Some(owners), Some((1, 2, false)))
+        );
+        assert!(fixture.group_terminals().is_empty(), "no terminal");
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
+        // The stop takes the fault back; the stopped port keeps the owners
+        // until its cleanup.
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        assert!(
+            fixture.stopped_release_refused(),
+            "the owners are retained"
+        );
+        assert!(fixture.stopped_service().is_ok());
+        assert_eq!(
+            fixture.group_terminals(),
+            [(Mutation::Remove, owners.0, owners.1)],
+            "the removal returns the slot and the permission"
+        );
+        assert!(fixture.stopped_service().is_ok());
+        assert_eq!(fixture.group_terminals().len(), 1, "once");
+        retires(fixture);
+    });
+}
+
+/// A cleanup whose clear the key table does not read back cleared frees
+/// nothing: no terminal, the named fault, the owners stay with the port,
+/// and the clear is not tried again.
+#[test]
+fn a_failed_rollbacks_entry_the_table_does_not_read_cleared_keeps_its_owners() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, _) = fixture.replacement();
+        fixture.observed.borrow_mut().reject_key_writes = 2;
+        assert!(matches!(
+            fixture.run_failed(replace),
+            Err(CommandFailed::Taken(_))
+        ));
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        fixture.observed.borrow_mut().key_entries_stuck = true;
+        assert_eq!(
+            fixture.stopped_service(),
+            Err(Fault::GroupEntryUnconfirmed)
+        );
+        assert!(fixture.group_terminals().is_empty(), "the slot is not free");
+        assert!(fixture.port.retained_group().0.is_some());
+        // A table that would now read the entry cleared changes nothing:
+        // the clear is not tried again.
+        fixture.observed.borrow_mut().key_entries_stuck = false;
+        assert!(!fixture.port.recover_for_stop(), "the fault stays");
+        assert_eq!(
+            fixture.stopped_service(),
+            Err(Fault::GroupEntryUnconfirmed)
+        );
+        assert!(fixture.group_terminals().is_empty());
+        drop(core::mem::take(&mut fixture.buffers));
+        assert!(fixture.port.release().is_none(), "the owners stay");
     });
 }
 

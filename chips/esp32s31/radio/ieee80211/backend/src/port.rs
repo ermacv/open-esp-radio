@@ -417,6 +417,33 @@ pub enum Fault {
     /// An HE association the MAC's fields do not hold, which the port
     /// contract's ranges exclude.
     HeAssociationRange,
+    /// A station group key replacement the hardware did not take, by how
+    /// it ended.
+    GroupReplacement(GroupReplacement),
+    /// The stopped port cleared the station group key entry a failed
+    /// rollback left, and the key table did not read it cleared: the
+    /// replacement's owners stay with the port.
+    GroupEntryUnconfirmed,
+}
+
+/// How a station group key replacement the hardware did not take ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GroupReplacement {
+    /// Refused before the key table changed: the previous key stands, and
+    /// the command came back whole.
+    Refused,
+    /// The new key was rejected, for this cause, and the previous key's
+    /// entry is installed again: it stands, with its identity, and the
+    /// command came back whole.
+    RolledBack(crate::mac::crypto::CryptoKeyError),
+    /// Neither key's entry is installed: the port keeps the command's
+    /// owners until its stop clears the entry and confirms it cleared.
+    RollbackFailed {
+        /// Why the new key was rejected.
+        replacement: crate::mac::crypto::CryptoKeyError,
+        /// Why the previous key's entry did not go back.
+        rollback: crate::mac::crypto::CryptoKeyError,
+    },
 }
 
 /// The one-shot fault of a diagnostic image.
@@ -524,8 +551,13 @@ impl Fault {
     /// Whether a stop can return every owner of this fault. Each variant
     /// here names sites that took nothing: a fault of any other kind stays
     /// terminal until its site proves the same.
+    /// A failed group replacement returned its command whole, or keeps its
+    /// owners for the stopped port's cleanup, which returns them.
     pub(crate) const fn leaves_owners_whole(self) -> bool {
-        matches!(self, Self::Unpublished(_) | Self::ReceiveLost)
+        matches!(
+            self,
+            Self::Unpublished(_) | Self::ReceiveLost | Self::GroupReplacement(_)
+        )
     }
 }
 

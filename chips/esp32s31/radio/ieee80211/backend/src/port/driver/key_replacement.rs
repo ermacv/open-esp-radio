@@ -27,4 +27,7 @@ impl<H: CcmpKeyHardware> CcmpKeyHardware for RejectOnce<'_, H> {
     fn clear_ccmp_entry(&mut self, index: u8) {
         self.hardware.clear_ccmp_entry(index);
     }
+    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
+        self.hardware.ccmp_entry_is_valid(index)
+    }
 }
