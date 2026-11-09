@@ -18,6 +18,7 @@ mod addba;
 mod link;
 mod ping;
 mod profile;
+mod profile_turns;
 mod stall;
 mod tracking;
 mod traffic;
@@ -34,12 +35,12 @@ use std::{
 use oer_hil_services_load::{
     Addba, AddbaCollected, CacheGeometry, CacheLevel, Collect, CollectAddba, CollectCounters,
     CollectHart1, CollectLink, CollectMac, CollectNetwork, CollectParts, CollectPositions,
-    CollectStall, CollectStallMac, CollectTracking, Collected, Counters, CountersCollected,
-    DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected, Load,
-    MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns, PartWindow,
-    PartsCollected, Positions, PositionsCollected, Report, Stall, StallCollected, StallMac,
-    StallMacCollected, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected,
-    Transmit,
+    CollectProfile, CollectStall, CollectStallMac, CollectTracking, Collected, Counters,
+    CountersCollected, DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected,
+    Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns,
+    PROFILE_PAGES, PartWindow, PartsCollected, Positions, PositionsCollected, ProfileCollected,
+    Report, Stall, StallCollected, StallMac, StallMacCollected, Start, Started, TUNE_KNOBS,
+    TUNE_UNSET, Tracking, TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Join, Joined, Leave, Left, ScanVisit,
@@ -273,6 +274,7 @@ struct Ended {
     stall_mac: StallMac,
     network: NetworkTurns,
     addba: Addba,
+    turn_profile: profile_turns::Profile,
 }
 
 fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
@@ -344,6 +346,19 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         }
     };
     received_readable(&report)?;
+    let mut turn_profile = profile_turns::Profile::default();
+    for page in 0..PROFILE_PAGES {
+        match cx.call(CollectProfile { run, page }, CALL)? {
+            ProfileCollected::Moments(moments) => turn_profile.moments = moments,
+            ProfileCollected::Cells(cells) => turn_profile.cells = cells,
+            ProfileCollected::Spread(spread) => turn_profile.spread = spread,
+            other => {
+                return Err(Failure::Fail(format!(
+                    "the image's turn profile, page {page}: {other:?}"
+                )));
+            }
+        }
+    }
     match cx.call(CollectAddba { run }, CALL)? {
         AddbaCollected::Report(addba) => Ok(Ended {
             report,
@@ -358,6 +373,7 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             stall_mac,
             network,
             addba,
+            turn_profile,
         }),
         other => Err(Failure::Fail(format!(
             "the image's ADDBA requests: {other:?}"
@@ -432,6 +448,16 @@ fn stall_measurement(name: &str, ended: &Ended) -> serde_json::Value {
 fn turns_measurement(name: &str, ended: &Ended) -> serde_json::Value {
     println!("  network turns {name}: {}", turns::summary(&ended.network));
     turns::window(&ended.network)
+}
+
+/// The network core's turn profile over a window; its one-line summary is
+/// printed as `name`'s.
+fn profile_measurement(name: &str, ended: &Ended) -> serde_json::Value {
+    println!(
+        "  turn profile {name}: {}",
+        profile_turns::summary(&ended.turn_profile)
+    );
+    profile_turns::window(&ended.turn_profile)
 }
 
 /// What the link ran over a window: the access point's view between
@@ -1538,6 +1564,8 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         object.insert("stall".to_owned(), stall_measurement(name, &ended));
         let turns = turns_measurement(name, &ended);
         object.insert("network_turns".to_owned(), turns);
+        let profile = profile_measurement(name, &ended);
+        object.insert("turn_profile".to_owned(), profile);
         object.insert("addba".to_owned(), addba_measurement(name, &ended));
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
@@ -1843,6 +1871,7 @@ mod tests {
             stall_mac: StallMac::default(),
             network: NetworkTurns::default(),
             addba: Addba::default(),
+            turn_profile: profile_turns::Profile::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
         let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);
@@ -1935,6 +1964,7 @@ mod tests {
             stall_mac: StallMac::default(),
             network: NetworkTurns::default(),
             addba: Addba::default(),
+            turn_profile: profile_turns::Profile::default(),
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
         let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);

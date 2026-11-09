@@ -329,6 +329,10 @@ impl oer_portable_trace::Observer for Observer {
         if let Some(decision) = Self::decoded::<E, station::StationRx>(event) {
             receive_decision(decision);
         }
+        #[cfg(feature = "wifi")]
+        if let Some(burst) = Self::decoded::<E, station::ActorReturned>(event) {
+            RETURNS.burst(burst.queued, burst.before, burst.after, burst.held);
+        }
         if let Some(request) = Self::decoded::<E, station::StationAddba>(event) {
             ADDBA.record(request.tid, addba_request(request));
         }
@@ -546,11 +550,41 @@ const _: () = {
     }
 };
 
+/// The network core's turn profile; the network's task is its one writer,
+/// and only a trace build writes it.
+#[cfg(feature = "network")]
+static PROFILE: crate::observe::profile::ProfileCounter =
+    crate::observe::profile::ProfileCounter::new();
+
+/// The network core's turn profile since boot: zeros unless a trace build.
+/// Read on the network's executor, between its polls, each word is whole.
+#[cfg(feature = "network")]
+pub fn turn_profile() -> crate::observe::profile::TurnProfile {
+    PROFILE.read()
+}
+
+/// The station's bursts of returned memory; the datapath actor is their one
+/// writer, through the observer of a trace build.
+#[cfg(feature = "wifi")]
+static RETURNS: crate::observe::profile::ReturnCounter =
+    crate::observe::profile::ReturnCounter::new();
+
+/// The station's bursts of returned memory since boot: zeros unless a trace
+/// build.
+#[cfg(feature = "wifi")]
+pub fn return_bursts() -> crate::observe::profile::Returns {
+    RETURNS.read()
+}
+
 /// The network service's sink: its turns and the core's drops, by reason,
-/// go to [`network_turns`].
+/// go to [`network_turns`]; in a trace build, each turn's cycles and work go
+/// to [`turn_profile`].
 #[cfg(feature = "network")]
 #[derive(Default)]
-pub(crate) struct NetworkSink(crate::observe::network::TurnTally);
+pub(crate) struct NetworkSink(
+    crate::observe::network::TurnTally,
+    #[cfg(oer_trace)] crate::observe::profile::ProfileTally,
+);
 
 #[cfg(feature = "network")]
 impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent> for NetworkSink {
@@ -563,8 +597,30 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
         use oer_protocols_network_runtime::{
             Interest, LocalEvent, PublishEnd, RequestKind, ServiceEvent,
         };
+        #[cfg(oer_trace)]
+        {
+            let profile = &mut self.1;
+            match event {
+                // The turn's cycles run from its first event to its end.
+                ServiceEvent::TurnBegan => profile.began(&PROFILE, oer_portable_riscv::cycle64()),
+                ServiceEvent::TurnEnded(_) => {
+                    profile.ended(&PROFILE, oer_portable_riscv::cycle64());
+                }
+                ServiceEvent::FrameTaken => profile.frame(),
+                ServiceEvent::Accepted => profile.accepted(),
+                ServiceEvent::Noticed => profile.noticed(),
+                ServiceEvent::Took(_) => profile.took(),
+                ServiceEvent::Yielded => profile.yielded(),
+                ServiceEvent::Waited { ready } => profile.waited(&PROFILE, ready),
+                ServiceEvent::BudgetSpent
+                | ServiceEvent::IntakeFull
+                | ServiceEvent::Published(_)
+                | ServiceEvent::Local(_) => {}
+            }
+        }
         let tally = &mut self.0;
         match event {
+            ServiceEvent::TurnBegan | ServiceEvent::FrameTaken | ServiceEvent::Noticed => {}
             ServiceEvent::Took(kind) => tally.took(
                 &NETWORK,
                 match kind {

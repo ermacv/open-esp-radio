@@ -129,7 +129,9 @@ Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
   answer.
 - **Counters, link, tracking:** hart 1's cycles and retired instructions
   at the window's two ends, read on hart 1, and the window's differences of
-  the boot hart's counters, the bridge's frames, the datagrams the network delivered, the network core's turns, the
+  the boot hart's counters, the bridge's frames, the datagrams the network delivered, the network core's turns and
+  their profile (`CollectProfile`, three pages: the fit's sums, the cells,
+  the histograms with the station's return bursts), the
   cache's counts (cleared just before the window) and geometry, the
   receive driver's and the station's receive counts, the transmit
   agreements', the link's rates and the PHY tracking ticks.
