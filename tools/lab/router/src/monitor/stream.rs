@@ -88,6 +88,8 @@ pub enum ReaderEvent {
     Taken,
     /// The stream was told to stop.
     Stopping,
+    /// The channel's receiving end was dropped: a blocked send fails now.
+    Released,
     /// The reader's thread reported its end.
     Ended,
 }
@@ -118,11 +120,23 @@ pub enum Next {
 pub const STREAM_DEPTH: usize = 64;
 const CHUNK: usize = 64 * 1024;
 
+/// The channel's receiving end; its drop is reported as it happens.
+struct Chunks {
+    receiver: mpsc::Receiver<Vec<u8>>,
+    released: Box<dyn Fn() + Send>,
+}
+
+impl Drop for Chunks {
+    fn drop(&mut self) {
+        (self.released)();
+    }
+}
+
 /// A reader's last word.
 type End = Result<u64>;
 
 pub struct Stream {
-    chunks: Option<mpsc::Receiver<Vec<u8>>>,
+    chunks: Option<Chunks>,
     ended: mpsc::Receiver<End>,
     stop: Option<PipeWriter>,
     reader: Option<JoinHandle<()>>,
@@ -206,7 +220,13 @@ impl Stream {
             inside.event(ReaderEvent::Ended);
         });
         Ok(Self {
-            chunks: Some(chunks),
+            chunks: Some(Chunks {
+                receiver: chunks,
+                released: {
+                    let observer = observer.clone();
+                    Box::new(move || observer.event(ReaderEvent::Released))
+                },
+            }),
             ended,
             stop: Some(stop),
             reader: Some(reader),
@@ -219,7 +239,7 @@ impl Stream {
         let Some(chunks) = &self.chunks else {
             return Next::Ended;
         };
-        match clock.recv(chunks, until) {
+        match clock.recv(&chunks.receiver, until) {
             Wait::Message(chunk) => {
                 (self.observer)(ReaderEvent::Taken);
                 Next::Bytes(chunk)

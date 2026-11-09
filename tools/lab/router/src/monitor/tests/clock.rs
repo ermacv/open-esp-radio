@@ -6,7 +6,9 @@
 //! descriptors it waits on to the clock ([`Observer`]); the test's writer
 //! reports the writes and signals it has still to act on. The driver
 //! ([`ManualClock::drive`]) advances time to the deadline of a blocked wait
-//! only when nothing but time can move: no write or signal is pending, and
+//! only when nothing but time can move: the waiter has resumed from every
+//! notification (it blocked having seen the latest change), no write or
+//! signal is pending, and
 //! the reader has ended, waits on a full channel, or waits in `poll` with
 //! neither descriptor readable (checked by a zero-timeout `poll` of
 //! duplicates, so a stop that was not delivered never counts as one).
@@ -46,8 +48,10 @@ enum Reader {
 pub struct State {
     now: u64,
     generation: u64,
-    /// The deadline of a blocked wait.
-    waiting: Option<u64>,
+    /// A blocked wait: its deadline, and the generation it saw when it
+    /// blocked. A change since (a notification it has not yet resumed
+    /// from) keeps the system from being quiet.
+    waiting: Option<(u64, u64)>,
     reader: Reader,
     written: u64,
     consumed: u64,
@@ -55,6 +59,9 @@ pub struct State {
     taken: u64,
     /// Duplicates of the reader's source and stop pipe while it runs.
     fds: Vec<OwnedFd>,
+    /// The channel's receiving end is gone: a reader blocked on a full
+    /// channel is about to fail its send, not stuck.
+    channel_gone: bool,
     /// Signals sent to the writer it has not acted on yet.
     signals: u64,
     /// Writes the writer still has to make: it is not quiet before.
@@ -78,6 +85,7 @@ impl ManualClock {
                 delivered: 0,
                 taken: 0,
                 fds: Vec::new(),
+                channel_gone: false,
                 signals: 0,
                 writes_left: 0,
                 released: false,
@@ -139,7 +147,7 @@ impl ManualClock {
                 return false;
             }
             let generation = state.generation;
-            state.waiting = Some(until);
+            state.waiting = Some((until, generation));
             self.0.1.notify_all();
             state = self
                 .0
@@ -208,9 +216,14 @@ impl ManualClock {
                     Reader::Absent => true,
                     Reader::Busy => false,
                     Reader::Waiting => state.writes_left == 0 && !readable(&state.fds),
-                    Reader::Sending => full,
+                    Reader::Sending => full && !state.channel_gone,
                 };
-            if let (Some(deadline), true) = (state.waiting, quiet) {
+            // Every notified party has resumed and blocked again: the
+            // waiter saw the latest change.
+            let acknowledged = state
+                .waiting
+                .is_some_and(|(_, seen)| seen == state.generation);
+            if let (Some((deadline, _)), true, true) = (state.waiting, quiet, acknowledged) {
                 if taken == steps {
                     return false;
                 }
@@ -254,7 +267,7 @@ impl Clock for ManualClock {
             if state.generation != generation {
                 continue;
             }
-            state.waiting = Some(until);
+            state.waiting = Some((until, generation));
             self.0.1.notify_all();
             state = self
                 .0
@@ -282,9 +295,11 @@ impl Observer for ManualClock {
             }
             ReaderEvent::Taken => state.taken += 1,
             ReaderEvent::Stopping => {}
+            ReaderEvent::Released => state.channel_gone = true,
             ReaderEvent::Ended => {
                 state.reader = Reader::Absent;
                 state.fds.clear();
+                state.channel_gone = false;
             }
         });
     }
