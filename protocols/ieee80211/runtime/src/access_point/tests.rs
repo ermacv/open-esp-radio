@@ -428,16 +428,16 @@ fn the_runner_beacons_answers_a_probe_and_stops_with_every_owner() {
         // Every ticket and buffer is home, the interface closed, its TSF
         // stopped, the beacon permission and the group key's owners back.
         assert_eq!(
-            runner.tickets.len(),
+            runner.homes.tickets.len(),
             oer_protocols_ieee80211_testing_model::MODEL_TICKETS
         );
         assert_eq!(
-            runner.buffers.len(),
+            runner.homes.buffers.len(),
             oer_protocols_ieee80211_testing_model::MODEL_LARGE_BUFFERS
         );
-        assert!(runner.beacon.is_some());
-        assert!(runner.group_slot.is_some() && runner.group_permission.is_some());
-        assert!(runner.configure.is_some());
+        assert!(runner.homes.beacon.is_some());
+        assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
+        assert!(runner.homes.configure.is_some());
         let interface = air.access_point();
         assert!(interface.receive.is_none());
         assert_eq!(interface.tsf, ModelAccessPointTsf::Stopped);
@@ -471,7 +471,7 @@ fn a_stop_behind_a_held_group_removal_waits_for_the_port_without_turning() {
             stop_and_finish(&counted, &air, &shared).await;
         };
         stopped(drive(runner.run(&shared, &counted), script).await);
-        assert!(runner.group_slot.is_some() && runner.group_permission.is_some());
+        assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
     }));
 }
 
@@ -496,7 +496,7 @@ fn a_held_beacon_completion_waits_for_the_port_without_turning() {
             stop_and_finish(&counted, &air, &shared).await;
         };
         stopped(drive(runner.run(&shared, &counted), script).await);
-        assert!(runner.beacon.is_some());
+        assert!(runner.homes.beacon.is_some());
     }));
 }
 
@@ -526,7 +526,7 @@ fn a_probe_response_waiting_for_its_queue_waits_without_turning() {
         };
         stopped(drive(runner.run(&shared, &counted), script).await);
         assert_eq!(
-            runner.tickets.len(),
+            runner.homes.tickets.len(),
             oer_protocols_ieee80211_testing_model::MODEL_TICKETS
         );
     }));
@@ -560,7 +560,7 @@ fn a_unit_the_group_removal_cuts_is_read_and_recycled() {
         // The stop ends with every owner: a cut unit kept from the port
         // would have quarantined it.
         stopped(drive(runner.run(&shared, &counted), script).await);
-        assert!(runner.group_slot.is_some() && runner.group_permission.is_some());
+        assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
     }));
 }
 
@@ -598,15 +598,15 @@ fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
         // Every other owner is the runner's: tickets, buffers, the beacon
         // permission, the group key's slot and permission.
         assert_eq!(
-            runner.tickets.len(),
+            runner.homes.tickets.len(),
             oer_protocols_ieee80211_testing_model::MODEL_TICKETS
         );
         assert_eq!(
-            runner.buffers.len(),
+            runner.homes.buffers.len(),
             oer_protocols_ieee80211_testing_model::MODEL_LARGE_BUFFERS
         );
-        assert!(runner.beacon.is_some());
-        assert!(runner.group_slot.is_some() && runner.group_permission.is_some());
+        assert!(runner.homes.beacon.is_some());
+        assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
         // The port stops with them.
         let stopped = core::future::poll_fn(|cx| {
             let now = oer_portable_time::Clock::now(&*counted.clock);
@@ -617,3 +617,5 @@ fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
 }
 
 mod handshake;
+
+mod ends;

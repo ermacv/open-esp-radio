@@ -216,7 +216,7 @@ impl AccessPointControl {
         self.shared.status()
     }
 
-    /// How the access point's runner ended, once it did.
+    /// How the access point's runner ended, or how far its end came.
     pub fn exit(&self) -> Option<ApExit> {
         self.start.ended.get()
     }
@@ -270,15 +270,16 @@ pub enum ApEnded {
     Refused(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
 }
 
-/// How the access point ended.
+/// How the access point ended, or how far its end came.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApExit {
     /// It ended for its cause; its radio stopped, every owner came back
     /// and the radio was released.
     Ended(ApEnded),
-    /// It ended for its cause and its radio's stop was not confirmed, as
-    /// the port observed it: the runner keeps every owner the hardware may
-    /// still use, in place.
+    /// It ended for its cause and its radio's stop is not confirmed yet, as
+    /// the port observed it last: the runner keeps every owner the hardware
+    /// may still use and watches the stop on. Published while it does; the
+    /// run never returns it.
     StopUnconfirmed {
         /// Why it ended.
         ended: ApEnded,
@@ -286,7 +287,10 @@ pub enum ApExit {
         observed: oer_protocols_ieee80211_contracts_port::StopUnconfirmed,
     },
     /// It ended for its cause, its radio's stop was confirmed, and the
-    /// radio's release refused: the runner keeps the port.
+    /// radio's release refused: published while the MAC refuses it as
+    /// still active and the release tries again; returned for a refusal
+    /// the release does not repeat (a leave never answered, a poisoned
+    /// domain, a port with no stopped radio).
     ReleaseRefused {
         /// Why it ended.
         ended: ApEnded,
@@ -456,7 +460,11 @@ impl<W: Binding> AccessPointRunner<W> {
         }
         let (parts, driver) = match radio::install(boot, config, AP_BANK).await {
             Ok(installed) => installed,
-            Err(error) => return ApExit::Unavailable(error),
+            Err(refused) => {
+                // A started radio leaves before the refusal is told.
+                let _left = refused.owners.retire().await;
+                return ApExit::Unavailable(refused.cause);
+            }
         };
         let Some(minted) = installations.first() else {
             return ApExit::Unavailable(InitializationError::Registration);
@@ -564,42 +572,33 @@ impl<W: Binding> AccessPointRunner<W> {
             nonces,
         );
         let mut runner = runner;
-        let ended = match runner.run(shared, &EmbassyClock).await {
-            ApEnd::Stopped => ApEnded::Stopped,
-            ApEnd::StopUnconfirmed(observed) => {
-                // The stop the runner asked for is not confirmed: the runner
-                // keeps the owners the hardware may still use, and this
-                // task keeps the runner.
-                return park(
-                    slot,
-                    runner,
-                    ApExit::StopUnconfirmed {
-                        ended: ApEnded::Stopped,
-                        observed,
-                    },
-                )
-                .await;
-            }
-            ApEnd::StartRefused(refused) => {
-                ApEnded::StartRefused(crate::failure::convert::start_refused(refused))
-            }
-            ApEnd::Faulted(fault) => {
-                ApEnded::Faulted(crate::failure::convert::backend_fault(fault))
-            }
-            ApEnd::Contract(contract) => ApEnded::Contract(contract),
-            ApEnd::Refused(refusal) => ApEnded::Refused(refusal),
+        let end = runner.run(shared, &EmbassyClock).await;
+        let (ended, stop) = match end {
+            ApEnd::Stopped => (ApEnded::Stopped, Stop::Confirmed),
+            ApEnd::StopUnconfirmed(observed) => (ApEnded::Stopped, Stop::Unconfirmed(observed)),
+            ApEnd::StartRefused(refused) => (
+                ApEnded::StartRefused(crate::failure::convert::start_refused(refused)),
+                Stop::Owed,
+            ),
+            ApEnd::Faulted(fault) => (
+                ApEnded::Faulted(crate::failure::convert::backend_fault(fault)),
+                Stop::Owed,
+            ),
+            ApEnd::Contract(contract) => (ApEnded::Contract(contract), Stop::Owed),
+            ApEnd::Refused(refusal) => (ApEnded::Refused(refusal), Stop::Owed),
         };
-        retire::<W>(slot, runner, ended).await
+        retire::<W>(slot, runner, ended, stop).await
     }
 }
 
-/// Keep `runner` and its owners in this task for good, after `exit` is
-/// published: the hardware may still use them, and nothing else may take
-/// them.
-async fn park<R>(slot: &StartSlot, runner: R, exit: ApExit) -> ApExit {
-    let _kept = runner;
-    slot.ended.set(Some(exit));
-    core::future::pending::<ApExit>().await
+/// What a run's end left of the radio's stop.
+enum Stop {
+    /// The port confirmed it.
+    Confirmed,
+    /// The port did not confirm it yet, as it observed.
+    Unconfirmed(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
+    /// The run ended before it.
+    Owed,
 }
 
 /// The access point's runner over the S31 port.
@@ -614,25 +613,38 @@ type ApRunnerOf<W> = ApRunner<
     Nonces,
 >;
 
-/// Stop the radio of an ended run unless it stopped already, then release
-/// it. The owners a contract break or a refusal left without a place come
-/// back first. An unconfirmed stop or a refused release keeps the runner.
-async fn retire<W: Binding>(slot: &StartSlot, mut runner: ApRunnerOf<W>, ended: ApEnded) -> ApExit {
-    while let Some(kept) = runner.take_kept() {
-        drop(kept);
+/// Stop the radio of an ended run unless the port confirmed its stop, then
+/// release it. Until the port confirms the stop, the runner keeps every
+/// owner and watches the stop on its facts and deadline, each observation
+/// published as [`ApExit::StopUnconfirmed`]; until the release ends, a
+/// release the MAC refused as still active is published as
+/// [`ApExit::ReleaseRefused`] and tried again. The owners end with the
+/// runner once the stop is confirmed and the release ended.
+async fn retire<W: Binding>(
+    slot: &StartSlot,
+    mut runner: ApRunnerOf<W>,
+    ended: ApEnded,
+    stop: Stop,
+) -> ApExit {
+    let unconfirmed = |observed| {
+        slot.ended
+            .set(Some(ApExit::StopUnconfirmed { ended, observed }))
+    };
+    match stop {
+        Stop::Confirmed => {}
+        Stop::Unconfirmed(observed) => {
+            unconfirmed(observed);
+            runner.finish_stop(&EmbassyClock, unconfirmed).await;
+        }
+        Stop::Owed => runner.finish_stop(&EmbassyClock, unconfirmed).await,
     }
-    drop(runner.take_refused());
-    let stopped = core::future::poll_fn(|cx| {
-        let now = oer_portable_time::Clock::now(&EmbassyClock);
-        oer_protocols_ieee80211_contracts_port::DataPort::poll_stop(runner.port_mut(), cx, now)
-    })
-    .await;
-    if let Err(observed) = stopped {
-        return park(slot, runner, ApExit::StopUnconfirmed { ended, observed }).await;
-    }
-    match radio::release::<W>(runner.port_mut()).await {
+    let refused = |cause| {
+        slot.ended
+            .set(Some(ApExit::ReleaseRefused { ended, cause }))
+    };
+    match radio::release::<W>(runner.port_mut(), refused).await {
         Ok(()) => ApExit::Ended(ended),
-        Err(cause) => park(slot, runner, ApExit::ReleaseRefused { ended, cause }).await,
+        Err(cause) => ApExit::ReleaseRefused { ended, cause },
     }
 }
 

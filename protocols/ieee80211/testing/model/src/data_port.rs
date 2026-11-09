@@ -1743,7 +1743,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let _turn = Turn::at(&air, now);
         self.held.draining.set(true);
         self.driver.publish(&self.held);
-        if self.idle() && self.held.events.is_empty() {
+        if self.idle() && self.held.events.is_empty() && !self.air.stop_held.get() {
             self.held.draining.set(false);
             self.radio = Radio::Stopped;
             // The stopped MAC receives for no interface and runs no TSF.

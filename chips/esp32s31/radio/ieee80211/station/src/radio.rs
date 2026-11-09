@@ -448,8 +448,10 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
     let config = boot.config;
     let (parts, driver) = match install(boot, config, crate::supply::PORT_BUFFERS).await {
         Ok(installed) => installed,
-        Err(error) => {
-            post(&mut mailbox, News::Unavailable(error)).await;
+        Err(refused) => {
+            // A started radio leaves before the refusal is told.
+            let _left = refused.owners.retire().await;
+            post(&mut mailbox, News::Unavailable(refused.cause)).await;
             return;
         }
     };
@@ -524,7 +526,7 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
                 }
             }
             ActorEnd::Retired => {
-                let released = release::<W>(actor.port_mut()).await;
+                let released = release::<W>(actor.port_mut(), |_| {}).await;
                 post(&mut mailbox, News::Released(released)).await;
                 return;
             }
@@ -538,149 +540,455 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
 /// The TSF epoch of the first installation ([`LowerMacConfig::tsf_epoch`]).
 const FIRST_TSF_EPOCH: u32 = 1;
 
-/// Release the retired port's radio membership. Every owner a failed step
-/// does not return stays quarantined in its static backing.
-pub(crate) async fn release<W: Binding>(
-    port: &mut Port<W>,
-) -> Result<(), crate::failure::ReleaseCause> {
-    use crate::failure::{ReleaseCause, convert};
-    let Some(device) = port.release() else {
-        return Err(ReleaseCause::NotStopped);
-    };
-    let Some((stopped, cell)) = device.0.take_stopped() else {
-        return Err(ReleaseCause::NotStopped);
-    };
-    match stopped.release(cell).await {
-        Ok((_cell, Ok(released))) => convert::released(released.domain),
-        Ok((_cell, Err(failure))) => {
-            let cause = convert::still_active(failure.error);
-            let _quarantined = core::mem::ManuallyDrop::new(failure.stopped);
-            Err(cause)
+/// The stopped radio a retired port gave up, with its membership cell: it
+/// leaves the radio system through [`StoppedRadio::release`].
+pub(crate) struct StoppedRadio {
+    stopped: oer_chips_esp32s31_radio_ieee80211_backend::runtime::WifiStopped<Platform>,
+    cell: MembershipCell<Wifi>,
+}
+
+/// Why a release of the stopped radio did not end.
+pub(crate) enum ReleaseRefused {
+    /// The MAC or its RX walker was still active; nothing was posted. The
+    /// stopped radio comes back with its cell, for a later release.
+    StillActive {
+        cause: crate::failure::ReleaseCause,
+        radio: StoppedRadio,
+    },
+    /// The leave was posted and ended for its cause: it is never posted
+    /// again.
+    Ended(crate::failure::ReleaseCause),
+}
+
+/// How long a release the MAC refused as still active waits before it
+/// tries again: a chosen retry time, not a hardware bound.
+pub(crate) const RELEASE_RETRY: Duration = Duration::from_millis(1);
+
+impl StoppedRadio {
+    /// Leave the radio system: confirm the MAC stopped, then post the
+    /// leave and wait for its answer, however late. A refusal before the
+    /// post returns the radio; once posted, the leave is never posted
+    /// again.
+    pub(crate) async fn release(self) -> Result<(), ReleaseRefused> {
+        use crate::failure::{ReleaseCause, convert};
+        let Self { stopped, cell } = self;
+        match stopped.release(cell).await {
+            Ok((_cell, Ok(released))) => {
+                convert::released(released.domain).map_err(ReleaseRefused::Ended)
+            }
+            Ok((cell, Err(failure))) => Err(ReleaseRefused::StillActive {
+                cause: convert::still_active(failure.error),
+                radio: Self {
+                    stopped: failure.stopped,
+                    cell,
+                },
+            }),
+            Err(quarantine) => Err(ReleaseRefused::Ended(ReleaseCause::LeaveUnanswered(
+                quarantine.reason.observations(),
+            ))),
         }
-        Err(quarantine) => Err(ReleaseCause::LeaveUnanswered(
-            quarantine.reason.observations(),
-        )),
     }
 }
-/// Start the radio and assemble the port's parts: the port holds the first
-/// `bank` buffers of the transmit pool.
-pub(crate) async fn install<W: Binding>(
-    boot: Boot<W>,
-    config: Config,
-    bank: u8,
-) -> Result<(PortParts<Device<W>, TX, ()>, &'static mut PortDriverOf<W>), InitializationError> {
-    let domain = RegulatoryDomain::of(
-        Country::new(config.country).map_err(|_| InitializationError::Country)?,
-    )
-    .ok_or(InitializationError::Domain)?;
-    let channel = WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20)
-        .map_err(|_| InitializationError::Channel)?;
-    let initial = domain
-        .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
-        .map_err(|_| InitializationError::Channel)?;
-    let limits = board::wifi_power_limits(
-        i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
-        Some(i32::from(config.cap_dbm) * 100),
-    );
-    let ceiling = initial.tx_ceiling(limits);
-    let start = RadioStartConfig::new(
-        WifiColdStartConfig::new(initial, ceiling),
-        WifiMacStartConfig::new(
-            MAC_COLD_HANDSHAKE_DEADLINE,
-            IndividualAddress::for_interface(boot.station)
-                .map_err(|_| InitializationError::Address)?,
-            IndividualAddress::for_interface(boot.ap).map_err(|_| InitializationError::Address)?,
-            boot.delay_random,
-        )
-        .map_err(|_| InitializationError::Radio)?,
-    );
-    let (cell, stopped) =
-        start_esp32s31_radio(boot.cell, boot.wifi, Platform { power: None }, start)
-            .await
-            .unwrap_or_else(|error| W::fail(InitializationError::Request(error.into())));
-    let stopped = stopped.map_err(|_| InitializationError::Radio)?;
-    let power = stopped.start_report().track.tx_power;
-    let arena = boot.rx;
-    let (rx, _, _) = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxArena::<
+
+/// Take the retired port's stopped radio: `None` while the port is not
+/// retirable or its device holds no stopped radio, and then nothing was
+/// taken.
+pub(crate) fn take_stopped<W: Binding>(port: &mut Port<W>) -> Option<StoppedRadio> {
+    let device = port.release()?;
+    let (stopped, cell) = device.0.take_stopped()?;
+    Some(StoppedRadio { stopped, cell })
+}
+
+/// Release the retired port's radio membership: a release the MAC refused
+/// as still active, which posted nothing, is tried again after
+/// [`RELEASE_RETRY`] until it is posted, each refusal's cause going to
+/// `still_active`; a posted leave is waited for and never posted again.
+/// Nothing is quarantined here: the radio stays with the release until it
+/// left.
+pub(crate) async fn release<W: Binding>(
+    port: &mut Port<W>,
+    mut still_active: impl FnMut(crate::failure::ReleaseCause),
+) -> Result<(), crate::failure::ReleaseCause> {
+    let Some(mut radio) = take_stopped::<W>(port) else {
+        return Err(crate::failure::ReleaseCause::NotStopped);
+    };
+    loop {
+        match radio.release().await {
+            Ok(()) => return Ok(()),
+            Err(ReleaseRefused::Ended(cause)) => return Err(cause),
+            Err(ReleaseRefused::StillActive { cause, radio: back }) => {
+                still_active(cause);
+                radio = back;
+                let at = oer_portable_time::Clock::now(&EmbassyClock).saturating_add(RELEASE_RETRY);
+                oer_portable_time::Timer::wait_until(&EmbassyClock, at).await;
+            }
+        }
+    }
+}
+/// Why [`install`] refused, with the owners it took that its refused step
+/// did not consume.
+pub(crate) struct InstallRefused<W: Binding> {
+    pub cause: InitializationError,
+    pub owners: Acquired<W>,
+}
+
+#[allow(
+    clippy::large_enum_variant,
+    reason = "no-alloc refusal returns each owner by value, as the radio's start failure does"
+)]
+/// The owners a refused install returns, by how far it came. A step that
+/// refuses consumes only what its own contract names (a placement that
+/// does not bind, a descriptor that does not pin); everything else comes
+/// back here.
+pub(crate) enum Acquired<W: Binding> {
+    /// The boot's configuration is not one the radio runs: nothing was
+    /// taken.
+    Boot(Boot<W>),
+    /// The port's storage did not take its parts before the radio started:
+    /// the radio's partition and cell, its interrupt binding and bell.
+    Unstarted {
+        cell: MembershipCell<Wifi>,
+        wifi: WifiPartition,
+        bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
+        bell: irq::Bell<W::Wifi, W::DriverEntry>,
+    },
+    /// The radio's join or track was never answered: its cell and
+    /// partition went with the request; the radio system keeps its seat.
+    Unanswered(Prepared<W>),
+    /// The radio did not start: its cell, the start's failure with what the
+    /// radio system returned, and the prepared parts.
+    NotStarted {
+        cell: MembershipCell<Wifi>,
+        failure: oer_chips_esp32s31_radio_ieee80211_backend::startup::RadioStartFailure<Platform>,
+        prepared: Prepared<W>,
+    },
+    /// The radio started and the transmitter did not go idle: the started
+    /// radio, for its release, and the transmitter.
+    Started {
+        radio: StoppedRadio,
+        transmitter: OrdinaryTxOwner<
+            'static,
+            <Device<W> as port::Device<TX>>::Power,
+            Entropy,
+            EmbassyClock,
+            TX,
+        >,
+    },
+}
+
+impl<W: Binding> Acquired<W> {
+    /// End what the refused install left. A member of the radio system
+    /// leaves it: a started radio as [`release`] does, a refusal of its MAC
+    /// tried again; a member whose track failed through its cell, the
+    /// leave never posted again. The other owners end here, no hardware of
+    /// theirs running: nothing was published to the MAC or its DMA.
+    pub(crate) async fn retire(self) -> Result<(), crate::failure::ReleaseCause> {
+        use oer_chips_esp32s31_radio_ieee80211_backend::startup::RadioStartFailure;
+        match self {
+            Self::Boot(_boot) => Ok(()),
+            Self::Unstarted {
+                cell: _cell,
+                wifi: _wifi,
+                bound: _bound,
+                bell: _bell,
+            } => Ok(()),
+            Self::Unanswered(prepared) => {
+                prepared.end();
+                Ok(())
+            }
+            Self::NotStarted {
+                cell,
+                failure,
+                prepared,
+            } => match failure {
+                // The partition came back at the stage the join reached:
+                // the client never became a member.
+                RadioStartFailure::Join { .. } => {
+                    prepared.end();
+                    Ok(())
+                }
+                RadioStartFailure::Track { failed, .. } => {
+                    prepared.end();
+                    let (member, wifi) = failed.returned;
+                    match cell
+                        .leave(
+                            oer_chips_esp32s31_radio_client::Leaving::Untracked(member),
+                            oer_chips_esp32s31_radio_client::wifi::WifiLeave { wifi },
+                        )
+                        .await
+                    {
+                        Ok((_cell, left)) => crate::failure::convert::released(left.domain),
+                        Err(reason) => Err(crate::failure::ReleaseCause::LeaveUnanswered(
+                            reason.observations(),
+                        )),
+                    }
+                }
+            },
+            Self::Started {
+                mut radio,
+                transmitter: _transmitter,
+            } => loop {
+                match radio.release().await {
+                    Ok(()) => return Ok(()),
+                    Err(ReleaseRefused::Ended(cause)) => return Err(cause),
+                    Err(ReleaseRefused::StillActive { radio: back, .. }) => {
+                        radio = back;
+                        let at = oer_portable_time::Clock::now(&EmbassyClock)
+                            .saturating_add(RELEASE_RETRY);
+                        oer_portable_time::Timer::wait_until(&EmbassyClock, at).await;
+                    }
+                }
+            },
+        }
+    }
+}
+
+impl<W: Binding> Prepared<W> {
+    /// End the prepared parts: the receive path was bound but never
+    /// started, and the interrupt binding and bell served no radio.
+    fn end(self) {
+        let Self {
+            bound: _bound,
+            bell: _bell,
+            rx: _rx,
+        } = self;
+    }
+}
+
+/// The port's parts an install prepared before the radio started.
+pub(crate) struct Prepared<W: Binding> {
+    bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
+    bell: irq::Bell<W::Wifi, W::DriverEntry>,
+    rx: oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxParts<
+        'static,
         N,
         B,
         S,
         Q,
+        ChipDma,
         DriverExecutor,
-    >::bind(
-        arena,
-        WifiIrqSignals {
-            mac: boot.mac,
-            receive: boot.receive,
-            power: boot.power,
-        },
-    )
-    .map_err(|_| InitializationError::Rx)?;
-    // Every bind lends the same static arena's counters: the first stays.
-    #[cfg(oer_trace)]
-    let _bound = crate::RX_COUNTERS.set(rx.counters());
-    let storage = boot.storage;
-    let device = storage
-        .device
-        .try_init_with(|| {
-            Device(RadioDevice::new(RadioParts {
-                wifi: stopped,
-                rx,
-                interrupt_cell: &boot.interrupts.line,
-                bound: boot.bound,
-                actor: cell,
-                timer: EmbassyClock,
-                doorbell: boot.bell,
-                domain,
-                power_limits: limits,
-                #[cfg(oer_trace)]
-                stall: &crate::RX_STALL,
-            }))
-        })
-        .ok_or(InitializationError::Storage)?;
-    let pool = boot.pool;
-    let [t0, t1, t2, t3, t4] = boot.descriptors;
-    let [c0, c1] = boot.chains;
-    let [s0, s1, s2, s3, s4] = &mut storage.slots;
-    let [m0, m1] = &mut storage.chains;
-    let [r0, r1] = &mut storage.retention;
-    macro_rules! slot {
-        ($dma:ident, $slot:ident) => {{
-            let dma = TxDmaStorage::pin::<ChipDma, _>($dma).map_err(|_| InitializationError::Tx)?;
-            Pin::new(
-                $slot
-                    .try_init(TxSlot::from_dma(dma))
-                    .ok_or(InitializationError::Storage)?,
+    >,
+}
+
+/// Start the radio and assemble the port's parts: the port holds the first
+/// `bank` buffers of the transmit pool.
+///
+/// # Errors
+///
+/// The refused step's cause, with every owner the install took that the
+/// step did not consume ([`Acquired`]).
+pub(crate) async fn install<W: Binding>(
+    boot: Boot<W>,
+    config: Config,
+    bank: u8,
+) -> Result<(PortParts<Device<W>, TX, ()>, &'static mut PortDriverOf<W>), InstallRefused<W>> {
+    // Every value the radio's start and the port take is checked first:
+    // a refusal here takes nothing.
+    let checked = (|| {
+        let domain = RegulatoryDomain::of(
+            Country::new(config.country).map_err(|_| InitializationError::Country)?,
+        )
+        .ok_or(InitializationError::Domain)?;
+        let channel = WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20)
+            .map_err(|_| InitializationError::Channel)?;
+        let initial = domain
+            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
+            .map_err(|_| InitializationError::Channel)?;
+        let limits = board::wifi_power_limits(
+            i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
+            Some(i32::from(config.cap_dbm) * 100),
+        );
+        let ceiling = initial.tx_ceiling(limits);
+        let start = RadioStartConfig::new(
+            WifiColdStartConfig::new(initial, ceiling),
+            WifiMacStartConfig::new(
+                MAC_COLD_HANDSHAKE_DEADLINE,
+                IndividualAddress::for_interface(boot.station)
+                    .map_err(|_| InitializationError::Address)?,
+                IndividualAddress::for_interface(boot.ap)
+                    .map_err(|_| InitializationError::Address)?,
+                boot.delay_random,
             )
-        }};
-    }
-    macro_rules! chain {
-        ($dma:ident, $metadata:ident, $retention:ident) => {{
-            let metadata = $metadata
-                .try_init(HtAmpduTxStorage::new())
-                .ok_or(InitializationError::Storage)?;
-            let retention = $retention
-                .try_init(RetainedAmpduDmaStorage::new())
-                .ok_or(InitializationError::Storage)?;
-            let resources = HtAmpduTxResources::pin_static(metadata, $dma)
-                .map_err(|_| InitializationError::Tx)?;
-            RetainedDmaAmpduTx::new(resources, retention)
-        }};
-    }
-    let transmitter = OrdinaryTxOwner::new(WifiTxResources {
-        slot: slot!(t0, s0),
+            .map_err(|_| InitializationError::Radio)?,
+        );
+        let access_point_address =
+            IndividualAddress::for_interface(boot.ap).map_err(|_| InitializationError::Address)?;
+        Ok((
+            domain,
+            channel,
+            limits,
+            ceiling,
+            start,
+            access_point_address,
+        ))
+    })();
+    let (domain, channel, limits, ceiling, start, access_point_address) = match checked {
+        Ok(checked) => checked,
+        Err(cause) => {
+            return Err(InstallRefused {
+                cause,
+                owners: Acquired::Boot(boot),
+            });
+        }
+    };
+    let Boot {
+        cell,
+        wifi,
+        delay_random: _,
+        station,
+        ap: _,
+        bound,
+        bell,
+        config: _,
+        entropy,
+        interrupts,
+        mac,
+        receive,
+        power,
+        rx,
+        pool,
+        descriptors,
+        chains,
+        storage,
+    } = boot;
+    let DriverStorage {
+        lent,
+        shared,
+        device,
+        slots,
+        chains: chain_storage,
+        retention,
+        driver,
+    } = storage;
+    // The port's parts are placed before the radio starts: a refusal of
+    // theirs leaves the radio unstarted.
+    let prepared = (|| {
+        let (rx, _, _) = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxArena::<
+            N,
+            B,
+            S,
+            Q,
+            DriverExecutor,
+        >::bind(
+            rx,
+            WifiIrqSignals {
+                mac,
+                receive,
+                power,
+            },
+        )
+        .map_err(|_| InitializationError::Rx)?;
+        let device = device.try_uninit().ok_or(InitializationError::Storage)?;
+        let [t0, t1, t2, t3, t4] = descriptors;
+        let [c0, c1] = chains;
+        let [s0, s1, s2, s3, s4] = slots;
+        let [m0, m1] = chain_storage;
+        let [r0, r1] = retention;
+        macro_rules! slot {
+            ($dma:ident, $slot:ident) => {{
+                let place = $slot.try_uninit().ok_or(InitializationError::Storage)?;
+                let dma =
+                    TxDmaStorage::pin::<ChipDma, _>($dma).map_err(|_| InitializationError::Tx)?;
+                Pin::new(&mut *place.write(TxSlot::from_dma(dma)))
+            }};
+        }
+        macro_rules! chain {
+            ($dma:ident, $metadata:ident, $retention:ident) => {{
+                let metadata = $metadata.try_uninit().ok_or(InitializationError::Storage)?;
+                let retention = $retention
+                    .try_uninit()
+                    .ok_or(InitializationError::Storage)?;
+                let metadata = metadata.write(HtAmpduTxStorage::new());
+                let retention = retention.write(RetainedAmpduDmaStorage::new());
+                let resources = HtAmpduTxResources::pin_static(metadata, $dma)
+                    .map_err(|_| InitializationError::Tx)?;
+                RetainedDmaAmpduTx::new(resources, retention)
+            }};
+        }
+        let first = slot!(t0, s0);
+        let single = [slot!(t1, s1), slot!(t2, s2), slot!(t3, s3), slot!(t4, s4)];
+        let chained = [chain!(c0, m0, r0), chain!(c1, m1, r1)];
+        let lent = lent.take().ok_or(InitializationError::Storage)?;
+        let shared = shared.try_uninit().ok_or(InitializationError::Storage)?;
+        Ok((rx, device, first, single, chained, lent, shared))
+    })();
+    let (rx, device, first, single, chained, lent, shared) = match prepared {
+        Ok(prepared) => prepared,
+        Err(cause) => {
+            return Err(InstallRefused {
+                cause,
+                owners: Acquired::Unstarted {
+                    cell,
+                    wifi,
+                    bound,
+                    bell,
+                },
+            });
+        }
+    };
+    let started = start_esp32s31_radio(cell, wifi, Platform { power: None }, start).await;
+    let (cell, stopped) = match started {
+        Ok(started) => started,
+        Err(quarantine) => {
+            // The radio system never answered: the request's seat stays
+            // its, and nothing of the radio comes back to be released.
+            return Err(InstallRefused {
+                cause: InitializationError::Request(quarantine.reason),
+                owners: Acquired::Unanswered(Prepared { bound, bell, rx }),
+            });
+        }
+    };
+    let stopped = match stopped {
+        Ok(stopped) => stopped,
+        Err(failure) => {
+            return Err(InstallRefused {
+                cause: InitializationError::Radio,
+                owners: Acquired::NotStarted {
+                    cell,
+                    failure,
+                    prepared: Prepared { bound, bell, rx },
+                },
+            });
+        }
+    };
+    let tx_power = stopped.start_report().track.tx_power;
+    let transmitter = match OrdinaryTxOwner::new(WifiTxResources {
+        slot: first,
         policy: WifiTxRuntimePolicy::vendor_defaults(),
-        power: CappedTxPowerProfile::new(power, ceiling),
-        entropy: Entropy(boot.entropy.max(1)),
+        power: CappedTxPowerProfile::new(tx_power, ceiling),
+        entropy: Entropy(entropy.max(1)),
         timer: EmbassyClock,
     })
     .into_idle()
-    .map_err(|_| InitializationError::Tx)?;
-    let lent = storage.lent.take().ok_or(InitializationError::Storage)?;
-    let shared = storage
-        .shared
-        .try_init_with(|| PortSharedStorage::with_network(lent))
-        .ok_or(InitializationError::Storage)?;
+    {
+        Ok(idle) => idle,
+        Err(transmitter) => {
+            return Err(InstallRefused {
+                cause: InitializationError::Tx,
+                owners: Acquired::Started {
+                    radio: StoppedRadio { stopped, cell },
+                    transmitter,
+                },
+            });
+        }
+    };
+    // Every bind lends the same static arena's counters: the first stays.
+    #[cfg(oer_trace)]
+    let _bound = crate::RX_COUNTERS.set(rx.counters());
+    let device = device.write(Device(RadioDevice::new(RadioParts {
+        wifi: stopped,
+        rx,
+        interrupt_cell: &interrupts.line,
+        bound,
+        actor: cell,
+        timer: EmbassyClock,
+        doorbell: bell,
+        domain,
+        power_limits: limits,
+        #[cfg(oer_trace)]
+        stall: &crate::RX_STALL,
+    })));
+    let shared = shared.write(PortSharedStorage::with_network(lent));
     let parts = PortParts {
         device,
         shared,
@@ -688,21 +996,20 @@ pub(crate) async fn install<W: Binding>(
         pool,
         bank,
         descriptors: TxDescriptors {
-            single: [slot!(t1, s1), slot!(t2, s2), slot!(t3, s3), slot!(t4, s4)],
-            chains: [chain!(c0, m0, r0), chain!(c1, m1, r1)],
+            single,
+            chains: chained,
         },
         config: LowerMacConfig {
-            station_address: boot.station,
+            station_address: station,
             channel,
             publication_timeout: PUBLICATION_BOUND,
             tsf_epoch: FIRST_TSF_EPOCH,
         },
-        access_point_address: IndividualAddress::for_interface(boot.ap)
-            .map_err(|_| InitializationError::Address)?,
+        access_point_address,
         coex: &Coex,
         observations: (),
     };
-    Ok((parts, &mut storage.driver))
+    Ok((parts, driver))
 }
 
 impl<W: Binding> port::Device<TX> for Device<W> {

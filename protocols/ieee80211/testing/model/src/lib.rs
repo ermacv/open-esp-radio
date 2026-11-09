@@ -1787,6 +1787,8 @@ pub struct ModelAir {
     held: Cell<[bool; WmmAccessCategory::ALL.len()]>,
     /// Keep a published PPDU's result pending, independently of prepublication CCA.
     held_results: Cell<[bool; WmmAccessCategory::ALL.len()]>,
+    /// The MAC does not go quiet: a stop stays unconfirmed while set.
+    stop_held: Cell<bool>,
     /// Arena ends served ahead of the port's transmit service.
     relayed: Cell<usize>,
     /// What [`TxArena::event_waiting`] of the port's arenas answers.
@@ -1845,6 +1847,7 @@ impl ModelAir {
             edca: Default::default(),
             held: Default::default(),
             held_results: Default::default(),
+            stop_held: Cell::new(false),
             relayed: Cell::new(0),
             event_waiting: Cell::new(false),
             time: ModelTime::new(clock),
@@ -2106,6 +2109,13 @@ impl ModelAir {
     /// admitted commands instead of waiting for this test hold to be released.
     pub fn hold_group_commands(&self, held: bool) {
         self.group_held.set(held);
+        self.wake_world();
+    }
+
+    /// Keep the MAC from going quiet: a stop stays unconfirmed, past its
+    /// bound, until the hold ends.
+    pub fn hold_stop(&self, held: bool) {
+        self.stop_held.set(held);
         self.wake_world();
     }
 
