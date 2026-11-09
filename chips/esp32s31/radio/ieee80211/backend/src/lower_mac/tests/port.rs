@@ -97,6 +97,8 @@ struct Observed {
     captured: std::collections::VecDeque<TestReceive>,
     /// Material writes the key table has seen.
     key_writes: usize,
+    /// Key places the registers cleared.
+    key_clears: usize,
     /// The next publication ends in the hardware's TX-timeout edge instead
     /// of a completion.
     timeout_edge: bool,
@@ -230,6 +232,7 @@ impl TestDevice {
             .iter()
             .filter(|operation| matches!(operation, super::CryptoOperation::Install(_)))
             .count();
+        observed.key_clears = self.hardware.cleared_keys.len();
         while let Some((frame, material)) = observed.air.pop_front() {
             if material == 0
                 || self

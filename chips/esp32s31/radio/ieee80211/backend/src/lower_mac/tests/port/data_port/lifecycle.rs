@@ -1224,7 +1224,7 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         assert_eq!(fixture.observed.borrow().publications, 1);
         let frame = fixture.frame();
         fixture.observed.borrow_mut().received.push_back(frame);
-        fixture.observed.borrow_mut().fail_poll = Some(Fault::RemovalMissing);
+        fixture.observed.borrow_mut().fail_poll = Some(Fault::RemovalMismatch);
         let waker = fixture.waker();
         let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
         assert!(
@@ -1233,7 +1233,7 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         );
         assert_eq!(
             fixture.port.fault(),
-            Some(Fault::RemovalMissing),
+            Some(Fault::RemovalMismatch),
             "the fault by name"
         );
         let now = fixture.now();
@@ -1241,11 +1241,11 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
             fixture
                 .port
                 .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox),
-            Err(Fault::RemovalMissing)
+            Err(Fault::RemovalMismatch)
         ));
         assert!(matches!(
             fixture.port.receive(8, now),
-            Err(Fault::RemovalMissing)
+            Err(Fault::RemovalMismatch)
         ));
         // The quarantine keeps every owner: no MPDU ended, no body dropped,
         // the frame stays on the ring.
@@ -1775,6 +1775,98 @@ fn a_removal_the_registers_refuse_comes_back_and_leaves_the_key_installed() {
             "the returned key is still installed in its own place"
         );
     });
+}
+
+/// A removal whose key's last use is out: its command is done and the port
+/// keeps the command's rights; the last use returns through a sink that
+/// takes no receipt, before or after the radio's stop; the next service
+/// ends the removal once with its rights, the key cleared once, and the
+/// stopped port retires.
+fn late_removal_receipt(after_stop: bool) {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(7),
+        );
+        assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) =
+            fixture.outbox.terminals.pop()
+        else {
+            panic!("the installation terminal returns the key");
+        };
+        let held = fixture.port.hold_key_use_for_test().expect("a key use");
+        let _ = fixture.turn();
+        let cleared = fixture.observed.borrow().key_clears;
+        let now = fixture.now();
+        assert!(matches!(
+            fixture.port.command(
+                PortCommand::RemovePairwise { association, key },
+                now,
+                &mut fixture.outbox,
+            ),
+            Ok(CommandProgress::Done)
+        ));
+        assert!(
+            fixture.outbox.terminals.is_empty(),
+            "its key is still in use"
+        );
+        assert!(fixture.port.removal_waits_for_test());
+        if after_stop {
+            fixture.stop();
+        }
+        fixture.port.return_key_use_for_test(held);
+        assert!(fixture.outbox.terminals.is_empty(), "refused, it waits");
+        assert!(fixture.port.removal_waits_for_test());
+        if after_stop {
+            assert!(
+                fixture.port.release().is_none(),
+                "a waiting removal holds the port"
+            );
+        }
+        // The next service ends it once.
+        let _ = fixture.turn();
+        let removed = |terminals: &mut Vec<_>| {
+            let before = terminals.len();
+            terminals.retain(|terminal| !matches!(terminal, LowerMacTerminal::KeyRemoved(_)));
+            before - terminals.len()
+        };
+        assert_eq!(
+            removed(&mut fixture.outbox.terminals),
+            1,
+            "one terminal with its rights"
+        );
+        assert!(!fixture.port.removal_waits_for_test());
+        let _ = fixture.turn();
+        assert_eq!(removed(&mut fixture.outbox.terminals), 0, "not again");
+        if !after_stop {
+            // The running port's device observes its registers at a turn.
+            assert_eq!(
+                fixture.observed.borrow().key_clears,
+                cleared + 1,
+                "cleared once"
+            );
+            fixture.stop();
+        }
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        drop(buffers);
+        assert!(port.release().is_some(), "the stopped port retires");
+    });
+}
+
+#[test]
+fn a_late_removal_receipt_ends_its_removal_once_and_the_port_retires() {
+    late_removal_receipt(false);
+}
+
+#[test]
+fn a_late_removal_receipt_after_the_stop_ends_its_removal_once_and_the_port_retires() {
+    late_removal_receipt(true);
 }
 
 /// Registers held elsewhere at a publication: every owner of the attempt

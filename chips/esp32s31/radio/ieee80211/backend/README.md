@@ -408,6 +408,16 @@ published arena to its end (its watchdog's timeout abort when the
 hardware gives no completion) before it disables the core. A station
 pairwise key removal waits while an arena holds a key right.
 
+A key removal whose key still has an admitted use when its command runs
+is done for its command (`Done`): the core clears the key once its last
+use returns and keeps the receipt in the removal's core place (every
+sink refuses receipts), and the port keeps the command's rights at that
+place (`Driver::removals`). Each later service, a stopped port's
+included, takes each finished receipt from its own place and ends that
+removal once with those rights (`deliver_removals`); a receipt of another
+key never answers the command at hand. A port with a waiting removal does
+not retire.
+
 The port exposes ordinary MPDUs, the station's data arenas (with their
 A-MPDU rates) and RX BlockAck agreements. It does not expose beacon
 timing, monitor or air reservation.

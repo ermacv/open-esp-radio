@@ -1,7 +1,9 @@
 use super::*;
 use super::{
     installation::PortCoreOwner,
-    keys::{GroupCommand, Installation, Installed, RawKeyIdentity, Removal},
+    keys::{
+        GroupCommand, Installation, Installed, RawKeyIdentity, Removal, Removing, WaitingRemoval,
+    },
 };
 use crate::ordinary_tx::sets_retry_bit;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
@@ -93,28 +95,17 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
 pub(super) type Completion<'id, Id, const B: usize> =
     crate::lower_mac::TxCompletion<'id, 'static, B, CorePath<Id>>;
 /// What one core call hands the port. Completions it has no room for, and
-/// a removal receipt outside a removal command, the sink refuses: the core
-/// keeps them whole in their own places and offers them again.
+/// every removal receipt, the sink refuses: the core keeps them whole in
+/// their own places, a completion offered again and a receipt taken by its
+/// removal's place ([`Driver::finished_removal`]).
 pub(super) struct Sink<'id, Id: SlotIdentity, const B: usize> {
     pub(super) completed: heapless::Vec<Completion<'id, Id, B>, 4>,
-    /// The receipt of the removal this sink's command makes, when it is
-    /// one: no other call takes a receipt.
-    removal: Option<Option<KeyRemoved<'id, CorePath<Id>>>>,
     /// Whether this sink takes completions: a call that collects none
     /// leaves them with the core.
     takes_completions: bool,
     tbtt: Option<TbttEvent>,
 }
-impl<'id, Id: SlotIdentity, const B: usize> Sink<'id, Id, B> {
-    /// The sink of a removal command, which takes its one receipt and
-    /// leaves any completion with the core.
-    fn removal() -> Self {
-        Self {
-            removal: Some(None),
-            takes_completions: false,
-            ..Self::default()
-        }
-    }
+impl<Id: SlotIdentity, const B: usize> Sink<'_, Id, B> {
     /// The sink of a call whose results the port does not collect: the
     /// core keeps every completion and receipt for a later offer.
     pub(super) fn refusing() -> Self {
@@ -123,16 +114,11 @@ impl<'id, Id: SlotIdentity, const B: usize> Sink<'id, Id, B> {
             ..Self::default()
         }
     }
-    /// The receipt this removal command's sink took.
-    fn take_removed(&mut self) -> Option<KeyRemoved<'id, CorePath<Id>>> {
-        self.removal.as_mut().and_then(Option::take)
-    }
 }
 impl<Id: SlotIdentity, const B: usize> Default for Sink<'_, Id, B> {
     fn default() -> Self {
         Self {
             completed: heapless::Vec::new(),
-            removal: None,
             takes_completions: true,
             tbtt: None,
         }
@@ -156,14 +142,9 @@ impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePa
         &mut self,
         removed: KeyRemoved<'id, CorePath<Id>>,
     ) -> Result<(), KeyRemoved<'id, CorePath<Id>>> {
-        match &mut self.removal {
-            Some(place @ None) => {
-                *place = Some(removed);
-                Ok(())
-            }
-            // Outside its command, or a second one: the core keeps it.
-            _ => Err(removed),
-        }
+        // The core keeps it in its removal's place, where the removal that
+        // waits for it takes it: no other command answers with it.
+        Err(removed)
     }
     fn disabled(&mut self) {}
     fn tbtt(&mut self, event: TbttEvent) {
@@ -362,6 +343,9 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     pub(super) closing: Option<GateOpen<'id, Part<Id, 1>>>,
     pub(super) closed: bool,
     pub(super) keys: [Option<(RawKeyIdentity, Installed<'id, Id>)>; 20],
+    /// Removals the core finishes after their command: each at its core
+    /// place, with the command's rights until its receipt is delivered.
+    pub(super) removals: [Option<WaitingRemoval<'id, Id>>; LOWER_MAC_KEY_SLOTS],
     pub(super) applied_ba: [Option<RxBlockAckValues>; 8],
     /// The one receiver of this driver's publication observations, present
     /// from preparation until retirement.
@@ -427,6 +411,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             closing: None,
             closed: false,
             keys: [const { None }; 20],
+            removals: [const { None }; LOWER_MAC_KEY_SLOTS],
             applied_ba: [None; 8],
             observations: None,
         }
@@ -1475,11 +1460,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         *place = Some((identity, installed));
         Ok(())
     }
+    /// Remove the installed key `identity`: its receipt now, or its core
+    /// place while its last use is out.
     pub(super) fn remove(
         &mut self,
         device: &mut D,
         identity: RawKeyIdentity,
-    ) -> Result<KeyRemoved<'id, CorePath<Id>>, Fault> {
+    ) -> Result<Removing<'id, Id>, Fault> {
         let index = self
             .keys
             .iter()
@@ -1498,16 +1485,98 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .get_mut(index)
             .and_then(Option::take)
             .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
-        let mut sink = Sink::removal();
-        match installed {
+        let mut sink = Sink::refusing();
+        let place = match installed {
             Installed::Transmit(key) => view.remove_checked_key(hardware, key, &mut sink),
             Installed::Receive(key) => view.remove_checked_key(hardware, key, &mut sink),
+        };
+        // This removal's own place: a receipt of another key stays in its
+        // place for its own removal.
+        Ok(match self.core.view().take_removed(place) {
+            Some(removed) => Removing::Removed(removed),
+            None => Removing::Waiting(place),
+        })
+    }
+    /// The terminal of a removal its command made: now, or, while its key's
+    /// last use is out, with the command's rights kept at its place until
+    /// [`Self::finished_removal`] delivers it.
+    pub(super) fn settle_removal(
+        &mut self,
+        removing: Removing<'id, Id>,
+        removal: Removal<'id, Id>,
+    ) -> Result<Option<brand::OwnedRemoved<'id, Id>>, Fault> {
+        match removing {
+            Removing::Removed(removed) => Self::removed_terminal(removal, removed).map(Some),
+            Removing::Waiting(place) => {
+                let waiting = self
+                    .removals
+                    .get_mut(place)
+                    .filter(|waiting| waiting.is_none())
+                    .ok_or(Fault::RemovalMismatch)?;
+                *waiting = Some(WaitingRemoval { removal });
+                Ok(None)
+            }
         }
-        // A removal still waiting for a use keeps its place in the core.
-        sink.take_removed().ok_or(Fault::RemovalMissing)
+    }
+    /// The terminal of the removal waiting at `place`, once the core
+    /// finished it: routed by its place, its rights the waiting command's.
+    pub(super) fn finished_removal(
+        &mut self,
+        place: usize,
+    ) -> Option<Result<brand::OwnedRemoved<'id, Id>, Fault>> {
+        let waiting = self.removals.get_mut(place)?;
+        let kept = waiting.take()?;
+        match self.core.view().take_removed(place) {
+            Some(removed) => Some(Self::removed_terminal(kept.removal, removed)),
+            None => {
+                *waiting = Some(kept);
+                None
+            }
+        }
+    }
+    /// Admit one use of the first installed transmit key outside any
+    /// publication: its last use then returns after a removal.
+    #[cfg(test)]
+    pub(super) fn hold_key_use_for_test(&mut self) -> Option<TxAdmission<'id, CorePath<Id>>> {
+        let ticket = self.tickets.take()?;
+        let key = self
+            .keys
+            .iter()
+            .flatten()
+            .find_map(|(_, installed)| match installed {
+                Installed::Transmit(key) => Some(key),
+                Installed::Receive(_) => None,
+            });
+        let (Some(key), CoreView::Open(mut core)) = (key, self.core.view()) else {
+            self.tickets.put(ticket);
+            return None;
+        };
+        match core.admit_key(key, ticket) {
+            Ok(key_use) => Some(TxAdmission::Protected(key_use)),
+            Err(refused) => {
+                self.tickets.put(refused.ticket);
+                None
+            }
+        }
+    }
+    /// Return a use [`Self::hold_key_use_for_test`] admitted, as an
+    /// unpublished admission returns: through a sink that takes no receipt.
+    #[cfg(test)]
+    pub(super) fn return_key_use_for_test(
+        &mut self,
+        hardware: &mut D::Hardware,
+        admission: TxAdmission<'id, CorePath<Id>>,
+    ) {
+        self.returned_ticket(hardware, admission);
+    }
+    /// Whether a waiting removal's receipt is ready to deliver.
+    pub(super) fn removal_ready(&mut self) -> bool {
+        (0..LOWER_MAC_KEY_SLOTS).any(|place| {
+            self.removals.get(place).is_some_and(Option::is_some)
+                && self.core.view().removed_ready(place)
+        })
     }
     pub(super) fn removed_terminal(
-        &self,
         removal: Removal<'id, Id>,
         removed: KeyRemoved<'id, CorePath<Id>>,
     ) -> Result<brand::OwnedRemoved<'id, Id>, Fault> {
@@ -1537,7 +1606,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         device: &mut D,
         command: GroupCommand<'id, Id>,
-    ) -> Result<brand::OwnedTerminal<'id, Id, D, B>, Fault> {
+    ) -> Result<Option<brand::OwnedTerminal<'id, Id, D, B>>, Fault> {
         match command {
             GroupCommand::InstallStation {
                 spp,
@@ -1560,7 +1629,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     &material,
                 )?;
                 identity.activity.set(identity.serial);
-                return Ok(brand::OwnedTerminal::GroupKeyInstalled(
+                return Ok(Some(brand::OwnedTerminal::GroupKeyInstalled(
                     brand::OwnedInstalledGroup::Station {
                         key: GroupKey {
                             identity,
@@ -1568,7 +1637,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         },
                         permission,
                     },
-                ));
+                )));
             }
             GroupCommand::InstallAccessPoint {
                 spp,
@@ -1602,7 +1671,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     &material,
                 )?;
                 identity.activity.set(identity.serial);
-                return Ok(brand::OwnedTerminal::GroupKeyInstalled(
+                return Ok(Some(brand::OwnedTerminal::GroupKeyInstalled(
                     brand::OwnedInstalledGroup::AccessPoint {
                         key: GroupKey {
                             identity,
@@ -1610,7 +1679,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         },
                         permission,
                     },
-                ));
+                )));
             }
             GroupCommand::Replace {
                 permission,
@@ -1705,13 +1774,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 };
                 entry.0 = identity;
                 identity.activity.set(identity.serial);
-                return Ok(brand::OwnedTerminal::GroupKeyReplaced {
+                return Ok(Some(brand::OwnedTerminal::GroupKeyReplaced {
                     key: GroupKey {
                         identity,
                         brand: PhantomData,
                     },
                     permission,
-                });
+                }));
             }
             GroupCommand::Select { permission, key } => {
                 if !self
@@ -1722,13 +1791,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 {
                     return Err(Fault::KeySlotMissing(KeyOp::Select));
                 }
-                return Ok(brand::OwnedTerminal::GroupKeySelected { key, permission });
+                return Ok(Some(brand::OwnedTerminal::GroupKeySelected {
+                    key,
+                    permission,
+                }));
             }
             GroupCommand::Remove { identity, removal } => {
-                let removed = self.remove(device, identity)?;
-                return Ok(brand::OwnedTerminal::KeyRemoved(
-                    self.removed_terminal(removal, removed)?,
-                ));
+                let removing = self.remove(device, identity)?;
+                return Ok(self
+                    .settle_removal(removing, removal)?
+                    .map(brand::OwnedTerminal::KeyRemoved));
             }
         }
     }

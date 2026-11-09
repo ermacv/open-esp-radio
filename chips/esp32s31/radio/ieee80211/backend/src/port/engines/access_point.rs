@@ -459,12 +459,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     <AccessPoint as Role<'id, Id>>::removal(association).into_owned(&self.loan);
                 let terminal = self
                     .driver
-                    .removed_terminal(removal, removed)
+                    .settle_removal(removed, removal)
                     .map_err(CommandFailed::Taken)?;
                 self.driver.barrier = None;
                 self.access_point_holding = None;
                 self.access_point_since = None;
-                sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                // A removal whose key's last use is out ends at a later
+                // service.
+                if let Some(terminal) = terminal {
+                    sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                }
                 Ok(AccessPointProgress::Done)
             }
             group @ (AccessPointCommand::InstallGroup(_)

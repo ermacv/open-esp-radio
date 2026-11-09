@@ -267,6 +267,32 @@ impl<
     }
 }
 
+impl<
+    'core,
+    'slot,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_portable_time::Timer,
+    C: RadioCoexPriorities,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> CoreView<'_, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+{
+    /// The finished receipt of the removal at `place`, in whichever phase
+    /// the core is.
+    pub fn take_removed(self, place: usize) -> Option<KeyRemoved<'core, Path>> {
+        self.arena_core()?.core.take_removed(place)
+    }
+
+    /// Whether the removal at `place` finished and its receipt waits, in
+    /// whichever phase the core is.
+    pub fn removed_ready(self, place: usize) -> bool {
+        self.arena_core()
+            .is_some_and(|core| core.core.removed_ready(place))
+    }
+}
+
 /// A vacant slot can be prepared once before any lifecycle transition.
 #[must_use]
 pub struct VacantView<'view, C> {

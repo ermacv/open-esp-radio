@@ -793,6 +793,33 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             .fetch_add(units, core::sync::atomic::Ordering::AcqRel);
     }
 
+    /// Admit a use of the first installed transmit key outside any
+    /// publication, held by the test.
+    #[cfg(test)]
+    pub(crate) fn hold_key_use_for_test(
+        &mut self,
+    ) -> Option<crate::lower_mac::TxAdmission<'static, CorePath<Id>>> {
+        self.driver.hold_key_use_for_test()
+    }
+
+    /// Return the use [`Self::hold_key_use_for_test`] admitted, as an
+    /// unpublished admission returns.
+    #[cfg(test)]
+    pub(crate) fn return_key_use_for_test(
+        &mut self,
+        admission: crate::lower_mac::TxAdmission<'static, CorePath<Id>>,
+    ) {
+        let hardware = self.device.hardware().expect("registers");
+        self.driver.return_key_use_for_test(hardware, admission);
+        self.recompute_deadline();
+    }
+
+    /// Whether a removal its command left waits in the port.
+    #[cfg(test)]
+    pub(crate) fn removal_waits_for_test(&self) -> bool {
+        self.driver.removals.iter().any(Option::is_some)
+    }
+
     /// Set the received units the caller holds: a count a unit did not
     /// join.
     #[cfg(test)]
@@ -836,10 +863,26 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.state == PortState::Stopped
             && self.fault.is_none()
             && self.rx_out.get() == 0
+            && self.driver.removals.iter().all(Option::is_none)
             && self.shared.returned.none_out()
             && self.driver.queues.iter().all(|queue| queue.is_empty())
             && self.driver.running.iter().all(Option::is_none)
             && self.driver.arenas_returnable()
+    }
+
+    /// End every removal its command left waiting whose key the core
+    /// cleared since: each terminal, routed by its core place, returns the
+    /// waiting command's rights. The key is not cleared again.
+    fn deliver_removals(
+        &mut self,
+        sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
+    ) -> Result<(), Fault> {
+        for place in 0..crate::lower_mac::LOWER_MAC_KEY_SLOTS {
+            if let Some(terminal) = self.driver.finished_removal(place) {
+                sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal?).lend(&self.loan));
+            }
+        }
+        Ok(())
     }
 
     /// Forget the command the caller held at its barrier: its admission
@@ -948,6 +991,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // here would hide what the start itself waits for, and a stopping
         // port applies none.
         let settings_due = self.settings.dirty() && self.running();
+        // A removal the core finished after its command waits for a
+        // service to end it.
+        if self.driver.removal_ready() {
+            add(Some(self.now));
+        }
         // Work a turn owes at once: a stop's withdrawals, an opened gate,
         // settings to apply.
         if (self.stopping() && !self.stop_served) || self.reopen || self.cut_due || settings_due {
@@ -1484,7 +1532,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 if let Err(cause) = self.device.finish_rx_cut() {
                     // The mutation ran: its terminal says so, and the fault
                     // of the receive path's resume follows it.
-                    sink.terminal(terminal.lend(&loan));
+                    if let Some(terminal) = terminal {
+                        sink.terminal(terminal.lend(&loan));
+                    }
                     return Err(self.record(cause));
                 }
                 self.group_since = None;
@@ -1496,7 +1546,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     Mutator::AccessPoint(_) => self.access_point_holding = None,
                 }
                 self.driver.barrier = None;
-                sink.terminal(terminal.lend(&loan));
+                // A removal whose key's last use is out ends at a later
+                // service ([`Self::deliver_removals`]).
+                if let Some(terminal) = terminal {
+                    sink.terminal(terminal.lend(&loan));
+                }
                 Ok(GroupStep::Done)
             }
         }
@@ -1709,11 +1763,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     <Station as Role<'id, Id>>::removal(association).into_owned(&self.loan);
                 let terminal = self
                     .driver
-                    .removed_terminal(removal, removed)
+                    .settle_removal(removed, removal)
                     .map_err(CommandFailed::Taken)?;
                 self.driver.barrier = None;
                 self.holding = None;
-                sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                // A removal whose key's last use is out ends at a later
+                // service ([`Self::deliver_removals`]).
+                if let Some(terminal) = terminal {
+                    sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                }
                 Ok(CommandProgress::Done)
             }
             group @ (PortCommand::InstallGroup(_)
@@ -1941,10 +1999,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.state,
             PortState::Running | PortState::Recovering | PortState::Stopping { .. }
         ) {
-            return Ok(None);
+            // A stopped port still ends the removals the stop finished.
+            let delivered = self
+                .deliver_removals(sink)
+                .map_err(|fault| self.record(fault));
+            self.recompute_deadline();
+            return delivered.map(|()| None);
         }
         let done = self
             .turn(tx, tbtt, now, sink)
+            .and_then(|done| self.deliver_removals(sink).map(|()| done))
             .map_err(|fault| self.record(fault));
         self.recompute_deadline();
         done

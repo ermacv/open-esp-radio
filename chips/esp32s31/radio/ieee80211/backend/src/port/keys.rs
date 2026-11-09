@@ -181,6 +181,17 @@ pub(super) enum Installed<'id, Id: SlotIdentity> {
     Transmit(KeyHandle<'id, CorePath<Id>>),
     Receive(ReceiveKeyHandle<'id, CorePath<Id>>),
 }
+/// What a removal's command left: the receipt now, or the core place where
+/// it finishes once the key's last use returns.
+pub(super) enum Removing<'id, Id: SlotIdentity> {
+    Removed(core_mac::KeyRemoved<'id, CorePath<Id>>),
+    Waiting(usize),
+}
+/// A removal its command left waiting at its key's core place: the
+/// command's rights, which its terminal returns.
+pub(super) struct WaitingRemoval<'id, Id: SlotIdentity> {
+    pub(super) removal: Removal<'id, Id>,
+}
 pub(super) enum Removal<'id, Id: SlotIdentity> {
     StationPairwise(core_mac::association::StationAssociation<'id, CorePath<Id>>),
     AccessPointPairwise(core_mac::association::AccessPointAssociation<'id, CorePath<Id>>),

@@ -18,8 +18,6 @@ pub enum BackendFault {
         queue: u8,
         step: PublishStep,
     },
-    /// The core reported no removal of a key it was told to remove.
-    RemovalMissing,
     /// A removal's terminal named another slot than the key held.
     RemovalMismatch,
     /// A group command named a key index the access point's group has not.

@@ -80,7 +80,6 @@ impl DiagnosticPath for BackendFault {
                 queue_fault(path, "Publish", *queue);
                 path.name(publish_step(step));
             }
-            Self::RemovalMissing => path.name("RemovalMissing"),
             Self::RemovalMismatch => path.name("RemovalMismatch"),
             Self::GroupKeyIdRange => path.name("GroupKeyIdRange"),
             Self::ConfigurationRefused => path.name("ConfigurationRefused"),

@@ -2531,7 +2531,8 @@ where
 
     /// Consume the sole installed handle at removal's FIFO position. The
     /// programmed material stays until the last admitted use returns. No
-    /// further right can be obtained from the moved handle.
+    /// further right can be obtained from the moved handle. Its place: the
+    /// receipt a sink refused waits there for [`Self::take_removed`].
     pub fn remove_checked_key<
         H: CcmpKeyHardware,
         K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
@@ -2540,17 +2541,39 @@ where
         hardware: &mut H,
         key: impl Into<RemovingKey<'core, Path>>,
         sink: &mut K,
-    ) {
+    ) -> usize {
         let key = key.into();
         let index = key.index;
         let Some(removal) = self.keys.removals.get_mut(index) else {
             // No position can retain it; the poisoned core keeps the
             // programmed material until reset.
             self.fault.get_or_insert(LowerMacFault::KeyBank);
-            return;
+            return index;
         };
         *removal = Some(Removal::Pending(key));
         self.finish_key_removal(hardware, index, sink);
+        index
+    }
+
+    /// The receipt of the removal at `place`, once its key is cleared and
+    /// its sink refused it; nothing while it waits for a use or was taken.
+    pub fn take_removed(&mut self, place: usize) -> Option<KeyRemoved<'core, Path>> {
+        let removal = self.keys.removals.get_mut(place)?;
+        match removal.take() {
+            Some(Removal::Finished(removed)) => Some(removed),
+            other => {
+                *removal = other;
+                None
+            }
+        }
+    }
+
+    /// Whether the removal at `place` finished and its receipt waits.
+    pub fn removed_ready(&self, place: usize) -> bool {
+        matches!(
+            self.keys.removals.get(place),
+            Some(Some(Removal::Finished(_)))
+        )
     }
 
     fn finish_key_removal<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(

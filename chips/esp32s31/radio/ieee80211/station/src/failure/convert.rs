@@ -34,7 +34,6 @@ pub(crate) fn backend_fault(
             queue,
             step: publish_step(step),
         },
-        Source::RemovalMissing => BackendFault::RemovalMissing,
         Source::RemovalMismatch => BackendFault::RemovalMismatch,
         Source::GroupKeyIdRange => BackendFault::GroupKeyIdRange,
         Source::ConfigurationRefused => BackendFault::ConfigurationRefused,
