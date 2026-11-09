@@ -47,11 +47,20 @@ pub(super) enum Item<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, 
     Received(ReceiveBuffer<'id, Id, D::Receive>, Esp32s31RxMeta),
 }
 
+/// A kept terminal with its sequence.
+type KeptTerminal<'id, Id, D, const B: usize, O> = (u8, Terminal<'id, Id, D, B, O>);
+/// A kept unit with its sequence.
+type KeptUnit<'id, Id, D, const B: usize> = (
+    u8,
+    ReceiveBuffer<'id, Id, <D as Device<B>>::Receive>,
+    Esp32s31RxMeta,
+);
+
 /// The port's store of what its sink refused.
 pub(super) struct Store<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 {
-    terminals: [Option<(u8, Terminal<'id, Id, D, B, O>)>; TERMINAL_PLACES],
-    units: [Option<(u8, ReceiveBuffer<'id, Id, D::Receive>, Esp32s31RxMeta)>; RX_HELD],
+    terminals: [Option<KeptTerminal<'id, Id, D, B, O>>; TERMINAL_PLACES],
+    units: [Option<KeptUnit<'id, Id, D, B>>; RX_HELD],
     /// How many items the store keeps: every kept item's sequence is below.
     count: u8,
     /// A place the store found taken or missing: the token it names was
