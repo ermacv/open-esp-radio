@@ -67,7 +67,7 @@ struct Observed {
     publications: usize,
     statuses: Vec<(u8, u8)>,
     starts: usize,
-    start_channels: Vec<oer_protocols_ieee80211_wire::channel::WifiChannel>,
+    start_channels: Vec<oer_protocols_ieee80211_wire::channel::Ghz2_4Channel>,
     stops: usize,
     detached: bool,
     /// Times the driver rearmed units the network returned.
@@ -330,7 +330,7 @@ impl Device<512> for TestDevice {
     fn poll_start(
         &mut self,
         _: &mut Context<'_>,
-        channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
+        channel: oer_protocols_ieee80211_wire::channel::Ghz2_4Channel,
     ) -> Poll<Result<(), Fault>> {
         self.assert_task_context();
         if self.observed.borrow().hold_start {

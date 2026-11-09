@@ -66,7 +66,7 @@ use oer_chips_family_platform_interrupt_table::{
 };
 use oer_portable_memory::{HandlerCell, PreparedTxDma};
 use oer_protocols_ieee80211_contracts_port::RegulatedChannel;
-use oer_protocols_ieee80211_wire::{channel::WifiChannel, sequence::SequenceNumber};
+use oer_protocols_ieee80211_wire::{channel::Ghz2_4Channel, sequence::SequenceNumber};
 use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
 
 use crate::{
@@ -877,15 +877,15 @@ impl WifiTxPowerProfile for ModelPower {
 /// is a retune it refuses, with the radio changed in nothing.
 pub struct ModelFrontier {
     registers: ModelRegisters,
-    channel: WifiChannel,
+    channel: Ghz2_4Channel,
 }
 
 impl ModelFrontier {
-    pub const fn new(registers: ModelRegisters, channel: WifiChannel) -> Self {
+    pub const fn new(registers: ModelRegisters, channel: Ghz2_4Channel) -> Self {
         Self { registers, channel }
     }
 
-    pub const fn channel(&self) -> WifiChannel {
+    pub const fn channel(&self) -> Ghz2_4Channel {
         self.channel
     }
 }
@@ -894,23 +894,23 @@ impl Frontier for ModelFrontier {
     type Registers = ModelRegisters;
     type Space = HostDma;
     type Calibrated = ModelPower;
-    type Context = WifiChannel;
+    type Context = Ghz2_4Channel;
     type Cell = ();
     type Retune = Option<Self>;
     type Failed = Infallible;
-    fn into_running(self) -> (ModelRegisters, WifiChannel) {
+    fn into_running(self) -> (ModelRegisters, Ghz2_4Channel) {
         (self.registers, self.channel)
     }
-    fn into_stopped(registers: ModelRegisters, channel: WifiChannel) -> Self {
+    fn into_stopped(registers: ModelRegisters, channel: Ghz2_4Channel) -> Self {
         Self { registers, channel }
     }
-    fn current_channel(context: &WifiChannel) -> WifiChannel {
+    fn current_channel(context: &Ghz2_4Channel) -> Ghz2_4Channel {
         *context
     }
     fn start_retune(
         self,
         (): (),
-        _channel: Permitted<RegulatedChannel<WifiChannel>>,
+        _channel: Permitted<RegulatedChannel<Ghz2_4Channel>>,
         _ceiling: TxCeiling,
     ) -> Option<Self> {
         self.registers.atoms.unmodelled("start_retune");

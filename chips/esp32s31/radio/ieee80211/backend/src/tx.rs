@@ -142,7 +142,7 @@ pub(crate) const fn capped_power(pair: WifiTxPowerPair, ceiling: Option<i8>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
+    use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
     use oer_protocols_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 
     struct Calibrated;
@@ -161,7 +161,7 @@ mod tests {
         let channel = domain
             .permit(
                 oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    WifiChannel::new_2_4_ghz(1, WifiChannelWidth::Mhz20).expect("channel"),
+                    Ghz2_4Channel::new(1, ChannelWidth::Mhz20).expect("channel"),
                 ),
             )
             .expect("permitted");

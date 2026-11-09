@@ -191,7 +191,7 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_wire::{
     ccmp::CCMP_HEADER_LEN,
-    channel::WifiChannel,
+    channel::Ghz2_4Channel,
     management::BROADCAST_ADDRESS,
     phy::{HeMcs, HtMcs},
     qos::WmmAccessCategory,
@@ -818,7 +818,7 @@ pub struct LowerMacConfig {
     /// no transaction that changes it.
     pub station_address: [u8; 6],
     /// The channel the radio is tuned to.
-    pub channel: WifiChannel,
+    pub channel: Ghz2_4Channel,
     /// Executor watchdog of one publication.
     pub publication_timeout: oer_portable_time::Duration,
     /// The epoch of the core's TSF relations, a number no other owner of a
@@ -1016,8 +1016,8 @@ pub struct LowerMacCore<
     fault: Option<LowerMacFault>,
     /// The configured channel; the radio is tuned to it unless a retune is
     /// pending.
-    channel: WifiChannel,
-    tuned: WifiChannel,
+    channel: Ghz2_4Channel,
+    tuned: Ghz2_4Channel,
     vifs: [Option<CoreVif>; LOWER_MAC_VIFS as usize],
     keys: KeyBank<'core, Path, TICKETS>,
     rx_block_acks: [Option<RxBlockAckEntry>; RX_BLOCK_ACK_BANKS],
@@ -1113,7 +1113,7 @@ where
 
     /// The channel the radio is tuned to: the configured one unless an
     /// `Enable` still awaits its retune.
-    pub const fn tuned_channel(&self) -> WifiChannel {
+    pub const fn tuned_channel(&self) -> Ghz2_4Channel {
         self.tuned
     }
     pub(crate) fn replace_power_profile(&mut self, power: P) {
@@ -1122,7 +1122,7 @@ where
 
     /// The channel received frames are reported on.
     pub fn channel(&self) -> Channel {
-        Channel::from_wifi_channel(self.channel)
+        Channel::from_ghz2_4_channel(self.channel)
     }
 
     /// The image clock used by the core's internal deadlines.
@@ -1888,7 +1888,7 @@ where
     }
 
     /// Tune the next `Enable` to `channel`, on a disabled port.
-    fn set_checked_channel(&mut self, channel: WifiChannel) {
+    fn set_checked_channel(&mut self, channel: Ghz2_4Channel) {
         if self.channel != channel {
             self.break_tsf_relation(VifRole::Station);
             self.break_tsf_relation(VifRole::AccessPoint);

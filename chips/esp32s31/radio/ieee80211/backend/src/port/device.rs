@@ -21,7 +21,7 @@ use core::cell::RefCell;
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::space::DmaSpace;
 use oer_chips_family_platform_interrupt_table::signal::SignalExecutor;
 use oer_portable_memory::HandlerCell;
-use oer_protocols_ieee80211_wire::channel::WifiChannel;
+use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 use oer_protocols_radio_regulatory::{Permitted, PowerLimits, RegulatoryDomain, TxCeiling};
 
 /// Image-owned policy and opaque operation contexts. No executor is selected.
@@ -62,13 +62,13 @@ pub trait Frontier: Sized + 'static {
     /// The stopped owner of the registers `context` went with.
     fn into_stopped(registers: Self::Registers, context: Self::Context) -> Self;
     /// The channel the radio is tuned to.
-    fn current_channel(context: &Self::Context) -> WifiChannel;
+    fn current_channel(context: &Self::Context) -> Ghz2_4Channel;
     /// Ask the radio's actor to retune; the stopped owner goes with the
     /// request.
     fn start_retune(
         self,
         cell: Self::Cell,
-        channel: Permitted<RegulatedChannel<WifiChannel>>,
+        channel: Permitted<RegulatedChannel<Ghz2_4Channel>>,
         ceiling: TxCeiling,
     ) -> Self::Retune;
     fn poll_retune(retune: &mut Self::Retune, cx: &mut Context<'_>) -> Poll<RetuneEnd<Self>>;
@@ -536,7 +536,7 @@ where
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
-        channel: WifiChannel,
+        channel: Ghz2_4Channel,
     ) -> Poll<Result<(), Fault>> {
         self.pausing = false;
         if let Some(retune) = self.retune.as_mut() {

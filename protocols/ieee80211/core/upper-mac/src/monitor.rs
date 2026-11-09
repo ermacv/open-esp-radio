@@ -11,7 +11,7 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 pub use oer_protocols_ieee80211_wire::monitor_injection::MonitorInjectionFrameError;
 use oer_protocols_ieee80211_wire::{
-    channel::WifiChannel,
+    channel::Ghz2_4Channel,
     frame::{AddressFields, FrameControlFields, FrameType},
     monitor_injection::MonitorInjectionMpdu,
 };
@@ -31,13 +31,13 @@ pub fn stored_injection_request(
 ///
 /// This is a bounded product policy, not a claim that fourteen entries exhaust
 /// every valid 20/40-MHz channel geometry. Each retained entry carries the
-/// complete validated [`WifiChannel`], including its width relationship.
+/// complete validated [`Ghz2_4Channel`], including its width relationship.
 pub const MONITOR_CHANNEL_SEQUENCE_CAPACITY: usize = 14;
 
 /// Allocation-free ordered channel cycle with one nonzero dwell per channel.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MonitorChannelSequence {
-    channels: [WifiChannel; MONITOR_CHANNEL_SEQUENCE_CAPACITY],
+    channels: [Ghz2_4Channel; MONITOR_CHANNEL_SEQUENCE_CAPACITY],
     length: u8,
     dwell_millis: NonZeroU16,
 }
@@ -52,7 +52,7 @@ impl MonitorChannelSequence {
         clippy::arithmetic_side_effects
     )]
     pub fn new(
-        channels: &[WifiChannel],
+        channels: &[Ghz2_4Channel],
         dwell_millis: NonZeroU16,
     ) -> Result<Self, MonitorChannelSequenceError> {
         let Some(&first) = channels.first() else {
@@ -92,7 +92,7 @@ impl MonitorChannelSequence {
         clippy::unreachable,
         clippy::arithmetic_side_effects
     )]
-    pub fn channels(&self) -> &[WifiChannel] {
+    pub fn channels(&self) -> &[Ghz2_4Channel] {
         self.channels
             .get(..usize::from(self.length))
             .unwrap_or_default()
@@ -106,7 +106,7 @@ impl MonitorChannelSequence {
         self.length == 0
     }
 
-    pub const fn first(self) -> WifiChannel {
+    pub const fn first(self) -> Ghz2_4Channel {
         self.channels[0]
     }
 
@@ -123,7 +123,7 @@ impl MonitorChannelSequence {
 pub enum MonitorChannelSequenceError {
     Empty,
     TooMany { requested: usize, capacity: usize },
-    Duplicate(WifiChannel),
+    Duplicate(Ghz2_4Channel),
 }
 
 impl fmt::Display for MonitorChannelSequenceError {
@@ -150,13 +150,13 @@ impl core::error::Error for MonitorChannelSequenceError {}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MonitorChannelPolicy {
     /// Preserve the historical behavior: capture on one channel until stop.
-    Fixed(WifiChannel),
+    Fixed(Ghz2_4Channel),
     /// Repeatedly traverse one bounded ordered cycle.
     Hopping(MonitorChannelSequence),
 }
 
 impl MonitorChannelPolicy {
-    pub const fn fixed(channel: WifiChannel) -> Self {
+    pub const fn fixed(channel: Ghz2_4Channel) -> Self {
         Self::Fixed(channel)
     }
 
@@ -164,7 +164,7 @@ impl MonitorChannelPolicy {
         Self::Hopping(sequence)
     }
 
-    pub const fn initial_channel(self) -> WifiChannel {
+    pub const fn initial_channel(self) -> Ghz2_4Channel {
         match self {
             Self::Fixed(channel) => channel,
             Self::Hopping(sequence) => sequence.first(),

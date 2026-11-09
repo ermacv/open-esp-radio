@@ -857,8 +857,8 @@ impl<'core> LowerMacSink<'core, 'static, 512> for Events<'core> {
     }
 }
 
-fn channel(number: u8) -> WifiChannel {
-    WifiChannel::mhz20(number).unwrap()
+fn channel(number: u8) -> Ghz2_4Channel {
+    Ghz2_4Channel::mhz20(number).unwrap()
 }
 
 /// A model slot in permanently retained storage, as target SRAM is.
@@ -2272,7 +2272,7 @@ fn received_frames_are_narrowed_to_the_requested_rules() {
         let meta = *received.common();
         assert_eq!(meta.noise_floor_dbm, RxEvidence::HardwareObserved(-96));
         assert_eq!(bytes, unicast);
-        assert_eq!(meta.channel, Channel::from_wifi_channel(channel(6)));
+        assert_eq!(meta.channel, Channel::from_ghz2_4_channel(channel(6)));
         assert_eq!(meta.rssi_dbm, RxEvidence::HardwareObserved(-42));
         assert!(core.received(&hardware, &normalized(&beacon)).is_none());
 

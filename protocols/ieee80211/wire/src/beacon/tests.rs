@@ -6,12 +6,12 @@ use super::{
     update_bss_protection, write_ht_beacon, write_tim_partial_virtual_bitmap,
 };
 use crate::{
-    channel::{WifiChannel, WifiChannelWidth},
+    channel::{ChannelWidth, Ghz2_4Channel},
     ht::HtDuplicateMcs32,
     protection::{ApBssProtection, ErpProtection, HtOperationProtection, HtProtectionMode},
     scan::parse_management,
     security::{BssSecurityElements, test_elements},
-    ssid::WifiSsid,
+    ssid::Ssid,
 };
 
 fn beacon() -> [u8; 44] {
@@ -47,14 +47,14 @@ fn executor_tsf_drives_dtim_and_group_indication() {
 #[test]
 fn a_wpa3_beacon_carries_its_rsne_and_rsnxe_to_the_scan_record() {
     let ap = [0x02, 0, 0, 0, 0, 1];
-    let ssid = WifiSsid::new(b"open-radio-ap").unwrap();
+    let ssid = Ssid::new(b"open-radio-ap").unwrap();
     let mut bytes = [0; AP_BEACON_CAPACITY];
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut bytes,
         ap,
         &ssid,
-        crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(6).unwrap()),
+        crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
         100,
         2,
         seq(1),
@@ -80,14 +80,14 @@ fn a_wpa3_beacon_carries_its_rsne_and_rsnxe_to_the_scan_record() {
 #[test]
 fn builds_the_bounded_wpa2_ht20_beacon() {
     let ap = [0x02, 0, 0, 0, 0, 1];
-    let ssid = WifiSsid::new(b"open-radio-ap").unwrap();
+    let ssid = Ssid::new(b"open-radio-ap").unwrap();
     let mut bytes = [0; AP_BEACON_CAPACITY];
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut bytes,
         ap,
         &ssid,
-        crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(6).unwrap()),
+        crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
         100,
         2,
         seq(0x0abc),
@@ -115,15 +115,15 @@ fn builds_the_bounded_wpa2_ht20_beacon() {
 
 #[test]
 fn ht40_beacon_advertises_the_validated_secondary_channel() {
-    let ssid = WifiSsid::new(b"open-radio-ap").unwrap();
+    let ssid = Ssid::new(b"open-radio-ap").unwrap();
     let mut bytes = [0; AP_BEACON_CAPACITY];
-    let channel = WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz40Above).unwrap();
+    let channel = Ghz2_4Channel::new(6, ChannelWidth::Mhz40Above).unwrap();
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut bytes,
         [2; 6],
         &ssid,
-        crate::channel::Channel::from_wifi_channel(channel),
+        crate::channel::Channel::from_ghz2_4_channel(channel),
         100,
         2,
         seq(0),
@@ -160,7 +160,7 @@ fn ht40_beacon_advertises_the_validated_secondary_channel() {
 
 #[test]
 fn rejects_unrepresentable_beacon_policy_before_mutation() {
-    let ssid = WifiSsid::new(b"ap").unwrap();
+    let ssid = Ssid::new(b"ap").unwrap();
     let mut bytes = [0xaa; AP_BEACON_CAPACITY];
     assert_eq!(
         write_ht_beacon(
@@ -168,7 +168,7 @@ fn rejects_unrepresentable_beacon_policy_before_mutation() {
             &mut bytes,
             [0; 6],
             &ssid,
-            crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(14).unwrap()),
+            crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(14).unwrap()),
             100,
             2,
             seq(0),
@@ -187,8 +187,8 @@ fn protection_update_rewrites_only_erp_and_ht_operation_after_tim_growth() {
         &TEST_ADVERTISEMENT,
         &mut bytes,
         [2; 6],
-        &WifiSsid::new(b"ap").unwrap(),
-        crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(6).unwrap()),
+        &Ssid::new(b"ap").unwrap(),
+        crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
         100,
         2,
         seq(0),
@@ -252,7 +252,7 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
     use crate::channel::{Channel, ChannelWidth};
 
     let ap = [0x02, 0, 0, 0, 0, 1];
-    let ssid = WifiSsid::new(b"open-radio-ap").unwrap();
+    let ssid = Ssid::new(b"open-radio-ap").unwrap();
     let channel = Channel::ghz5(36, ChannelWidth::Mhz40Above).unwrap();
     let mut bytes = [0; AP_BEACON_CAPACITY];
     // DSSS rates have no place in the band.
@@ -359,8 +359,8 @@ fn template_edits_insert_count_and_remove_elements_after_the_tim() {
         &TEST_ADVERTISEMENT,
         &mut bytes,
         [0x02, 0, 0, 0, 0, 1],
-        &WifiSsid::new(b"ap").unwrap(),
-        crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(6).unwrap()),
+        &Ssid::new(b"ap").unwrap(),
+        crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
         100,
         2,
         seq(1),

@@ -23,7 +23,7 @@ use {
     },
     oer_protocols_ieee80211_wire::{
         ccmp::CcmpPacketNumber,
-        channel::WifiChannel,
+        channel::Ghz2_4Channel,
         extensions::espressif::esp_now::{
             ESP_NOW_V1_MIN_PROTECTED_MPDU_LEN, EspNowCcmpPacketNumber, EspNowDestination,
             EspNowEncryptedV1Unavailable, EspNowProtectedV1Envelope, EspNowProtectedV1WireError,
@@ -259,7 +259,7 @@ impl fmt::Debug for EspNowPmkMutationFailure {
 /// mutation and zeroized when the configuration is dropped.
 pub struct EspNowEncryptedPeerConfig {
     destination: EspNowUnicastAddress,
-    channel: WifiChannel,
+    channel: Ghz2_4Channel,
     phy_mode: EspNowPhyMode,
     lmk: EspNowLmk,
 }
@@ -267,7 +267,7 @@ pub struct EspNowEncryptedPeerConfig {
 impl EspNowEncryptedPeerConfig {
     pub const fn new(
         destination: EspNowUnicastAddress,
-        channel: WifiChannel,
+        channel: Ghz2_4Channel,
         lmk: EspNowLmk,
     ) -> Self {
         Self {
@@ -287,7 +287,7 @@ impl EspNowEncryptedPeerConfig {
         self.destination
     }
 
-    pub const fn channel(&self) -> WifiChannel {
+    pub const fn channel(&self) -> Ghz2_4Channel {
         self.channel
     }
 
@@ -303,7 +303,14 @@ impl EspNowEncryptedPeerConfig {
         &self.lmk
     }
 
-    pub fn into_parts(self) -> (EspNowUnicastAddress, WifiChannel, EspNowPhyMode, EspNowLmk) {
+    pub fn into_parts(
+        self,
+    ) -> (
+        EspNowUnicastAddress,
+        Ghz2_4Channel,
+        EspNowPhyMode,
+        EspNowLmk,
+    ) {
         (self.destination, self.channel, self.phy_mode, self.lmk)
     }
 }
@@ -344,7 +351,7 @@ impl EspNowEncryptedPeerId {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EspNowEncryptedPeerView {
     pub destination: EspNowUnicastAddress,
-    pub channel: WifiChannel,
+    pub channel: Ghz2_4Channel,
     pub phy_mode: EspNowPhyMode,
     pub last_tx_packet_number: u64,
     pub highest_authenticated_rx_packet_number: Option<u64>,
@@ -389,7 +396,7 @@ impl EspNowEncryptedPeerSlot {
 /// Every change, packet-number allocation and replay step is its call's
 /// result; the table keeps no count of them.
 pub struct EspNowEncryptedPeerTable<const N: usize = ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY> {
-    home_channel: WifiChannel,
+    home_channel: Ghz2_4Channel,
     slots: [EspNowEncryptedPeerSlot; N],
     length: usize,
 }
@@ -403,7 +410,7 @@ pub struct EspNowPeersCleared {
 }
 
 impl<const N: usize> EspNowEncryptedPeerTable<N> {
-    pub fn new(home_channel: WifiChannel) -> Self {
+    pub fn new(home_channel: Ghz2_4Channel) -> Self {
         Self {
             home_channel,
             slots: array::from_fn(|_| EspNowEncryptedPeerSlot::empty()),
@@ -411,7 +418,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         }
     }
 
-    pub const fn home_channel(&self) -> WifiChannel {
+    pub const fn home_channel(&self) -> Ghz2_4Channel {
         self.home_channel
     }
 
@@ -919,8 +926,8 @@ pub enum EspNowEncryptedPeerError {
         proposed: EspNowUnicastAddress,
     },
     ChannelMismatch {
-        peer: WifiChannel,
-        home: WifiChannel,
+        peer: Ghz2_4Channel,
+        home: Ghz2_4Channel,
     },
     GenerationExhausted,
     Stale(EspNowEncryptedPeerId),
@@ -1126,7 +1133,7 @@ impl<const N: usize> EspNowEncryptedProtocol<N> {
     pub fn prepare_receive_v1<'frame>(
         &mut self,
         active_station: BoundVirtualInterface,
-        active_channel: WifiChannel,
+        active_channel: Ghz2_4Channel,
         bytes: &'frame [u8],
     ) -> Result<EspNowEncryptedRxCandidate<'_, 'frame>, EspNowEncryptedReceiveError> {
         if active_station != self.config.station() {
@@ -1188,7 +1195,7 @@ fn encrypted_v1_encoded_len(payload_length: usize) -> Result<usize, EspNowV1Wire
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EspNowPreparedEncryptedV1Tx<'payload> {
     peer: EspNowEncryptedPeerId,
-    home_channel: WifiChannel,
+    home_channel: Ghz2_4Channel,
     station: BoundVirtualInterface,
     source: EspNowUnicastAddress,
     destination: EspNowUnicastAddress,
@@ -1205,7 +1212,7 @@ impl<'payload> EspNowPreparedEncryptedV1Tx<'payload> {
         self.peer
     }
 
-    pub const fn home_channel(self) -> WifiChannel {
+    pub const fn home_channel(self) -> Ghz2_4Channel {
         self.home_channel
     }
 
@@ -1316,8 +1323,8 @@ pub enum EspNowEncryptedReceiveError {
         active: BoundVirtualInterface,
     },
     ChannelMismatch {
-        configured: WifiChannel,
-        active: WifiChannel,
+        configured: Ghz2_4Channel,
+        active: Ghz2_4Channel,
     },
     Wire(EspNowProtectedV1WireError),
     ForeignDestination(EspNowUnicastAddress),

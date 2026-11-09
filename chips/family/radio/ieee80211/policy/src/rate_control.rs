@@ -24,7 +24,7 @@ use oer_protocols_ieee80211_core_upper_mac::rate_control::{
 use {
     oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode,
     oer_protocols_ieee80211_wire::{
-        channel::WifiChannelWidth,
+        channel::ChannelWidth,
         he::{He20Capabilities, He20PeerState, HeDcmConstellation, HeMcsNssSupport},
         phy::{
             FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
@@ -1318,9 +1318,9 @@ impl RateControl for EspressifRateControl {
             },
         });
         let (ht_bandwidth, width) = if peer.phy == PhyMode::Ht40 {
-            (PpduBandwidth::Mhz40, WifiChannelWidth::Mhz40Above)
+            (PpduBandwidth::Mhz40, ChannelWidth::Mhz40Above)
         } else {
-            (PpduBandwidth::Mhz20, WifiChannelWidth::Mhz20)
+            (PpduBandwidth::Mhz20, ChannelWidth::Mhz20)
         };
         Self {
             association,

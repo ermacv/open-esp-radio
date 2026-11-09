@@ -5,10 +5,10 @@
 //! frequencies that occupies, and what a regulatory domain allows there, is
 //! the port's operational description.
 
-use oer_protocols_ieee80211_wire::channel::{Channel, WifiChannel};
+use oer_protocols_ieee80211_wire::channel::{Channel, Ghz2_4Channel};
 use oer_protocols_radio_regulatory::{FrequencySpan, RadioChannel};
 
-/// A channel, [`Channel`] or [`WifiChannel`], as a regulatory domain sees it.
+/// A channel, [`Channel`] or [`Ghz2_4Channel`], as a regulatory domain sees it.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct RegulatedChannel<C = Channel>(C);
 
@@ -38,9 +38,9 @@ impl RadioChannel for RegulatedChannel<Channel> {
     }
 }
 
-impl RadioChannel for RegulatedChannel<WifiChannel> {
+impl RadioChannel for RegulatedChannel<Ghz2_4Channel> {
     fn span(&self) -> FrequencySpan {
-        *Channel::from_wifi_channel(self.0).select(&SPANS)
+        *Channel::from_ghz2_4_channel(self.0).select(&SPANS)
     }
 }
 
@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn every_channel_spans_its_width_and_a_wifi_channel_the_same() {
+    fn every_channel_spans_its_width_and_a_ghz2_4_channel_the_same() {
         for channel in Channel::ALL {
             let span = RegulatedChannel::new(channel).span();
             let center = u32::from(channel.center_frequency_mhz()) * 1000;
@@ -99,7 +99,7 @@ mod tests {
                 (span.low_khz(), span.high_khz()),
                 (center - half, center + half)
             );
-            if let Some(wifi) = channel.wifi_channel() {
+            if let Some(wifi) = channel.ghz2_4_channel() {
                 assert_eq!(RegulatedChannel::from(wifi).span(), span);
                 assert_eq!(RegulatedChannel::from(wifi).channel(), wifi);
             }
