@@ -160,6 +160,7 @@ fn turns(events: &[ServiceEvent]) -> Vec<Turn> {
             ServiceEvent::IntakeFull
             | ServiceEvent::Yielded
             | ServiceEvent::Waited { .. }
+            | ServiceEvent::Returned { .. }
             | ServiceEvent::Local(_) => {}
         }
     }
@@ -326,9 +327,9 @@ fn a_spent_budget_counts_only_while_the_lane_holds_more() {
                 credits_free: true,
                 loans: 0,
             }),
-            ServiceEvent::Yielded,
+            ServiceEvent::Waited { ready: false },
         ],
-        "a budget that empties the lane is not spent"
+        "a budget that empties the lane is not spent, and no turn follows unwoken"
     );
 
     brand!(More);
@@ -401,7 +402,7 @@ fn a_turn_says_which_resource_was_out_when_it_ended() {
 }
 
 #[test]
-fn a_pass_says_whether_it_yielded_or_waited() {
+fn a_useful_turn_is_followed_by_a_wait_not_another_turn() {
     brand!(Net);
     let (mut service, mut socket, _wire, _stop) = flow::<Net>();
     let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
@@ -411,7 +412,6 @@ fn a_pass_says_whether_it_yielded_or_waited() {
         pass(&mut run);
         socket.reserve_ahead(1);
         assert!(socket.try_reserve().unwrap().is_none());
-        pass(&mut run);
         pass(&mut run);
     }
     let passes: Vec<_> = seen
@@ -424,9 +424,10 @@ fn a_pass_says_whether_it_yielded_or_waited() {
         [
             // Nothing to do: the first poll ends waiting.
             &ServiceEvent::Waited { ready: false },
-            // The reserve wakes it: the turn gives a block and yields.
-            &ServiceEvent::Yielded,
-            // The next turn has nothing, so the poll ends waiting again.
+            // The reserve wakes it, and its turn gives a block.
+            &ServiceEvent::Waited { ready: true },
+            // That turn left nothing a wake does not name: the poll ends
+            // waiting, with no turn between.
             &ServiceEvent::Waited { ready: false },
         ]
     );
@@ -435,8 +436,8 @@ fn a_pass_says_whether_it_yielded_or_waited() {
             .iter()
             .filter(|event| matches!(event, ServiceEvent::TurnEnded(_)))
             .count(),
-        3,
-        "one turn before each"
+        2,
+        "the first turn and the reserve's"
     );
 }
 
@@ -671,4 +672,90 @@ fn a_block_ack_s_ends_settle_in_one_turn_which_publishes_again() {
         );
         assert_eq!(ack[0].accepted, 1, "the waiting datagram goes in that turn");
     }
+}
+
+/// More datagrams ready than one turn publishes: the turn that spent its
+/// budget turns again, though no lane and no port wakes it.
+#[test]
+fn a_spent_publishing_budget_turns_again_unwoken() {
+    brand!(Net);
+    const QUEUED: usize = 12;
+    let (mut service, mut socket, wire, stop) = flow::<Net>();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut seen = Seen::default();
+    let drive = async {
+        socket.reserve_ahead(RESERVE_AHEAD);
+        // The peer's address first, so nothing below waits for ARP.
+        let mut block = socket.reserve().await.unwrap();
+        block.fill(b"resolve").unwrap();
+        socket.credit().await.unwrap();
+        let first = socket.send(peer(), block).ok().unwrap();
+        assert_eq!(result_of(first).await, Sent::Ended(Outcome::Accepted));
+        wire.0.borrow_mut().full = true;
+        for count in 0..QUEUED {
+            let mut block = socket.reserve().await.unwrap();
+            block.fill(&[u8::try_from(count).unwrap()]).unwrap();
+            socket.credit().await.unwrap();
+            drop(socket.send(peer(), block).ok().unwrap());
+        }
+        settle().await;
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.full = false;
+            wire.wake();
+        }
+        // Only the service's own next turn sends what the budget left.
+        while datagrams(&wire.0.borrow()).len() < QUEUED + 1 {
+            yield_now().await;
+        }
+        stop.try_send(()).ok().unwrap();
+    };
+    let (cause, ()) = run_tasks(clock, service.run(clock, &mut seen), drive);
+    assert_eq!(cause, EndCause::Stopped);
+    let turns = turns(&seen.0);
+    assert!(
+        turns
+            .iter()
+            .any(|turn| turn.published == [PublishEnd::Budget]),
+        "one turn spent its budget"
+    );
+}
+
+/// More notices than a turn hands the policy: that turn publishes nothing
+/// and names its own next turn, which it takes after a yield, not after a
+/// wait.
+#[test]
+fn notices_past_a_turn_s_budget_turn_again_after_a_yield() {
+    brand!(Net);
+    let (mut service, _socket, wire, _stop) = flow::<Net>();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut seen = Seen::default();
+    {
+        let mut run = pin!(service.run(clock, &mut seen));
+        pass(&mut run);
+        wire.0.borrow_mut().ended.extend(0..65);
+        pass(&mut run);
+        pass(&mut run);
+    }
+    assert!(wire.0.borrow().ended.is_empty());
+    let deferred = seen
+        .0
+        .iter()
+        .position(|event| *event == ServiceEvent::Published(PublishEnd::Deferred))
+        .unwrap();
+    let after: Vec<_> = seen.0[deferred + 1..]
+        .iter()
+        .filter(|event| {
+            matches!(
+                event,
+                ServiceEvent::Yielded | ServiceEvent::Waited { .. } | ServiceEvent::TurnBegan
+            )
+        })
+        .take(2)
+        .collect();
+    assert_eq!(
+        after,
+        [&ServiceEvent::Yielded, &ServiceEvent::TurnBegan],
+        "the deferred turn yields and turns again"
+    );
 }

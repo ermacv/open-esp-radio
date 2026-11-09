@@ -240,10 +240,11 @@ impl Produce for Script {
         source.held.retain(|item| item.tag != work.tag);
     }
 
-    fn register(&mut self, cx: &mut Context<'_>, interest: Interest) {
+    fn register(&mut self, cx: &mut Context<'_>, interest: Interest) -> bool {
         let mut source = self.0.borrow_mut();
         source.waker = Some(cx.waker().clone());
         source.interests.push(interest);
+        !source.ready.is_empty()
     }
 }
 
@@ -276,6 +277,10 @@ struct Line {
     waker: Option<Waker>,
     /// The link is down.
     down: bool,
+    /// The last frame was refused for room.
+    refused: bool,
+    /// Each publication moves the clock to this time, as a turn takes time.
+    elapse: Option<(&'static VirtualClock, Instant)>,
 }
 
 #[derive(Clone, Default)]
@@ -342,10 +347,16 @@ impl FramePort for LocalPort {
     ) -> Result<u32, Unpublished<(), E>> {
         let mut line = self.0.borrow_mut();
         line.publishes += 1;
+        if let Some((clock, at)) = line.elapse
+            && clock.now() < at
+        {
+            clock.advance_to(at);
+        }
         let reply =
             line.replies
                 .pop_front()
                 .unwrap_or(if line.full { Reply::Full } else { Reply::Take });
+        line.refused = reply == Reply::Full;
         let mut frame = vec![0; length];
         match reply {
             Reply::Full => Err(Unpublished::Port(())),
@@ -411,12 +422,10 @@ impl FrameSource for LocalPort {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
+    fn register(&mut self, cx: &mut Context<'_>) -> bool {
         let mut line = self.0.borrow_mut();
         line.waker = Some(cx.waker().clone());
-        if !line.incoming.is_empty() || !line.notices.is_empty() {
-            cx.waker().wake_by_ref();
-        }
+        !line.incoming.is_empty() || !line.notices.is_empty() || (line.refused && !line.full)
     }
 }
 
@@ -1815,4 +1824,117 @@ fn dropping_the_service_ends_the_watch_and_wakes_its_reader() {
         "the reader was woken"
     );
     assert!(changed.as_mut().poll(cx).is_ready());
+}
+
+/// A declining fill keeps the producer's flow out of the rest of its turn
+/// only: its next work goes in the next turn, which nothing but the service
+/// itself starts.
+#[test]
+fn after_a_declining_fill_the_producer_s_next_work_goes_unwoken() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        line,
+        script,
+        clock,
+        ..
+    } = direct::<Net>();
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let (count, waker) = counter();
+    script.0.borrow_mut().declining.push(0);
+    script.push(tag(0, 0), broadcast(), 16);
+    script.push(tag(0, 1), broadcast(), 16);
+    settle(&mut run, &count, &waker);
+    assert_eq!(
+        line.produced(),
+        [data_of(tag(0, 1), 16)],
+        "the next work went"
+    );
+}
+
+/// The owner's case: the producer is held on `NeighborsFull`, then starts a
+/// new generation with a broadcast ready, and a block comes home by the
+/// return lane at the same moment. The pass that takes the return also sees
+/// the producer's change, by its own reading: the broadcast goes without
+/// any other wake.
+#[test]
+fn a_producer_s_change_that_comes_with_a_return_is_not_lost_to_it() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        mut socket,
+        script,
+        line,
+        clock,
+        ..
+    } = direct::<Net>();
+    let lane = Box::leak(Box::new(crate::ReturnLane::new()));
+    let (returner, end) = lane.split();
+    assert!(service.attach_returns(end).is_ok());
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let (count, waker) = counter();
+    let _seven = channel_send(&mut socket, &mut run, host(7), b"seven");
+    let _eight = channel_send(&mut socket, &mut run, host(8), b"eight");
+    let spare = blocks(&mut socket, &mut run, 1).pop().unwrap();
+    settle(&mut run, &count, &waker);
+    let held = tag(0, 0);
+    script.push(held, host(9), 16);
+    script.wake();
+    settle(&mut run, &count, &waker);
+    assert_eq!(
+        script.calls(),
+        [
+            Call::Offered(held),
+            Call::Refused(held, SendRefusal::NeighborsFull)
+        ]
+    );
+    let next = tag(1, 0);
+    script.forget(held);
+    script.0.borrow_mut().generation = 1;
+    script.push(next, broadcast(), 16);
+    script.wake();
+    returner.give(spare).ok().unwrap();
+    settle(&mut run, &count, &waker);
+    assert_eq!(line.produced(), [data_of(next, 16)], "the broadcast went");
+}
+
+/// A time already due when the wait begins ends it at its first poll as a
+/// ready source would: the useful turn before it is not followed by another
+/// in the same poll.
+#[test]
+fn a_time_due_at_the_wait_still_leaves_one_useful_turn_a_poll() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        mut socket,
+        line,
+        script,
+        clock,
+        ..
+    } = direct::<Net>();
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let cx = &mut Context::from_waker(Waker::noop());
+    let mut block = blocks(&mut socket, &mut run, 1).pop().unwrap();
+    block.fill(b"first").unwrap();
+    let due = clock.now().saturating_add(Duration::from_millis(5));
+    script.0.borrow_mut().due = Some((
+        due,
+        Item {
+            tag: tag(0, 0),
+            remote: broadcast(),
+            data: data_of(tag(0, 0), 16),
+        },
+    ));
+    // Publishing the channel's datagram takes the clock to the producer's
+    // time: the wait after that turn finds it already due.
+    line.0.borrow_mut().elapse = Some((clock, due));
+    drop(socket.send(broadcast(), block).ok().unwrap());
+    assert!(poll(&mut run, cx).is_pending());
+    assert_eq!(line.channel(), [b"first".to_vec()]);
+    assert!(line.produced().is_empty(), "one useful turn in this poll");
+    assert!(poll(&mut run, cx).is_pending());
+    assert_eq!(line.produced(), [data_of(tag(0, 0), 16)], "the next poll's");
 }

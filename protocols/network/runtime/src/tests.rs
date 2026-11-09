@@ -81,6 +81,8 @@ struct Wire {
     /// Ended frames, by ticket.
     ended: VecDeque<u32>,
     waker: Option<Waker>,
+    /// The last frame was refused for room.
+    refused: bool,
     /// How the port holds what it shows: lendable buffers, or its copies.
     holding: Option<Holding>,
     /// Buffers the port lent and has not got back.
@@ -150,6 +152,7 @@ impl FramePort for WirePort {
         fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
     ) -> Result<u32, Unpublished<bool, E>> {
         let mut wire = self.0.borrow_mut();
+        wire.refused = wire.full;
         if wire.full {
             return Err(Unpublished::Port(false));
         }
@@ -216,12 +219,10 @@ impl FrameSource for WirePort {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
+    fn register(&mut self, cx: &mut Context<'_>) -> bool {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
-        if !wire.incoming.is_empty() {
-            cx.waker().wake_by_ref();
-        }
+        !wire.incoming.is_empty() || !wire.ended.is_empty() || (wire.refused && !wire.full)
     }
 }
 

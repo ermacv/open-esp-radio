@@ -128,7 +128,9 @@ impl oer_protocols_network_port::FrameSource for Port {
             })
     }
 
-    fn register(&mut self, _: &mut core::task::Context<'_>) {}
+    fn register(&mut self, _: &mut core::task::Context<'_>) -> bool {
+        !self.received.is_empty()
+    }
 }
 
 impl FramePort for Port {

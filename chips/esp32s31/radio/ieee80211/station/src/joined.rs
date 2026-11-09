@@ -588,10 +588,8 @@ impl FrameSource for Counted {
             .as_ref()
             .map_or(LinkSnapshot::DOWN, FrameSource::link)
     }
-    fn register(&mut self, cx: &mut Context<'_>) {
-        if let Some(inner) = &mut self.inner {
-            inner.register(cx);
-        }
+    fn register(&mut self, cx: &mut Context<'_>) -> bool {
+        self.inner.as_mut().is_some_and(|inner| inner.register(cx))
     }
 }
 

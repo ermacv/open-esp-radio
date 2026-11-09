@@ -85,11 +85,14 @@ pub trait Produce {
     fn ended(&mut self, work: Work<Self::Tag>, outcome: Outcome);
 
     /// Make `cx` the one the source's next change wakes, as `interest`
-    /// names: with [`Interest::Offers`] new data too, and at once if some
-    /// came since [`Self::offer`] last answered [`Next`]; with
-    /// [`Interest::Changes`] only a move of [`Self::generation`] or an open or
-    /// held tag no longer [`Self::current`], never new data alone.
-    fn register(&mut self, cx: &mut Context<'_>, interest: Interest);
+    /// names: with [`Interest::Offers`] new data too; with
+    /// [`Interest::Changes`] only a move of [`Self::generation`] or an open
+    /// or held tag no longer [`Self::current`], never new data alone. Return
+    /// whether data waits that [`Self::offer`] has not handed out, looked at
+    /// after registering, so data that comes between the two is missed by
+    /// neither. The service reads [`Self::generation`] and
+    /// [`Self::current`] itself for the changes. A `true` is not also a wake.
+    fn register(&mut self, cx: &mut Context<'_>, interest: Interest) -> bool;
 }
 
 /// What a waiting service can act on, which its producer's wake is for.
@@ -235,6 +238,9 @@ pub struct Producer<'a, B, P: Produce, const CREDITS: usize> {
     declined: bool,
     /// When the producer said it has more.
     at: Option<Instant>,
+    /// The last offer step stopped before the producer said it had no more:
+    /// at a hold or a budget, which no wake of the producer's names.
+    stopped: bool,
     /// Last, so it goes after the producer.
     ending: Ending<'a>,
 }
@@ -251,6 +257,7 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
             hold: None,
             declined: false,
             at: None,
+            stopped: false,
             ending: Ending(end),
         }
     }
@@ -325,11 +332,21 @@ pub(crate) mod sealed {
             events: &mut impl EventSink<ServiceEvent>,
         ) -> bool;
 
-        /// Register the producer for what the service can act on now.
-        fn register(&mut self, cx: &mut Context<'_>, events: &mut impl EventSink<ServiceEvent>);
+        /// Register the producer for what the service can act on now;
+        /// whether some is here already.
+        fn register(
+            &mut self,
+            cx: &mut Context<'_>,
+            events: &mut impl EventSink<ServiceEvent>,
+        ) -> bool;
 
         /// When the producer said it has more.
         fn deadline(&self) -> Option<Instant>;
+
+        /// Whether the next turn would ask the producer for offers that the
+        /// last turn stopped asking for: its hold or its budget freed since.
+        /// No wake of the producer's names these.
+        fn again(&self, owner: &impl Owner<B>) -> bool;
 
         /// The core retired: each open work's outcome, then the producer
         /// back, and only then the end flag.
@@ -433,11 +450,22 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     }
 
     #[inline(always)]
-    fn register(&mut self, _cx: &mut Context<'_>, _events: &mut impl EventSink<ServiceEvent>) {}
+    fn register(
+        &mut self,
+        _cx: &mut Context<'_>,
+        _events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
+        false
+    }
 
     #[inline(always)]
     fn deadline(&self) -> Option<Instant> {
         None
+    }
+
+    #[inline(always)]
+    fn again(&self, _owner: &impl Owner<B>) -> bool {
+        false
     }
 
     #[inline(always)]
@@ -458,6 +486,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         events: &mut impl EventSink<ServiceEvent>,
     ) -> bool {
         self.at = None;
+        self.stopped = false;
         if self.socket.is_none() {
             return false;
         }
@@ -485,6 +514,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             if released || hold.generation != generation || !self.producer.current(hold.tag) {
                 self.hold = None;
             } else {
+                self.stopped = true;
                 return moved;
             }
         }
@@ -493,6 +523,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         };
         for _ in 0..TURN_FRAMES {
             if self.open >= TURN_FRAMES {
+                self.stopped = true;
                 return moved;
             }
             let offer = match self.producer.offer(now) {
@@ -531,11 +562,13 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
                         generation,
                         waits,
                     });
+                    self.stopped = true;
                     return moved;
                 }
             }
         }
         // The budget is spent with more to ask: the next turn asks again.
+        self.stopped = true;
         true
     }
 
@@ -605,9 +638,13 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         moved
     }
 
-    fn register(&mut self, cx: &mut Context<'_>, events: &mut impl EventSink<ServiceEvent>) {
+    fn register(
+        &mut self,
+        cx: &mut Context<'_>,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
         if self.socket.is_none() {
-            return;
+            return false;
         }
         // Held, or at the budget of open works, the service asks nothing at
         // its next turn: what frees it comes in a turn of its own.
@@ -617,11 +654,35 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             Interest::Offers
         };
         report(events, || ServiceEvent::Local(LocalEvent::Waits(interest)));
-        self.producer.register(cx, interest);
+        let data = self.producer.register(cx, interest);
+        // What the next turn acts on, read after registering: new data while
+        // it would ask, a new generation, or a hold gone stale.
+        let generation = self.producer.generation();
+        let stale = self
+            .hold
+            .as_ref()
+            .is_some_and(|hold| hold.generation != generation || !self.producer.current(hold.tag));
+        (interest == Interest::Offers && data) || generation != self.generation || stale
     }
 
     fn deadline(&self) -> Option<Instant> {
         self.at
+    }
+
+    fn again(&self, owner: &impl Owner<B>) -> bool {
+        if !self.stopped || self.socket.is_none() || self.open >= TURN_FRAMES {
+            return false;
+        }
+        self.hold.as_ref().is_none_or(|hold| {
+            let released = match hold.waits {
+                Waits::Place => self.open < CREDITS,
+                Waits::Neighbors(seen) => owner.neighbors_changed() != seen,
+                Waits::Address(seen) => owner.address_version() != seen,
+            };
+            released
+                || hold.generation != self.producer.generation()
+                || !self.producer.current(hold.tag)
+        })
     }
 
     fn retire<const SOCKETS: usize>(self, results: &mut RetiredResults<B, SOCKETS, CREDITS>) -> P {

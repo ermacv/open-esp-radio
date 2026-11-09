@@ -364,3 +364,123 @@ fn serving_late_loans_after_a_stop_waits_for_the_held_buffer_and_closes_the_acco
     assert!(ended.retired.pool.loans().released());
     assert_eq!(lent_out(&wire), 0);
 }
+
+/// Every service event, where the test reads it while the service runs.
+#[derive(Clone, Default)]
+struct Tape(std::rc::Rc<core::cell::RefCell<Vec<ServiceEvent>>>);
+
+impl EventSink<ServiceEvent> for Tape {
+    fn event(&mut self, event: ServiceEvent) {
+        self.0.borrow_mut().push(event);
+    }
+}
+
+impl EventSink<NetEvent> for Tape {
+    fn event(&mut self, _: NetEvent) {}
+}
+
+impl Tape {
+    fn len(&self) -> usize {
+        self.0.borrow().len()
+    }
+
+    fn since(&self, mark: usize) -> Vec<ServiceEvent> {
+        self.0.borrow()[mark..].to_vec()
+    }
+}
+
+#[test]
+fn a_returned_buffer_is_taken_back_with_no_turn() {
+    #[derive(Debug)]
+    struct Net;
+    let (mut service, _copying, mut lending, wire, stop) = lending::<Net>(4, 1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let tape = Tape::default();
+    let mut events = tape.clone();
+    let drive = async {
+        arrive(&wire, LENDING, b"first");
+        let first = lending.receive().await.unwrap();
+        settle().await;
+        let mark = tape.len();
+        drop(first);
+        settle().await;
+        let after = tape.since(mark);
+        assert!(
+            after.contains(&ServiceEvent::Returned { work: false }),
+            "{after:?}"
+        );
+        assert!(
+            !after.contains(&ServiceEvent::TurnBegan),
+            "a return runs no turn: {after:?}"
+        );
+        // Its credit is back before the next frame needs it.
+        arrive(&wire, LENDING, b"second");
+        let Received::Lent(second) = lending.receive().await.unwrap() else {
+            panic!("lent on the returned credit");
+        };
+        drop(second);
+        stop.try_send(()).ok().unwrap();
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(lent_out(&wire), 0);
+}
+
+/// A return and a frame wake the service together: the pass that takes the
+/// return loses no wake of the frame's, and the frame finds the credit.
+#[test]
+fn a_frame_that_comes_with_a_return_is_not_lost_to_it() {
+    #[derive(Debug)]
+    struct Net;
+    let (mut service, _copying, mut lending, wire, stop) = lending::<Net>(4, 1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut drops = Drops::default();
+    let drive = async {
+        arrive(&wire, LENDING, b"first");
+        let first = lending.receive().await.unwrap();
+        settle().await;
+        drop(first);
+        arrive(&wire, LENDING, b"second");
+        let Received::Lent(second) = lending.receive().await.unwrap() else {
+            panic!("lent on the returned credit");
+        };
+        drop(second);
+        stop.try_send(()).ok().unwrap();
+    };
+    run_tasks(clock, service.run(clock, &mut drops), drive);
+    assert!(drops.0.is_empty(), "no credit was missing: {:?}", drops.0);
+}
+
+/// A run cancelled in its wait, after a pass took a return, keeps what the
+/// return brought: retirement finds the account settled and every block home.
+#[test]
+fn a_run_cancelled_after_a_return_keeps_what_it_took() {
+    #[derive(Debug)]
+    struct Net;
+    let (mut service, _copying, mut lending, wire, _stop) = lending::<Net>(4, 1);
+    let clock: VirtualClock = VirtualClock::new();
+    let tape = Tape::default();
+    let mut events = tape.clone();
+    let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
+    {
+        let mut run = core::pin::pin!(service.run(&clock, &mut events));
+        assert!(run.as_mut().poll(cx).is_pending());
+        arrive(&wire, LENDING, b"held");
+        assert!(run.as_mut().poll(cx).is_pending());
+        let Some(Received::Lent(held)) = lending.try_receive() else {
+            panic!("lent");
+        };
+        let mark = tape.len();
+        drop(held);
+        assert!(run.as_mut().poll(cx).is_pending());
+        assert!(
+            tape.since(mark)
+                .contains(&ServiceEvent::Returned { work: false })
+        );
+    }
+    let mut ended = service.retire();
+    assert_eq!(ended.retired.pool.loans().outstanding(), 0);
+    assert!(ended.retired.pool.loans().released());
+    assert_eq!(lent_out(&wire), 0);
+    drop(lending);
+    ended.collect();
+}

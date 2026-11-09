@@ -275,16 +275,11 @@ impl Source {
 /// handed over into the slot the network grants it.
 pub(crate) struct LoadProducer {
     source: &'static Source,
-    /// The generation at the last registration.
-    registered: u32,
 }
 
 impl LoadProducer {
     pub(crate) const fn new(source: &'static Source) -> Self {
-        Self {
-            source,
-            registered: 0,
-        }
+        Self { source }
     }
 
     /// The datagram of `tag` leaves, and its room is a sender's.
@@ -378,23 +373,14 @@ impl Produce for LoadProducer {
         self.forget(work.tag);
     }
 
-    fn register(&mut self, cx: &mut Context<'_>, interest: Interest) {
+    fn register(&mut self, cx: &mut Context<'_>, interest: Interest) -> bool {
         let offers = interest == Interest::Offers;
         self.source.wants_offers.store(offers, Ordering::Release);
         self.source.network.register(cx.waker());
-        // Check again after registering: a new run since the last
-        // registration, or, while the network can declare one, a datagram
-        // not yet offered.
-        let generation = self.generation();
-        let moved = core::mem::replace(&mut self.registered, generation) != generation;
-        let waiting = offers
-            && self
-                .source
-                .lend(|datagrams| !datagrams.unoffered.is_empty())
-                .unwrap_or(false);
-        if moved || waiting {
-            self.source.wake_network();
-        }
+        // Looked at after registering: a datagram not yet offered.
+        self.source
+            .lend(|datagrams| !datagrams.unoffered.is_empty())
+            .unwrap_or(false)
     }
 }
 

@@ -136,12 +136,10 @@ impl FrameSource for Port {
             epoch: 1,
         }
     }
-    fn register(&mut self, cx: &mut Context<'_>) {
+    fn register(&mut self, cx: &mut Context<'_>) -> bool {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
-        if !wire.incoming.is_empty() {
-            cx.waker().wake_by_ref();
-        }
+        !wire.incoming.is_empty()
     }
 }
 
