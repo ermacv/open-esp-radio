@@ -6,6 +6,53 @@ use core::{
     task::{Context, Poll},
 };
 use oer_portable_time::{Duration, Instant, Timer};
+use oer_protocols_ieee80211_contracts_port::{
+    DataPort, LowerMacTerminal, PortSink, PortTypes, TbttEvent,
+};
+
+/// The stopped port's cleanup, once per call of its lifecycle owner, after
+/// a confirmed stop: the removal receipts it frees end here with the
+/// retiring installation's other tokens ([`Retiring`]).
+///
+/// # Errors
+///
+/// The cleanup did not finish: the port keeps its owners and stays
+/// stopped; nothing here calls it again.
+pub(crate) fn clean<'id, P>(port: &mut P) -> Result<(), crate::failure::CleanupCause>
+where
+    P: DataPort<'id, Fault = oer_chips_esp32s31_radio_ieee80211_backend::port::Fault>,
+{
+    port.clean_stopped(&mut Retiring)
+        .map_err(crate::failure::convert::cleanup)
+}
+
+/// The sink of a retiring port's cleanup. It takes a removal receipt,
+/// whose slot and permission end with the installation the port retires,
+/// and refuses every other item whole: the port keeps it, and then does
+/// not retire.
+struct Retiring;
+
+impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Retiring {
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'id, T>,
+    ) -> Result<(), LowerMacTerminal<'id, T>> {
+        match terminal {
+            LowerMacTerminal::KeyRemoved(_removed) => Ok(()),
+            other => Err(other),
+        }
+    }
+
+    fn tbtt(&mut self, _event: TbttEvent) {}
+
+    fn received(
+        &mut self,
+        frame: T::RxBuffer,
+        meta: T::RxMeta,
+    ) -> Result<(), (T::RxBuffer, T::RxMeta)> {
+        Err((frame, meta))
+    }
+}
 
 /// The owners a refused start returned, which end through [`Retire::retire`].
 pub(crate) trait Retire {

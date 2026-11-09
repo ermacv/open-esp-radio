@@ -40,7 +40,14 @@ oldest first and before anything newer, at its next call with a sink while
 the radio has not confirmed a stop; after a confirmed stop only
 `DataPort::take_unconsumed` offers it, each once. The port signals nothing
 for what it keeps: the refusing sink registers its own wake for room and
-checks its room again before its task sleeps. `PortTypes` (module `types`) names
+checks its room again before its task sleeps. After a confirmed stop the
+lifecycle owner that stopped the port calls `DataPort::clean_stopped`, once
+per call and whether or not the datapath actor still runs, for the cleanup
+the stop leaves to the backend (a hardware write that releases what a failed
+operation left in use); its result (`CleanupRefused`: not stopped, faulted,
+a step that could not run and wrote nothing, or held after its one write) is
+that owner's, and a port whose cleanup did not finish does not retire.
+Nothing repeats the cleanup's write. `PortTypes` (module `types`) names
 the types the port's owners and terminals carry:
 
 - **Tickets and buffers.** A transmission takes a ticket (a place in

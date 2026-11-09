@@ -143,6 +143,26 @@ const fn crypto_key_error_name(error: CryptoKeyError) -> &'static str {
 }
 
 /// A fault of one hardware queue: its name, then the queue.
+/// The path of a cleanup that did not finish: its kind, then the port's
+/// cause.
+fn cleanup_path(cause: CleanupCause, path: &mut DiagPath) {
+    match cause {
+        CleanupCause::NotStopped => path.name("NotStopped"),
+        CleanupCause::Faulted(fault) => {
+            path.name("Faulted");
+            fault.push_path(path);
+        }
+        CleanupCause::Unavailable(fault) => {
+            path.name("Unavailable");
+            fault.push_path(path);
+        }
+        CleanupCause::Held(fault) => {
+            path.name("Held");
+            fault.push_path(path);
+        }
+    }
+}
+
 fn queue_fault(path: &mut DiagPath, name: &'static str, queue: u8) {
     path.name(name);
     path.word(u32::from(queue));
@@ -447,7 +467,11 @@ impl DiagnosticPath for LifecycleFailure {
                     ReinstallCause::Receipt => "Receipt",
                     ReinstallCause::Resources => "Resources",
                     ReinstallCause::Epochs => "Epochs",
+                    ReinstallCause::Cleanup(_) => "Cleanup",
                 });
+                if let ReinstallCause::Cleanup(cause) = cause {
+                    cleanup_path(*cause, path);
+                }
             }
             Self::Mailbox => path.name("Mailbox"),
         }

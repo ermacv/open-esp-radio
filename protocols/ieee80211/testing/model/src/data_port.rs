@@ -30,10 +30,10 @@ use oer_protocols_ieee80211_contracts_port::{
     TsfControl, first_stale,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AccessPointCommandFailed, AdmittedTxParts, CommandFailed, CommandKind, CommandProgress,
-    CommandRefusal, CommandTypes, DataPort, Facts, LendRefusal, LendRefused, PairwiseIssue,
-    PortArena, PortCommand, PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer,
-    PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartFailure, StartRefused,
+    AccessPointCommandFailed, AdmittedTxParts, CleanupRefused, CommandFailed, CommandKind,
+    CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, LendRefusal, LendRefused,
+    PairwiseIssue, PortArena, PortCommand, PortCommandFailed, PortCommands, PortCompleted,
+    PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartFailure, StartRefused,
     StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
     Unconsumed, UnconsumedRefused,
     arena::{
@@ -1399,6 +1399,17 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
         self.keep_posted();
         Ok(self.offer_kept(sink))
+    }
+
+    /// The model's stop leaves no cleanup: a stopped port has finished.
+    fn clean_stopped(
+        &mut self,
+        _sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<(), CleanupRefused<Self::Fault>> {
+        if self.radio != Radio::Stopped {
+            return Err(CleanupRefused::NotStopped);
+        }
+        Ok(())
     }
 
     fn deadline(&self) -> Option<Instant> {

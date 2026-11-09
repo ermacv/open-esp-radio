@@ -921,7 +921,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     fn clean_retained_group(
         &mut self,
         sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
-    ) -> Result<(), Fault> {
+    ) -> Result<(), CleanupRefused<Fault>> {
         if let Some(terminal) = self.driver.clean_retained_group(self.device)? {
             self.unconsumed.deliver(
                 sink,
@@ -2199,17 +2199,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.state,
             PortState::Running | PortState::Recovering | PortState::Stopping { .. }
         ) {
-            // A stopped port cleans up a replacement whose rollback failed,
-            // then ends the removals the stop finished. The cleanup's
-            // refusal is this call's result, not the port's fault: the next
-            // stopped service runs it on from where it stands, writing
-            // nothing it wrote before.
-            let cleaned = self.clean_retained_group(sink);
+            // A stopped port ends the removals the stop finished. A
+            // replacement whose rollback failed waits for the lifecycle
+            // owner's cleanup ([`DataPort::clean_stopped`]), not for this
+            // service.
             let delivered = self
                 .deliver_removals(sink)
                 .map_err(|fault| self.record(fault));
             self.recompute_deadline();
-            return delivered.and(cleaned).map(|()| None);
+            return delivered.map(|()| None);
         }
         let done = self
             .turn(tx, tbtt, now, sink)
@@ -2725,6 +2723,22 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
         }
         recoverable
+    }
+
+    fn clean_stopped(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<(), CleanupRefused<Self::Fault>> {
+        if self.state != PortState::Stopped {
+            return Err(CleanupRefused::NotStopped);
+        }
+        self.check().map_err(CleanupRefused::Faulted)?;
+        // The cleanup's result is the owner's, never the port's recorded
+        // fault: a later call goes on from where it stands, writing nothing
+        // it wrote before.
+        let cleaned = self.clean_retained_group(sink);
+        self.recompute_deadline();
+        cleaned
     }
 
     fn take_unconsumed(

@@ -87,10 +87,10 @@ mod command;
 pub use command::{CommandKind, CommandTypes, PairwiseIssue, PortCommand, PortCommands};
 mod data_port;
 pub use data_port::{
-    CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, PortArena, PortCommandFailed,
-    PortCompleted, PortRxBuffer, PortRxPull, PortSink, RxPull, StartFailure, StartRefused,
-    StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
-    Unconsumed, UnconsumedRefused,
+    CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, PortArena,
+    PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink, RxPull, StartFailure,
+    StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal,
+    TxFacts, Unconsumed, UnconsumedRefused,
 };
 mod layout;
 pub use layout::{

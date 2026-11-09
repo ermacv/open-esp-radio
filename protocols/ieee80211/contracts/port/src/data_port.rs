@@ -216,6 +216,25 @@ pub enum UnconsumedRefused {
     NotStopped,
 }
 
+/// Why [`DataPort::clean_stopped`] did not finish the cleanup the stop
+/// left to the port.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CleanupRefused<F> {
+    /// The radio has not confirmed a stop: nothing was done.
+    NotStopped,
+    /// The port holds the backend's contract fault: nothing was done, and
+    /// the port does not retire.
+    Faulted(F),
+    /// The cleanup's next step cannot run now, for the backend's cause:
+    /// that step wrote nothing, and a later call takes it.
+    Unavailable(F),
+    /// The cleanup's one hardware write was issued and the hardware still
+    /// holds what that write releases, the backend's cause: the port keeps
+    /// the owners it concerns and does not retire. A later call reads the
+    /// hardware again and writes nothing; nothing repeats the write.
+    Held(F),
+}
+
 /// How far [`DataPort::command`] took one command.
 pub enum CommandProgress<'id, T: CommandTypes<'id>, K: Ieee80211Capabilities> {
     /// The command ran; its terminal, if it has one, is in the sink.
@@ -723,6 +742,23 @@ pub trait DataPort<'id> {
         &mut self,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<Unconsumed, UnconsumedRefused>;
+
+    /// After the radio's confirmed stop: the cleanup the stop leaves to the
+    /// port (a backend's write that releases hardware a failed operation
+    /// left in use), by the lifecycle owner that stopped it, whether or not
+    /// the datapath actor still runs. The owners the cleanup frees leave
+    /// through their terminals in `sink`, each once; a terminal the sink
+    /// refuses stays with the port for [`Self::take_unconsumed`]. A port
+    /// whose cleanup did not finish does not retire. Nothing calls it on
+    /// its own: each call is the owner's.
+    ///
+    /// # Errors
+    ///
+    /// Why the cleanup did not finish ([`CleanupRefused`]).
+    fn clean_stopped(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<(), CleanupRefused<Self::Fault>>;
 
     /// Take back the fault the port last reported, so that a stop can run
     /// and return the owners it holds: whether it can. From then on the port

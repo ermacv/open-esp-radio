@@ -1092,8 +1092,10 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
                 ActorEnd::Reinstall => ActorEndSeen::Reinstall,
                 ActorEnd::Faulted(_) => ActorEndSeen::Faulted,
             });
-            // The facade's `release`.
-            match actor.port_mut().release() {
+            // The facade's `release`: the stopped port's cleanup, then the
+            // port's release.
+            let cleaned = crate::release::clean(actor.port_mut());
+            match cleaned.ok().and_then(|()| actor.port_mut().release()) {
                 Some(device) => {
                     ends.released = Some(true);
                     ends.frontier = device.take_stopped().map(|(frontier, ())| frontier);

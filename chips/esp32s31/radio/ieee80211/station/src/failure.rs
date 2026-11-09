@@ -569,6 +569,26 @@ pub enum ReleaseCause {
     /// the release. The task keeps what it was handed; a later answer is
     /// never read, and nothing is reused.
     Deadline,
+    /// The stopped port's cleanup did not finish: the port keeps its
+    /// owners and the radio, and nothing was released.
+    Cleanup(CleanupCause),
+}
+/// Why the stopped port's cleanup ([`DataPort::clean_stopped`]) did not
+/// finish. Nothing calls it again on its own: the port stays stopped with
+/// the owners it holds.
+///
+/// [`DataPort::clean_stopped`]: oer_protocols_ieee80211_contracts_port::DataPort::clean_stopped
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CleanupCause {
+    /// The radio had not confirmed a stop.
+    NotStopped,
+    /// The port holds its contract fault.
+    Faulted(BackendFault),
+    /// The cleanup's next step could not run and wrote nothing.
+    Unavailable(BackendFault),
+    /// The cleanup's one write was issued and the hardware still holds
+    /// what it releases: a station group key's entry still reads valid.
+    Held(BackendFault),
 }
 /// Why the station's lifecycle, or the datapath actor under it, ended
 /// with a cause the image records before it resets. A restart of the
@@ -612,6 +632,8 @@ pub enum ReinstallCause {
     Resources,
     /// The TSF epochs are used up.
     Epochs,
+    /// The stopped port's cleanup did not finish.
+    Cleanup(CleanupCause),
 }
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;

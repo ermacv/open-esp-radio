@@ -834,6 +834,21 @@ pub(crate) fn restart(
     }
 }
 
+/// The station's form of a cleanup the port did not finish.
+pub(crate) fn cleanup(
+    refused: oer_protocols_ieee80211_contracts_port::CleanupRefused<
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
+    >,
+) -> CleanupCause {
+    use oer_protocols_ieee80211_contracts_port::CleanupRefused as Source;
+    match refused {
+        Source::NotStopped => CleanupCause::NotStopped,
+        Source::Faulted(fault) => CleanupCause::Faulted(backend_fault(fault)),
+        Source::Unavailable(fault) => CleanupCause::Unavailable(backend_fault(fault)),
+        Source::Held(fault) => CleanupCause::Held(backend_fault(fault)),
+    }
+}
+
 /// Why the port did not reinstall.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reinstall(

@@ -1909,24 +1909,25 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     ///
     /// # Errors
     ///
-    /// This call's result, never recorded; the owners stay retained and
-    /// the slot is not free, and the next stopped service runs the cleanup
-    /// on from where it is. Before the clear: the registers, the core's
-    /// command view or the key's place are not there, and nothing was
-    /// written. After it: the table reads the entry valid
-    /// ([`Fault::GroupEntryHeld`]) or does not say
-    /// ([`Fault::GroupEntryUnobservable`]), or the registers or the removal
-    /// are not there.
+    /// This call's result, never recorded; the owners stay retained, the
+    /// slot is not free and the previous key stays inactive, and the
+    /// lifecycle owner's next call goes on from where it is.
+    /// [`CleanupRefused::Unavailable`]: the step at hand cannot run (the
+    /// registers, the core's command view, the key's place, or after a
+    /// cleared read the removal) and wrote nothing.
+    /// [`CleanupRefused::Held`]: the clear was issued and the table reads
+    /// the entry valid ([`Fault::GroupEntryHeld`]) or does not say
+    /// ([`Fault::GroupEntryUnobservable`]).
     pub(super) fn clean_retained_group(
         &mut self,
         device: &mut D,
-    ) -> Result<Option<brand::OwnedRemoved<'id, Id>>, Fault> {
+    ) -> Result<Option<brand::OwnedRemoved<'id, Id>>, CleanupRefused<Fault>> {
         let Some(mut retained) = self.retained_group.take() else {
             return Ok(None);
         };
         let identity = retained.key.identity;
         let observed = (|| {
-            let hardware = device.hardware()?;
+            let hardware = device.hardware().map_err(CleanupRefused::Unavailable)?;
             let installed = self
                 .keys
                 .iter_mut()
@@ -1936,29 +1937,39 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     Installed::Receive(installed) if *held == identity => Some(installed),
                     _ => None,
                 })
-                .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
+                .ok_or(CleanupRefused::Unavailable(Fault::KeySlotMissing(
+                    KeyOp::Remove,
+                )))?;
             let mut view = self
                 .core
                 .view()
                 .commands()
-                .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
+                .ok_or(CleanupRefused::Unavailable(Fault::CoreViewUnavailable(
+                    CoreOp::Command,
+                )))?;
             if retained.clear == GroupClear::NotIssued {
                 view.clear_failed_station_group(hardware, installed);
                 retained.clear = GroupClear::Issued;
             }
             match view.read_failed_station_group(hardware, installed) {
                 crate::mac::crypto::EntryRead::Cleared => Ok(()),
-                crate::mac::crypto::EntryRead::Held => Err(Fault::GroupEntryHeld),
-                crate::mac::crypto::EntryRead::Unobservable => Err(Fault::GroupEntryUnobservable),
+                crate::mac::crypto::EntryRead::Held => {
+                    Err(CleanupRefused::Held(Fault::GroupEntryHeld))
+                }
+                crate::mac::crypto::EntryRead::Unobservable => {
+                    Err(CleanupRefused::Held(Fault::GroupEntryUnobservable))
+                }
             }
         })();
-        let removed =
-            observed.and_then(|()| self.remove::<StaPermission<'id, Id>>(device, identity));
+        let removed = observed.and_then(|()| {
+            self.remove::<StaPermission<'id, Id>>(device, identity)
+                .map_err(CleanupRefused::Unavailable)
+        });
         match removed {
             Ok(removing) => Ok(removing.settle(retained.permission)),
-            Err(fault) => {
+            Err(refused) => {
                 self.retained_group = Some(retained);
-                Err(fault)
+                Err(refused)
             }
         }
     }

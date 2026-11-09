@@ -6,7 +6,7 @@
 //! station's next publications.
 use super::*;
 use oer_portable_time::Duration;
-use oer_protocols_ieee80211_contracts_port::CommandFailed;
+use oer_protocols_ieee80211_contracts_port::{CleanupRefused, CommandFailed};
 use oer_protocols_ieee80211_testing_conformance::group_keys::{
     self as group_cases, Event, Installation, Mutation, Timing,
 };
@@ -696,6 +696,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             .service_tx(TxFacts::DUE, false, now, &mut self.outbox)
             .map(|completed| assert!(completed.is_none()))
     }
+
+    /// The lifecycle owner's cleanup of the stopped port.
+    fn clean(&mut self) -> Result<(), CleanupRefused<Fault>> {
+        self.port.clean_stopped(&mut self.outbox)
+    }
 }
 
 /// Whether the stopped port retires once the fixture's transmit buffers
@@ -793,17 +798,29 @@ fn a_gtk_replacement_whose_rollback_fails_returns_its_owners_through_the_stop_on
         );
         assert!(fixture.group_terminals().is_empty(), "no terminal");
         assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
+        // Before a confirmed stop the cleanup refuses and writes nothing.
+        let clears = fixture.observed.borrow().key_clears;
+        assert_eq!(fixture.clean(), Err(CleanupRefused::NotStopped));
+        assert_eq!(fixture.observed.borrow().key_clears, clears);
         // The stop takes the fault back; the stopped port keeps the owners
         // until its cleanup.
         assert!(fixture.port.recover_for_stop());
         fixture.stop();
         assert!(fixture.stopped_release_refused(), "the owners are retained");
+        // The stopped service is not the cleanup: it neither frees the
+        // owners nor reports the cleanup's result.
+        let clears = fixture.observed.borrow().key_clears;
         assert!(fixture.stopped_service().is_ok());
+        assert!(fixture.group_terminals().is_empty());
+        assert_eq!(fixture.observed.borrow().key_clears, clears);
+        assert!(fixture.stopped_release_refused(), "still retained");
+        assert!(fixture.clean().is_ok());
         assert_eq!(
             fixture.group_terminals(),
             [(Mutation::Remove, owners.0, owners.1)],
             "the removal returns the slot and the permission"
         );
+        assert!(fixture.clean().is_ok());
         assert!(fixture.stopped_service().is_ok());
         assert_eq!(fixture.group_terminals().len(), 1, "once");
         retires(fixture);
@@ -834,11 +851,17 @@ fn a_failed_rollbacks_entry_is_cleared_once_and_then_only_read_until_it_reads_cl
         let observed = fixture.observed.clone();
         let clears = || observed.borrow().key_clears;
         fixture.observed.borrow_mut().hardware_unavailable = true;
-        assert_eq!(fixture.stopped_service(), Err(Fault::HardwareUnavailable));
+        assert_eq!(
+            fixture.clean(),
+            Err(CleanupRefused::Unavailable(Fault::HardwareUnavailable))
+        );
         let before = clears();
         fixture.observed.borrow_mut().hardware_unavailable = false;
         fixture.observed.borrow_mut().key_entries_stuck = true;
-        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryHeld));
+        assert_eq!(
+            fixture.clean(),
+            Err(CleanupRefused::Held(Fault::GroupEntryHeld))
+        );
         assert_eq!(clears(), before, "nothing was written without registers");
         assert!(fixture.group_terminals().is_empty(), "the slot is not free");
         assert_eq!(
@@ -849,21 +872,27 @@ fn a_failed_rollbacks_entry_is_cleared_once_and_then_only_read_until_it_reads_cl
         assert!(fixture.port.retained_group().0.is_some());
         assert!(fixture.stopped_release_refused(), "the owners stay");
         // Read again: still valid.
-        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryHeld));
+        assert_eq!(
+            fixture.clean(),
+            Err(CleanupRefused::Held(Fault::GroupEntryHeld))
+        );
         assert_eq!(clears(), before + 1, "the clear was issued once");
-        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryHeld));
+        assert_eq!(
+            fixture.clean(),
+            Err(CleanupRefused::Held(Fault::GroupEntryHeld))
+        );
         assert_eq!(clears(), before + 1, "a read writes nothing");
         assert!(fixture.group_terminals().is_empty());
         // The table reads the entry cleared: the removal, which writes the
         // entry no more, returns the owners once.
         fixture.observed.borrow_mut().key_entries_stuck = false;
-        assert!(fixture.stopped_service().is_ok());
+        assert!(fixture.clean().is_ok());
         assert_eq!(
             fixture.group_terminals(),
             [(Mutation::Remove, owners.0, owners.1)],
             "the removal returns the slot and the permission"
         );
-        assert!(fixture.stopped_service().is_ok());
+        assert!(fixture.clean().is_ok());
         assert_eq!(clears(), before + 1, "no second clear");
         assert_eq!(fixture.group_terminals().len(), 1, "once");
         retires(fixture);

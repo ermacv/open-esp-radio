@@ -527,6 +527,16 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
                     .await;
                     return;
                 };
+                // The stopped port's cleanup first: a port it did not
+                // finish keeps its owners and does not reinstall.
+                if let Err(cause) = crate::release::clean(actor.port_mut()) {
+                    post(
+                        &mut mailbox,
+                        News::Reinstall(crate::failure::ReinstallCause::Cleanup(cause)),
+                    )
+                    .await;
+                    return;
+                }
                 match actor.reinstall_in_place(|port| port.reinstall(&mut installations, next)) {
                     Ok((commands, resources)) => {
                         epoch = next;
@@ -662,6 +672,7 @@ pub(crate) async fn release<W: Binding>(
     port: &mut Port<W>,
     mut still_active: impl FnMut(crate::failure::ReleaseCause),
 ) -> Result<(), crate::failure::ReleaseCause> {
+    crate::release::clean(port).map_err(crate::failure::ReleaseCause::Cleanup)?;
     let Some(radio) = take_stopped::<W>(port) else {
         return Err(crate::failure::ReleaseCause::NotStopped);
     };
