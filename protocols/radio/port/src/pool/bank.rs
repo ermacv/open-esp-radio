@@ -3,8 +3,14 @@
 use super::{Brand, PoolPath, Root, Slot};
 use core::marker::PhantomData;
 
-/// The places of a pool's own slots, one per slot index the [`Mint`]
-/// issued: a slot returns to the place its index names, which is its own.
+/// The home of a whole pool: one place for every index a slot of this
+/// pool (its installation, `Kind` and `Path`) can carry, so every valid
+/// slot of the pool belongs to every bank of it. A slot returns to the
+/// place its index names, which is its own.
+///
+/// Membership is by construction, not by a set taken at construction:
+/// the places cover the pool's whole index range (every `u8`), and
+/// [`take`](Self::take) reads only which places are home.
 ///
 /// Returning is infallible and has no branch: the index of a slot of
 /// this pool is unique (the mint issues each once, and a slot is neither
