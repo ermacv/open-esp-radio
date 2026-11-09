@@ -759,7 +759,7 @@ fn a_lent_unit_lends_its_storage_and_its_drop_returns_it_to_the_ring() {
 }
 
 #[test]
-fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stays_out() {
+fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_goes_back() {
     use oer_protocols_ieee80211_contracts_port::LendRefused;
     with_installations(|mut fixture, _| {
         fixture.start();
@@ -774,8 +774,8 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
             panic!("a received unit");
         };
         drop(lost);
-        // The dropped buffer frees nothing and rearms nothing.
-        assert_eq!(count(&fixture.released), 0);
+        // The dropped buffer's unit goes back: nothing of it is forgotten.
+        assert_eq!(count(&fixture.released), 1, "the dropped unit returned");
         let (pulls, returned) = {
             let observed = fixture.observed.borrow();
             (observed.pulls, observed.returned)
@@ -822,7 +822,7 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
             Ok(_) => panic!("a faulted port lends nothing"),
         };
         fixture.port.recycle(kept);
-        assert_eq!(count(&fixture.released), 1, "only the kept unit returned");
+        assert_eq!(count(&fixture.released), 2, "the kept unit returned too");
         fixture.advance(COMMAND_BOUND);
         let now = fixture.now();
         assert!(matches!(
@@ -844,16 +844,15 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
             assert_eq!(observed.returned, returned, "nothing rearmed the ring");
             assert_eq!(observed.received.len(), 1, "the third unit stays staged");
         }
-        assert_eq!(
-            count(&fixture.released),
-            1,
-            "the lost allocation never returns"
-        );
+        assert_eq!(count(&fixture.released), 2, "each unit returned once");
         let Fixture {
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_none(), "the lost unit keeps the device");
+        assert!(
+            port.release().is_none(),
+            "the loss is a fault: the device stays with the port"
+        );
     });
 }
 
@@ -1064,5 +1063,42 @@ fn a_set_edca_lifetime_expires_a_queued_mpdu_at_its_exact_deadline() {
         assert_eq!(fixture.take_completed(), 1, "expired at its deadline");
         assert_eq!(fixture.port.expired_msdus(), 1);
         assert_eq!(fixture.observed.borrow().publications, 0, "never published");
+    });
+}
+
+#[test]
+fn a_unit_a_cut_drains_past_the_held_units_goes_back_to_the_ring_beside_the_fault() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.configure_station();
+        fixture.deliver(RX_HELD);
+        let now = fixture.now();
+        let mut held = Vec::new();
+        while held.len() < RX_HELD {
+            let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+                panic!("a received unit");
+            };
+            held.push(frame);
+        }
+        let frame = fixture.frame();
+        fixture.observed.borrow_mut().captured.push_back(frame);
+        let released = count(&fixture.released);
+        let (association, slot, _) = fixture.association();
+        let permission = fixture.group_permission.take().expect("permission");
+        let install =
+            fixture
+                .commands
+                .install_group(&association, permission, slot, key_id(1), group_key(1));
+        let _ran = fixture.run(install);
+        assert_eq!(fixture.port.fault(), Some(Fault::ReceiveOverflow));
+        assert_eq!(
+            count(&fixture.released),
+            released + 1,
+            "the drained unit went back to the ring"
+        );
+        assert!(fixture.outbox.received.is_empty(), "the caller got none");
+        for frame in held {
+            fixture.port.recycle(frame);
+        }
     });
 }

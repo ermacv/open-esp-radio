@@ -37,6 +37,8 @@ use atomic_words::KeyActivity;
 mod buffer;
 pub mod device;
 mod driver;
+#[cfg(test)]
+pub(crate) use driver::TestRefusal;
 mod engines;
 pub use engines::{
     AccessPointGroupInstall, AccessPointPairwiseInstall, Esp32s31Arena, Esp32s31Commands,
@@ -398,8 +400,8 @@ pub enum Fault {
     ReceiveOverflow,
     /// A received unit's MPDU lies outside the unit.
     ReceiveRange,
-    /// A received buffer was dropped without its recycle: its allocation
-    /// stays out of the ring.
+    /// A received buffer was dropped without its recycle: its unit went
+    /// back to the ring, outside the held count.
     ReceiveLost,
     /// The data arenas' step completed an MPDU or removed a key.
     ArenaCoreContract,
@@ -661,14 +663,15 @@ type Terminal<'id, Id: SlotIdentity, D, const B: usize, O: Observations> =
 
 pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
     brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id)>,
-    /// The unit, its view narrowed to the MPDU. A lost buffer never drops
-    /// it: its original DMA lease stays quarantined.
-    unit: core::mem::ManuallyDrop<R>,
+    /// The unit, its view narrowed to the MPDU. A buffer dropped without
+    /// its recycle drops it too: its lease goes back to the ring, and the
+    /// guard records the loss.
+    unit: R,
     loss: LossGuard,
 }
-/// Records the loss of its receive buffer: dropping a buffer does not
-/// authorize rearming its allocation, and the port's next call answers
-/// with [`Fault::ReceiveLost`].
+/// Records the loss of its receive buffer: its unit goes back to the ring,
+/// but the caller's held count no longer matches, and the port's next call
+/// answers with [`Fault::ReceiveLost`].
 pub(crate) struct LossGuard {
     lost: &'static AtomicBool,
     armed: bool,
@@ -693,7 +696,7 @@ impl<'id, Id: SlotIdentity, R> ReceiveBuffer<'id, Id, R> {
     pub(crate) fn new(unit: R, loss: LossGuard) -> Self {
         Self {
             brand: PhantomData,
-            unit: core::mem::ManuallyDrop::new(unit),
+            unit,
             loss,
         }
     }
@@ -701,7 +704,7 @@ impl<'id, Id: SlotIdentity, R> ReceiveBuffer<'id, Id, R> {
     pub(crate) fn into_unit(self) -> R {
         let Self { unit, loss, .. } = self;
         loss.disarm();
-        core::mem::ManuallyDrop::into_inner(unit)
+        unit
     }
     /// The same buffer under another brand.
     pub(crate) fn rebrand<'p>(self) -> ReceiveBuffer<'p, Id, R> {

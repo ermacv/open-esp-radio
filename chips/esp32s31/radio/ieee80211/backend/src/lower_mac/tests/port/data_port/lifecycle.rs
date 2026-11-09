@@ -1752,10 +1752,12 @@ fn a_removal_the_registers_refuse_comes_back_and_leaves_the_key_installed() {
             panic!("the installation terminal returns the key");
         };
         let writes = fixture.observed.borrow().key_writes;
+        let place = fixture.port.key_place_for_test(&key);
+        assert!(place.is_some(), "the installed key has its place");
         fixture.observed.borrow_mut().hardware_unavailable = true;
         let now = fixture.now();
         let Err(CommandFailed::Returned {
-            command: PortCommand::RemovePairwise { .. },
+            command: PortCommand::RemovePairwise { key, .. },
             fault: Fault::HardwareUnavailable,
         }) = fixture.port.command(
             PortCommand::RemovePairwise { association, key },
@@ -1767,6 +1769,11 @@ fn a_removal_the_registers_refuse_comes_back_and_leaves_the_key_installed() {
         };
         assert!(fixture.outbox.terminals.is_empty(), "nothing was removed");
         assert_eq!(fixture.observed.borrow().key_writes, writes);
+        assert_eq!(
+            fixture.port.key_place_for_test(&key),
+            place,
+            "the returned key is still installed in its own place"
+        );
     });
 }
 
@@ -1936,4 +1943,180 @@ fn an_aborted_publication_makes_its_attempt_s_cost_unknown() {
             let _first = fixture.port.arena().release(done, drop).expect("released");
         });
     }
+}
+
+/// Serve one transmit turn, whatever it answers.
+fn serve_once<'id, Id: radio::SlotIdentity + 'id>(fixture: &mut Fixture<'id, Id>) {
+    let waker = fixture.waker();
+    let now = fixture.now();
+    let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
+    let _served = fixture.port.service_tx(
+        facts.tx.unwrap_or(TxFacts::DUE),
+        facts.tbtt,
+        now,
+        &mut fixture.outbox,
+    );
+}
+
+/// The single MPDU that ended last, and its outcome.
+fn last_outcome<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &Fixture<'id, Id>,
+) -> Option<oer_protocols_ieee80211_contracts_port::SingleOutcome<Ack, core::convert::Infallible>> {
+    match fixture.outbox.terminals.last() {
+        Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(completed))) => {
+            Some(*completed.outcome())
+        }
+        _ => None,
+    }
+}
+
+/// The attempts a faulted port's stop reports: queued, then published.
+fn stop_counts<'id, Id: radio::SlotIdentity + 'id>(fixture: &mut Fixture<'id, Id>) -> (u8, u8) {
+    let Poll::Ready(Err(unconfirmed)) = fixture.poll_stop_now() else {
+        panic!("a faulted port's stop is unconfirmed");
+    };
+    (
+        unconfirmed.observations.queued,
+        unconfirmed.observations.published,
+    )
+}
+
+#[test]
+fn a_submission_its_queue_refuses_ends_withdrawn_with_its_owners_beside_the_fault() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let before = fixture.port.admissions_for_test();
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::QueuePush);
+        let now = fixture.now();
+        let _submitted = fixture.port.submit(attempt, now, &mut fixture.outbox);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::QueueFull { .. })
+        ));
+        assert!(matches!(
+            last_outcome(fixture),
+            Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
+        ));
+        assert_eq!(fixture.take_completed(), 1, "the attempt came back");
+        assert_eq!(fixture.port.admissions_for_test(), before, "no ticket left");
+        assert_eq!(stop_counts(fixture), (0, 0), "nothing stays behind");
+    });
+}
+
+#[test]
+fn a_refused_publication_its_queue_cannot_take_back_ends_withdrawn_beside_the_fault() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let key = installed_pairwise(fixture);
+        // The first MPDU holds the queue; the second waits behind it.
+        fixture.hold_air(true);
+        let first = fixture.station_mpdu().expect("first");
+        fixture.submit_now(first);
+        let second = fixture.protected_mpdu(&key).expect("second");
+        fixture.submit_now(second);
+        // The second's key is gone at its publication, which goes back to
+        // the queue: the queue refuses it.
+        fixture.port.uninstall_keys_for_test();
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::QueuePush);
+        fixture.hold_air(false);
+        serve_once(fixture);
+        serve_once(fixture);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::QueueFull { .. })
+        ));
+        assert!(matches!(
+            last_outcome(fixture),
+            Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
+        ));
+        assert_eq!(fixture.take_completed(), 2, "both MPDUs came back");
+        assert_eq!(stop_counts(fixture), (0, 0), "nothing stays behind");
+    });
+}
+
+#[test]
+fn a_retry_its_queue_refuses_stays_published_beside_the_fault() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().statuses = std::vec![ACK_TIMEOUT];
+        let attempt = fixture
+            .mpdu_of(None, core::num::NonZeroU8::new(2).expect("two"))
+            .expect("attempt");
+        fixture.submit_now(attempt);
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::QueuePush);
+        serve_once(fixture);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::QueueFull { .. })
+        ));
+        assert_eq!(fixture.take_completed(), 0, "no terminal");
+        assert_eq!(
+            stop_counts(fixture),
+            (0, 1),
+            "the attempt stays in its published place"
+        );
+    });
+}
+
+#[test]
+fn a_completion_whose_buffer_refuses_its_memory_keeps_the_attempt_published() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let before = fixture.port.admissions_for_test();
+        fixture.submit_now(attempt);
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::Return);
+        serve_once(fixture);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::ReturnRefused { .. })
+        ));
+        assert_eq!(fixture.take_completed(), 0, "no terminal");
+        assert_eq!(
+            fixture.port.admissions_for_test().0,
+            before.0,
+            "the completion's ticket went home"
+        );
+        assert_eq!(stop_counts(fixture), (0, 1), "the attempt stays published");
+    });
+}
+
+#[test]
+fn a_submission_the_core_refuses_goes_back_to_its_queue_with_its_ticket() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let before = fixture.port.admissions_for_test();
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::Submit);
+        let published = fixture.observed.borrow().publications;
+        let now = fixture.now();
+        let _submitted = fixture.port.submit(attempt, now, &mut fixture.outbox);
+        assert_eq!(
+            fixture.port.fault(),
+            Some(Fault::Core(crate::lower_mac::LowerMacFault::KeyUseMismatch))
+        );
+        assert_eq!(fixture.take_completed(), 0, "no terminal");
+        assert_eq!(
+            fixture.port.admissions_for_test(),
+            before,
+            "the ticket is back"
+        );
+        assert_eq!(fixture.observed.borrow().publications, published);
+        assert_eq!(
+            stop_counts(fixture),
+            (1, 0),
+            "the attempt waits at the head of its queue"
+        );
+    });
 }

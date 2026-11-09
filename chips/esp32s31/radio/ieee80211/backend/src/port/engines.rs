@@ -745,6 +745,25 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.driver.refuse_values_for_test = true;
     }
 
+    /// Refuse the next step of `refusal`'s kind, which the counts exclude.
+    #[cfg(test)]
+    pub(crate) fn refuse_for_test(&mut self, refusal: super::driver::TestRefusal) {
+        self.driver.refuse_for_test = Some(refusal);
+    }
+
+    /// The place of `key` among the driver's installed keys.
+    #[cfg(test)]
+    pub(crate) fn key_place_for_test<R>(
+        &self,
+        key: &super::PairwiseKey<'id, Id, R>,
+    ) -> Option<usize> {
+        self.driver.keys.iter().position(|entry| {
+            entry
+                .as_ref()
+                .is_some_and(|(identity, _)| *identity == key.identity)
+        })
+    }
+
     /// The tickets in the driver's hand and the keys' uses in the core.
     #[cfg(test)]
     pub(crate) fn admissions_for_test(&mut self) -> (usize, Option<u32>) {
@@ -1028,7 +1047,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             if busy {
                 // A beacon past its deadline ends behind a busy queue too:
                 // the next TBTT's beacon replaces it.
-                driver.expire_beacons(&mut env, index, now)?;
+                driver.expire_beacons(&mut env, index, now);
                 continue;
             }
             // Expiry continues behind a gate or a barrier.
@@ -2017,19 +2036,22 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             air: None,
             beacon: attempt.execution.beacon,
         };
-        let Some(queued) = self.driver.queues.get_mut(index) else {
-            // The attempt stays in custody with the quarantine.
-            core::mem::forget(pending);
-            self.record(Fault::QueueFull { queue: 0 });
-            return Ok(());
-        };
-        if let Err(pending) = queued.push_back(pending) {
-            // A queue holds at most every ticket; the attempt stays in
-            // custody with the quarantine.
-            core::mem::forget(pending);
+        // A queue holds every ticket's attempt (`QUEUE_DEPTH`), and this
+        // attempt holds one: the push has room.
+        if let Err(pending) = self.driver.enqueue(index, pending, false) {
+            // Refused all the same: the attempt ends withdrawn with every
+            // owner, and the fault stops the port.
             self.record(Fault::QueueFull {
                 queue: u8::try_from(index).unwrap_or(u8::MAX),
             });
+            let (driver, _, mut env) = self.parts(sink);
+            driver.finish(
+                &mut env,
+                pending,
+                oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
+                ),
+            );
             return Ok(());
         }
         // A free queue publishes its head at once: nothing ends here.

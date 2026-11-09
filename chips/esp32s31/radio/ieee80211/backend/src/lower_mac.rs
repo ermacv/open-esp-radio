@@ -2798,6 +2798,11 @@ pub struct MpduValuesRefused<'slot, const BUFFER_SIZE: usize> {
 }
 
 impl<'slot, const BUFFER_SIZE: usize> MpduValues<'slot, BUFFER_SIZE> {
+    /// The slot the values hold, for a test that refuses their submission.
+    #[cfg(test)]
+    pub(crate) fn into_slot_for_test(self) -> Pin<&'slot mut crate::mac::tx::TxSlot<BUFFER_SIZE>> {
+        self.slot.into_slot()
+    }
     /// Validate the public request once; callers cannot mutate the resulting
     /// length, rate or protection fields before submission. Encryption itself
     /// comes from the separately consumed `TxAdmission`, never these values.
