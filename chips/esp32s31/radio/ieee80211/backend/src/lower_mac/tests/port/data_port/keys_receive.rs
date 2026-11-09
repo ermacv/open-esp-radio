@@ -829,8 +829,8 @@ fn a_gtk_replacement_whose_rollback_fails_returns_its_owners_through_the_stop_on
 
 /// The cleanup of a failed rollback's entry, each case its own: without
 /// registers it writes nothing and waits; a table that still reads the
-/// entry valid after the one clear frees nothing, and each later stopped
-/// service only reads it again. Each is the call's named result, the port's
+/// entry valid after the one clear frees nothing, and each later cleanup
+/// call only reads it again. Each is the call's named result, the port's
 /// own fault untouched, the owners with the port. Once the table reads the
 /// entry cleared, the removal (writing nothing more) returns the same slot
 /// and permission once, and the port retires.
