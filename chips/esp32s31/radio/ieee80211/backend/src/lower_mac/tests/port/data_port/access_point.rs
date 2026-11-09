@@ -694,6 +694,19 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> AccessPointHarness<'id> for ApFixtu
 /// Run `case` on a fresh installed fixture whose register model the
 /// harness observes.
 fn run_case(case: ap_cases::Case) -> Result<(), CaseViolation> {
+    run_check(Check::Case(case))
+}
+
+/// A check of the suite: one of its cases, or a check for backends whose
+/// command call never ends a publication.
+#[derive(Clone, Copy, Debug)]
+enum Check {
+    Case(ap_cases::Case),
+    ExpiredConfigure,
+    ExpiredPairwiseRemoval,
+}
+
+fn run_check(check: Check) -> Result<(), CaseViolation> {
     block_on(radio::with_local_slot(async move |claim| {
         let hardware = crate::lower_mac::tests::Hardware::default();
         let interface = hardware.access_point.clone();
@@ -719,8 +732,19 @@ fn run_case(case: ap_cases::Case) -> Result<(), CaseViolation> {
             interface,
             published,
         };
-        ap_cases::check(&mut harness, case)
+        match check {
+            Check::Case(case) => ap_cases::check(&mut harness, case),
+            Check::ExpiredConfigure => ap_cases::expired_configure(&mut harness),
+            Check::ExpiredPairwiseRemoval => ap_cases::expired_pairwise_removal(&mut harness),
+        }
     }))
+}
+
+#[test]
+fn an_expired_configuration_and_pairwise_removal_undo_their_barriers_on_the_s31_port() {
+    for check in [Check::ExpiredConfigure, Check::ExpiredPairwiseRemoval] {
+        assert_eq!(run_check(check), Ok(()), "{check:?}");
+    }
 }
 
 #[test]

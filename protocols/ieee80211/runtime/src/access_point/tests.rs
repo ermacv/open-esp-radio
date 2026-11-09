@@ -616,6 +616,111 @@ fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
     }));
 }
 
+/// Run the runner beside time moving on in 1 ms steps until the run ends;
+/// its end.
+async fn run_to_end<F>(
+    run: impl core::future::Future<Output = ApEnd<F>>,
+    counted: &Counted,
+    air: &oer_protocols_ieee80211_testing_model::ModelAir,
+    before: impl core::future::Future<Output = ()>,
+) -> ApEnd<F> {
+    let script = async {
+        before.await;
+        loop {
+            counted.advance(air, Duration::from_millis(1)).await;
+        }
+    };
+    match select(Woken::new(run), script).await {
+        Either::First(end) => end,
+        Either::Second(()) => unreachable!(),
+    }
+}
+
+/// The end of a run whose held command passed the port's bound: the run
+/// ends refused `Expired` with the command of `kind`, nothing kept beside
+/// it, and the port's stop completes without an unconfirmed report.
+macro_rules! expired {
+    ($runner:ident, $end:expr, $kind:ident, $counted:expr) => {{
+        let ApEnd::Refused(refusal) = $end else {
+            panic!("an expired command ends the run refused");
+        };
+        assert_eq!(
+            refusal,
+            oer_protocols_ieee80211_contracts_port::AccessPointRefusal::Expired
+        );
+        let Some(command) = $runner.take_refused() else {
+            panic!("the expired command comes back");
+        };
+        assert_eq!(
+            command.kind(),
+            oer_protocols_ieee80211_contracts_port::AccessPointCommandKind::$kind
+        );
+        assert!($runner.take_kept().is_none(), "nothing kept beside it");
+        let mut reported = 0;
+        $runner.finish_stop($counted, |_| reported += 1).await;
+        assert_eq!(reported, 0, "the stop is never unconfirmed");
+        drop(command);
+    }};
+}
+
+#[test]
+fn an_expired_configuration_returns_its_permission_and_the_stop_completes() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        // The first command, the receive rules' configuration, stays held.
+        air.hold_access_point_configure(true);
+        let end = run_to_end(runner.run(&shared, &counted), &counted, &air, async {}).await;
+        expired!(runner, end, Configure, &counted);
+        assert_eq!(
+            runner.homes.tickets.len(),
+            oer_protocols_ieee80211_testing_model::MODEL_TICKETS
+        );
+        assert!(runner.homes.beacon.is_some());
+        assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
+    }));
+}
+
+#[test]
+fn an_expired_group_install_returns_its_slot_and_permission_and_the_stop_completes() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        // The configuration runs; the group key's installation stays held.
+        air.hold_group_commands(true);
+        let end = run_to_end(runner.run(&shared, &counted), &counted, &air, async {}).await;
+        expired!(runner, end, InstallGroup, &counted);
+        assert!(!shared.status().running);
+        assert_eq!(
+            runner.homes.tickets.len(),
+            oer_protocols_ieee80211_testing_model::MODEL_TICKETS
+        );
+        assert!(runner.homes.beacon.is_some());
+    }));
+}
+
+#[test]
+fn an_expired_group_removal_at_the_stop_returns_its_key_and_the_stop_completes() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        let before = async {
+            counted.idle(64).await;
+            assert!(shared.status().running);
+            // The stop's removal of the group key stays held.
+            air.hold_group_commands(true);
+            shared.request_stop();
+        };
+        let end = run_to_end(runner.run(&shared, &counted), &counted, &air, before).await;
+        expired!(runner, end, RemoveGroup, &counted);
+        assert_eq!(
+            runner.homes.tickets.len(),
+            oer_protocols_ieee80211_testing_model::MODEL_TICKETS
+        );
+        assert!(runner.homes.beacon.is_some());
+    }));
+}
+
 mod handshake;
 
 mod ends;

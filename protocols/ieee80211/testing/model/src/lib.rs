@@ -1771,6 +1771,8 @@ pub struct ModelAir {
     refuse_enable: Cell<u8>,
     refuse_access_point: Cell<u8>,
     group_held: Cell<bool>,
+    /// The access point's configuration is held at its barrier.
+    access_point_configure_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
     key_installations: Cell<Vec<KeyInstallation>>,
@@ -1837,6 +1839,7 @@ impl ModelAir {
             refuse_enable: Default::default(),
             refuse_access_point: Default::default(),
             group_held: Default::default(),
+            access_point_configure_held: Default::default(),
             key_installations: Default::default(),
             associations: Default::default(),
             group_rx: Default::default(),
@@ -2110,6 +2113,18 @@ impl ModelAir {
     pub fn hold_group_commands(&self, held: bool) {
         self.group_held.set(held);
         self.wake_world();
+    }
+
+    /// Hold the access point's configuration at its barrier while `held`, as
+    /// a frame of the access point on the air does.
+    pub fn hold_access_point_configure(&self, held: bool) {
+        self.access_point_configure_held.set(held);
+        self.wake_world();
+    }
+
+    /// Whether the access point's configuration is held.
+    pub(crate) fn access_point_configure_held(&self) -> bool {
+        self.access_point_configure_held.get()
     }
 
     /// Keep the MAC from going quiet: a stop stays unconfirmed, past its

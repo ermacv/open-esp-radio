@@ -139,12 +139,6 @@ fn a_named_driver_fault_keeps_its_queue_and_operation_across_the_boundary() {
         super::convert::backend_fault(Fault::CoreViewUnavailable(CoreOp::Tbtt)),
         BackendFault::CoreViewUnavailable(CoreOperation::Tbtt)
     );
-    assert_eq!(
-        super::convert::backend_fault(Fault::CommandExpired(
-            oer_protocols_ieee80211_contracts_port::CommandKind::InstallGroup
-        )),
-        BackendFault::CommandExpired(PortCommandKind::InstallGroup)
-    );
     let path = oer_portable_diagnostics::DiagPath::of(&BackendFault::QueueFull { queue: 3 });
     assert_eq!(path.names(), &["QueueFull"]);
     assert_eq!(path.words(), &[3]);

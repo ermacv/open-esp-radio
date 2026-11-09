@@ -596,14 +596,13 @@ fn a_gtk_mutation_refused_by_a_stop_leaves_no_hold_on_single_mpdus_after_the_res
 }
 
 #[test]
-fn every_stalled_gtk_mutation_expires_on_its_own_deadline_into_its_named_fault() {
+fn every_stalled_gtk_mutation_is_refused_expired_at_its_own_deadline_and_runs_again_later() {
     // An installation's expiry is checked beside the cut-held installation
     // in data_port.rs; these are the mutations of an installed key.
     for mutation in [Mutation::Replace, Mutation::Select, Mutation::Remove] {
         with_fixture(|fixture| {
             fixture.start();
             let (command, _) = fixture.group_command(mutation);
-            let fault = Fault::CommandExpired(command.kind());
             let cuts = fixture.observed.borrow().resumed_cuts;
             fixture.observed.borrow_mut().hold_cut = true;
             let admitted = fixture.now();
@@ -613,22 +612,28 @@ fn every_stalled_gtk_mutation_expires_on_its_own_deadline_into_its_named_fault()
                 let now = fixture.now();
                 match fixture.port.command(command, now, &mut fixture.outbox) {
                     Ok(CommandProgress::Held(held)) => command = held,
-                    Err(found) => {
-                        assert_eq!(found, fault, "{mutation:?}");
+                    Ok(CommandProgress::Refused(refused, CommandRefusal::Expired)) => {
                         assert_eq!(now, bound, "{mutation:?}: expired at its own bound");
-                        assert_eq!(fixture.port.fault(), Some(fault));
+                        assert_eq!(fixture.port.fault(), None, "{mutation:?}");
                         assert!(fixture.group_terminals().is_empty(), "{mutation:?}");
+                        // The cut it polled ended; nothing resumed it as a
+                        // finished mutation.
+                        assert_eq!(fixture.observed.borrow().abandoned_cuts, 1);
                         assert_eq!(fixture.observed.borrow().resumed_cuts, cuts);
-                        // Every later call answers with the same fault.
+                        assert_eq!(fixture.port.deadline(), None, "{mutation:?}");
+                        // The port runs on, and the key is still installed:
+                        // the same command runs once the cut passes.
+                        fixture.observed.borrow_mut().hold_cut = false;
                         assert!(
-                            matches!(fixture.port.receive(4, now), Err(found) if found == fault)
+                            matches!(fixture.run(refused), Ok(CommandProgress::Done)),
+                            "{mutation:?}: the refused command runs again"
                         );
-                        assert!(matches!(
-                            fixture.port.service_tx(TxFacts::DUE, false, now, &mut fixture.outbox),
-                            Err(found) if found == fault
-                        ));
+                        assert_eq!(fixture.group_terminals().len(), 1, "{mutation:?}");
+                        fixture.stop();
+                        assert_eq!(fixture.port.fault(), None, "{mutation:?}");
                         return;
                     }
+                    Err(fault) => panic!("{mutation:?}: {fault:?}"),
                     Ok(_) => panic!("{mutation:?}: the cut holds the mutation"),
                 }
                 // The caller follows the port's deadline, which the held

@@ -377,6 +377,11 @@ pub enum AccessPointRefusal {
         /// The port's installation.
         installation: u32,
     },
+    /// The command waited at its barrier past the backend's command bound
+    /// and did not run: what its barrier began is undone, and the command
+    /// comes back with every owner, as
+    /// [`CommandRefusal::Expired`](crate::CommandRefusal::Expired).
+    Expired,
 }
 
 /// One beacon awaiting admission: an access-point attempt of the frame the

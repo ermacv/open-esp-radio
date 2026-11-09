@@ -385,6 +385,9 @@ pub(super) enum GroupStep<C> {
     Done,
     /// It waits at its barrier or receive cut.
     Held(C),
+    /// It waited past its bound and did not run; what its barrier began is
+    /// undone and the caller refuses it with every owner.
+    Expired(C),
     /// It failed: the caller keeps the command with the quarantine.
     Failed(C, Fault),
 }
@@ -1293,6 +1296,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         match step {
             GroupStep::Done => Ok(CommandProgress::Done),
             GroupStep::Held(command) => Ok(CommandProgress::Held(command)),
+            GroupStep::Expired(command) => {
+                Ok(CommandProgress::Refused(command, CommandRefusal::Expired))
+            }
             GroupStep::Failed(command, fault) => {
                 self.retain(command);
                 Err(self.record(fault))
@@ -1325,11 +1331,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.group_mutator = Some(mutator);
         let since = *self.group_since.get_or_insert(now);
         if now.saturating_duration_since(since) >= COMMAND_BOUND {
-            let fault = match mutator {
-                Mutator::Station(kind) => Fault::CommandExpired(kind),
-                Mutator::AccessPoint(kind) => Fault::AccessPointCommandExpired(kind),
-            };
-            return Ok(GroupStep::Failed(command, fault));
+            return self.expire_mutation(command, mutator, removal);
         }
         if let Some(identity) = removal {
             identity.activity.set(0);
@@ -1412,6 +1414,53 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 Ok(GroupStep::Done)
             }
         }
+    }
+
+    /// End a group mutation past its bound. It never reached the key table
+    /// (`Driver::group` runs only once its cut drained), so its outcome is
+    /// known: not run. What its hold began is undone: a cut it polled ends
+    /// once a freeze already begun completes, then the removal's key is
+    /// active again and its barrier lifts. Attempts the barrier withdrew
+    /// keep their terminals.
+    fn expire_mutation<C>(
+        &mut self,
+        command: C,
+        mutator: Mutator,
+        removal: Option<RawKeyIdentity>,
+    ) -> Result<GroupStep<C>, Fault> {
+        // A polled cut: `poll_rx_cut` runs only with the caller's waker.
+        if self.cut_retry || self.cut_due {
+            let ended = match self.waker.as_ref() {
+                Some(waker) => self
+                    .device
+                    .poll_abandon_rx_cut(&mut Context::from_waker(waker)),
+                None => Poll::Ready(Ok(())),
+            };
+            match ended {
+                Poll::Pending => {
+                    self.hold_mutation(mutator);
+                    return Ok(GroupStep::Held(command));
+                }
+                Poll::Ready(Err(cause)) => return Ok(GroupStep::Failed(command, cause)),
+                Poll::Ready(Ok(())) => {}
+            }
+        }
+        if let Some(identity) = removal {
+            // The key is installed: its removal did not run.
+            identity.activity.set(identity.serial);
+            if self.driver.barrier == Some(identity) {
+                self.driver.barrier = None;
+            }
+        }
+        self.group_since = None;
+        self.group_mutator = None;
+        self.cut_retry = false;
+        self.cut_due = false;
+        match mutator {
+            Mutator::Station(_) => self.holding = None,
+            Mutator::AccessPoint(_) => self.access_point_holding = None,
+        }
+        Ok(GroupStep::Expired(command))
     }
 
     /// Mark the mutation held at its barrier.

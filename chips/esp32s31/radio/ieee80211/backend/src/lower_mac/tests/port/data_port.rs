@@ -974,7 +974,7 @@ fn a_group_installation_delivers_its_cut_units_before_its_terminal() {
 }
 
 #[test]
-fn a_stalled_group_command_becomes_a_named_fault_that_keeps_the_command() {
+fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_on() {
     with_fixture(|fixture| {
         fixture.start();
         let (association, slot, _) = fixture.association();
@@ -992,32 +992,50 @@ fn a_stalled_group_command_becomes_a_named_fault_that_keeps_the_command() {
         // The held command bounds the deadline.
         let bound = now.saturating_add(COMMAND_BOUND);
         assert!(fixture.port.deadline().is_some_and(|at| at <= bound));
+        // The caller's turn registers its waker: the cut runs and holds.
+        let _ = fixture.turn();
+        let now = fixture.now();
+        let install = match fixture.port.command(install, now, &mut fixture.outbox) {
+            Ok(CommandProgress::Held(install)) => install,
+            _ => panic!("the cut holds the installation"),
+        };
+        assert!(
+            fixture.observed.borrow().cut_calls > 0,
+            "the cut was polled"
+        );
         fixture.advance(COMMAND_BOUND);
         let now = fixture.now();
-        let fault = Fault::CommandExpired(
-            oer_protocols_ieee80211_contracts_port::CommandKind::InstallGroup,
-        );
-        assert!(matches!(
-            fixture.port.command(install, now, &mut fixture.outbox),
-            Err(found) if found == fault
-        ));
-        assert_eq!(fixture.port.fault(), Some(fault));
-        // Every later call answers with the same fault; nothing poisoned.
-        assert!(matches!(
-            fixture.port.service_tx(TxFacts::DUE, false, now, &mut fixture.outbox),
-            Err(found) if found == fault
-        ));
-        assert!(matches!(fixture.port.receive(4, now), Err(found) if found == fault));
+        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) =
+            fixture.port.command(install, now, &mut fixture.outbox)
+        else {
+            panic!("the expired installation comes back refused");
+        };
+        assert_eq!(fixture.port.fault(), None);
+        assert!(fixture.outbox.terminals.is_empty(), "it did not run");
+        assert_eq!(fixture.observed.borrow().abandoned_cuts, 1);
+        assert_eq!(fixture.port.deadline(), None, "no held command's bound");
+        // The port runs on: a single MPDU publishes at once.
+        let publications = fixture.observed.borrow().publications;
         let attempt = fixture.station_mpdu().expect("attempt");
         assert!(
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
-                .is_err()
+                .is_ok()
         );
-        // The refused attempt's withdrawn terminal returns its owners.
-        assert_eq!(fixture.take_completed(), 1);
-        assert!(fixture.outbox.terminals.is_empty());
+        let _ = fixture.turn();
+        assert_eq!(fixture.observed.borrow().publications, publications + 1);
+        // The refused installation runs again with the same owners.
+        fixture.observed.borrow_mut().hold_cut = false;
+        assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+        assert!(matches!(
+            fixture.outbox.terminals.last(),
+            Some(LowerMacTerminal::GroupKeyInstalled(
+                InstalledGroup::Station { .. }
+            ))
+        ));
+        fixture.stop();
+        assert_eq!(fixture.port.fault(), None);
     });
 }
 

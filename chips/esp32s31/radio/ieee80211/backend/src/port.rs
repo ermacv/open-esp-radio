@@ -277,6 +277,11 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// which only its returns free.
     fn cut_held_by_units(&self) -> bool;
     fn finish_rx_cut(&mut self) -> Result<(), Fault>;
+    /// End the cut of a mutation that will not run: a freeze already begun
+    /// completes under its own bounds, then receive resumes as after
+    /// [`Self::finish_rx_cut`]; a cut that froze nothing resumes at once.
+    /// Units the cut already drained stay staged for the ordinary pull.
+    fn poll_abandon_rx_cut(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>>;
     /// The data port's receive facts: register `cx` alone on their signal
     /// and report whether the ring holds work: a staged unit, a raised
     /// receive fact or known ring work, either waiting for no continuation
@@ -413,12 +418,6 @@ pub enum Fault {
     /// The caller returned more received units than it held, or the
     /// network more lends than the caller made.
     ReceiveAccounting,
-    /// A command the data port held at its barrier passed its bound; the
-    /// port keeps the command with its quarantine.
-    CommandExpired(oer_protocols_ieee80211_contracts_port::CommandKind),
-    /// An access-point command the data port held at its barrier passed its
-    /// bound; the port keeps the command with its quarantine.
-    AccessPointCommandExpired(oer_protocols_ieee80211_contracts_port::AccessPointCommandKind),
 }
 
 /// The one-shot fault of a diagnostic image.

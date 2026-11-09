@@ -276,8 +276,10 @@ all delivered old-installation frames precede it, including facts retained
 in hardware, DMA, ISR and software queues; selected-installation frames
 follow it; the units the cut drained go to the sink before the terminal.
 The cut is finite under continuous ingress. A mutation held at its barrier
-past the backend's command bound is the port's named fault, which keeps its
-owners. A stop completes accepted GTK operations within the same bound. The
+past the backend's command bound did not run: the port undoes what its
+barrier began (the removal barrier and the key's activity, a cut it froze
+resumes after its freeze ends) and refuses it `Expired` with every owner;
+attempts its barrier already withdrew keep their terminals. A stop completes accepted GTK operations within the same bound. The
 API exposes no cancellation.
 
 `PortCommand::SelectGroup` consumes a concrete retained installed owner. It neither
@@ -358,7 +360,7 @@ Block Ack slots, the epoch slot) are not checked.
 | --- | --- | --- | --- |
 | access-point transmission | `submit` | `SubmitRefusal`, withdrawn terminal in the sink | `TxCompleted::Single` |
 | beacon | `submit` | as a transmission, an earlier installation's permission included; its terminal returns the permission | `TxCompleted::Beacon` with the permission, `Expired` when unpublished by its deadline |
-| key install or removal, configuration with its TSF control | `AccessPointProgress::Done` | `AccessPointProgress::Refused` with the command (`NotEnabled`, `StalePermission`) | its terminal (`PairwiseKeyInstalled`, `GroupKeyInstalled`, `KeyRemoved`, `Configured` of the access point) |
+| key install or removal, configuration with its TSF control | `AccessPointProgress::Done` | `AccessPointProgress::Refused` with the command (`NotEnabled`, `StalePermission`, `Expired` past the command bound, its barrier undone) | its terminal (`PairwiseKeyInstalled`, `GroupKeyInstalled`, `KeyRemoved`, `Configured` of the access point) |
 
 The access point's commands run in its own order: one held at its barrier
 holds no station command, and a station command held at its barrier holds

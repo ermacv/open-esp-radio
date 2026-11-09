@@ -205,6 +205,13 @@ pub enum CommandRefusal {
         /// The port's installation.
         installation: u32,
     },
+    /// The command waited at its barrier past the backend's command bound
+    /// and did not run: what its barrier began (a key's removal barrier,
+    /// a receive cut, a held configuration) is undone, attempts its
+    /// barrier already withdrew keep their terminals, and the command
+    /// comes back with every owner. Final for this issue: the caller
+    /// issues it again or ends.
+    Expired,
 }
 
 /// Why [`DataPort::submit`] refused an attempt.

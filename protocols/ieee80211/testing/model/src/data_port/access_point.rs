@@ -99,7 +99,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 // Its queued attempts end withdrawn; the station's stay.
                 self.driver
                     .publish_before(&self.held, |role| role == VifRole::AccessPoint);
-                if self.access_point_on_air() {
+                if self.access_point_on_air() || self.air.access_point_configure_held() {
                     return AccessPointProgress::Held(AccessPointCommand::Configure {
                         permission,
                         receive,
@@ -274,6 +274,16 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
         let kind = command.kind();
+        if self
+            .access_point_held_since
+            .is_none_or(|(held, _)| held != kind)
+        {
+            self.access_point_held_key = match &command {
+                AccessPointCommand::RemovePairwise { key, .. } => Some(HeldKey::of(&key.identity)),
+                AccessPointCommand::RemoveGroup { key, .. } => Some(HeldKey::of(&key.identity)),
+                _ => None,
+            };
+        }
         let progress = self.run_access_point(command, now);
         self.drain(sink);
         if let Err(fault) = self.check(ModelPortCall::Command) {
@@ -291,16 +301,23 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
                     _ => now,
                 };
                 if now.saturating_duration_since(since) >= MODEL_HELD_COMMAND_BOUND {
-                    self.retained_access_point.push(command);
-                    return Err(
-                        self.fail(ModelPortFault::AccessPointCommandStalled { kind, since })
-                    );
+                    // It did not run: what its hold began is undone.
+                    self.access_point_held_since = None;
+                    if let Some(key) = self.access_point_held_key.take() {
+                        key.restore();
+                    }
+                    self.refresh_deadline(now);
+                    return Ok(AccessPointProgress::Refused(
+                        command,
+                        AccessPointRefusal::Expired,
+                    ));
                 }
                 self.access_point_held_since = Some((kind, since));
                 AccessPointProgress::Held(command)
             }
             done => {
                 self.access_point_held_since = None;
+                self.access_point_held_key = None;
                 done
             }
         };

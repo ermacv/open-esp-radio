@@ -106,6 +106,8 @@ struct Observed {
     hold_stop: bool,
     cut_calls: usize,
     resumed_cuts: usize,
+    /// Cuts ended for a mutation that did not run.
+    abandoned_cuts: usize,
     backoffs: Vec<u16>,
     /// Each HT publication's backoff and AIFSN, in order.
     ht_contention: Vec<(u16, u8)>,
@@ -475,6 +477,11 @@ impl Device<512> for TestDevice {
         self.assert_task_context();
         self.observed.borrow_mut().resumed_cuts += 1;
         Ok(())
+    }
+    fn poll_abandon_rx_cut(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Fault>> {
+        self.assert_task_context();
+        self.observed.borrow_mut().abandoned_cuts += 1;
+        Poll::Ready(Ok(()))
     }
     fn returns_quiet(&mut self, _held: usize, _returned: bool) -> bool {
         self.observed.borrow().rx_continuation.is_some()

@@ -26,9 +26,12 @@
 //!   ([`Case::Keys`]);
 //! - the access point stops alone beside a running station
 //!   ([`Case::StopsAlone`]); its held command holds no station command and
-//!   ends in the backend's named fault past its bound
-//!   ([`Case::HeldCommandApart`]); a stop returns a held command, which the
-//!   stopped port refuses ([`Case::StopReturnsHeld`]);
+//!   comes back refused `Expired` with its owners past its bound, the port
+//!   running on and stopping ([`Case::HeldCommandApart`]); an expired key
+//!   removal undoes its barrier: the key stays installed and in use
+//!   ([`Case::ExpiredRemoval`]); a stop
+//!   returns a held command, which the stopped port refuses
+//!   ([`Case::StopReturnsHeld`]);
 //! - the shared stop ends the beacon and the access point's interface
 //!   ([`Case::SharedStop`]).
 
@@ -315,8 +318,11 @@ pub enum Case {
     /// The access point stops alone beside a running station.
     StopsAlone,
     /// A held access-point command holds no station command; past its bound
-    /// it is the backend's fault.
+    /// it comes back refused `Expired` with its owners and the port stops.
     HeldCommandApart,
+    /// A group key removal held past its bound comes back `Expired`; the key
+    /// stays installed and removes later.
+    ExpiredRemoval,
     /// A stop returns a held command, which the stopped port refuses.
     StopReturnsHeld,
     /// The shared stop ends the beacon and the access point's interface.
@@ -325,7 +331,7 @@ pub enum Case {
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::SharedPort,
         Self::StationConfigureApart,
         Self::ConfigureBarrier,
@@ -340,6 +346,7 @@ impl Case {
         Self::Keys,
         Self::StopsAlone,
         Self::HeldCommandApart,
+        Self::ExpiredRemoval,
         Self::StopReturnsHeld,
         Self::SharedStop,
     ];
@@ -395,6 +402,7 @@ pub fn check<'id, H: AccessPointHarness<'id>>(
         Case::Keys => keys(harness),
         Case::StopsAlone => stops_alone(harness),
         Case::HeldCommandApart => held_command_apart(harness),
+        Case::ExpiredRemoval => expired_removal(harness),
         Case::StopReturnsHeld => stop_returns_held(harness),
         Case::SharedStop => shared_stop(harness),
     }
@@ -1191,20 +1199,159 @@ fn held_command_apart<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Resul
     let install = held(harness, install)?;
     // The station's command runs meanwhile.
     configure_station(harness)?;
-    // Past its bound the held installation is the backend's named fault;
-    // the port keeps it.
+    // Past its bound the held installation did not run: it comes back
+    // with its owners and the port runs on.
+    expire(harness, install, AccessPointCommandKind::InstallGroup)?;
+    if harness.take_terminal().is_some() {
+        return Err(Violation::Barrier);
+    }
+    harness.hold_group_commands(false);
+    stop(harness)
+}
+
+/// Let a held command pass the port's bound: it must come back refused
+/// `Expired`, its owners back with the harness.
+fn expire<'id, H: AccessPointHarness<'id>>(
+    harness: &mut H,
+    command: AccessPointCommandOf<'id, H::Port>,
+    kind: AccessPointCommandKind,
+) -> Result<(), Violation> {
     let bound = harness.command_bound();
     harness.advance(bound);
     let now = harness.now();
     let (port, sink) = harness.parts();
-    match port.access_point_command(install, now, sink) {
-        Err(_) => Ok(()),
+    match port.access_point_command(command, now, sink) {
+        Err(_) => Err(Violation::Fault),
+        Ok(AccessPointProgress::Refused(command, AccessPointRefusal::Expired))
+            if command.kind() == kind =>
+        {
+            harness.restore(command);
+            Ok(())
+        }
         Ok(AccessPointProgress::Held(command) | AccessPointProgress::Refused(command, _)) => {
             harness.restore(command);
-            Err(Violation::Barrier)
+            Err(Violation::Refusal)
         }
         Ok(AccessPointProgress::Done) => Err(Violation::Barrier),
     }
+}
+
+/// The end of the one frame a case let the air keep past a bound: any end,
+/// its owners back.
+fn one_end<'id, H: AccessPointHarness<'id>>(harness: &mut H, ticket: u8) -> Result<(), Violation> {
+    for _ in 0..PROGRESS_STEPS {
+        service(harness)?;
+        let ends = harness.take_ends();
+        match ends.as_ref() {
+            [] => {
+                let now = harness.now();
+                let (port, _) = harness.parts();
+                if let Some(at) = port.deadline()
+                    && at > now
+                {
+                    harness.advance(at.saturating_duration_since(now));
+                }
+            }
+            [Ended::Frame(ended, _)] if *ended == ticket => return Ok(()),
+            _ => return Err(Violation::Ends),
+        }
+    }
+    Err(Violation::Ends)
+}
+
+/// A held access-point configuration past the port's bound, its barrier an
+/// access-point frame the air keeps, comes back refused `Expired` with its
+/// permission; it runs again from its own new admission once the frame
+/// ended. Not in [`Case::ALL`]: it holds for a backend whose command call
+/// never ends a publication (it ends them in its service). A backend that
+/// ends a held frame by its publication bound within the call runs the
+/// configuration instead, as the model does.
+///
+/// # Errors
+///
+/// What the case found wrong.
+pub fn expired_configure<'id, H: AccessPointHarness<'id>>(
+    harness: &mut H,
+) -> Result<(), Violation> {
+    start(harness)?;
+    harness.hold(ACCESS_POINT_QUEUE, true);
+    let frame = harness.access_point_frame(None, ACCESS_POINT_QUEUE);
+    let frame = submit(harness, frame)?;
+    service(harness)?;
+    let configure = harness.configure(Issued::Current, Receive::Bss, None);
+    let command = held(harness, configure)?;
+    expire(harness, command, AccessPointCommandKind::Configure)?;
+    if harness.take_terminal().is_some() || harness.interface().receives {
+        return Err(Violation::Barrier);
+    }
+    harness.hold(ACCESS_POINT_QUEUE, false);
+    one_end(harness, frame)?;
+    let configure = harness.configure(Issued::Current, Receive::Bss, None);
+    done(harness, configure)?;
+    terminal(harness, Terminal::Configured(0))?;
+    if !harness.interface().receives {
+        return Err(Violation::Interface);
+    }
+    stop(harness)
+}
+
+/// A pairwise key removal held past the port's bound behind a frame under
+/// the key that the air keeps comes back refused `Expired` with its owners;
+/// the key still protects the access point's frames and removes later. Not
+/// in [`Case::ALL`], for the reason [`expired_configure`] names.
+///
+/// # Errors
+///
+/// What the case found wrong.
+pub fn expired_pairwise_removal<'id, H: AccessPointHarness<'id>>(
+    harness: &mut H,
+) -> Result<(), Violation> {
+    start(harness)?;
+    install_keys(harness, 0)?;
+    harness.hold(ACCESS_POINT_QUEUE, true);
+    let frame = harness.access_point_frame(Some(Issued::Current), ACCESS_POINT_QUEUE);
+    let frame = submit(harness, frame)?;
+    service(harness)?;
+    let remove = harness.remove_pairwise(Issued::Current, Issued::Current);
+    let remove = held(harness, remove)?;
+    expire(harness, remove, AccessPointCommandKind::RemovePairwise)?;
+    if harness.take_terminal().is_some() {
+        return Err(Violation::Barrier);
+    }
+    harness.hold(ACCESS_POINT_QUEUE, false);
+    one_end(harness, frame)?;
+    // The key is active again: a frame under it goes out protected.
+    let frame = harness.access_point_frame(Some(Issued::Current), ACCESS_POINT_QUEUE);
+    let frame = submit(harness, frame)?;
+    service(harness)?;
+    if last_sent(harness)
+        != Some(Sent {
+            role: VifRole::AccessPoint,
+            protected: true,
+        })
+    {
+        return Err(Violation::Air);
+    }
+    ends(harness, &[Ended::Frame(frame, End::Delivered)])?;
+    remove_keys(harness, 0)?;
+    stop(harness)
+}
+
+fn expired_removal<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+    start(harness)?;
+    install_keys(harness, 0)?;
+    // The group key's removal waits for the air's group commands.
+    harness.hold_group_commands(true);
+    let remove = harness.remove_group(Issued::Current, Issued::Current);
+    let remove = held(harness, remove)?;
+    expire(harness, remove, AccessPointCommandKind::RemoveGroup)?;
+    harness.hold_group_commands(false);
+    if harness.take_terminal().is_some() {
+        return Err(Violation::Barrier);
+    }
+    // Both keys are still installed: their removals run now.
+    remove_keys(harness, 0)?;
+    stop(harness)
 }
 
 /// Stop the port and confirm the stop within the case's steps, moving

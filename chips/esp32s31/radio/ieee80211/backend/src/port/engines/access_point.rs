@@ -188,8 +188,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
     }
 
-    /// Hold an access-point configuration at its barrier, or end it past
-    /// its bound.
+    /// Hold an access-point configuration or pairwise removal at its
+    /// barrier, or refuse it past its bound. A held command has not run, so
+    /// its outcome is known: what its hold began is undone (the
+    /// configuration's withdrawal of the access point's attempts, the
+    /// removal's barrier and its key's activity) and it comes back
+    /// `Expired` with every owner.
     fn hold_access_point(
         &mut self,
         command: ApCmd<'id, Id, D, B, O>,
@@ -198,8 +202,31 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         let kind = command.kind();
         let since = *self.access_point_since.get_or_insert(now);
         if now.saturating_duration_since(since) >= COMMAND_BOUND {
-            self.retain_access_point(command);
-            return Err(self.record(Fault::AccessPointCommandExpired(kind)));
+            self.access_point_since = None;
+            self.access_point_holding = None;
+            match &command {
+                AccessPointCommand::Configure { .. } => {
+                    self.driver.access_point_configuring = false;
+                }
+                AccessPointCommand::RemovePairwise { key, .. } => {
+                    let identity =
+                        <PortKeys<Id, AccessPoint> as KeyTypes<'id>>::pairwise_identity(key).owned;
+                    // Only its own barrier began: another key's held it
+                    // before it took any step.
+                    if self.driver.barrier == Some(identity) {
+                        identity.activity.set(identity.serial);
+                        self.driver.barrier = None;
+                    }
+                }
+                // Group mutations expire through their own cut.
+                AccessPointCommand::InstallPairwise(_)
+                | AccessPointCommand::InstallGroup(_)
+                | AccessPointCommand::RemoveGroup { .. } => {}
+            }
+            return Ok(AccessPointProgress::Refused(
+                command,
+                AccessPointRefusal::Expired,
+            ));
         }
         self.access_point_holding = Some(kind);
         Ok(AccessPointProgress::Held(command))
@@ -418,6 +445,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 match step {
                     GroupStep::Done => Ok(AccessPointProgress::Done),
                     GroupStep::Held(command) => Ok(AccessPointProgress::Held(command)),
+                    GroupStep::Expired(command) => Ok(AccessPointProgress::Refused(
+                        command,
+                        AccessPointRefusal::Expired,
+                    )),
                     GroupStep::Failed(command, fault) => {
                         self.retain_access_point(command);
                         Err(self.record(fault))

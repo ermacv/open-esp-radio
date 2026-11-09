@@ -893,6 +893,27 @@ where
         self.rx_pending = true;
         Ok(())
     }
+    fn poll_abandon_rx_cut(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>> {
+        if !self.cut {
+            return Poll::Ready(Ok(()));
+        }
+        {
+            let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
+            let session = self.session.as_mut().map_err(|e| *e)?;
+            if session.port_freeze_begun() {
+                // The freeze's mask request and runtime stop are in flight:
+                // they end under their own bounds before receive resumes.
+                core::task::ready!(session.port_freeze(
+                    cx,
+                    &mut active.registers,
+                    &self.doorbell,
+                    &self.timer
+                ))
+                .map_err(Fault::Receive)?;
+            }
+        }
+        Poll::Ready(<Self as Device<B>>::finish_rx_cut(self))
+    }
     fn detach(&mut self) {
         if let Ok(session) = self.session.as_ref() {
             session.port_mask_all(&self.doorbell);

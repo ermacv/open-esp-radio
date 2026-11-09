@@ -17,8 +17,8 @@
 //! configuration while a data arena or a station MPDU is on the air, a
 //! key removal while an admitted attempt still uses its key, a group
 //! mutation while the air holds group commands. A held command that waits
-//! past [`MODEL_HELD_COMMAND_BOUND`] is a named fault, and the port keeps
-//! its owners.
+//! past [`MODEL_HELD_COMMAND_BOUND`] did not run: the port undoes what its
+//! hold began and refuses it `Expired` with every owner.
 
 use super::*;
 use core::task::Context;
@@ -53,6 +53,29 @@ pub const MODEL_HELD_COMMAND_BOUND: oer_portable_time::Duration =
 /// How long a stop may wait for the work on the air, in model time.
 pub const MODEL_STOP_BOUND: oer_portable_time::Duration =
     oer_portable_time::Duration::from_millis(20);
+
+/// A key's activity before a removal held at its barrier changed it.
+struct HeldKey {
+    key: RawKeyIdentity,
+    active: bool,
+    rx_active: bool,
+}
+
+impl HeldKey {
+    fn of(key: &RawKeyIdentity) -> Self {
+        Self {
+            key: key.clone(),
+            active: key.0.active.get(),
+            rx_active: key.0.rx_active.get(),
+        }
+    }
+
+    /// The removal did not run: the key is as it was.
+    fn restore(self) {
+        self.key.0.active.set(self.active);
+        self.key.0.rx_active.set(self.rx_active);
+    }
+}
 
 /// A pairwise installation the issuer accepted.
 pub struct ModelPairwiseInstall<B: ModelComposition> {
@@ -354,21 +377,6 @@ pub enum ModelPortFault {
         /// The arena on the air then.
         on_air: Option<ArenaId>,
     },
-    /// A held command passed [`MODEL_HELD_COMMAND_BOUND`]; the port keeps it.
-    CommandStalled {
-        /// The held command.
-        kind: CommandKind,
-        /// When the port first held it.
-        since: Instant,
-    },
-    /// A held access-point command passed [`MODEL_HELD_COMMAND_BOUND`]; the
-    /// port keeps it.
-    AccessPointCommandStalled {
-        /// The held command.
-        kind: AccessPointCommandKind,
-        /// When the port first held it.
-        since: Instant,
-    },
 }
 
 /// A command of the model port of `(Id, C, X)`.
@@ -460,9 +468,14 @@ pub struct ModelPort<
     radio: Radio,
     deadline: Option<Instant>,
     held_since: Option<(CommandKind, Instant)>,
+    /// The activity of the key a held removal names, as it was before its
+    /// first hold: an expired removal restores it.
+    held_key: Option<HeldKey>,
     /// The access point's held command, on its own bound: it holds no
     /// station command.
     access_point_held_since: Option<(AccessPointCommandKind, Instant)>,
+    /// The access point's [`Self::held_key`].
+    access_point_held_key: Option<HeldKey>,
     retained: Vec<ModelCommand<'id, Id, C, X>>,
     retained_access_point: Vec<ModelAccessPointCommand<'id, Id, C, X>>,
     fault: Option<ModelPortFault>,
@@ -514,7 +527,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 radio: Radio::Stopped,
                 deadline: None,
                 held_since: None,
+                held_key: None,
                 access_point_held_since: None,
+                access_point_held_key: None,
                 retained: Vec::new(),
                 retained_access_point: Vec::new(),
                 fault: None,
@@ -587,7 +602,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                         radio: Radio::Stopped,
                         deadline: None,
                         held_since: None,
+                        held_key: None,
                         access_point_held_since: None,
+                        access_point_held_key: None,
                         retained,
                         retained_access_point,
                         fault: None,
@@ -1664,6 +1681,13 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
         let kind = command.kind();
+        if self.held_since.is_none_or(|(held, _)| held != kind) {
+            self.held_key = match &command {
+                PortCommand::RemovePairwise { key, .. } => Some(HeldKey::of(&key.identity)),
+                PortCommand::RemoveGroup { key, .. } => Some(HeldKey::of(&key.identity)),
+                _ => None,
+            };
+        }
         let progress = self.run(command, now);
         self.drain(sink);
         if let Err(fault) = self.check(ModelPortCall::Command) {
@@ -1680,14 +1704,23 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     _ => now,
                 };
                 if now.saturating_duration_since(since) >= MODEL_HELD_COMMAND_BOUND {
-                    self.retained.push(command);
-                    return Err(self.fail(ModelPortFault::CommandStalled { kind, since }));
+                    // It did not run: what its hold began is undone.
+                    self.held_since = None;
+                    if let Some(key) = self.held_key.take() {
+                        key.restore();
+                    }
+                    if kind == CommandKind::Configure {
+                        self.held.configuring_station.set(false);
+                    }
+                    self.refresh_deadline(now);
+                    return Ok(CommandProgress::Refused(command, CommandRefusal::Expired));
                 }
                 self.held_since = Some((kind, since));
                 CommandProgress::Held(command)
             }
             done => {
                 self.held_since = None;
+                self.held_key = None;
                 done
             }
         };
@@ -1733,7 +1766,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 // A stopping port refuses the held command back to its
                 // caller: its bound runs again from its next admission.
                 self.held_since = None;
+                self.held_key = None;
                 self.access_point_held_since = None;
+                self.access_point_held_key = None;
                 now
             }
             Radio::Stopping { since } => since,

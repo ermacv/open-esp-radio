@@ -53,23 +53,6 @@ pub(crate) fn backend_fault(
         Source::ChannelUnsupported => BackendFault::ChannelUnsupported,
         Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
         Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
-        Source::CommandExpired(kind) => BackendFault::CommandExpired(command_kind(kind)),
-        Source::AccessPointCommandExpired(kind) => {
-            BackendFault::AccessPointCommandExpired(access_point_command_kind(kind))
-        }
-    }
-}
-
-pub(super) fn access_point_command_kind(
-    value: oer_protocols_ieee80211_contracts_port::AccessPointCommandKind,
-) -> AccessPointCommandKind {
-    use oer_protocols_ieee80211_contracts_port::AccessPointCommandKind as Source;
-    match value {
-        Source::InstallPairwise => AccessPointCommandKind::InstallPairwise,
-        Source::InstallGroup => AccessPointCommandKind::InstallGroup,
-        Source::RemovePairwise => AccessPointCommandKind::RemovePairwise,
-        Source::RemoveGroup => AccessPointCommandKind::RemoveGroup,
-        Source::Configure => AccessPointCommandKind::Configure,
     }
 }
 
@@ -131,24 +114,6 @@ pub(super) fn key_operation(
         Source::Remove => KeyOperation::Remove,
         Source::Replace => KeyOperation::Replace,
         Source::Select => KeyOperation::Select,
-    }
-}
-
-pub(super) fn command_kind(
-    value: oer_protocols_ieee80211_contracts_port::CommandKind,
-) -> PortCommandKind {
-    use oer_protocols_ieee80211_contracts_port::CommandKind as Source;
-    match value {
-        Source::InstallPairwise => PortCommandKind::InstallPairwise,
-        Source::InstallGroup => PortCommandKind::InstallGroup,
-        Source::ReplaceGroup => PortCommandKind::ReplaceGroup,
-        Source::SelectGroup => PortCommandKind::SelectGroup,
-        Source::RemovePairwise => PortCommandKind::RemovePairwise,
-        Source::RemoveGroup => PortCommandKind::RemoveGroup,
-        Source::Configure => PortCommandKind::Configure,
-        Source::CloseGate => PortCommandKind::CloseGate,
-        Source::SetEdca => PortCommandKind::SetEdca,
-        Source::SetBssColor => PortCommandKind::SetBssColor,
     }
 }
 

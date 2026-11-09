@@ -37,10 +37,13 @@ struct Seen {
     ended: Option<std::string::String>,
 }
 
-/// Start the access point over the real S31 port and run `script` on it.
-fn on_the_s31_port(
-    script: impl FnOnce(&mut dyn FnMut(&str, &mut dyn FnMut(&ApShared) -> bool), &ApShared),
-) {
+/// Run the bench until `done` holds, given the shared status and the run's
+/// end so far.
+type Until<'u> = &'u mut dyn FnMut(&str, &mut dyn FnMut(&ApShared, Option<&str>) -> bool);
+
+/// Start the access point over the real S31 port and run `script` on it,
+/// with the bench's register model and clock.
+fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Clocked::new();
         let reader = clock.clock.clone();
@@ -239,6 +242,14 @@ fn on_the_s31_port(
                 ApEnd::Contract(contract) => std::format!("contract: {contract:?}"),
                 ApEnd::Refused(refusal) => std::format!("refused: {refusal:?}"),
             });
+            if !matches!(end, ApEnd::Stopped) {
+                // The run ended before its stop: the stop goes on until the
+                // port confirms it.
+                runner.finish_stop(&airy, |_| {}).await;
+                if let Some(ended) = seen.borrow_mut().ended.as_mut() {
+                    ended.push_str(", stop confirmed");
+                }
+            }
         });
         std::println!(
             "sizes: run with its bench {} B",
@@ -246,7 +257,7 @@ fn on_the_s31_port(
         );
         let mut task = Task::new(run.as_mut());
 
-        let mut until = |what: &str, done: &mut dyn FnMut(&ApShared) -> bool| {
+        let mut until = |what: &str, done: &mut dyn FnMut(&ApShared, Option<&str>) -> bool| {
             for _ in 0..PASSES {
                 for _ in 0..PASSES {
                     oer_chips_family_platform_interrupt_table::signal::service::<Deferred>();
@@ -260,15 +271,15 @@ fn on_the_s31_port(
                         line.latch(atoms.end_ppdu(frame.queue, 0, 0));
                     }
                     seen.borrow_mut().running = shared.status().running;
+                    // Each step is looked at: a state one turn passes
+                    // through is seen.
+                    let ended = seen.borrow().ended.clone();
+                    if done(&shared, ended.as_deref()) {
+                        return;
+                    }
                     if !ran && !air {
                         break;
                     }
-                }
-                if done(&shared) {
-                    return;
-                }
-                if let Some(ended) = seen.borrow().ended.clone() {
-                    panic!("{what}: the runner ended: {ended}");
                 }
                 if !clock.pass_to_next() {
                     panic!("{what}: nothing is woken and no time is due");
@@ -276,7 +287,7 @@ fn on_the_s31_port(
             }
             panic!("{what}: {PASSES} passes without an end");
         };
-        script(&mut until, &shared);
+        script(&mut until, &shared, &atoms, &clock);
         let _held = &seen;
     }));
 }
@@ -305,17 +316,48 @@ impl Timer for Airy {
 
 #[test]
 fn the_access_point_starts_and_stops_on_the_s31_port() {
-    on_the_s31_port(|until, shared| {
+    on_the_s31_port(|until, shared, _, _| {
         // The receive rules, the group key through its receive cut, then
         // the TSF: the access point runs.
-        until("the access point runs", &mut |shared| {
+        until("the access point runs", &mut |shared, ended| {
+            assert_eq!(ended, None, "the run goes on");
             shared.status().running
         });
         // Its beacons go at their TBTTs.
-        until("a beacon ends", &mut |shared| shared.status().beacons >= 2);
-        shared.request_stop();
-        until("the access point stops", &mut |shared| {
-            !shared.status().running
+        until("a beacon ends", &mut |shared, ended| {
+            assert_eq!(ended, None, "the run goes on");
+            shared.status().beacons >= 2
         });
+        shared.request_stop();
+        until("the access point stops", &mut |shared, ended| {
+            !shared.status().running && ended == Some("stopped")
+        });
+    });
+}
+
+/// The stand failure's order: the group key's installation holds at its
+/// receive cut, mid-freeze, and the runner's task does not run again until
+/// past the port's command bound. The installation never reached the key
+/// table: the run ends refused `Expired` with it, the cut resumes, and the
+/// stop completes.
+#[test]
+fn a_group_install_expired_at_its_receive_cut_ends_refused_and_the_stop_completes() {
+    on_the_s31_port(|until, _, atoms, clock| {
+        // The port's start runs the MAC runtime; the cut's freeze asks it
+        // to stop and waits for it.
+        let mut opened = false;
+        until("the cut freezes", &mut |_, _| {
+            opened |= atoms.running();
+            opened && !atoms.running()
+        });
+        clock.pass(port::COMMAND_BOUND.as_micros());
+        until(
+            "the run ends refused and its stop completes",
+            &mut |_, ended| match ended {
+                None | Some("refused: Expired") => false,
+                Some("refused: Expired, stop confirmed") => true,
+                Some(other) => panic!("the run ended: {other}"),
+            },
+        );
     });
 }

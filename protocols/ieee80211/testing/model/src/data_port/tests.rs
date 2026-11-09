@@ -1264,39 +1264,39 @@ fn old_group_key_ingress_at_every_stage_reaches_the_sink_before_the_replacements
 }
 
 #[test]
-fn a_held_command_past_its_bound_is_a_named_fault_that_keeps_its_owners() {
+fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop_completes() {
     with_harness(|harness| {
         harness.start();
         let install = group_install(harness);
         harness.air.hold_group_commands(true);
-        let since = harness.clock.now();
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("held");
         };
         harness.advance(MODEL_HELD_COMMAND_BOUND);
         let now = harness.clock.now();
-        let fault = harness
-            .port
-            .command(install, now, &mut harness.sink)
-            .err()
-            .unwrap();
-        assert_eq!(
-            fault,
-            ModelPortFault::CommandStalled {
-                kind: CommandKind::InstallGroup,
-                since,
-            }
-        );
-        assert_eq!(harness.port.retained.len(), 1, "the port keeps the command");
-        // Every later fallible call reports the same fault.
+        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) =
+            harness.port.command(install, now, &mut harness.sink)
+        else {
+            panic!("an expired command comes back refused");
+        };
+        assert!(harness.port.retained.is_empty(), "the caller has it");
+        assert!(harness.sink.terminals.is_empty(), "it did not run");
+        assert_eq!(harness.port.deadline(), None, "no held command's bound");
+        // The port runs on: the same command runs once the air lets it.
+        harness.air.hold_group_commands(false);
+        assert!(matches!(harness.command(install), CommandProgress::Done));
+        assert!(matches!(
+            harness.sink.terminals.as_slice(),
+            [LowerMacTerminal::GroupKeyInstalled(_)]
+        ));
+        let waker = harness.waker();
         let now = harness.clock.now();
-        assert_eq!(
+        assert!(matches!(
             harness
                 .port
-                .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
-                .err(),
-            Some(fault)
-        );
+                .poll_stop(&mut Context::from_waker(&waker), now),
+            Poll::Ready(Ok(()))
+        ));
     });
 }
 

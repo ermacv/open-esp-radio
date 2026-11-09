@@ -109,31 +109,6 @@ impl DiagnosticPath for BackendFault {
                 });
             }
             Self::ReceiveAccounting => path.name("ReceiveAccounting"),
-            Self::CommandExpired(kind) => {
-                path.name("CommandExpired");
-                path.name(match kind {
-                    PortCommandKind::InstallPairwise => "InstallPairwise",
-                    PortCommandKind::InstallGroup => "InstallGroup",
-                    PortCommandKind::ReplaceGroup => "ReplaceGroup",
-                    PortCommandKind::SelectGroup => "SelectGroup",
-                    PortCommandKind::RemovePairwise => "RemovePairwise",
-                    PortCommandKind::RemoveGroup => "RemoveGroup",
-                    PortCommandKind::Configure => "Configure",
-                    PortCommandKind::CloseGate => "CloseGate",
-                    PortCommandKind::SetEdca => "SetEdca",
-                    PortCommandKind::SetBssColor => "SetBssColor",
-                });
-            }
-            Self::AccessPointCommandExpired(kind) => {
-                path.name("AccessPointCommandExpired");
-                path.name(match kind {
-                    AccessPointCommandKind::InstallPairwise => "InstallPairwise",
-                    AccessPointCommandKind::InstallGroup => "InstallGroup",
-                    AccessPointCommandKind::RemovePairwise => "RemovePairwise",
-                    AccessPointCommandKind::RemoveGroup => "RemoveGroup",
-                    AccessPointCommandKind::Configure => "Configure",
-                });
-            }
         }
     }
 }
