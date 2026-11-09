@@ -551,26 +551,8 @@ pub(crate) struct ServiceRunner<W: Binding> {
         <W::Notifies as crate::Notifies>::Channels,
     >,
 }
-/// How the station ended: an ordinary stop, a refused start or a stop
-/// whose radio release failed (typed, nothing resets), or a failure the
-/// image records before it resets. A restart of the station never ends it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StationExit {
-    Stopped,
-    /// Stopped and released, every owner back, but the network's stop
-    /// participant was lost, so the network never confirmed its stop: a
-    /// software error this exit records. The radio's stop was confirmed;
-    /// nothing resets for it.
-    StoppedNetworkLost,
-    /// The lifecycle or the datapath actor under it ended terminally.
-    Failed(crate::failure::LifecycleFailure),
-    /// Stopped, but the Wi-Fi radio release did not complete: the stop is
-    /// confirmed and nothing resets; a posted leave is never posted again.
-    ReleaseFailed(crate::failure::ReleaseCause),
-    /// The station never started: its refusal, and how the owners it
-    /// returned ended.
-    Unavailable(crate::failure::Unavailable<InitializationError>),
-}
+/// How the station ended ([`crate::station_end::StationExitOf`]).
+pub type StationExit = crate::station_end::StationExitOf<InitializationError>;
 /// How the station ended, and the removal receipt (a key slot and its
 /// permission) of the stopped port's cleanup that a refused release or
 /// reinstall returned with its refusal: the caller holds it from here.

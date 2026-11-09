@@ -11,19 +11,19 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 
 /// What one call of the stopped port's cleanup did: its result, and the
-/// removal receipt it freed, whose slot and permission the composition
+/// removal receipt `R` it freed, whose slot and permission the composition
 /// that called it keeps, past the port's final retire, and on a refused
 /// retire or reinstall too.
 #[must_use = "the cleanup's receipt holds a slot and a permission"]
-pub(crate) struct Cleaned<'id, T: PortTypes<'id>> {
+pub(crate) struct Cleaned<R> {
     pub result: Result<(), crate::failure::CleanupCause>,
-    pub removed: Option<Removed<'id, T>>,
+    pub removed: Option<R>,
 }
 
 /// The stopped port's cleanup, once per call of its lifecycle owner, after
 /// a confirmed stop. A removal receipt it frees comes back whole to the
 /// caller ([`Cleaned::removed`]); nothing here calls it again.
-pub(crate) fn clean<'id, P>(port: &mut P) -> Cleaned<'id, P::Types>
+pub(crate) fn clean<'id, P>(port: &mut P) -> Cleaned<Removed<'id, P::Types>>
 where
     P: DataPort<'id, Fault = oer_chips_esp32s31_radio_ieee80211_backend::port::Fault>,
     P::Types: PortTypes<'id>,
@@ -36,6 +36,46 @@ where
         result,
         removed: sink.removed,
     }
+}
+
+/// A retired port whose stopped radio a release takes: the S31 port on the
+/// chip, a port of the test on the host.
+pub(crate) trait Stopped {
+    /// The removal receipt its cleanup frees.
+    type Receipt;
+    /// The stopped radio its release takes.
+    type Radio;
+    /// The stopped port's cleanup, once ([`clean`]).
+    fn clean(&mut self) -> Cleaned<Self::Receipt>;
+    /// Take the stopped radio: `None` while the port is not retirable or
+    /// holds no stopped radio, and then nothing was taken.
+    fn take_stopped(&mut self) -> Option<Self::Radio>;
+}
+
+/// Run the stopped port's cleanup once, then release the retired port's
+/// radio through `leave` ([`until_left`], every `retry` after a refusal
+/// that posted nothing, each refusal's cause going to `still_active`). The
+/// cleanup's removal receipt comes back with the result, whatever it is,
+/// for the caller to keep.
+pub(crate) async fn release<P: Stopped, F>(
+    port: &mut P,
+    timer: &impl Timer,
+    retry: Duration,
+    leave: impl FnMut(P::Radio) -> F,
+    mut still_active: impl FnMut(crate::failure::ReleaseCause),
+) -> (Result<(), crate::failure::ReleaseCause>, Option<P::Receipt>)
+where
+    F: Future<Output = Leave<P::Radio, crate::failure::ReleaseCause>>,
+{
+    let Cleaned { result, removed } = port.clean();
+    if let Err(cause) = result {
+        return (Err(crate::failure::ReleaseCause::Cleanup(cause)), removed);
+    }
+    let Some(radio) = port.take_stopped() else {
+        return (Err(crate::failure::ReleaseCause::NotStopped), removed);
+    };
+    let left = until_left(timer, retry, radio, leave, |cause| still_active(*cause)).await;
+    (left, removed)
 }
 
 /// The sink of a stopped port's cleanup: one place for the removal receipt

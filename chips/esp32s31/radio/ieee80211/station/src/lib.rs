@@ -768,6 +768,12 @@ pub use supply::{
 mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod release;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod station_end;
+#[cfg(target_arch = "riscv32")]
+pub use station_end::StationExitOf;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod access_point_end;
 #[cfg(oer_fault_injection)]
 pub use oer_chips_esp32s31_radio_ieee80211_backend::port::debug::refuse_next_publication;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};

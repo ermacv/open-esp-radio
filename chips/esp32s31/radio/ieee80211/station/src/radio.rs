@@ -323,29 +323,9 @@ pub(crate) type ActorOf<W> =
 pub(crate) type Tokens<W> = port::StationTokens<'static, <W as Binding>::Id, Device<W>, TX, ()>;
 
 /// What the actor's task tells the station's task, in order, through the
-/// one-slot installation mailbox.
-pub(crate) enum News<W: Binding> {
-    /// An installation, on first install and after every reinstall: its
-    /// commands' issuer and the lifecycle's tokens.
-    Installed(Commands<W>, Tokens<W>),
-    /// The first installation did not come up.
-    Unavailable(crate::failure::Unavailable<InitializationError>),
-    /// The port did not reinstall after the station's restart, and the
-    /// removal receipt its cleanup freed, if one, which the receiver keeps.
-    Reinstall {
-        cause: crate::failure::ReinstallCause,
-        returned: Option<Removal<W>>,
-    },
-    /// The radio's release after the lifecycle retired the port, whether
-    /// the last stop's network participant was lost, and the removal
-    /// receipt the port's cleanup freed, if one, which the receiver keeps
-    /// past the release, refused or not.
-    Released {
-        result: Result<(), crate::failure::ReleaseCause>,
-        network_lost: bool,
-        returned: Option<Removal<W>>,
-    },
-}
+/// one-slot installation mailbox ([`crate::station_end::News`]).
+pub(crate) type News<W> =
+    crate::station_end::News<Commands<W>, Tokens<W>, Removal<W>, InitializationError>;
 
 /// A removal receipt of the station's port: its slot and permission.
 pub type Removal<W> =
@@ -544,56 +524,38 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
                 // The stopped port's cleanup first: a port it did not
                 // finish keeps its owners and does not reinstall.
                 let cleaned = crate::release::clean(actor.port_mut());
-                let returned = cleaned.removed;
-                if let Err(cause) = cleaned.result {
-                    post(
-                        &mut mailbox,
-                        News::Reinstall {
-                            cause: crate::failure::ReinstallCause::Cleanup(cause),
-                            returned,
-                        },
-                    )
-                    .await;
+                let news = crate::station_end::reinstalled(cleaned, || {
+                    actor
+                        .reinstall_in_place(|port| port.reinstall(&mut installations, next))
+                        .map(|(commands, resources)| {
+                            // The actor keeps its receive agreements'
+                            // storage; the new installation's slots stay
+                            // unused.
+                            let (_kept, tokens) = resources.into_station();
+                            (commands, tokens)
+                        })
+                        .map_err(crate::failure::convert::reinstall)
+                });
+                let installed = matches!(news, News::<W>::Installed(..));
+                post(&mut mailbox, news).await;
+                if !installed {
                     return;
                 }
-                match actor.reinstall_in_place(|port| port.reinstall(&mut installations, next)) {
-                    Ok((commands, resources)) => {
-                        // The receipt's owners are the retired
-                        // installation's: they end after its retire.
-                        drop(returned);
-                        epoch = next;
-                        // The actor keeps its receive agreements' storage;
-                        // the new installation's slots stay unused.
-                        let (_kept, tokens) = resources.into_station();
-                        post(&mut mailbox, News::Installed(commands, tokens)).await;
-                    }
-                    Err(refused) => {
-                        post(
-                            &mut mailbox,
-                            News::Reinstall {
-                                cause: crate::failure::convert::reinstall(refused),
-                                returned,
-                            },
-                        )
-                        .await;
-                        return;
-                    }
-                }
+                epoch = next;
             }
             ActorEnd::Retired => {
                 // Read before the release: the loss of the last stop's
                 // network participant, which the runner's exit records.
                 let network_lost = actor.network_lost();
-                let (result, returned) = release::<W>(actor.port_mut(), |_| {}).await;
-                post(
-                    &mut mailbox,
-                    News::Released {
-                        result,
-                        network_lost,
-                        returned,
-                    },
+                let news = crate::station_end::retired(
+                    actor.port_mut(),
+                    network_lost,
+                    &EmbassyClock,
+                    RELEASE_RETRY,
+                    StoppedRadio::release,
                 )
                 .await;
+                post(&mut mailbox, news).await;
                 return;
             }
             // The lifecycle hears the fault and ends with it: every owner
@@ -688,35 +650,15 @@ pub(crate) fn take_stopped<W: Binding>(port: &mut Port<W>) -> Option<StoppedRadi
     Some(StoppedRadio { stopped, cell })
 }
 
-/// Run the stopped port's cleanup once, then release the retired port's
-/// radio membership. The cleanup's removal receipt comes back with the
-/// result, whatever it is, for the caller to keep. A release the MAC refused
-/// as still active, which posted nothing, is tried again after
-/// [`RELEASE_RETRY`] until it is posted, each refusal's cause going to
-/// `still_active`; a posted leave is waited for and never posted again.
-/// Nothing is quarantined here: the radio stays with the release until it
-/// left.
-pub(crate) async fn release<W: Binding>(
-    port: &mut Port<W>,
-    mut still_active: impl FnMut(crate::failure::ReleaseCause),
-) -> (Result<(), crate::failure::ReleaseCause>, Option<Removal<W>>) {
-    let cleaned = crate::release::clean(port);
-    let returned = cleaned.removed;
-    if let Err(cause) = cleaned.result {
-        return (Err(crate::failure::ReleaseCause::Cleanup(cause)), returned);
+impl<W: Binding> crate::release::Stopped for Port<W> {
+    type Receipt = Removal<W>;
+    type Radio = StoppedRadio;
+    fn clean(&mut self) -> crate::release::Cleaned<Removal<W>> {
+        crate::release::clean(self)
     }
-    let Some(radio) = take_stopped::<W>(port) else {
-        return (Err(crate::failure::ReleaseCause::NotStopped), returned);
-    };
-    let left = crate::release::until_left(
-        &EmbassyClock,
-        RELEASE_RETRY,
-        radio,
-        StoppedRadio::release,
-        |cause| still_active(*cause),
-    )
-    .await;
-    (left, returned)
+    fn take_stopped(&mut self) -> Option<StoppedRadio> {
+        take_stopped::<W>(self)
+    }
 }
 
 /// The refusal of a port that did not take the parts of a started radio.

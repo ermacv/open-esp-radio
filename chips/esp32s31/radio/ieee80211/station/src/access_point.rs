@@ -10,6 +10,7 @@
 //! Once the runner stopped the radio, the composition releases the radio's
 //! membership as the station's does.
 
+use crate::access_point_end::Stop;
 use crate::chip::{Binding, Config, InitializationError, Resources};
 use crate::radio::{self, Port};
 use oer_chips_esp32s31_radio_ieee80211_backend::port::{BufferClass, PortInstallation, TX_TICKETS};
@@ -277,71 +278,9 @@ impl ApNonces for Nonces {
     }
 }
 
-/// Why the access point's run ended.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ApEnded {
-    /// The application stopped it.
-    Stopped,
-    /// Its radio did not start.
-    StartRefused(
-        oer_protocols_ieee80211_contracts_port::StartRefused<crate::failure::BackendFault>,
-    ),
-    /// The port reported its named fault.
-    Faulted(crate::failure::BackendFault),
-    /// The runner's own contract broke.
-    Contract(oer_protocols_ieee80211_runtime::access_point::ApContract),
-    /// The port refused one of its commands.
-    Refused(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
-    /// The port refused a received unit's recycle for its count; the unit
-    /// stayed with the runner and ended with it after the release.
-    Unrecycled(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
-    /// The port's capabilities do not serve the access point; the run
-    /// never asked the radio to start.
-    Unsupported(ApUnsupported),
-}
-
+pub use crate::access_point_end::{ApEnded, ApExitOf};
 /// How the access point ended, or how far its end came.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ApExit {
-    /// It ended for its cause; its radio stopped, every owner came back
-    /// and the radio was released.
-    Ended(ApEnded),
-    /// It ended for its cause and its radio's stop is not confirmed yet, as
-    /// the port observed it last: the runner keeps every owner the hardware
-    /// may still use and watches the stop on. Published while it does; the
-    /// run never returns it.
-    StopUnconfirmed {
-        /// Why it ended.
-        ended: ApEnded,
-        /// What the port observed of the stop.
-        observed: oer_protocols_ieee80211_contracts_port::StopUnconfirmed,
-    },
-    /// It ended for its cause, its radio's stop was confirmed, and the
-    /// radio's release refused: published while the MAC refuses it as
-    /// still active and the release tries again; returned for a refusal
-    /// the release does not repeat (a leave never answered, a poisoned
-    /// domain, a port with no stopped radio).
-    ReleaseRefused {
-        /// Why it ended.
-        ended: ApEnded,
-        /// Why the release refused.
-        cause: crate::failure::ReleaseCause,
-    },
-    /// It ended for its cause, and the stop that followed found a received
-    /// unit whose recycle the port refused for its count: the unit stayed
-    /// with the runner and ended with it after the release.
-    Unrecycled {
-        /// Why it ended.
-        ended: ApEnded,
-        /// The count that refused the unit.
-        fault: oer_protocols_ieee80211_contracts_port::ReceiveAccounting,
-        /// How the release ended.
-        released: Result<(), crate::failure::ReleaseCause>,
-    },
-    /// It never served: its refusal before the runner existed, and how the
-    /// owners that refusal returned ended.
-    Unavailable(crate::failure::Unavailable<InitializationError>),
-}
+pub type ApExit = ApExitOf<InitializationError>;
 
 /// The access point's task: it owns the radio.
 pub struct AccessPointRunner<W: Binding> {
@@ -708,18 +647,17 @@ impl<W: Binding> AccessPointRunner<W> {
             // starts; a run that still ended here never asked it to start.
             ApEnd::Unsupported(cause) => (ApEnded::Unsupported(cause), Stop::Owed),
         };
-        retire::<W>(slot, runner, ended, stop).await
+        crate::access_point_end::retire(
+            &slot.ended,
+            runner,
+            ended,
+            stop,
+            &EmbassyClock,
+            radio::RELEASE_RETRY,
+            radio::StoppedRadio::release,
+        )
+        .await
     }
-}
-
-/// What a run's end left of the radio's stop.
-enum Stop {
-    /// The port confirmed it.
-    Confirmed,
-    /// The port did not confirm it yet, as it observed.
-    Unconfirmed(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
-    /// The run ended before it.
-    Owed,
 }
 
 /// The access point's runner over the S31 port.
@@ -734,58 +672,27 @@ type ApRunnerOf<W> = ApRunner<
     Nonces,
 >;
 
-/// Stop the radio of an ended run unless the port confirmed its stop, then
-/// release it. Until the port confirms the stop, the runner keeps every
-/// owner and watches the stop on its facts and deadline, each observation
-/// published as [`ApExit::StopUnconfirmed`]; until the release ends, a
-/// release the MAC refused as still active is published as
-/// [`ApExit::ReleaseRefused`] and tried again. The owners end with the
-/// runner once the stop is confirmed and the release ended; a refused
-/// release's cleanup receipt goes back to the runner's caller with it.
-async fn retire<W: Binding>(
-    slot: &StartSlot,
-    mut runner: ApRunnerOf<W>,
-    ended: ApEnded,
-    stop: Stop,
-) -> (ApExit, Option<radio::Removal<W>>) {
-    let unconfirmed = |observed| {
-        slot.ended
-            .set(Some(ApExit::StopUnconfirmed { ended, observed }))
-    };
-    let finished = match stop {
-        Stop::Confirmed => Ok(()),
-        Stop::Unconfirmed(observed) => {
-            unconfirmed(observed);
-            runner.finish_stop(&EmbassyClock, unconfirmed).await
-        }
-        Stop::Owed => runner.finish_stop(&EmbassyClock, unconfirmed).await,
-    };
-    // A unit the port refused stays here until the runner ends, after the
-    // release.
-    let unrecycled = runner.take_unrecycled();
-    let refused = |cause| {
-        slot.ended
-            .set(Some(ApExit::ReleaseRefused { ended, cause }))
-    };
-    // The cleanup's removal receipt: a refused release returns it to the
-    // runner's caller with the refusal; after a release that succeeded it
-    // ends with the retired installation.
-    let (released, returned) = radio::release::<W>(runner.port_mut(), refused).await;
-    drop(unrecycled);
-    let returned = crate::release::returned(released.is_err(), returned);
-    let exit = match (ended, finished, released) {
-        // A refusal the stop found after another cause.
-        (ended, Err(fault), released) if !matches!(ended, ApEnded::Unrecycled(_)) => {
-            ApExit::Unrecycled {
-                ended,
-                fault,
-                released,
-            }
-        }
-        (ended, _, Ok(())) => ApExit::Ended(ended),
-        (ended, _, Err(cause)) => ApExit::ReleaseRefused { ended, cause },
-    };
-    (exit, returned)
+impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
+    type Port = Port<W>;
+    type Unrecycled = Option<
+        oer_protocols_ieee80211_contracts_port::RecycleRefused<
+            <<Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Types as oer_protocols_ieee80211_contracts_port::PortTypes<'static>>::RxBuffer,
+        >,
+    >;
+    fn finish_stop(
+        &mut self,
+        unconfirmed: impl FnMut(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
+    ) -> impl core::future::Future<
+        Output = Result<(), oer_protocols_ieee80211_contracts_port::ReceiveAccounting>,
+    > {
+        ApRunner::finish_stop(self, &EmbassyClock, unconfirmed)
+    }
+    fn take_unrecycled(&mut self) -> Self::Unrecycled {
+        ApRunner::take_unrecycled(self)
+    }
+    fn port_mut(&mut self) -> &mut Port<W> {
+        ApRunner::port_mut(self)
+    }
 }
 
 const _: () = {

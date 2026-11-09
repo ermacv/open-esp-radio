@@ -484,27 +484,15 @@ async fn lifecycles<W: Binding>(
     } = profile;
     let mut start = Some(start);
     loop {
-        let (issuer, tokens) = match news(mailbox).await {
-            radio::News::Installed(issuer, tokens) => (issuer, tokens),
-            radio::News::Unavailable(error) => {
-                if let Some(start) = start.take() {
+        let (issuer, tokens) = match crate::station_end::installed(news(mailbox).await) {
+            Ok(installed) => installed,
+            Err((exit, returned)) => {
+                if let StationExit::Unavailable(error) = exit
+                    && let Some(start) = start.take()
+                {
                     start.complete(Err(crate::StartError::Unavailable(error)));
                 }
-                return (StationExit::Unavailable(error), None);
-            }
-            // A refused reinstall: its receipt goes back with the refusal.
-            radio::News::Reinstall { cause, returned } => {
-                return (
-                    StationExit::Failed(crate::failure::LifecycleFailure::Reinstall(cause)),
-                    returned,
-                );
-            }
-            news @ radio::News::Released { .. } => {
-                let (_, returned) = ended::<W>(news);
-                return (
-                    StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
-                    returned,
-                );
+                return (exit, returned);
             }
         };
         let lifecycle = initialize::<W>(
@@ -541,7 +529,7 @@ async fn lifecycles<W: Binding>(
                 })
                 .await;
                 return match released {
-                    Some(news) => ended::<W>(news),
+                    Some(news) => crate::station_end::ended(news),
                     None => (
                         StationExit::ReleaseFailed(crate::failure::ReleaseCause::Deadline),
                         None,
@@ -557,7 +545,7 @@ async fn lifecycles<W: Binding>(
             // owner is unconfirmed.
             LifecycleEnd::StoppedReturning(_) | LifecycleEnd::StoppedNetworkLost(_) => {
                 drop(retired);
-                return ended::<W>(news(mailbox).await);
+                return crate::station_end::ended(news(mailbox).await);
             }
             LifecycleEnd::Restart(failure) => {
                 let failure = crate::failure::convert::restart(failure);
@@ -592,42 +580,5 @@ async fn lifecycles<W: Binding>(
                 return (exit, None);
             }
         }
-    }
-}
-
-/// The exit the actor task's last news gives, and the removal receipt a
-/// refusal returned with it, for the runner's caller. Only a release that
-/// succeeded ends its receipt, with the retired installation.
-fn ended<W: Binding>(news: radio::News<W>) -> (StationExit, Option<radio::Removal<W>>) {
-    match news {
-        radio::News::Released {
-            result,
-            network_lost,
-            returned,
-        } => {
-            let returned = crate::release::returned(result.is_err(), returned);
-            (released_exit(result, network_lost), returned)
-        }
-        radio::News::Reinstall { returned, .. } => (
-            StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
-            returned,
-        ),
-        radio::News::Installed(..) | radio::News::Unavailable(_) => (
-            StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
-            None,
-        ),
-    }
-}
-
-/// The exit of a released radio: its release's result, and the loss of the
-/// last stop's network participant, which a stopped exit records.
-fn released_exit(
-    result: Result<(), crate::failure::ReleaseCause>,
-    network_lost: bool,
-) -> StationExit {
-    match (result, network_lost) {
-        (Ok(()), false) => StationExit::Stopped,
-        (Ok(()), true) => StationExit::StoppedNetworkLost,
-        (Err(cause), _) => StationExit::ReleaseFailed(cause),
     }
 }
