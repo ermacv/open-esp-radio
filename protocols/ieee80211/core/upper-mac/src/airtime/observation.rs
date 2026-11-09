@@ -35,43 +35,15 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         charged_micros: u32,
         events: &mut impl EventSink<AirtimeObservation<K>>,
     ) {
-        // The reservation count is bounded by `RESERVATIONS`; it is summed
-        // only for an enabled sink.
-        report(events, || {
-            self.observation(account, action, grant_micros, charged_micros)
-        });
-    }
-
-    fn observation(
-        &self,
-        account: Account<K>,
-        action: AirtimeAction,
-        grant_micros: u32,
-        charged_micros: u32,
-    ) -> AirtimeObservation<K> {
-        let mut event = AirtimeObservation {
+        // The account keeps its outstanding reservations' count and sum.
+        report(events, || AirtimeObservation {
             key: account.key,
             action,
             grant_micros,
             charged_micros,
             balance_after_event_micros: account.balance,
-            outstanding: 0,
-            outstanding_micros: 0,
-        };
-        for pending in self
-            .state
-            .pending
-            .iter()
-            .flatten()
-            .filter(|p| p.key == account.key)
-        {
-            // Storage's const capacity bound proves these never saturate:
-            // at most u32::MAX reservations, each with a u32 budget.
-            event.outstanding = event.outstanding.saturating_add(1);
-            event.outstanding_micros = event
-                .outstanding_micros
-                .saturating_add(u64::from(pending.budget));
-        }
-        event
+            outstanding: account.outstanding,
+            outstanding_micros: account.outstanding_micros,
+        });
     }
 }

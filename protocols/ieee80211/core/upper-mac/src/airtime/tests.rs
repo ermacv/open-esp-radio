@@ -250,6 +250,8 @@ fn unfunded_internal_demand_returns_a_named_fault_with_its_cursor() {
         balance: 2,
         minimum: 3,
         retired: false,
+        outstanding: 0,
+        outstanding_micros: 0,
     })];
     assert!(matches!(
         funded_account(&mut accounts, 0),
@@ -284,4 +286,110 @@ fn arithmetic_boundaries_leave_ledgers_and_completion_owners_unchanged_on_error(
     assert_eq!(scheduler.state.next_id, before);
     assert_eq!(scheduler.balance_micros(1), Some(i64::MIN));
     assert_eq!(scheduler.balance_micros(2), None);
+}
+
+/// Each reservation reads and frees its own place: the horizon holds
+/// exactly `RESERVATIONS`, a place an end frees serves the next one,
+/// whichever ended, and a refused reservation takes no place.
+#[test]
+fn reservations_reuse_the_places_their_ends_free_and_a_refusal_takes_none() {
+    const RESERVATIONS: usize = 3;
+    let mut storage = AirtimeStorage::<_, 1, RESERVATIONS>::new(us(1000));
+    let mut scheduler = storage.scheduler();
+    let mut held: std::vec::Vec<_> = (0..RESERVATIONS)
+        .map(|_| {
+            scheduler
+                .reserve([candidate(1, 100)], &mut ())
+                .unwrap()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(
+        scheduler.reserve([candidate(1, 100)], &mut ()),
+        Err(AirtimeError::ReservationCapacity)
+    );
+    // Another account than the one storage holds is refused whole.
+    assert_eq!(
+        scheduler.reserve([candidate(2, 100)], &mut ()),
+        Err(AirtimeError::ReservationCapacity)
+    );
+    // The middle one ends: its place takes the next, and only one.
+    let middle = held.remove(1);
+    scheduler
+        .settle(middle.published().completed(()), us(100), &mut ())
+        .unwrap();
+    let next = scheduler
+        .reserve([candidate(1, 100)], &mut ())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        scheduler.reserve([candidate(1, 100)], &mut ()),
+        Err(AirtimeError::ReservationCapacity)
+    );
+    held.push(next);
+    // Ended in any order, each is known at its place, once.
+    for reservation in held.into_iter().rev() {
+        scheduler.cancel(reservation, &mut ()).unwrap();
+    }
+    assert_eq!(scheduler.state.pending.iter().flatten().count(), 0);
+    // Many rounds over few places: nothing leaks.
+    for _ in 0..100 {
+        let reservation = scheduler
+            .reserve([candidate(1, 100)], &mut ())
+            .unwrap()
+            .unwrap();
+        scheduler
+            .settle(reservation.published().completed(()), us(100), &mut ())
+            .unwrap();
+    }
+    let all: std::vec::Vec<_> = (0..RESERVATIONS)
+        .map(|_| {
+            scheduler
+                .reserve([candidate(1, 100)], &mut ())
+                .unwrap()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(all.len(), RESERVATIONS);
+    for reservation in all {
+        scheduler.cancel(reservation, &mut ()).unwrap();
+    }
+}
+
+/// What an observation counts of an account's reservations follows each
+/// grant and end, and a retired account goes with its last.
+#[test]
+fn an_account_counts_its_outstanding_reservations_and_goes_with_the_last() {
+    #[derive(Default)]
+    struct Seen(std::vec::Vec<(u32, u64)>);
+    impl EventSink<AirtimeObservation<u8>> for Seen {
+        fn event(&mut self, event: AirtimeObservation<u8>) {
+            self.0.push((event.outstanding, event.outstanding_micros));
+        }
+    }
+    let mut storage = AirtimeStorage::<_, 2, 4>::new(us(300));
+    let mut scheduler = storage.scheduler();
+    let mut seen = Seen::default();
+    let first = scheduler
+        .reserve([candidate(1, 100)], &mut seen)
+        .unwrap()
+        .unwrap();
+    let second = scheduler
+        .reserve([candidate(1, 100)], &mut seen)
+        .unwrap()
+        .unwrap();
+    let (a, b) = (first.budget_micros().get(), second.budget_micros().get());
+    assert_eq!(
+        seen.0,
+        [(1, u64::from(a)), (2, u64::from(a) + u64::from(b))]
+    );
+    scheduler.retire(1);
+    scheduler
+        .settle(first.published().completed(()), us(50), &mut seen)
+        .unwrap();
+    assert_eq!(seen.0.last(), Some(&(1, u64::from(b))));
+    assert!(scheduler.balance_micros(1).is_some(), "one still pins it");
+    scheduler.cancel(second, &mut seen).unwrap();
+    assert_eq!(seen.0.last(), Some(&(0, 0)));
+    assert_eq!(scheduler.balance_micros(1), None, "gone with its last");
 }
