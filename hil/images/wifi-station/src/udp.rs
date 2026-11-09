@@ -19,12 +19,16 @@ use core::future::poll_fn;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::task::{Context, Poll};
 
+#[cfg(oer_measure_copying)]
+use copying::Socket;
 use embassy_futures::select::{Either, select};
 use heapless::Vec;
+#[cfg(not(oer_measure_copying))]
+use oer::wifi::LendingSocket as Socket;
 use oer::wifi::{
-    self, AtomicWaker, ClaimCell, Declined, Delivered, FrameLengthError, Interest, Ipv4,
-    LendingSocket as Socket, LocalEnd, NetworkBlock, NetworkInstant, Next, Offer, Outcome, Produce,
-    Refusal, Refused, Remote, SendRefusal, WatchRefused, Work,
+    self, AtomicWaker, ClaimCell, Declined, Delivered, FrameLengthError, Interest, Ipv4, LocalEnd,
+    NetworkBlock, NetworkInstant, Next, Offer, Outcome, Produce, Refusal, Refused, Remote,
+    SendRefusal, WatchRefused, Work,
 };
 use oer_hil_services_load::header::{self, Header};
 use oer_hil_services_load::{LoadError, Start};
@@ -41,7 +45,47 @@ pub(crate) const PORT: u16 = 5001;
 pub(crate) const CREDIT: usize = 12;
 
 /// How the channel socket receives.
+#[cfg(not(oer_measure_copying))]
 pub(crate) type Receive = wifi::Lending<CREDIT>;
+/// Measurement only: the channel socket copies each datagram.
+#[cfg(oer_measure_copying)]
+pub(crate) type Receive = wifi::Copying;
+
+/// How the network chooses what goes out.
+#[cfg(not(oer_measure_direct))]
+pub(crate) type Mode = wifi::Queued;
+/// Measurement only: the first ready work goes.
+#[cfg(oer_measure_direct)]
+pub(crate) type Mode = wifi::Direct;
+
+/// Measurement only: a copying channel socket with a lending socket's
+/// receive calls, every datagram a copy.
+#[cfg(oer_measure_copying)]
+mod copying {
+    use oer::wifi::{self, Delivered, SocketClosed};
+
+    pub(crate) struct Socket(wifi::Socket);
+
+    impl Socket {
+        pub(crate) const fn socket(&mut self) -> &mut wifi::Socket {
+            &mut self.0
+        }
+
+        pub(crate) async fn receive(&mut self) -> Result<Delivered, SocketClosed> {
+            self.0.receive().await.map(Delivered::Copied)
+        }
+
+        pub(crate) fn try_receive(&mut self) -> Option<Delivered> {
+            self.0.try_receive().map(Delivered::Copied)
+        }
+    }
+
+    impl From<wifi::Socket> for Socket {
+        fn from(socket: wifi::Socket) -> Self {
+            Self(socket)
+        }
+    }
+}
 
 /// The ports of the network's sockets.
 pub(crate) const PORTS: wifi::Ports = wifi::Ports {
@@ -400,7 +444,7 @@ impl Produce for LoadProducer {
 
 /// The network the load server opens its runs on.
 pub(crate) struct Network {
-    network: wifi::Network<LoadProducer, wifi::Queued, Receive>,
+    network: wifi::Network<LoadProducer, Mode, Receive>,
     /// The channel socket, which receives and echoes.
     socket: RefCell<Socket>,
     source: &'static Source,
@@ -420,10 +464,12 @@ pub(crate) struct Network {
 impl Network {
     /// The network, its channel socket, and the source its producer reads.
     pub(crate) fn new(
-        network: wifi::Network<LoadProducer, wifi::Queued, Receive>,
-        socket: Socket,
+        network: wifi::Network<LoadProducer, Mode, Receive>,
+        socket: <Receive as wifi::ReceiveMode>::Socket,
         source: &'static Source,
     ) -> Self {
+        #[cfg(oer_measure_copying)]
+        let socket = Socket::from(socket);
         let _installed = source.datagrams.install(Datagrams::new());
         Self {
             end: network.end(),
@@ -453,9 +499,7 @@ pub(crate) fn address(net: &Network) -> Result<Option<Ipv4>, WatchRefused> {
 /// The network's publications, which the station services' waits read
 /// (`crate::waits`).
 #[cfg(target_arch = "riscv32")]
-pub(crate) const fn published(
-    net: &Network,
-) -> &wifi::Network<LoadProducer, wifi::Queued, Receive> {
+pub(crate) const fn published(net: &Network) -> &wifi::Network<LoadProducer, Mode, Receive> {
     &net.network
 }
 
