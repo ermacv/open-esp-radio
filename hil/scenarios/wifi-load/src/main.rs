@@ -343,6 +343,7 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             )));
         }
     };
+    received_readable(&report)?;
     match cx.call(CollectAddba { run }, CALL)? {
         AddbaCollected::Report(addba) => Ok(Ended {
             report,
@@ -360,6 +361,22 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         }),
         other => Err(Failure::Fail(format!(
             "the image's ADDBA requests: {other:?}"
+        ))),
+    }
+}
+
+/// The reason a run fails whose image met lent datagrams it could not read.
+const UNREADABLE: &str = "unreadable lent datagrams";
+
+/// A run's report holds only datagrams the image could read: a lent buffer
+/// that no longer held what the station showed breaks the device's
+/// contract, and the case fails with [`UNREADABLE`], whatever else it
+/// measured.
+fn received_readable(report: &Report) -> Result<(), Failure> {
+    match report.received.unreadable {
+        0 => Ok(()),
+        count => Err(Failure::Fail(format!(
+            "{UNREADABLE}: {count}, whose buffer no longer held what the station showed"
         ))),
     }
 }
@@ -1668,6 +1685,17 @@ mod tests {
                 .collect();
             let least = (shape.every_ms as usize).min(PING_REPLIES_LEAST);
             assert_eq!(phases.len(), least, "{}", shape.name());
+        }
+    }
+
+    #[test]
+    fn a_report_with_an_unreadable_lent_datagram_fails_the_case_by_name() {
+        let mut report = Report::default();
+        assert!(received_readable(&report).is_ok());
+        report.received.unreadable = 1;
+        match received_readable(&report) {
+            Err(Failure::Fail(reason)) => assert!(reason.starts_with(UNREADABLE), "{reason}"),
+            other => panic!("an unreadable loan fails the case: {other:?}"),
         }
     }
 
