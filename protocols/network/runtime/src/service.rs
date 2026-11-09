@@ -11,7 +11,7 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, Eviction, Group, GroupsFull, Intake, LentDatagram, LoansRefused,
+    CommandId, CommandState, Ends, Eviction, Group, GroupsFull, Intake, LentDatagram, LoansRefused,
     NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId, Unsent,
 };
 use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
@@ -272,7 +272,12 @@ struct Bound<
     /// A lending socket's loans.
     lent: Option<LentEnd<'a, B, H, LANE>>,
     open: Option<Open<B>>,
-    commands: [Option<CommandId<B>>; CREDITS],
+    /// Where the core tells this socket's ends, which outlives its close.
+    ends: Ends<B>,
+    /// The right to each accepted command's result and the socket's tag of
+    /// it, at the command's place in the core: an end the core tells is
+    /// matched here by place and generation.
+    commands: [Option<(CommandId<B>, u8)>; CREDITS],
     closing: Option<CommandId<B>>,
     /// A received datagram waits for room in the lane.
     blocked: bool,
@@ -614,6 +619,7 @@ impl<
             end,
             lent: None,
             group,
+            ends: id.ends(),
             open: Some(Open { id, reserving: 0 }),
             commands: [const { None }; CREDITS],
             closing: None,
@@ -674,6 +680,7 @@ impl<
             end,
             lent: Some(lent),
             group,
+            ends: id.ends(),
             open: Some(Open { id, reserving: 0 }),
             commands: [const { None }; CREDITS],
             closing: None,
@@ -931,9 +938,11 @@ impl<
                         continue;
                     };
                     match self.owner.send(now, socket, remote, block) {
+                        // The core numbers this socket's places below
+                        // `CREDITS`.
                         Ok(command) => {
-                            if let Some(place) = bound.commands.get_mut(usize::from(tag)) {
-                                *place = Some(command);
+                            if let Some(place) = bound.commands.get_mut(command.work().place()) {
+                                *place = Some((command, tag));
                             }
                         }
                         Err(refused) => {
@@ -1264,35 +1273,42 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
     ) -> bool {
         let mut moved = false;
-        for tag in 0..CREDITS {
-            let Some(command) = self.commands.get_mut(tag).and_then(Option::take) else {
+        // Only what the core told ended: running commands are not looked at.
+        while let Some(work) = owner.next_end(&self.ends) {
+            if self
+                .closing
+                .as_ref()
+                .is_some_and(|close| close.work() == work)
+            {
+                if let Some(close) = self.closing.take() {
+                    let _socket_closed = owner.take_result(close);
+                }
+                moved = true;
+                self.closed();
+                continue;
+            }
+            // The generation decides: a told end that is not this right's
+            // command leaves the right where it is.
+            let Some(slot) = self.commands.get_mut(work.place()).filter(|slot| {
+                slot.as_ref()
+                    .is_some_and(|(command, _)| command.work() == work)
+            }) else {
                 continue;
             };
-            let tag_byte = u8::try_from(tag).unwrap_or(u8::MAX);
-            match owner.take_result(command) {
+            let Some((command, tag)) = slot.take() else {
+                continue;
+            };
+            let sent = match owner.take_result(command) {
+                CommandState::Finished(outcome) => Sent::Ended(outcome),
+                // An end is told once it is a result, so this keeps its right.
                 CommandState::Running(command) => {
-                    if let Some(place) = self.commands.get_mut(tag) {
-                        *place = Some(command);
-                    }
+                    *slot = Some((command, tag));
+                    continue;
                 }
-                CommandState::Finished(outcome) => {
-                    moved = true;
-                    self.ended(tag_byte, Sent::Ended(outcome));
-                }
-                CommandState::Gone => {
-                    moved = true;
-                    self.ended(tag_byte, Sent::Ended(Outcome::Unknown));
-                }
-            }
-        }
-        if let Some(close) = self.closing.take() {
-            match owner.take_result(close) {
-                CommandState::Running(close) => self.closing = Some(close),
-                CommandState::Finished(_) | CommandState::Gone => {
-                    moved = true;
-                    self.closed();
-                }
-            }
+                CommandState::Gone => Sent::Ended(Outcome::Unknown),
+            };
+            moved = true;
+            self.ended(tag, sent);
         }
         self.blocked = false;
         if let Some(Open { id: socket, .. }) = &self.open {
@@ -1336,13 +1352,12 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             abandoned,
             ..
         } = self;
-        for (tag, place) in (0_u8..).zip(end.places.iter()) {
-            let command = commands.get_mut(usize::from(tag)).and_then(Option::take);
-            if let Some(command) = command {
-                let sent = match retired.results.take(command) {
-                    CommandState::Finished(outcome) => Sent::Ended(outcome),
-                    CommandState::Running(_) | CommandState::Gone => Sent::Ended(Outcome::Unknown),
-                };
+        for (command, tag) in commands.iter_mut().filter_map(Option::take) {
+            let sent = match retired.results.take(command) {
+                CommandState::Finished(outcome) => Sent::Ended(outcome),
+                CommandState::Running(_) | CommandState::Gone => Sent::Ended(Outcome::Unknown),
+            };
+            if let Some(place) = end.places.get(usize::from(tag)) {
                 place.end(sent, end.credits, tag);
             }
         }

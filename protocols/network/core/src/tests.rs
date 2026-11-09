@@ -1813,5 +1813,6 @@ fn a_new_datagram_after_a_rejected_request_asks_anew() {
 
 mod dhcp;
 mod echo;
+mod ends;
 mod lending;
 mod produced;
