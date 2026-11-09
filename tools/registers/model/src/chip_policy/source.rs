@@ -439,11 +439,18 @@ pub struct FixedRegisterSequence {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct SequenceStep {
-    /// `INSTANCE.REGISTER`: one element.
+    /// `INSTANCE.REGISTER`: one element, or with `first` and `count` a
+    /// template (`INSTANCE.REGISTER%s`) whose elements the step writes.
     pub register: String,
     pub value: u32,
     #[serde(default)]
     pub whole_word: bool,
+    /// The first element of a template step.
+    #[serde(default)]
+    pub first: Option<u32>,
+    /// The number of elements of a template step, from `first`.
+    #[serde(default)]
+    pub count: Option<u32>,
 }
 
 /// A read-modify-write of caller (`input-mask`) and fixed (`set-mask`)

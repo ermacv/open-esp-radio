@@ -117,6 +117,84 @@ fn doc(body: &mut String, summary: &str, register: &str, sources: &[String]) {
     );
 }
 
+/// One accessor named after `sequence` that writes `step`'s whole-word
+/// image to elements `first..first + count` of its template, in ascending
+/// order, through an indexed word array of exactly those elements.
+fn render_element_range(
+    body: &mut String,
+    plan: &TypePlan<'_>,
+    owner: &Owner<'_>,
+    model: &ChipModel,
+    sequence: &crate::chip_policy::FixedRegisterSequence,
+    step: &crate::chip_policy::SequenceStep,
+) -> Result<(), Error> {
+    let entity = sequence.name.as_str();
+    let (Some(first), Some(count)) = (step.first, step.count) else {
+        return Err(Error::new(entity, "an element range names first and count"));
+    };
+    let end = first
+        .checked_add(count)
+        .ok_or_else(|| Error::new(entity, "the element range overflows"))?;
+    let mut array = None;
+    for index in first..end {
+        let identity = step.register.replacen("%s", &index.to_string(), 1);
+        let target = element(entity, plan, owner, model, &identity)?;
+        if target
+            .template
+            .fields
+            .iter()
+            .any(|field| field.pointer.is_some() && field.mask() & step.value != 0)
+        {
+            return Err(Error::new(entity, "a fixed image sets an address field"));
+        }
+        // Every element is one this owner writes.
+        target.write(entity, owner, "0", step.value)?;
+        let (offset, stride, elements) = target
+            .template
+            .array
+            .ok_or_else(|| Error::new(entity, "an element range needs one evenly spaced array"))?;
+        let position = target
+            .offset
+            .checked_sub(offset)
+            .filter(|from| stride != 0 && from % stride == 0)
+            .map(|from| from / stride);
+        if position != Some(u64::from(index)) {
+            return Err(Error::new(
+                entity,
+                format!("{identity} is not element {index} of its array"),
+            ));
+        }
+        array = Some((offset, stride, elements));
+    }
+    let Some((offset, stride, _)) = array else {
+        return Err(Error::new(entity, "an element range selects no element"));
+    };
+    // The write names only the selected elements, from element `first`: the
+    // owner needs to hold exactly those words, not the whole array.
+    let base = u64::from(first)
+        .checked_mul(stride)
+        .and_then(|from| offset.checked_add(from))
+        .ok_or_else(|| Error::new(entity, "the element range overflows its block"))?;
+    doc(
+        body,
+        &format!(
+            "Write the vendor's whole-word image `0x{:08x}`, undeclared bits included, to elements {first} through {} of the array, in ascending order (`{}`)",
+            step.value,
+            end - 1,
+            sequence.name
+        ),
+        &step.register,
+        &sequence.sources,
+    );
+    let _ = writeln!(
+        body,
+        "#[inline]\npub fn {}(&mut self) {{\nfor element in 0..{count} {{\nif let Ok(index) = oer_portable_mmio::Index::<{count}>::new(element) {{\nself.0.write_indexed::<0x{base:x}, 0x{stride:x}, {count}>(index, 0x{:08x});\n}}\n}}\n}}\n",
+        names::ident(entity),
+        step.value
+    );
+    Ok(())
+}
+
 pub(super) fn render(
     body: &mut String,
     output: &mut String,
@@ -306,6 +384,10 @@ pub(super) fn render(
     {
         for step in sequence.steps.iter().filter(|step| step.whole_word) {
             let entity = sequence.name.as_str();
+            if step.first.is_some() || step.count.is_some() {
+                render_element_range(body, plan, owner, model, sequence, step)?;
+                continue;
+            }
             let target = element(entity, plan, owner, model, &step.register)?;
             if target
                 .template

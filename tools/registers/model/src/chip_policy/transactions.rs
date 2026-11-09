@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{
     BitwiseComposedDomain, BoundedDomain, Constraint, Context, DomainValue, EnumDomain, Error,
     ErrorKind, FlagDomain, Holder, Index, InputTransform, InterruptSnapshot, PartId, PolicyFile,
-    Projection, Target, WholeWordBits, Word, field_mask, field_ones, lower_snake,
+    Projection, SequenceStep, Target, WholeWordBits, Word, field_mask, field_ones, lower_snake,
     ownership::Coverage, stored, upper_camel, upper_snake,
 };
 use crate::chip_model::{ExpandedField, Field, FieldClass, Value};
@@ -466,6 +466,55 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         self.index
             .target(reference)
             .ok_or_else(|| self.error(entity, ErrorKind::UnknownRegister(reference.to_owned())))
+    }
+
+    /// The words a sequence step of `steps` steps writes, in order: its one
+    /// element, or the `count` elements of its template from `first`. A
+    /// template step writes whole words and is its sequence's only step.
+    fn step_words(
+        &self,
+        entity: &str,
+        step: &SequenceStep,
+        steps: usize,
+    ) -> Result<Vec<usize>, Error> {
+        let (first, count) = match (step.first, step.count) {
+            (None, None) => return Ok(vec![self.element(entity, &step.register)?]),
+            (Some(first), Some(count)) => (first, count),
+            _ => {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Transaction(format!(
+                        "{} names first and count together",
+                        step.register
+                    )),
+                ));
+            }
+        };
+        if !step.whole_word || steps != 1 {
+            return Err(self.error(
+                entity,
+                ErrorKind::Transaction(format!(
+                    "{}: an element range is a whole-word step and its sequence's only step",
+                    step.register
+                )),
+            ));
+        }
+        let Target::Template(template) = self.register(entity, &step.register)? else {
+            return Err(self.error(entity, ErrorKind::ElementRange(step.register.clone())));
+        };
+        let words = self
+            .index
+            .templates
+            .get(template)
+            .map_or(&[][..], Vec::as_slice);
+        let first = usize::try_from(first).unwrap_or(usize::MAX);
+        let count = usize::try_from(count).unwrap_or(usize::MAX);
+        first
+            .checked_add(count)
+            .filter(|_| count > 0)
+            .and_then(|end| words.get(first..end))
+            .map(<[usize]>::to_vec)
+            .ok_or_else(|| self.error(entity, ErrorKind::ElementRange(step.register.clone())))
     }
 
     /// One element, not a template.
@@ -1535,16 +1584,17 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             }
             let mut owners = Vec::new();
             for step in &sequence.steps {
-                let word = self.element(entity, &step.register)?;
-                self.write_word(
-                    entity,
-                    Target::Word(word),
-                    WordWrite::Sequence {
-                        value: step.value,
-                        whole_word: step.whole_word,
-                    },
-                )?;
-                owners.push(self.owner(entity, Target::Word(word), Some(step.value))?);
+                for word in self.step_words(entity, step, sequence.steps.len())? {
+                    self.write_word(
+                        entity,
+                        Target::Word(word),
+                        WordWrite::Sequence {
+                            value: step.value,
+                            whole_word: step.whole_word,
+                        },
+                    )?;
+                    owners.push(self.owner(entity, Target::Word(word), Some(step.value))?);
+                }
             }
             self.take(entity, &owners, true)?;
         }
