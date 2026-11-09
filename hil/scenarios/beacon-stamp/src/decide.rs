@@ -88,9 +88,10 @@ pub const J_SNIFFER_MIN_US: f64 = 4.0;
 /// +-25 ppm of IEEE Std 802.11-2020 15.4.4.5 / 17.3.9.7 on each side, with
 /// margin.
 pub const RHO_MAX_PPM: f64 = 100.0;
-/// The largest residual of the undelayed frames' rate fit accepted. A
-/// sniffer TSFT from the sniffer MAC's own TSF follows the air within
-/// microseconds; a host receive time does not.
+/// The largest residual of the undelayed frames' rate fit accepted: a
+/// quality bound on the TSFT's scatter between frames. It does not show
+/// what clock the TSFT counts or when it latched: a constant delay between
+/// the air and the stamp is absorbed by the fit's offset and passes it.
 pub const J_SNIFFER_MAX_US: f64 = 50.0;
 /// The largest AP TSF/MAC local rate difference accepted.
 pub const DEVICE_RATE_MAX_PPM: f64 = 100.0;
@@ -162,7 +163,7 @@ pub enum Shortfall {
         ppm: f64,
     },
     /// The undelayed frames scatter beyond `J_SNIFFER_MAX_US` around the
-    /// rate fit: the TSFT does not follow the air.
+    /// rate fit: the capture's timing is too coarse for the budget.
     SnifferJitter {
         micros: f64,
     },
@@ -277,14 +278,44 @@ fn blocker_airtime_us(body: usize) -> f64 {
 
 type Index<'a> = HashMap<(u8, u16), Vec<&'a AirFrame>>;
 
-fn index<'a>(run: &Run, capture: &'a Capture) -> (Index<'a>, Vec<&'a AirFrame>) {
+/// The width of a sniffer's TSFT when every value of the run's frames
+/// fits 32 bits: mt76 (mt7915, the stand router's MT7981) reports the RX
+/// descriptor's 32-bit timestamp, which wraps every 2^32 us.
+const WRAP_32: u64 = 1 << 32;
+
+/// The run's own frames in capture (arrival) order, their TSFT made
+/// continuous across a 32-bit wrap when every value fits 32 bits.
+fn ours(run: &Run, capture: &Capture) -> Vec<AirFrame> {
+    let mut frames: Vec<AirFrame> = capture
+        .frames
+        .iter()
+        .filter(|frame| {
+            frame.transmitter == run.ap && frame.tag.is_some_and(|tag| tag.run == run.run)
+        })
+        .cloned()
+        .collect();
+    if frames.iter().all(|frame| frame.tsft < WRAP_32) {
+        let mut epoch = 0u64;
+        let mut previous: Option<u64> = None;
+        for frame in &mut frames {
+            if let Some(previous) = previous
+                && frame.tsft < previous
+                && previous - frame.tsft > WRAP_32 / 2
+            {
+                epoch = epoch.saturating_add(WRAP_32);
+            }
+            previous = Some(frame.tsft);
+            frame.tsft = frame.tsft.saturating_add(epoch);
+        }
+    }
+    frames
+}
+
+fn index<'a>(frames: &'a [AirFrame]) -> (Index<'a>, Vec<&'a AirFrame>) {
     let mut index: Index<'a> = HashMap::new();
     let mut ours = Vec::new();
-    for frame in &capture.frames {
-        if frame.transmitter != run.ap {
-            continue;
-        }
-        let Some(tag) = frame.tag.filter(|tag| tag.run == run.run) else {
+    for frame in frames {
+        let Some(tag) = frame.tag else {
             continue;
         };
         index.entry((tag.kind, tag.n)).or_default().push(frame);
@@ -730,7 +761,8 @@ fn verdict(
 
 /// The run-wide clocks and one verdict per kind.
 pub fn decide(run: &Run, capture: &Capture) -> (Result<Clocks, Shortfall>, Vec<Verdict>) {
-    let (index, ours) = index(run, capture);
+    let frames = ours(run, capture);
+    let (index, ours) = index(&frames);
     let joinings: Vec<(Kind, Joining<'_>)> = Kind::ALL
         .iter()
         .map(|kind| (*kind, join(run, *kind, run.records.iter(), &index, &ours)))

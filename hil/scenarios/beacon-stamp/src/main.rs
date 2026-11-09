@@ -7,9 +7,12 @@
 //! identity comes from that build's own records (`bundle.rs`). Under one
 //! lease on the board, the router and the air it starts the router's
 //! monitor capture of the probe's channel (`sniffer.rs`), writes the
-//! bundle, reads the probe's console from its reset to its `OER-RESULT:`
-//! line into the log, stops the capture and releases the lease; each of
-//! the three results is kept. The probe needs no network, peer or secret:
+//! bundle, lets the preflight (`preflight.rs`) accept the capture of the
+//! probe's first boot, reads the probe's console from its reset to its
+//! `OER-RESULT:` line into the log, stops the capture and releases the
+//! lease; the three ends are kept and recorded apart, in
+//! `<console-log>.outcome.json`. Every path is absolute and the bundle's
+//! identity is read before the lease. The probe needs no network, peer or secret:
 //! its frames go out open, to the broadcast address or to an absent
 //! receiver.
 //!
@@ -23,6 +26,7 @@ mod capture;
 mod console;
 mod decide;
 mod device;
+mod preflight;
 mod result;
 mod sniffer;
 
@@ -88,7 +92,12 @@ fn main() -> ExitCode {
 /// `Ok(true)` when the probe printed its pass line, the capture stopped
 /// and the lease was released.
 fn run(board_id: &str, bundle: &Path, console: &Path, capture: &Path) -> Result<bool> {
-    let identity = bundle::identity(bundle)?;
+    let Paths {
+        bundle,
+        console,
+        capture,
+        identity,
+    } = paths(bundle, console, capture)?;
     eprintln!(
         "beacon-stamp: bundle of {} at {} (dirty {}), application {}",
         bundle::PACKAGE,
@@ -123,22 +132,94 @@ fn run(board_id: &str, bundle: &Path, console: &Path, capture: &Path) -> Result<
         &mut |message| eprintln!("beacon-stamp: {message}"),
     )?;
     eprintln!("beacon-stamp: lease {} granted", granted.lease);
-    let captured = sniffer::with_capture(&mut sniffer::RouterMonitor, CHANNEL, capture, || {
-        leased(&mut client, &board.mac, &owner, bundle, &identity, console)
-    });
+    let mut monitor = sniffer::RouterMonitor::new();
+    let captured = sniffer::with_capture(
+        &mut client,
+        &mut monitor,
+        CHANNEL,
+        &capture,
+        |client, monitor| {
+            leased(
+                client, monitor, &board.mac, &owner, &bundle, &identity, &console,
+            )
+        },
+    );
     let released = client.release();
     eprintln!("beacon-stamp: lease {} released", granted.lease);
-    ended(captured, released)
+    let (result, record) = ended(captured, released);
+    // Recorded apart: the run's, the capture's and the lease's ends.
+    let mut file = console.into_os_string();
+    file.push(".outcome.json");
+    let written = std::fs::write(&file, record.to_string())
+        .map_err(|error| format!("{}: {error}", Path::new(&file).display()));
+    match (result, written) {
+        (result, Ok(())) => result,
+        (Ok(_), Err(error)) => Err(error),
+        (Err(result), Err(error)) => Err(format!("{result}; {error}")),
+    }
+}
+
+/// The run's files, every path absolute, and the bundle's identity.
+struct Paths {
+    bundle: std::path::PathBuf,
+    console: std::path::PathBuf,
+    capture: std::path::PathBuf,
+    identity: Identity,
+}
+
+/// Resolve and check the run's files before the lease: the LAB service
+/// resolves a relative path from its own directory, not this one, so the
+/// bundle goes to it absolute, existing, a directory whose records give
+/// its identity.
+fn paths(bundle: &Path, console: &Path, capture: &Path) -> Result<Paths> {
+    let bundle = std::fs::canonicalize(bundle)
+        .map_err(|error| format!("the bundle {}: {error}", bundle.display()))?;
+    if !bundle.is_dir() {
+        return Err(format!(
+            "the bundle {} is not a directory",
+            bundle.display()
+        ));
+    }
+    let identity = bundle::identity(&bundle)?;
+    let console = std::path::absolute(console)
+        .map_err(|error| format!("the console log {}: {error}", console.display()))?;
+    let capture = std::path::absolute(capture)
+        .map_err(|error| format!("the capture {}: {error}", capture.display()))?;
+    Ok(Paths {
+        bundle,
+        console,
+        capture,
+        identity,
+    })
 }
 
 /// The run's result only when the probe ran, the capture stopped and the
-/// lease was released; otherwise every failure, together.
-fn ended(captured: sniffer::Captured<bool>, released: Result<()>) -> Result<bool> {
+/// lease was released; otherwise every failure, together. Beside it the
+/// record of the three ends, each its own.
+fn ended(
+    captured: sniffer::Captured<bool>,
+    released: Result<()>,
+) -> (Result<bool>, serde_json::Value) {
     let probe = match captured.body {
         None => Err("the probe was not run".to_owned()),
         Some(result) => result,
     };
-    match (probe, captured.capture, released) {
+    let end = |ok: bool, detail: String| serde_json::json!({ "ok": ok, "detail": detail });
+    let record = serde_json::json!({
+        "probe": match &probe {
+            Ok(passed) => end(true, format!("ran, pass {passed}")),
+            Err(error) => end(false, error.clone()),
+        },
+        "capture": match &captured.capture {
+            Ok(file) => end(true, file.display().to_string()),
+            Err(error) => end(false, error.clone()),
+        },
+        "release": match &released {
+            Ok(()) => end(true, "released".to_owned()),
+            Err(error) => end(false, error.clone()),
+        },
+    });
+    let result = match (probe, captured.capture, released) {
         (Ok(passed), Ok(file), Ok(())) => {
             eprintln!("beacon-stamp: capture {}", file.display());
             Ok(passed)
@@ -149,11 +230,13 @@ fn ended(captured: sniffer::Captured<bool>, released: Result<()>) -> Result<bool
             capture.map_or_else(|e| e, |file| format!("stopped, {}", file.display())),
             released.map_or_else(|e| e, |()| "released".to_owned()),
         )),
-    }
+    };
+    (result, record)
 }
 
 fn leased(
     client: &mut Client,
+    monitor: &mut sniffer::RouterMonitor,
     mac: &str,
     owner: &str,
     bundle: &Path,
@@ -179,8 +262,12 @@ fn leased(
         None,
     )?;
     eprintln!(
-        "beacon-stamp: wrote the probe bundle, application {}; reading the probe from its reset",
+        "beacon-stamp: wrote the probe bundle, application {}; preflight on its first boot",
         identity.application_sha256
+    );
+    let frames = preflight::wait::<Client, _>(monitor)?;
+    eprintln!(
+        "beacon-stamp: preflight accepted {frames} probe frames with TSFT; reading the probe from its reset"
     );
     let mut log = std::fs::File::create(console)
         .map_err(|error| format!("{}: {error}", console.display()))?;
@@ -270,7 +357,8 @@ fn decide(console: &Path, capture: &Path) -> Result<bool> {
 const CONDITIONS: &str = "AP interface, DSSS 1 Mb/s, one attempt; AIFSN 2 and CW 0 on both queues (vendor VO: CW 3..7); \
 the blocker on VI ahead of the VO subject, not in the subject's queue; probe responses unsolicited, to an absent receiver, \
 without the vendor's TX-control bit 27 (no equivalent here): a probe-response outcome does not describe the vendor's \
-unicast probe-response path";
+unicast probe-response path; the sniffer's TSFT is the mt76 RX descriptor's 32-bit timestamp, which the driver flags as \
+the first symbol of the MPDU and mac80211 passes on unchanged; what counter it reads is not established";
 
 #[cfg(test)]
 mod tests {
@@ -283,16 +371,54 @@ mod tests {
             body: Some(Ok(true)),
             capture: Ok(PathBuf::from("run.pcap")),
         };
-        assert_eq!(ended(captured, Ok(())), Ok(true));
+        let (result, record) = ended(captured, Ok(()));
+        assert_eq!(result, Ok(true));
+        assert_eq!(record["probe"]["ok"], true);
+        assert_eq!(record["capture"]["ok"], true);
+        assert_eq!(record["release"]["ok"], true);
         let captured = sniffer::Captured {
             body: Some(Ok(true)),
             capture: Ok(PathBuf::from("run.pcap")),
         };
-        assert!(
-            ended(captured, Err("lab gone".into()))
-                .unwrap_err()
-                .contains("lab gone")
-        );
+        let (result, record) = ended(captured, Err("lab gone".into()));
+        assert!(result.unwrap_err().contains("lab gone"));
+        assert_eq!(record["probe"]["ok"], true);
+        assert_eq!(record["release"]["detail"], "lab gone");
+    }
+
+    #[test]
+    fn the_bundle_is_absolute_existing_and_identified_before_the_lease() {
+        let directory = tempfile::tempdir().unwrap();
+        let bundle = directory.path().join("bundle");
+        assert!(paths(&bundle, Path::new("c.log"), Path::new("c.pcap")).is_err());
+        std::fs::write(&bundle, b"not a directory").unwrap();
+        assert!(paths(&bundle, Path::new("c.log"), Path::new("c.pcap")).is_err());
+        std::fs::remove_file(&bundle).unwrap();
+        std::fs::create_dir(&bundle).unwrap();
+        // A directory without the build's records has no identity.
+        assert!(paths(&bundle, Path::new("c.log"), Path::new("c.pcap")).is_err());
+        let application = b"probe";
+        std::fs::write(bundle.join("application.bin"), application).unwrap();
+        let sha256 = oer_tools_os_durable::sha256_bytes(application);
+        std::fs::write(
+            bundle.join("bundle.json"),
+            serde_json::json!({"flash_files": [{"file": "application.bin", "sha256": sha256, "bytes": 5}]})
+                .to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            bundle.join("sizes.json"),
+            serde_json::json!({
+                "provenance": {"commit": "eae701e4f", "dirty": false, "package": bundle::PACKAGE},
+                "image_files": {"application.bin": 5},
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let resolved = paths(&bundle, Path::new("c.log"), Path::new("c.pcap")).unwrap();
+        assert!(resolved.bundle.is_absolute() && resolved.console.is_absolute());
+        assert!(resolved.capture.is_absolute());
+        assert_eq!(resolved.identity.commit, "eae701e4f");
     }
 
     #[test]
@@ -301,15 +427,19 @@ mod tests {
             body: Some(Err("console timeout".into())),
             capture: Err("tcpdump lost".into()),
         };
-        let error = ended(captured, Err("release refused".into())).unwrap_err();
+        let (result, record) = ended(captured, Err("release refused".into()));
+        let error = result.unwrap_err();
         for cause in ["console timeout", "tcpdump lost", "release refused"] {
             assert!(error.contains(cause), "{error}");
         }
+        assert_eq!(record["probe"]["detail"], "console timeout");
+        assert_eq!(record["capture"]["detail"], "tcpdump lost");
+        assert_eq!(record["release"]["detail"], "release refused");
         let captured = sniffer::Captured::<bool> {
             body: None,
             capture: Err("the capture did not start".into()),
         };
-        let error = ended(captured, Ok(())).unwrap_err();
+        let error = ended(captured, Ok(())).0.unwrap_err();
         assert!(error.contains("not run") && error.contains("did not start"));
     }
 }

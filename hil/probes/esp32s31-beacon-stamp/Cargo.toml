@@ -47,9 +47,6 @@ workspace = true
 critical-section-hart = "boot"
 
 [package.metadata.open-radio.panic-budget]
-# Initial composition inventory copied from the rx-rebind probe, which
-# composes the same production crates: existing production/macro sites, no
-# handwritten panic site. CI's image report gives this image's own counts
-# against the target of zero.
-runtime = { hal = 15, chips = 310, portable = 1, firmware = 23, unnamed = 5, hardware = 1 }
-bootstrap = { unnamed = 2 }
+# The image report of eae701e4f: no runtime and no bootstrap panic site.
+runtime = { hal = 0, chips = 0, portable = 0, firmware = 0, unnamed = 0, hardware = 0 }
+bootstrap = { unnamed = 0 }

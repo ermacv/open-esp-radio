@@ -136,7 +136,18 @@ fn frame(tsft: u64, mpdu: &[u8]) -> Option<AirFrame> {
     })
 }
 
+/// A whole capture file: a truncated last record is an error.
 pub fn parse(bytes: &[u8]) -> Result<Capture, String> {
+    parse_with(bytes, false)
+}
+
+/// The complete records of a capture still being written: its last
+/// record may be incomplete and is left out.
+pub fn parse_prefix(bytes: &[u8]) -> Result<Capture, String> {
+    parse_with(bytes, true)
+}
+
+fn parse_with(bytes: &[u8], partial_tail: bool) -> Result<Capture, String> {
     let magic = u32_at(bytes, 0, false).ok_or("the capture has no pcap header")?;
     let big = match magic {
         0xa1b2_c3d4 | 0xa1b2_3c4d => false,
@@ -154,15 +165,22 @@ pub fn parse(bytes: &[u8]) -> Result<Capture, String> {
     let mut at = 24usize;
     let mut index = 0usize;
     while at < bytes.len() {
-        let included = u32_at(bytes, at.checked_add(8).ok_or("offset")?, big)
-            .ok_or_else(|| format!("record {index} has a short header"))?;
+        let Some(included) = u32_at(bytes, at.checked_add(8).ok_or("offset")?, big) else {
+            if partial_tail {
+                break;
+            }
+            return Err(format!("record {index} has a short header"));
+        };
         let start = at.checked_add(16).ok_or("offset")?;
         let end = start
             .checked_add(usize::try_from(included).map_err(|_| "record length")?)
             .ok_or("offset")?;
-        let packet = bytes
-            .get(start..end)
-            .ok_or_else(|| format!("record {index} runs past the end of the capture"))?;
+        let Some(packet) = bytes.get(start..end) else {
+            if partial_tail {
+                break;
+            }
+            return Err(format!("record {index} runs past the end of the capture"));
+        };
         at = end;
         index = index.saturating_add(1);
         let Some((length, tsft, flags)) = radiotap(packet) else {
@@ -308,6 +326,21 @@ mod tests {
         let capture = parse(&synthetic::file(&[packet])).unwrap();
         assert_eq!(capture.frames[0].tsft, 99);
         assert_eq!(capture.frames[0].tag, Some(TAG));
+    }
+
+    #[test]
+    fn a_capture_still_being_written_keeps_its_complete_records() {
+        let mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
+        let mut bytes =
+            synthetic::file(&[synthetic::record(5, &mpdu), synthetic::record(6, &mpdu)]);
+        bytes.truncate(bytes.len() - 7);
+        assert!(parse(&bytes).is_err());
+        assert_eq!(parse_prefix(&bytes).unwrap().frames.len(), 1);
+        assert_eq!(parse_prefix(&bytes[..30]).unwrap().frames.len(), 0);
+        assert!(
+            parse_prefix(&bytes[..10]).is_err(),
+            "no header yet is no capture"
+        );
     }
 
     #[test]

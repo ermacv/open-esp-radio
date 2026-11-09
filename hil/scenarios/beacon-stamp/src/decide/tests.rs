@@ -567,7 +567,7 @@ fn an_unconfirmed_cleanup_or_a_probe_error_withholds_every_outcome() {
 }
 
 #[test]
-fn a_sniffer_timestamp_that_does_not_follow_the_air_is_insufficient() {
+fn a_sniffer_timestamp_scattered_beyond_the_quality_bound_is_insufficient() {
     let model = Model {
         sniffer_scatter_us: 300,
         ..MODEL
@@ -576,4 +576,25 @@ fn a_sniffer_timestamp_that_does_not_follow_the_air_is_insufficient() {
     assert!(
         matches!(decide(&run, &capture).0, Err(Shortfall::SnifferJitter { micros }) if micros > 50.0)
     );
+}
+
+#[test]
+fn a_32_bit_sniffer_tsft_that_wraps_during_the_run_is_made_continuous() {
+    let (run, mut capture) = simulate(MODEL);
+    // The sniffer's 32-bit counter wraps in the middle of the beacons.
+    let wrap_at = capture
+        .frames
+        .iter()
+        .find(|frame| frame.tag.is_some_and(|tag| tag.kind == b'b' && tag.n == 16))
+        .map(|frame| frame.tsft)
+        .unwrap();
+    let base = WRAP_32 - (wrap_at - SNIFFER_ORIGIN) - 10;
+    for frame in &mut capture.frames {
+        frame.tsft = (frame.tsft - SNIFFER_ORIGIN + base) % WRAP_32;
+    }
+    assert!(capture.frames.iter().any(|frame| frame.tsft < 1_000_000));
+    for verdict in decide(&run, &capture).1 {
+        assert_eq!(verdict.outcome, Outcome::ApTsfAtTransmission);
+        assert_eq!(verdict.evidence.decisive, 31);
+    }
 }
