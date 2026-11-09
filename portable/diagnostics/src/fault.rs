@@ -62,6 +62,9 @@ pub enum Domain {
     /// What a CPU exception's hook read after the trap, beside the runtime's
     /// trap-time record.
     ExceptionObservation = 14,
+    /// The beacon-stamp probe's retained fault: its own namespace, so a
+    /// record another image left at the same place is never taken for its.
+    BeaconStamp = 15,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

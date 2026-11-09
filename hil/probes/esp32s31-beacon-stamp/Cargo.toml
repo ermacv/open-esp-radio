@@ -15,7 +15,6 @@ embedded-io-async = "0.7.0"
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-portable-riscv = { path = "../../../portable/riscv" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
-heapless = "0.9.3"
 static_cell = { workspace = true }
 oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
 oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/runtime" }

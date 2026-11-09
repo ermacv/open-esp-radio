@@ -150,6 +150,17 @@ pub(crate) fn record_line(record: &Record) -> Result<Line<RECORD_LINE>, LineFull
     Ok(line)
 }
 
+/// The line naming a previous boot's retained fault, beside its note.
+pub(crate) fn previous_line(kind: u32, phase: u32) -> Result<Line<64>, LineFull> {
+    let mut line = Line::new();
+    line.text(b"STAMP previous kind=")?
+        .decimal(u64::from(kind))?
+        .text(b" phase=")?
+        .decimal(u64::from(phase))?
+        .text(b"\n")?;
+    Ok(line)
+}
+
 pub(crate) fn clock_line(at: &[u8], value: Sample) -> Result<Line<64>, LineFull> {
     let mut line = Line::new();
     line.text(b"STAMP clock at=")?.text(at)?.text(b" s=")?;
@@ -218,6 +229,18 @@ mod tests {
         assert!(text.contains(" bq=07 pub="), "{text}");
         assert!(text.ends_with(",ff,ff rb=abababababababab\n"), "{text}");
         assert!(text.starts_with("STAMP rec n=65535 kind=p arm=d k=ffffffffffffffff bpub="));
+    }
+
+    #[test]
+    fn a_previous_fault_line_names_its_kind_and_phase_whatever_their_width() {
+        assert_eq!(
+            previous_line(2, 1).unwrap().as_bytes(),
+            b"STAMP previous kind=2 phase=1\n"
+        );
+        assert_eq!(
+            previous_line(u32::MAX, u32::MAX).unwrap().as_bytes(),
+            b"STAMP previous kind=4294967295 phase=4294967295\n"
+        );
     }
 
     #[test]

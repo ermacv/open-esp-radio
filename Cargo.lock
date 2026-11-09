@@ -2043,7 +2043,6 @@ name = "oer-hil-probes-esp32s31-beacon-stamp"
 version = "0.1.0"
 dependencies = [
  "embedded-io-async",
- "heapless",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",

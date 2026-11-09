@@ -60,7 +60,7 @@ fn record(claim: &Claim<'_>, kind: u32, cause: u32, pc: u32, mtval: u32, ra: u32
     };
     if let Ok(record) = Record::encode(
         class,
-        Domain::RxChain,
+        Domain::BeaconStamp,
         kind,
         oer_portable_riscv::hart_id() as u32,
         PHASE.load(Ordering::Relaxed),
@@ -92,7 +92,7 @@ pub(crate) fn report_previous() {
         return;
     };
     let Ok([kind, phase, hart, cause, pc, tval, ra, mscratch]) =
-        view.decode::<[u32; 8]>(Domain::RxChain)
+        view.decode::<[u32; 8]>(Domain::BeaconStamp)
     else {
         return;
     };
@@ -105,9 +105,8 @@ pub(crate) fn report_previous() {
         if !oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_note(&note).is_whole() {
             return Err(());
         }
-        use core::fmt::Write as _;
-        let mut line = heapless::String::<80>::new();
-        writeln!(&mut line, "STAMP previous kind={kind} phase={phase}").map_err(|_| ())?;
+        // The probe's fixed-buffer writer: no `core::fmt` on this path.
+        let line = crate::record::previous_line(kind, phase).map_err(|_| ())?;
         if !oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(line.as_bytes())
             .is_whole()
         {
