@@ -81,6 +81,39 @@ pub enum VacantKeySlot<'id, P: PoolPath = Root<oer_protocols_radio_port::LocalId
     AccessPointGroup(AccessPointGroupSlot<'id, P>),
 }
 
+/// The role and kind of a key slot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KeySlotKind {
+    StationPairwise,
+    StationGroup,
+    AccessPointPairwise,
+    AccessPointGroup,
+}
+
+impl<P: PoolPath> VacantKeySlot<'_, P> {
+    /// The slot's role and kind.
+    pub const fn kind(&self) -> KeySlotKind {
+        match self {
+            Self::StationPairwise(_) => KeySlotKind::StationPairwise,
+            Self::StationGroup(_) => KeySlotKind::StationGroup,
+            Self::AccessPointPairwise(_) => KeySlotKind::AccessPointPairwise,
+            Self::AccessPointGroup(_) => KeySlotKind::AccessPointGroup,
+        }
+    }
+}
+
+impl<'id, P: PoolPath> From<AccessPointGroupSlot<'id, P>> for VacantKeySlot<'id, P> {
+    fn from(slot: AccessPointGroupSlot<'id, P>) -> Self {
+        Self::AccessPointGroup(slot)
+    }
+}
+
+impl<'id, P: PoolPath> From<StationGroupSlot<'id, P>> for VacantKeySlot<'id, P> {
+    fn from(slot: StationGroupSlot<'id, P>) -> Self {
+        Self::StationGroup(slot)
+    }
+}
+
 impl<'id, P: PoolPath> TransmitKeyInstallation<'_, 'id, P> {
     pub(crate) fn into_parts(self) -> (Spp, TransmitKeyScope, VacantKeySlot<'id, P>) {
         match self {
@@ -118,14 +151,20 @@ impl<'id, P: PoolPath> TransmitKeyInstallation<'_, 'id, P> {
     }
 }
 
-/// Installation had no effect; the exact vacant slot remains recoverable.
+/// Installation had no effect; the exact vacant slot remains recoverable,
+/// as the type the caller gave it (`S`).
 #[must_use]
-pub struct KeyInstallRefused<'id, P: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
+pub struct KeyInstallRefused<
+    'id,
+    P: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+    S = VacantKeySlot<'id, P>,
+> {
     pub fault: super::LowerMacFault,
-    pub slot: VacantKeySlot<'id, P>,
+    pub slot: S,
+    pub brand: core::marker::PhantomData<VacantKeySlot<'id, P>>,
 }
 
-impl<P: PoolPath> core::fmt::Debug for KeyInstallRefused<'_, P> {
+impl<P: PoolPath, S> core::fmt::Debug for KeyInstallRefused<'_, P, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("KeyInstallRefused")
             .field("fault", &self.fault)

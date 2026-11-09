@@ -2125,17 +2125,28 @@ where
         self.install_key_parts(hardware, spp, scope, slot, temporal_key)
     }
 
-    pub(crate) fn install_key_parts<H: LowerMacHardware>(
+    /// Install a transmit key in `slot`, which a refusal returns as the
+    /// caller gave it.
+    pub(crate) fn install_key_parts<H: LowerMacHardware, S>(
         &mut self,
         hardware: &mut H,
         spp: oer_protocols_ieee80211_wire::security::Spp,
         scope: TransmitKeyScope,
-        slot: association::VacantKeySlot<'core, Path>,
+        slot: S,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
-    ) -> Result<KeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
+    ) -> Result<KeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path, S>>
+    where
+        S: Into<association::VacantKeySlot<'core, Path>>,
+    {
         let (free, place) = match self.vacant_key(scope.into()) {
             Ok(vacant) => vacant,
-            Err(fault) => return Err(association::KeyInstallRefused { fault, slot }),
+            Err(fault) => {
+                return Err(association::KeyInstallRefused {
+                    fault,
+                    slot,
+                    brand: core::marker::PhantomData,
+                });
+            }
         };
         hardware.configure_ccmp_association(
             match scope {
@@ -2166,12 +2177,13 @@ where
                 return Err(association::KeyInstallRefused {
                     fault: LowerMacFault::Key(error),
                     slot,
+                    brand: core::marker::PhantomData,
                 });
             }
         };
         *place = Some(scope.into());
         Ok(KeyHandle {
-            slot,
+            slot: slot.into(),
             index: free,
             token,
             scope,
@@ -2190,6 +2202,11 @@ where
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         self.install_station_group_parts(hardware, association.spp(), slot, key_id, temporal_key)
+            .map_err(|refused| association::KeyInstallRefused {
+                fault: refused.fault,
+                slot: refused.slot.into(),
+                brand: core::marker::PhantomData,
+            })
     }
 
     pub(crate) fn install_station_group_parts<H: LowerMacHardware>(
@@ -2199,12 +2216,20 @@ where
         slot: association::StationGroupSlot<'core, Path>,
         key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
-    ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
+    ) -> Result<
+        ReceiveKeyHandle<'core, Path>,
+        association::KeyInstallRefused<'core, Path, association::StationGroupSlot<'core, Path>>,
+    > {
         let scope = CheckedKeyScope::StationGroup { key_id };
-        let slot = association::VacantKeySlot::StationGroup(slot);
         let (index, place) = match self.vacant_key(scope) {
             Ok(vacant) => vacant,
-            Err(fault) => return Err(association::KeyInstallRefused { fault, slot }),
+            Err(fault) => {
+                return Err(association::KeyInstallRefused {
+                    fault,
+                    slot,
+                    brand: core::marker::PhantomData,
+                });
+            }
         };
         hardware.configure_ccmp_association(
             oer_chips_esp32s31_hal::types::MacInterface::Station,
@@ -2216,12 +2241,13 @@ where
                 return Err(association::KeyInstallRefused {
                     fault: LowerMacFault::Key(error),
                     slot,
+                    brand: core::marker::PhantomData,
                 });
             }
         };
         *place = Some(scope);
         Ok(ReceiveKeyHandle {
-            slot,
+            slot: slot.into(),
             index,
             token,
             material: crate::mac::crypto::StaGroupCcmpKeyMaterial::new(key_id, *temporal_key),

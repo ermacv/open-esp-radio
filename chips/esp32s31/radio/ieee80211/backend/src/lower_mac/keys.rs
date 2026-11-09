@@ -22,6 +22,14 @@ pub struct KeyHandle<'core, Path: PoolPath = Root<oer_protocols_radio_port::Loca
     pub(super) brand: Installation<'core, Path>,
 }
 
+impl<Path: PoolPath> KeyHandle<'_, Path> {
+    /// The role and kind of the slot the key holds, which its removal's
+    /// receipt returns.
+    pub const fn slot_kind(&self) -> super::association::KeySlotKind {
+        self.slot.kind()
+    }
+}
+
 /// Keys which can encrypt transmitted frames. Station GTKs have a different
 /// installation operation and handle, so they cannot enter TX admission or PN
 /// allocation even while they remain installed for reception.
@@ -82,6 +90,13 @@ pub struct ReceiveKeyHandle<'core, Path: PoolPath = Root<oer_protocols_radio_por
     pub(super) material: crate::mac::crypto::StaGroupCcmpKeyMaterial,
     pub(super) key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
     pub(super) brand: Installation<'core, Path>,
+}
+
+impl<Path: PoolPath> ReceiveKeyHandle<'_, Path> {
+    /// The role and kind of the slot the key holds.
+    pub const fn slot_kind(&self) -> super::association::KeySlotKind {
+        self.slot.kind()
+    }
 }
 
 /// A consumed installed handle, retained until hardware removal completes.

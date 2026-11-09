@@ -398,11 +398,26 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 identity,
                 installation,
                 material,
-                issued: _,
+                issued,
             })) => {
-                self.driver
-                    .install(self.device, identity, installation, &material)
-                    .map_err(CommandFailed::Taken)?;
+                // Refused, the installation comes back whole with its
+                // command: the core did not take its slot.
+                if let Err((installation, fault)) =
+                    self.driver
+                        .install(self.device, identity, installation, &material)
+                {
+                    return Err(CommandFailed::Returned {
+                        command: AccessPointCommand::InstallPairwise(AccessPointPairwiseInstall(
+                            PairwiseInstall {
+                                identity,
+                                installation,
+                                material,
+                                issued,
+                            },
+                        )),
+                        fault,
+                    });
+                }
                 identity.activity.set(identity.serial);
                 sink.terminal(
                     brand::OwnedTerminal::PairwiseKeyInstalled(brand::OwnedInstalledPairwise::new(
@@ -446,7 +461,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         now,
                     ));
                 }
-                let removed = match self.driver.remove(self.device, identity) {
+                let removed = match self.driver.remove(
+                    self.device,
+                    identity,
+                    core_mac::association::KeySlotKind::AccessPointPairwise,
+                ) {
                     Ok(removed) => removed,
                     Err(fault) => {
                         return Err(CommandFailed::Returned {
@@ -497,6 +516,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                                 })
                             }
                             other => Err(other),
+                        },
+                        |command, association| {
+                            AccessPointCommand::InstallGroup(AccessPointGroupInstall(
+                                GroupInstall {
+                                    command,
+                                    association,
+                                },
+                            ))
                         },
                     )
                     .map_err(CommandFailed::Taken)?;

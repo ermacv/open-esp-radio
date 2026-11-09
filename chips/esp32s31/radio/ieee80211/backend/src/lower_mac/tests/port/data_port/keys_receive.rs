@@ -1162,3 +1162,111 @@ fn a_unit_a_cut_drains_past_the_held_units_goes_back_to_the_ring_beside_the_faul
         }
     });
 }
+
+impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
+    /// Run `command` until it leaves its barrier, serving a turn between
+    /// holds: its progress or its failure, as the port returned them.
+    fn run_failed(
+        &mut self,
+        mut command: Command<'id, Id>,
+    ) -> Result<CommandProgress<'id, Family<Id>, Caps>, CommandFailed<Command<'id, Id>, Fault>>
+    {
+        for _ in 0..16 {
+            let now = self.now();
+            match self.port.command(command, now, &mut self.outbox)? {
+                CommandProgress::Held(held) => command = held,
+                other => return Ok(other),
+            }
+            self.turn();
+        }
+        Ok(CommandProgress::Held(command))
+    }
+
+    /// The slot and permission a returned station group command holds.
+    fn group_owners(command: &Command<'id, Id>) -> Option<(u8, u8)> {
+        match command {
+            PortCommand::InstallGroup(install) => install.owners_for_test(),
+            PortCommand::SelectGroup {
+                permission,
+                installed,
+            } => Some((
+                <Keys<Id> as KeyTypes<'id>>::group_slot_identity(installed),
+                permission.index(),
+            )),
+            _ => None,
+        }
+    }
+}
+
+/// A pairwise installation the hardware rejects comes back whole, its
+/// slot in it, beside the fault: the core did not take the slot.
+#[test]
+fn a_pairwise_installation_the_hardware_rejects_comes_back_with_its_slot() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(7),
+        );
+        fixture.observed.borrow_mut().reject_key_writes = 1;
+        match fixture.run_failed(install) {
+            Err(CommandFailed::Returned {
+                command: PortCommand::InstallPairwise(_),
+                fault,
+            }) => assert_eq!(fault, KEY_REJECTED),
+            _ => panic!("the installation comes back beside its fault"),
+        }
+        assert!(fixture.outbox.terminals.is_empty(), "no terminal");
+    });
+}
+
+/// A group installation the hardware rejects after its receive cut comes
+/// back whole, its slot and permission in it, beside the fault; the cut
+/// resumes.
+#[test]
+fn a_group_installation_the_hardware_rejects_comes_back_with_its_slot_and_permission() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (install, owners) = fixture.group_command(Mutation::Install);
+        let cuts = fixture.observed.borrow().resumed_cuts;
+        fixture.observed.borrow_mut().reject_key_writes = 1;
+        let returned = match fixture.run_failed(install) {
+            Err(CommandFailed::Returned {
+                command: command @ PortCommand::InstallGroup(_),
+                fault,
+            }) => {
+                assert_eq!(fault, KEY_REJECTED);
+                command
+            }
+            _ => panic!("the installation comes back beside its fault"),
+        };
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
+        assert!(fixture.group_terminals().is_empty(), "no terminal");
+        // The very slot and permission the command took.
+        assert_eq!(Fixture::group_owners(&returned), Some(owners));
+    });
+}
+
+/// A group selection whose key the driver no longer holds comes back
+/// whole beside the fault, its key and permission in it, before the
+/// driver takes anything; the cut resumes.
+#[test]
+fn a_group_selection_of_a_missing_key_comes_back_with_its_owners() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (select, owners) = fixture.group_command(Mutation::Select);
+        fixture.port.uninstall_keys_for_test();
+        let cuts = fixture.observed.borrow().resumed_cuts;
+        match fixture.run_failed(select) {
+            Err(CommandFailed::Returned {
+                command: command @ PortCommand::SelectGroup { .. },
+                fault: Fault::KeySlotMissing(crate::port::KeyOp::Select),
+            }) => assert_eq!(Fixture::group_owners(&command), Some(owners)),
+            _ => panic!("the selection comes back beside its fault"),
+        }
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
+    });
+}

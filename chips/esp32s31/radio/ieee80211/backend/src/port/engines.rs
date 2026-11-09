@@ -64,6 +64,22 @@ pub struct GroupInstall<Id: SlotIdentity> {
     association: u32,
 }
 
+impl<Id: SlotIdentity> GroupInstall<Id> {
+    /// The slot and permission indices of the installation.
+    #[cfg(test)]
+    pub(crate) fn owners_for_test(&self) -> Option<(u8, u8)> {
+        match &self.command {
+            GroupCommand::InstallStation {
+                slot, permission, ..
+            } => Some((slot.index(), permission.index())),
+            GroupCommand::InstallAccessPoint {
+                slot, permission, ..
+            } => Some((slot.index(), permission.index())),
+            _ => None,
+        }
+    }
+}
+
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> CommandTypes<'id>
     for Types<Id, D, B, O>
 {
@@ -1407,6 +1423,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     }),
                     other => Err(other),
                 },
+                |command, association| {
+                    PortCommand::InstallGroup(GroupInstall {
+                        command,
+                        association,
+                    })
+                },
             )
             .map_err(CommandFailed::Taken)?;
         match step {
@@ -1433,6 +1455,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         now: Instant,
         sink: &mut S,
         into_owned: impl FnOnce(C, &Loan<'id, Id, D, B, O>) -> Result<GroupCommand<'static, Id>, C>,
+        reinstall: impl FnOnce(GroupCommand<'static, Id>, u32) -> C,
     ) -> Result<GroupStep<C>, Fault>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
@@ -1504,6 +1527,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             Poll::Ready(Err(cause)) => Ok(GroupStep::Failed(command, cause)),
             Poll::Ready(Ok(None)) => {
+                // What the driver's step needs besides the command's own
+                // owners, checked before it takes them: the registers, the
+                // core's command view, the key it names, or a free table
+                // place for an installation. Refused, the command comes
+                // back whole and the frozen receive path resumes.
+                if let Err(fault) = self.group_ready(mutator, uses) {
+                    self.unfreeze_mutation(mutator, removal);
+                    return Ok(GroupStep::Failed(command, fault));
+                }
                 let loan = self.loan;
                 let owned = match into_owned(command, &loan) {
                     Ok(owned) => owned,
@@ -1515,7 +1547,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 };
                 let terminal = match terminal {
                     Ok(terminal) => terminal,
-                    Err(fault) => {
+                    Err(driver::GroupFailed::Install(command, fault)) => {
+                        // The core did not take the installation's slot:
+                        // the command comes back whole.
+                        self.unfreeze_mutation(mutator, removal);
+                        let generation = self.serials.generation;
+                        return Ok(GroupStep::Failed(reinstall(command, generation), fault));
+                    }
+                    Err(driver::GroupFailed::Taken(fault)) => {
                         // The mutation failed with its fault; the receive
                         // path it froze resumes, so a failed command leaves
                         // no frozen receive behind. The first fault stays
@@ -1555,6 +1594,65 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 }
                 Ok(GroupStep::Done)
             }
+        }
+    }
+
+    /// Whether the driver's step of a group mutation has what it needs
+    /// besides the command: the registers, the core's command view, the
+    /// installed key `uses` names, or a free table place when it names
+    /// none (an installation).
+    fn group_ready(&mut self, mutator: Mutator, uses: Option<RawKeyIdentity>) -> Result<(), Fault> {
+        self.device.hardware()?;
+        if self.driver.core.view().commands().is_none() {
+            return Err(Fault::CoreViewUnavailable(CoreOp::Command));
+        }
+        let op = match mutator {
+            Mutator::Station(oer_protocols_ieee80211_contracts_port::CommandKind::SelectGroup) => {
+                KeyOp::Select
+            }
+            Mutator::Station(oer_protocols_ieee80211_contracts_port::CommandKind::ReplaceGroup) => {
+                KeyOp::Replace
+            }
+            _ => KeyOp::Remove,
+        };
+        // A station mutation names the station's group key, an access
+        // point's the access point's.
+        let group = match mutator {
+            Mutator::Station(_) => core_mac::association::KeySlotKind::StationGroup,
+            Mutator::AccessPoint(_) => core_mac::association::KeySlotKind::AccessPointGroup,
+        };
+        match uses.map(|identity| self.driver.installed_kind(identity)) {
+            Some(None) => Err(Fault::KeySlotMissing(op)),
+            Some(Some(kind)) if kind != group => match op {
+                KeyOp::Remove => Err(Fault::RemovalMismatch),
+                _ => Err(Fault::KeySlotMissing(op)),
+            },
+            Some(Some(_)) => Ok(()),
+            None if self.driver.keys.iter().any(Option::is_none) => Ok(()),
+            None => Err(Fault::KeySlotMissing(KeyOp::Install)),
+        }
+    }
+
+    /// Undo a group mutation's hold that did not reach the key table: its
+    /// frozen receive path resumes (a resume that fails is the port's
+    /// fault), its removal's key is active again and its barrier lifts.
+    fn unfreeze_mutation(&mut self, mutator: Mutator, removal: Option<RawKeyIdentity>) {
+        if let Err(cause) = self.device.finish_rx_cut() {
+            self.record(cause);
+        }
+        if let Some(identity) = removal {
+            identity.activity.set(identity.serial);
+            if self.driver.barrier == Some(identity) {
+                self.driver.barrier = None;
+            }
+        }
+        self.group_since = None;
+        self.group_mutator = None;
+        self.cut_retry = false;
+        self.cut_due = false;
+        match mutator {
+            Mutator::Station(_) => self.holding = None,
+            Mutator::AccessPoint(_) => self.access_point_holding = None,
         }
     }
 
@@ -1720,11 +1818,24 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 identity,
                 installation,
                 material,
-                issued: _,
+                issued,
             }) => {
-                self.driver
-                    .install(self.device, identity, installation, &material)
-                    .map_err(CommandFailed::Taken)?;
+                // Refused, the installation comes back whole with its
+                // command: the core did not take its slot.
+                if let Err((installation, fault)) =
+                    self.driver
+                        .install(self.device, identity, installation, &material)
+                {
+                    return Err(CommandFailed::Returned {
+                        command: PortCommand::InstallPairwise(PairwiseInstall {
+                            identity,
+                            installation,
+                            material,
+                            issued,
+                        }),
+                        fault,
+                    });
+                }
                 identity.activity.set(identity.serial);
                 sink.terminal(
                     brand::OwnedTerminal::PairwiseKeyInstalled(brand::OwnedInstalledPairwise::new(
@@ -1752,7 +1863,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         key,
                     }));
                 }
-                let removed = match self.driver.remove(self.device, identity) {
+                let removed = match self.driver.remove(
+                    self.device,
+                    identity,
+                    core_mac::association::KeySlotKind::StationPairwise,
+                ) {
                     Ok(removed) => removed,
                     Err(fault) => {
                         return Err(CommandFailed::Returned {

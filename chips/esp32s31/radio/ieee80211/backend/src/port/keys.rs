@@ -230,6 +230,27 @@ pub(super) enum Removal<'id, Id: SlotIdentity> {
     StationGroup(StaPermission<'id, Id>),
     AccessPointGroup(ApPermission<'id, Id>),
 }
+impl<Id: SlotIdentity> Removal<'_, Id> {
+    /// The kind of slot whose receipt these rights take.
+    pub(super) const fn kind(&self) -> core_mac::association::KeySlotKind {
+        use core_mac::association::KeySlotKind;
+        match self {
+            Self::StationPairwise(_) => KeySlotKind::StationPairwise,
+            Self::AccessPointPairwise(_) => KeySlotKind::AccessPointPairwise,
+            Self::StationGroup(_) => KeySlotKind::StationGroup,
+            Self::AccessPointGroup(_) => KeySlotKind::AccessPointGroup,
+        }
+    }
+}
+impl<Id: SlotIdentity> Installed<'_, Id> {
+    /// The kind of slot the installed key holds.
+    pub(super) const fn kind(&self) -> core_mac::association::KeySlotKind {
+        match self {
+            Self::Transmit(key) => key.slot_kind(),
+            Self::Receive(key) => key.slot_kind(),
+        }
+    }
+}
 pub(super) enum GroupCommand<'id, Id: SlotIdentity> {
     InstallStation {
         spp: Spp,
