@@ -1735,6 +1735,69 @@ fn installed_pairwise<'id, Id: radio::SlotIdentity + 'id>(
 }
 
 #[test]
+fn a_removal_the_registers_refuse_comes_back_and_leaves_the_key_installed() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(7),
+        );
+        assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) =
+            fixture.outbox.terminals.pop()
+        else {
+            panic!("the installation terminal returns the key");
+        };
+        let writes = fixture.observed.borrow().key_writes;
+        fixture.observed.borrow_mut().hardware_unavailable = true;
+        let now = fixture.now();
+        let Err(CommandFailed::Returned {
+            command: PortCommand::RemovePairwise { .. },
+            fault: Fault::HardwareUnavailable,
+        }) = fixture.port.command(
+            PortCommand::RemovePairwise { association, key },
+            now,
+            &mut fixture.outbox,
+        )
+        else {
+            panic!("the removal comes back beside the fault");
+        };
+        assert!(fixture.outbox.terminals.is_empty(), "nothing was removed");
+        assert_eq!(fixture.observed.borrow().key_writes, writes);
+    });
+}
+
+#[test]
+fn a_publication_the_registers_refuse_keeps_its_attempt_in_its_queue() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().hardware_unavailable = true;
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let now = fixture.now();
+        let _submitted = fixture.port.submit(attempt, now, &mut fixture.outbox);
+        let _served = fixture
+            .port
+            .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox);
+        assert_eq!(fixture.port.fault(), Some(Fault::HardwareUnavailable));
+        assert_eq!(fixture.take_completed(), 0, "no terminal");
+        let Poll::Ready(Err(unconfirmed)) = fixture.poll_stop_now() else {
+            panic!("a faulted port's stop is unconfirmed");
+        };
+        assert_eq!(
+            (
+                unconfirmed.observations.queued,
+                unconfirmed.observations.published
+            ),
+            (1, 0),
+            "the attempt waits in its queue, never published"
+        );
+    });
+}
+
+#[test]
 fn a_key_left_installed_is_erased_by_the_reinstall_and_its_slot_takes_the_next_key() {
     with_installations(|mut fixture, installations| {
         fixture.start();

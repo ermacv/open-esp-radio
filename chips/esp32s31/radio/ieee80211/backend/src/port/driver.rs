@@ -833,42 +833,97 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Err(self.back_to_queue(index, pending, refusal));
         }
         let Ok((mut core, admitted_at, key_handle)) = checked else {
-            return Err(refused(PublishStep::Values));
+            return Err(self.requeue(index, pending, refused(PublishStep::Values)));
         };
-        let observations = self
-            .observations
-            .as_mut()
-            .ok_or(refused(PublishStep::Observations))?;
+        // The registers first: a device that holds none takes nothing of
+        // the attempt, which goes back to the head of its queue.
+        let hardware = match device.hardware() {
+            Ok(hardware) => hardware,
+            Err(fault) => return Err(self.requeue(index, pending, fault)),
+        };
+        let Some(observations) = self.observations.as_mut() else {
+            return Err(self.requeue(index, pending, refused(PublishStep::Observations)));
+        };
         let backoff_slots = core.draw_backoff(role, pending.category, observations);
-        let core_ticket = self
-            .tickets
-            .iter_mut()
-            .find_map(Option::take)
-            .ok_or(refused(PublishStep::Ticket))?;
+        let Some(place) = self.tickets.iter_mut().find(|place| place.is_some()) else {
+            return Err(self.requeue(index, pending, refused(PublishStep::Ticket)));
+        };
+        let Some(core_ticket) = place.take() else {
+            return Err(self.requeue(index, pending, refused(PublishStep::Ticket)));
+        };
         let admission = match key_handle {
-            Some(Installed::Transmit(key)) => core
-                .admit_key(key, core_ticket)
-                .map(TxAdmission::Protected)
-                .map_err(|_| refused(PublishStep::KeyAdmission))?,
-            Some(Installed::Receive(_)) => return Err(refused(PublishStep::ReceiveKey)),
+            Some(Installed::Transmit(key)) => match core.admit_key(key, core_ticket) {
+                Ok(key_use) => TxAdmission::Protected(key_use),
+                Err(refusal) => {
+                    *place = Some(refusal.ticket);
+                    return Err(self.requeue(index, pending, refused(PublishStep::KeyAdmission)));
+                }
+            },
+            Some(Installed::Receive(_)) => {
+                *place = Some(core_ticket);
+                return Err(self.requeue(index, pending, refused(PublishStep::ReceiveKey)));
+            }
             None => TxAdmission::Open(core_ticket),
         };
+        // The descriptor before the buffer's lease: a refusal here holds the
+        // admission alone, which goes back as a ticket.
+        let Some(mut slot) = self.descriptors.get_mut(index).and_then(Option::take) else {
+            return Err(self.unadmit(
+                hardware,
+                index,
+                pending,
+                admission,
+                None,
+                refused(PublishStep::Descriptor),
+            ));
+        };
+        if slot.state() != crate::mac::tx::TxDmaState::Free || slot.attached() {
+            return Err(self.unadmit(
+                hardware,
+                index,
+                pending,
+                admission,
+                Some(slot),
+                refused(PublishStep::DescriptorBusy),
+            ));
+        }
         let mpdu = pending.operation.execute().mpdu;
         // The hardware takes the memory through the queue's descriptor; the
         // buffer keeps its return right.
-        let lease = mpdu
-            .buffer
-            .dma
-            .publish()
-            .ok_or(refused(PublishStep::Buffer))?;
-        let mut slot = self
-            .descriptors
-            .get_mut(index)
-            .and_then(Option::take)
-            .ok_or(refused(PublishStep::Descriptor))?;
-        if slot.as_mut().attach(lease).is_err() {
-            return Err(refused(PublishStep::Attach));
+        let Some(lease) = mpdu.buffer.dma.publish() else {
+            return Err(self.unadmit(
+                hardware,
+                index,
+                pending,
+                admission,
+                Some(slot),
+                refused(PublishStep::Buffer),
+            ));
+        };
+        if let Err(lease) = slot.as_mut().attach(lease) {
+            // The lease goes back to the buffer it left, which is published:
+            // its return cannot refuse.
+            let _returned = mpdu.buffer.dma.complete(lease).is_ok();
+            return Err(self.unadmit(
+                hardware,
+                index,
+                pending,
+                admission,
+                Some(slot),
+                refused(PublishStep::Attach),
+            ));
         }
+        if slot.state() != crate::mac::tx::TxDmaState::Free {
+            return self.unwind(
+                hardware,
+                env,
+                index,
+                (pending, admission),
+                slot,
+                PublishStep::DescriptorBusy,
+            );
+        }
+        // Free a moment ago, in the same call: the slot lends its memory.
         let TxSlotAccess::Free(mut memory) = slot.access() else {
             return Err(refused(PublishStep::DescriptorBusy));
         };
@@ -886,7 +941,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 };
                 if let Some(step) = refusal {
                     return self.unwind(
-                        device,
+                        hardware,
                         env,
                         index,
                         (pending, admission),
@@ -899,7 +954,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         #[cfg(test)]
         if core::mem::take(&mut self.refuse_values_for_test) {
             return self.unwind(
-                device,
+                hardware,
                 env,
                 index,
                 (pending, admission),
@@ -907,6 +962,18 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 PublishStep::Values,
             );
         }
+        // The queue before the values that hold the memory: without it the
+        // attempt unwinds whole.
+        let Some(queue) = self.free.get_mut(index).and_then(Option::take) else {
+            return self.unwind(
+                hardware,
+                env,
+                index,
+                (pending, admission),
+                memory.into_slot(),
+                PublishStep::Queue,
+            );
+        };
         let values = MpduValues::checked(
             memory,
             core_mac::MpduParameters {
@@ -932,9 +999,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let values = match values {
             Ok(values) => values,
             Err(refused) => {
+                if let Some(place) = self.free.get_mut(index) {
+                    *place = Some(queue);
+                }
                 let slot = refused.slot.into_slot();
                 return self.unwind(
-                    device,
+                    hardware,
                     env,
                     index,
                     (pending, admission),
@@ -950,10 +1020,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             ticket: pending.operation.ticket().index(),
             buffer: pending.operation.execute().mpdu.buffer.index(),
         };
-        let queue = self.free[index].take().ok_or(refused(PublishStep::Queue))?;
         // Durable backing owns the indivisible operation before publication.
         self.running[index] = Some(pending);
-        if let Err(failed) = core.submit_checked(device.hardware()?, queue, admission, values) {
+        if let Err(failed) = core.submit_checked(hardware, queue, admission, values) {
             let fault = failed.fault;
             core::mem::forget(failed);
             return Err(Fault::Core(fault));
@@ -961,6 +1030,52 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         #[cfg(all(oer_trace, oer_debug_control))]
         oer_portable_trace_recorder::emit(&publication);
         Ok(())
+    }
+    /// Put `pending` back at the head of its queue with `fault`: nothing of
+    /// it was published. A queue without room ends in [`Fault::QueueFull`]
+    /// with the attempt kept at its queue's tail place.
+    fn requeue(&mut self, index: usize, pending: Pending<'id, Id, D, B, O>, fault: Fault) -> Fault {
+        match self.back_to_queue(index, pending, Unpublished::CoreView) {
+            Fault::Unpublished(_) => fault,
+            full => full,
+        }
+    }
+    /// Give a refused publication's admission back as a ticket and its
+    /// descriptor back to its queue's place, then the attempt to the head of
+    /// its queue: `fault` names the refusal. An admission the core does not
+    /// take back is that fault instead.
+    fn unadmit(
+        &mut self,
+        hardware: &mut D::Hardware,
+        index: usize,
+        pending: Pending<'id, Id, D, B, O>,
+        admission: TxAdmission<'id, CorePath<Id>>,
+        slot: Option<Pin<&'static mut TxSlot<B>>>,
+        fault: Fault,
+    ) -> Fault {
+        if let (Some(slot), Some(place)) = (slot, self.descriptors.get_mut(index)) {
+            *place = Some(slot);
+        }
+        let fault = match self.returned_ticket(hardware, pending.role(), admission, fault) {
+            Ok(ticket) => match self.tickets.iter_mut().find(|place| place.is_none()) {
+                Some(place) => {
+                    *place = Some(ticket);
+                    fault
+                }
+                None => {
+                    // More tickets than places, which the installation's
+                    // counts exclude: the ticket, which owns no memory, is
+                    // capacity lost.
+                    drop(ticket);
+                    Fault::Publish {
+                        queue: index as u8,
+                        step: PublishStep::Ticket,
+                    }
+                }
+            },
+            Err(cause) => cause,
+        };
+        self.requeue(index, pending, fault)
     }
     /// Put `pending` back at the head of its queue: nothing of it was
     /// published, and a stop withdraws it there.
@@ -995,7 +1110,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// quarantine.
     fn unwind(
         &mut self,
-        device: &mut D,
+        hardware: &mut D::Hardware,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
         (mut pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
@@ -1006,29 +1121,39 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             queue: index as u8,
             step,
         };
-        let memory = slot.as_mut().detach().and_then(|memory| {
+        let Some(memory) = slot.as_mut().detach() else {
+            // The memory stays attached to its descriptor: every owner goes
+            // back to its place with the fault.
+            return Err(self.unadmit(hardware, index, pending, admission, Some(slot), terminal));
+        };
+        {
             let buffer = &mut pending.operation.execute().mpdu.buffer;
-            buffer.dma.complete(memory).ok()
-        });
-        if memory.is_none() {
-            core::mem::forget((pending, admission));
-            return Err(terminal);
+            // The buffer is published, so its memory's return cannot
+            // refuse.
+            let _returned = buffer.dma.complete(memory).is_ok();
         }
-        let ticket = match self.returned_ticket(device, pending.role(), admission, terminal) {
+        let ticket = match self.returned_ticket(hardware, pending.role(), admission, terminal) {
             Ok(ticket) => ticket,
             Err(fault) => {
-                core::mem::forget(pending);
-                return Err(fault);
+                if let Some(place) = self.descriptors.get_mut(index) {
+                    *place = Some(slot);
+                }
+                return Err(self.requeue(index, pending, fault));
             }
         };
-        let descriptor = self.descriptors.get_mut(index);
-        let free = self.tickets.iter_mut().find(|place| place.is_none());
-        let (Some(descriptor), Some(free)) = (descriptor, free) else {
-            core::mem::forget((pending, ticket));
-            return Err(terminal);
-        };
-        *descriptor = Some(slot);
-        *free = Some(ticket);
+        if let Some(place) = self.descriptors.get_mut(index) {
+            *place = Some(slot);
+        }
+        match self.tickets.iter_mut().find(|place| place.is_none()) {
+            Some(place) => *place = Some(ticket),
+            None => {
+                // More tickets than places, which the installation's counts
+                // exclude: the ticket, which owns no memory, is capacity
+                // lost; the attempt waits in its queue with the fault.
+                drop(ticket);
+                return Err(self.requeue(index, pending, terminal));
+            }
+        }
         self.finish(
             env,
             pending,
@@ -1043,7 +1168,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// and the sink stays empty.
     fn returned_ticket(
         &mut self,
-        device: &mut D,
+        hardware: &mut D::Hardware,
         role: VifRole,
         admission: TxAdmission<'id, CorePath<Id>>,
         terminal: Fault,
@@ -1056,13 +1181,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let Some(mut core) = core else {
             core::mem::forget(admission);
             return Err(terminal);
-        };
-        let hardware = match device.hardware() {
-            Ok(hardware) => hardware,
-            Err(fault) => {
-                core::mem::forget(admission);
-                return Err(fault);
-            }
         };
         let mut sink = Sink::default();
         let ticket = match core.return_admission(hardware, admission, &mut sink) {

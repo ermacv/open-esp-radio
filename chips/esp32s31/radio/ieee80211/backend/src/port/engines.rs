@@ -978,23 +978,23 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.settings.he = None;
         }
         if self.settings.block_acks_dirty {
-            for (index, old) in driver.applied_ba.iter_mut().enumerate() {
+            // The registers before any agreement changes: a device that holds
+            // none leaves every applied record as it was.
+            let hardware = self.device.hardware()?;
+            for (index, applied) in driver.applied_ba.iter_mut().enumerate() {
                 let wanted = self.settings.block_acks.get(index).copied().flatten();
-                if *old == wanted {
+                if *applied == wanted {
                     continue;
                 }
-                if let Some(old) = old.take() {
-                    view.end_checked_rx_block_ack(
-                        self.device.hardware()?,
-                        old.role,
-                        old.peer,
-                        old.tid,
-                    )?;
+                if let Some(old) = *applied {
+                    view.end_checked_rx_block_ack(&mut *hardware, old.role, old.peer, old.tid)?;
+                    // Ended: the record follows the bank.
+                    *applied = None;
                 }
                 if let Some(agreement) = wanted {
-                    view.start_checked_rx_block_ack(self.device.hardware()?, agreement)?;
+                    view.start_checked_rx_block_ack(&mut *hardware, agreement)?;
                 }
-                *old = wanted;
+                *applied = wanted;
             }
             self.settings.block_acks_dirty = false;
         }
