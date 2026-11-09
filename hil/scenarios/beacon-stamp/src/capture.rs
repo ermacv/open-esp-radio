@@ -124,51 +124,61 @@ struct Radiotap {
     mcs: Option<[u8; 3]>,
 }
 
-/// The radiotap header of `packet`, every read bounded by its `it_len`:
-/// the presence words and each field must lie inside the header. A
-/// presence word past `it_len` leaves every field unknown; a field past it
-/// leaves that field and every later one unknown, never a value from the
-/// frame body. `None` only for a header that is no radiotap header: an
-/// unknown version, an `it_len` shorter than its first presence word or
-/// longer than the packet.
-fn radiotap(packet: &[u8]) -> Option<Radiotap> {
-    if *packet.first()? != 0 {
-        return None;
+/// The radiotap header of `packet`, every read bounded by its `it_len`.
+/// A field the presence words do not declare is absent. The header is
+/// refused, with its reason, for an unknown version, an `it_len` shorter
+/// than the first presence word or longer than the packet, and a declared
+/// presence word or field that does not fit within `it_len`: such a record
+/// is malformed, never read with unknown fields or with octets of its frame.
+fn radiotap(packet: &[u8]) -> Result<Radiotap, String> {
+    if packet.first() != Some(&0) {
+        return Err("radiotap version is not 0".into());
     }
-    let length = usize::from(u16_at(packet, 2, false)?);
+    let length = usize::from(u16_at(packet, 2, false).ok_or("radiotap it_len is cut")?);
     if length < 8 || length > packet.len() {
-        return None;
+        return Err(format!(
+            "radiotap it_len {length} is outside 8..={}",
+            packet.len()
+        ));
     }
-    let bounded = packet.get(..length)?;
+    let bounded = packet.get(..length).ok_or("radiotap it_len is cut")?;
     let mut header = Radiotap {
         length,
         ..Radiotap::default()
     };
-    let Some(present) = u32_at(bounded, 4, false) else {
-        return Some(header);
-    };
+    let present = u32_at(bounded, 4, false).ok_or("radiotap presence word is cut")?;
     let mut words = 1usize;
     let mut last = present;
     while last & 0x8000_0000 != 0 {
-        let Some(next) = words
+        let at = words
             .checked_mul(4)
             .and_then(|offset| offset.checked_add(4))
-            .and_then(|at| u32_at(bounded, at, false))
-        else {
-            return Some(header);
-        };
-        last = next;
-        words = words.checked_add(1)?;
+            .ok_or("radiotap presence words overflow")?;
+        last = u32_at(bounded, at, false).ok_or_else(|| {
+            format!("radiotap presence word {words} at {at} lies past it_len {length}")
+        })?;
+        words = words
+            .checked_add(1)
+            .ok_or("radiotap presence words overflow")?;
     }
-    let mut at = 4usize.checked_add(words.checked_mul(4)?)?;
+    let mut at = words
+        .checked_mul(4)
+        .and_then(|size| size.checked_add(4))
+        .ok_or("radiotap presence words overflow")?;
     for (bit, (align, size)) in FIELDS.iter().enumerate() {
         if present & (1 << bit) == 0 {
             continue;
         }
-        at = at.checked_add(align - 1)? / align * align;
-        let Some(field) = at.checked_add(*size).and_then(|end| bounded.get(at..end)) else {
-            break;
-        };
+        let start = at
+            .checked_add(align - 1)
+            .map(|padded| padded / align * align)
+            .ok_or("radiotap field offset overflows")?;
+        let end = start
+            .checked_add(*size)
+            .ok_or("radiotap field offset overflows")?;
+        let field = bounded.get(start..end).ok_or_else(|| {
+            format!("radiotap field {bit} at {start}..{end} lies past it_len {length}")
+        })?;
         match bit {
             0 => header.tsft = u64_le(field, 0),
             1 => header.flags = field.first().copied().unwrap_or(0),
@@ -176,9 +186,9 @@ fn radiotap(packet: &[u8]) -> Option<Radiotap> {
             19 => header.mcs = field.try_into().ok(),
             _ => {}
         }
-        at = at.checked_add(*size)?;
+        at = end;
     }
-    Some(header)
+    Ok(header)
 }
 
 /// The PHY a radiotap header describes, as mac80211 v6.18.26 writes it
@@ -315,9 +325,7 @@ fn parse_with(bytes: &[u8], partial_tail: bool) -> Result<Capture, String> {
         };
         at = end;
         index = index.saturating_add(1);
-        let Some(header) = radiotap(packet) else {
-            return Err(format!("record {index} has no valid radiotap header"));
-        };
+        let header = radiotap(packet).map_err(|reason| format!("record {index}: {reason}"))?;
         let (length, flags) = (header.length, header.flags);
         if flags & FLAG_BAD_FCS != 0 {
             capture.bad_fcs = capture.bad_fcs.saturating_add(1);
@@ -518,10 +526,20 @@ mod tests {
         packet
     }
 
+    /// The record alone as a complete capture, and the same record followed
+    /// by an incomplete last record, as a live capture.
+    fn both_ways(record: Vec<u8>) -> (Result<Capture, String>, Result<Capture, String>) {
+        let whole = synthetic::file(std::slice::from_ref(&record));
+        let mpdu = synthetic::mpdu(0x80, TA, 2, TAG);
+        let mut live = synthetic::file(&[record, synthetic::record(4, &mpdu)]);
+        live.truncate(live.len() - 3);
+        (parse(&whole), parse_prefix(&live))
+    }
+
     #[test]
-    fn the_owners_rate_past_it_len_is_no_rate_from_the_frame_body() {
+    fn the_owners_rate_declared_past_it_len_refuses_the_record() {
         // 17 octets: version, pad, length, presence (TSFT, Flags, Rate),
-        // TSFT at 8..16, Flags at 16; the Rate would be at 17, past it_len.
+        // TSFT at 8..16, Flags at 16; the declared Rate would be at 17.
         let mut header = vec![0, 0, 0, 0];
         header.extend_from_slice(&0b111u32.to_le_bytes());
         header.extend_from_slice(&77u64.to_le_bytes());
@@ -529,41 +547,44 @@ mod tests {
         // The MPDU's first octet, 0x02 (1 Mb/s as a Rate), right after.
         let mut mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
         mpdu[0] = 0x02;
-        let capture = parse(&synthetic::file(&[record_of(&header, 17, &mpdu)])).unwrap();
-        let frame = &capture.frames[0];
-        assert_eq!(frame.tsft, 77);
-        assert_eq!(frame.phy, ObservedPhy::Missing);
-        assert_eq!(frame.frame_control, 0x02);
+        let (whole, live) = both_ways(record_of(&header, 17, &mpdu));
+        let reason = whole.unwrap_err();
+        assert!(
+            reason.contains("record 1") && reason.contains("field 2"),
+            "{reason}"
+        );
+        assert!(live.unwrap_err().contains("field 2"));
     }
 
     #[test]
-    fn extended_presence_words_past_it_len_leave_every_field_unknown() {
+    fn the_owners_presence_word_declared_past_it_len_refuses_the_record() {
         // A first word announcing a second one, with it_len 8: the second
-        // word, and the TSFT, would lie in the frame body.
+        // word would lie in the frame body.
         let mut header = vec![0, 0, 0, 0];
         header.extend_from_slice(&(0x8000_0007u32).to_le_bytes());
         let mut mpdu = 0x0000_0001u32.to_le_bytes().to_vec();
         mpdu.extend_from_slice(&synthetic::mpdu(0x80, TA, 1, TAG));
-        let capture = parse(&synthetic::file(&[record_of(&header, 8, &mpdu)])).unwrap();
-        assert!(capture.frames.is_empty());
-        assert_eq!(capture.without_tsft, 1);
+        let (whole, live) = both_ways(record_of(&header, 8, &mpdu));
+        let reason = whole.unwrap_err();
+        assert!(reason.contains("presence word 1"), "{reason}");
+        assert!(live.unwrap_err().contains("presence word 1"));
     }
 
     #[test]
-    fn an_mcs_field_cut_by_it_len_is_no_phy() {
+    fn an_mcs_field_declared_past_it_len_refuses_the_record() {
         // TSFT 8..16, Flags 16, MCS 17..20, but it_len 19.
         let mut header = vec![0, 0, 0, 0];
         header.extend_from_slice(&(0x3u32 | 1 << 19).to_le_bytes());
         header.extend_from_slice(&5u64.to_le_bytes());
         header.extend_from_slice(&[0, 0x07, 0x00]);
         let mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
-        let capture = parse(&synthetic::file(&[record_of(&header, 19, &mpdu)])).unwrap();
-        assert_eq!(capture.frames[0].phy, ObservedPhy::Missing);
-        assert_eq!(capture.frames[0].tsft, 5);
+        let (whole, live) = both_ways(record_of(&header, 19, &mpdu));
+        assert!(whole.unwrap_err().contains("field 19"));
+        assert!(live.unwrap_err().contains("field 19"));
         // Whole, the same field is read.
-        let mut whole = header.clone();
-        whole.push(0);
-        let capture = parse(&synthetic::file(&[record_of(&whole, 20, &mpdu)])).unwrap();
+        let mut complete = header.clone();
+        complete.push(0);
+        let capture = parse(&synthetic::file(&[record_of(&complete, 20, &mpdu)])).unwrap();
         assert_eq!(
             capture.frames[0].phy,
             ObservedPhy::Phy(Phy::HtMixed { mcs: 0 })
@@ -571,13 +592,33 @@ mod tests {
     }
 
     #[test]
-    fn a_tsft_past_it_len_is_no_tsft() {
+    fn a_tsft_declared_past_it_len_refuses_the_record() {
         let mut header = vec![0, 0, 0, 0];
         header.extend_from_slice(&1u32.to_le_bytes());
         let mut mpdu = 9u64.to_le_bytes().to_vec();
         mpdu.extend_from_slice(&synthetic::mpdu(0x80, TA, 1, TAG));
-        let capture = parse(&synthetic::file(&[record_of(&header, 8, &mpdu)])).unwrap();
-        assert_eq!(capture.without_tsft, 1);
+        let (whole, live) = both_ways(record_of(&header, 8, &mpdu));
+        assert!(whole.unwrap_err().contains("field 0"));
+        assert!(live.unwrap_err().contains("field 0"));
+    }
+
+    #[test]
+    fn a_field_the_presence_words_do_not_declare_is_absent() {
+        // TSFT and Flags only: no Rate and no MCS, accepted with no PHY.
+        let mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
+        let capture = parse(&synthetic::file(&[synthetic::record(3, &mpdu)])).unwrap();
+        assert_eq!(capture.frames[0].phy, ObservedPhy::Missing);
+        assert_eq!(capture.frames[0].tsft, 3);
+    }
+
+    #[test]
+    fn a_live_capture_leaves_out_only_its_incomplete_last_record() {
+        let mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
+        let (whole, live) = both_ways(synthetic::record(3, &mpdu));
+        assert_eq!(whole.unwrap().frames.len(), 1);
+        let live = live.unwrap();
+        assert_eq!(live.frames.len(), 1);
+        assert_eq!(live.frames[0].tsft, 3);
     }
 
     #[test]

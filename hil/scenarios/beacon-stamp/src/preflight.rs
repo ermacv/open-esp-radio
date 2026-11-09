@@ -76,11 +76,12 @@ pub struct Preflight {
     pub evidence: latch::Evidence,
 }
 
-/// Whether the capture holds every calibration frame of the first boot.
-fn calibrated(bytes: &[u8]) -> Option<latch::Pairs> {
-    let capture = capture::parse_prefix(bytes).ok()?;
+/// Whether the capture holds every calibration frame of the first boot;
+/// a malformed record refuses it.
+fn calibrated(bytes: &[u8]) -> Result<Option<latch::Pairs>> {
+    let capture = capture::parse_prefix(bytes)?;
     let found = latch::pairs(&capture, None);
-    (found.seen() >= latch::FRAMES).then_some(found)
+    Ok((found.seen() >= latch::FRAMES).then_some(found))
 }
 
 /// Look at the capture until it is accepted or refused, within `WINDOW`;
@@ -103,7 +104,7 @@ pub fn wait<C, S: Sniffer<C>>(sniffer: &mut S) -> Result<Preflight> {
     };
     let found = loop {
         let bytes = sniffer.captured()?;
-        if let Some(found) = calibrated(&bytes) {
+        if let Some(found) = calibrated(&bytes)? {
             break found;
         }
         if Instant::now() >= deadline {
@@ -153,6 +154,23 @@ mod tests {
     fn three_tagged_frames_with_tsft_are_accepted() {
         let bytes = synthetic::file(&[tagged(0), tagged(1), tagged(2)]);
         assert_eq!(look(&bytes), Look::Accepted { frames: 3 });
+    }
+
+    #[test]
+    fn a_record_whose_declared_field_lies_past_it_len_refuses_at_once() {
+        // A TSFT declared with it_len 8, then the tagged frames whole.
+        let mut malformed = vec![0, 0, 8, 0];
+        malformed.extend_from_slice(&1u32.to_le_bytes());
+        malformed.extend_from_slice(&tagged(9)[8..]);
+        let bytes = synthetic::file(&[tagged(0), malformed, tagged(1), tagged(2)]);
+        let Look::Refused(reason) = look(&bytes) else {
+            panic!("a malformed record was not refused");
+        };
+        assert!(
+            reason.contains("record 2") && reason.contains("past it_len"),
+            "{reason}"
+        );
+        assert!(calibrated(&bytes).is_err());
     }
 
     #[test]

@@ -118,10 +118,6 @@ impl ManualClock {
         self.change(|state| state.consumed += bytes);
     }
 
-    pub fn delivered(&self) -> u64 {
-        self.lock().delivered
-    }
-
     /// Wake whoever waits: something the clock does not see changed.
     pub fn poke(&self) {
         self.change(|_| {});
