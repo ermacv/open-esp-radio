@@ -82,7 +82,7 @@
 use oer_portable_time::Clock;
 
 use crate::{
-    Access, BootFailure, Busy,
+    Access, BootFailure, Busy, WaitFailure,
     wait::{BootDeadline, BootWait},
 };
 
@@ -381,20 +381,15 @@ where
     if autoload {
         registers.set_autoload(Access::new(), false);
     }
-    let idle = [
-        (
-            waits.autoload,
-            R::autoload_done as fn(&R, Access<'_>) -> bool,
-        ),
-        (waits.preload, R::preload_done),
-        (waits.sync, R::sync_done),
-        (waits.lock, R::lock_done),
-    ];
-    for (wait, idle) in idle {
-        if let Err(failure) = deadline.poll(wait, || idle(registers, Access::new()).then_some(())) {
-            undo(registers, autoload, false, reopen);
-            return Err(failure.into());
-        }
+    // Each wait calls its accessor directly: the first failure ends the
+    // sequence, and the later waits never run.
+    let idle = wait_idle(&*registers, waits.autoload, deadline, R::autoload_done)
+        .and_then(|()| wait_idle(&*registers, waits.preload, deadline, R::preload_done))
+        .and_then(|()| wait_idle(&*registers, waits.sync, deadline, R::sync_done))
+        .and_then(|()| wait_idle(&*registers, waits.lock, deadline, R::lock_done));
+    if let Err(failure) = idle {
+        undo(registers, autoload, false, reopen);
+        return Err(failure.into());
     }
     registers.select_freeze_mode_zero(Access::new());
     registers.set_freeze(Access::new(), true);
@@ -412,6 +407,20 @@ where
         return Err(failure.into());
     }
     Ok(autoload)
+}
+
+/// Poll `idle` on `registers` under `wait` and the boot's `deadline`. Each
+/// accessor is its own type parameter, so every call to it is direct.
+fn wait_idle<R, C>(
+    registers: &R,
+    wait: BootWait,
+    deadline: &BootDeadline<'_, C>,
+    idle: impl Fn(&R, Access<'_>) -> bool,
+) -> Result<(), WaitFailure>
+where
+    C: Clock + ?Sized,
+{
+    deadline.poll(wait, || idle(registers, Access::new()).then_some(()))
 }
 
 /// Undo a suspension: thaw if still frozen, open the instruction bus, then
