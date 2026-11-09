@@ -25,7 +25,7 @@ where
     pub(super) fn station_tx<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         transmit: StationTx<'id, D>,
-        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
     ) -> Result<(), Failed<'id, D>> {
         let StationTx {
             ticket,
@@ -174,15 +174,12 @@ where
         // its terminal returns the owners to the lifecycle like any other,
         // and the station hears the frame did not go.
         let mut outbox = super::turn::Outbox {
-            from_actor: &lifecycle.from_actor,
-            returns: &lifecycle.returns,
+            from_actor: &mut lifecycle.from_actor,
+            returns: &mut lifecycle.returns,
             stage: &mut self.stage,
             grouped: false,
         };
         let _refused = self.port.submit(admitted, self.now, &mut outbox);
-        match self.stage.overflow.take() {
-            Some(violation) => Err(ActorFault::Contract(violation)),
-            None => Ok(()),
-        }
+        Ok(())
     }
 }

@@ -382,9 +382,6 @@ pub enum ActorViolation {
     /// the lifecycle lent one while the actor kept another, asked for a key
     /// the actor does not keep, or retired the actor while it kept one.
     PairwiseCustody,
-    /// A group mutation's receive cut drained more units than the actor
-    /// stages; the unit stays with the actor.
-    CutOverflow,
     /// The receive reordering lost its delivery order.
     ReorderOverflow,
 }

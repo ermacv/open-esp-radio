@@ -29,16 +29,27 @@ enum Seen<'id, Id: radio::SlotIdentity + 'id> {
 /// A sink that keeps cut units and terminals in one ordered list.
 struct Ordered<'id, Id: radio::SlotIdentity + 'id>(Vec<Seen<'id, Id>>);
 impl<'id, Id: radio::SlotIdentity + 'id> PortSink<'id, Family<Id>> for Ordered<'id, Id> {
-    fn terminal(&mut self, terminal: LowerMacTerminal<'id, Family<Id>>) {
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'id, Family<Id>>,
+    ) -> Result<(), LowerMacTerminal<'id, Family<Id>>> {
         self.0.push(Seen::Terminal(terminal));
+        Ok(())
     }
     fn tbtt(&mut self, _: TbttEvent) {}
     fn received(
         &mut self,
         frame: ReceiveBuffer<'id, Id, TestReceive>,
         _: crate::lower_mac::Esp32s31RxMeta,
-    ) {
+    ) -> Result<
+        (),
+        (
+            ReceiveBuffer<'id, Id, TestReceive>,
+            crate::lower_mac::Esp32s31RxMeta,
+        ),
+    > {
         self.0.push(Seen::Received(frame));
+        Ok(())
     }
 }
 

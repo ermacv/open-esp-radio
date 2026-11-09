@@ -229,6 +229,12 @@ impl<'id, C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'id, Kind, Path>, M, 
         }
     }
 
+    /// The index of the terminal's ticket in its pool, without releasing
+    /// any owner: the place a port keeps a terminal its sink refused.
+    pub fn ticket_index(&self) -> u8 {
+        self.operation.ticket.index()
+    }
+
     /// Recover the owners using the consumer authority for this ticket pool.
     /// A backend can create and forward terminals, but cannot reopen them.
     pub fn into_parts(

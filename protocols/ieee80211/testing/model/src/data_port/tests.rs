@@ -51,18 +51,37 @@ struct Sink<'s> {
     received: Vec<(ModelRxBuffer<'s, LocalId<'s>>, ModelRxMeta)>,
     tbtt: usize,
     order: Vec<Put>,
+    /// How many of the next terminals and units it refuses.
+    refuse: usize,
 }
 impl<'s> PortSink<'s, Types<'s>> for Sink<'s> {
-    fn terminal(&mut self, terminal: LowerMacTerminal<'s, Types<'s>>) {
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'s, Types<'s>>,
+    ) -> Result<(), LowerMacTerminal<'s, Types<'s>>> {
+        if let Some(left) = self.refuse.checked_sub(1) {
+            self.refuse = left;
+            return Err(terminal);
+        }
         self.terminals.push(terminal);
         self.order.push(Put::Terminal);
+        Ok(())
     }
     fn tbtt(&mut self, _: oer_protocols_ieee80211_contracts_port::TbttEvent) {
         self.tbtt += 1;
     }
-    fn received(&mut self, frame: ModelRxBuffer<'s, LocalId<'s>>, meta: ModelRxMeta) {
+    fn received(
+        &mut self,
+        frame: ModelRxBuffer<'s, LocalId<'s>>,
+        meta: ModelRxMeta,
+    ) -> Result<(), (ModelRxBuffer<'s, LocalId<'s>>, ModelRxMeta)> {
+        if let Some(left) = self.refuse.checked_sub(1) {
+            self.refuse = left;
+            return Err((frame, meta));
+        }
         self.received.push((frame, meta));
         self.order.push(Put::Received);
+        Ok(())
     }
 }
 
@@ -171,6 +190,7 @@ impl<'s> Harness<'s> {
                 received: Vec::new(),
                 tbtt: 0,
                 order: Vec::new(),
+                refuse: 0,
             },
             tickets,
             small,
@@ -1725,3 +1745,120 @@ fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication(
 
 mod access_point;
 mod station_stale;
+
+/// Stop the harness's radio, serving and moving time until it confirms.
+fn stop_radio(harness: &mut Harness<'_>) {
+    for _ in 0..64 {
+        let (now, waker) = harness.now_wake();
+        match harness
+            .port
+            .poll_stop(&mut Context::from_waker(&waker), now)
+        {
+            Poll::Ready(result) => return result.unwrap(),
+            Poll::Pending => {
+                let _arena = harness.service();
+                harness.advance(oer_portable_time::Duration::from_millis(10));
+            }
+        }
+    }
+    panic!("the stop confirms");
+}
+
+/// The tickets of the single-MPDU terminals the sink holds, in its order.
+fn completed_tickets(harness: &Harness<'_>) -> Vec<u8> {
+    harness
+        .sink
+        .terminals
+        .iter()
+        .filter_map(|terminal| match terminal {
+            LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
+                Some(completed.ticket_index())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_refused_terminal_is_kept_and_offered_again_first_once_the_sink_has_room() {
+    with_harness(|harness| {
+        harness.start();
+        let now = harness.now();
+        let first = harness.mpdu().unwrap();
+        let second = harness.mpdu().unwrap();
+        let (first_ticket, second_ticket) = (
+            <Harness<'_> as DataPortHarness<'_>>::identity(&first),
+            <Harness<'_> as DataPortHarness<'_>>::identity(&second),
+        );
+        assert!(harness.port.submit(first, now, &mut harness.sink).is_ok());
+        assert!(harness.port.submit(second, now, &mut harness.sink).is_ok());
+        harness.sink.refuse = 1;
+        for _ in 0..8 {
+            if harness.sink.refuse == 0 {
+                break;
+            }
+            let _arena = harness.service();
+            harness.advance(oer_portable_time::Duration::from_millis(1));
+        }
+        assert_eq!(harness.sink.refuse, 0, "the sink refused a terminal");
+        // The first terminal was refused: it and the one behind it wait.
+        assert!(harness.sink.terminals.is_empty());
+        // What the port keeps makes nothing due: the sink owns the wake.
+        let now = harness.now();
+        assert!(harness.port.deadline().is_none_or(|at| at > now));
+        // Before a confirmed stop the port offers them itself.
+        assert_eq!(
+            harness.port.take_unconsumed(&mut harness.sink),
+            Err(UnconsumedRefused::NotStopped)
+        );
+        for _ in 0..8 {
+            let _arena = harness.service();
+            harness.advance(oer_portable_time::Duration::from_millis(1));
+        }
+        assert_eq!(completed_tickets(harness), [first_ticket, second_ticket]);
+        assert_eq!(harness.take_completed(), 2);
+    });
+}
+
+#[test]
+fn terminals_kept_at_a_confirmed_stop_leave_only_through_take_unconsumed_each_once() {
+    with_harness(|harness| {
+        harness.start();
+        let now = harness.now();
+        let attempt = harness.mpdu().unwrap();
+        let ticket = <Harness<'_> as DataPortHarness<'_>>::identity(&attempt);
+        assert!(harness.port.submit(attempt, now, &mut harness.sink).is_ok());
+        harness.sink.refuse = 1;
+        for _ in 0..8 {
+            if harness.sink.refuse == 0 {
+                break;
+            }
+            let _arena = harness.service();
+            harness.advance(oer_portable_time::Duration::from_millis(1));
+        }
+        assert_eq!(harness.sink.refuse, 0, "the sink refused a terminal");
+        assert!(harness.sink.terminals.is_empty());
+        stop_radio(harness);
+        // After the confirmed stop the port's other calls offer nothing it
+        // keeps.
+        let _arena = harness.service();
+        assert!(harness.sink.terminals.is_empty());
+        // Refused again, it stays; then it leaves once.
+        harness.sink.refuse = 1;
+        assert_eq!(
+            harness.port.take_unconsumed(&mut harness.sink),
+            Ok(Unconsumed::Kept)
+        );
+        assert!(harness.sink.terminals.is_empty());
+        assert_eq!(
+            harness.port.take_unconsumed(&mut harness.sink),
+            Ok(Unconsumed::None)
+        );
+        assert_eq!(completed_tickets(harness), [ticket]);
+        assert_eq!(
+            harness.port.take_unconsumed(&mut harness.sink),
+            Ok(Unconsumed::None)
+        );
+        assert_eq!(harness.take_completed(), 1);
+    });
+}

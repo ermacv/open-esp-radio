@@ -33,7 +33,14 @@ start's cause and the stop's observation: the port is stopping, and
 (`PortCommands`), which mints the identity the installed key will carry.
 Terminals, TBTTs and the units a group mutation's receive cut drained go to
 the turn's `PortSink`, in the order the port produced them; a data arena's
-end returns from `service_tx` itself. `PortTypes` (module `types`) names
+end returns from `service_tx` itself. A sink may refuse a terminal or a unit
+it has no room for (`PortSink::terminal` / `received` return it): the port
+keeps it whole in a place of its own token and offers what it keeps again,
+oldest first and before anything newer, at its next call with a sink while
+the radio has not confirmed a stop; after a confirmed stop only
+`DataPort::take_unconsumed` offers it, each once. The port signals nothing
+for what it keeps: the refusing sink registers its own wake for room and
+checks its room again before its task sleeps. `PortTypes` (module `types`) names
 the types the port's owners and terminals carry:
 
 - **Tickets and buffers.** A transmission takes a ticket (a place in

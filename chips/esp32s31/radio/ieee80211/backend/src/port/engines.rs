@@ -28,7 +28,7 @@ use oer_protocols_ieee80211_contracts_port::{
     PortArena, PortCommand, PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer,
     PortRxPull, PortSink, ReceiveAccounting, ReceiveOperation, RecycleRefused, RxPull,
     StartFailure, StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed,
-    SubmitRefusal, TxFacts,
+    SubmitRefusal, TxFacts, Unconsumed, UnconsumedRefused,
 };
 use oer_protocols_radio_port::{Installation as Receipt, Installations, Minted};
 
@@ -381,6 +381,8 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     waker: Option<core::task::Waker>,
     /// The first contract fault: every later call answers with it.
     fault: Option<Fault>,
+    /// What a sink refused, kept whole until a sink takes it.
+    unconsumed: unconsumed::Store<'id, Id, D, B, O>,
 }
 
 /// How far the S31 port took a station command.
@@ -424,6 +426,19 @@ struct PortEnv<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Obser
     shared: &'static PortSharedStorage<B, D::Lent>,
     loan: Loan<'id, Id, D, B, O>,
     sink: &'a mut S,
+    /// What the sink refused, which the port keeps.
+    unconsumed: &'a mut unconsumed::Store<'id, Id, D, B, O>,
+}
+
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, S>
+    PortEnv<'_, 'id, Id, D, B, O, S>
+where
+    S: PortSink<'id, Types<Id, D, B, O>>,
+{
+    /// Give `item` to the sink behind what the port keeps.
+    fn deliver(&mut self, item: unconsumed::Item<'id, Id, D, B, O>) {
+        self.unconsumed.deliver(self.sink, item);
+    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, S>
@@ -447,7 +462,8 @@ where
         *self.expired = self.expired.saturating_add(msdus);
     }
     fn tx_completed(&mut self, _: u8, completed: brand::OwnedTxCompleted<'static, Id, D, B, O>) {
-        self.sink.terminal(completed.lend(&self.loan));
+        let terminal = completed.lend(&self.loan);
+        self.deliver(unconsumed::Item::Terminal(terminal));
     }
     fn tbtt(&mut self, event: TbttEvent) {
         self.sink.tbtt(event);
@@ -457,7 +473,7 @@ where
         frame: ReceiveBuffer<'static, Id, D::Receive>,
         meta: Esp32s31RxMeta,
     ) -> Result<(), Fault> {
-        self.sink.received(frame.lend(), meta);
+        self.deliver(unconsumed::Item::Received(frame.lend(), meta));
         Ok(())
     }
     fn serial(&mut self) -> u64 {
@@ -635,6 +651,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             core_disabled: false,
             waker: None,
             fault: prepared.err(),
+            unconsumed: unconsumed::Store::new(),
         };
         PortInstallation {
             port,
@@ -869,6 +886,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             && self.fault.is_none()
             && self.rx_out.get() == 0
             && !self.driver.removal_waits()
+            && self.unconsumed.is_empty()
             && self.shared.returned.none_out()
             && self.driver.queues.iter().all(|queue| queue.is_empty())
             && self.driver.running.iter().all(Option::is_none)
@@ -885,7 +903,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> Result<(), Fault> {
         for place in 0..self.driver.keys.len() {
             if let Some(terminal) = self.driver.finished_removal(place) {
-                sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                self.unconsumed.deliver(
+                    sink,
+                    unconsumed::Item::Terminal(
+                        brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
+                    ),
+                );
             }
         }
         Ok(())
@@ -935,7 +958,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             Some(fault) => Err(fault),
             // A received buffer dropped unrecycled marks its allocation lost.
             None if self.shared.lost() => Err(Fault::ReceiveLost),
+            None if self.unconsumed.broken() => Err(Fault::UnconsumedPlace),
             None => Ok(()),
+        }
+    }
+
+    /// Offer what a sink refused again, oldest first, while the radio has
+    /// not confirmed a stop; after a confirmed stop only
+    /// [`DataPort::take_unconsumed`] does.
+    fn reoffer(&mut self, sink: &mut impl PortSink<'id, Types<Id, D, B, O>>) {
+        if self.state != PortState::Stopped {
+            let _kept: Unconsumed = self.unconsumed.offer(sink);
         }
     }
 
@@ -970,6 +1003,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 shared: self.shared,
                 loan: self.loan,
                 sink,
+                unconsumed: &mut self.unconsumed,
             },
         )
     }
@@ -1212,8 +1246,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         if driver.withdraw(&mut env)
             && let Some(permission) = driver.configuring.take()
         {
-            env.sink
-                .terminal(brand::OwnedTerminal::Configured(permission).lend(&loan));
+            env.deliver(unconsumed::Item::Terminal(
+                brand::OwnedTerminal::Configured(permission).lend(&loan),
+            ));
         }
         Ok(())
     }
@@ -1231,7 +1266,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         {
             let gate = self.gate.close(gate);
             self.driver.closed = true;
-            sink.terminal(LowerMacTerminal::GateClosed(gate.lend(&self.loan)));
+            self.unconsumed.deliver(
+                sink,
+                unconsumed::Item::Terminal(LowerMacTerminal::GateClosed(gate.lend(&self.loan))),
+            );
         }
         Ok(())
     }
@@ -1594,7 +1632,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     // The mutation ran: its terminal says so, and the fault
                     // of the receive path's resume follows it.
                     if let Some(terminal) = terminal {
-                        sink.terminal(terminal.lend(&loan));
+                        self.unconsumed
+                            .deliver(sink, unconsumed::Item::Terminal(terminal.lend(&loan)));
                     }
                     return Err(self.record(cause));
                 }
@@ -1610,7 +1649,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 // A removal whose key's last use is out ends at a later
                 // service ([`Self::deliver_removals`]).
                 if let Some(terminal) = terminal {
-                    sink.terminal(terminal.lend(&loan));
+                    self.unconsumed
+                        .deliver(sink, unconsumed::Item::Terminal(terminal.lend(&loan)));
                 }
                 Ok(GroupStep::Done)
             }
@@ -1857,12 +1897,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     });
                 }
                 identity.activity.set(identity.serial);
-                sink.terminal(
-                    brand::OwnedTerminal::PairwiseKeyInstalled(brand::OwnedInstalledPairwise::new(
-                        identity.role,
-                        identity,
-                    ))
-                    .lend(&self.loan),
+                self.unconsumed.deliver(
+                    sink,
+                    unconsumed::Item::Terminal(
+                        brand::OwnedTerminal::PairwiseKeyInstalled(
+                            brand::OwnedInstalledPairwise::new(identity.role, identity),
+                        )
+                        .lend(&self.loan),
+                    ),
                 );
                 Ok(CommandProgress::Done)
             }
@@ -1903,7 +1945,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 // A removal whose key's last use is out ends at a later
                 // service ([`Self::deliver_removals`]).
                 if let Some(terminal) = terminal {
-                    sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                    self.unconsumed.deliver(
+                        sink,
+                        unconsumed::Item::Terminal(
+                            brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
+                        ),
+                    );
                 }
                 Ok(CommandProgress::Done)
             }
@@ -2126,6 +2173,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault> {
+        self.reoffer(sink);
         self.check()?;
         self.now = now;
         if !matches!(
@@ -2181,6 +2229,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<(), SubmitRefusal> {
+        self.reoffer(sink);
         let reason = match self.state {
             PortState::Running if self.check().is_ok() => None,
             PortState::Stopping { .. } | PortState::Recovering => Some(SubmitRefusal::Stopping),
@@ -2232,7 +2281,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 },
                 None => brand::OwnedTxCompleted::Single(completed),
             };
-            sink.terminal(completed.lend(&self.loan));
+            self.unconsumed
+                .deliver(sink, unconsumed::Item::Terminal(completed.lend(&self.loan)));
             return Err(reason);
         }
         self.now = now;
@@ -2448,6 +2498,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<CommandProgress<'id, Self::Types, Self::Caps>, PortCommandFailed<'id, Self>> {
+        self.reoffer(sink);
         // A faulted port keeps no command: it comes back beside the fault.
         if let Err(fault) = self.check() {
             return Err(CommandFailed::Returned { command, fault });
@@ -2650,6 +2701,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
         }
         recoverable
+    }
+
+    fn take_unconsumed(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<Unconsumed, UnconsumedRefused> {
+        if self.state != PortState::Stopped {
+            return Err(UnconsumedRefused::NotStopped);
+        }
+        Ok(self.unconsumed.offer(sink))
     }
 
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError> {

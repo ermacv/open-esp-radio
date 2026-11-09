@@ -35,11 +35,13 @@ pub(super) type Failed<'id, D> = ActorFault<PortFault<'id, D>>;
 /// The turn's sink for what the port produces besides its return values: a
 /// terminal goes to the lifecycle at once, unless it ends the group change
 /// the actor holds a token for; that terminal, the units of a receive cut
-/// and the TBTT wait in the stage for the actor.
+/// and the TBTT wait in the stage for the actor. One it has no room for it
+/// refuses: the port keeps it, and the actor's next wait registers for the
+/// lifecycle's room ([`Stage::refused`]) before it sleeps.
 pub(super) struct Outbox<'a, 'c, 'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize>
 {
-    pub(super) from_actor: &'a WakingSpscSender<'c, FromActor<'id, D>, FROM>,
-    pub(super) returns: &'a WakingSpscSender<'c, Returned<'id, D>, RETURNS>,
+    pub(super) from_actor: &'a mut WakingSpscSender<'c, FromActor<'id, D>, FROM>,
+    pub(super) returns: &'a mut WakingSpscSender<'c, Returned<'id, D>, RETURNS>,
     pub(super) stage: &'a mut Stage<'id, D>,
     /// A group change's terminal is owed.
     pub(super) grouped: bool,
@@ -78,33 +80,43 @@ pub(super) fn give_back<'id, D: DatapathPort<'id>, const FROM: usize, const RETU
 impl<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize> PortSink<'id, D::Types>
     for Outbox<'_, '_, 'id, D, FROM, RETURNS>
 {
-    fn terminal(&mut self, terminal: ActorTerminal<'id, D>) {
-        D::terminal(&terminal);
+    fn terminal(&mut self, terminal: ActorTerminal<'id, D>) -> Result<(), ActorTerminal<'id, D>> {
         if self.grouped && self.stage.group_terminal.is_none() && is_group(&terminal) {
+            D::terminal(&terminal);
             self.stage.group_terminal = Some(terminal);
-            return;
+            return Ok(());
         }
-        let returned = Returned::Terminal {
+        // Both cells first: a terminal without its announcement's room is
+        // refused whole, and the port keeps it.
+        let (Some(announce), Some(cell)) =
+            (self.from_actor.try_reserve(), self.returns.try_reserve())
+        else {
+            self.stage.refused = true;
+            return Err(terminal);
+        };
+        D::terminal(&terminal);
+        cell.send(Returned::Terminal {
             terminal,
             grouped: false,
-        };
-        if let Err(returned) = give_back(self.from_actor, self.returns, returned) {
-            // The producers' bounds did not hold: the owner stays, never
-            // dropped, and the run ends on the violation.
-            let _quarantined = core::mem::ManuallyDrop::new(returned);
-            self.stage.overflow = Some(ActorViolation::OutboxFull);
-        }
+        });
+        announce.send(FromActor::Returned);
+        Ok(())
     }
 
     fn tbtt(&mut self, event: TbttEvent) {
         self.stage.tbtt = Some(event);
     }
 
-    fn received(&mut self, frame: ActorRxBuffer<'id, D>, meta: ActorRxMeta<'id, D>) {
-        if let Err(unit) = self.stage.cut.push_back((frame, meta)) {
-            let _quarantined = core::mem::ManuallyDrop::new(unit);
-            self.stage.overflow = Some(ActorViolation::CutOverflow);
-        }
+    fn received(
+        &mut self,
+        frame: ActorRxBuffer<'id, D>,
+        meta: ActorRxMeta<'id, D>,
+    ) -> Result<(), (ActorRxBuffer<'id, D>, ActorRxMeta<'id, D>)> {
+        // A full stage is drained by this turn: the port keeps the unit and
+        // offers it again at the next turn's call.
+        self.stage.cut.push_back((frame, meta)).inspect_err(|_| {
+            self.stage.refused = true;
+        })
     }
 }
 
@@ -326,6 +338,16 @@ where
         if self.poll_network_stop(cx, network) {
             ready = true;
         }
+        // What the outbox refused waits in the port, which signals nothing
+        // for it: the lifecycle's room wakes the actor, each queue's wait
+        // armed before its room is checked again.
+        if self.stage.refused {
+            let announce = lifecycle.from_actor.poll_room(cx).is_ready();
+            let cell = lifecycle.returns.poll_room(cx).is_ready();
+            if announce && cell {
+                ready = true;
+            }
+        }
         if self.receive.has_ready()
             && (!network.network.takes_frames() || self.port.poll_lend_room(cx).is_ready())
         {
@@ -484,10 +506,24 @@ where
         if facts.tx.is_some_and(|tx| tx.bits() != 0) || facts.tbtt {
             self.progressed = true;
         }
-        if facts.tx.is_some() || facts.tbtt || due {
+        // What the outbox refused waits in the port: after a confirmed stop
+        // only `take_unconsumed` offers it, before one the service does.
+        let refused = core::mem::take(&mut self.stage.refused);
+        if refused {
             let mut outbox = Outbox {
-                from_actor: &lifecycle.from_actor,
-                returns: &lifecycle.returns,
+                from_actor: &mut lifecycle.from_actor,
+                returns: &mut lifecycle.returns,
+                stage: &mut self.stage,
+                grouped: self.group.is_some(),
+            };
+            if self.port.take_unconsumed(&mut outbox).is_ok() {
+                self.staged(lifecycle, network)?;
+            }
+        }
+        if facts.tx.is_some() || facts.tbtt || due || refused {
+            let mut outbox = Outbox {
+                from_actor: &mut lifecycle.from_actor,
+                returns: &mut lifecycle.returns,
                 stage: &mut self.stage,
                 grouped: self.group.is_some(),
             };
@@ -524,9 +560,6 @@ where
         lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
-        if let Some(violation) = self.stage.overflow.take() {
-            return Err(ActorFault::Contract(violation));
-        }
         if let Some(event) = self.stage.tbtt.take() {
             self.owed.tbtt = Some(event);
         }
@@ -874,8 +907,8 @@ where
             self.withdraw_unpublished()?;
         }
         let mut outbox = Outbox {
-            from_actor: &lifecycle.from_actor,
-            returns: &lifecycle.returns,
+            from_actor: &mut lifecycle.from_actor,
+            returns: &mut lifecycle.returns,
             stage: &mut self.stage,
             grouped: self.group.is_some(),
         };

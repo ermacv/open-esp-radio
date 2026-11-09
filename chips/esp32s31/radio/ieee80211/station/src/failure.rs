@@ -18,8 +18,10 @@ pub enum BackendFault {
         queue: u8,
         step: PublishStep,
     },
-    /// A removal's terminal named another slot than the key held.
+    /// A removal's rights were of another slot kind than the key it named.
     RemovalMismatch,
+    /// The port's store of refused terminals found a token's place taken.
+    UnconsumedPlace,
     /// A group command named a key index the access point's group has not.
     GroupKeyIdRange,
     /// The core refused a VIF configuration.

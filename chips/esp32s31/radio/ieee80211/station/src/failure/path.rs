@@ -81,6 +81,7 @@ impl DiagnosticPath for BackendFault {
                 path.name(publish_step(step));
             }
             Self::RemovalMismatch => path.name("RemovalMismatch"),
+            Self::UnconsumedPlace => path.name("UnconsumedPlace"),
             Self::GroupKeyIdRange => path.name("GroupKeyIdRange"),
             Self::ConfigurationRefused => path.name("ConfigurationRefused"),
             Self::CompletionWithoutPending { queue } => {
@@ -456,7 +457,6 @@ fn actor_violation(
         V::RetireRunning => "RetireRunning",
         V::LinkReturn => "LinkReturn",
         V::PairwiseCustody => "PairwiseCustody",
-        V::CutOverflow => "CutOverflow",
         V::ReorderOverflow => "ReorderOverflow",
     }
 }

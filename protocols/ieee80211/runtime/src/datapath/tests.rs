@@ -2041,3 +2041,63 @@ fn a_lost_network_settles_only_once_every_ended_frame_s_memory_went_home() {
         assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
+
+#[test]
+fn a_terminal_the_full_lifecycle_refuses_waits_in_the_port_and_comes_once_its_room_frees() {
+    bench(|bench| {
+        // The lifecycle takes nothing back: refused settings before the
+        // start fill its return queue.
+        let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+        for _ in 0..RETURNS {
+            bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+        }
+        bench.send(ToActor::Start(supported()));
+        bench.connect(link(true, None));
+        let transmit = station_frame_under(bench, 0, false);
+        bench.send(ToActor::StationTx(transmit));
+        for _ in 0..4 {
+            bench.advance(1_000);
+            bench.settle();
+        }
+        // The frame went; its terminal found no room: the port keeps it,
+        // the run goes on and the actor sleeps.
+        assert_eq!(bench.data_sent().len(), 1);
+        assert!(bench.end.is_none(), "{:?}", bench.end);
+        let wakes = bench.wakes();
+        bench.settle();
+        assert_eq!(bench.wakes(), wakes, "a full lifecycle wakes nobody");
+        // One return taken frees one cell: the actor wakes and the port
+        // offers the kept terminal again.
+        assert!(matches!(
+            bench.returns.try_receive(),
+            Some(Returned::Command { .. })
+        ));
+        assert!(bench.wakes() > wakes, "the freed cell wakes the actor");
+        bench.settle();
+        let mut terminals = 0;
+        let mut commands = 0;
+        while let Some(returned) = bench.returns.try_receive() {
+            match returned {
+                Returned::Terminal { terminal, .. } => {
+                    assert!(matches!(
+                        terminal,
+                        LowerMacTerminal::TxCompleted(
+                            oer_protocols_ieee80211_contracts_port::TxCompleted::Single(_)
+                        )
+                    ));
+                    terminals += 1;
+                }
+                Returned::Command { .. } => commands += 1,
+                _ => {}
+            }
+        }
+        assert_eq!(commands, RETURNS - 1);
+        assert_eq!(terminals, 1, "the terminal comes exactly once");
+        for _ in 0..4 {
+            bench.advance(1_000);
+            bench.settle();
+        }
+        assert!(bench.returns.try_receive().is_none(), "nothing comes again");
+        assert!(bench.end.is_none());
+    });
+}

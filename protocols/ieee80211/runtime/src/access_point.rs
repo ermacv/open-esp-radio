@@ -91,7 +91,7 @@ use oer_protocols_ieee80211_contracts_port::{
     RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopUnconfirmed,
     SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl, TbttEvent,
     TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxFacts,
-    TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
+    TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource, Unconsumed, UnconsumedRefused,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
     ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
@@ -650,22 +650,35 @@ where
     <Keys<'id, P> as KeyTypes<'id>>::GroupSlotIdentity: PartialEq,
     <Keys<'id, P> as KeyTypes<'id>>::Identity: PartialEq,
 {
-    fn terminal(&mut self, terminal: LowerMacTerminal<'id, Ty<'id, P>>) {
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'id, Ty<'id, P>>,
+    ) -> Result<(), LowerMacTerminal<'id, Ty<'id, P>>> {
         self.taken = self.taken.wrapping_add(1);
         self.terminal_home(terminal);
+        Ok(())
     }
     fn tbtt(&mut self, _: TbttEvent) {}
     fn received(
         &mut self,
         frame: <Ty<'id, P> as PortTypes<'id>>::RxBuffer,
         meta: <Ty<'id, P> as PortTypes<'id>>::RxMeta,
-    ) {
-        self.cut_units = self.cut_units.wrapping_add(1);
+    ) -> Result<
+        (),
+        (
+            <Ty<'id, P> as PortTypes<'id>>::RxBuffer,
+            <Ty<'id, P> as PortTypes<'id>>::RxMeta,
+        ),
+    > {
         // A receive cut's unit precedes the mutation's terminal: the runner
-        // reads and recycles it as soon as the port's call returned.
-        if let Err((frame, _)) = self.cut.push_back((frame, meta)) {
-            self.keep(Kept::Unit(frame), ApContract::CutUnits);
-        }
+        // reads and recycles it as soon as the port's call returned. More
+        // than the runner stages is its contract broken: the run ends, and
+        // the port keeps the unit.
+        self.cut.push_back((frame, meta)).inspect_err(|_| {
+            self.broken.get_or_insert(ApContract::CutUnits);
+        })?;
+        self.cut_units = self.cut_units.wrapping_add(1);
+        Ok(())
     }
 }
 
@@ -1663,7 +1676,10 @@ where
                 Either::Second(()) => Woke::Other,
             };
             match woke {
-                Woke::Stopped(Ok(())) => return Ok(()),
+                Woke::Stopped(Ok(())) => {
+                    self.take_unconsumed();
+                    return Ok(());
+                }
                 Woke::Stopped(Err(observed)) => {
                     if ends(observed) {
                         return Err(observed);
@@ -1671,6 +1687,22 @@ where
                 }
                 Woke::Facts(taken) => facts = union(facts, taken),
                 Woke::Other => {}
+            }
+        }
+    }
+
+    /// After the radio's confirmed stop: what the port kept for the homes'
+    /// refusals comes home now, once; one whose home is still taken stays
+    /// with the port. A unit goes back to its ring, until the port refuses
+    /// one.
+    fn take_unconsumed(&mut self) {
+        let _kept: Result<Unconsumed, UnconsumedRefused> =
+            self.port.take_unconsumed(&mut self.homes);
+        while self.homes.unrecycled.is_none()
+            && let Some((frame, _)) = self.homes.cut.pop_front()
+        {
+            if let Err(refused) = self.port.recycle(frame) {
+                self.homes.unrecycled = Some(refused);
             }
         }
     }

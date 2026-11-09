@@ -7,6 +7,7 @@ use crate::port::{PortDriver, PortInstallation};
 use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaFormat, ArenaPublication, TxArena,
 };
+use oer_protocols_ieee80211_contracts_port::{Unconsumed, UnconsumedRefused};
 use oer_protocols_ieee80211_testing_conformance::data_port::{
     self as cases, Case, DataPortHarness,
 };
@@ -71,10 +72,20 @@ struct Outbox<'id, Id: radio::SlotIdentity + 'id> {
         ReceiveBuffer<'id, Id, TestReceive>,
         crate::lower_mac::Esp32s31RxMeta,
     )>,
+    /// How many of the next terminals and units it refuses.
+    refuse: usize,
 }
 impl<'id, Id: radio::SlotIdentity + 'id> PortSink<'id, Family<Id>> for Outbox<'id, Id> {
-    fn terminal(&mut self, terminal: LowerMacTerminal<'id, Family<Id>>) {
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'id, Family<Id>>,
+    ) -> Result<(), LowerMacTerminal<'id, Family<Id>>> {
+        if let Some(left) = self.refuse.checked_sub(1) {
+            self.refuse = left;
+            return Err(terminal);
+        }
         self.terminals.push(terminal);
+        Ok(())
     }
     fn tbtt(&mut self, _: TbttEvent) {
         self.tbtt += 1;
@@ -83,8 +94,19 @@ impl<'id, Id: radio::SlotIdentity + 'id> PortSink<'id, Family<Id>> for Outbox<'i
         &mut self,
         frame: ReceiveBuffer<'id, Id, TestReceive>,
         meta: crate::lower_mac::Esp32s31RxMeta,
-    ) {
+    ) -> Result<
+        (),
+        (
+            ReceiveBuffer<'id, Id, TestReceive>,
+            crate::lower_mac::Esp32s31RxMeta,
+        ),
+    > {
+        if let Some(left) = self.refuse.checked_sub(1) {
+            self.refuse = left;
+            return Err((frame, meta));
+        }
         self.received.push((frame, meta));
+        Ok(())
     }
 }
 
@@ -165,6 +187,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                 terminals: Vec::new(),
                 tbtt: 0,
                 received: Vec::new(),
+                refuse: 0,
             },
             commands,
             observed,
@@ -1159,6 +1182,128 @@ fn a_running_port_refuses_its_reinstall_and_keeps_running() {
             Some(crate::port::ReinstallRefused::NotRetired)
         );
         fixture.stop();
+    });
+}
+
+/// The tickets of the single-MPDU terminals the outbox holds, in order.
+fn completed_tickets<Id: radio::SlotIdentity>(fixture: &Fixture<'_, Id>) -> Vec<u8> {
+    fixture
+        .outbox
+        .terminals
+        .iter()
+        .filter_map(|terminal| match terminal {
+            LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
+                Some(completed.ticket_index())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Serve turns until the outbox refused what it was told to.
+fn refuse_one<Id: radio::SlotIdentity>(fixture: &mut Fixture<'_, Id>) {
+    fixture.outbox.refuse = 1;
+    for _ in 0..8 {
+        if fixture.outbox.refuse == 0 {
+            return;
+        }
+        let _ = fixture.turn();
+    }
+    panic!("the outbox refused a terminal");
+}
+
+#[test]
+fn a_terminal_the_sink_refuses_is_kept_whole_and_offered_again_first_on_the_s31_port() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let now = fixture.now();
+        let first = fixture.station_mpdu().expect("attempt");
+        let first_ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&first);
+        assert!(fixture.port.submit(first, now, &mut fixture.outbox).is_ok());
+        refuse_one(fixture);
+        assert!(fixture.outbox.terminals.is_empty(), "the terminal is kept");
+        assert_eq!(fixture.port.fault(), None);
+        // What the port keeps makes nothing due: the sink owns the wake.
+        let now = fixture.now();
+        assert!(fixture.port.deadline().is_none_or(|at| at > now));
+        // Before a confirmed stop the port offers it itself.
+        assert_eq!(
+            fixture.port.take_unconsumed(&mut fixture.outbox),
+            Err(UnconsumedRefused::NotStopped)
+        );
+        let second = fixture.station_mpdu().expect("attempt");
+        let second_ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&second);
+        // The next call with a sink offers the kept terminal before its own.
+        assert!(
+            fixture
+                .port
+                .submit(second, now, &mut fixture.outbox)
+                .is_ok()
+        );
+        assert_eq!(completed_tickets(fixture), [first_ticket]);
+        for _ in 0..4 {
+            let _ = fixture.turn();
+        }
+        assert_eq!(completed_tickets(fixture), [first_ticket, second_ticket]);
+        assert_eq!(fixture.take_completed(), 2);
+        fixture.stop();
+        assert_eq!(fixture.port.fault(), None);
+    });
+}
+
+#[test]
+fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and_the_port_retires()
+{
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        let now = fixture.now();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&attempt);
+        assert!(
+            fixture
+                .port
+                .submit(attempt, now, &mut fixture.outbox)
+                .is_ok()
+        );
+        refuse_one(&mut fixture);
+        // The sink stays full through the stop, which offers it again.
+        fixture.outbox.refuse = usize::MAX;
+        fixture.stop();
+        fixture.outbox.refuse = 0;
+        // After the confirmed stop the port's other calls offer nothing it
+        // keeps, and the kept terminal holds the port from retiring.
+        let _ = fixture.turn();
+        assert!(fixture.outbox.terminals.is_empty());
+        assert!(fixture.port.release().is_none());
+        // Refused again, it stays; then it leaves once, with its outcome.
+        fixture.outbox.refuse = 1;
+        assert_eq!(
+            fixture.port.take_unconsumed(&mut fixture.outbox),
+            Ok(Unconsumed::Kept)
+        );
+        assert_eq!(
+            fixture.port.take_unconsumed(&mut fixture.outbox),
+            Ok(Unconsumed::None)
+        );
+        assert_eq!(completed_tickets(&fixture), [ticket]);
+        assert!(matches!(
+            fixture.outbox.terminals.first(),
+            Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)))
+                if matches!(completed.outcome(), TxOutcome::Ended(SingleEnd::Delivered { .. }))
+        ));
+        assert_eq!(
+            fixture.port.take_unconsumed(&mut fixture.outbox),
+            Ok(Unconsumed::None)
+        );
+        assert_eq!(fixture.take_completed(), 1);
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        drop(buffers);
+        assert!(
+            port.release().is_some(),
+            "nothing is kept: the port retires"
+        );
     });
 }
 

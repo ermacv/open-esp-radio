@@ -383,9 +383,10 @@ struct Stage<'id, D: DatapathPort<'id>> {
     cut: heapless::Deque<(ActorRxBuffer<'id, D>, ActorRxMeta<'id, D>), CUT_UNITS>,
     group_terminal: Option<ActorTerminal<'id, D>>,
     tbtt: Option<TbttEvent>,
-    /// The sink found no room for an owner: the run ends on this broken
-    /// contract.
-    overflow: Option<ActorViolation>,
+    /// The outbox refused a terminal or a unit, which the port keeps: the
+    /// actor's wait registers for the lifecycle's room, and its next turn
+    /// has the port offer it again.
+    refused: bool,
 }
 
 /// The data transmission's state: the plane over the port's arenas, the
@@ -514,7 +515,7 @@ where
                 cut: heapless::Deque::new(),
                 group_terminal: None,
                 tbtt: None,
-                overflow: None,
+                refused: false,
             },
             frames_out: 0,
             network_stopping: NetworkStopping::NotAsked,
@@ -580,7 +581,7 @@ where
                         cut: heapless::Deque::new(),
                         group_terminal: None,
                         tbtt: None,
-                        overflow: None,
+                        refused: false,
                     })
                 },
                 frames_out: 0,

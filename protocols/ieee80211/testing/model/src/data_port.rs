@@ -35,6 +35,7 @@ use oer_protocols_ieee80211_contracts_port::{
     PortArena, PortCommand, PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer,
     PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartFailure, StartRefused,
     StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
+    Unconsumed, UnconsumedRefused,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
@@ -479,6 +480,28 @@ pub struct ModelPort<
     /// The access point's [`Self::held_key`].
     access_point_held_key: Option<HeldKey>,
     fault: Option<ModelPortFault>,
+    /// What a sink refused, oldest first: offered again before anything
+    /// newer ([`PortSink`]).
+    kept: alloc::collections::VecDeque<Refused<'id, ModelTypes<Backend<Id, C, X>>>>,
+}
+
+/// A terminal or a unit a sink refused, which the port keeps whole.
+enum Refused<'id, T: PortTypes<'id>> {
+    Terminal(oer_protocols_ieee80211_contracts_port::LowerMacTerminal<'id, T>),
+    Received(T::RxBuffer, T::RxMeta),
+}
+
+/// Offer `item` to `sink`; refused, it comes back.
+fn offer<'id, T: PortTypes<'id>>(
+    sink: &mut impl PortSink<'id, T>,
+    item: Refused<'id, T>,
+) -> Result<(), Refused<'id, T>> {
+    match item {
+        Refused::Terminal(terminal) => sink.terminal(terminal).map_err(Refused::Terminal),
+        Refused::Received(frame, meta) => sink
+            .received(frame, meta)
+            .map_err(|(frame, meta)| Refused::Received(frame, meta)),
+    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContext + 'id>
@@ -530,6 +553,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 held_key: None,
                 access_point_held_since: None,
                 access_point_held_key: None,
+                kept: alloc::collections::VecDeque::new(),
                 fault: None,
             },
             commands: ModelCommands { air, loan },
@@ -554,6 +578,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let retired = self.radio == Radio::Stopped
             && self.idle()
             && self.held.events.is_empty()
+            && self.kept.is_empty()
             && self.held.rx_out.get() == 0
             && self.driver.removing.is_empty();
         if !retired {
@@ -599,6 +624,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                         held_key: None,
                         access_point_held_since: None,
                         access_point_held_key: None,
+                        kept: alloc::collections::VecDeque::new(),
                         fault: None,
                     },
                     ModelReinstallRefused::Receipt,
@@ -675,16 +701,63 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     }
 
     /// Move every terminal and received unit the model's steps posted to
-    /// `sink`, in the order they were posted.
+    /// `sink`, in the order they were posted, behind what a sink refused
+    /// before. After a confirmed stop what the port keeps leaves only
+    /// through [`DataPort::take_unconsumed`], so nothing newer passes it.
     fn drain(&mut self, sink: &mut impl PortSink<'id, ModelTypes<Backend<Id, C, X>>>) {
+        if self.radio == Radio::Stopped && !self.kept.is_empty() {
+            self.keep_posted();
+            return;
+        }
+        if self.offer_kept(sink) == Unconsumed::Kept {
+            self.keep_posted();
+            return;
+        }
         while let Some(event) = self.held.take_event() {
-            match event {
-                OwnedLowerMacEvent::Terminal(terminal) => sink.terminal(terminal.lend(&self.loan)),
-                OwnedLowerMacEvent::Received { frame, meta } => {
-                    sink.received(frame.lend(&self.loan), meta);
-                }
+            if let Err(refused) = offer(sink, self.lend_event(event)) {
+                // Everything posted after it waits behind it.
+                self.kept.push_back(refused);
+                self.keep_posted();
+                return;
             }
         }
+    }
+
+    /// A posted event in the caller's brand.
+    fn lend_event(
+        &self,
+        event: OwnedLowerMacEvent<'static, Backend<Id, C, X>>,
+    ) -> Refused<'id, ModelTypes<Backend<Id, C, X>>> {
+        match event {
+            OwnedLowerMacEvent::Terminal(terminal) => Refused::Terminal(terminal.lend(&self.loan)),
+            OwnedLowerMacEvent::Received { frame, meta } => {
+                Refused::Received(frame.lend(&self.loan), meta)
+            }
+        }
+    }
+
+    /// Keep every posted event behind what the port keeps, in order: a
+    /// posted event makes the port's deadline due, a kept one does not.
+    fn keep_posted(&mut self) {
+        while let Some(event) = self.held.take_event() {
+            let kept = self.lend_event(event);
+            self.kept.push_back(kept);
+        }
+    }
+
+    /// Offer what the port keeps to `sink`, oldest first, until it refuses
+    /// one again.
+    fn offer_kept(
+        &mut self,
+        sink: &mut impl PortSink<'id, ModelTypes<Backend<Id, C, X>>>,
+    ) -> Unconsumed {
+        while let Some(item) = self.kept.pop_front() {
+            if let Err(item) = offer(sink, item) {
+                self.kept.push_front(item);
+                return Unconsumed::Kept;
+            }
+        }
+        Unconsumed::None
     }
 
     /// End each queued single MPDU whose lifetime passed at `now`.
@@ -1304,6 +1377,17 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             rx: self.radio == Radio::Running
                 && (!self.air.rx.is_empty() || group_ready || streaming),
         }
+    }
+
+    fn take_unconsumed(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<Unconsumed, UnconsumedRefused> {
+        if self.radio != Radio::Stopped {
+            return Err(UnconsumedRefused::NotStopped);
+        }
+        self.keep_posted();
+        Ok(self.offer_kept(sink))
     }
 
     fn deadline(&self) -> Option<Instant> {

@@ -437,6 +437,18 @@ only a receipt of their own kind. A key of another kind than the rights
 is refused before anything is taken (`RemovalMismatch`, the command back
 whole).
 
+A terminal or a cut unit the caller's sink refuses stays with the port
+(`port/unconsumed.rs`): a terminal in the place of its token (its ticket,
+the gate, its interface's configure permission, its pairwise key slot or
+its group permission), a unit in one of `RX_HELD` places, one relative
+sequence over both. While the radio has not confirmed a stop the port
+offers them again, oldest first, at the start of `service_tx`, `submit`,
+`command` and `access_point_command`, and a newer terminal waits behind
+them; after a confirmed stop only `take_unconsumed` offers them. Nothing
+the port keeps makes its deadline due or raises a fact, and a port that
+keeps one does not retire. A taken or missing place (a token that was not
+unique) is the contract fault `UnconsumedPlace`.
+
 A station group key mutation and an access point's are commands of their
 own role (`StationGroupCommand`, `AccessPointGroupCommand`). A step of
 the driver that refuses returns the command whole: the engine converts

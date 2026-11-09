@@ -58,6 +58,7 @@ pub mod trace;
 pub use buffer::*;
 pub use keys::{GroupKey, KeyIdentity, PairwiseKey, PortKeys};
 mod brand;
+mod unconsumed;
 pub use crate::lower_mac::arena::BlockAckAnswer;
 pub use crate::lower_mac::{ContentionDraw, Observations};
 
@@ -361,6 +362,10 @@ pub enum Fault {
         /// The step.
         step: PublishStep,
     },
+    /// The store of what a sink refused found a token's place taken or
+    /// missing: the token was not unique, and the item that found it could
+    /// not be kept.
+    UnconsumedPlace,
     /// A removal's rights are of another slot kind than the key it
     /// names: refused before anything is taken.
     RemovalMismatch,

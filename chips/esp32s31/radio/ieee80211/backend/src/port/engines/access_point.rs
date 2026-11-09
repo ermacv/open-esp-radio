@@ -299,11 +299,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.access_point_holding = None;
         self.access_point_since = None;
         let loan = self.loan;
-        sink.terminal(
-            brand::OwnedTerminal::Configured(brand::OwnedConfigured::AccessPoint(
-                permission.into_owned(&loan),
-            ))
-            .lend(&loan),
+        self.unconsumed.deliver(
+            sink,
+            unconsumed::Item::Terminal(
+                brand::OwnedTerminal::Configured(brand::OwnedConfigured::AccessPoint(
+                    permission.into_owned(&loan),
+                ))
+                .lend(&loan),
+            ),
         );
         Ok(AccessPointProgress::Done)
     }
@@ -421,12 +424,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     });
                 }
                 identity.activity.set(identity.serial);
-                sink.terminal(
-                    brand::OwnedTerminal::PairwiseKeyInstalled(brand::OwnedInstalledPairwise::new(
-                        identity.role,
-                        identity,
-                    ))
-                    .lend(&self.loan),
+                self.unconsumed.deliver(
+                    sink,
+                    unconsumed::Item::Terminal(
+                        brand::OwnedTerminal::PairwiseKeyInstalled(
+                            brand::OwnedInstalledPairwise::new(identity.role, identity),
+                        )
+                        .lend(&self.loan),
+                    ),
                 );
                 Ok(AccessPointProgress::Done)
             }
@@ -484,7 +489,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 // A removal whose key's last use is out ends at a later
                 // service.
                 if let Some(terminal) = terminal {
-                    sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                    self.unconsumed.deliver(
+                        sink,
+                        unconsumed::Item::Terminal(
+                            brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
+                        ),
+                    );
                 }
                 Ok(AccessPointProgress::Done)
             }
@@ -581,6 +591,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<ApProgress<'id, Id, D, B, O>, AccessPointCommandFailed<'id, Self>> {
+        self.reoffer(sink);
         // A faulted port keeps no command: it comes back beside the fault.
         if let Err(fault) = self.check() {
             return Err(CommandFailed::Returned { command, fault });

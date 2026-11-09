@@ -160,17 +160,60 @@ pub enum RxPull<F, M> {
 }
 
 /// Where the port puts what a call produced besides its return value, in
-/// the order it produced it: the turn's outbox. A sink takes every value;
-/// one it cannot hold it keeps and reports itself, so the port never gets
-/// an owner back.
+/// the order it produced it: the turn's outbox.
+///
+/// A sink may refuse a terminal or a unit it has no room for now: it comes
+/// back, and the port keeps it, with every owner and its outcome, in a
+/// place of its own token. The port offers what it keeps again, oldest
+/// first and before anything newer, at its next call with a sink while the
+/// radio has not confirmed a stop, and after a confirmed stop only through
+/// [`DataPort::take_unconsumed`]. The port signals nothing for what it
+/// keeps: a sink that refuses registers its own wake for room, then checks
+/// its room again, before its task sleeps, and its task then makes a call
+/// with a sink.
 pub trait PortSink<'id, T: PortTypes<'id>> {
     /// A command's or a single MPDU's terminal.
-    fn terminal(&mut self, terminal: LowerMacTerminal<'id, T>);
+    ///
+    /// # Errors
+    ///
+    /// The sink has no room for it now: the terminal, whole, which the port
+    /// keeps.
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'id, T>,
+    ) -> Result<(), LowerMacTerminal<'id, T>>;
     /// A TBTT of the station's schedule.
     fn tbtt(&mut self, event: TbttEvent);
     /// A unit a group mutation's receive cut drained: it precedes the
     /// mutation's terminal.
-    fn received(&mut self, frame: T::RxBuffer, meta: T::RxMeta);
+    ///
+    /// # Errors
+    ///
+    /// The sink has no room for it now: the unit and its metadata, which
+    /// the port keeps, counted among the caller's held units.
+    fn received(
+        &mut self,
+        frame: T::RxBuffer,
+        meta: T::RxMeta,
+    ) -> Result<(), (T::RxBuffer, T::RxMeta)>;
+}
+
+/// What [`DataPort::take_unconsumed`] left with the port.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Unconsumed {
+    /// The port keeps nothing a sink refused.
+    None,
+    /// The sink refused the oldest again: it and everything newer stay
+    /// with the port, in order.
+    Kept,
+}
+
+/// Why [`DataPort::take_unconsumed`] offered nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnconsumedRefused {
+    /// The radio has not confirmed a stop: the port offers what it keeps at
+    /// its calls with a sink.
+    NotStopped,
 }
 
 /// How far [`DataPort::command`] took one command.
@@ -666,6 +709,20 @@ pub trait DataPort<'id> {
         cx: &mut Context<'_>,
         now: Instant,
     ) -> Poll<Result<(), StopUnconfirmed>>;
+
+    /// After the radio's confirmed stop: offer what a sink refused and the
+    /// port keeps to `sink`, oldest first, each once, until the sink refuses
+    /// one again, which stays with everything newer. Each terminal and unit
+    /// leaves the port once, with its own outcome and owners.
+    ///
+    /// # Errors
+    ///
+    /// The stop is not confirmed: nothing is offered here; the port offers
+    /// what it keeps at its calls with a sink.
+    fn take_unconsumed(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<Unconsumed, UnconsumedRefused>;
 
     /// Take back the fault the port last reported, so that a stop can run
     /// and return the owners it holds: whether it can. From then on the port
