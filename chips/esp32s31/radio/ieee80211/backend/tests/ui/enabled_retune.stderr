@@ -7,4 +7,4 @@ error[E0624]: method `set_checked_channel` is private
  ::: src/lower_mac.rs
   |
   |     fn set_checked_channel(&mut self, channel: Ghz2_4Channel) {
-  |     ------------------------------------------------------- private method defined here
+  |     --------------------------------------------------------- private method defined here
