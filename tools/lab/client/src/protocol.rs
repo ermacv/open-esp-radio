@@ -440,8 +440,9 @@ pub enum RouterOperation {
     /// What the AP knows of station `mac`.
     Station { mac: String },
     /// What the AP's driver reports of station `mac`'s link: its counters,
-    /// the rates of its last frames each way, the AP's channel width and
-    /// the survey of the channel in use. Result: the router's
+    /// the rates of its last frames each way, the AP's channel width, the
+    /// survey of the channel in use, and the station's per-TID and the
+    /// radio's transmit queues. Result: the router's
     /// `station::link::StationLink`.
     StationLink { mac: String },
     /// Station `mac`'s DHCP lease, if it has one.

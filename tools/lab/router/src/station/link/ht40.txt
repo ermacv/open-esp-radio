@@ -30,6 +30,8 @@
 	associated at [boottime]:	1934.180s
 	associated at:	1793612345120 ms
 	current time:	1793612387130 ms
+[station-clock]
+1976.19
 [channel]
 	channel 13 (2472 MHz), width: 40 MHz, center1: 2462 MHz
 [survey]
@@ -40,8 +42,37 @@
 	channel receive time:		40121 ms
 	channel BSS receive time:		1311 ms
 	channel transmit time:		21843 ms
-[aqm]
-tid0 drops: 4
+[station-aqm]
+clock: 1976.21
+tid ac backlog-bytes backlog-packets new-flows drops marks overlimit collisions tx-bytes tx-packets flags
+0 2 30280 20 412 4 0 3 0 40812020 27901 0x6(RUN AMPDU NO-AMSDU)
+1 3 0 0 0 0 0 0 0 0 0 0x0(RUN)
+2 3 0 0 0 0 0 0 0 0 0 0x0(RUN)
+3 2 0 0 0 0 0 0 0 0 0 0x0(RUN)
+4 1 0 0 0 0 0 0 0 0 0 0x0(RUN)
+5 1 0 0 0 0 0 0 0 0 0 0x0(RUN)
+6 0 0 0 0 0 0 0 0 0 0 0x0(RUN)
+7 0 0 0 2 0 0 0 0 322 2 0x0(RUN)
+8 2 0 0 0 0 0 0 0 0 0 0x0(RUN)
+9 3 0 0 0 0 0 0 0 0 0 0x0(RUN)
+10 3 0 0 0 0 0 0 0 0 0 0x0(RUN)
+11 2 0 0 0 0 0 0 0 0 0 0x0(RUN)
+12 1 0 0 0 0 0 0 0 0 0 0x0(RUN)
+13 1 0 0 0 0 0 0 0 0 0 0x0(RUN)
+14 0 0 0 0 0 0 0 0 0 0 0x0(RUN)
+15 0 0 0 0 0 0 0 0 0 0 0x0(RUN)
+[radio-aqm]
+clock: 1976.22
+access name value
+R fq_flows_cnt 4096
+R fq_backlog 20
+R fq_overlimit 167599
+R fq_overmemory 167620
+R fq_collisions 18
+R fq_memory_usage 46080
+RW fq_memory_limit 4194304
+RW fq_limit 8192
+RW fq_quantum 300
 [radio]
 rx_fcs_errors: 12
 dot11FCSErrorCount: 34
