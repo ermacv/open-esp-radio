@@ -89,59 +89,52 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
         }
     }
 }
-pub(super) struct Completion<'id, Id: SlotIdentity, const B: usize> {
-    queue: FreeQueue<'id, CorePath<Id>>,
-    ticket: TxTicket<'id, CorePath<Id>>,
-    slot: Pin<&'static mut TxSlot<B>>,
-    end: PublicationEnd,
-    rate: PhyRate,
-}
+/// One ended attempt the core handed to the port's sink.
+pub(super) type Completion<'id, Id, const B: usize> =
+    crate::lower_mac::TxCompletion<'id, 'static, B, CorePath<Id>>;
+/// What one core call hands the port. Completions it has no room for, and
+/// a removal receipt outside a removal command, the sink refuses: the core
+/// keeps them whole in their own places and offers them again.
 pub(super) struct Sink<'id, Id: SlotIdentity, const B: usize> {
     pub(super) completed: heapless::Vec<Completion<'id, Id, B>, 4>,
-    pub(super) removed: heapless::Vec<KeyRemoved<'id, CorePath<Id>>, 20>,
+    /// The receipt of the removal this sink's command makes, when it is
+    /// one: no other call takes a receipt.
+    removal: Option<Option<KeyRemoved<'id, CorePath<Id>>>>,
+    /// Whether this sink takes completions: a call that collects none
+    /// leaves them with the core.
+    takes_completions: bool,
     tbtt: Option<TbttEvent>,
-    /// The first callback the port's core contract forbids: a second
-    /// completion of a queue in one service or more removals than
-    /// installed keys. Its owners are retained here,
-    /// never returned to a pool, and the service ends with the fault.
-    refused: Option<(Fault, Refused<'id, Id, B>)>,
-}
-/// Owners of a refused callback, kept until the port's quarantine ends.
-#[allow(dead_code, reason = "retained owners are never read, only kept")]
-enum Refused<'id, Id: SlotIdentity, const B: usize> {
-    Completion(Completion<'id, Id, B>),
-    Removal(KeyRemoved<'id, CorePath<Id>>),
 }
 impl<'id, Id: SlotIdentity, const B: usize> Sink<'id, Id, B> {
-    fn refuse(&mut self, fault: Fault, owners: Refused<'id, Id, B>) {
-        if self.refused.is_none() {
-            self.refused = Some((fault, owners));
-        } else {
-            // A later refusal adds no cause. It lies past the four unique
-            // queue places and the installed keys, a second time: its
-            // tokens own no memory, and a descriptor it holds stays
-            // attached to its memory, outside every pool.
-            let _excess = owners;
+    /// The sink of a removal command, which takes its one receipt and
+    /// leaves any completion with the core.
+    fn removal() -> Self {
+        Self {
+            removal: Some(None),
+            takes_completions: false,
+            ..Self::default()
         }
     }
-    /// The recorded contract fault, retaining its owners in quarantine.
-    pub(super) fn fault(&mut self) -> Option<Fault> {
-        let (fault, owners) = self.refused.take()?;
-        let _quarantined = core::mem::ManuallyDrop::new(owners);
-        Some(fault)
+    /// The sink of a call whose results the port does not collect: the
+    /// core keeps every completion and receipt for a later offer.
+    pub(super) fn refusing() -> Self {
+        Self {
+            takes_completions: false,
+            ..Self::default()
+        }
     }
-    /// The recorded contract fault with the owners it refused.
-    fn take_refused(&mut self) -> Option<(Fault, Refused<'id, Id, B>)> {
-        self.refused.take()
+    /// The receipt this removal command's sink took.
+    fn take_removed(&mut self) -> Option<KeyRemoved<'id, CorePath<Id>>> {
+        self.removal.as_mut().and_then(Option::take)
     }
 }
 impl<Id: SlotIdentity, const B: usize> Default for Sink<'_, Id, B> {
     fn default() -> Self {
         Self {
             completed: heapless::Vec::new(),
-            removed: heapless::Vec::new(),
+            removal: None,
+            takes_completions: true,
             tbtt: None,
-            refused: None,
         }
     }
 }
@@ -150,31 +143,26 @@ impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePa
 {
     fn tx_completed(
         &mut self,
-        queue: FreeQueue<'id, CorePath<Id>>,
-        ticket: TxTicket<'id, CorePath<Id>>,
-        slot: Pin<&'static mut TxSlot<B>>,
-        end: PublicationEnd,
-        rate: PhyRate,
-    ) {
-        // One completion per hardware queue per service.
-        if let Err(completion) = self.completed.push(Completion {
-            queue,
-            ticket,
-            slot,
-            end,
-            rate,
-        }) {
-            let at = self::queue(completion.queue.category()) as u8;
-            self.refuse(
-                Fault::DuplicateCompletion { queue: at },
-                Refused::Completion(completion),
-            );
+        completion: Completion<'id, Id, B>,
+    ) -> Result<(), Completion<'id, Id, B>> {
+        // One completion per hardware queue per service; the core keeps
+        // one it has no room for.
+        if !self.takes_completions {
+            return Err(completion);
         }
+        self.completed.push(completion)
     }
-    fn key_removed(&mut self, removed: KeyRemoved<'id, CorePath<Id>>) {
-        // One removal per installed hardware key.
-        if let Err(removed) = self.removed.push(removed) {
-            self.refuse(Fault::RemovalOverflow, Refused::Removal(removed));
+    fn key_removed(
+        &mut self,
+        removed: KeyRemoved<'id, CorePath<Id>>,
+    ) -> Result<(), KeyRemoved<'id, CorePath<Id>>> {
+        match &mut self.removal {
+            Some(place @ None) => {
+                *place = Some(removed);
+                Ok(())
+            }
+            // Outside its command, or a second one: the core keeps it.
+            _ => Err(removed),
         }
     }
     fn disabled(&mut self) {}
@@ -241,6 +229,108 @@ pub(crate) enum TestRefusal {
     Submit,
 }
 
+/// The queue places at home, each with its queue's ordinary descriptor.
+///
+/// A single MPDU's publication takes a place and its descriptor together
+/// and gives them back together, at its completion or its refusal: the
+/// descriptor's place is the one its queue place left, so it is vacant.
+/// A data arena takes a place alone; its queue's descriptor stays home.
+pub(super) struct QueueHomes<'id, Id: SlotIdentity, const B: usize> {
+    pub(super) bank: crate::lower_mac::QueueBank<'id, CorePath<Id>>,
+    descriptors: [Option<Pin<&'static mut TxSlot<B>>>; TX_DESCRIPTORS],
+}
+impl<'id, Id: SlotIdentity, const B: usize> QueueHomes<'id, Id, B> {
+    const fn empty() -> Self {
+        Self {
+            bank: crate::lower_mac::QueueBank::empty(),
+            descriptors: [const { None }; TX_DESCRIPTORS],
+        }
+    }
+    fn new(
+        queues: [FreeQueue<'id, CorePath<Id>>; 4],
+        single: [Pin<&'static mut TxSlot<B>>; TX_DESCRIPTORS],
+    ) -> Self {
+        Self {
+            bank: crate::lower_mac::QueueBank::new(queues),
+            descriptors: single.map(Some),
+        }
+    }
+    /// The descriptor place of the queue of `category`.
+    fn descriptor_place(
+        &mut self,
+        category: WmmAccessCategory,
+    ) -> &mut Option<Pin<&'static mut TxSlot<B>>> {
+        let [voice, video, best_effort, background] = &mut self.descriptors;
+        match LegacyTxQueue::from_access_category(category) {
+            LegacyTxQueue::Voice => voice,
+            LegacyTxQueue::Video => video,
+            LegacyTxQueue::BestEffort => best_effort,
+            LegacyTxQueue::Background => background,
+        }
+    }
+    /// The descriptor of the queue of `category`, while it is home.
+    fn descriptor(&self, category: WmmAccessCategory) -> Option<&Pin<&'static mut TxSlot<B>>> {
+        self.descriptors
+            .get(queue(category))
+            .and_then(Option::as_ref)
+    }
+    /// The place of the queue of `category` with its descriptor, when both
+    /// are home; otherwise neither leaves.
+    fn take_paired(
+        &mut self,
+        category: WmmAccessCategory,
+    ) -> Option<(FreeQueue<'id, CorePath<Id>>, Pin<&'static mut TxSlot<B>>)> {
+        self.descriptor(category)?;
+        let queue = self.bank.take(category)?;
+        match self.descriptor_place(category).take() {
+            Some(slot) => Some((queue, slot)),
+            None => {
+                self.bank.put(queue);
+                None
+            }
+        }
+    }
+    /// Give a place back with the descriptor it left with.
+    fn put_paired(
+        &mut self,
+        queue: FreeQueue<'id, CorePath<Id>>,
+        slot: Pin<&'static mut TxSlot<B>>,
+    ) {
+        *self.descriptor_place(queue.category()) = Some(slot);
+        self.bank.put(queue);
+    }
+    /// Give a place back alone: its descriptor stayed home, or is gone
+    /// with its memory.
+    fn put(&mut self, queue: FreeQueue<'id, CorePath<Id>>) {
+        self.bank.put(queue);
+    }
+    fn is_home(&self, category: WmmAccessCategory) -> bool {
+        self.bank.is_home(category)
+    }
+    pub(super) fn is_home_at(&self, index: usize) -> bool {
+        self.bank.is_home_at(index)
+    }
+    /// Whether every descriptor is home and idle.
+    fn descriptors_idle(&self) -> bool {
+        self.descriptors.iter().all(|slot| {
+            slot.as_ref().is_some_and(|slot| {
+                slot.state() == crate::mac::tx::TxDmaState::Free && !slot.attached()
+            })
+        })
+    }
+    /// Every descriptor, when each is home; otherwise all stay.
+    fn take_descriptors(&mut self) -> Option<[Pin<&'static mut TxSlot<B>>; TX_DESCRIPTORS]> {
+        if self.descriptors.iter().any(Option::is_none) {
+            return None;
+        }
+        let [Some(a), Some(b), Some(c), Some(d)] = self.descriptors.each_mut().map(Option::take)
+        else {
+            return None;
+        };
+        Some([a, b, c, d])
+    }
+}
+
 pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) core: PortCoreOwner<'id, Id, D, B>,
     /// The tickets at home, each at its own place.
@@ -251,12 +341,11 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     /// Refuse the next step of this kind, which the counts exclude.
     #[cfg(test)]
     pub(super) refuse_for_test: Option<TestRefusal>,
-    /// The queue places at home, each at its own place.
-    pub(super) free: crate::lower_mac::QueueBank<'id, CorePath<Id>>,
+    /// The queue places at home, each at its own place with its
+    /// descriptor.
+    pub(super) free: QueueHomes<'id, Id, B>,
     pub(super) queues: [heapless::Deque<Pending<'id, Id, D, B, O>, QUEUE_DEPTH>; 4],
     pub(super) running: [Option<Pending<'id, Id, D, B, O>>; 4],
-    /// Each queue's ordinary descriptor, while no MPDU of it is published.
-    pub(super) descriptors: [Option<Pin<&'static mut TxSlot<B>>>; TX_DESCRIPTORS],
     /// The station's two data arenas over the A-MPDU chains, from
     /// preparation until retirement returns their chains and tickets.
     pub(super) arena: Option<DataArenas<'id, Id, B>>,
@@ -294,12 +383,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// Every descriptor, when each is back and idle; a missing or busy one
     /// keeps them all, and the stopped port then refuses reinstallation.
     pub(super) fn take_descriptors(&mut self) -> Option<TxDescriptors<B>> {
-        let idle = self
-            .descriptors
-            .iter()
-            .flatten()
-            .all(|slot| slot.state() == crate::mac::tx::TxDmaState::Free && !slot.attached());
-        if !idle || self.descriptors.iter().any(Option::is_none) {
+        if !self.free.descriptors_idle() {
             return None;
         }
         // Idle, empty arenas give their chains and tickets back; any other
@@ -312,12 +396,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 return None;
             }
         };
-        let [Some(a), Some(b), Some(c), Some(d)] = self.descriptors.each_mut().map(Option::take)
-        else {
-            return None;
-        };
+        let single = self.free.take_descriptors()?;
         Some(TxDescriptors {
-            single: [a, b, c, d],
+            single,
             chains: [first, second],
         })
     }
@@ -335,10 +416,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             refuse_values_for_test: false,
             #[cfg(test)]
             refuse_for_test: None,
-            free: crate::lower_mac::QueueBank::empty(),
+            free: QueueHomes::empty(),
             queues: [const { heapless::Deque::new() }; 4],
             running: [const { None }; 4],
-            descriptors: [const { None }; TX_DESCRIPTORS],
             arena: None,
             retained_group: None,
             barrier: None,
@@ -369,9 +449,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // The one caller checked `retired` before taking any resource.
         self.core = core;
         self.tickets = crate::lower_mac::TicketBank::new(tickets);
-        self.free = crate::lower_mac::QueueBank::new(queues);
         let TxDescriptors { single, chains } = descriptors;
-        self.descriptors = single.map(Some);
+        self.free = QueueHomes::new(queues, single);
         self.observations = Some(observations);
         let (Some(first), Some(second)) = (self.tickets.take(), self.tickets.take()) else {
             core::mem::forget(chains);
@@ -401,7 +480,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let descriptors = self.take_descriptors();
         // The installation ends: its tickets and queue places end with it.
         self.tickets = crate::lower_mac::TicketBank::empty();
-        self.free = crate::lower_mac::QueueBank::empty();
+        self.free = QueueHomes::empty();
         for key in &mut self.keys {
             drop(key.take());
         }
@@ -570,33 +649,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         sink: &mut Sink<'id, Id, B>,
         stopping: bool,
     ) -> Result<(), Fault> {
-        let refused = sink.take_refused();
-        let mut first = refused.as_ref().map(|(fault, _)| *fault);
+        let mut first = None;
         for completion in sink.completed.drain(..) {
             if let Err(fault) = self.complete(env, completion, stopping) {
                 first.get_or_insert(fault);
             }
-        }
-        match refused {
-            // A completion past the queue places goes home as the others.
-            Some((_, Refused::Completion(completion))) => {
-                if let Err(fault) = self.complete(env, completion, stopping) {
-                    first.get_or_insert(fault);
-                }
-            }
-            Some((_, Refused::Removal(removed))) => {
-                let _quarantined = core::mem::ManuallyDrop::new(removed);
-            }
-            None => {}
         }
         if let Some(tbtt) = sink.tbtt.take() {
             env.tbtt(tbtt);
         }
         if let Some(fault) = first {
             return Err(fault);
-        }
-        if !sink.removed.is_empty() {
-            return Err(Fault::RemovalOverflow);
         }
         self.withdraw(env);
         Ok(())
@@ -621,14 +684,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         } = completion;
         let index = queue(free.category());
         let at = index as u8;
+        let category = free.category();
         let mut first = None;
-        // The queue place and the ticket return to their own places.
-        self.free.put(free);
+        // The ticket returns to its own place.
         self.tickets.put(ticket);
         let Some(mut pending) = self.running.get_mut(index).and_then(Option::take) else {
             // No attempt to take the memory: it stays attached to its
-            // descriptor, which goes home and keeps it out of every pool.
-            self.home_descriptor(index, slot);
+            // descriptor, which goes home with its queue place and keeps it
+            // out of every pool.
+            self.free.put_paired(free, slot);
             return Err(*first.get_or_insert(Fault::CompletionWithoutPending { queue: at }));
         };
         // The buffer leaves the queue's descriptor and rejoins the right
@@ -645,12 +709,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
             },
         };
-        if !self.home_descriptor(index, slot) {
-            first.get_or_insert(Fault::DescriptorMissing { queue: at });
-        }
+        // The queue place and its descriptor go home together.
+        self.free.put_paired(free, slot);
         if let Err(fault) = returned {
             // Its memory is not back: the attempt stays published.
-            self.keep_running(index, pending);
+            self.keep_running(category, pending);
             return Err(*first.get_or_insert(fault));
         }
         use crate::ordinary_tx::OrdinaryTxFailure as Failure;
@@ -701,7 +764,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             // A queue holds every ticket's attempt (`QUEUE_DEPTH`), so this
             // push has room; refused, the retry stays where it was.
             if let Err(pending) = self.enqueue(index, pending, true) {
-                self.keep_running(index, pending);
+                self.keep_running(category, pending);
                 first.get_or_insert(Fault::QueueFull { queue: at });
             }
         }
@@ -750,23 +813,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         pending.operation.execute().mpdu.buffer.dma.complete(memory)
     }
-    /// Put a descriptor back in its queue's place: `false`, with the
-    /// descriptor kept out of every pool, when the place is taken.
-    fn home_descriptor(&mut self, index: usize, slot: Pin<&'static mut TxSlot<B>>) -> bool {
-        match self.descriptors.get_mut(index) {
-            Some(place) if place.is_none() => {
-                *place = Some(slot);
-                true
-            }
-            _ => false,
-        }
-    }
     /// Keep an attempt a completion could not end in its queue's published
     /// place, which the completion just emptied.
-    fn keep_running(&mut self, index: usize, pending: Pending<'id, Id, D, B, O>) {
-        if let Some(place) = self.running.get_mut(index) {
-            *place = Some(pending);
-        }
+    fn keep_running(&mut self, category: WmmAccessCategory, pending: Pending<'id, Id, D, B, O>) {
+        let [voice, video, best_effort, background] = &mut self.running;
+        let place = match LegacyTxQueue::from_access_category(category) {
+            LegacyTxQueue::Voice => voice,
+            LegacyTxQueue::Video => video,
+            LegacyTxQueue::BestEffort => best_effort,
+            LegacyTxQueue::Background => background,
+        };
+        *place = Some(pending);
     }
     /// Offer one TX edge to the core's MPDUs and to the published arena.
     /// Their timeout aborts force CCA one at a time: when one side's
@@ -950,7 +1007,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             Ok((_, _, key)) => owner_free_refusal(
                 self.observations.is_some(),
                 self.tickets.at_home() != 0,
-                self.descriptors.get(index).and_then(Option::as_ref),
+                self.free.descriptor(pending.category),
                 self.free.is_home(pending.category),
                 &mut pending,
                 *key,
@@ -994,9 +1051,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
             None => TxAdmission::Open(core_ticket),
         };
-        // The descriptor before the buffer's lease: a refusal here holds the
-        // admission alone, which goes back as a ticket.
-        let Some(mut slot) = self.descriptors.get_mut(index).and_then(Option::take) else {
+        // The queue place and its descriptor before the buffer's lease: a
+        // refusal here holds the admission alone, which goes back as a
+        // ticket.
+        let Some((queue, mut slot)) = self.free.take_paired(pending.category) else {
             return Err(self.unadmit(
                 hardware,
                 env,
@@ -1012,7 +1070,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 env,
                 index,
                 (pending, admission),
-                Some(slot),
+                Some((queue, Some(slot))),
                 refused(PublishStep::DescriptorBusy),
             ));
         }
@@ -1025,7 +1083,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 env,
                 index,
                 (pending, admission),
-                Some(slot),
+                Some((queue, Some(slot))),
                 refused(PublishStep::Buffer),
             ));
         };
@@ -1038,7 +1096,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 env,
                 index,
                 (pending, admission),
-                Some(slot),
+                Some((queue, Some(slot))),
                 refused(PublishStep::Attach),
             ));
         }
@@ -1048,21 +1106,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 env,
                 index,
                 (pending, admission),
-                slot,
+                (queue, slot),
                 PublishStep::DescriptorBusy,
             );
         }
         // Free a moment ago, in the same call: the slot lends its memory.
         let TxSlotAccess::Free(mut memory) = slot.access() else {
             // Excluded by the read just above. The descriptor keeps the
-            // memory out of every pool; the other owners go back beside
-            // the fault.
+            // memory out of every pool; the queue place and the other
+            // owners go back beside the fault.
             return Err(self.unadmit(
                 hardware,
                 env,
                 index,
                 (pending, admission),
-                None,
+                Some((queue, None)),
                 Fault::DescriptorMissing { queue: at },
             ));
         };
@@ -1084,7 +1142,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         env,
                         index,
                         (pending, admission),
-                        memory.into_slot(),
+                        (queue, memory.into_slot()),
                         step,
                     );
                 }
@@ -1097,32 +1155,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 env,
                 index,
                 (pending, admission),
-                memory.into_slot(),
+                (queue, memory.into_slot()),
                 PublishStep::Values,
             );
         }
-        // The queue before the values that hold the memory: without it the
-        // attempt unwinds whole.
-        let Some(running) = self.running.get_mut(index) else {
-            return self.unwind(
-                hardware,
-                env,
-                index,
-                (pending, admission),
-                memory.into_slot(),
-                PublishStep::Queue,
-            );
-        };
-        let Some(queue) = self.free.take(pending.category) else {
-            return self.unwind(
-                hardware,
-                env,
-                index,
-                (pending, admission),
-                memory.into_slot(),
-                PublishStep::Queue,
-            );
-        };
         let values = MpduValues::checked(
             memory,
             core_mac::MpduParameters {
@@ -1148,14 +1184,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let values = match values {
             Ok(values) => values,
             Err(refused) => {
-                self.free.put(queue);
                 let slot = refused.slot.into_slot();
                 return self.unwind(
                     hardware,
                     env,
                     index,
                     (pending, admission),
-                    slot,
+                    (queue, slot),
                     PublishStep::Values,
                 );
             }
@@ -1168,8 +1203,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             ticket: pending.operation.ticket().index(),
             buffer: pending.operation.execute().mpdu.buffer.index(),
         };
-        // Durable backing owns the indivisible operation before publication.
-        *running = Some(pending);
         #[cfg(test)]
         let submitted = if self
             .refuse_for_test
@@ -1194,19 +1227,25 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 slot,
                 admission,
             } = failed;
-            let fault = Fault::Core(fault);
             // The core refused the publication: its owners go back as at a
             // refusal before it, and the attempt to the head of its queue.
-            self.free.put(queue);
-            let Some(mut pending) = self.running.get_mut(index).and_then(Option::take) else {
-                return Err(fault);
-            };
             (
                 pending.operation.execute().mpdu.published,
                 pending.published,
             ) = before;
-            return Err(self.put_back(hardware, env, index, (pending, admission), slot, fault));
+            return Err(self.put_back(
+                hardware,
+                env,
+                index,
+                (pending, admission),
+                (queue, slot),
+                Fault::Core(fault),
+            ));
         }
+        // The core holds the publication; its attempt waits in its queue's
+        // published place, which no attempt of this queue holds while its
+        // queue place was home.
+        self.keep_running(pending.category, pending);
         #[cfg(all(oer_trace, oer_debug_control))]
         oer_portable_trace_recorder::emit(&publication);
         Ok(())
@@ -1258,18 +1297,20 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
         (pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
-        slot: Option<Pin<&'static mut TxSlot<B>>>,
+        home: Option<(
+            FreeQueue<'id, CorePath<Id>>,
+            Option<Pin<&'static mut TxSlot<B>>>,
+        )>,
         fault: Fault,
     ) -> Fault {
-        if let Some(slot) = slot {
-            // A taken place lies past the queue's one descriptor: the
-            // descriptor stays out of every pool.
-            let _home = self.home_descriptor(index, slot);
+        // The queue place goes home with the descriptor it took.
+        match home {
+            Some((queue, Some(slot))) => self.free.put_paired(queue, slot),
+            Some((queue, None)) => self.free.put(queue),
+            None => {}
         }
-        match self.returned_ticket(hardware, admission, fault) {
-            Ok(()) => self.requeue(env, index, pending, fault),
-            Err(cause) => self.requeue_beside(env, index, pending, cause),
-        }
+        self.returned_ticket(hardware, admission);
+        self.requeue(env, index, pending, fault)
     }
     /// A publication the core refused at its submission: the memory
     /// rejoins the buffer when the descriptor gives it up (otherwise it
@@ -1281,7 +1322,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
         (mut pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
-        mut slot: Pin<&'static mut TxSlot<B>>,
+        (queue, mut slot): (FreeQueue<'id, CorePath<Id>>, Pin<&'static mut TxSlot<B>>),
         fault: Fault,
     ) -> Fault {
         if let Some(memory) = slot.as_mut().detach()
@@ -1296,7 +1337,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             env,
             index,
             (pending, admission),
-            Some(slot),
+            Some((queue, Some(slot))),
             fault,
         )
     }
@@ -1337,7 +1378,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
         (mut pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
-        mut slot: Pin<&'static mut TxSlot<B>>,
+        (queue, mut slot): (FreeQueue<'id, CorePath<Id>>, Pin<&'static mut TxSlot<B>>),
         step: PublishStep,
     ) -> Result<(), Fault> {
         let terminal = Fault::Publish {
@@ -1352,7 +1393,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 env,
                 index,
                 (pending, admission),
-                Some(slot),
+                Some((queue, Some(slot))),
                 terminal,
             ));
         };
@@ -1362,10 +1403,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             // refuse.
             let _returned = buffer.dma.complete(memory).is_ok();
         }
-        let _home = self.home_descriptor(index, slot);
-        if let Err(fault) = self.returned_ticket(hardware, admission, terminal) {
-            return Err(self.requeue_beside(env, index, pending, fault));
-        }
+        self.free.put_paired(queue, slot);
+        self.returned_ticket(hardware, admission);
         self.finish(
             env,
             pending,
@@ -1375,30 +1414,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     }
     /// Return the ticket of an admission never published to its own place,
     /// its key use returned first, in whichever phase the core is. A
-    /// removal takes its key out of `keys` before its barrier, so a
-    /// publication's key has no removal waiting on this use and the sink
-    /// stays empty; otherwise `terminal`, or the sink's contract fault,
-    /// names the refusal.
+    /// removal this return finishes keeps its receipt in the core's
+    /// removal place (this sink takes none), and a removal takes its key
+    /// out of `keys` before its barrier, so a publication's key has none
+    /// waiting on this use.
     fn returned_ticket(
         &mut self,
         hardware: &mut D::Hardware,
         admission: TxAdmission<'id, CorePath<Id>>,
-        terminal: Fault,
-    ) -> Result<(), Fault> {
-        let mut sink = Sink::default();
+    ) {
+        let mut sink = Sink::refusing();
         let ticket = self
             .core
             .view()
             .return_admission(hardware, admission, &mut sink);
         self.tickets.put(ticket);
-        let contract = sink.fault();
-        if sink.removed.is_empty() && contract.is_none() {
-            return Ok(());
-        }
-        // A removal this key's return finished, which the order above
-        // excludes: its tokens own no memory.
-        drop(sink);
-        Err(contract.unwrap_or(terminal))
     }
     pub(super) fn install(
         &mut self,
@@ -1468,15 +1498,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .get_mut(index)
             .and_then(Option::take)
             .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
-        let mut sink = Sink::default();
+        let mut sink = Sink::removal();
         match installed {
             Installed::Transmit(key) => view.remove_checked_key(hardware, key, &mut sink),
             Installed::Receive(key) => view.remove_checked_key(hardware, key, &mut sink),
         }
-        if let Some(fault) = sink.fault() {
-            return Err(fault);
-        }
-        sink.removed.pop().ok_or(Fault::RemovalMissing)
+        // A removal still waiting for a use keeps its place in the core.
+        sink.take_removed().ok_or(Fault::RemovalMissing)
     }
     pub(super) fn removed_terminal(
         &self,

@@ -80,8 +80,6 @@ impl DiagnosticPath for BackendFault {
                 queue_fault(path, "Publish", *queue);
                 path.name(publish_step(step));
             }
-            Self::DuplicateCompletion { queue } => queue_fault(path, "DuplicateCompletion", *queue),
-            Self::RemovalOverflow => path.name("RemovalOverflow"),
             Self::RemovalMissing => path.name("RemovalMissing"),
             Self::RemovalMismatch => path.name("RemovalMismatch"),
             Self::GroupKeyIdRange => path.name("GroupKeyIdRange"),
@@ -95,7 +93,6 @@ impl DiagnosticPath for BackendFault {
             Self::ReceiveOverflow => path.name("ReceiveOverflow"),
             Self::ReceiveRange => path.name("ReceiveRange"),
             Self::ReceiveLost => path.name("ReceiveLost"),
-            Self::ArenaCoreContract => path.name("ArenaCoreContract"),
             Self::InstallationResources => path.name("InstallationResources"),
             Self::EdcaUnsupported => path.name("EdcaUnsupported"),
             Self::ChannelNotPermitted => path.name("ChannelNotPermitted"),

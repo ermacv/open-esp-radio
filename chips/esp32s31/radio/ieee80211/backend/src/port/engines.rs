@@ -2588,13 +2588,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             .as_mut()
             .ok_or(Fault::InstallationResources)?;
         let pairwise = driver::arena::station_pairwise(&driver.keys);
-        let mut sink = Sink::default();
+        // The arena core hands its port nothing: a receipt or a completion
+        // it finishes waits with the core for the next ordinary service.
+        let mut sink = Sink::refusing();
         let result = {
             let mut arena_port: driver::arena::Port<'_, 'static, Id, D, B, O> = ArenaPort::new(
                 arena,
                 core,
                 hardware,
-                &mut driver.free,
+                &mut driver.free.bank,
                 VifRole::Station,
                 pairwise,
                 &mut sink,
@@ -2602,15 +2604,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             );
             step(&mut arena_port)
         };
-        let contract = sink.fault().or_else(|| {
-            (!sink.removed.is_empty() || !sink.completed.is_empty())
-                .then_some(Fault::ArenaCoreContract)
-        });
-        if let Some(fault) = contract {
-            // The callback's owners stay with the sink's quarantine.
-            core::mem::forget(sink);
-            return Err(port.record(fault));
-        }
         let result = result.map_err(|fault| port.record(Fault::Arena(fault)));
         port.recompute_deadline();
         result

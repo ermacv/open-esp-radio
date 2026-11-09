@@ -60,6 +60,8 @@ pub enum CoreRetained {
     NotDisabled,
     /// The transmitter still holds an attempt or a published slot.
     Publications,
+    /// The core keeps a key removal, or a result its sink refused.
+    Results,
 }
 impl<C> CoreOwner<C> {
     /// Empty storage before initial preparation or after dismantling.
@@ -332,6 +334,10 @@ impl<
             self.bank = Some(prepared);
             return Err(CoreRetained::NotDisabled);
         }
+        if prepared.core.keeps_results() {
+            self.bank = Some(prepared);
+            return Err(CoreRetained::Results);
+        }
         let Prepared { mut core, phase } = prepared;
         match core.tx.into_idle() {
             Ok(tx) => Ok(LowerMacCoreParts {
@@ -425,7 +431,9 @@ impl<
         sink: &mut K,
         gate: GateMode,
     ) -> bool {
-        let core = &self.core;
+        let core = &mut self.core;
+        // A completion its sink refused before ends here, at the latest.
+        core.offer_kept(sink);
         if core.fault.is_some() || core.attempts().next().is_some() {
             return false;
         }

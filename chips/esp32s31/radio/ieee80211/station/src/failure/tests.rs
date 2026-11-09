@@ -132,8 +132,8 @@ fn a_port_fault_keeps_its_whole_path_under_the_lifecycle_failure() {
 fn a_named_driver_fault_keeps_its_queue_and_operation_across_the_boundary() {
     use oer_chips_esp32s31_radio_ieee80211_backend::port::{CoreOp, Fault};
     assert_eq!(
-        super::convert::backend_fault(Fault::DuplicateCompletion { queue: 2 }),
-        BackendFault::DuplicateCompletion { queue: 2 }
+        super::convert::backend_fault(Fault::CompletionWithoutPending { queue: 2 }),
+        BackendFault::CompletionWithoutPending { queue: 2 }
     );
     assert_eq!(
         super::convert::backend_fault(Fault::CoreViewUnavailable(CoreOp::Tbtt)),

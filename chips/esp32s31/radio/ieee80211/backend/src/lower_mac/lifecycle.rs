@@ -781,6 +781,7 @@ impl<
                         slot,
                         PublicationEnd::Expired { msdus: 1 },
                         rate,
+                        admitted_at,
                         sink,
                     );
                     continue;
@@ -800,6 +801,7 @@ impl<
                                 slot,
                                 PublicationEnd::Withdrawn,
                                 rate,
+                                admitted_at,
                                 sink,
                             );
                             self.withdraw_held_attempts(hardware, sink);
@@ -807,7 +809,9 @@ impl<
                         }
                     }
                 }
-                published @ (Work::Published(_) | Work::Quarantined { .. }) => published,
+                published @ (Work::Published(_) | Work::Quarantined { .. } | Work::Done { .. }) => {
+                    published
+                }
             };
             self.queues[index] = Some(Attempt {
                 queue,

@@ -488,7 +488,6 @@ fn a_fault_that_took_owners_keeps_the_port_quarantined() {
         fixture.start();
         // Each of these left a site with an owner in its hands.
         for fault in [
-            Fault::RemovalOverflow,
             Fault::RemovalMissing,
             Fault::RemovalMismatch,
             Fault::ReceiveAccounting,

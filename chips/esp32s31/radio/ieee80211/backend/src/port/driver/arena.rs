@@ -117,13 +117,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .as_mut()
             .ok_or(Fault::InstallationResources)?;
         let pairwise = station_pairwise(&self.keys);
-        let mut sink = Sink::default();
+        // The arena core hands its port nothing: a receipt or a completion
+        // it finishes waits with the core for the next ordinary service.
+        let mut sink = Sink::refusing();
         let (done, settled) = {
             let mut port: Port<'_, 'id, Id, D, B, O> = ArenaPort::new(
                 arena,
                 core,
                 hardware,
-                &mut self.free,
+                &mut self.free.bank,
                 VifRole::Station,
                 pairwise,
                 &mut sink,
@@ -132,15 +134,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             let done = port.service(wake, now).map_err(Fault::Arena)?;
             (done, was_settling && !port.arenas.settling())
         };
-        if let Some(fault) = sink.fault() {
-            return Err(fault);
-        }
-        // An arena releases its key right only at the station's settlement.
-        if !sink.removed.is_empty() || !sink.completed.is_empty() {
-            // The callback's owners stay with the sink's quarantine.
-            core::mem::forget(sink);
-            return Err(Fault::ArenaCoreContract);
-        }
         Ok((done, settled))
     }
 }

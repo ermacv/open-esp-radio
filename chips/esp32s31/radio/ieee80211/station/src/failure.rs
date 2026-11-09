@@ -18,12 +18,6 @@ pub enum BackendFault {
         queue: u8,
         step: PublishStep,
     },
-    /// A hardware queue completed twice in one service.
-    DuplicateCompletion {
-        queue: u8,
-    },
-    /// The core removed more keys than were installed.
-    RemovalOverflow,
     /// The core reported no removal of a key it was told to remove.
     RemovalMissing,
     /// A removal's terminal named another slot than the key held.
@@ -54,8 +48,6 @@ pub enum BackendFault {
     ReceiveRange,
     /// A received buffer was dropped without its recycle.
     ReceiveLost,
-    /// The data arenas' step completed an MPDU or removed a key.
-    ArenaCoreContract,
     /// The installation's descriptors, chains, tickets or buffers were not
     /// all available.
     InstallationResources,

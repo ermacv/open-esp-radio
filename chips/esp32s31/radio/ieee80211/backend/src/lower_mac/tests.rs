@@ -850,17 +850,29 @@ struct Events<'core> {
     slots: Vec<Pin<&'static mut TxSlot<512>>>,
     disabled: usize,
     tbtts: Vec<TbttEvent>,
+    /// How many of the next completions this sink refuses.
+    refuse_completions: usize,
+    /// How many of the next removal receipts this sink refuses.
+    refuse_removals: usize,
 }
 
 impl<'core> LowerMacSink<'core, 'static, 512> for Events<'core> {
     fn tx_completed(
         &mut self,
-        queue: FreeQueue<'core>,
-        ticket: TxTicket<'core>,
-        slot: Pin<&'static mut TxSlot<512>>,
-        end: PublicationEnd,
-        rate: PhyRate,
-    ) {
+        completion: TxCompletion<'core, 'static, 512>,
+    ) -> Result<(), TxCompletion<'core, 'static, 512>> {
+        if let Some(left) = self.refuse_completions.checked_sub(1) {
+            self.refuse_completions = left;
+            self.order.push("tx refused");
+            return Err(completion);
+        }
+        let TxCompletion {
+            queue,
+            ticket,
+            slot,
+            end,
+            rate,
+        } = completion;
         self.returned_tickets.push(ticket);
         self.order.push("tx");
         self.queues.push(queue.category());
@@ -868,11 +880,18 @@ impl<'core> LowerMacSink<'core, 'static, 512> for Events<'core> {
         self.slots.push(slot);
         self.completions.push(end);
         self.rates.push(rate);
+        Ok(())
     }
 
-    fn key_removed(&mut self, removed: KeyRemoved<'core>) {
+    fn key_removed(&mut self, removed: KeyRemoved<'core>) -> Result<(), KeyRemoved<'core>> {
+        if let Some(left) = self.refuse_removals.checked_sub(1) {
+            self.refuse_removals = left;
+            self.order.push("key refused");
+            return Err(removed);
+        }
         self.removed.push(removed);
         self.order.push("key");
+        Ok(())
     }
 
     fn disabled(&mut self) {
@@ -4471,5 +4490,114 @@ fn a_ticket_and_a_queue_place_go_back_to_their_own_places() {
         assert!(queues.is_home(WmmAccessCategory::Voice));
         queues.put(video);
         assert!(queues.all_home());
+    });
+}
+
+#[test]
+fn a_completion_its_sink_refuses_waits_in_its_queue_and_ends_once_when_offered_again() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let frame = data_frame(BSSID);
+        submit(&mut core, &mut hardware, values(&frame, false)).unwrap();
+        hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
+        let mut events = Events {
+            refuse_completions: 1,
+            ..Events::default()
+        };
+        core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
+            .unwrap();
+        assert_eq!(events.order, ["tx refused"]);
+        assert!(events.completions.is_empty());
+        // The ended attempt keeps its queue's place: no second attempt of
+        // the queue is admitted, and the core holds a result.
+        assert!(core.queue_busy(WmmAccessCategory::BestEffort));
+        assert!(core.keeps_results());
+        // The next service offers it again; the hardware ends nothing new.
+        let mut events = Events::default();
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        assert_eq!(events.order, ["tx"]);
+        assert!(matches!(
+            events.completions.as_slice(),
+            [PublicationEnd::Delivered { .. }]
+        ));
+        assert_eq!(hardware.publications(), 1);
+        assert!(!core.queue_busy(WmmAccessCategory::BestEffort));
+        assert!(!core.keeps_results());
+        // It ends once.
+        let mut events = Events::default();
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        assert!(events.order.is_empty());
+    });
+}
+
+#[test]
+fn a_removal_receipt_its_sink_refuses_waits_in_its_place_and_the_key_clears_once() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        static KEY: [u8; 16] = [0x5a; 16];
+        let pairwise = core
+            .install_key(
+                &mut hardware,
+                TransmitKeyScope::StationPairwise { peer: BSSID },
+                &KEY,
+            )
+            .unwrap();
+        let mut events = Events {
+            refuse_removals: 1,
+            ..Events::default()
+        };
+        core.remove_checked_key(&mut hardware, pairwise, &mut events);
+        assert_eq!(hardware.cleared_keys, [4]);
+        assert_eq!(events.order, ["key refused"]);
+        assert!(events.removed.is_empty());
+        assert!(core.keeps_results());
+        // Offered again: the receipt comes out, the key is not cleared again.
+        let mut events = Events::default();
+        core.offer_kept(&mut events);
+        assert_eq!(hardware.cleared_keys, [4]);
+        assert_eq!(events.removed.len(), 1);
+        assert!(!core.keeps_results());
+        let mut again = Events::default();
+        core.offer_kept(&mut again);
+        assert!(again.order.is_empty());
+    });
+}
+
+#[test]
+fn a_disable_offers_a_kept_completion_before_it_ends() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let frame = data_frame(BSSID);
+        submit(&mut core, &mut hardware, values(&frame, false)).unwrap();
+        hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
+        let mut events = Events {
+            refuse_completions: 1,
+            ..Events::default()
+        };
+        core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
+            .unwrap();
+        assert!(core.keeps_results());
+        let mut refusing = Events {
+            refuse_completions: 1,
+            ..Events::default()
+        };
+        // A disable whose sink still refuses the completion does not end.
+        core.inner
+            .disable_checked(&mut hardware, &mut refusing)
+            .unwrap();
+        assert_eq!(refusing.order, ["tx refused"]);
+        assert_eq!(refusing.disabled, 0);
+        assert!(core.keeps_results());
+        let mut events = Events::default();
+        core.inner.finish_disable(&mut events);
+        assert_eq!(events.order, ["tx"]);
+        assert_eq!(events.disabled, 1);
+        assert!(!core.keeps_results());
+        core.reclaim(&mut events);
     });
 }

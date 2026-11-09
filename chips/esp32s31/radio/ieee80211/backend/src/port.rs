@@ -361,13 +361,6 @@ pub enum Fault {
         /// The step.
         step: PublishStep,
     },
-    /// A hardware queue completed twice in one service.
-    DuplicateCompletion {
-        /// The hardware queue.
-        queue: u8,
-    },
-    /// The core removed more keys than were installed.
-    RemovalOverflow,
     /// The core reported no removal of a key it was told to remove.
     RemovalMissing,
     /// A removal's terminal names another slot than the key held.
@@ -403,8 +396,6 @@ pub enum Fault {
     /// A received buffer was dropped without its recycle: its unit went
     /// back to the ring. A stop's recovery takes it out of the held count.
     ReceiveLost,
-    /// The data arenas' step completed an MPDU or removed a key.
-    ArenaCoreContract,
     /// The installation's descriptors, chains, tickets or buffers were not
     /// all available to it.
     InstallationResources,

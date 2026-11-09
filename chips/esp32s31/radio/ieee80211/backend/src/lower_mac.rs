@@ -599,22 +599,49 @@ pub trait LowerMacSink<
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 >
 {
-    /// The attempt of `queue`, submitted at `rate`, ended as `end`: its
-    /// slot comes back with it.
+    /// An attempt ended: its queue place, ticket and slot come back with
+    /// its end.
+    ///
+    /// # Errors
+    ///
+    /// The sink has no room for it: the whole completion comes back, and
+    /// the core keeps it in its queue's place and offers it again at its
+    /// next service or disable, never repeating the hardware's end.
     fn tx_completed(
         &mut self,
-        queue: FreeQueue<'core, Path>,
-        ticket: TxTicket<'core, Path>,
-        slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
-        end: PublicationEnd,
-        rate: PhyRate,
-    );
+        completion: TxCompletion<'core, 'slot, BUFFER_SIZE, Path>,
+    ) -> Result<(), TxCompletion<'core, 'slot, BUFFER_SIZE, Path>>;
     /// The last admitted use returned and the programmed key was cleared.
-    fn key_removed(&mut self, removed: KeyRemoved<'core, Path>);
+    ///
+    /// # Errors
+    ///
+    /// The sink does not take it now: the receipt comes back, and the core
+    /// keeps it in its removal's place, offering it again without clearing
+    /// the key a second time.
+    fn key_removed(
+        &mut self,
+        removed: KeyRemoved<'core, Path>,
+    ) -> Result<(), KeyRemoved<'core, Path>>;
     /// A disable the core started has ended: no attempt is left.
     fn disabled(&mut self);
     /// The station's TBTT event announced the TBTT `event` names.
     fn tbtt(&mut self, event: TbttEvent);
+}
+
+/// One ended attempt: its queue place, its ticket and its slot, with the
+/// end the hardware reported and the rate it was submitted at.
+#[must_use = "a completion carries the attempt's owners home"]
+pub struct TxCompletion<
+    'core,
+    'slot,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+> {
+    pub queue: FreeQueue<'core, Path>,
+    pub ticket: TxTicket<'core, Path>,
+    pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+    pub end: PublicationEnd,
+    pub rate: PhyRate,
 }
 
 /// Why the backend's state is unknown: the port is poisoned.
@@ -886,7 +913,16 @@ impl KeyToken {
 struct KeyBank<'core, Path: PoolPath, const TICKETS: usize> {
     installed: [Option<CheckedKeyScope>; LOWER_MAC_KEY_SLOTS],
     uses: [KeyUseCount<TICKETS>; LOWER_MAC_KEY_SLOTS],
-    removals: [Option<RemovingKey<'core, Path>>; LOWER_MAC_KEY_SLOTS],
+    removals: [Option<Removal<'core, Path>>; LOWER_MAC_KEY_SLOTS],
+}
+
+/// A key's removal in its place: waiting for its last use, or finished
+/// with a receipt its sink has not taken yet.
+enum Removal<'core, Path: PoolPath> {
+    /// The consumed handle, waiting for the key's last admitted use.
+    Pending(RemovingKey<'core, Path>),
+    /// The key is cleared; the receipt waits for its sink.
+    Finished(KeyRemoved<'core, Path>),
 }
 
 impl<Path: PoolPath, const TICKETS: usize> KeyBank<'_, Path, TICKETS> {
@@ -919,6 +955,12 @@ enum Work<'slot, const BUFFER_SIZE: usize> {
     Quarantined {
         _owner: QuarantinedSingleAttempt<'slot, BUFFER_SIZE>,
     },
+    /// An ended attempt whose sink had no room: its slot and end wait in
+    /// the queue's place, offered again until the sink takes them.
+    Done {
+        slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+        end: PublicationEnd,
+    },
 }
 
 impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
@@ -926,14 +968,26 @@ impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
         matches!(self, Self::Held { .. })
     }
 
+    const fn done(&self) -> bool {
+        matches!(self, Self::Done { .. })
+    }
+
     /// The pending deadline of a published attempt, and whether it is the
     /// end of a timeout abort's settle.
     const fn deadline(&self) -> Option<(oer_portable_time::Instant, bool)> {
         match self {
             Self::Published(queued) => Some((queued.deadline(), queued.abort_settling())),
-            Self::Held { .. } | Self::Quarantined { .. } => None,
+            Self::Held { .. } | Self::Quarantined { .. } | Self::Done { .. } => None,
         }
     }
+}
+
+/// An ended attempt on its way to the sink, with what its queue's place
+/// keeps of it when the sink refuses it.
+struct Ended<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
+    role: VifRole,
+    admitted_at: oer_portable_time::Instant,
+    completion: TxCompletion<'core, 'slot, BUFFER_SIZE, Path>,
 }
 
 /// The attempt occupying one queue.
@@ -1578,6 +1632,9 @@ where
         wake: WifiTxWake,
         sink: &mut K,
     ) -> Result<(), LowerMacFault> {
+        // What a sink refused before is offered first, under a fault too:
+        // its hardware end is known.
+        self.offer_kept(sink);
         if let Some(fault) = self.fault {
             return Err(fault);
         }
@@ -1602,6 +1659,21 @@ where
                     work,
                 } = attempt;
                 let queued = match work {
+                    Work::Done { slot, end } => {
+                        let ended = Ended {
+                            role,
+                            admitted_at,
+                            completion: TxCompletion {
+                                queue,
+                                ticket: admission.into_ticket(),
+                                slot,
+                                end,
+                                rate,
+                            },
+                        };
+                        self.offer_completion(ended, sink);
+                        continue;
+                    }
                     Work::Held { slot, .. }
                         if self.msdu_expired(role, queue.category(), admitted_at) =>
                     {
@@ -1613,6 +1685,7 @@ where
                             slot,
                             PublicationEnd::Expired { msdus: 1 },
                             rate,
+                            admitted_at,
                             sink,
                         );
                         continue;
@@ -1657,6 +1730,7 @@ where
                             slot,
                             publication_end(outcome),
                             rate,
+                            admitted_at,
                             sink,
                         );
                     }
@@ -1698,6 +1772,7 @@ where
         slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
         end: PublicationEnd,
         rate: PhyRate,
+        admitted_at: oer_portable_time::Instant,
         sink: &mut K,
     ) {
         if let PublicationEnd::Expired { msdus } = end {
@@ -1715,14 +1790,118 @@ where
             self.tx
                 .record_retry_failure(role, LegacyTxQueue::from_access_category(queue.category()));
         }
+        let ended = |ticket| Ended {
+            role,
+            admitted_at,
+            completion: TxCompletion {
+                queue,
+                ticket,
+                slot,
+                end,
+                rate,
+            },
+        };
         match admission {
-            TxAdmission::Open(ticket) => sink.tx_completed(queue, ticket, slot, end, rate),
+            TxAdmission::Open(ticket) => self.offer_completion(ended(ticket), sink),
             TxAdmission::Protected(key) => {
                 let (index, ticket) = self.release_key(key);
-                sink.tx_completed(queue, ticket, slot, end, rate);
+                self.offer_completion(ended(ticket), sink);
                 self.finish_key_removal(hardware, index, sink);
             }
         }
+    }
+
+    /// Offer an ended attempt to `sink`. Refused, it waits whole in its
+    /// queue's place, which its attempt just left, until a later offer.
+    fn offer_completion<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+        &mut self,
+        ended: Ended<'core, 'slot, BUFFER_SIZE, Path>,
+        sink: &mut K,
+    ) {
+        let Ended {
+            role,
+            admitted_at,
+            completion,
+        } = ended;
+        let Err(refused) = sink.tx_completed(completion) else {
+            return;
+        };
+        let TxCompletion {
+            queue,
+            ticket,
+            slot,
+            end,
+            rate,
+        } = refused;
+        let [voice, video, best_effort, background] = &mut self.queues;
+        let place = match LegacyTxQueue::from_access_category(queue.category()) {
+            LegacyTxQueue::Voice => voice,
+            LegacyTxQueue::Video => video,
+            LegacyTxQueue::BestEffort => best_effort,
+            LegacyTxQueue::Background => background,
+        };
+        *place = Some(Attempt {
+            queue,
+            role,
+            admission: TxAdmission::Open(ticket),
+            rate,
+            admitted_at,
+            work: Work::Done { slot, end },
+        });
+    }
+
+    /// Offer again what a sink refused before: every ended attempt waiting
+    /// in its queue's place and every finished removal's receipt. Nothing
+    /// is repeated on the hardware; a refused offer keeps its place.
+    pub fn offer_kept<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(&mut self, sink: &mut K) {
+        for index in 0..LOWER_MAC_TX_QUEUES {
+            let Some(place) = self.queues.get_mut(index) else {
+                continue;
+            };
+            if !place.as_ref().is_some_and(|attempt| attempt.work.done()) {
+                continue;
+            }
+            let Some(Attempt {
+                queue,
+                role,
+                admission,
+                rate,
+                admitted_at,
+                work: Work::Done { slot, end },
+            }) = place.take()
+            else {
+                continue;
+            };
+            let ended = Ended {
+                role,
+                admitted_at,
+                completion: TxCompletion {
+                    queue,
+                    ticket: admission.into_ticket(),
+                    slot,
+                    end,
+                    rate,
+                },
+            };
+            self.offer_completion(ended, sink);
+        }
+        for removal in &mut self.keys.removals {
+            if !matches!(removal, Some(Removal::Finished(_))) {
+                continue;
+            }
+            let Some(Removal::Finished(removed)) = removal.take() else {
+                continue;
+            };
+            if let Err(removed) = sink.key_removed(removed) {
+                *removal = Some(Removal::Finished(removed));
+            }
+        }
+    }
+
+    /// Whether the core keeps a result its sink refused, or a removal.
+    pub fn keeps_results(&self) -> bool {
+        self.attempts().any(|attempt| attempt.work.done())
+            || self.keys.removals.iter().any(Option::is_some)
     }
 
     /// The owned view of one received MPDU, or `None` while the port does
@@ -1771,7 +1950,7 @@ where
                 work: Work::Held { slot, .. },
                 admission,
                 rate,
-                ..
+                admitted_at,
             } => {
                 self.finish_attempt(
                     hardware,
@@ -1781,6 +1960,7 @@ where
                     slot,
                     PublicationEnd::Withdrawn,
                     rate,
+                    admitted_at,
                     sink,
                 );
             }
@@ -2369,7 +2549,7 @@ where
             self.fault.get_or_insert(LowerMacFault::KeyBank);
             return;
         };
-        *removal = Some(key);
+        *removal = Some(Removal::Pending(key));
         self.finish_key_removal(hardware, index, sink);
     }
 
@@ -2389,14 +2569,23 @@ where
         if self.fault.is_some() || !uses.is_empty() {
             return;
         }
-        if let Some(key) = removal.take() {
-            key.token.clear(hardware);
-            *installed = None;
-            sink.key_removed(KeyRemoved {
-                slot: key.slot,
-                scope: key.scope,
-                brand: key.brand,
-            });
+        if !matches!(removal, Some(Removal::Pending(_))) {
+            return;
+        }
+        let Some(Removal::Pending(key)) = removal.take() else {
+            return;
+        };
+        key.token.clear(hardware);
+        *installed = None;
+        let removed = KeyRemoved {
+            slot: key.slot,
+            scope: key.scope,
+            brand: key.brand,
+        };
+        // Refused, the receipt waits in the removal's place: the key is
+        // cleared once, and only the receipt is offered again.
+        if let Err(removed) = sink.key_removed(removed) {
+            *removal = Some(Removal::Finished(removed));
         }
     }
 
