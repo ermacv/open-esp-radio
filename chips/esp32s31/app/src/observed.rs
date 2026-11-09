@@ -615,12 +615,16 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
                 ServiceEvent::BudgetSpent
                 | ServiceEvent::IntakeFull
                 | ServiceEvent::Published(_)
+                | ServiceEvent::Returned { .. }
                 | ServiceEvent::Local(_) => {}
             }
         }
         let tally = &mut self.0;
         match event {
-            ServiceEvent::TurnBegan | ServiceEvent::FrameTaken | ServiceEvent::Noticed => {}
+            ServiceEvent::TurnBegan
+            | ServiceEvent::FrameTaken
+            | ServiceEvent::Noticed
+            | ServiceEvent::Returned { .. } => {}
             ServiceEvent::Took(kind) => tally.took(
                 &NETWORK,
                 match kind {

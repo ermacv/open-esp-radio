@@ -76,7 +76,7 @@ pub struct TurnEnd {
 /// [`Self::Local`] counts what a turn did with its producer, and what a
 /// wait registered it for.
 /// [`Self::Yielded`] or [`Self::Waited`] says how the pass after the turn
-/// went on.
+/// went on, and [`Self::Returned`] what a pass of the wait took back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ServiceEvent {
     /// A turn begins.
@@ -101,14 +101,19 @@ pub enum ServiceEvent {
     TurnEnded(TurnEnd),
     /// What the turn, or the wait after it, did with its producer.
     Local(LocalEvent),
-    /// After a turn that moved something, the task gave its executor a turn:
-    /// its poll ends here, the task woken again.
+    /// The task gave its executor a turn before its next turn: the turn left
+    /// work no wake names, or a useful turn's wait found work at its first
+    /// look. Its poll ends here, the task woken again.
     Yielded,
-    /// After a turn that moved nothing, the wait registered every wake. With
-    /// `ready`, a lane, the port or a stop had something then, and the next
-    /// turn runs within the same poll; without, the poll ends here unless
-    /// the wait's deadline was already due.
+    /// A pass of the wait after a turn registered every wake, then looked.
+    /// With `ready`, a lane, a stop, a block for a waiting socket, or a wake
+    /// with no return to take had come, and a turn follows; without, the
+    /// poll ends here unless the wait's deadline was already due.
     Waited { ready: bool },
+    /// A pass of the wait took the returns it found as one batch, before
+    /// [`Self::Waited`]: lent buffers' loans and blocks home, with no turn.
+    /// `work`: a block came home for a socket that waits for one.
+    Returned { work: bool },
 }
 
 /// Report what `event` builds to `sink`, if anything. The closure runs only

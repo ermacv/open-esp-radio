@@ -1816,3 +1816,30 @@ fn dropping_the_service_ends_the_watch_and_wakes_its_reader() {
     );
     assert!(changed.as_mut().poll(cx).is_ready());
 }
+
+/// A declining fill keeps the producer's flow out of the rest of its turn
+/// only: its next work goes in the next turn, which nothing but the service
+/// itself starts.
+#[test]
+fn after_a_declining_fill_the_producer_s_next_work_goes_unwoken() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        line,
+        script,
+        clock,
+        ..
+    } = direct::<Net>();
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let (count, waker) = counter();
+    script.0.borrow_mut().declining.push(0);
+    script.push(tag(0, 0), broadcast(), 16);
+    script.push(tag(0, 1), broadcast(), 16);
+    settle(&mut run, &count, &waker);
+    assert_eq!(
+        line.produced(),
+        [data_of(tag(0, 1), 16)],
+        "the next work went"
+    );
+}

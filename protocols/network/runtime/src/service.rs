@@ -71,6 +71,26 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
     }
 }
 
+/// What a turn did.
+#[derive(Clone, Copy, Debug)]
+struct Turned {
+    /// Something moved.
+    moved: bool,
+    /// It left work no wake names: a budget spent, notices untold, a block
+    /// evicted, a producer's hold or budget freed, a refused publication of
+    /// the address.
+    again: bool,
+}
+
+/// What one batch of returns did.
+#[derive(Clone, Copy, Debug)]
+struct Returned {
+    /// Something came back.
+    any: bool,
+    /// A block came home while a socket waits for one.
+    work: bool,
+}
+
 /// The lane that stops a service: whoever holds its sender asks once.
 pub type StopLane = WakingSpscQueue<(), 1>;
 
@@ -541,8 +561,9 @@ impl<
         Ok(())
     }
 
-    /// Publish the address if the turn changed it.
-    fn publish_configuration(&mut self) {
+    /// Publish the address if the turn changed it; whether a refusal left
+    /// it for the next turn.
+    fn publish_configuration(&mut self) -> bool {
         let changes = self.owner.configuration_changes();
         if let Some(Watching { watch, seen }) = &mut self.watch
             && *seen != changes
@@ -556,29 +577,56 @@ impl<
                 .is_ok()
             {
                 *seen = changes;
+            } else {
+                return true;
             }
         }
+        false
     }
 
-    /// Bring home what came by the return lane and from adopted sockets.
-    fn take_home(&mut self) -> bool {
-        let mut moved = false;
-        let pool = self.owner.pool();
-        if let Some(returns) = &self.returns {
-            moved |= returns.take_home(pool);
+    /// Take the returns published to this service, as one batch.
+    fn take_returns(&mut self) -> Returned {
+        Self::returns_of(
+            &mut self.owner,
+            &mut self.bound,
+            self.returns.as_ref(),
+            &mut self.adopted,
+        )
+    }
+
+    /// The service's return servicing: take what came back by the return
+    /// lane, from adopted sockets and as lent buffers back with their port,
+    /// and give it to the pool and the loans' account. It runs no command,
+    /// reads no frame, chooses nothing and builds nothing. A block that came
+    /// home while a socket waits for one is work, which a turn grants.
+    fn returns_of(
+        owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        bound: &mut [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>; SOCKETS],
+        returns: Option<&ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
+        adopted: &mut [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
+    ) -> Returned {
+        let mut any = false;
+        let pool = owner.pool();
+        let free = pool.free();
+        if let Some(returns) = returns {
+            any |= returns.take_home(pool);
         }
-        for late in &mut self.adopted {
+        for late in adopted.iter_mut() {
             if late.as_mut().is_some_and(|late| late.collect(pool)) {
                 *late = None;
-                moved = true;
+                any = true;
             }
         }
-        for bound in self.bound.iter_mut().flatten() {
+        for bound in bound.iter_mut().flatten() {
             if let Some(lent) = &mut bound.lent {
-                moved |= lent.collect(pool.loans());
+                any |= lent.collect(pool.loans());
             }
         }
-        moved
+        let came = pool.free() > free;
+        Returned {
+            any: any || came,
+            work: came && bound.iter().flatten().any(Bound::waiting),
+        }
     }
 
     /// A new group of at most `limit` blocks.
@@ -709,29 +757,36 @@ impl<
                 self.ended = Some(EndCause::Stopped);
                 continue;
             }
-            let moved = self.turn(clock.now(), events);
+            let turned = self.turn(clock.now(), events);
             if self.owner.port_broken() {
                 self.ended = Some(EndCause::PortContract);
             } else if self.fault.is_some() {
                 self.ended = Some(EndCause::Egress);
-            } else if moved {
+            } else if turned.again {
+                // The turn left work no wake will name: the next turn
+                // takes it, once the executor had its turn.
                 report(events, || ServiceEvent::Yielded);
                 yield_now().await;
-            } else {
-                self.wait(clock, events).await;
+            } else if self.wait(clock, events).await && turned.moved {
+                // Work was there at the wait's first look: a useful turn is
+                // never followed by another within the same poll.
+                report(events, || ServiceEvent::Yielded);
+                yield_now().await;
             }
         }
     }
 
-    /// One bounded pass over everything; whether anything moved. Every exit
-    /// goes through its one epilogue, which hands every known result to its
+    /// One bounded pass over everything: whether anything moved, and whether
+    /// it left work for the next turn that no wake names. Every exit goes
+    /// through its one epilogue, which hands every known result to its
     /// client, so at an await each open work truly was not published.
     fn turn(
         &mut self,
         now: Instant,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
-    ) -> bool {
+    ) -> Turned {
         let mut moved = false;
+        let mut again = false;
         report(events, || ServiceEvent::TurnBegan);
         self.local.turn_begins();
         self.owner.observe_link(now);
@@ -739,7 +794,7 @@ impl<
         for index in 0..SOCKETS {
             moved |= self.commands(now, index, events);
         }
-        moved |= self.take_home();
+        moved |= self.take_returns().any;
         moved |= self.give_blocks();
         let mut intake_full = true;
         for _ in 0..TURN_FRAMES {
@@ -755,6 +810,7 @@ impl<
             moved = true;
         }
         seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
+        again |= intake_full;
         let mut told_all = false;
         for _ in 0..TURN_NOTICES {
             let Some(notice) = self.owner.take_notice() else {
@@ -774,23 +830,34 @@ impl<
             report(events, || ServiceEvent::Published(PublishEnd::Fault));
         } else if told_all {
             moved |= self.local.offers(now, &mut self.owner, events);
-            moved |= self.publish(now, events);
+            let (published, end) = self.publish(now, events);
+            moved |= published;
+            // More may be ready past the budget; a declining fill kept the
+            // producer's flow out of the rest of this turn only.
+            again |= end == PublishEnd::Budget || self.local.filtered().is_some();
         } else {
             // A policy chooses knowing all the port has said: a later notice
             // may free what the choice needs. So publishing waits for the
             // next turn.
             report(events, || ServiceEvent::Published(PublishEnd::Deferred));
             moved = true;
+            again = true;
         }
         // Eviction ends commands too, so it comes before the delivery: the
         // epilogue's delivery is the turn's last step that can learn a result.
         if self.fault.is_none() && !self.owner.port_broken() {
-            moved |= self.relieve(now);
+            // An evicted block is granted by the next turn.
+            let evicted = self.relieve(now);
+            moved |= evicted;
+            again |= evicted;
         }
         moved |= self.deliver(events);
-        self.publish_configuration();
+        // What the delivery freed may release the producer's hold or budget,
+        // which no wake of its own names.
+        again |= self.local.again(&self.owner);
+        again |= self.publish_configuration();
         self.turn_ended(events);
-        moved
+        Turned { moved, again }
     }
 
     /// Hand a lent datagram to its socket, or say why not: its buffer then
@@ -1016,7 +1083,11 @@ impl<
     /// Publish what the policy chooses, until it or the port has no room. No
     /// await falls between a choice and its answer, so no cancellation can
     /// leave a reservation unanswered.
-    fn publish(&mut self, now: Instant, events: &mut impl EventSink<ServiceEvent>) -> bool {
+    fn publish(
+        &mut self,
+        now: Instant,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> (bool, PublishEnd) {
         let mut moved = false;
         let mut end = PublishEnd::Budget;
         for _ in 0..TURN_FRAMES {
@@ -1092,11 +1163,22 @@ impl<
         if moved {
             self.owner.flush();
         }
-        moved
+        (moved, end)
     }
 
-    /// Wait for anything to do: the port, a lane, a stop or a time wakes this.
-    async fn wait<T: Timer>(&mut self, clock: &T, events: &mut impl EventSink<ServiceEvent>) {
+    /// Wait for anything to do: the port, a lane, the producer, a stop or a
+    /// time ends this. Returns do not: a pass that finds them takes them as
+    /// one batch ([`Self::returns_of`]) and waits on, unless a block came
+    /// home for a socket that waits for one. Each pass registers every source
+    /// first and then looks, so nothing that comes meanwhile is missed. A
+    /// pass woken with no return to take was woken by the port, the producer
+    /// or a time, which it cannot look at: that ends the wait. Whether work
+    /// was there at the first look.
+    async fn wait<T: Timer>(
+        &mut self,
+        clock: &T,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
         let deadline = [
             self.owner.poll_deadline(),
             self.pressure_at,
@@ -1114,25 +1196,33 @@ impl<
             local,
             ..
         } = self;
-        let mut registered = false;
+        let mut woken = false;
+        let mut at_once = false;
         let ready = poll_fn(|cx| {
-            // Any wake ends the wait: the turn looks at everything anyway.
-            if core::mem::replace(&mut registered, true) {
-                return Poll::Ready(());
-            }
             let mut ready = pin!(stop.ready()).poll(cx).is_ready();
             owner.register_port(cx);
             local.register(cx, events);
+            let mut returned = false;
             for bound in bound.iter_mut().flatten() {
                 ready |= bound.poll_lanes(cx);
+                returned |= bound.poll_returns(cx);
             }
             for late in adopted.iter_mut().flatten() {
-                ready |= late.poll(cx);
+                returned |= late.poll(cx);
             }
-            if let Some(returns) = returns {
-                ready |= returns.poll_waiting(cx);
+            if let Some(returns) = returns.as_ref() {
+                returned |= returns.poll_waiting(cx);
             }
+            if returned {
+                let taken = Self::returns_of(owner, bound, returns.as_ref(), adopted);
+                report(events, || ServiceEvent::Returned { work: taken.work });
+                ready |= taken.work;
+            }
+            // Woken with nothing here to take: by a source only a turn reads.
+            ready |= woken && !returned;
             report(events, || ServiceEvent::Waited { ready });
+            at_once |= ready && !woken;
+            woken = true;
             if ready {
                 Poll::Ready(())
             } else {
@@ -1145,6 +1235,7 @@ impl<
             }
             None => ready.await,
         }
+        at_once
     }
 
     /// End: nothing more is published, every known result goes to its place,
@@ -1160,7 +1251,7 @@ impl<
         // The lease leaves with the core: the watch ends here, as it would
         // at a drop.
         drop(this.watch.take());
-        while this.take_home() {}
+        while this.take_returns().any {}
         let adopted = this.adopted;
         let returns = this.returns;
         let mut retired = this.owner.retire();
@@ -1333,10 +1424,12 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         if self.blocked {
             ready |= pin!(self.end.datagrams.ready()).poll(cx).is_ready();
         }
-        if let Some(lent) = &self.lent {
-            ready |= lent.poll(cx);
-        }
         ready
+    }
+
+    /// Whether lent buffers came back; `cx` hears the next.
+    fn poll_returns(&self, cx: &Context<'_>) -> bool {
+        self.lent.as_ref().is_some_and(|lent| lent.poll(cx))
     }
 
     /// The core retired: write what it decided into the places, say so, and

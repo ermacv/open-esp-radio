@@ -96,14 +96,45 @@ Dropping a `LateSocket` or a `Service` with commands in a request lane still str
 what those hold: that has no contract yet.
 
 A turn first reads the port's link into the core, then takes commands (four a
-lane), received frames (eight) and the port's notices (up to 64, a Block Ack's
-whole ends), then, once it has
+lane), the returns, received frames (eight) and the port's notices (up to 64, a
+Block Ack's whole ends), then, once it has
 read them all, asks its producer for offers, chooses work and publishes it (eight),
 evicts under memory pressure, then hands results and datagrams back. Each part is bounded, so no lane and no port
 starves the others, and sockets waiting for blocks take turns. Every exit of a
 turn goes through that last part, a fault's too: after a policy or port fault the
 turn publishes nothing more, and only hands back what it knows, so at an await
 each open work truly was not published.
+
+## Returns and waiting
+
+Returns are what others publish back to the service: lent buffers back with
+their port (each `Lent`'s drop counts one), blocks in the return lane, and what
+adopted sockets give back. Servicing them is a short owner operation: take what
+was published as one batch and give it to the pool and the loans' account, so a
+credit frees before the next frame needs it. It runs no command, reads no frame,
+chooses no work and builds no frame. Loan accounting stays with the service: an
+application only publishes a count. A batch whose blocks came home while a
+socket waits for one marks work, and a turn grants it. A turn takes the returns
+too, before it reads frames.
+
+After a turn, the service waits, unless the turn left work that no wake
+names: a spent budget of frames or publications, notices still untold, a block
+evicted, a producer's hold or open budget freed by the turn's own delivery, a
+declining fill that kept the producer's flow out of the rest of the turn, or a
+refused publication of the address. Then it yields and turns again. A useful
+turn is never followed by an empty one only to find nothing.
+
+Each pass of the wait registers every source, then looks: the stop, each
+lane, the port, the producer, the returns and the deadline. Whatever comes
+after the registration wakes the next pass. A pass that finds returns takes
+them and waits on, with no turn, unless they marked work. A pass woken with no
+return to take was woken by the port, the producer or a time, which only a turn
+reads, and a turn follows. A pass that takes returns registered the port and
+the producer first. Their registration wakes at once while they hold work, so
+a wake that came with a return is not lost to it. A wait that found work at its
+first look, after a useful turn, yields before the next turn, so one poll holds
+at most one useful turn. A return that comes between a pass's registration and
+its take wakes one more pass, which finds nothing and runs one turn.
 
 ## Lending sockets
 
@@ -125,7 +156,7 @@ check leaves no room for.
 Dropping a `Lent` gives its buffer back to the port first and only then
 counts its loan back, so a credit frees once its memory has, never at a stop
 or a new installation. The service gives the loan to the account at its next
-turn. A stop does not wait for lent buffers: the service ends with loans
+pass, with no turn (see "Returns and waiting"). A stop does not wait for lent buffers: the service ends with loans
 out, its `LateSocket` keeps them, and whoever holds the pool by then takes
 each late return, through `Ended::collect` or the next service's `adopt`.
 The account outlives the core with its pool, so a loan of an earlier

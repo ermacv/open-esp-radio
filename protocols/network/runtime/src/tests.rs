@@ -757,6 +757,27 @@ fn an_end_reaches_its_own_observer_when_its_tag_is_not_its_place() {
     });
 }
 
+/// More notices than a turn hands the policy, with a datagram behind them:
+/// that turn publishes nothing, and the next, which no wake starts, sends it.
+#[test]
+fn notices_past_a_turn_s_budget_leave_no_datagram_behind() {
+    brand!(Net);
+    // Broadcast: no neighbor, so no time wakes the service either.
+    let everyone = Remote {
+        address: [192, 0, 2, 255],
+        port: 7,
+    };
+    let _ended = run(bench::<Net>(), async |socket, wire| {
+        let block = fill(socket, b"behind").await;
+        socket.credit().await.unwrap();
+        // Ends with no wake, more than one turn hands the policy.
+        wire.0.borrow_mut().ended.extend(0..65);
+        let observer = socket.send(everyone, block).ok().unwrap();
+        assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
+        assert!(wire.0.borrow().ended.is_empty());
+    });
+}
+
 #[test]
 fn a_dropped_observer_frees_its_credit_once_the_command_ended() {
     brand!(Net);

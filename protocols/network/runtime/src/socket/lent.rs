@@ -4,7 +4,7 @@
 //! A lent buffer goes back to its port when the application drops its
 //! [`Lent`], and only then is its loan counted back, so a credit frees once
 //! its memory has. The service gives the loan to the pool's account at its
-//! next turn; after the service, the [`LateSocket`](super::LateSocket) it
+//! next pass, a turn or a pass of its wait; after the service, the [`LateSocket`](super::LateSocket) it
 //! left does, for whoever holds the pool. Nothing here waits for a buffer: a
 //! stop ends the service with loans still out, and they count until they
 //! return.
