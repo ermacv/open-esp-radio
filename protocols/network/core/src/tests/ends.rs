@@ -199,3 +199,32 @@ fn a_close_tells_every_running_end_before_its_own() {
         assert_eq!(stack.pool().free(), BLOCKS);
     });
 }
+
+#[test]
+fn acceptance_order_is_no_send_order_a_ready_datagram_goes_before_one_waiting_for_arp() {
+    brand!(Net);
+    wide::<Net>(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let unknown = Remote {
+            address: [192, 0, 2, 9],
+            port: 7,
+        };
+        let block = filled(stack.pool(), b"waits");
+        let waiting = stack.send(at(1), &socket, unknown, block).unwrap();
+        let ready = send_wide(stack, &socket, b"ready");
+        // The ARP request for the unknown neighbor, then the ready datagram:
+        // the earlier one is not ready, so it is not offered.
+        let order: Vec<_> = stack
+            .demands(at(1))
+            .map(|demand| demand.ready.class)
+            .collect();
+        assert_eq!(order, [Class::Control, Class::Data]);
+        transmit_next(stack);
+        transmit_next(stack);
+        assert_eq!(finished(stack.take_result(ready)), Outcome::Accepted);
+        assert!(matches!(
+            stack.take_result(waiting),
+            CommandState::Running(_)
+        ));
+    });
+}

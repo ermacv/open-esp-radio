@@ -47,8 +47,10 @@ without walking every place:
 So a place is never on two chains, and an end is told once: only a running
 work goes to the ended chain. A chain holds places, not owners. `demands`, the
 neighbors a work protects, `queued` and eviction walk the running chain,
-oldest acceptance first, so a socket's work goes out in the order it was
-accepted. `next_end(&ends)` tells a socket's ends, oldest first, the close's
+oldest acceptance first. That is the order `demands` enumerates a socket's
+work in, subject to readiness and policy: it is no send order. A datagram
+whose neighbor is not yet known is not ready, so a later one that is ready
+goes before it, and the egress policy chooses among what is ready. `next_end(&ends)` tells a socket's ends, oldest first, the close's
 among them, as a `WorkId`, which is a place and its generation. It is no right
 to the result: that waits in its place for whoever holds the `CommandId`
 (`CommandId::work` is the same value), and `take_result` checks the
