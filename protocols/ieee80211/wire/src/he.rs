@@ -748,6 +748,15 @@ pub struct He20PeerState {
     pub partial_bss_color: bool,
     pub basic_mcs_nss_map: u16,
     pub rts_threshold: Option<u16>,
+    /// The HE Operation's Max Co-Hosted BSSID Indicator, present exactly
+    /// when its Co-Hosted BSS bit is set.
+    ///
+    /// SOURCE(esp32s31): complete pinned
+    /// `libnet80211[ieee80211_he.o]::ieee80211_parse_heopr` +0xd2..0xfa passes
+    /// complete-IE byte four bit seven (Co-Hosted BSS) and, when it is set,
+    /// the byte at element offset 12 with the VHT Operation Information
+    /// (byte four bit six) or 9 without it to `hal_he_set_co_hosted_bss`.
+    pub max_co_hosted_bssid_indicator: Option<u8>,
     /// Raw HE Operation `ER-SU-Disable` bit.
     ///
     /// SOURCE(esp32s31): complete
@@ -951,7 +960,7 @@ pub fn parse_he20_peer_state(
 ) -> Result<He20PeerState, HeElementError> {
     let (capability, thresholds) =
         validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(capability, HE_CAPABILITIES_EXTENSION_ID)?;
-    let (operation, _) =
+    let (operation, optional) =
         validate_extension::<HE_OPERATION_IE_MIN_LEN>(operation, HE_OPERATION_EXTENSION_ID)?;
 
     let mut reader = oer_portable_wire::Reader::new(capability);
@@ -978,6 +987,20 @@ pub fn parse_he20_peer_state(
         }
     };
 
+    // The optional fields after the fixed nine octets: VHT Operation
+    // Information (three octets) when present, then the Max Co-Hosted
+    // BSSID Indicator (one octet) of a co-hosted BSS (IEEE Std
+    // 802.11ax-2021, 9.4.2.249, clause number as Linux cites it).
+    let max_co_hosted_bssid_indicator = if fields.co_hosted_bss() {
+        let mut optional = oer_portable_wire::Reader::new(optional);
+        if fields.vht_operation_present() {
+            optional.take(3).map_err(|_| HeElementError::TooShort)?;
+        }
+        Some(optional.u8().map_err(|_| HeElementError::TooShort)?)
+    } else {
+        None
+    };
+
     let encoded_rts_threshold = fields.rts_threshold();
     let rts_threshold =
         (!matches!(encoded_rts_threshold, 0 | 0x03ff)).then_some(encoded_rts_threshold);
@@ -991,6 +1014,7 @@ pub fn parse_he20_peer_state(
         partial_bss_color: fields.partial_bss_color(),
         basic_mcs_nss_map: fields.basic_mcs_nss(),
         rts_threshold,
+        max_co_hosted_bssid_indicator,
         extended_range_single_user_disabled: fields.er_su_disabled(),
     })
 }
@@ -1091,6 +1115,8 @@ oer_portable_wire::bitfield! {
     pub struct HeOperationFields[6] (little) {
         pub default_pe, with_default_pe: u8 = 0..3;
         pub rts_threshold, with_rts_threshold: u16 = 4..14;
+        pub vht_operation_present, with_vht_operation_present: bool = 14..15;
+        pub co_hosted_bss, with_co_hosted_bss: bool = 15..16;
         pub er_su_disabled, with_er_su_disabled: bool = 16..17;
         pub bss_color, with_bss_color: u8 = 24..30;
         pub partial_bss_color, with_partial_bss_color: bool = 30..31;

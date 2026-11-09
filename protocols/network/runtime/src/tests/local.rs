@@ -369,20 +369,31 @@ impl FramePort for LocalPort {
 
 impl FrameSource for LocalPort {
     type Notice = u32;
+    type Held = oer_protocols_network_port::NeverHeld;
 
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(
+            EthernetFrameView<'_>,
+            oer_protocols_network_port::Holding,
+        ) -> oer_protocols_network_port::Keep,
+    ) -> oer_protocols_network_port::Taken<Self::Held> {
+        use oer_protocols_network_port::{CopyReason, Holding, Taken};
         let frame = self.0.borrow_mut().incoming.pop_front();
         let Some(frame) = frame else {
-            return false;
+            return Taken::Empty;
         };
         let (header, payload) = EthernetHeader::parse(&frame).unwrap();
-        read(EthernetFrameView {
-            destination: header.destination,
-            source: header.source,
-            ether_type: header.ether_type.value(),
-            payload,
-        });
-        true
+        let _copied = read(
+            EthernetFrameView {
+                destination: header.destination,
+                source: header.source,
+                ether_type: header.ether_type.value(),
+                payload,
+            },
+            Holding::Copied(CopyReason::Format),
+        );
+        Taken::Read
     }
 
     fn take_notice(&mut self) -> Option<u32> {

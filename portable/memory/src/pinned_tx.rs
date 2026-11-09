@@ -325,6 +325,11 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         }
     }
 
+    /// The slot's index in its pool: no other live lease has it.
+    pub const fn index(&self) -> u8 {
+        self.index
+    }
+
     /// Publish the first `length` bytes written through
     /// [`Self::bytes_mut`], consuming the network lease.
     pub fn publish_written(mut self, length: FrameLen<FRAME_CAPACITY>) -> u8 {

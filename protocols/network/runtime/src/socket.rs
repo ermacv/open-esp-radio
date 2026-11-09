@@ -1,5 +1,7 @@
 //! A socket: what an application holds, and the lanes to the service.
 
+mod lent;
+
 use core::future::poll_fn;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::task::Poll;
@@ -7,6 +9,9 @@ use core::task::Poll;
 use embassy_futures::select::{select, select3};
 use oer_portable_memory::{AtomicWaker, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_protocols_network_core::{Block, Datagram, Eviction, Outcome, Pool, Remote, SendRefusal};
+
+pub(crate) use lent::{LateLoans, LentEnd, lending_lanes};
+pub use lent::{LendingLanes, LendingSocket, Lent, Received};
 
 /// The answers a socket can be owed at once: what it asked ahead, a close and
 /// a stop.
@@ -536,23 +541,43 @@ impl<'m, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize>
 }
 
 /// What a stop leaves of a socket: if the socket is dropped later, this
-/// gives the pool's holder what it held.
+/// gives the pool's holder what it held, and a lending socket's loans as
+/// their buffers come back.
 pub struct LateSocket<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize> {
     pub(crate) abandon: WakingSpscReceiver<'a, Inbound<'a, 'm, B, SIZE, DEPTH, RECEIVED>, 1>,
+    /// The socket was dropped, and its lanes drained.
+    pub(crate) dropped: bool,
+    pub(crate) loans: Option<LateLoans<'a, B, RECEIVED>>,
 }
 
 impl<'m, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize>
     LateSocket<'_, 'm, B, SIZE, DEPTH, RECEIVED>
 {
-    /// Whether the socket was dropped: if so, its blocks are in `pool` now.
+    /// Bring home what came back: a dropped socket's blocks, and the loans of
+    /// lent buffers back with their port. Whether nothing is owed any more.
     pub fn collect<const BLOCKS: usize>(&mut self, pool: &mut Pool<'m, B, SIZE, BLOCKS>) -> bool {
-        match self.abandon.try_receive() {
-            Some(inbound) => {
-                inbound.drain(pool);
-                true
-            }
-            None => false,
+        if !self.dropped
+            && let Some(inbound) = self.abandon.try_receive()
+        {
+            inbound.drain(pool);
+            self.dropped = true;
         }
+        if let Some(loans) = &mut self.loans {
+            let _any = loans.collect(pool.loans());
+        }
+        self.dropped && self.loans.as_ref().is_none_or(LateLoans::settled)
+    }
+
+    /// Whether anything came back to collect; `cx` hears the next.
+    pub(crate) fn poll(&mut self, cx: &mut core::task::Context<'_>) -> bool {
+        let mut ready = false;
+        if !self.dropped {
+            ready |= core::pin::pin!(self.abandon.ready()).poll(cx).is_ready();
+        }
+        if let Some(loans) = &self.loans {
+            ready |= loans.poll(cx);
+        }
+        ready
     }
 }
 

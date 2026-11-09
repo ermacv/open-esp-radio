@@ -188,7 +188,7 @@ struct Bench<'b, 's> {
     link: WakingSpscSender<'b, ActorLink<'s, P<'s>>, 1>,
     link_return: WakingSpscReceiver<'b, LinkReturn, 1>,
     transmit: SlotSender<'b, Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>,
-    returned: SlotReceiver<'b, Option<ModelNetworkMemory>, TX_DEPTH>,
+    returned: SlotReceiver<'b, Option<TxEnded<ModelNetworkMemory>>, TX_DEPTH>,
     receive: WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>,
     tickets: Vec<ActorTicket<'s, P<'s>>>,
     small: Vec<ActorStationBuffer<'s, P<'s>>>,
@@ -292,6 +292,7 @@ fn link<'s>(qos: bool, key: Option<ActorLinkKey<'s, P<'s>>>) -> ActorLink<'s, P<
         retry: None,
         ht: None,
         windows: [None; 8],
+        protection: Default::default(),
     };
     LinkHandover::for_test(1, address, bssid, key.is_some(), qos, key, Some(data))
 }
@@ -465,7 +466,8 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
         let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue =
             WakingSlotQueue::<Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>::new();
-        let mut returned_queue = WakingSlotQueue::<Option<ModelNetworkMemory>, TX_DEPTH>::new();
+        let mut returned_queue =
+            WakingSlotQueue::<Option<TxEnded<ModelNetworkMemory>>, TX_DEPTH>::new();
         let mut receive_queue = WakingSpscQueue::<Received<ModelLentRx>, RX_DEPTH>::new();
         let mut copies_queue = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
         let (to_actor, to_actor_end) = to_queue.split();
@@ -1115,7 +1117,7 @@ fn retire(bench: &mut Bench<'_, '_>, window: u32) {
 }
 
 #[test]
-fn a_retiring_stop_waits_for_the_network_and_its_lent_units() {
+fn a_retiring_stop_waits_for_the_network_and_not_for_its_lent_units() {
     bench(|bench| {
         bench.start();
         bench.connect(link(true, None));
@@ -1130,13 +1132,15 @@ fn a_retiring_stop_waits_for_the_network_and_its_lent_units() {
         assert!(bench.next().is_none(), "the network has not stopped");
         bench.network.answer.set(Some(Ok(())));
         bench.settle();
-        assert!(bench.next().is_none(), "a lent unit is still out");
-        drop(held);
-        bench.settle();
+        // A lent unit held for ever does not hold the stop: it stays
+        // counted, and returns whenever its holder drops it.
         assert!(matches!(
             bench.next(),
             Some(FromActor::Stopped(StopOutcome::Confirmed))
         ));
+        drop(held);
+        bench.settle();
+        assert!(bench.next().is_none(), "a late return answers nothing");
     });
 }
 
@@ -1162,8 +1166,11 @@ fn a_stopped_radio_still_waits_for_its_network() {
     });
 }
 
+/// A participant lost before the deadline ends the stop at once with the
+/// radio's confirmed stop and the loss: nothing of the radio is unconfirmed,
+/// and the actor retires.
 #[test]
-fn a_lost_network_participant_leaves_the_stop_unconfirmed_at_once() {
+fn a_lost_network_participant_ends_the_stop_with_the_loss_and_the_radio_stopped() {
     bench(|bench| {
         bench.start();
         retire(bench, 50);
@@ -1174,27 +1181,106 @@ fn a_lost_network_participant_leaves_the_stop_unconfirmed_at_once() {
         bench.advance(1);
         bench.settle();
         match bench.next() {
-            Some(FromActor::Stopped(StopOutcome::Unconfirmed(observed))) => {
-                assert!(observed.network_lost && !observed.deadline);
+            Some(FromActor::Stopped(StopOutcome::NetworkLost(observed))) => {
+                assert_eq!((observed.memory_held, observed.lent), (0, 0));
             }
-            _ => panic!("a lost participant proves no stop"),
+            _ => panic!("a lost participant ends the stop with the loss"),
         }
+        bench.send(ToActor::Retire);
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
 
+/// A participant lost while the network still holds a lent unit: the stop
+/// does not wait for it, and its outcome counts the unit still out. Its late
+/// return answers nothing.
 #[test]
-fn a_network_that_never_stops_leaves_the_stop_unconfirmed_at_its_deadline() {
+fn a_lost_network_participant_holding_a_lent_unit_ends_the_stop_and_counts_it() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
+        bench.settle();
+        let held = bench.receive.try_receive();
+        assert!(matches!(held, Some(Received::Lent(_))));
+        while bench.next().is_some() {}
+        retire(bench, 50);
+        bench
+            .network
+            .answer
+            .set(Some(Err(crate::station::NetworkStopLost)));
+        bench.advance(1);
+        bench.settle();
+        let mut answer = None;
+        while let Some(message) = bench.next() {
+            if let FromActor::Stopped(outcome) = message {
+                answer = Some(outcome);
+            }
+        }
+        match answer {
+            Some(StopOutcome::NetworkLost(observed)) => {
+                assert_eq!((observed.memory_held, observed.lent), (0, 1));
+            }
+            other => panic!("a lost stop ends with the unit counted: {other:?}"),
+        }
+        drop(held);
+        bench.settle();
+        assert!(bench.next().is_none(), "a late return answers nothing");
+        bench.send(ToActor::Retire);
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
+    });
+}
+
+/// The radio stopped, but the network has not stopped by the deadline: the
+/// stop's wait ends there as returning, not unconfirmed. A retirement waits
+/// for the network, which the actor still follows, and ends the actor once
+/// it stopped.
+#[test]
+fn a_network_that_stops_late_ends_the_wait_returning_and_retires_after_it() {
     bench(|bench| {
         bench.start();
         retire(bench, 1);
         bench.advance(2_000);
         bench.settle();
         match bench.next() {
-            Some(FromActor::Stopped(StopOutcome::Unconfirmed(observed))) => {
-                assert!(observed.network_running && observed.deadline);
+            Some(FromActor::Stopped(StopOutcome::Returning(observed))) => {
+                assert!(observed.network_running);
+                assert_eq!((observed.memory_held, observed.lent), (0, 0));
             }
-            _ => panic!("a network that never stopped proves no stop"),
+            _ => panic!("a stopped radio whose network is late is returning"),
         }
+        bench.send(ToActor::Retire);
+        bench.settle();
+        assert!(bench.end.is_none(), "the retirement waits for the network");
+        bench.network.answer.set(Some(Ok(())));
+        bench.settle();
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
+    });
+}
+
+/// A participant lost after the deadline, while the actor still followed
+/// the network's late return: the station's share is home, so the actor
+/// retires and tells the composition the loss.
+#[test]
+fn a_network_lost_after_the_deadline_retires_the_actor_with_the_loss() {
+    bench(|bench| {
+        bench.start();
+        retire(bench, 1);
+        bench.advance(2_000);
+        bench.settle();
+        assert!(matches!(
+            bench.next(),
+            Some(FromActor::Stopped(StopOutcome::Returning(_)))
+        ));
+        bench.send(ToActor::Retire);
+        bench.settle();
+        assert!(bench.end.is_none());
+        bench
+            .network
+            .answer
+            .set(Some(Err(crate::station::NetworkStopLost)));
+        bench.settle();
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
 
@@ -1837,4 +1923,53 @@ fn every_actor_span_is_found_by_its_number_and_no_other_number_is() {
         assert_eq!(ActorSpan::from_number(span as u8), Some(span));
     }
     assert_eq!(ActorSpan::from_number(ActorSpan::ALL.len() as u8), None);
+}
+
+/// A participant lost while the station still holds the network's memory:
+/// the return queue is full and the last ended frame's memory waits in the
+/// actor. The stop does not settle while it does; once the queue has room
+/// again the memory goes home, and only then the stop ends with the loss,
+/// holding nothing, and the actor retires.
+#[test]
+fn a_lost_network_settles_only_once_every_ended_frame_s_memory_went_home() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        let total = TX_DEPTH + 1;
+        for n in 0..total {
+            bench.send_msdu(msdu(0, &[n as u8; 8]));
+            bench.settle();
+        }
+        bench.advance(1);
+        bench.settle();
+        while bench.next().is_some() {}
+        retire(bench, 50);
+        bench
+            .network
+            .answer
+            .set(Some(Err(crate::station::NetworkStopLost)));
+        bench.settle();
+        assert!(bench.next().is_none(), "the actor still holds memory");
+        let mut home = 0;
+        while let Ok(Some(_memory)) = bench.returned.try_receive_with(Option::take) {
+            home += 1;
+        }
+        bench.settle();
+        let mut answer = None;
+        while let Some(message) = bench.next() {
+            if let FromActor::Stopped(outcome) = message {
+                answer = Some(outcome);
+            }
+        }
+        match answer {
+            Some(StopOutcome::NetworkLost(observed)) => assert_eq!(observed.memory_held, 0),
+            other => panic!("the lost stop settles with nothing held: {other:?}"),
+        }
+        while let Ok(Some(_memory)) = bench.returned.try_receive_with(Option::take) {
+            home += 1;
+        }
+        assert_eq!(home, total, "every MSDU's memory is home");
+        bench.send(ToActor::Retire);
+        assert_eq!(bench.end, Some(ActorEnd::Retired));
+    });
 }

@@ -187,6 +187,10 @@ const LINK_WAIT_MS: u32 = 10_000;
 const EXCHANGE_MS: u32 = 10_000;
 /// How long a lease may take not to come while the router serves no DHCP.
 const NO_DHCP_WAIT_MS: u32 = 20_000;
+/// The longest INIT-REBOOT retransmission wait of the network core, 10 s,
+/// and 5 s for the router's DHCP server to answer once it serves again: the
+/// station's next REQUEST and its ACK come within this.
+const SERVED_AGAIN_WAIT_MS: u32 = 15_000;
 const MARGIN: Duration = Duration::from_secs(5);
 /// How long the router may take to show what the device did.
 const ROUTER_SEES: Duration = Duration::from_secs(10);
@@ -536,11 +540,13 @@ fn exchange(cx: &mut Cx<'_>) -> Result<(), Failure> {
         timeout_ms: EXCHANGE_MS,
     };
     let answer = cx.call(request, milliseconds(EXCHANGE_MS) + MARGIN)?;
-    let (from, received) = peer.served(milliseconds(EXCHANGE_MS) + MARGIN)?;
+    // The device's answer first: a refusal is the verdict, not the peer's
+    // wait for a connection that never came.
     check(
         answer == Exchanged::Echoed,
         format!("the exchange answered {answer:?}"),
     )?;
+    let (from, received) = peer.served(milliseconds(EXCHANGE_MS) + MARGIN)?;
     check(
         from.ip() == std::net::IpAddr::V4(Ipv4Addr::from(device.address)),
         format!(
@@ -606,7 +612,7 @@ fn no_dhcp(cx: &mut Cx<'_>) -> Result<(), Failure> {
     )?;
     let after = status(cx)?;
     check(after.link_up, format!("without DHCP: {after:?}"))?;
-    leased(cx, REJOIN_WAIT_MS).map(|_| ())
+    leased(cx, SERVED_AGAIN_WAIT_MS).map(|_| ())
 }
 
 #[cfg(test)]
@@ -628,6 +634,12 @@ mod tests {
             );
         }
         assert!(connect(&ssid, &wrong).is_ok());
+    }
+
+    #[test]
+    fn the_wait_after_dhcp_serves_again_covers_the_longest_retransmission_wait() {
+        // The core's INIT-REBOOT repeats wait 10 s at most.
+        assert!(milliseconds(SERVED_AGAIN_WAIT_MS) > Duration::from_secs(10));
     }
 
     #[test]

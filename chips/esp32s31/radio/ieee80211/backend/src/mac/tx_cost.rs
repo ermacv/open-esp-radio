@@ -7,8 +7,12 @@
 
 use core::num::{NonZeroU16, NonZeroU32, NonZeroU64};
 
-/// PHY timing facts for reviewed DSSS/CCK and BCC OFDM formats. This does not
-/// approximate LDPC, HE packet extension or unsupported coding as ordinary HT.
+mod he_su;
+pub use he_su::{HeNominalPacketPadding, HeSuCoding, HeSuTiming, LdpcCodeRate};
+
+/// PHY timing facts for reviewed DSSS/CCK, BCC OFDM and HE SU formats. This
+/// does not approximate LDPC or HE packet extension as ordinary HT: HE SU
+/// carries its own pre-FEC padding, LDPC and PE geometry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PpduTiming {
     Dsss {
@@ -22,6 +26,8 @@ pub enum PpduTiming {
         tail_bits: u8,
         signal_extension_micros: u8,
     },
+    /// HE SU PPDU; its PSDU length argument is the APEP_LENGTH.
+    HeSu(HeSuTiming),
 }
 
 impl PpduTiming {
@@ -31,6 +37,7 @@ impl PpduTiming {
     /// geometry supported by this model; all intermediate arithmetic is u64.
     pub fn maximum_psdu_bytes(self, micros: u32) -> Option<NonZeroU16> {
         let bytes = match self {
+            Self::HeSu(timing) => return timing.maximum_apep_bytes(micros),
             Self::Dsss {
                 bitrate_kbps,
                 preamble_micros,
@@ -61,6 +68,7 @@ impl PpduTiming {
     /// bits/symbol rather than a rounded nominal bitrate. SERVICE is 16 bits.
     pub fn duration_micros(self, psdu_bytes: u16) -> u32 {
         match self {
+            Self::HeSu(timing) => timing.duration_micros(psdu_bytes),
             Self::Dsss {
                 bitrate_kbps,
                 preamble_micros,

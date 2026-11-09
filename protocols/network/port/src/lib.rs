@@ -21,11 +21,15 @@
 mod device;
 mod frame;
 pub use device::{
-    EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot, NetDevice,
-    NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused, TxStorage,
+    CopyReason, EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot,
+    NetDevice, NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused,
+    TxStorage,
 };
 
-pub use frame::{Candidate, Class, Egress, FramePort, FrameSource, Ready, Unpublished};
+pub use frame::{
+    Candidate, Class, Egress, FramePort, FrameSource, Holding, Keep, NeverHeld, Ready, Taken,
+    Unpublished,
+};
 
 /// Opaque identity of one logical network endpoint sharing a physical radio.
 ///

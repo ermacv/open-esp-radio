@@ -95,6 +95,33 @@ turn goes through that last part, a fault's too: after a policy or port fault th
 turn publishes nothing more, and only hands back what it knows, so at an await
 each open work truly was not published.
 
+## Lending sockets
+
+A socket receives in one mode, chosen at its bind, and paths never switch
+under pressure. `bind` copies each datagram into a block of its group.
+`bind_lending::<CREDIT>` lends: a datagram in a buffer the port may lend
+stays there, under a loan of the socket's credit from the pool's `Loans`,
+and the application receives it as a `Lent` from `LendingSocket::receive`.
+The lane holds every loan the credit allows, which a const check proves
+when the bind compiles, and the account refuses a credit the pool cannot
+hold, with the storage returned and nothing changed. A frame the device
+copied for its form (`CopyReason::Format`, such as an A-MSDU's MSDU) comes as
+a copy in a block of the socket's group; one it copied by pressure is
+dropped (`NetEvent::PressureCopy`). A datagram that finds the socket at its
+credit is dropped with `NetEvent::NotLent`, and its buffer goes back to the
+port at once; a full lent lane is `NetEvent::LentLaneFull`, which the const
+check leaves no room for.
+
+Dropping a `Lent` gives its buffer back to the port first and only then
+counts its loan back, so a credit frees once its memory has, never at a stop
+or a new installation. The service gives the loan to the account at its next
+turn. A stop does not wait for lent buffers: the service ends with loans
+out, its `LateSocket` keeps them, and whoever holds the pool by then takes
+each late return, through `Ended::collect` or the next service's `adopt`.
+The account outlives the core with its pool, so a loan of an earlier
+installation counts against the next one's credits until it returns, and
+nothing expires.
+
 ## Local producer
 
 `Service::with_producer` owns a `Produce` by value, and `bind_local` gives it a
@@ -175,3 +202,28 @@ ends the commands it had not seen `Outcome::Closed`, closes the socket in the
 core, and gives every block in the lanes to the pool; observers still read their
 results. A socket dropped after a stop gives the same to `LateSocket::collect`. A
 block in the application's own hands stays there, for the pool's holder.
+
+## The device port
+
+`DevicePort` is a service's port over a `NetDevice` and its `NetTransmit`. It
+publishes into the device's own transmit buffers (`TxBuffers`). A frame the
+device took carries the buffers' ticket, and the buffers' notices are those
+frames' ends, which the egress policy settles its reservations by: a buffer
+the device gave back is free again only when its end is handed on, so no more
+frames are unsettled than there are buffers. It shows a lent received frame as
+lendable and hands its buffer over when the reader keeps it; a frame the
+device copied stays the device's, with its copy's reason. Each
+registration asks the transmit half for the memory the device returned, so that
+memory comes home whether or not the service sends; only a refused frame waiting for
+room is woken by room. `give_back` ends the exchange before the port ends: it gives
+back every frame the device's queue holds and takes back the memory the device
+returned, as the device's queues outlive the port, and leaves no refused frame
+waiting, so a next service over the same port starts idle. `serve_returns` is the
+return path of a port whose service no longer runs, for a composition that cancels
+its network: an owner that outlives the cancelled future keeps the service
+(`retire` takes it whenever) and drives the port's returns, frames given back and
+memory taken back with a registration for the next of each, until the device's
+owner says it is done. Nothing serves the returns of a composition without such an
+owner. The S31 application does not cancel its network task: that task is a root
+pinned in an executor frame that never returns, and it has no such owner. A change
+that cancels it must bring a working return path with it.

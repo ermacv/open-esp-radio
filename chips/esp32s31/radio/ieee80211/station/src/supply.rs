@@ -51,6 +51,14 @@ pub type TxMemory = TxBacking<TX>;
 /// One pool buffer the network holds: its bytes from where a frame starts.
 pub struct TxSlot(NetworkLease);
 
+impl TxSlot {
+    /// The buffer's index in the pool: it names the frame the buffer holds
+    /// until the station gives it back.
+    pub const fn index(&self) -> u8 {
+        self.0.index()
+    }
+}
+
 impl TxStorage for TxSlot {
     fn bytes_mut(&mut self) -> &mut [u8] {
         // ETHERNET_AT lies inside the buffer (the check above).

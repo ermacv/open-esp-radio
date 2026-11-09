@@ -57,6 +57,9 @@ impl oer_protocols_network_port::ReceivedFrame for Frame {
     fn into_lent(self) -> Result<oer_protocols_network_port::LentFrame<Self::Storage>, Self> {
         Err(self)
     }
+    fn copy_reason(_: &Self) -> oer_protocols_network_port::CopyReason {
+        oer_protocols_network_port::CopyReason::Format
+    }
 }
 impl EthernetFrame for Frame {
     fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {

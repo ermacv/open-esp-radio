@@ -57,7 +57,7 @@ pub(crate) static CAPABILITIES: AssociationCapabilities = AssociationCapabilitie
     ht40: [0; 28],
     he20_ht: [0; 28],
     he20: [0; 24],
-    he20_extended: [0; 14],
+    he20_extended: None,
     wmm: [0; 9],
 };
 

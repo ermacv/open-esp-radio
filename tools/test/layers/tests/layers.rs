@@ -1000,7 +1000,6 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/agent", Role::HilSdkAgent),
     ("hil/images/aes", Role::HilImage),
     ("hil/images/wifi-station", Role::HilImage),
-    ("hil/images/wifi-network", Role::HilImage),
     ("hil/images/wifi-access-point", Role::HilImage),
     ("hil/services/aes", Role::HilBinding),
     ("hil/services/fault", Role::HilBinding),

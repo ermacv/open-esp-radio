@@ -232,8 +232,9 @@ policy becomes active when an application's connect links; one that ends
 without a link leaves the station idle and the retries to the application.
 Explicit Disconnect pauses reconnect.
 Policy requests use the lifecycle's existing affine command credits and
-normal Control events. A facade Stop disconnects once, waits for link-down
-and then retires the lifecycle and the actor. HIL retains command correlation and socket workload lifetime,
+normal Control events. A facade Stop disconnects once, waits for link-down,
+returns the network's transmit memory, stops the network and then retires
+the lifecycle and the actor. HIL retains command correlation and socket workload lifetime,
 without its own station policy loop or product counters.
 The neutral `oer-protocols-network-port::NetDevice` transfers Ethernet owners and publishes
 the link epoch. `oer_portable_embassy_net::ip` builds its pools, one pinned IP stack

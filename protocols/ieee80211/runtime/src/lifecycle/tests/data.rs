@@ -431,6 +431,7 @@ fn an_amsdu_is_copied_and_a_single_msdu_lent() {
                     }),
                     [RxMsdusCopied {
                         aggregated: 2,
+                        shared: 0,
                         kept: 0
                     }]
                 );

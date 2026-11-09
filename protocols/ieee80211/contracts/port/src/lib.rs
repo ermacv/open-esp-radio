@@ -98,6 +98,8 @@ pub use layout::{
 };
 pub mod control;
 pub mod extensions;
+pub mod he;
+pub use he::{He20Association, He20AssociationError, HeBssColor, StationHe};
 pub mod operation;
 pub mod owner;
 pub mod regulated;
@@ -176,8 +178,8 @@ pub use rx::{
 };
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
-    Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody, TxOutcome,
-    TxPower, TxResponse, TxStatus, WithdrawCause,
+    Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody,
+    TxEstimate, TxOutcome, TxPower, TxResponse, TxStatus, WithdrawCause,
 };
 pub use types::{
     AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt, AttemptKey,

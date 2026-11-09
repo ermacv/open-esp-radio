@@ -418,6 +418,9 @@ pub enum Fault {
     /// The caller returned more received units than it held, or the
     /// network more lends than the caller made.
     ReceiveAccounting,
+    /// An HE association the MAC's fields do not hold, which the port
+    /// contract's ranges exclude.
+    HeAssociationRange,
 }
 
 /// The one-shot fault of a diagnostic image.

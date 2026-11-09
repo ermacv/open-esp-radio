@@ -416,7 +416,11 @@ struct Bench<'b, 's, const HELD: u8> {
     returns: WakingSpscReceiver<'b, Returned<'s, P<'s, HELD>>, RETURNS>,
     link: WakingSpscSender<'b, ActorLink<'s, P<'s, HELD>>, 1>,
     transmit: SlotSender<'b, Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>,
-    returned: SlotReceiver<'b, Option<ModelNetworkMemory>, TX_DEPTH>,
+    returned: SlotReceiver<
+        'b,
+        Option<oer_protocols_ieee80211_runtime::station::TxEnded<ModelNetworkMemory>>,
+        TX_DEPTH,
+    >,
     receive: WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>,
     copies: WakingSpscReceiver<
         'b,
@@ -501,9 +505,9 @@ impl<'s, const HELD: u8> Bench<'_, 's, HELD> {
     fn network(&mut self) -> bool {
         let nanos = self.now_micros() * 1_000;
         let mut moved = false;
-        while let Ok(Some(memory)) = self.returned.try_receive_with(Option::take) {
+        while let Ok(Some(ended)) = self.returned.try_receive_with(Option::take) {
             self.sent += 1;
-            self.pool.push(memory);
+            self.pool.push(ended.memory);
             moved = true;
         }
         while self.transmits && self.transmit.free_capacity() != 0 && self.tx_turn.pass(nanos) {
@@ -614,6 +618,7 @@ fn link<'s, const HELD: u8>(
             max_length: 65_535,
         }),
         windows: [None; 8],
+        protection: Default::default(),
     };
     LinkHandover::for_test(1, address, bssid, false, true, Some(key), Some(data))
 }
@@ -711,7 +716,10 @@ fn run<const HELD: u8>(inputs: Inputs) -> Outcome {
         let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue =
             WakingSlotQueue::<Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>::new();
-        let mut returned_queue = WakingSlotQueue::<Option<ModelNetworkMemory>, TX_DEPTH>::new();
+        let mut returned_queue = WakingSlotQueue::<
+            Option<oer_protocols_ieee80211_runtime::station::TxEnded<ModelNetworkMemory>>,
+            TX_DEPTH,
+        >::new();
         let mut receive_queue = WakingSpscQueue::<Received<ModelLentRx>, RX_DEPTH>::new();
         let mut copies_queue = WakingSpscQueue::<
             oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame,

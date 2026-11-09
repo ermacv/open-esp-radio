@@ -93,6 +93,9 @@ pub enum InitializationError {
     Dma(crate::DmaError),
     /// The station's transmit Block Ack policy builds no originator.
     TxBlockAck,
+    /// The PHY's target powers give no HE Power Capability or HE UL-MU
+    /// power capability.
+    HePower,
 }
 
 /// The station's transmit Block Ack agreements: the widest window the S31
@@ -122,7 +125,7 @@ const TX_BLOCK_ACK: oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockA
             lifetime: Duration::from_micros(
                 oer_chips_family_radio_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
             ),
-            attempts: oer_chips_family_radio_ieee80211_policy::lmac::LONG_RETRY_LIMIT,
+            attempts: crate::air::AGGREGATE_MEMBER_ATTEMPTS,
         },
     };
 pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);
@@ -277,9 +280,9 @@ impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
     }
     fn he_packet_padding(
         &self,
-        _: &[u8],
+        he_capability: &[u8],
     ) -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding {
-        oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding::None
+        oer_chips_family_radio_ieee80211_policy::he_txop::packet_padding(he_capability)
     }
 }
 /// What the station runner starts with: the station's own address, scan
@@ -363,11 +366,13 @@ impl<W: Binding> Profile<W> {
                 association: &service::ASSOCIATION,
                 listen_interval:
                     oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
-                phy: if config.ht40 {
-                    oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::Ht40
-                } else {
-                    oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::Ht20
-                },
+                // HE20 only for a connection whose settings ask for it
+                // (`StationSettings::with_he20`).
+                phy:
+                    oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::PreferHe20 {
+                        ht40: config.ht40,
+                        power: radio::he_power(&config.domain, config.channel, config.cap_dbm)?,
+                    },
                 tx_block_ack: Some(
                     oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
                         TX_BLOCK_ACK,
@@ -555,6 +560,11 @@ pub(crate) struct ServiceRunner<W: Binding> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationExit {
     Stopped,
+    /// Stopped and released, every owner back, but the network's stop
+    /// participant was lost, so the network never confirmed its stop: a
+    /// software error this exit records. The radio's stop was confirmed;
+    /// nothing resets for it.
+    StoppedNetworkLost,
     /// The lifecycle or the datapath actor under it ended terminally.
     Failed(crate::failure::LifecycleFailure),
     /// Stopped, but the Wi-Fi radio release did not complete: the stop is

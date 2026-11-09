@@ -158,10 +158,11 @@ fn a_lifecycle_failure_names_its_cause_and_keeps_its_observations() {
             network_running: false,
             network_lost: true,
             lent: 3,
+            memory_held: 5,
         },
     ));
     assert_eq!(stop.names(), ["StopUnconfirmed"]);
-    assert_eq!(stop.words(), [0b1001, 2, 3]);
+    assert_eq!(stop.words(), [5 << 16 | 0b1001, 2, 3]);
     let actor = DiagPath::of(&LifecycleFailure::Actor(
         oer_protocols_ieee80211_runtime::datapath::ActorViolation::PairwiseCustody,
     ));

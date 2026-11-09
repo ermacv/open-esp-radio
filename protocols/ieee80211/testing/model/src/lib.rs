@@ -143,8 +143,9 @@ pub use air_time::{
 use air_time::{AirWorld, Medium};
 pub mod arena;
 pub use arena::{
-    MODEL_ARENA_CHANNEL, MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, ModelArena, ModelArenaAnswer,
-    ModelArenaFault, ModelArenaPublication, ModelArenas, ModelDataArena,
+    MODEL_ARENA_CHANNEL, MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, MODEL_PUBLICATION_COST,
+    ModelArena, ModelArenaAnswer, ModelArenaFault, ModelArenaPublication, ModelArenas,
+    ModelDataArena,
 };
 mod loan;
 mod owned;
@@ -1777,6 +1778,9 @@ pub struct ModelAir {
     refuse_access_point: Cell<u8>,
     /// The next access-point command meets a poisoned air.
     fault_access_point: Cell<bool>,
+    /// The HE20 associations (`SetHe` after an Association Response) the
+    /// port refuses next.
+    refuse_he_association: Cell<u8>,
     group_held: Cell<bool>,
     /// The access point's configuration is held at its barrier.
     access_point_configure_held: Cell<bool>,
@@ -1832,6 +1836,10 @@ pub struct ModelAir {
     rx_limits: Cell<ModelRxLimits>,
     /// The subframes one data arena holds.
     arena_frames: Cell<u8>,
+    /// The station interface's HE association, as the last
+    /// [`PortCommand::SetHe`](oer_protocols_ieee80211_contracts_port::PortCommand::SetHe)
+    /// set it.
+    he: Cell<oer_protocols_ieee80211_contracts_port::StationHe>,
 }
 impl ModelAir {
     fn new(clock: Rc<dyn Clock>) -> Self {
@@ -1845,6 +1853,7 @@ impl ModelAir {
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
             refuse_access_point: Default::default(),
+            refuse_he_association: Default::default(),
             group_held: Default::default(),
             access_point_configure_held: Default::default(),
             key_installations: Default::default(),
@@ -1858,6 +1867,7 @@ impl ModelAir {
             fault_access_point: Cell::new(false),
             confirmed_stops: Cell::new(0),
             edca: Default::default(),
+            he: Cell::new(oer_protocols_ieee80211_contracts_port::StationHe::Off),
             held: Default::default(),
             held_results: Default::default(),
             stop_held: Cell::new(false),
@@ -2450,6 +2460,20 @@ impl ModelAir {
         left > 0
     }
 
+    /// Refuse the next `count` HE20 associations (`SetHe(He20)`), as a
+    /// backend that cannot apply them: each comes back refused, `Busy`.
+    pub fn refuse_he_associations(&self, count: u8) {
+        self.refuse_he_association.set(count);
+    }
+
+    /// Whether this HE20 association is refused: one of the refusals asked
+    /// for.
+    pub(crate) fn take_he_association_refusal(&self) -> bool {
+        let left = self.refuse_he_association.get();
+        self.refuse_he_association.set(left.saturating_sub(1));
+        left > 0
+    }
+
     /// Poison the backend.
     pub fn poison(&self) {
         self.stream.set(ModelStream::Ended);
@@ -2505,6 +2529,17 @@ impl ModelAir {
     /// modeled hardware holds them.
     pub fn access_point(&self) -> ModelAccessPointInterface {
         self.access_point.get()
+    }
+
+    /// The station interface's HE association, as the last `SetHe` set it;
+    /// `Off` before any.
+    pub fn he(&self) -> oer_protocols_ieee80211_contracts_port::StationHe {
+        self.he.get()
+    }
+
+    /// Set the station interface's HE association.
+    pub(crate) fn set_he(&self, he: oer_protocols_ieee80211_contracts_port::StationHe) {
+        self.he.set(he);
     }
 
     /// The complete EDCA set currently installed for this interface.

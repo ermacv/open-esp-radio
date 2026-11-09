@@ -105,8 +105,9 @@ use oer_protocols_ieee80211_wire::{
 };
 use oer_protocols_network_core::{Datagram, Group, Interface, NetworkOwner, Outcome, Remote};
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource, LinkSnapshot,
-    LinkState, NetTransmit, TransmitError, TransmitRefused, TxStorage, Unpublished,
+    EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource, Holding, Keep,
+    LinkSnapshot, LinkState, NetTransmit, Taken, TransmitError, TransmitRefused, TxStorage,
+    Unpublished,
 };
 use oer_protocols_network_runtime::{
     DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, PortRefusal, Sent, Service,
@@ -369,6 +370,8 @@ const FROM: usize = from_actor_depth(RETURNS);
 #[derive(Default)]
 struct Free {
     slots: RefCell<Vec<TxSlot>>,
+    /// What the station gave back, free once the port handed its end on.
+    ended: RefCell<std::collections::VecDeque<TxSlot>>,
     waker: Cell<Option<Waker>>,
 }
 
@@ -428,8 +431,18 @@ impl TxSupply<WrittenFrame> for Supply {
                 TxPublishRefused::Lost => TxRefused::Lost,
             })
     }
-    fn give(&mut self, memory: TxMemory) {
-        self.free.give(self.publisher.slot(memory));
+    fn give(
+        &mut self,
+        memory: TxMemory,
+        _cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
+    ) {
+        self.free
+            .ended
+            .borrow_mut()
+            .push_back(self.publisher.slot(memory));
+        if let Some(waker) = self.free.waker.take() {
+            waker.wake();
+        }
     }
 }
 
@@ -438,6 +451,17 @@ struct Buffers(Rc<Free>);
 
 impl TxBuffers for Buffers {
     type Frame = WrittenFrame;
+    type Ticket = ();
+    type Notice = ();
+    fn ticket(&self, _: &WrittenFrame) {}
+    fn take_notice(&mut self) -> Option<()> {
+        let slot = self.0.ended.borrow_mut().pop_front()?;
+        self.0.give(slot);
+        Some(())
+    }
+    fn notice_waiting(&self) -> bool {
+        !self.0.ended.borrow().is_empty()
+    }
     fn available(&self) -> bool {
         !self.0.slots.borrow().is_empty()
     }
@@ -546,15 +570,19 @@ impl FramePort for Counted {
 
 impl FrameSource for Counted {
     type Notice = ();
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
+    type Held = <Inner as FrameSource>::Held;
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
+    ) -> Taken<Self::Held> {
         let moved = &self.moved;
-        self.inner.as_mut().is_some_and(|inner| {
-            inner.take_frame(|view| {
+        self.inner.as_mut().map_or(Taken::Empty, |inner| {
+            inner.take_frame(|view, holding| {
                 let mut count = moved.get();
                 count.rx_frames += 1;
                 count.rx_bytes += u32::try_from(view.payload.len()).unwrap();
                 moved.set(count);
-                read(view);
+                read(view, holding)
             })
         })
     }
@@ -813,7 +841,7 @@ async fn serve_network<T: 'static>(
     // The queue outlives the port, so its frames are given back first, as the
     // application's stop does.
     if let Some(port) = ended.retired.port.inner.as_mut() {
-        port.give_back_received();
+        port.give_back();
     }
     ended.retired.port.inner = None;
     {
@@ -1262,6 +1290,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
             retry: None,
             ht: None,
             windows: [None; 8],
+            protection: Default::default(),
         };
         let link: ActorLink<'s, P<'s>> =
             LinkHandover::for_test(1, address, bssid, false, false, None, Some(data));
@@ -1337,7 +1366,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
     /// The buffers home: what the station gave back and the network took.
     fn buffers_home(&mut self) -> usize {
         let _room = self.transmit.0.borrow_mut().has_room();
-        self.free.slots.borrow().len()
+        self.free.slots.borrow().len() + self.free.ended.borrow().len()
     }
 
     /// The work so far.

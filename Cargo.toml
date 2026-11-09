@@ -47,7 +47,6 @@ members = [
     "tools/lab/fixture",
     "tools/lab/fixture-install",
     "hil/images/aes",
-    "hil/images/wifi-network",
     "hil/images/wifi-station",
     "hil/images/wifi-access-point",
     "tools/image/build",

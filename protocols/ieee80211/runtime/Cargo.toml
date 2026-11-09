@@ -36,6 +36,7 @@ oer-protocols-ieee80211-core-security-rsn = { path = "../core/security/rsn" }
 [dev-dependencies]
 oer-protocols-ieee80211-wire = { path = "../wire" }
 oer-portable-wire = { path = "../../../portable/wire" }
+oer-protocols-ieee80211-contracts-security = { path = "../contracts/security" }
 oer-portable-crypto = { path = "../../../portable/crypto", features = ["test-support"] }
 # The compile-fail example of a shareable command channel.
 embassy-sync = "0.8.0"

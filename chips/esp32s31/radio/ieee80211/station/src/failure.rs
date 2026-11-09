@@ -70,6 +70,8 @@ pub enum BackendFault {
     KeySlotMissing(KeyOperation),
     /// Received units were returned or lent beyond the count held.
     ReceiveAccounting,
+    /// An HE association the MAC's fields do not hold.
+    HeAssociationRange,
 }
 /// The lower-MAC operation a missing core view stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -274,7 +274,7 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     ht40: [0; 28],
     he20_ht: [0; 28],
     he20: [0; 24],
-    he20_extended: [0; 14],
+    he20_extended: None,
     wmm: [0; 9],
 };
 
@@ -399,6 +399,7 @@ enum Seen {
     SelectGroup,
     RemoveKey,
     Edca(WmmParameterSet),
+    He(oer_protocols_ieee80211_contracts_port::StationHe),
 }
 
 /// Counts the station's token losses and RSN input drops, each test's own.
@@ -547,6 +548,7 @@ fn test_profile(security: StaSecurity) -> StaProfile {
     StaProfile {
         ssid: heapless::Vec::from_slice(SSID).unwrap(),
         security,
+        prefer_he20: false,
     }
 }
 
@@ -836,6 +838,7 @@ impl<'id, const G: usize> World<'id, G> {
                     }
                     StaAction::Ready(id) => self.arbiter.ready(id),
                     StaAction::SetEdca(edca) => self.seen.push(Seen::Edca(edca.get().wmm())),
+                    StaAction::SetHe(he) => self.seen.push(Seen::He(he)),
                     StaAction::InstallPairwiseKey {
                         association,
                         pending,
@@ -1442,11 +1445,13 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
             world.losses.scan,
             Some(crate::events::ScanOutcome::Inserted)
         );
-        // The scan ends; the join leases channel 6 and authenticates.
+        // The scan ends; the join leases channel 6, starts with HE off (an
+        // access point without HE) and authenticates.
         world.advance();
         assert_eq!(
             world.take(),
             [
+                Seen::He(oer_protocols_ieee80211_contracts_port::StationHe::Off),
                 Seen::Configure("bss"),
                 Seen::Transmit {
                     subtype: 0x00b0,
@@ -2070,6 +2075,7 @@ fn beside_an_access_point_a_join_elsewhere_moves_it_and_one_too_soon_after_waits
             world.take(),
             [
                 Seen::Retune(6),
+                Seen::He(oer_protocols_ieee80211_contracts_port::StationHe::Off),
                 Seen::Configure("bss"),
                 Seen::Transmit {
                     subtype: 0x00b0,
@@ -3103,6 +3109,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
                 retry: None,
                 ht: None,
                 windows: [None; 8],
+                protection: Default::default(),
             })
             .ok()
             .unwrap();
@@ -3129,7 +3136,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             // The MPDU went into the memory; withdrawn, it shows its header.
             let mut written = None;
             plane
-                .withdraw_unpublished(arena, |memory| written = Some(memory), &mut ())
+                .withdraw_unpublished(arena, |memory, _| written = Some(memory), &mut ())
                 .unwrap();
             tid_and_sequence(&written.expect("the arena held the MPDU")[..])
         }
@@ -3931,6 +3938,7 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
             channel: world.station.config.channels[0],
             phy: PhyMode::Legacy,
             he_power: None,
+            he_set: true,
             step: JoinStep::Associate(
                 StaAssociationRuntime::new(
                     oer_protocols_ieee80211_wire::address::OwnAddress::new(

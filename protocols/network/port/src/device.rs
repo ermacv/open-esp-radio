@@ -178,6 +178,20 @@ pub trait ReceivedFrame: Sized {
     type Copied;
     /// The frame in its owner's storage, or what stands for its copy.
     fn into_lent(self) -> Result<LentFrame<Self::Storage>, Self::Copied>;
+    /// Why the device copied the frame `copied` stands for.
+    fn copy_reason(copied: &Self::Copied) -> CopyReason;
+}
+
+/// Why a device copied a received frame instead of lending its buffer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CopyReason {
+    /// The frame's form: its buffer carried more than this frame, such as
+    /// several MSDUs, or a frame the device also hands elsewhere, or a
+    /// device that lends no buffer at all.
+    Format,
+    /// The device would have lent the buffer and could not: it was out of
+    /// lending room or stopping.
+    Pressure,
 }
 
 /// A refusal before TX admission. The caller receives its unchanged frame.
@@ -227,7 +241,9 @@ pub trait NetTransmit {
     /// The stack's packet owner a transmission hands over.
     type Frame: EthernetFrame;
     /// Whether the next [`Self::try_transmit`] finds room, without
-    /// registering anything: the sending path asks at every frame.
+    /// registering anything: the sending path asks at every frame. It takes
+    /// back the memory the device returned first, so a call returns that
+    /// memory to the stack whether or not a frame follows.
     fn has_room(&mut self) -> bool;
     /// As [`Self::has_room`], registering `cx` for the next room or returned
     /// memory before observing them.

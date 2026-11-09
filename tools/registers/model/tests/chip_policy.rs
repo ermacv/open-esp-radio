@@ -2048,6 +2048,119 @@ fn w1c_status_word_accepts_a_fixed_discard_only_with_its_consumption_proof() -> 
     Ok(())
 }
 
+/// A fixed sequence of one template step over `register` with `range`
+/// (TOML key-values) and `whole_word`.
+fn element_range_sequence(register: &str, range: &str, whole_word: bool) -> String {
+    format!(
+        "\n[[fixed-register-sequences]]\nname = \"store_alarms\"\nsteps = [{{ register = \"{register}\", {range}value = 0, whole-word = {whole_word} }}]\nsources = [\"SRC_DRIVER\"]\n"
+    )
+}
+
+#[test]
+fn an_element_range_writes_the_elements_it_selects() -> TestResult {
+    for range in ["first = 0, count = 2, ", "first = 1, count = 1, "] {
+        let fixture = Fixture::new()?;
+        fixture.append(&element_range_sequence("TIMER0.ALARM_%s", range, true))?;
+        fixture.load()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn an_element_range_outside_its_array_is_refused() -> TestResult {
+    for range in [
+        "first = 0, count = 3, ",
+        "first = 2, count = 1, ",
+        "first = 1, count = 0, ",
+        "first = 4294967295, count = 2, ",
+    ] {
+        let fixture = Fixture::new()?;
+        fixture.append(&element_range_sequence("TIMER0.ALARM_%s", range, true))?;
+        let error = fixture.rejection()?;
+        assert_eq!(error.entity, "store_alarms");
+        assert!(
+            matches!(error.kind, ErrorKind::ElementRange(_)),
+            "{range}: {error}"
+        );
+    }
+    // A range names a template, not one element.
+    let fixture = Fixture::new()?;
+    fixture.append(&element_range_sequence(
+        "TIMER0.ALARM_0",
+        "first = 0, count = 1, ",
+        true,
+    ))?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::ElementRange(_)), "{error}");
+    Ok(())
+}
+
+#[test]
+fn an_element_range_is_a_complete_whole_word_sequence() -> TestResult {
+    // `first` and `count` go together, on a template or one element alike.
+    for register in ["TIMER0.ALARM_%s", "TIMER0.ALARM_0"] {
+        for range in ["first = 0, ", "count = 1, "] {
+            let fixture = Fixture::new()?;
+            fixture.append(&element_range_sequence(register, range, true))?;
+            let error = fixture.rejection()?;
+            assert_eq!(error.entity, "store_alarms");
+            assert!(
+                matches!(error.kind, ErrorKind::Transaction(_)),
+                "{register} {range}: {error}"
+            );
+        }
+    }
+    // It stores whole words.
+    let fixture = Fixture::new()?;
+    fixture.append(&element_range_sequence(
+        "TIMER0.ALARM_%s",
+        "first = 0, count = 2, ",
+        false,
+    ))?;
+    assert!(matches!(
+        fixture.rejection()?.kind,
+        ErrorKind::Transaction(_)
+    ));
+    // It is its sequence's only step.
+    let fixture = Fixture::new()?;
+    fixture.append("\n[[fixed-register-sequences]]\nname = \"store_alarms\"\nsteps = [{ register = \"TIMER0.ALARM_%s\", first = 0, count = 2, value = 0, whole-word = true }, { register = \"TIMER0.CONFIG\", value = 0 }]\nsources = [\"SRC_DRIVER\"]\n")?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "store_alarms");
+    assert!(matches!(error.kind, ErrorKind::Transaction(_)), "{error}");
+    Ok(())
+}
+
+#[test]
+fn every_element_of_a_range_takes_the_step_rules() -> TestResult {
+    // Elements two parts hold are no one owner's.
+    let fixture = Fixture::new()?;
+    fixture.append(&element_range_sequence(
+        "ETM.CH%s_EVENT",
+        "first = 1, count = 2, ",
+        true,
+    ))?;
+    assert_eq!(fixture.rejection()?.entity, "store_alarms");
+    // An element with no writable field takes no fixed write.
+    let fixture = Fixture::new()?;
+    fixture.write(
+        "types/timer.toml",
+        &TIMER.replace(
+            "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"plain\"",
+            "name = \"ALARM\"\nbits = \"31:0\"\nclass = \"read-only\"",
+        ),
+    )?;
+    fixture.remove("full-register-writes", "write_timer0_alarm")?;
+    fixture.append(&element_range_sequence(
+        "TIMER0.ALARM_%s",
+        "first = 0, count = 2, ",
+        true,
+    ))?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "store_alarms");
+    assert!(matches!(error.kind, ErrorKind::Register(_)), "{error}");
+    Ok(())
+}
+
 #[test]
 fn every_fixed_write_checks_w1c_without_a_snapshot() -> TestResult {
     for sequence in [false, true] {

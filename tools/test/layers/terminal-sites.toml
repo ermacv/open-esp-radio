@@ -420,8 +420,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 # hil/images/aes/src/entry.rs
 "hil/images/aes/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/aes", classes = ["rust-panic", "cpu-exception"] }
 
-# hil/images/wifi-network/src/entry.rs
-"hil/images/wifi-network/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/wifi-network", classes = ["rust-panic", "cpu-exception"] }
 # hil/images/wifi-station/src/entry.rs
 "hil/images/wifi-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/wifi-station", classes = ["rust-panic", "cpu-exception"] }
 # hil/images/wifi-access-point/src/entry.rs

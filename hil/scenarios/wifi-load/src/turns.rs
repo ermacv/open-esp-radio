@@ -1,16 +1,19 @@
 //! What the network core's turns did within a window: the requests they
 //! took, how often a socket's budget ran out with requests left, the frames
 //! the port accepted per turn, how publishing ended, what had run out when a
-//! turn ended, and how each pass after a turn went on. Only a trace image on
-//! the network core counts them; `available` says whether it did.
+//! turn ended, how each pass after a turn went on, the core's drops by
+//! reason, and the receive loans out at each turn's end. Only a trace image
+//! on the network core counts them; `available` says whether it did.
 
-use oer_hil_services_load::NetworkTurns;
+use oer_hil_services_load::{DROP_NAMES, NetworkTurns};
 use serde_json::{Value, json};
 
 /// The names of the accepted-per-turn bins.
 const BINS: [&str; 7] = ["0", "1", "2", "3", "4", "5-8", "9+"];
 /// The names of the reservation-size bins, in blocks.
 const SIZES: [&str; 5] = ["1", "2", "3-4", "5-8", "9-16"];
+/// The names of the loans-at-turn-end bins.
+const LOANS: [&str; 6] = ["0", "1", "2", "3", "4", "5+"];
 
 /// `names` paired with `counts`, as `name:count` words.
 fn binned(names: &[&str], counts: &[u32]) -> String {
@@ -86,6 +89,16 @@ pub fn window(turns: &NetworkTurns) -> Value {
             "unknown": turns.producer_unknown,
         },
         "producer_wakes_per_offer": ratio(turns.producer_wakes, turns.local_offered),
+        "drops": DROP_NAMES
+            .iter()
+            .zip(turns.drops)
+            .map(|(name, count)| ((*name).to_owned(), count.into()))
+            .collect::<serde_json::Map<_, _>>(),
+        "loans_at_turn_end": LOANS
+            .iter()
+            .zip(turns.loans_at_turn_end)
+            .map(|(name, count)| ((*name).to_owned(), count.into()))
+            .collect::<serde_json::Map<_, _>>(),
     })
 }
 
@@ -97,6 +110,18 @@ pub fn summary(turns: &NetworkTurns) -> String {
     let fixed = |value: Option<f64>| value.map_or("-".to_owned(), |value| format!("{value:.2}"));
     let bins = binned(&BINS, &turns.accepted_by_turn);
     let sizes = binned(&SIZES, &turns.reserve_by_size);
+    let loans = binned(&LOANS, &turns.loans_at_turn_end);
+    let drops = DROP_NAMES
+        .iter()
+        .zip(turns.drops)
+        .filter(|(_, count)| *count != 0)
+        .map(|(name, count)| format!("{name}:{count}"))
+        .collect::<Vec<_>>();
+    let drops = if drops.is_empty() {
+        "none".to_owned()
+    } else {
+        drops.join(" ")
+    };
     format!(
         "{} turns; reserve {} send {} release {} close {} (reserve/send {}); \
          reserved blocks {} ({} per reserve; {sizes}); \
@@ -105,7 +130,7 @@ pub fn summary(turns: &NetworkTurns) -> String {
          deferred {} fault {}; out at end: blocks {} credits {}; yields {} \
          ({} with possible work), waits pending {} ready {}; producer offered {} \
          refused {} held {} declined {} withdrawn {} unknown {}, waits for offers {} \
-         changes {}, wakes {}",
+         changes {}, wakes {}; core drops {drops}; loans at end {loans}",
         turns.turns,
         turns.reserves,
         turns.sends,
@@ -167,6 +192,12 @@ mod tests {
             local_held: 1,
             local_waits_changes: 2,
             producer_wakes: 3,
+            drops: core::array::from_fn(|kind| match DROP_NAMES[kind] {
+                "no_credit" => 5,
+                "pressure_copy" => 1,
+                _ => 0,
+            }),
+            loans_at_turn_end: [3, 0, 0, 0, 5, 0],
             ..NetworkTurns::default()
         };
         let value = window(&turns);
@@ -193,8 +224,12 @@ mod tests {
              refused 0 budget 0 deferred 0 fault 0; out at end: blocks 0 credits 0; \
              yields 8 (7 with possible work), waits pending 0 ready 0; producer offered 6 \
              refused 0 held 1 declined 0 withdrawn 0 unknown 0, waits for offers 0 \
-             changes 2, wakes 3"
+             changes 2, wakes 3; core drops no_credit:5 pressure_copy:1; \
+             loans at end 0:3 1:0 2:0 3:0 4:5 5+:0"
         );
+        assert_eq!(value["drops"]["no_credit"], 5);
+        assert_eq!(value["drops"]["lent_lane_full"], 0);
+        assert_eq!(value["loans_at_turn_end"]["4"], 5);
     }
 
     #[test]

@@ -91,6 +91,7 @@ a HIL image of one function build it:
 | Reconnect after a lost association | every 1 s (`wifi::RECONNECT`) | `wifi::Config::with_reconnect(interval)`, `without_reconnect()` |
 | Drain at a stop | 2 s (`wifi::DRAIN`) | `wifi::Config::with_drain(deadline)` |
 | Channel width of a join | 20 MHz | `wifi::Config::with_ht40()`: 40 MHz where the access point's HT elements name a secondary channel the domain permits |
+| HE (802.11ax) of a connect | off: HT | `wifi::Profile::with_he20()`, experimental: HE20 (one stream, HE-MCS 0 to 9, no optional HE capability, no answer to Trigger frames) with an access point that admits it, HT otherwise; `Connected::phy` names the mode |
 | IP pools (receive frames, transmit credits) | 8, 8 (`wifi::RX`, `TX`); the stack's general packets are the station's transmit buffers | `static POOLS: wifi::Pools<RX, TX>`, `Net::start_with(device, &POOLS, config, boot)` in the group |
 
 A zero interval or deadline is refused (`ConfigError`). The pools' sizes are types (`Net<RX, TX>`, `Stack<RX, TX>`),

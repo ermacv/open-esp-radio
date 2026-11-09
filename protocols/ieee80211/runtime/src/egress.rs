@@ -43,8 +43,18 @@ pub struct Exchange<T> {
 pub enum RadioNotice<T, K> {
     /// A frame the port took has ended.
     Ended(Exchange<T>),
-    /// An association has ended: its account goes, once its frames settle.
+    /// An association has ended. Each of its frames still at the port
+    /// settles here, once, at its ceiling or its reservation if that is
+    /// more, and its account goes at once. The frames' buffers stay the
+    /// port's until they come back; each one's later [`Self::Ended`] only
+    /// closes its ticket, with no second charge.
     Left(K),
+    /// The port took the frame and lost it with its memory before the
+    /// radio's end of it: no completion follows, and whether it reached the
+    /// air is not known. Its reservation settles here at its ceiling, or its
+    /// reservation if that is more. This settles the account only: it
+    /// returns no memory and permits no reuse of the lost buffer.
+    Lost(T),
 }
 
 /// Why the policy cannot go on. The scheduler keeps a charge it could not
@@ -64,6 +74,17 @@ impl From<AirtimeError> for AirtimeFault {
     }
 }
 
+/// What one pass over the ready work keeps of one account.
+struct Best<K, C> {
+    key: K,
+    /// The largest least grant among its works.
+    minimum: NonZeroU32,
+    /// Its last served flow, and its work next in turn after it.
+    last: Option<u8>,
+    order: (bool, u8),
+    work: C,
+}
+
 /// A choice until the port answers it.
 #[derive(Debug)]
 pub struct Held<'o, K> {
@@ -73,10 +94,25 @@ pub struct Held<'o, K> {
 }
 
 /// A frame the port holds.
-struct Flight<'o, T, K> {
-    ticket: T,
-    flight: AirtimeInFlight<'o, K>,
-    ceiling: NonZeroU32,
+enum Flight<'o, T, K> {
+    /// Its reservation is open, for its completion to settle.
+    Open {
+        ticket: T,
+        flight: AirtimeInFlight<'o, K>,
+        ceiling: NonZeroU32,
+    },
+    /// Its association left and its reservation settled at its ceiling: only
+    /// its buffer's return is owed, which closes the ticket and charges
+    /// nothing.
+    Closed { ticket: T },
+}
+
+impl<T, K> Flight<'_, T, K> {
+    const fn ticket(&self) -> &T {
+        match self {
+            Self::Open { ticket, .. } | Self::Closed { ticket } => ticket,
+        }
+    }
 }
 
 /// Airtime between peers, turns between one peer's flows, and control first.
@@ -113,19 +149,54 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
         self.scheduler.balance_micros(key)
     }
 
-    /// Frames the port still holds.
+    /// Frames the port still holds, settled or not: one per buffer it has
+    /// not given back.
     pub fn in_flight(&self) -> usize {
         self.flights.iter().flatten().count()
     }
 
-    /// End an association. A frame in flight still settles on its old account.
-    pub fn retire(&mut self, key: A::Key) {
+    /// Frames whose reservation is still open.
+    pub fn unsettled(&self) -> usize {
+        self.flights
+            .iter()
+            .flatten()
+            .filter(|flight| matches!(flight, Flight::Open { .. }))
+            .count()
+    }
+
+    /// End an association: each of its frames still at the port settles now
+    /// at its ceiling, or its reservation if that is more, and the account
+    /// goes. The frames' tickets stay until their buffers come back.
+    ///
+    /// # Errors
+    /// [`AirtimeFault`]: a settlement the ledger refused.
+    pub fn retire(&mut self, key: A::Key) -> Result<(), AirtimeFault> {
+        for slot in &mut self.flights {
+            let closes = matches!(slot, Some(Flight::Open { flight, .. }) if flight.key() == key);
+            if !closes {
+                continue;
+            }
+            let Some(Flight::Open {
+                ticket,
+                flight,
+                ceiling,
+            }) = slot.take()
+            else {
+                continue;
+            };
+            *slot = Some(Flight::Closed { ticket });
+            let charged = ceiling.max(flight.reserved_micros());
+            self.scheduler
+                .settle(flight.completed(()), charged, &mut ())
+                .map_err(|(error, _)| AirtimeFault::from(error))?;
+        }
         self.scheduler.retire(key);
         for slot in &mut self.flows {
             if slot.is_some_and(|(peer, _)| peer == key) {
                 *slot = None;
             }
         }
+        Ok(())
     }
 
     fn last_flow(&self, key: A::Key) -> Option<u8> {
@@ -159,6 +230,51 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
                     .is_some_and(|candidate| candidate.key == key)
             })
             .min_by_key(|work| turn(work.ready(), last))
+    }
+
+    /// Choose over `ready` read twice, the whole list given to the scheduler:
+    /// for more accounts than one pass keeps, whose answer the scheduler
+    /// gives.
+    #[cold]
+    fn choose_over<C: Candidate>(
+        &mut self,
+        ready: impl Iterator<Item = C> + Clone,
+    ) -> Result<Option<(C, Held<'o, A::Key>)>, AirtimeFault> {
+        let air = &self.air;
+        let candidates = ready.clone().filter_map(|work| air.candidate(work.ready()));
+        let reservation = match self.scheduler.reserve(candidates, &mut ()) {
+            Ok(reservation) => reservation,
+            Err(AirtimeError::ReservationCapacity) => None,
+            Err(error) => return Err(error.into()),
+        };
+        let Some(reservation) = reservation else {
+            return Ok(None);
+        };
+        match self.pick(ready, reservation.key()) {
+            Some(work) => Ok(Some(self.hold(work, reservation))),
+            None => match self.scheduler.cancel(reservation, &mut ()) {
+                Ok(()) => Ok(None),
+                Err((error, _)) => Err(error.into()),
+            },
+        }
+    }
+
+    /// `work` under `reservation`, with its ceiling.
+    fn hold<C: Candidate>(
+        &self,
+        work: C,
+        reservation: AirtimeReservation<'o, A::Key>,
+    ) -> (C, Held<'o, A::Key>) {
+        let flow = work.ready().flow;
+        let ceiling = self.air.ceiling(work.ready());
+        (
+            work,
+            Held {
+                reservation,
+                flow,
+                ceiling,
+            },
+        )
     }
 
     /// Hold `flight` for its completion.
@@ -198,12 +314,49 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
     type Reservation = Held<'o, A::Key>;
     type Fault = AirtimeFault;
 
+    /// One pass over `ready`: each work's candidate once, kept per account
+    /// as its largest least grant and its work next in turn, which is what
+    /// the scheduler and the pick read of all of them. More accounts than
+    /// `PEERS` cannot all be served; the scheduler names that from the whole
+    /// list, read once more.
     fn choose<C: Candidate>(
         &mut self,
         ready: impl Iterator<Item = C> + Clone,
     ) -> Result<Option<(C, Self::Reservation)>, AirtimeFault> {
-        let air = &self.air;
-        let candidates = ready.clone().filter_map(|work| air.candidate(work.ready()));
+        let mut best: heapless::Vec<Best<A::Key, C>, PEERS> = heapless::Vec::new();
+        for work in ready.clone() {
+            let Some(candidate) = self.air.candidate(work.ready()) else {
+                continue;
+            };
+            match best.iter_mut().find(|best| best.key == candidate.key) {
+                Some(best) => {
+                    best.minimum = best.minimum.max(candidate.minimum_micros);
+                    let order = turn(work.ready(), best.last);
+                    // The first of equal turns, as the list gave them.
+                    if order < best.order {
+                        best.order = order;
+                        best.work = work;
+                    }
+                }
+                None => {
+                    let last = self.last_flow(candidate.key);
+                    let entry = Best {
+                        key: candidate.key,
+                        minimum: candidate.minimum_micros,
+                        last,
+                        order: turn(work.ready(), last),
+                        work,
+                    };
+                    if best.push(entry).is_err() {
+                        return self.choose_over(ready);
+                    }
+                }
+            }
+        }
+        let candidates = best.iter().map(|best| AirtimeCandidate {
+            key: best.key,
+            minimum_micros: best.minimum,
+        });
         let reservation = match self.scheduler.reserve(candidates, &mut ()) {
             Ok(reservation) => reservation,
             // A frame's completion makes room, and it wakes the service.
@@ -213,18 +366,10 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
         let Some(reservation) = reservation else {
             return Ok(None);
         };
-        match self.pick(ready, reservation.key()) {
-            Some(work) => {
-                let flow = work.ready().flow;
-                let ceiling = self.air.ceiling(work.ready());
-                let held = Held {
-                    reservation,
-                    flow,
-                    ceiling,
-                };
-                Ok(Some((work, held)))
-            }
-            // The candidates were this work, so one of them holds the key.
+        let key = reservation.key();
+        match best.into_iter().find(|best| best.key == key) {
+            Some(Best { work, .. }) => Ok(Some(self.hold(work, reservation))),
+            // The candidates were these accounts, so one of them holds the key.
             None => match self.scheduler.cancel(reservation, &mut ()) {
                 Ok(()) => Ok(None),
                 Err((error, _)) => Err(error.into()),
@@ -241,7 +386,7 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
         if let Some(flow) = flow {
             self.remember(reservation.key(), flow);
         }
-        self.fly(Flight {
+        self.fly(Flight::Open {
             ticket,
             flight: reservation.published(),
             ceiling,
@@ -263,26 +408,33 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
     fn notice(&mut self, notice: RadioNotice<T, A::Key>) -> Result<(), AirtimeFault> {
         let exchange = match notice {
             RadioNotice::Ended(exchange) => exchange,
-            RadioNotice::Left(key) => {
-                self.retire(key);
-                return Ok(());
-            }
+            RadioNotice::Lost(ticket) => Exchange {
+                ticket,
+                charged: None,
+            },
+            RadioNotice::Left(key) => return self.retire(key),
         };
         let flight = self
             .flights
             .iter_mut()
             .find(|slot| {
                 slot.as_ref()
-                    .is_some_and(|flight| flight.ticket == exchange.ticket)
+                    .is_some_and(|flight| *flight.ticket() == exchange.ticket)
             })
             .and_then(Option::take);
-        let Some(flight) = flight else {
-            return Err(AirtimeFault::UnknownTicket);
-        };
-        let charged = exchange
-            .charged
-            .unwrap_or_else(|| flight.ceiling.max(flight.flight.reserved_micros()));
-        self.settle(flight.flight, charged)
+        match flight {
+            Some(Flight::Open {
+                flight, ceiling, ..
+            }) => {
+                let charged = exchange
+                    .charged
+                    .unwrap_or_else(|| ceiling.max(flight.reserved_micros()));
+                self.settle(flight, charged)
+            }
+            // Settled when its association left: its return closes it.
+            Some(Flight::Closed { .. }) => Ok(()),
+            None => Err(AirtimeFault::UnknownTicket),
+        }
     }
 }
 

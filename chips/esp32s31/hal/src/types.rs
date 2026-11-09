@@ -7,13 +7,13 @@
 pub use crate::radio::bluetooth::BluetoothMemoryListSelector;
 /// The Wi-Fi MAC value types of the HAL's register operations.
 pub use crate::radio::ieee80211::registers::{
-    ExtraSoftApRxBlockAckEntrySnapshot, MAC_TX_POWER_RATE_COUNT, MacApReceivePolicySnapshot,
-    MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot, MacDelaySlot,
-    MacExtraSoftApRxBlockAckEntryIndex, MacHe20PeerConfig, MacHe20PeerError,
+    ExtraSoftApRxBlockAckEntrySnapshot, MAC_MINIMUM_TX_POWER_DBM, MAC_TX_POWER_RATE_COUNT,
+    MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot,
+    MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHe20Association, MacHe20PeerConfig,
     MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeBssColor,
     MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
     MacHeGuardIntervalAndLtf, MacHeMcs, MacHePacketPaddingDuration, MacHeRate,
-    MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
+    MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbStatistics, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxFormat, MacHeTxParameters,
     MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtChannelWidth, MacHtGuardInterval,
     MacHtMcs, MacHtProtectionSpacing, MacHtRate, MacHtTxFormat, MacHtTxParameters, MacHtTxProgram,

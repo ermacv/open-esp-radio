@@ -175,6 +175,10 @@ impl ReceivedFrame for ApCopied {
     fn into_lent(self) -> Result<LentFrame<NoStorage>, ApCopied> {
         Err(self)
     }
+    /// The access point's device lends no buffer at all.
+    fn copy_reason(_: &ApCopied) -> oer_protocols_network_port::CopyReason {
+        oer_protocols_network_port::CopyReason::Format
+    }
 }
 
 impl NetDevice for ApNetDevice<'_> {

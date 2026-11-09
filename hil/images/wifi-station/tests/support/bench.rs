@@ -33,6 +33,12 @@ pub(crate) struct Wire {
     pub(crate) open: bool,
     /// The port says it took a frame it never filled.
     pub(crate) lazy: bool,
+    /// The port lends its buffers, and whether each one's storage breaks
+    /// once lent.
+    pub(crate) lends: bool,
+    pub(crate) breaks: bool,
+    /// Lent buffers back with the port.
+    pub(crate) back: Rc<core::cell::Cell<usize>>,
 }
 
 #[derive(Clone, Default)]
@@ -60,18 +66,46 @@ impl FramePort for Port {
 }
 impl FrameSource for Port {
     type Notice = ();
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
-        let Some(frame) = self.0.borrow_mut().incoming.pop_front() else {
-            return false;
+    type Held = wifi::HostHeld;
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(
+            EthernetFrameView<'_>,
+            oer_protocols_network_port::Holding,
+        ) -> oer_protocols_network_port::Keep,
+    ) -> oer_protocols_network_port::Taken<Self::Held> {
+        use oer_protocols_network_port::{CopyReason, Holding, Keep, Taken};
+        let (frame, lends, breaks, back) = {
+            let mut wire = self.0.borrow_mut();
+            let Some(frame) = wire.incoming.pop_front() else {
+                return Taken::Empty;
+            };
+            (frame, wire.lends, wire.breaks, wire.back.clone())
+        };
+        let holding = if lends {
+            Holding::Lendable
+        } else {
+            Holding::Copied(CopyReason::Format)
         };
         let (header, payload) = EthernetHeader::parse(&frame).unwrap();
-        read(EthernetFrameView {
-            destination: header.destination,
-            source: header.source,
-            ether_type: header.ether_type.value(),
-            payload,
-        });
-        true
+        let keep = read(
+            EthernetFrameView {
+                destination: header.destination,
+                source: header.source,
+                ether_type: header.ether_type.value(),
+                payload,
+            },
+            holding,
+        );
+        if lends && keep == Keep::Keep {
+            Taken::Kept(wifi::HostHeld {
+                frame,
+                broken: breaks,
+                back,
+            })
+        } else {
+            Taken::Read
+        }
     }
     fn take_notice(&mut self) -> Option<()> {
         None

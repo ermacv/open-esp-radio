@@ -115,7 +115,9 @@ pub struct AssociationCapabilities {
     pub ht40: [u8; 28],
     pub he20_ht: [u8; 28],
     pub he20: [u8; 24],
-    pub he20_extended: [u8; 14],
+    /// The Extended Capabilities element an HE20 request carries after its
+    /// WMM element; `None` sends none.
+    pub he20_extended: Option<[u8; 14]>,
     pub wmm: [u8; 9],
 }
 
@@ -290,10 +292,9 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             } else {
                 &[]
             },
-            if he_capability.is_some() {
-                &capabilities.he20_extended
-            } else {
-                &[]
+            match (he_capability, &capabilities.he20_extended) {
+                (Some(_), Some(extended)) => extended.as_slice(),
+                _ => &[],
             },
         ])
         .write(output)

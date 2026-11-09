@@ -17,7 +17,7 @@ use oer_protocols_ieee80211_core_roles_sta::data::{
 use oer_protocols_ieee80211_core_roles_sta::link::LinkRx;
 use oer_protocols_ieee80211_core_roles_sta::machine::{StaEapol, StaReceived};
 use oer_protocols_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
-use oer_protocols_network_port::LentFrame;
+use oer_protocols_network_port::{CopyReason, LentFrame};
 
 /// Why the actor did not deliver one received MSDU.
 #[derive(Clone, Copy)]
@@ -49,6 +49,7 @@ fn copy_received<
     network: &NetworkEnds<'_, M, L, NS, TX_DEPTH, RX_DEPTH, N>,
     frame: &[u8],
     plan: &MsduPlan,
+    reason: CopyReason,
 ) -> Option<Refusal> {
     // The mark follows its copy: room for both, or neither is sent.
     if network.receive.free_capacity() == 0 || network.receive_copied.free_capacity() == 0 {
@@ -58,7 +59,7 @@ fn copy_received<
         Ok(frame) => (network.receive_copied.try_send(frame).is_err()
             || network
                 .receive
-                .try_send_held(Received::Copied(CopiedMark::new()))
+                .try_send_held(Received::Copied(CopiedMark::new(reason)))
                 .is_err())
         .then_some(Refusal::QueueFull),
         // The link located the payload in this frame.
@@ -378,8 +379,9 @@ where
                     several = true;
                     let earlier = first
                         .take()
-                        .map(|plan| copy_received(network, bytes, &plan));
-                    let refusal = copy_received(network, bytes, &delivery.plan());
+                        .map(|plan| copy_received(network, bytes, &plan, CopyReason::Format));
+                    let refusal =
+                        copy_received(network, bytes, &delivery.plan(), CopyReason::Format);
                     if counted {
                         for refusal in earlier.into_iter().chain([refusal]) {
                             count(&mut refused, refusal);
@@ -409,10 +411,10 @@ where
             Some((payload, protection)) => {
                 // The frame goes to the lifecycle: its data MSDU is copied.
                 if let Some(plan) = first.take() {
-                    let refusal = copy_received(network, frame.bytes(), &plan);
+                    let refusal = copy_received(network, frame.bytes(), &plan, CopyReason::Format);
                     if counted {
                         count(&mut refused, refusal);
-                        copied.kept = copied.kept.saturating_add(1);
+                        copied.shared = copied.shared.saturating_add(1);
                     }
                 }
                 self.hand_to_lifecycle(
@@ -431,7 +433,8 @@ where
                         Ok(lent) => queue_lent(network, lent, plan),
                         Err(refusal) => {
                             let buffer = refusal.buffer;
-                            let refusal = copy_received(network, buffer.bytes(), &plan);
+                            let refusal =
+                                copy_received(network, buffer.bytes(), &plan, CopyReason::Pressure);
                             if counted {
                                 copied.kept = copied.kept.saturating_add(1);
                             }

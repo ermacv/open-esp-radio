@@ -84,7 +84,8 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
     let (mut words, _) = run(u32::MAX);
     let owners = words.owners();
     let registers = &owners.registers;
-    for index in 0..120_u8 {
+    for index in 0..oer_chips_esp32s31_pac::wifi_mac::he_scratch::COUNT {
+        let index = u8::try_from(index).expect("a link index fits a byte");
         assert_eq!(
             registers.he_tx_mpdu_length_link(index),
             Some(MacHeTxMpduLengthLink {
@@ -123,15 +124,18 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
 
 #[test]
 fn every_link_word_is_stored_whole() {
-    // From all ones, each of the 120 link words reads zero in every bit, not
-    // only in its two link fields: the init stores the whole word.
+    // From all ones, each link word reads zero in every bit, not only in
+    // its two link fields: the init stores the whole word.
     let (words, _) = run(u32::MAX);
     let zero_words = words
         .wifi_mac_he_init_suffix
         .iter()
         .filter(|word| **word == 0)
         .count();
-    assert!(zero_words >= 120, "{zero_words} whole zero words");
+    assert!(
+        zero_words >= oer_chips_esp32s31_pac::wifi_mac::he_scratch::COUNT,
+        "{zero_words} whole zero words"
+    );
 }
 
 #[test]

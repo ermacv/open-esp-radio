@@ -9,7 +9,7 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
 use oer_protocols_network_port::{
-    Candidate, Class, EthernetFrameView, LinkSnapshot, LinkState, Ready,
+    Candidate, Class, CopyReason, EthernetFrameView, Holding, LinkSnapshot, LinkState, Ready,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
@@ -27,6 +27,7 @@ use crate::echo::{Echoes, IcmpDrop, Owed};
 use crate::interface::{
     Addressing, BROADCAST, BROADCAST_HARDWARE, Interface, Ipv4, UNSPECIFIED, is_unicast,
 };
+use crate::loans::{LoansRefused, NotLent};
 use crate::neighbor::{Lookup, Neighbors};
 
 /// RFC 1122, 3.2.1.7: a default time to live large enough for the Internet.
@@ -400,6 +401,8 @@ pub enum OpenRefused {
     NoSocket,
     /// Another socket holds the port, until it closes.
     PortInUse,
+    /// The receive loans' account refused the lending socket's credit.
+    Loans(LoansRefused),
 }
 
 /// The socket ended. A final refusal.
@@ -423,6 +426,27 @@ pub enum SendRefusal {
     /// The interface has no address, until one is leased: the address
     /// version ([`Core::address_version`]) moves then.
     NoAddress,
+}
+
+/// A datagram for a lending socket the core did not copy: its socket's
+/// flow and where its data lies in the Ethernet payload of the frame, whose
+/// buffer its holder lends.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LendTo {
+    pub flow: u8,
+    pub remote: Remote,
+    pub data: core::ops::Range<usize>,
+}
+
+/// How a socket takes what it receives.
+#[derive(Clone, Copy)]
+enum Mode {
+    /// Copied into blocks.
+    Copy,
+    /// Lent in the port's buffers.
+    Lend,
+    /// Nothing: it only sends.
+    SendOnly,
 }
 
 /// A refused datagram with its block.
@@ -457,6 +481,15 @@ pub enum NetEvent {
     ReplyDropped,
     /// A datagram for a send-only socket's port, dropped before any block.
     SendOnly,
+    /// A lending socket's datagram got no loan, for this reason: its buffer
+    /// went back to the port.
+    NotLent(NotLent),
+    /// A lending socket's datagram the device had copied by pressure, not
+    /// by its form: a lending socket takes no such copy.
+    PressureCopy,
+    /// A lending socket's lane had no room for a lent datagram: its buffer
+    /// went back to the port.
+    LentLaneFull,
     /// A server's DHCP message the client did not take.
     Dhcp(DhcpDrop),
     /// An ICMP message that got no reply.
@@ -623,6 +656,10 @@ pub struct Configuration {
     pub lease: Option<Lease>,
     /// The DHCP client's state; `None` for an address given by its owner.
     pub dhcp: Option<DhcpState>,
+    /// The port's link as the core last observed it: an application that
+    /// waits for an address over an up link, or for that link's loss, reads
+    /// both from one publication.
+    pub link: LinkSnapshot,
 }
 
 #[derive(Debug)]
@@ -633,6 +670,8 @@ struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: us
     open: bool,
     /// It only sends: a datagram for its port is dropped before any block.
     send_only: bool,
+    /// Its datagrams are lent in the port's own buffers, not copied.
+    lends: bool,
     dscp: Dscp,
     /// What its received data counts toward.
     group: Group<B>,
@@ -651,6 +690,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>
             port: None,
             open: false,
             send_only: false,
+            lends: false,
             dscp: BEST_EFFORT,
             group: Group::shared(),
             places: [const { Place::new() }; CREDITS],
@@ -797,11 +837,12 @@ impl<
             version: self.version,
             lease: self.dhcp.as_ref().and_then(Client::lease).copied(),
             dhcp: self.dhcp.as_ref().map(Client::state),
+            link: self.link,
         }
     }
 
     /// A wrapping count that moves whenever [`Self::configuration`] may have
-    /// changed: an address, a lease's times, the client's state.
+    /// changed: an address, a lease's times, the client's state, the link.
     pub const fn configuration_changes(&self) -> u32 {
         self.configuration_changes
     }
@@ -939,7 +980,32 @@ impl<
         dscp: Dscp,
         group: Group<B>,
     ) -> Result<SocketId<B>, OpenRefused> {
-        self.open_socket(port, dscp, group, false)
+        self.open_socket(port, dscp, group, Mode::Copy, |_| Ok(()))
+    }
+
+    /// Open a socket on `port` that receives in the port's own buffers, with
+    /// a credit of `credit` loans in `pool`'s account: each datagram in a
+    /// lendable buffer is lent to it ([`Self::input_view`] says so) rather
+    /// than copied, one the device copied for its form goes into a block of
+    /// `group`, and one it copied by pressure is dropped. Its close takes the
+    /// credit back; what it holds counts until it returns.
+    ///
+    /// # Errors
+    /// [`OpenRefused`]; [`OpenRefused::Loans`] when the account refuses the
+    /// credit. A refusal changes nothing.
+    pub fn open_lending<const BLOCKS: usize>(
+        &mut self,
+        port: u16,
+        dscp: Dscp,
+        group: Group<B>,
+        credit: usize,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) -> Result<SocketId<B>, OpenRefused> {
+        self.open_socket(port, dscp, group, Mode::Lend, |index| {
+            pool.loans()
+                .grant(index, credit)
+                .map_err(OpenRefused::Loans)
+        })
     }
 
     /// Open a send-only socket on `port`, whose work a local producer
@@ -949,7 +1015,7 @@ impl<
     /// # Errors
     /// [`OpenRefused`].
     pub fn open_local(&mut self, port: u16, dscp: Dscp) -> Result<SocketId<B>, OpenRefused> {
-        self.open_socket(port, dscp, Group::shared(), true)
+        self.open_socket(port, dscp, Group::shared(), Mode::SendOnly, |_| Ok(()))
     }
 
     fn open_socket(
@@ -957,11 +1023,13 @@ impl<
         port: u16,
         dscp: Dscp,
         group: Group<B>,
-        send_only: bool,
+        mode: Mode,
+        admit: impl FnOnce(usize) -> Result<(), OpenRefused>,
     ) -> Result<SocketId<B>, OpenRefused> {
         if self.sockets.iter().any(|socket| socket.port == Some(port)) {
             return Err(OpenRefused::PortInUse);
         }
+        // A refusal below skips a serial, which only has to be new.
         let serial = self.next_serial();
         let (index, socket) = self
             .sockets
@@ -969,11 +1037,15 @@ impl<
             .enumerate()
             .find(|(_, socket)| !socket.in_use())
             .ok_or(OpenRefused::NoSocket)?;
-        let index = u8::try_from(index).map_err(|_| OpenRefused::NoSocket)?;
+        let index_byte = u8::try_from(index).map_err(|_| OpenRefused::NoSocket)?;
+        // The last refusal: nothing is written before it.
+        admit(index)?;
+        let index = index_byte;
         socket.serial = serial;
         socket.port = Some(port);
         socket.open = true;
-        socket.send_only = send_only;
+        socket.send_only = matches!(mode, Mode::SendOnly);
+        socket.lends = matches!(mode, Mode::Lend);
         socket.dscp = dscp;
         socket.group = group;
         Ok(SocketId {
@@ -1271,6 +1343,9 @@ impl<
             .ok_or(StaleSocket)?;
         open.open = false;
         open.port = None;
+        if core::mem::replace(&mut open.lends, false) {
+            pool.loans().revoke(usize::from(socket.index));
+        }
         while let Some(datagram) = open.received.pop_front() {
             pool.give(datagram.block);
         }
@@ -1313,27 +1388,34 @@ impl<
             ether_type: header.ether_type.value(),
             payload,
         };
-        self.input_view(now, view, pool, events);
+        // A frame given as octets is no port's buffer: it is copied.
+        let _copied = self.input_view(now, view, Holding::Copied(CopyReason::Format), pool, events);
     }
 
     /// As [`Self::input`], for a frame whose fields a port read apart from its
-    /// payload.
+    /// payload, held as `holding` says. A datagram for a lending socket in a
+    /// lendable buffer is not copied: the answer names its socket and where
+    /// its data lies in the frame's payload, for its holder to lend.
     pub fn input_view<const BLOCKS: usize>(
         &mut self,
         now: Instant,
         frame: EthernetFrameView<'_>,
+        holding: Holding,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
-    ) {
+    ) -> Option<LendTo> {
         if frame.destination != self.interface.hardware() && frame.destination != BROADCAST_HARDWARE
         {
-            return;
+            return None;
         }
         let ether_type = EtherType::new(frame.ether_type);
         if ether_type == EtherType::ARP {
             self.input_arp(now, frame.payload, events);
+            None
         } else if ether_type == EtherType::IPV4 {
-            self.input_ipv4(now, frame.payload, pool, events);
+            self.input_ipv4(now, frame.payload, holding, pool, events)
+        } else {
+            None
         }
     }
 
@@ -1371,12 +1453,13 @@ impl<
         &mut self,
         now: Instant,
         payload: &[u8],
+        holding: Holding,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
-    ) {
+    ) -> Option<LendTo> {
         let Ok(packet) = Ipv4Header::parse(payload) else {
             report(events, || NetEvent::Malformed);
-            return;
+            return None;
         };
         let [s0, s1, s2, s3, d0, d1, d2, d3] = packet.addresses();
         let (source, destination) = ([s0, s1, s2, s3], [d0, d1, d2, d3]);
@@ -1387,7 +1470,7 @@ impl<
         // decide.
         let leasing = self.dhcp.is_some() && packet.protocol() == PROTOCOL_UDP;
         if !ours && !leasing {
-            return;
+            return None;
         }
         let intact = payload
             .first()
@@ -1396,28 +1479,28 @@ impl<
             .is_some_and(|header| Checksum::new().with(header).verifies());
         if !intact {
             report(events, || NetEvent::Checksum);
-            return;
+            return None;
         }
         if self.is_broadcast(source) {
             report(events, || NetEvent::BadSource);
-            return;
+            return None;
         }
         let protocol = packet.protocol();
         if protocol != PROTOCOL_UDP && protocol != PROTOCOL_ICMP {
-            return;
+            return None;
         }
         if packet.is_fragment() {
             report(events, || NetEvent::Fragment);
-            return;
+            return None;
         }
         if protocol == PROTOCOL_ICMP {
             self.input_icmp(now, source, destination, packet.payload(), pool, events);
-            return;
+            return None;
         }
         let datagram = packet.payload();
         let Ok((header, data)) = UdpHeader::parse(datagram) else {
             report(events, || NetEvent::Malformed);
-            return;
+            return None;
         };
         let length = usize::from(header.length);
         // Zero says that the sender computed none, RFC 768.
@@ -1435,7 +1518,7 @@ impl<
             })
         {
             report(events, || NetEvent::Checksum);
-            return;
+            return None;
         }
         let port = header.ports.destination;
         if self.dhcp.is_some() && port == dhcp::CLIENT_PORT {
@@ -1444,26 +1527,53 @@ impl<
             } else {
                 report(events, || NetEvent::NoSocket);
             }
-            return;
+            return None;
         }
         if !ours {
-            return;
+            return None;
         }
-        let Some(socket) = self
-            .sockets
-            .iter_mut()
-            .find(|socket| socket.open && socket.port == Some(port))
-        else {
+        let found = (0_u8..)
+            .zip(self.sockets.iter_mut())
+            .find(|(_, socket)| socket.open && socket.port == Some(port));
+        let Some((index, socket)) = found else {
             report(events, || NetEvent::NoSocket);
-            return;
+            return None;
         };
         if socket.send_only {
             report(events, || NetEvent::SendOnly);
-            return;
+            return None;
+        }
+        if socket.lends {
+            match holding {
+                Holding::Lendable => {
+                    // `data` lies inside `payload`, which the parse sliced.
+                    let at = data.as_ptr().addr().checked_sub(payload.as_ptr().addr());
+                    let Some((at, end)) = at.and_then(|at| Some((at, at.checked_add(data.len())?)))
+                    else {
+                        report(events, || NetEvent::Malformed);
+                        return None;
+                    };
+                    return Some(LendTo {
+                        flow: index,
+                        remote: Remote {
+                            address: source,
+                            port: header.ports.source,
+                        },
+                        data: at..end,
+                    });
+                }
+                Holding::Copied(CopyReason::Pressure) => {
+                    report(events, || NetEvent::PressureCopy);
+                    return None;
+                }
+                // The device's copy by the frame's form: into a block of the
+                // socket's group, as a copying socket takes it.
+                Holding::Copied(CopyReason::Format) => {}
+            }
         }
         if socket.received.is_full() {
             report(events, || NetEvent::ReceiveFull);
-            return;
+            return None;
         }
         let Some(mut block) = pool.take_as(socket.group) else {
             report(events, || {
@@ -1473,12 +1583,12 @@ impl<
                     NetEvent::GroupLimit
                 }
             });
-            return;
+            return None;
         };
         if block.fill(data).is_err() {
             pool.give(block);
             report(events, || NetEvent::TooLong);
-            return;
+            return None;
         }
         let datagram = Datagram {
             remote: Remote {
@@ -1491,6 +1601,7 @@ impl<
             pool.give(datagram.block);
             report(events, || NetEvent::ReceiveFull);
         }
+        None
     }
 
     /// A server's message to the client port.
@@ -1667,13 +1778,13 @@ impl<
                 pool.give(owed.block);
                 report(events, || NetEvent::Icmp(IcmpDrop::Unreachable));
             });
-            // RFC 2131, 4.4.4: no answer from a known server; the renewal
-            // counts as sent, and its next try comes at its time.
+            // The server's neighbor never answered: the renewal never went,
+            // so it counts as refused, and its next try comes at its time.
             if dhcp == Some(address)
                 && let Some(client) = client
                 && let Some(owed) = client.owed()
             {
-                client.sent(now, owed);
+                client.refused(now, owed);
             }
             changes = changes.wrapping_add(1);
         });
@@ -2108,13 +2219,18 @@ impl<
                         && let Some(client) = &mut self.dhcp
                         && let Some(owed) = client.owed()
                     {
-                        client.sent(now, owed);
+                        client.refused(now, owed);
                     }
                     self.neighbors_moved();
                 }
             }
             Work::Datagram { .. } => self.end_published(grant, Outcome::Rejected, pool),
-            Work::Dhcp { serial, .. } => self.dhcp_sent(now, serial),
+            Work::Dhcp { serial, .. } => {
+                if let Some(client) = &mut self.dhcp {
+                    client.refused(now, serial);
+                }
+                self.forget_unneeded();
+            }
             Work::Echo { serial, .. } => self.end_echo(serial, pool),
         }
     }
@@ -2130,9 +2246,8 @@ impl<
         self.forget_unneeded();
     }
 
-    /// The port took the client's message of `serial`, or refused it for
-    /// good, which would meet the same again: its next try comes at its
-    /// time.
+    /// The port took the client's message of `serial`: its next try comes at
+    /// its time.
     fn dhcp_sent(&mut self, now: Instant, serial: u64) {
         if let Some(client) = &mut self.dhcp {
             client.sent(now, serial);

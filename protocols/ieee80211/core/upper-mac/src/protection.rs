@@ -171,6 +171,21 @@ impl ProtectionPolicy {
         }
     }
 
+    /// The exchange the BSS's HE TXOP Duration RTS Threshold asks before
+    /// an individually addressed PPDU at `rate` when the transmitter
+    /// estimates no TXOP duration ([`ProtectEveryHeTxop`]): RTS/CTS at the
+    /// control rate for an HE rate, a single MPDU or an A-MPDU alike, while
+    /// the BSS advertises a threshold; no exchange otherwise. The ERP, HT
+    /// and length rules of [`Self::select`] take no part.
+    pub fn every_he_txop_protection(&self, rate: PhyRate) -> Protection {
+        match (self.bss.he_txop_rts_threshold, rate) {
+            (Some(_), PhyRate::He(_)) => Protection::RtsCts {
+                rate: self.control_rate(rate),
+            },
+            _ => Protection::None,
+        }
+    }
+
     /// Control-frame rate for one data rate.
     ///
     /// The fastest basic rate not faster than the data rate, or the slowest

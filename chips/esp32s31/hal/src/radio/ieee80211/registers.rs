@@ -531,7 +531,7 @@ pub use he::{
     beamforming::{
         MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeErSuAckRateProfile,
     },
-    init_suffix::MacHeTxMpduLengthLink,
+    init_suffix::{MAC_MINIMUM_TX_POWER_DBM, MacHeTxMpduLengthLink},
     ofdma::{
         MacBeamformingAverageSnr, MacHeBeamformingConfigurationSnapshot,
         MacHeBeamformingDiagnostics, MacHeBufferStatusSnapshot, MacHeCustomReceiveType,
@@ -540,7 +540,7 @@ pub use he::{
         MacHeTbProgramError, MacHeTbTidLimit, MacHeTid, MacHeTriggerQueueConfiguration,
         MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot,
     },
-    peer::{MacHe20PeerConfig, MacHe20PeerError},
+    peer::{MacHe20Association, MacHe20PeerConfig},
     tb::{MacHeTbStatistics, MacHeTbTxDiagnostics},
 };
 pub use interrupt::{

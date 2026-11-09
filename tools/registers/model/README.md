@@ -738,10 +738,20 @@ kinds are `interrupt-snapshots` (`status`, optional `events`), `field-reads`,
 `full-register-writes`, `pointer-fields`, `zero-based-field-writes` (`fields`),
 `sampled-bit-zero-writes`, `zero-register-writes`,
 `fixed-register-images`, `fixed-register-sequences` (each step one
-element), `masked-register-modifies`, `field-or-modifies`,
-`field-clear-modifies`, `field-replace-modifies` and
+element, or an element range), `masked-register-modifies`,
+`field-or-modifies`, `field-clear-modifies`, `field-replace-modifies` and
 `indexed-bit-set-modifies`. Names are unique `lower_snake_case` across
 all transactions; the fields of one transaction lie in one register.
+
+A fixed-sequence step that names a template with `first` and `count`
+(`{ register = "WIFI_MAC.HE_SCRATCH%s", first = 0, count = 120, value = 0,
+whole-word = true }`, the spelling of a part's `elements`) is an element
+range: it writes its image to `count` elements from `first`, in ascending
+order. `count` may cover the whole array; a range outside the array, an
+empty one, one over a single element or `first` without `count` is a load
+error. An element range is a `whole-word` step and its sequence's only
+step. Every element takes the rules of a sequence step below and one owner
+holds them all.
 
 A word containing a `read-observed` field admits only observation and a
 separately sourced `zero-register-writes` publication. The latter generates
@@ -988,7 +998,11 @@ What a write does with the lanes it does not set:
 - **Policy items.** Only the items field accessors cannot express render:
   `whole-word` fixed images, each `whole-word` step of a fixed sequence
   (one method per image, `<sequence>_<element>`; the HAL orders the
-  steps), fixed images with a `masks` (masked first, whole-word or not) or
+  steps), an element range (one method named after its sequence that
+  stores every element of the range in ascending order through an indexed
+  word array of exactly those elements, its order and count from the
+  geometry, so its owner holds the range and need not hold the rest of the
+  array), fixed images with a `masks` (masked first, whole-word or not) or
   `consumed-event` proof, interrupt snapshots (with the consumed field as
   an `Option` argument; the token reads back its sampled `bits()` and has
   no constructor), zero-based writes with `whole-word-bits` and

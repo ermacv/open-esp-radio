@@ -134,6 +134,19 @@ pub enum StaPhyRequest {
     PreferHe20 { ht40: bool, power: StaHePower },
 }
 
+impl StaPhyRequest {
+    /// This request without HE20: [`Self::PreferHe20`]'s fallback,
+    /// [`Self::Ht40`] when `ht40` holds, else [`Self::Ht20`]; any other
+    /// request unchanged.
+    pub const fn without_he20(self) -> Self {
+        match self {
+            Self::PreferHe20 { ht40: true, .. } => Self::Ht40,
+            Self::PreferHe20 { ht40: false, .. } => Self::Ht20,
+            other => other,
+        }
+    }
+}
+
 /// What an associated station knows of its access point: the PHY it
 /// associated with and the peer facts its transmitter follows, from the
 /// access point's scan record and its Association Response.
@@ -151,6 +164,9 @@ pub struct StaAssociatedPeer {
     pub he_peer_state: Option<oer_protocols_ieee80211_wire::he::He20PeerState>,
     /// The BSS color of the access point's HE Operation, zero without one.
     pub he_bss_color: u8,
+    /// What the station's MAC follows of an HE association: its peer
+    /// state, the AID and the access point's minimum MPDU start spacing.
+    pub he_association: Option<oer_protocols_ieee80211_contracts_port::He20Association>,
     /// The protection facts of the BSS the transmitter's planner applies.
     pub protection: oer_protocols_ieee80211_core_upper_mac::protection::BssProtection,
     /// The EDCA parameters the station's interface contends with: those
@@ -187,6 +203,9 @@ pub enum StaAssociatedPeerError {
     /// An HE association whose Association Response repeats an HE element or
     /// carries one longer than the station keeps.
     HeElementsUnusable,
+    /// An HE association whose AID or HE parameters lie outside their
+    /// fields.
+    HeAssociation(oer_protocols_ieee80211_contracts_port::He20AssociationError),
 }
 
 impl StaAssociatedPeerError {
@@ -201,6 +220,7 @@ impl StaAssociatedPeerError {
                 | Self::HeNotGranted
                 | Self::HeUnsupported
                 | Self::HeElementsUnusable
+                | Self::HeAssociation(_)
         )
     }
 }
@@ -243,6 +263,11 @@ impl StaAssociatedPeer {
         if response.status_code != 0 {
             return Err(StaAssociatedPeerError::Rejected(response.status_code));
         }
+        // The A-MPDU Parameters field of the access point's HT Capabilities
+        // (kept whole: payload byte two is element byte four).
+        let ht_ampdu_parameters = access_point
+            .ht_capability_ie_bytes()
+            .map_or(0, |capability| capability[4]);
         let (he_capability, he_capabilities, he_peer_state, he_bss_color) = if phy == PhyMode::He20
         {
             let he = &response.he;
@@ -274,6 +299,21 @@ impl StaAssociatedPeer {
                     .map_or(0, |operation| operation.effective_bss_color()),
             )
         };
+        // SOURCE(esp32s31): complete pinned `libnet80211.a[wl_cnx.o]::ic_set_sta`
+        // +0x140..0x150 passes the peer's A-MPDU Parameters bits 4:2 (its
+        // Minimum MPDU Start Spacing, IEEE Std 802.11-2020, 9.4.2.55.3) and
+        // the AID to `hal_he_set_mmss_and_aid`.
+        let he_association = match he_peer_state {
+            Some(state) => Some(
+                oer_protocols_ieee80211_contracts_port::He20Association::new(
+                    &state,
+                    response.association_id,
+                    (ht_ampdu_parameters >> 2) & 0x07,
+                )
+                .map_err(StaAssociatedPeerError::HeAssociation)?,
+            ),
+            None => None,
+        };
         let edca = match response
             .wmm_parameters
             .or_else(|| access_point.wmm_parameters())
@@ -291,14 +331,11 @@ impl StaAssociatedPeer {
                 )
                 .ok_or(StaAssociatedPeerError::NoLegacyRates)?,
             ht_capabilities: access_point.ht_peer_capabilities(),
-            // HT Capabilities is kept whole: payload byte two is element
-            // byte four.
-            ht_ampdu_parameters: access_point
-                .ht_capability_ie_bytes()
-                .map_or(0, |capability| capability[4]),
+            ht_ampdu_parameters,
             he_capabilities,
             he_peer_state,
             he_bss_color,
+            he_association,
             protection: BssProtection {
                 erp,
                 ht: HtProtectionMode::from_operation_ie(access_point.ht_operation_ie_bytes()),
