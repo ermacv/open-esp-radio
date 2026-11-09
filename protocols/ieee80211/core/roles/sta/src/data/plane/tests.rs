@@ -135,6 +135,8 @@ struct World<'p, 'id> {
     returned: Vec<ModelNetworkMemory>,
     /// The cost each returned memory came back with, in the same order.
     costs: Vec<TxEstimate>,
+    /// And the rate it last went on the air at.
+    air_rates: Vec<Option<PhyRate>>,
     micros: u64,
 }
 
@@ -158,6 +160,7 @@ impl<'p, 'id: 'p> World<'p, 'id> {
             plane,
             returned: Vec::new(),
             costs: Vec::new(),
+            air_rates: Vec::new(),
             micros: 1,
         }
     }
@@ -244,15 +247,16 @@ impl<'p, 'id: 'p> World<'p, 'id> {
 
     fn settle_ended(&mut self, done: Done<'p, 'id>) {
         let now = self.now();
-        let (returned, costs) = (&mut self.returned, &mut self.costs);
+        let (returned, costs, rates) = (&mut self.returned, &mut self.costs, &mut self.air_rates);
         self.plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory, cost| {
+                |memory, end: TxEnd| {
                     returned.push(memory);
-                    costs.push(cost);
+                    costs.push(end.cost);
+                    rates.push(end.rate);
                 },
                 &mut (),
             )
@@ -269,15 +273,16 @@ impl<'p, 'id: 'p> World<'p, 'id> {
     fn settle(&mut self) -> Settled<ModelBlockAckEvidence, ModelAirDenied> {
         let now = self.now();
         let done = self.arena.service((), now).unwrap().unwrap();
-        let (returned, costs) = (&mut self.returned, &mut self.costs);
+        let (returned, costs, rates) = (&mut self.returned, &mut self.costs, &mut self.air_rates);
         self.plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory, cost| {
+                |memory, end: TxEnd| {
                     returned.push(memory);
-                    costs.push(cost);
+                    costs.push(end.cost);
+                    rates.push(end.rate);
                 },
                 &mut (),
             )
@@ -289,16 +294,17 @@ impl<'p, 'id: 'p> World<'p, 'id> {
     fn settled_holes(&mut self) -> Option<u32> {
         let now = self.now();
         let done = self.arena.service((), now).unwrap().unwrap();
-        let (returned, costs) = (&mut self.returned, &mut self.costs);
+        let (returned, costs, rates) = (&mut self.returned, &mut self.costs, &mut self.air_rates);
         let mut holes = Holes(Some(None));
         self.plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory, cost| {
+                |memory, end: TxEnd| {
                     returned.push(memory);
-                    costs.push(cost);
+                    costs.push(end.cost);
+                    rates.push(end.rate);
                 },
                 &mut holes,
             )
@@ -378,7 +384,14 @@ fn cost_split<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(world.returned_sequences(), [0, 2]);
     // 100 among three: the first takes the remainder.
     assert_eq!(world.costs, [micros(34), micros(33)]);
+    let aggregate = Some(world.rates.aggregate.rate().get());
+    assert_eq!(
+        world.air_rates,
+        [aggregate, aggregate],
+        "the aggregate's rate"
+    );
     world.costs.clear();
+    world.air_rates.clear();
     world.arena.set_cost(micros(70));
     world.taken(3, BE);
     let (retry, _) = world.publish();
@@ -388,6 +401,11 @@ fn cost_split<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(world.returned_sequences(), [1]);
     // Its part of the first attempt, then the whole of the second.
     assert_eq!(world.costs, [micros(33 + 70)]);
+    assert_eq!(
+        world.air_rates,
+        [Some(world.rates.single.get())],
+        "the rate of its last attempt on the air"
+    );
 }
 
 fn cost_single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
@@ -399,24 +417,29 @@ fn cost_single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.settle();
     assert_eq!(world.returned_sequences(), [0]);
     assert_eq!(world.costs, [micros(250)]);
+    assert_eq!(world.air_rates, [Some(world.rates.single.get())]);
     world.costs.clear();
+    world.air_rates.clear();
     // Withdrawn frames that never went leave with no cost.
     world.taken(1, BE);
     let returned = &mut world.returned;
     let costs = &mut world.costs;
+    let rates = &mut world.air_rates;
     world
         .plane
         .withdraw_unpublished(
             &mut world.arena,
-            |memory, cost| {
+            |memory, end: TxEnd| {
                 returned.push(memory);
-                costs.push(cost);
+                costs.push(end.cost);
+                rates.push(end.rate);
             },
             &mut (),
         )
         .unwrap();
     assert_eq!(world.returned_sequences(), [1]);
     assert_eq!(world.costs, [TxEstimate::NONE]);
+    assert_eq!(world.air_rates, [None], "and no rate");
 }
 
 fn cost_unknown<'p, 'id: 'p>(rates: Rates<'p, 'id>) {

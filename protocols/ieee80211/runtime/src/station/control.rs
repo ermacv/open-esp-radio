@@ -584,13 +584,9 @@ pub trait TxSupply<P> {
     /// the memory does not hold ([`TransmitError::InvalidLength`]) keeps the
     /// frame; a pool that refuses its own written memory loses both.
     fn write(&mut self, frame: P) -> Result<Self::Memory, TxRefused<P>>;
-    /// Memory the station gave back, its MSDU ended at `cost`: free again
+    /// Memory the station gave back, its MSDU ended so (`end`): free again
     /// once the network settled that end.
-    fn give(
-        &mut self,
-        memory: Self::Memory,
-        cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
-    );
+    fn give(&mut self, memory: Self::Memory, end: oer_protocols_ieee80211_contracts_port::TxEnd);
 }
 
 /// A frame [`TxSupply::write`] did not hand over.
@@ -707,7 +703,7 @@ impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, 
     /// executor.
     fn take_returned(&mut self) {
         while let Ok(Some(ended)) = self.returned.try_receive_with(Option::take) {
-            self.supply.give(ended.memory, ended.cost);
+            self.supply.give(ended.memory, ended.end);
         }
     }
 }

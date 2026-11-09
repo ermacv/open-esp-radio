@@ -429,11 +429,7 @@ impl TxSupply<WrittenFrame> for Supply {
                 TxPublishRefused::Lost => TxRefused::Lost,
             })
     }
-    fn give(
-        &mut self,
-        memory: TxMemory,
-        _cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
-    ) {
+    fn give(&mut self, memory: TxMemory, _end: oer_protocols_ieee80211_contracts_port::TxEnd) {
         self.free
             .ended
             .borrow_mut()

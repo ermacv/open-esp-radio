@@ -37,7 +37,7 @@
 use super::*;
 use core::task::{Context as TaskContext, Poll};
 use oer_portable_memory::WakingSpscSender;
-use oer_protocols_ieee80211_contracts_port::TxEstimate;
+use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
 use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, RadioNotice};
 use oer_protocols_ieee80211_runtime::station::{Completions, StationKey, TxRefused, TxSupply};
@@ -192,7 +192,7 @@ impl TransmitMode for Queued {
     ) -> Airtime {
         AirtimeEgress::new(
             storage,
-            wifi::StationAir::<Notifies>::new(link, wifi::S31Ceiling),
+            wifi::StationAir::<Notifies>::new(link, wifi::S31Ceiling::new()),
         )
     }
 }
@@ -403,9 +403,9 @@ impl FreeSlots {
         self.slots.lend(heapless::Vec::pop).ok().flatten()
     }
 
-    /// The station gave `slot` back, its frame ended at `cost`: it waits
+    /// The station gave `slot` back, its frame ended so (`end`): it waits
     /// with that end for the port.
-    fn ended(&self, slot: wifi::TxSlot, cost: TxEstimate) {
+    fn ended(&self, slot: wifi::TxSlot, end: TxEnd) {
         let ticket = slot.index();
         let mut slot = Some(slot);
         // Only the network's task lends this, so a lend is never refused.
@@ -413,7 +413,7 @@ impl FreeSlots {
             .ended
             .lend(|ended| {
                 let slot = slot.take()?;
-                ended.returned(slot, ticket, cost).err()
+                ended.returned(slot, ticket, end).err()
             })
             .ok()
             .flatten();
@@ -543,8 +543,8 @@ impl TxSupply<TxPacket> for WifiTx {
                 }
             })
     }
-    fn give(&mut self, memory: wifi::TxMemory, cost: TxEstimate) {
-        FREE.ended(self.publisher.slot(memory), cost);
+    fn give(&mut self, memory: wifi::TxMemory, end: TxEnd) {
+        FREE.ended(self.publisher.slot(memory), end);
     }
 }
 

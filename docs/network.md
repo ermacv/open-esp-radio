@@ -150,6 +150,15 @@ only after the policy chose it and the port gave the room.
   once: each work's least grant once, kept per account as the largest and
   with the work next in turn, which is all the scheduler and the pick read
   of it. The scan stays one pass over the backlog per frame sent.
+- **Least grant.** A frame's least useful grant is its PPDU at the full rate
+  (mode, MCS, streams, width, guard interval and LTF) its association's last
+  settled frame reached the air at: each frame's end carries that rate
+  (`TxEnd`) to `Completions` and the policy, which hands it to `StationAir`.
+  Until a frame of the association that runs now reports one, the grant is
+  the PPDU at the slowest single rate the data plans publish (DSSS 1 Mb/s).
+  The S31's cost model keeps its last answers with every input they were
+  computed from: the grant with the rate and the length, the ceiling with
+  the length.
 - **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
   publications that reached the air by the backend's declared model: the
   modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck

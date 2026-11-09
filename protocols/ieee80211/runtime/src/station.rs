@@ -143,14 +143,16 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
     }
 }
 
-/// One MSDU's end, as the station gives it back: the network's memory and
-/// what its transmissions cost by the backend's model, the part of each
-/// attempt that carried it ([`TxEstimate`]): none for an MSDU that never
-/// reached the air.
+/// One MSDU's end, as the station gives it back: the network's memory, what
+/// its transmissions cost by the backend's model (the part of each attempt
+/// that carried it), and the full rate its last transmission on the air went
+/// at ([`TxEnd`]): none of either for an MSDU that never reached the air.
+///
+/// [`TxEnd`]: oer_protocols_ieee80211_contracts_port::TxEnd
 #[derive(Debug)]
 pub struct TxEnded<M> {
     pub memory: M,
-    pub cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
+    pub end: oer_protocols_ieee80211_contracts_port::TxEnd,
 }
 
 /// One MSDU the network stack hands the station: the network's memory its

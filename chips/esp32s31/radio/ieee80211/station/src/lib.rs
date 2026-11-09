@@ -962,7 +962,7 @@ mod tests {
                 },
             ))
         }
-        fn give(&mut self, (): (), _: oer_protocols_ieee80211_contracts_port::TxEstimate) {}
+        fn give(&mut self, (): (), _: oer_protocols_ieee80211_contracts_port::TxEnd) {}
     }
     #[test]
     fn a_stopper_reports_its_stop_and_a_dropped_one_is_a_lost_participant() {

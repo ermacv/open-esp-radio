@@ -12,7 +12,7 @@ use std::task::{Context, Poll, Waker};
 
 use oer_portable_events::EventSink;
 use oer_protocols_ieee80211_contracts_port::ReturnedMpdu;
-use oer_protocols_ieee80211_contracts_port::TxEstimate;
+use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET;
 use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
@@ -311,10 +311,10 @@ impl TxSupply<WrittenFrame> for Supply {
     fn write(&mut self, frame: WrittenFrame) -> Result<Memory, TxRefused<WrittenFrame>> {
         Ok(frame.memory)
     }
-    fn give(&mut self, memory: Memory, cost: TxEstimate) {
+    fn give(&mut self, memory: Memory, end: TxEnd) {
         let ticket = ticket_of(&memory);
         // One end a buffer, and the queue holds every buffer.
-        if let Err(memory) = self.0.ended.borrow_mut().returned(memory, ticket, cost) {
+        if let Err(memory) = self.0.ended.borrow_mut().returned(memory, ticket, end) {
             self.0.give(memory);
         }
         if let Some(waker) = self.0.waker.take() {

@@ -60,8 +60,8 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 };
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Ieee80211Capabilities, IndeterminateCause, MpduProtection,
-    MpduStartSpacing, PhyRate, RxMetadata, SingleEnd, SingleOutcome, SingleResponse, TxEstimate,
-    TxOutcome,
+    MpduStartSpacing, PhyRate, RxMetadata, SingleEnd, SingleOutcome, SingleResponse, TxEnd,
+    TxEstimate, TxOutcome,
 };
 use oer_protocols_ieee80211_core_upper_mac::{
     ccmp::CcmpTxPacketNumber,
@@ -387,6 +387,9 @@ struct ArenaBook {
     /// What each original position's transmissions cost so far: its part of
     /// every attempt that carried it.
     spent: [TxEstimate; BOOK_FRAMES],
+    /// The full rate of the arena's last attempt that reached the air: the
+    /// rate every frame leaving it last went at.
+    rate: Option<PhyRate>,
     /// Publications that may have reached a receiver: every frame the arena
     /// holds went in each.
     attempts: u8,
@@ -409,6 +412,7 @@ impl ArenaBook {
             octets: 0,
             admitted: [Instant::EPOCH; BOOK_FRAMES],
             spent: [TxEstimate::NONE; BOOK_FRAMES],
+            rate: None,
             attempts: 0,
             retained: false,
             published: None,
@@ -429,6 +433,7 @@ impl ArenaBook {
         self.attempts = 0;
         self.retained = false;
         self.spent = [TxEstimate::NONE; BOOK_FRAMES];
+        self.rate = None;
     }
 
     /// Split `cost` exactly once among the original positions of `carried`,
@@ -450,16 +455,17 @@ impl ArenaBook {
         }
     }
 
-    /// Hand each memory leaving the arena to `returned` with its cost: the
-    /// arena returns them in position order, which is the ascending order
-    /// of their original positions in `leaving`. A memory past them has no
-    /// known cost.
-    fn with_costs<M, F: FnMut(M, TxEstimate)>(
+    /// Hand each memory leaving the arena to `returned` with its end: its
+    /// cost and the arena's last on-air rate. The arena returns them in
+    /// position order, which is the ascending order of their original
+    /// positions in `leaving`. A memory past them has no known cost.
+    fn with_costs<M, F: FnMut(M, TxEnd)>(
         &self,
         leaving: u64,
         mut returned: F,
     ) -> impl FnMut(M) + use<M, F> {
         let spent = self.spent;
+        let rate = self.rate;
         let mut originals = Originals(leaving);
         move |memory| {
             let cost = originals
@@ -468,7 +474,7 @@ impl ArenaBook {
                 .and_then(|original| spent.get(original))
                 .copied()
                 .unwrap_or(TxEstimate::Unknown);
-            returned(memory, cost);
+            returned(memory, TxEnd { cost, rate });
         }
     }
 
@@ -595,7 +601,7 @@ impl DataPlane {
     pub fn stop<'p, 'id: 'p, A: TxArena<'p, 'id>>(
         &mut self,
         arena: &mut A,
-        mut returned: impl FnMut(A::Memory, TxEstimate),
+        mut returned: impl FnMut(A::Memory, TxEnd),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<Option<DataLink>, A::Fault> {
         for id in [ArenaId::First, ArenaId::Second] {
@@ -617,7 +623,7 @@ impl DataPlane {
     pub fn withdraw_unpublished<'p, 'id: 'p, A: TxArena<'p, 'id>>(
         &mut self,
         arena: &mut A,
-        mut returned: impl FnMut(A::Memory, TxEstimate),
+        mut returned: impl FnMut(A::Memory, TxEnd),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), A::Fault> {
         for id in [ArenaId::First, ArenaId::Second] {
@@ -670,7 +676,7 @@ impl DataPlane {
         &mut self,
         arena: &mut A,
         id: ArenaId,
-        returned: &mut impl FnMut(A::Memory, TxEstimate),
+        returned: &mut impl FnMut(A::Memory, TxEnd),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), A::Fault> {
         let book = self.book_mut(id);
@@ -680,9 +686,9 @@ impl DataPlane {
         if book.pending == 0 {
             return Ok(());
         }
-        let leave = book.with_costs(book.pending, |memory, cost| {
+        let leave = book.with_costs(book.pending, |memory, end| {
             report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
-            returned(memory, cost);
+            returned(memory, end);
         });
         arena.withdraw(right, leave)?;
         book.clear();
@@ -1031,7 +1037,7 @@ impl DataPlane {
         arena: &mut A,
         done: CompletedOf<'p, 'id, A>,
         now: Instant,
-        mut returned: impl FnMut(A::Memory, TxEstimate),
+        mut returned: impl FnMut(A::Memory, TxEnd),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<SettledOf<'p, 'id, A>, SettleErrorOf<'p, 'id, A>>
     where
@@ -1053,7 +1059,12 @@ impl DataPlane {
             PpduKind::Aggregate { .. } => book.pending,
         };
         let cost = done.cost();
-        self.book_mut(id).charge(carried, cost);
+        let air = done.end().air().map(|air| air.rate);
+        let book = self.book_mut(id);
+        book.charge(carried, cost);
+        if air.is_some() {
+            book.rate = air;
+        }
         let book = self.book(id);
         let link = self.link.as_ref().filter(|_| book.epoch == self.epoch);
         let Some(link) = link else {

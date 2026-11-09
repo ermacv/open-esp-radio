@@ -1,10 +1,15 @@
 use super::*;
+
+/// An end of `cost` that never says its rate.
+const fn end(cost: TxEstimate) -> TxEnd {
+    TxEnd { cost, rate: None }
+}
 use oer_protocols_network_port::Class;
 
 struct Fixed(u32);
 
 impl FrameCost for Fixed {
-    fn least(&self, frame_octets: usize) -> NonZeroU32 {
+    fn least(&self, frame_octets: usize, _rate: Option<PhyRate>) -> NonZeroU32 {
         NonZeroU32::new(u32::try_from(frame_octets).unwrap()).unwrap()
     }
     fn ceiling(&self, frame_octets: usize) -> NonZeroU32 {
@@ -53,17 +58,18 @@ fn a_buffer_comes_back_only_with_its_end_and_a_new_epoch_ends_the_old_account_fi
     let mut ends = Completions::<&str, u8, 2>::new();
     assert!(!ends.waiting(up(1)));
     assert_eq!(ends.take_notice(up(1)).map(|(notice, _)| notice), None);
-    ends.returned("a", 7, TxEstimate::Estimated { micros: 300 })
+    ends.returned("a", 7, end(TxEstimate::Estimated { micros: 300 }))
         .unwrap();
-    ends.returned("b", 8, TxEstimate::NONE).unwrap();
-    assert_eq!(ends.returned("c", 9, TxEstimate::NONE), Err("c"), "full");
+    ends.returned("b", 8, TxEnd::NONE).unwrap();
+    assert_eq!(ends.returned("c", 9, TxEnd::NONE), Err("c"), "full");
     assert!(ends.waiting(up(1)));
     assert_eq!(
         ends.take_notice(up(1)),
         Some((
             RadioNotice::Ended(Exchange {
                 ticket: 7,
-                charged: NonZeroU32::new(300)
+                charged: NonZeroU32::new(300),
+                rate: None
             }),
             Some("a")
         ))
@@ -77,7 +83,8 @@ fn a_buffer_comes_back_only_with_its_end_and_a_new_epoch_ends_the_old_account_fi
         Some((
             RadioNotice::Ended(Exchange {
                 ticket: 8,
-                charged: Some(NonZeroU32::MIN)
+                charged: Some(NonZeroU32::MIN),
+                rate: None
             }),
             Some("b")
         )),
@@ -90,14 +97,15 @@ fn a_buffer_comes_back_only_with_its_end_and_a_new_epoch_ends_the_old_account_fi
 fn a_lost_frame_settles_with_no_buffer_and_an_unknown_cost_is_charged_the_ceiling() {
     let mut ends = Completions::<&str, u8, 2>::new();
     ends.lost(5).unwrap();
-    ends.returned("a", 6, TxEstimate::Unknown).unwrap();
+    ends.returned("a", 6, end(TxEstimate::Unknown)).unwrap();
     assert_eq!(ends.take_notice(up(1)), Some((RadioNotice::Lost(5), None)));
     assert_eq!(
         ends.take_notice(up(1)),
         Some((
             RadioNotice::Ended(Exchange {
                 ticket: 6,
-                charged: None
+                charged: None,
+                rate: None
             }),
             Some("a")
         ))
@@ -159,7 +167,7 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
     assert_eq!((egress.unsettled(), egress.in_flight()), (0, 5));
     // Now every buffer comes back, late.
     for (ticket, name) in (1..=5_u8).zip(names) {
-        ends.returned(name, ticket, TxEstimate::Estimated { micros: 400 })
+        ends.returned(name, ticket, end(TxEstimate::Estimated { micros: 400 }))
             .unwrap();
     }
     assert_eq!(handed_on(&mut ends, &mut egress), names);
@@ -168,5 +176,121 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
         egress.balance_micros(6),
         None,
         "the current one never charged"
+    );
+}
+
+/// Two full rates of the same mode, MCS and width, apart in guard interval.
+fn ht(mcs: u8, short_gi: bool) -> PhyRate {
+    use oer_protocols_ieee80211_wire::phy::{HtMcs, HtRate, PpduBandwidth};
+    PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), PpduBandwidth::Mhz20, short_gi).unwrap())
+}
+
+/// A [`FrameCost`] that says which rate each least grant was asked at.
+#[derive(Default)]
+struct Asked(core::cell::RefCell<std::vec::Vec<Option<PhyRate>>>);
+
+impl FrameCost for &Asked {
+    fn least(&self, frame_octets: usize, rate: Option<PhyRate>) -> NonZeroU32 {
+        self.0.borrow_mut().push(rate);
+        NonZeroU32::new(u32::try_from(frame_octets).unwrap()).unwrap()
+    }
+    fn ceiling(&self, frame_octets: usize) -> NonZeroU32 {
+        NonZeroU32::new(u32::try_from(frame_octets).unwrap()).unwrap()
+    }
+}
+
+/// The least grant goes at the association's last reported full rate: the
+/// lowest until one reports, each later report as it comes, and none of an
+/// earlier association's.
+#[test]
+fn the_least_grant_goes_at_the_association_s_last_reported_rate() {
+    let link = NetworkLink::new();
+    link.publish(up(1));
+    let asked = Asked::default();
+    let mut air = StationAir::new(&link, &asked);
+    air.candidate(&ready(1514)).unwrap();
+    air.reported(1, ht(7, true));
+    air.candidate(&ready(1514)).unwrap();
+    // The same epoch and length, another guard interval: its own rate.
+    air.reported(1, ht(7, false));
+    air.candidate(&ready(1514)).unwrap();
+    link.publish(up(2));
+    air.candidate(&ready(1514)).unwrap();
+    air.reported(2, ht(0, false));
+    air.candidate(&ready(1514)).unwrap();
+    assert_eq!(
+        *asked.0.borrow(),
+        [
+            None,
+            Some(ht(7, true)),
+            Some(ht(7, false)),
+            None,
+            Some(ht(0, false))
+        ]
+    );
+}
+
+/// The owner's review counterexample, on the rate-aware signature: a cost
+/// model whose context changes within one association and length.
+struct ReviewerChanging<'a>(&'a core::cell::Cell<u32>);
+impl FrameCost for ReviewerChanging<'_> {
+    fn least(&self, _: usize, _: Option<PhyRate>) -> NonZeroU32 {
+        NonZeroU32::new(self.0.get()).unwrap()
+    }
+    fn ceiling(&self, _: usize) -> NonZeroU32 {
+        NonZeroU32::new(10 * self.0.get()).unwrap()
+    }
+}
+#[test]
+fn reviewer_a_changed_cost_input_updates_the_grant_within_the_same_association() {
+    let link = NetworkLink::new();
+    link.publish(up(1));
+    let value = core::cell::Cell::new(100);
+    let air = StationAir::new(&link, ReviewerChanging(&value));
+    assert_eq!(
+        air.candidate(&ready(1514)).unwrap().minimum_micros.get(),
+        100
+    );
+    value.set(200);
+    assert_eq!(
+        air.candidate(&ready(1514)).unwrap().minimum_micros.get(),
+        200
+    );
+}
+#[test]
+fn reviewer_a_changed_cost_input_updates_the_ceiling_within_the_same_association() {
+    let link = NetworkLink::new();
+    link.publish(up(1));
+    let value = core::cell::Cell::new(100);
+    let air = StationAir::new(&link, ReviewerChanging(&value));
+    assert_eq!(air.ceiling(&ready(1514)).get(), 1000);
+    value.set(200);
+    assert_eq!(air.ceiling(&ready(1514)).get(), 2000);
+}
+
+/// A returned frame's end hands its rate on with its charge.
+#[test]
+fn a_returned_frame_s_rate_goes_with_its_end() {
+    let mut ends = Completions::<&str, u8, 1>::new();
+    let rate = ht(5, true);
+    ends.returned(
+        "a",
+        3,
+        TxEnd {
+            cost: TxEstimate::Estimated { micros: 90 },
+            rate: Some(rate),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        ends.take_notice(up(1)),
+        Some((
+            RadioNotice::Ended(Exchange {
+                ticket: 3,
+                charged: NonZeroU32::new(90),
+                rate: Some(rate),
+            }),
+            Some("a")
+        ))
     );
 }

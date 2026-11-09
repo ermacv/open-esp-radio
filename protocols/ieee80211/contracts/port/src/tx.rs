@@ -159,6 +159,26 @@ pub enum IndeterminateCause {
     KeyRefused,
 }
 
+/// How a frame's transmissions ended for its owner: what they cost by the
+/// backend's model, and the full rate (mode, MCS, streams, width, guard
+/// interval and LTF) the last of them that reached the air went at, `None`
+/// when none did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TxEnd {
+    /// What the frame's transmissions cost.
+    pub cost: TxEstimate,
+    /// The full rate of its last transmission that reached the air.
+    pub rate: Option<crate::PhyRate>,
+}
+
+impl TxEnd {
+    /// A frame that never went on the air.
+    pub const NONE: Self = Self {
+        cost: TxEstimate::NONE,
+        rate: None,
+    };
+}
+
 /// What transmissions cost by a backend's declared model, in microseconds:
 /// for every publication that reached the air, its modelled PPDU duration,
 /// one SIFS and its solicited response (an ACK or a BlockAck) at the
