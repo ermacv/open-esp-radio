@@ -214,3 +214,27 @@ fn frames_of_one_length_compute_each_charge_once() {
     );
     assert_eq!(air.ceiling(&ready(64)).get(), 640);
 }
+
+/// A charge is kept for one association: the same length under a new epoch
+/// is computed again, as the next association may run another PHY.
+#[test]
+fn a_new_association_computes_each_charge_again_for_the_same_length() {
+    let link = NetworkLink::new();
+    link.publish(up(1));
+    let costs = Counted::default();
+    let air = StationAir::new(&link, &costs);
+    air.candidate(&ready(1514)).unwrap();
+    air.ceiling(&ready(1514));
+    assert_eq!((costs.least.get(), costs.ceiling.get()), (1, 1));
+    link.publish(up(2));
+    assert_eq!(air.candidate(&ready(1514)).unwrap().key, 2);
+    air.ceiling(&ready(1514));
+    assert_eq!(
+        (costs.least.get(), costs.ceiling.get()),
+        (2, 2),
+        "the new epoch's charges are its own"
+    );
+    air.candidate(&ready(1514)).unwrap();
+    air.ceiling(&ready(1514));
+    assert_eq!((costs.least.get(), costs.ceiling.get()), (2, 2));
+}
