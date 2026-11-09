@@ -228,7 +228,9 @@ impl Worker {
         self.phase = Phase::Leaving;
         let left = match self.station.stop().await {
             Ok(()) => Left::Down,
-            Err(StopError::Failed) => Left::Refused(StationError::Unavailable),
+            Err(StopError::Failed | StopError::ReleaseFailed(_)) => {
+                Left::Refused(StationError::Unavailable)
+            }
         };
         self.phase = Phase::Stopped;
         left
