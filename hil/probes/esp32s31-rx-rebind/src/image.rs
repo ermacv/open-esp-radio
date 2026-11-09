@@ -460,30 +460,35 @@ async fn capture(boot: Boot) {
         _pads,
         mac_irq,
     } = boot;
-    usb::text(&mut console, b"REBIND boot\n").await;
-    match run_direct(&mut console, mac_irq).await {
-        Err(reason) => {
-            usb::text(&mut console, reason.as_str().as_bytes()).await;
-            usb::text(&mut console, b"\nOER-RESULT: fail rx-rebind error\n").await;
-        }
-        Ok(crate::verdict::Verdict::Pass) => {
-            usb::text(&mut console, b"OER-RESULT: pass rx-rebind\n").await;
-        }
-        Ok(crate::verdict::Verdict::Fail(kind)) => {
-            usb::text(&mut console, b"OER-RESULT: fail rx-rebind violation=").await;
-            usb::text(&mut console, kind.name().as_bytes()).await;
-            usb::text(&mut console, b"\n").await;
-        }
-        Ok(crate::verdict::Verdict::Insufficient(shortfall)) => {
-            usb::text(
-                &mut console,
-                b"OER-RESULT: fail rx-rebind insufficient-experiment=",
-            )
-            .await;
-            usb::text(&mut console, shortfall.name().as_bytes()).await;
-            usb::text(&mut console, b"\n").await;
+    let booted = usb::text(&mut console, b"REBIND boot\n").await;
+    let outcome = run_direct(&mut console, mac_irq).await;
+    let parts: [&[u8]; 3] = match &outcome {
+        Err(reason) => [
+            reason.as_str().as_bytes(),
+            b"\nOER-RESULT: fail rx-rebind error",
+            b"\n",
+        ],
+        Ok(crate::verdict::Verdict::Pass) => [b"OER-RESULT: pass rx-rebind", b"", b"\n"],
+        Ok(crate::verdict::Verdict::Fail(kind)) => [
+            b"OER-RESULT: fail rx-rebind violation=",
+            kind.name().as_bytes(),
+            b"\n",
+        ],
+        Ok(crate::verdict::Verdict::Insufficient(shortfall)) => [
+            b"OER-RESULT: fail rx-rebind insufficient-experiment=",
+            shortfall.name().as_bytes(),
+            b"\n",
+        ],
+    };
+    let mut written = Ok(());
+    for part in parts {
+        if written.is_ok() {
+            written = usb::text(&mut console, part).await;
         }
     }
+    // The console is this image's only output: a write it refuses has no
+    // other place to be reported, and no other line replaces the verdict.
+    let _ = (booted, written);
 }
 async fn run_direct(
     console: &mut usb::Console,
@@ -544,7 +549,8 @@ async fn run_direct(
         console,
         b"REBIND begin v=2 channel=13 count=32 buffer=1664 spares=96 pool=64 segment_ms=2500 action_ms=80 arms=fixed,rebind,rebind,fixed-late\n",
     )
-    .await;
+    .await
+    .map_err(|_| oer_portable_diagnostics::name!("console-write"; 32))?;
     let observation =
         experiment::run(state, frame, storage, bank, &mut ring, access, &mut mac_irq).await;
     access.wifi_mac_hal().request_channel_stop();

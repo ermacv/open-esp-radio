@@ -25,10 +25,13 @@ pub(crate) fn interrupt(part: &mut ConsoleInterrupt) {
     INTERRUPT.service(part);
 }
 
-/// Writes `bytes` as they are on the open console.
-pub(crate) async fn text(console: &mut Console, bytes: &[u8]) {
-    use embedded_io_async::Write as _;
-    let _ = console.write_all(bytes).await;
+/// Writes `bytes` as they are on the open console, by the bounded write
+/// loop of `console_write`.
+pub(crate) async fn text(
+    console: &mut Console,
+    bytes: &[u8],
+) -> Result<(), crate::console_write::ConsoleWriteError> {
+    crate::console_write::write_bytes(console, bytes).await
 }
 
 /// Why the console did not open.

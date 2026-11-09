@@ -23,6 +23,8 @@ mod usb;
 #[cfg(target_arch = "riscv32")]
 use image::*;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+mod console_write;
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 mod crc;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 mod verdict;

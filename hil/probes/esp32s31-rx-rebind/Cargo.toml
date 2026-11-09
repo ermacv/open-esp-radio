@@ -11,6 +11,7 @@ build = "build.rs"
 
 [dependencies]
 crc = "3.3.0"
+embedded-io-async = "0.7.0"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
@@ -23,7 +24,6 @@ oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/run
 oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform/runtime" }
 oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
 oer-chips-family-drivers-usb-serial-jtag.workspace = true
-embedded-io-async = "0.7.0"
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-portable-trace = { path = "../../../portable/trace" }

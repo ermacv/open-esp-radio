@@ -799,7 +799,9 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             counts.hw_data_success,
         )
         .map_err(|_| name!("format"; 32))?;
-        usb::text(console, line.as_bytes()).await;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
     }
     line.clear();
     writeln!(
@@ -823,7 +825,9 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
         state.violations_len,
     )
     .map_err(|_| name!("format"; 32))?;
-    usb::text(console, line.as_bytes()).await;
+    usb::text(console, line.as_bytes())
+        .await
+        .map_err(|_| name!("console-write"; 32))?;
     for violation in state.violations.iter().take(state.violations_len) {
         line.clear();
         writeln!(
@@ -837,7 +841,9 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             violation.observed,
         )
         .map_err(|_| name!("format"; 32))?;
-        usb::text(console, line.as_bytes()).await;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
     }
     Ok(())
 }

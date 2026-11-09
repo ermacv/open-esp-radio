@@ -1049,7 +1049,13 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                     return Ok(None);
                 }
             }
-            if self.descriptors()[index].word0().rx_done() {
+            if self
+                .descriptors()
+                .get(index)
+                .ok_or(RxRingError::Count)?
+                .word0()
+                .rx_done()
+            {
                 return Ok(Some(step + 1));
             }
         }
