@@ -208,6 +208,10 @@ pub struct RadioDevice<
     session: Result<ReceiveSession<N, RB, RS, Q, X, V, F::Space>, Fault>,
     /// The receive session is paused and its interrupt epoch closed.
     paused: bool,
+    /// A start of the receive session began: its ring was asked to
+    /// prepare, its interrupt epoch to open, its walker to enable. Never
+    /// cleared: a start that began and failed may have left the walker on.
+    rx_start_began: bool,
     actor: Option<F::Cell>,
     retune: Option<F::Retune>,
     failed_retune: Option<F::Failed>,
@@ -322,6 +326,7 @@ impl<
             active: Some(Active { registers, context }),
             session,
             paused: false,
+            rx_start_began: false,
             actor: Some(parts.actor),
             retune: None,
             failed_retune: None,
@@ -440,6 +445,32 @@ impl<
             hardware,
             mac,
             periodic,
+        }
+    }
+
+    /// Recover the Wi-Fi frontier of a device whose receive session never
+    /// began a start, as a port that refused its parts leaves it: the
+    /// session's construction prepared the ring and installed its line,
+    /// but only a start opens the interrupt epoch, enables the walker and
+    /// starts the MAC runtime, so none of them ran. A device whose start
+    /// began (even one that failed, which may have left the walker on), or
+    /// whose retune holds the registers, keeps its owners and returns
+    /// `None`; such a device leaves only through a stop and
+    /// [`Self::take_stopped`].
+    pub fn take_unstarted(&mut self) -> Option<(F, F::Cell)> {
+        if self.rx_start_began || self.failed_retune.is_some() || self.retune.is_some() {
+            return None;
+        }
+        // Both owners leave together, or neither does.
+        match (self.active.take(), self.actor.take()) {
+            (Some(Active { registers, context }), Some(actor)) => {
+                Some((F::into_stopped(registers, context), actor))
+            }
+            (active, actor) => {
+                self.active = active;
+                self.actor = actor;
+                None
+            }
         }
     }
 
@@ -619,6 +650,7 @@ where
         if core::mem::take(&mut self.paused) {
             session.reattach();
         }
+        self.rx_start_began = true;
         session
             .port_start(&mut active.registers, &self.doorbell)
             .map(|r| r.map_err(Fault::Receive))

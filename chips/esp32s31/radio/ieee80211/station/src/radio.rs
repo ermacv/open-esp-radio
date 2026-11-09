@@ -468,18 +468,17 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
             return;
         }
     };
-    let Ok(PortInstallation {
+    let PortInstallation {
         port,
         commands,
         resources,
-    }) = Port::<W>::install(parts, minted, driver)
-    else {
-        post(
-            &mut mailbox,
-            News::Unavailable(port_refused(InitializationError::Backend)),
-        )
-        .await;
-        return;
+    } = match Port::<W>::install(parts, minted, driver) {
+        Ok(installation) => installation,
+        Err((parts, _minted)) => {
+            let unavailable = port_refused::<W>(InitializationError::Backend, parts.device).await;
+            post(&mut mailbox, News::Unavailable(unavailable)).await;
+            return;
+        }
     };
     let (block_acks, tokens) = resources.into_station();
     const {
@@ -616,17 +615,33 @@ pub(crate) async fn release<W: Binding>(
     .await
 }
 
-/// The refusal of a port that did not take the parts of a started radio:
-/// the radio stays in the parts' device, never started by the port, and no
-/// release takes it back from there ([`take_stopped`] needs a paused
-/// device), so the cleanup names it not released.
-pub(crate) fn port_refused(
+/// The refusal of a port that did not take the parts of a started radio.
+/// The port never started the parts' device, so its receive session never
+/// began a start (no interrupt epoch, walker or MAC runtime of it ran):
+/// the radio leaves the radio system from there, a refusal of its MAC
+/// tried again and a posted leave awaited however late, and the cleanup
+/// is that leave's outcome. A device whose session began a start keeps
+/// the radio ([`take_stopped`] needs a stop first), and the cleanup names
+/// it not stopped. The other parts end here: nothing was published to the
+/// MAC or its DMA.
+pub(crate) async fn port_refused<W: Binding>(
     cause: InitializationError,
+    device: &'static mut Device<W>,
 ) -> crate::failure::Unavailable<InitializationError> {
-    crate::failure::Unavailable {
-        cause,
-        cleanup: Err(crate::failure::ReleaseCause::NotStopped),
-    }
+    let cleanup = match device.0.take_unstarted() {
+        Some((stopped, cell)) => {
+            crate::release::until_left(
+                &EmbassyClock,
+                RELEASE_RETRY,
+                StoppedRadio { stopped, cell },
+                StoppedRadio::release,
+                |_| {},
+            )
+            .await
+        }
+        None => Err(crate::failure::ReleaseCause::NotStopped),
+    };
+    crate::failure::Unavailable { cause, cleanup }
 }
 
 /// Why [`install`] refused, with the owners it took that its refused step

@@ -533,15 +533,19 @@ impl<W: Binding> AccessPointRunner<W> {
                 );
             }
         };
-        let Ok(PortInstallation {
+        let PortInstallation {
             port,
             commands,
             resources,
-        }) = Port::<W>::install(parts, minted, driver)
-        else {
-            // The started radio stays in the refused parts' device, which
-            // no release takes back before a start of the port.
-            return ApExit::Unavailable(radio::port_refused(InitializationError::Backend));
+        } = match Port::<W>::install(parts, minted, driver) {
+            Ok(installation) => installation,
+            Err((parts, _minted)) => {
+                // The started radio leaves from the refused parts' device,
+                // which the port never started; its outcome is the cleanup.
+                return ApExit::Unavailable(
+                    radio::port_refused::<W>(InitializationError::Backend, parts.device).await,
+                );
+            }
         };
         let mut tickets = heapless::Vec::new();
         for ticket in resources.tickets {
