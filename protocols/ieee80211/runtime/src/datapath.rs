@@ -32,9 +32,10 @@
 //!    holds at its barrier stops the messages until it ran, but a stop
 //!    behind it withdraws it;
 //! 3. at most [`RX_BUDGET`] received units, reordered, admitted by the link
-//!    and handed on; the network at its lend limit stops the pull for at
-//!    most [`NETWORK_LATE`], then the actor walks the ring regardless and
-//!    refuses, counted, what the network's queues do not take. While the
+//!    and handed on; the network at its lend limit stops the pull until it
+//!    returns a unit, or for at most [`NETWORK_LATE`] without one, then
+//!    the actor walks the ring regardless and refuses, counted, what the
+//!    network's queues do not take. While the
 //!    message budget left messages queued, the
 //!    units wait for the next turn: a link handed over before them is in
 //!    force when they are routed;
@@ -129,12 +130,13 @@ pub const DUE_REPOSTS: u8 = 4;
 pub const RX_BUDGET: u8 = 32;
 
 /// How long received frames wait for a network that holds every unit the
-/// port may lend before the actor walks the ring regardless. Within it a
-/// late network loses nothing: the units wait in the ring, as a burst
-/// does while the network is on its way. Past it the actor walks and
-/// rearms the ring, so the station's frames and the receive agreements go
-/// on, and refuses what the network's queues do not take, counted. The
-/// runtime's policy, not a hardware bound.
+/// port may lend and returns none before the actor walks the ring
+/// regardless. Within it, and for as long as the network returns units,
+/// however slowly, the units wait in the ring: a burst the network is on
+/// its way to loses nothing, and a slow network paces the peer. Past it the
+/// actor walks and rearms the ring, so the station's frames and the receive
+/// agreements go on, and refuses what the network's queues do not take,
+/// counted. The runtime's policy, not a hardware bound.
 pub const NETWORK_LATE: Duration = Duration::from_millis(10);
 
 /// The lifecycle's messages one turn takes at most.
@@ -447,8 +449,7 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     /// The receive ring has work from this instant on.
     rx_later: Option<Instant>,
     /// Since when received frames have waited for a network that holds
-    /// every unit the port may lend, until the pull caught up with the
-    /// ring while the network had room again.
+    /// every unit the port may lend, until it has room again.
     held_back: Option<Instant>,
     /// A budget ran out with work left.
     again: bool,

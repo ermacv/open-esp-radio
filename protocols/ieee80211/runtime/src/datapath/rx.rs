@@ -6,15 +6,16 @@
 //! the others are copied. While the network holds all the units the port
 //! may lend, the frames in delivery order wait and the actor pulls no more,
 //! so the port keeps further units in its ring: a burst the network is on
-//! its way to loses nothing. A network that stays at its limit for
-//! [`NETWORK_LATE`] no longer holds the ring back: the actor walks it, a
-//! frame of one MSDU is copied by pressure while the copy queue has room,
-//! and an MSDU no queue takes is refused, counted ([`RxMsdusRefused`]), its
-//! buffer back to the ring at once. So the station's frames, the link's
-//! admission and the receive agreements go on whatever the network takes.
-//! The walk lasts until nothing waits in delivery order while the network
-//! has room again. The units the network holds stay lent until it drops
-//! them; the port never lends past its limit.
+//! its way to loses nothing, and a network that takes slowly paces the
+//! ring, whose full slots the recipient does not acknowledge, so the peer
+//! sends them again. A network that returns nothing for [`NETWORK_LATE`]
+//! no longer holds the ring back: the actor walks it, a frame of one MSDU
+//! is copied by pressure while the copy queue has room, and an MSDU no
+//! queue takes is refused, counted ([`RxMsdusRefused`]), its buffer back to
+//! the ring at once. So the station's frames, the link's admission and the
+//! receive agreements go on whatever the network takes. The walk lasts
+//! until the network has room again. The units the network holds stay lent
+//! until it drops them; the port never lends past its limit.
 
 use super::turn::{Failed, PortBlockAcks};
 use super::*;
@@ -158,13 +159,14 @@ where
         self.network_full(network) && !self.network_late()
     }
 
-    /// Frames no longer wait for the network once nothing waits in delivery
-    /// order and it has room: the next back-pressure starts its own bound.
-    fn caught_up<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
+    /// A network with room returned a unit since frames began to wait: it
+    /// makes progress, however slowly, and the next back-pressure starts
+    /// its own bound.
+    fn progressed<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
         &mut self,
         network: &NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) {
-        if !self.receive.has_ready() && !self.network_full(network) {
+        if !self.network_full(network) {
             self.held_back = None;
         }
     }
@@ -187,8 +189,8 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         let now = self.now;
+        self.progressed(network);
         self.pending(lifecycle, network)?;
-        self.caught_up(network);
         let continued = self.rx_later.is_some_and(|at| at <= now);
         if (signalled || continued) && self.radio_receives() {
             self.rx_later = None;
@@ -224,10 +226,7 @@ where
                             self.received(frame, meta, lifecycle, network)?;
                         }
                     }
-                    RxPull::Empty => {
-                        self.caught_up(network);
-                        break;
-                    }
+                    RxPull::Empty => break,
                     RxPull::Later(at) if at <= now => {
                         // The port's call ended at its own bound with the
                         // ring's work left: no alarm keeps an instant
@@ -239,7 +238,6 @@ where
                     }
                     RxPull::Later(at) => {
                         self.rx_later = Some(at);
-                        self.caught_up(network);
                         break;
                     }
                 }
