@@ -564,9 +564,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             // published head or an earlier unaffected queued owner. A
             // halted call withdraws no more: the rest stay queued.
             while !env.halted()
-                && let Some(cause) = self.queues[index].front().and_then(|pending| {
-                    global.or_else(|| self.withdrawal(pending.role(), pending.key()))
-                })
+                && let Some(cause) = self
+                    .queues
+                    .get(index)
+                    .and_then(heapless::Deque::front)
+                    .and_then(|pending| {
+                        global.or_else(|| self.withdrawal(pending.role(), pending.key()))
+                    })
             {
                 let Some(queued) = self.queues[index].pop_front() else {
                     break;

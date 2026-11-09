@@ -261,6 +261,25 @@ impl<'id, T: PortTypes<'id>, I, R> core::fmt::Debug for Unkeeping<'id, T, I, R> 
 /// `R`, or the [`Unkept`] it stopped on beside its input.
 pub type PortAnswer<'id, T, I, R> = Result<R, Unkeeping<'id, T, I, R>>;
 
+/// The answer of [`DataPort::service_tx`] of the port `P`.
+pub type ServiceAnswer<'id, P> = PortAnswer<
+    'id,
+    <P as DataPort<'id>>::Types,
+    core::convert::Infallible,
+    Result<Option<PortCompleted<'id, P>>, <P as DataPort<'id>>::Fault>,
+>;
+
+/// The answer of [`DataPort::command`] of the port `P`.
+pub type CommandAnswer<'id, P> = PortAnswer<
+    'id,
+    <P as DataPort<'id>>::Types,
+    PortCommand<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
+    Result<
+        CommandProgress<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
+        PortCommandFailed<'id, P>,
+    >,
+>;
+
 /// What [`DataPort::take_unconsumed`] left with the port.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Unconsumed {
@@ -644,12 +663,7 @@ pub trait DataPort<'id> {
         tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        core::convert::Infallible,
-        Result<Option<PortCompleted<'id, Self>>, Self::Fault>,
-    >;
+    ) -> ServiceAnswer<'id, Self>;
 
     /// Serve the published data arena alone on the completion events
     /// `tx`, for a caller that publishes the next arena before anything
@@ -784,12 +798,7 @@ pub trait DataPort<'id> {
         command: PortCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        PortCommand<'id, Self::Types, Self::Caps>,
-        Result<CommandProgress<'id, Self::Types, Self::Caps>, PortCommandFailed<'id, Self>>,
-    >;
+    ) -> CommandAnswer<'id, Self>;
 
     /// Start the stopped radio on `channel`, within the backend's command
     /// bound from the first call. A start that fails after the device began

@@ -465,8 +465,15 @@ offers them again, oldest first, at the start of `service_tx`, `submit`,
 `command` and `access_point_command`, and a newer terminal waits behind
 them; after a confirmed stop only `take_unconsumed` offers them. Nothing
 the port keeps makes its deadline due or raises a fact, and a port that
-keeps one does not retire. A taken or missing place (a token that was not
-unique) is the contract fault `UnconsumedPlace`.
+keeps one does not retire. An item the store cannot keep (a taken or
+missing place: a token that was not unique) goes to the call's one unkept
+place and comes back beside the call's answer (`Unkeeping`); from then on
+the call takes no further owner. Every producing loop checks that place
+before it takes the next owner: queued withdrawals and a late beacon stay
+queued, completions the core already gave wait in the driver and come home
+first at the next call (no sink takes the core's completions meanwhile),
+waiting removals, the configuration and gate terminals and the receive cut
+wait for the next call.
 
 A station group key mutation and an access point's are commands of their
 own role (`StationGroupCommand`, `AccessPointGroupCommand`). A step of

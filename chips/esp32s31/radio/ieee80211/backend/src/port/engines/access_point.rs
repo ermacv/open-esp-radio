@@ -566,6 +566,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     Esp32s31Port<'id, Id, D, B, O>
 {
+    #[allow(
+        clippy::result_large_err,
+        reason = "the failure returns the command by value, as the trait's call does"
+    )]
     fn access_point_ran(
         &mut self,
         command: ApCmd<'id, Id, D, B, O>,

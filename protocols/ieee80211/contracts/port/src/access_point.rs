@@ -706,6 +706,21 @@ pub trait AccessPointCommands<'id> {
     ) -> AccessPointCommand<'id, Self::Types, Self::Caps>;
 }
 
+/// The answer of [`AccessPointPort::access_point_command`] of the port `P`.
+pub type AccessPointCommandAnswer<'id, P> = crate::PortAnswer<
+    'id,
+    <P as crate::DataPort<'id>>::Types,
+    AccessPointCommand<'id, <P as crate::DataPort<'id>>::Types, <P as crate::DataPort<'id>>::Caps>,
+    Result<
+        AccessPointProgress<
+            'id,
+            <P as crate::DataPort<'id>>::Types,
+            <P as crate::DataPort<'id>>::Caps,
+        >,
+        AccessPointCommandFailed<'id, P>,
+    >,
+>;
+
 /// The access-point role of a shared port: its entry points beside the
 /// station's, over the same physical owner, queues and sink.
 pub trait AccessPointPort<'id>:
@@ -746,15 +761,7 @@ pub trait AccessPointPort<'id>:
         command: AccessPointCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> crate::PortAnswer<
-        'id,
-        Self::Types,
-        AccessPointCommand<'id, Self::Types, Self::Caps>,
-        Result<
-            AccessPointProgress<'id, Self::Types, Self::Caps>,
-            AccessPointCommandFailed<'id, Self>,
-        >,
-    >;
+    ) -> AccessPointCommandAnswer<'id, Self>;
 }
 
 #[cfg(test)]

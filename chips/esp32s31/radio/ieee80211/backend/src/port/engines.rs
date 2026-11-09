@@ -2357,6 +2357,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         Ok(())
     }
 
+    #[allow(
+        clippy::result_large_err,
+        reason = "the failure returns the command by value, as the trait's call does"
+    )]
     fn ran(
         &mut self,
         command: PortCommand<'id, <Self as DataPort<'id>>::Types, <Self as DataPort<'id>>::Caps>,

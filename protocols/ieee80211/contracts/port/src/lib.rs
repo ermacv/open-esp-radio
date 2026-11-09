@@ -68,11 +68,12 @@ mod issued;
 pub use issued::{IssuedSlot, IssuedSlots, SlotGrant, first_stale};
 pub mod access_point;
 pub use access_point::{
-    AccessPointCapabilities, AccessPointCommand, AccessPointCommandFailed, AccessPointCommandKind,
-    AccessPointCommands, AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress,
-    AccessPointReceive, AccessPointRefusal, AccessPointServices, AccessPointSubmission,
-    AccessPointTypes, AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant,
-    BeaconParts, BeaconPermission, BeaconPool, BeaconStamp, BeaconSubmission, BeaconTimestamp,
+    AccessPointCapabilities, AccessPointCommand, AccessPointCommandAnswer,
+    AccessPointCommandFailed, AccessPointCommandKind, AccessPointCommands,
+    AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
+    AccessPointRefusal, AccessPointServices, AccessPointSubmission, AccessPointTypes,
+    AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant, BeaconParts,
+    BeaconPermission, BeaconPool, BeaconStamp, BeaconSubmission, BeaconTimestamp,
     SealedBeaconParts, SupportedTsfControl, TsfControl,
 };
 pub mod arena;

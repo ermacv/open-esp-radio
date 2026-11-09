@@ -1283,10 +1283,8 @@ fn a_port_without_its_registers_faults_without_publishing() {
     });
 }
 
-/// One service of `fixture`'s port on its facts, with its whole answer.
-fn serve_once<'id, Id: radio::SlotIdentity + 'id>(
-    fixture: &mut Fixture<'id, Id>,
-) -> oer_protocols_ieee80211_contracts_port::PortAnswer<
+/// A service's whole answer.
+type Served<'id, Id> = oer_protocols_ieee80211_contracts_port::PortAnswer<
     'id,
     Family<Id>,
     core::convert::Infallible,
@@ -1294,7 +1292,12 @@ fn serve_once<'id, Id: radio::SlotIdentity + 'id>(
         Option<oer_protocols_ieee80211_contracts_port::PortCompleted<'id, Port<'id, Id>>>,
         Fault,
     >,
-> {
+>;
+
+/// One service of `fixture`'s port on its facts, with its whole answer.
+fn serve_once<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &mut Fixture<'id, Id>,
+) -> Served<'id, Id> {
     let waker = fixture.waker();
     let now = fixture.now();
     let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));

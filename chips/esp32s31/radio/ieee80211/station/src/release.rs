@@ -43,6 +43,10 @@ impl<'id, T: PortTypes<'id>> Freed<'id, T> {
     }
 
     /// An item a run returned unkept, which no release follows.
+    #[cfg_attr(
+        not(target_arch = "riscv32"),
+        allow(dead_code, reason = "the chip's access point builds it")
+    )]
     pub(crate) fn unkept(unkept: Unkept<'id, T>) -> Self {
         Self {
             removed: None,
@@ -73,9 +77,10 @@ where
     };
     let result = answer
         .map_err(crate::failure::convert::cleanup)
-        .and_then(|()| match unkept {
-            Some(_) => Err(crate::failure::CleanupCause::Unkept),
-            None => Ok(()),
+        .and(if unkept.is_some() {
+            Err(crate::failure::CleanupCause::Unkept)
+        } else {
+            Ok(())
         });
     Cleaned {
         result,
