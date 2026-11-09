@@ -382,9 +382,6 @@ pub enum ModelPortFault {
     },
 }
 
-/// A command of the model port of `(Id, C, X)`.
-type ModelCommand<'id, Id, C, X> = PortCommand<'id, ModelTypes<Backend<Id, C, X>>, C>;
-
 /// An access-point command of the model port of `(Id, C, X)`.
 type ModelAccessPointCommand<'id, Id, C, X> =
     AccessPointCommand<'id, ModelTypes<Backend<Id, C, X>>, C>;
