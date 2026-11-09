@@ -57,6 +57,45 @@ pub enum Local {
     WaitsChanges,
 }
 
+/// What the network core dropped, by its reason: one word each. The core
+/// names each drop where it happens; this counts them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum Dropped {
+    Malformed,
+    Checksum,
+    NoSocket,
+    ReceiveFull,
+    NoBlock,
+    GroupLimit,
+    TooLong,
+    Fragment,
+    BadSource,
+    ReplyDropped,
+    SendOnly,
+    /// A lending socket's datagram found the socket at its credit.
+    NoCredit,
+    /// A lending socket's datagram met a stopping account.
+    NotLentStopping,
+    /// A lending socket's datagram for a socket the account has no place
+    /// for.
+    NotLentSocket,
+    /// A lending socket's datagram the device had copied by pressure.
+    PressureCopy,
+    /// A lending socket's lane had no room for a lent datagram.
+    LentLaneFull,
+    /// A DHCP or an ICMP message the core dropped, by any of its reasons.
+    Dhcp,
+    Icmp,
+}
+
+/// The words of [`NetworkTurns::drops`], one for each [`Dropped`].
+pub const DROP_KINDS: usize = Dropped::Icmp as usize + 1;
+
+/// The bins of [`NetworkTurns::loans_at_turn_end`]: turns that ended with
+/// 0, 1, 2, 3, 4, and 5 or more receive loans out.
+pub const LOAN_BINS: usize = 6;
+
 /// The bins of [`NetworkTurns::accepted_by_turn`]: turns whose port took
 /// 0, 1, 2, 3, 4, 5 to 8, and 9 or more frames.
 pub const ACCEPTED_BINS: usize = 7;
@@ -121,6 +160,11 @@ pub struct NetworkTurns {
     pub local_withdrawn: u32,
     pub local_waits_offers: u32,
     pub local_waits_changes: u32,
+    /// The core's drops, by [`Dropped`] reason.
+    pub drops: [u32; DROP_KINDS],
+    /// Turns by the receive loans out when they ended ([`LOAN_BINS`]),
+    /// old installations' included.
+    pub loans_at_turn_end: [u32; LOAN_BINS],
 }
 
 /// The words of [`NetworkCounter`], by what they count.
@@ -157,7 +201,11 @@ mod word {
     pub const LOCAL_WITHDRAWN: usize = 37;
     pub const LOCAL_WAITS_OFFERS: usize = 38;
     pub const LOCAL_WAITS_CHANGES: usize = 39;
-    pub const COUNT: usize = 40;
+    /// [`super::DROP_KINDS`] words.
+    pub const DROPS: usize = 40;
+    /// [`super::LOAN_BINS`] words.
+    pub const LOANS_AT_TURN_END: usize = 58;
+    pub const COUNT: usize = 64;
 }
 
 const _: () = {
@@ -167,8 +215,14 @@ const _: () = {
     if word::RESERVE_BY_SIZE + RESERVE_BINS != word::LOCAL_OFFERED {
         panic!("the producer's words follow the reservations' histogram");
     }
-    if word::LOCAL_WAITS_CHANGES + 1 != word::COUNT {
-        panic!("the producer's waits are the last of the words");
+    if word::LOCAL_WAITS_CHANGES + 1 != word::DROPS {
+        panic!("the drops follow the producer's waits");
+    }
+    if word::DROPS + DROP_KINDS != word::LOANS_AT_TURN_END {
+        panic!("the loans' histogram follows the drops");
+    }
+    if word::LOANS_AT_TURN_END + LOAN_BINS != word::COUNT {
+        panic!("the loans' histogram is the last of the words");
     }
 };
 
@@ -234,6 +288,10 @@ impl NetworkCounter {
             local_withdrawn: at(word::LOCAL_WITHDRAWN),
             local_waits_offers: at(word::LOCAL_WAITS_OFFERS),
             local_waits_changes: at(word::LOCAL_WAITS_CHANGES),
+            drops: core::array::from_fn(|kind| at(word::DROPS.saturating_add(kind))),
+            loans_at_turn_end: core::array::from_fn(|bin| {
+                at(word::LOANS_AT_TURN_END.saturating_add(bin))
+            }),
         }
     }
 }
@@ -320,6 +378,11 @@ impl TurnTally {
         );
     }
 
+    /// The core dropped something, for `reason`.
+    pub fn dropped(&mut self, counter: &NetworkCounter, reason: Dropped) {
+        counter.bump(word::DROPS.saturating_add(reason as usize), 1);
+    }
+
     /// A socket's lane held requests once the turn had taken its budget.
     pub fn budget_spent(&mut self) {
         self.spent = self.spent.wrapping_add(1);
@@ -340,9 +403,15 @@ impl TurnTally {
         self.publish = Some(end);
     }
 
-    /// The turn ended, with a free block or none and every open socket with
-    /// a free credit or not.
-    pub fn ended(&mut self, counter: &NetworkCounter, blocks_free: bool, credits_free: bool) {
+    /// The turn ended, with a free block or none, every open socket with a
+    /// free credit or not, and `loans` receive loans out.
+    pub fn ended(
+        &mut self,
+        counter: &NetworkCounter,
+        blocks_free: bool,
+        credits_free: bool,
+        loans: usize,
+    ) {
         let Self {
             spent,
             accepted,
@@ -373,6 +442,10 @@ impl TurnTally {
         }
         counter.bump(word::BLOCKS_OUT, u32::from(!blocks_free));
         counter.bump(word::CREDITS_OUT, u32::from(!credits_free));
+        counter.bump(
+            word::LOANS_AT_TURN_END.saturating_add(loans.min(LOAN_BINS.saturating_sub(1))),
+            1,
+        );
         self.work_left = spent != 0
             || intake_full
             || matches!(publish, Some(Publish::Budget | Publish::Deferred));

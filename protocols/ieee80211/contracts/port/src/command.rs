@@ -29,7 +29,7 @@ use oer_protocols_ieee80211_wire::{address::IndividualAddress, ccmp::GroupKeyId}
 
 use crate::{
     BssColor, ConfigurePermission, GateOpen, Ieee80211Capabilities, KeyTypes, PortTypes, Station,
-    StationReceive, SupportedEdca,
+    StationReceive, SupportedEdca, he::StationHe,
 };
 
 /// The station's keys of the phase types `T`.
@@ -119,6 +119,14 @@ pub enum PortCommand<'id, T: CommandTypes<'id>, K: Ieee80211Capabilities> {
     SetEdca(SupportedEdca<K>),
     /// The BSS color of the station's HE BSS.
     SetBssColor(BssColor),
+    /// The station interface's HE state, from the next publication on: an
+    /// HE BSS's ([`StationHe::Bss`]) before authentication, its
+    /// association's ([`StationHe::He20`]) after the Association Response
+    /// and before the link's data, [`StationHe::Off`] at a join of a BSS
+    /// without HE and once an HE association ends. `Bss` and `Off` also set
+    /// the color the station's HE transmissions carry, as
+    /// [`Self::SetBssColor`] does.
+    SetHe(StationHe),
 }
 
 impl<'id, T: CommandTypes<'id>, K: Ieee80211Capabilities> PortCommand<'id, T, K> {
@@ -135,6 +143,7 @@ impl<'id, T: CommandTypes<'id>, K: Ieee80211Capabilities> PortCommand<'id, T, K>
             Self::CloseGate(_) => CommandKind::CloseGate,
             Self::SetEdca(_) => CommandKind::SetEdca,
             Self::SetBssColor(_) => CommandKind::SetBssColor,
+            Self::SetHe(_) => CommandKind::SetHe,
         }
     }
 }
@@ -162,6 +171,8 @@ pub enum CommandKind {
     SetEdca,
     /// [`PortCommand::SetBssColor`].
     SetBssColor,
+    /// [`PortCommand::SetHe`].
+    SetHe,
 }
 
 /// The lifecycle's issuer of the commands only the backend makes: it

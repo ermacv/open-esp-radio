@@ -524,6 +524,127 @@ fn an_ack_after_requests_repeated_still_binds() {
     });
 }
 
+/// One pass whose every ready work the port refuses for good: how many it
+/// refused. Nothing is left ready at `now` after it, so the client waits for
+/// a time of its own.
+fn refused_turn<B>(stack: &mut Stack<B>, now: Instant) -> usize {
+    stack.port_mut().rejects = true;
+    stack.observe_link(now);
+    stack.tick(now, &mut Dropped::default());
+    let mut refused = 0;
+    while let Some(demand) = stack.poll_demand(now) {
+        assert!(stack.transmit(now, demand.grant(), unproduced).is_err());
+        refused += 1;
+        assert!(refused < 16, "a refusal is offered again at once");
+    }
+    stack.port_mut().rejects = false;
+    refused
+}
+
+#[test]
+fn final_refusals_of_requests_spend_none_of_the_requesting_tries() {
+    leasing!(|stack| {
+        link_up(stack, 1);
+        let xid = assert_discover(&one(stack, at(0)));
+        give(stack, at(0), &Reply::new(MessageType::Offer, xid).frame());
+        // More refusals than REQUESTING has tries: each REQUEST is refused
+        // for good, and the next waits for its time.
+        let mut now = at(0);
+        for _ in 0..7 {
+            assert_eq!(refused_turn(stack, now), 1);
+            let due = stack.poll_deadline().unwrap();
+            assert!(due > now, "a refusal waits for a time");
+            now = due;
+        }
+        // The port took none, so the client still asks for the OFFER's
+        // address, not for a new one.
+        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Requesting));
+        assert_selecting_request(&one(stack, now), xid);
+    });
+}
+
+#[test]
+fn a_lease_counts_from_the_first_request_the_port_took_not_from_a_refused_one() {
+    leasing!(|stack| {
+        link_up(stack, 1);
+        let xid = assert_discover(&one(stack, at(0)));
+        give(stack, at(0), &Reply::new(MessageType::Offer, xid).frame());
+        let mut now = at(0);
+        while now < at(4000) {
+            assert_eq!(refused_turn(stack, now), 1);
+            now = stack.poll_deadline().unwrap();
+        }
+        // The first REQUEST the port takes, over 4 s after the first refusal.
+        assert_selecting_request(&one(stack, now), xid);
+        let mut ack = Reply::new(MessageType::Ack, xid);
+        ack.options = with(
+            ack_options(),
+            option::LEASE_TIME,
+            Some(1_u32.to_be_bytes().to_vec()),
+        );
+        // An ACK at once grants a lease of 1 s from that REQUEST.
+        assert!(give(stack, now, &ack.frame()).0.is_empty());
+        let lease = configuration(stack).lease.unwrap();
+        assert_eq!(lease.obtained, now);
+        assert_eq!(lease.expires, now.saturating_add(Duration::from_secs(1)));
+        assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
+    });
+}
+
+#[test]
+fn a_renewal_whose_server_never_answers_arp_starts_no_lease_clock() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        // T1: the server's neighbor is asked for, three times a second apart,
+        // and never answers: the REQUEST never went.
+        let frames = turn(stack, secs(500), &mut Dropped::default());
+        assert_eq!(frames.len(), 1, "an ARP request");
+        let mut now = secs(500);
+        for _ in 0..3 {
+            now = stack.poll_deadline().unwrap();
+            assert!(dhcp_turn(stack, now).is_empty());
+        }
+        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Renewing));
+        // The next renewal comes at its time, the server answers its ARP and
+        // takes its REQUEST: the extension counts from that one.
+        let due = stack.poll_deadline().unwrap();
+        assert!(due.as_micros() - now.as_micros() >= 60_000_000, "{due:?}");
+        let frames = turn(stack, due, &mut Dropped::default());
+        assert_eq!(frames.len(), 1, "an ARP request");
+        server_answers_arp(stack, due);
+        let xid = assert_extension(&one(stack, due), false);
+        give(stack, due, &Reply::new(MessageType::Ack, xid).frame());
+        let lease = configuration(stack).lease.unwrap();
+        assert_eq!(lease.obtained, due);
+        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Bound));
+    });
+}
+
+#[test]
+fn a_refused_init_reboot_request_keeps_its_wait_and_starts_no_lease_clock() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        link_down(stack);
+        link_up(stack, 2);
+        // Refused at once, then again at its time: the wait stays at its
+        // first, 250 ms less up to a quarter.
+        let mut now = secs(11);
+        for _ in 0..3 {
+            assert_eq!(refused_turn(stack, now), 1);
+            let due = stack.poll_deadline().unwrap();
+            assert!((187_500..=250_000).contains(&(due.as_micros() - now.as_micros())));
+            now = due;
+        }
+        let first = one(stack, now);
+        give(
+            stack,
+            now,
+            &Reply::new(MessageType::Ack, first.xid()).frame(),
+        );
+        assert_eq!(configuration(stack).lease.unwrap().obtained, now);
+    });
+}
+
 #[test]
 fn a_nak_to_the_request_starts_discovery_over_at_once() {
     leasing!(|stack| {
@@ -726,6 +847,30 @@ fn a_link_lost_and_back_mid_lease_runs_init_reboot_and_keeps_the_address() {
 }
 
 #[test]
+fn the_configuration_names_the_link_the_core_last_saw_and_a_change_of_it_moves_the_count() {
+    use oer_protocols_network_port::{LinkSnapshot, LinkState};
+    leasing!(|stack| {
+        assert_eq!(configuration(stack).link, LinkSnapshot::DOWN);
+        bound(stack, at(0));
+        let up = configuration(stack).link;
+        assert_eq!((up.state, up.epoch), (LinkState::Up, 1));
+        let changes = stack.configuration_changes();
+        link_down(stack);
+        quiet(stack, secs(10));
+        // The lease and its address stay; the link that carried them went.
+        let down = configuration(stack);
+        assert_eq!(down.link.state, LinkState::Down);
+        assert_eq!(down.ipv4, Some(leased_ipv4()));
+        assert_eq!(down.dhcp, Some(DhcpState::Bound));
+        assert_ne!(stack.configuration_changes(), changes);
+        link_up(stack, 2);
+        one(stack, secs(11));
+        let again = configuration(stack).link;
+        assert_eq!((again.state, again.epoch), (LinkState::Up, 2));
+    });
+}
+
+#[test]
 fn a_nak_to_init_reboot_starts_discovery_without_the_address() {
     leasing!(|stack| {
         bound(stack, at(0));
@@ -744,28 +889,88 @@ fn a_nak_to_init_reboot_starts_discovery_without_the_address() {
 }
 
 #[test]
-fn an_unanswered_init_reboot_keeps_the_lease_for_its_time() {
+fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_ends() {
     leasing!(|stack| {
         bound(stack, at(0));
         link_down(stack);
         quiet(stack, secs(10));
         link_up(stack, 2);
         let first = one(stack, secs(11));
-        // Its repeats start at 250 ms: the link just came up.
+        // The DISCOVER's schedule: 250 ms doubling to 10 s, each wait less
+        // up to a quarter; the same transaction throughout.
         let mut last = secs(11);
-        for nominal in [250, 500, 1000, 2000] {
+        for nominal in [250, 500, 1000, 2000, 4000, 8000, 10_000, 10_000] {
             let due = stack.poll_deadline().unwrap();
             let wait = due.as_micros() - last.as_micros();
-            assert!((nominal * 750..=nominal * 1000).contains(&wait), "{wait}");
-            assert_eq!(one(stack, due).xid(), first.xid());
+            assert!(
+                (nominal * 750..=nominal * 1000).contains(&wait),
+                "{wait} µs for {nominal} ms"
+            );
+            quiet(stack, Instant::from_micros(due.as_micros() - 1));
+            let sent = one(stack, due);
+            assert_eq!(sent.xid(), first.xid());
+            assert_eq!(sent.kind(), MessageType::Request);
+            assert_eq!(sent.message().fixed.ciaddr, [0; 4]);
+            assert_eq!(
+                sent.option(option::REQUESTED_ADDRESS),
+                Some(OFFERED.to_vec())
+            );
+            assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
+            // Unanswered, the client keeps asking, and its address stays in
+            // use, RFC 2131, 3.7, never confirmed: still REBOOTING, and the
+            // lease stays the one the first ACK granted.
+            let configured = configuration(stack);
+            assert_eq!(configured.dhcp, Some(DhcpState::Rebooting));
+            assert_eq!(configured.ipv4, Some(leased_ipv4()));
+            assert_eq!(configured.lease.unwrap().expires, secs(1000));
             last = due;
         }
-        let due = stack.poll_deadline().unwrap();
-        quiet(stack, due);
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Bound));
-        assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
-        // T1 of the original lease renews it.
-        assert_eq!(stack.poll_deadline(), Some(secs(500)));
+        // Its repeats go on to the lease's end at 1000 s, where the address
+        // goes and discovery starts over.
+        let version = stack.address_version();
+        let mut now = last;
+        while now < secs(1000) {
+            now = stack.poll_deadline().unwrap();
+            let sent = one(stack, now);
+            if now < secs(1000) {
+                assert_eq!(sent.kind(), MessageType::Request);
+                assert_eq!(configuration(stack).dhcp, Some(DhcpState::Rebooting));
+            } else {
+                assert_discover(&sent);
+            }
+        }
+        assert_eq!(now, secs(1000));
+        assert_eq!(configuration(stack).ipv4, None);
+        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Selecting));
+        assert_ne!(stack.address_version(), version);
+    });
+}
+
+#[test]
+fn an_ack_to_a_late_init_reboot_repeat_confirms_the_lease() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        link_down(stack);
+        link_up(stack, 2);
+        let first = one(stack, secs(11));
+        let mut due = secs(11);
+        for _ in 0..3 {
+            due = stack.poll_deadline().unwrap();
+            one(stack, due);
+        }
+        let version = stack.address_version();
+        give(
+            stack,
+            due,
+            &Reply::new(MessageType::Ack, first.xid()).frame(),
+        );
+        let configured = configuration(stack);
+        assert_eq!(configured.dhcp, Some(DhcpState::Bound));
+        assert_eq!(configured.ipv4, Some(leased_ipv4()));
+        assert_eq!(stack.address_version(), version);
+        // It counts from the transaction's first REQUEST.
+        assert_eq!(configured.lease.unwrap().obtained, secs(11));
+        assert_eq!(stack.poll_deadline(), Some(configured.lease.unwrap().renew));
     });
 }
 

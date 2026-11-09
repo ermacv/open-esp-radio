@@ -49,9 +49,12 @@ pub use local::{
 };
 pub use observation::{LocalEvent, PublishEnd, RequestKind, ServiceEvent, TurnEnd};
 pub use returns::{NotHome, ReturnEnd, ReturnLane, ReturnRefusal, Returner};
-pub use service::{BindRefused, Direct, EndCause, Ended, MemoryPolicy, Service, StopLane};
+pub use service::{
+    BindRefused, Direct, EndCause, Ended, MemoryPolicy, Service, StopLane, serve_late_loans,
+};
 pub use socket::{
-    LateSocket, Observer, RESERVE_AHEAD, Refusal, Refused, Sent, Socket, SocketClosed, SocketLanes,
+    LateSocket, LendingLanes, LendingSocket, Lent, Observer, RESERVE_AHEAD, Received, Refusal,
+    Refused, Sent, Socket, SocketClosed, SocketLanes,
 };
 pub use watch::{ConfigurationWatch, WatchRefused, Watched};
 

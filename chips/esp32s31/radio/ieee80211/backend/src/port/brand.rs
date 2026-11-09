@@ -152,8 +152,8 @@ impl<'p, Id: SlotIdentity> Removal<'p, Id> {
         match self {
             Self::StationPairwise(a) => Removal::StationPairwise(a.into_owned(loan)),
             Self::AccessPointPairwise(a) => Removal::AccessPointPairwise(a.into_owned(loan)),
-            Self::StationGroup(p) => Removal::StationGroup(loan.reclaim_slot(p)),
-            Self::AccessPointGroup(p) => Removal::AccessPointGroup(loan.reclaim_slot(p)),
+            Self::StationGroup(p) => Removal::StationGroup(p.into_owned(loan)),
+            Self::AccessPointGroup(p) => Removal::AccessPointGroup(p.into_owned(loan)),
         }
     }
 }
@@ -172,7 +172,7 @@ impl<'p, Id: SlotIdentity> GroupCommand<'p, Id> {
             } => GroupCommand::InstallStation {
                 spp,
                 slot: slot.into_owned(loan),
-                permission: loan.reclaim_slot(permission),
+                permission: permission.into_owned(loan),
                 key_id,
                 material,
             },
@@ -185,7 +185,7 @@ impl<'p, Id: SlotIdentity> GroupCommand<'p, Id> {
             } => GroupCommand::InstallAccessPoint {
                 spp,
                 slot: slot.into_owned(loan),
-                permission: loan.reclaim_slot(permission),
+                permission: permission.into_owned(loan),
                 key_id,
                 material,
             },
@@ -195,13 +195,13 @@ impl<'p, Id: SlotIdentity> GroupCommand<'p, Id> {
                 key_id,
                 material,
             } => GroupCommand::Replace {
-                permission: loan.reclaim_slot(permission),
+                permission: permission.into_owned(loan),
                 key: key.into_owned(),
                 key_id,
                 material,
             },
             Self::Select { permission, key } => GroupCommand::Select {
-                permission: loan.reclaim_slot(permission),
+                permission: permission.into_owned(loan),
                 key: key.into_owned(),
             },
             Self::Remove { identity, removal } => GroupCommand::Remove {
@@ -224,7 +224,7 @@ pub(super) enum OwnedRemoved<'o, Id: SlotIdentity> {
             association::PairwiseKeySlot<'o, Station, 1, 1, Child<CorePath<Id>, 2>>,
             association::Association<'o, Station, 1, 1, Child<CorePath<Id>, 2>>,
             association::GroupKeySlot<'o, Station, 1, 1, Child<CorePath<Id>, 2>>,
-            Slot<'o, GroupPermission<Station>, Part<Id, 5>>,
+            StaPermission<'o, Id>,
         >,
     ),
     AccessPoint(
@@ -232,7 +232,7 @@ pub(super) enum OwnedRemoved<'o, Id: SlotIdentity> {
             association::PairwiseKeySlot<'o, AccessPoint, 15, 3, Child<CorePath<Id>, 3>>,
             association::Association<'o, AccessPoint, 15, 3, Child<CorePath<Id>, 3>>,
             association::GroupKeySlot<'o, AccessPoint, 15, 3, Child<CorePath<Id>, 3>>,
-            Slot<'o, GroupPermission<AccessPoint>, Part<Id, 6>>,
+            ApPermission<'o, Id>,
         >,
     ),
 }
@@ -329,7 +329,7 @@ impl<Id: SlotIdentity> OwnedRemoved<'static, Id> {
                 },
                 RemovedOwners::Group { slot, permission } => RemovedKey::Group {
                     slot: slot.lend(loan),
-                    permission: loan.lend_slot(permission),
+                    permission: permission.lend(loan),
                 },
             }),
             Self::AccessPoint(key) => Removed::AccessPoint(match key {
@@ -339,7 +339,7 @@ impl<Id: SlotIdentity> OwnedRemoved<'static, Id> {
                 },
                 RemovedOwners::Group { slot, permission } => RemovedKey::Group {
                     slot: slot.lend(loan),
-                    permission: loan.lend_slot(permission),
+                    permission: permission.lend(loan),
                 },
             }),
         }
@@ -356,11 +356,11 @@ impl<Id: SlotIdentity> OwnedInstalledGroup<'static, Id> {
         match self {
             Self::Station { key, permission } => InstalledGroup::Station {
                 key: key.lend(),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
             Self::AccessPoint { key, permission } => InstalledGroup::AccessPoint {
                 key: key.lend(),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
         }
     }
@@ -378,11 +378,11 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedTerminal<'static, Id, 
             Self::KeyRemoved(k) => LowerMacTerminal::KeyRemoved(k.lend(loan)),
             Self::GroupKeyReplaced { key, permission } => LowerMacTerminal::GroupKeyReplaced {
                 key: key.lend(),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
             Self::GroupKeySelected { key, permission } => LowerMacTerminal::GroupKeySelected {
                 key: key.lend(),
-                permission: loan.lend_slot(permission),
+                permission: permission.lend(loan),
             },
             Self::GroupKeyInstalled(g) => LowerMacTerminal::GroupKeyInstalled(g.lend(loan)),
             Self::PairwiseKeyInstalled(OwnedInstalledPairwise::Station(key)) => {

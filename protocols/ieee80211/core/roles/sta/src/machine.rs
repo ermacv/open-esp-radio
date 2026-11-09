@@ -200,6 +200,11 @@ pub enum TxRefusal {
     Preparation(oer_protocols_ieee80211_contracts_port::PreparationError),
     /// Portable placement failed before entering the backend.
     Layout(oer_protocols_ieee80211_contracts_port::LayoutError),
+    /// The port refused the frame: its key was issued by an earlier
+    /// installation of the port
+    /// ([`WithdrawCause::StalePermission`](oer_protocols_ieee80211_contracts_port::WithdrawCause::StalePermission)).
+    /// The link cannot send under it again.
+    StaleKey,
 }
 
 /// The tokens a station holds: the port's, or a host test's.
@@ -324,6 +329,10 @@ pub struct StaProfile {
     pub ssid: heapless::Vec<u8, MAX_SSID_LEN>,
     /// How the network protects its link.
     pub security: StaSecurity,
+    /// Whether the connection asks an access point that admits HE20 for it,
+    /// as the station's [`StaPhyRequest::PreferHe20`] names; without it the
+    /// join takes that request's HT fallback ([`StaPhyRequest::without_he20`]).
+    pub prefer_he20: bool,
 }
 
 impl core::fmt::Debug for StaProfile {
@@ -331,6 +340,7 @@ impl core::fmt::Debug for StaProfile {
         f.debug_struct("StaProfile")
             .field("ssid", &self.ssid)
             .field("policy", &self.security.policy())
+            .field("prefer_he20", &self.prefer_he20)
             .finish_non_exhaustive()
     }
 }
@@ -551,6 +561,13 @@ pub enum StaAction<'a, 'id, T: StaTokens, K> {
     /// access point's, from its association on and whenever its beacons
     /// announce another set. No input follows.
     SetEdca(SupportedEdca<K>),
+    /// Set the station interface's HE state, in the vendor station's two
+    /// stages: before authentication, an HE20 join's HE BSS (the color the
+    /// scan heard) or `Off` for any other join; after the Association
+    /// Response and before the link's data, the HE20 association. `Off`
+    /// again at the leave of an HE BSS and before a restart's reclaim
+    /// finds one left. No input follows.
+    SetHe(oer_protocols_ieee80211_contracts_port::StationHe),
     /// Install a pairwise key ([`StaInput::PairwiseKeyInstalled`]).
     InstallPairwiseKey {
         /// Unique policy owner, returned inside the installed pairwise owner.
@@ -1154,6 +1171,10 @@ pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     epochs: LinkEpochSource<'id, T::EpochPath>,
     /// Who holds the connected link.
     link: LinkCustody,
+    /// Whether the port holds an HE BSS or association the station set
+    /// ([`StaAction::SetHe`]), which it sets `Off` at its leave; every join
+    /// sets the port's HE state again before authentication.
+    he: bool,
 }
 
 /// Who holds the station's connected link ([`crate::link`]).
@@ -1266,6 +1287,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStatio
                 epoch: None,
                 state: State::Reclaiming(Reclaim::Keys),
                 link: LinkCustody::Station,
+                // A restart runs on the next installation, whose MAC starts
+                // without an HE association.
+                he: false,
             },
             notice,
             deferred_eapol,
@@ -2128,6 +2152,9 @@ struct Join<T: StaTokens, K> {
     /// The power elements of the request: present exactly when `phy` is
     /// HE20.
     he_power: Option<StaHePower>,
+    /// Whether the join set the port's HE state before authentication: the
+    /// HE BSS of an HE20 join, `Off` for another.
+    he_set: bool,
     step: JoinStep<T::RxMeta>,
 }
 
@@ -2149,6 +2176,13 @@ enum JoinStep<M> {
     Associate(StaAssociationRuntime, AssociationKey),
     /// The association's EDCA parameters to set, after its notice.
     SetEdca {
+        association_id: u16,
+        peer: Peer<M>,
+        key: AssociationKey,
+    },
+    /// An HE20 association to install in the port, after its EDCA
+    /// parameters and before the link's data.
+    SetHe {
         association_id: u16,
         peer: Peer<M>,
         key: AssociationKey,
@@ -2420,6 +2454,7 @@ fn handover_data<T: StaTokens, K>(
         retry: tx.map(StaTxBlockAck::retry_members),
         ht,
         windows: [None; 8],
+        protection: connected.peer.associated.protection,
     })
 }
 
@@ -2939,6 +2974,7 @@ enum Owed<'id, T: StaTokens, K> {
         >,
     ),
     SetEdca(SupportedEdca<K>),
+    SetHe(oer_protocols_ieee80211_contracts_port::StationHe),
     Transmit(StaTransmit<'id, T, K>),
     /// Under the pairwise key of the connected link.
     TransmitProtected(StaTransmit<'id, T, K>),
@@ -3071,6 +3107,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             scan: _,
             epoch: _,
             link: _,
+            he: _,
         } = self;
         (
             RetiredStation {
@@ -3144,6 +3181,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             epoch,
             epochs,
             link,
+            he,
         ) = oer_portable_memory::unpack_placed!(
             machine,
             Self {
@@ -3164,10 +3202,11 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 pmksa,
                 epoch,
                 epochs,
-                link
+                link,
+                he
             }
         );
-        drop((lease, absence, scan, epoch, link));
+        drop((lease, absence, scan, epoch, link, he));
         let deferred = state.take_deferred();
         drop(state);
         let retired = oer_portable_memory::Placed::init(destination, |place| {
@@ -3266,6 +3305,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 epoch: None,
                 epochs,
                 link: LinkCustody::Station,
+                he: false,
             },
             credits,
         )
@@ -3321,6 +3361,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 epoch: None,
                 epochs: epochs,
                 link: LinkCustody::Station,
+                he: false,
             }),
             credits,
         )
@@ -3873,6 +3914,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             Owed::Upstream(fact) => StaAction::Upstream(fact),
             Owed::Configure(receive, pending) => StaAction::Configure(receive, pending),
             Owed::SetEdca(edca) => StaAction::SetEdca(edca),
+            Owed::SetHe(he) => StaAction::SetHe(he),
             Owed::Transmit(transmit) => StaAction::Transmit(transmit),
             // A frame of the handed-over link goes under the link's key; one
             // the station numbered goes under its own installed key. Owed
@@ -4040,6 +4082,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 epoch: &mut self.epoch,
                 epochs: &mut self.epochs,
                 link: &mut self.link,
+                he: &mut self.he,
             },
             &mut self.state,
         )
@@ -4072,6 +4115,8 @@ struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: Sta
     epochs: &'s mut LinkEpochSource<'id, T::EpochPath>,
     /// Who holds the connected link.
     link: &'s mut LinkCustody,
+    /// Whether the port holds an HE association the station set.
+    he: &'s mut bool,
 }
 
 impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
@@ -4153,6 +4198,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     | JoinStep::SaeAwait(_) => ConnectStep::Authenticate,
                     JoinStep::Associate(..) => ConnectStep::Associate,
                     JoinStep::SetEdca { .. }
+                    | JoinStep::SetHe { .. }
                     | JoinStep::NotifyAssociated { .. }
                     | JoinStep::StartLink { .. } => ConnectStep::StartLink,
                 },
@@ -4902,6 +4948,24 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         ) {
             return leave_disabled(connected);
         }
+        // A key of an earlier installation is refused for good: every later
+        // frame under it would be refused too, so the link ends, without a
+        // Deauthentication under that key.
+        if matches!(
+            done,
+            Done::Tx {
+                completion: TxOutcome::Withdrawn(
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::StalePermission
+                ),
+                ..
+            }
+        ) {
+            return leave_connected(
+                connected,
+                StaDisconnectReason::TransmitRefused(TxRefusal::StaleKey),
+                None,
+            );
+        }
         match self.update_connected(connected, now, done) {
             Ok(()) => Change::Keep,
             Err(reason) => leave_connected(connected, reason, None),
@@ -5148,12 +5212,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
         };
-        let (channel, phy, he_power) = join_phy(
-            self.config.phy,
-            &self.config.wide_channels,
-            &access_point,
-            scanned,
-        );
+        let request = match self.profile.as_ref() {
+            Some(profile) if profile.prefer_he20 => self.config.phy,
+            _ => self.config.phy.without_he20(),
+        };
+        let (channel, phy, he_power) =
+            join_phy(request, &self.config.wide_channels, &access_point, scanned);
         Change::Join(Join {
             access_point,
             erp: selected.erp,
@@ -5161,6 +5225,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             channel,
             phy,
             he_power,
+            he_set: false,
             step: JoinStep::NeedLease,
         })
     }
@@ -5847,6 +5912,15 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     (Change::Reclaiming(Reclaim::Keys), ActionProgress::Wait)
                 }
             }
+            Reclaim::Configure if *self.he => {
+                *self.he = false;
+                (
+                    Change::Reclaiming(Reclaim::Configure),
+                    ActionProgress::Action(Owed::SetHe(
+                        oer_protocols_ieee80211_contracts_port::StationHe::Off,
+                    )),
+                )
+            }
             Reclaim::Configure => match self.configure(StationReceive::Off) {
                 Some(owed) => (
                     Change::Reclaiming(Reclaim::AwaitConfigured),
@@ -5939,6 +6013,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         return (Change::Keep, ActionProgress::Transition);
                     }
                 }
+            }
+            LeaveStep::NeedConfigure if *self.he => {
+                *self.he = false;
+                Some(Owed::SetHe(
+                    oer_protocols_ieee80211_contracts_port::StationHe::Off,
+                ))
             }
             LeaveStep::NeedConfigure if self.configuration.is_some() => {
                 leave.step = LeaveStep::AwaitConfigured;
@@ -6965,6 +7045,34 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 Some(place) => (JoinStep::AwaitAnswer, Some(Owed::Request(connect, place))),
                 None => (JoinStep::NeedLease, None),
             },
+            // Before authentication, as the vendor station's connect does
+            // (`libnet80211.a[wl_cnx.o]::cnx_connect_to_bss`): an HE20 join's
+            // HE BSS with the color the scan heard, `Off` for any other.
+            JoinStep::NeedConfigure if !join.he_set => {
+                use oer_protocols_ieee80211_contracts_port::{HeBssColor, StationHe};
+                let he = if join.phy == PhyMode::He20 {
+                    match oer_protocols_ieee80211_wire::he::parse_he20_operation(
+                        join.access_point.he_operation_ie_bytes(),
+                    )
+                    .ok()
+                    .as_ref()
+                    .and_then(HeBssColor::of)
+                    {
+                        Some(color) => StationHe::Bss(color),
+                        None => {
+                            return (
+                                leave_unkeyed(StaDisconnectReason::HeNotGranted),
+                                ActionProgress::Transition,
+                            );
+                        }
+                    }
+                } else {
+                    StationHe::Off
+                };
+                join.he_set = true;
+                *self.he = matches!(he, StationHe::Bss(_));
+                (JoinStep::NeedConfigure, Some(Owed::SetHe(he)))
+            }
             JoinStep::NeedConfigure if self.configuration.is_some() => {
                 let receive = bss_rules(join.access_point.bssid, Rules::<K>::MEMBER);
                 (JoinStep::AwaitConfigured, self.configure(receive))
@@ -7207,10 +7315,18 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 peer,
                 key,
             } => {
-                let next = JoinStep::StartLink {
-                    association_id,
-                    peer,
-                    key,
+                let next = if peer.associated.he_association.is_some() {
+                    JoinStep::SetHe {
+                        association_id,
+                        peer,
+                        key,
+                    }
+                } else {
+                    JoinStep::StartLink {
+                        association_id,
+                        peer,
+                        key,
+                    }
                 };
                 match SupportedEdca::new(
                     oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
@@ -7223,6 +7339,24 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         return (Change::Keep, ActionProgress::Transition);
                     }
                 }
+            }
+            JoinStep::SetHe {
+                association_id,
+                peer,
+                key,
+            } => {
+                let he = peer.associated.he_association.map_or(
+                    oer_protocols_ieee80211_contracts_port::StationHe::Off,
+                    oer_protocols_ieee80211_contracts_port::StationHe::He20,
+                );
+                (
+                    JoinStep::StartLink {
+                        association_id,
+                        peer,
+                        key,
+                    },
+                    Some(Owed::SetHe(he)),
+                )
             }
             JoinStep::StartLink {
                 association_id,

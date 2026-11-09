@@ -130,9 +130,9 @@
 //! receive rules and TSF. A confirmed stop leaves its interface receiving
 //! nothing and its TSF stopped. [`ModelResources`] groups the shared tokens
 //! and each role's own permissions. Every token of its pools, its group
-//! permissions included, names its installation; the access point's
-//! commands and its beacons and keyed attempts at `submit` refuse a token of
-//! an earlier installation with its owners.
+//! permissions included, names its installation; both roles' commands, and
+//! beacons and keyed attempts at `submit`, refuse a token of an earlier
+//! installation with its owners.
 
 pub mod air_time;
 pub use air_time::{
@@ -143,8 +143,9 @@ pub use air_time::{
 use air_time::{AirWorld, Medium};
 pub mod arena;
 pub use arena::{
-    MODEL_ARENA_CHANNEL, MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, ModelArena, ModelArenaAnswer,
-    ModelArenaFault, ModelArenaPublication, ModelArenas, ModelDataArena,
+    MODEL_ARENA_CHANNEL, MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, MODEL_PUBLICATION_COST,
+    ModelArena, ModelArenaAnswer, ModelArenaFault, ModelArenaPublication, ModelArenas,
+    ModelDataArena,
 };
 mod loan;
 mod owned;
@@ -1769,6 +1770,9 @@ pub struct ModelAir {
     rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<u8>,
+    /// The HE20 associations (`SetHe` after an Association Response) the
+    /// port refuses next.
+    refuse_he_association: Cell<u8>,
     group_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
@@ -1820,6 +1824,10 @@ pub struct ModelAir {
     rx_limits: Cell<ModelRxLimits>,
     /// The subframes one data arena holds.
     arena_frames: Cell<u8>,
+    /// The station interface's HE association, as the last
+    /// [`PortCommand::SetHe`](oer_protocols_ieee80211_contracts_port::PortCommand::SetHe)
+    /// set it.
+    he: Cell<oer_protocols_ieee80211_contracts_port::StationHe>,
 }
 impl ModelAir {
     fn new(clock: Rc<dyn Clock>) -> Self {
@@ -1832,6 +1840,7 @@ impl ModelAir {
             rx: Default::default(),
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
+            refuse_he_association: Default::default(),
             group_held: Default::default(),
             key_installations: Default::default(),
             associations: Default::default(),
@@ -1841,6 +1850,7 @@ impl ModelAir {
             recovery: Default::default(),
             disables: Default::default(),
             edca: Default::default(),
+            he: Cell::new(oer_protocols_ieee80211_contracts_port::StationHe::Off),
             held: Default::default(),
             held_results: Default::default(),
             relayed: Cell::new(0),
@@ -2302,6 +2312,20 @@ impl ModelAir {
         left > 0
     }
 
+    /// Refuse the next `count` HE20 associations (`SetHe(He20)`), as a
+    /// backend that cannot apply them: each comes back refused, `Busy`.
+    pub fn refuse_he_associations(&self, count: u8) {
+        self.refuse_he_association.set(count);
+    }
+
+    /// Whether this HE20 association is refused: one of the refusals asked
+    /// for.
+    pub(crate) fn take_he_association_refusal(&self) -> bool {
+        let left = self.refuse_he_association.get();
+        self.refuse_he_association.set(left.saturating_sub(1));
+        left > 0
+    }
+
     /// Poison the backend.
     pub fn poison(&self) {
         self.stream.set(ModelStream::Ended);
@@ -2357,6 +2381,17 @@ impl ModelAir {
     /// modeled hardware holds them.
     pub fn access_point(&self) -> ModelAccessPointInterface {
         self.access_point.get()
+    }
+
+    /// The station interface's HE association, as the last `SetHe` set it;
+    /// `Off` before any.
+    pub fn he(&self) -> oer_protocols_ieee80211_contracts_port::StationHe {
+        self.he.get()
+    }
+
+    /// Set the station interface's HE association.
+    pub(crate) fn set_he(&self, he: oer_protocols_ieee80211_contracts_port::StationHe) {
+        self.he.set(he);
     }
 
     /// The complete EDCA set currently installed for this interface.

@@ -2,13 +2,14 @@
 
 use core::task::Context;
 
-use oer_portable_events::EventSink;
+use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
-use oer_protocols_network_port::{FramePort, FrameSource, Unpublished};
+use oer_protocols_network_port::{FramePort, FrameSource, Keep, Taken, Unpublished};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::block::{Block, CoreBrand, Group, Pool};
 use crate::interface::Interface;
+use crate::loans::Loan;
 use crate::machine::{
     CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Eviction, FillFailed,
     Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal, SendRefused,
@@ -31,6 +32,38 @@ pub struct Retired<
     pub pool: Pool<'m, B, SIZE, BLOCKS>,
     pub brand: CoreBrand<B>,
     pub port: P,
+}
+
+/// What a look for a received frame found.
+#[derive(Debug)]
+pub enum Intake<B, H> {
+    /// No frame waited.
+    Empty,
+    /// A frame was read, and its buffer stayed the port's.
+    Read,
+    /// A datagram for a lending socket, in its buffer, with its loan.
+    Lent(LentDatagram<B, H>),
+}
+
+impl<B, H> Intake<B, H> {
+    /// Whether a frame was there.
+    pub const fn found(&self) -> bool {
+        !matches!(self, Self::Empty)
+    }
+}
+
+/// A datagram a lending socket receives in the port's buffer. The buffer goes
+/// back to the port when `frame` drops; `loan` goes back to the pool's
+/// [`Loans`](crate::Loans) only then, so a credit frees once its memory has.
+#[derive(Debug)]
+pub struct LentDatagram<B, H> {
+    /// The socket's flow, as [`SocketId::flow`] names it.
+    pub flow: u8,
+    pub remote: Remote,
+    /// Where the datagram's data lies in the frame's Ethernet payload.
+    pub data: core::ops::Range<usize>,
+    pub frame: H,
+    pub loan: Loan<B>,
 }
 
 /// Why a grant sent nothing the core knows of.
@@ -244,15 +277,55 @@ impl<
         self.core.input(now, frame, &mut self.pool, events);
     }
 
-    /// Take one frame from the port, if one waits; whether one did.
-    pub fn take_frame(&mut self, now: Instant, events: &mut impl EventSink<NetEvent>) -> bool
+    /// Take one frame from the port, if one waits. A datagram for a lending
+    /// socket keeps its buffer only with a loan of that socket's credit,
+    /// taken before the port hands the buffer over; without one it is
+    /// dropped with [`NotLent`] counted, and its buffer stays the port's.
+    pub fn take_frame(
+        &mut self,
+        now: Instant,
+        events: &mut impl EventSink<NetEvent>,
+    ) -> Intake<B, P::Held>
     where
         P: FrameSource,
     {
         let core = &mut self.core;
         let pool = &mut self.pool;
-        self.port
-            .take_frame(|frame| core.input_view(now, frame, pool, events))
+        let mut lent = None;
+        let taken = self.port.take_frame(|frame, holding| {
+            let Some(to) = core.input_view(now, frame, holding, pool, events) else {
+                return Keep::Drop;
+            };
+            match pool.loans().lend(usize::from(to.flow)) {
+                Ok(loan) => {
+                    lent = Some((to, loan));
+                    Keep::Keep
+                }
+                Err(refused) => {
+                    report(events, || NetEvent::NotLent(refused));
+                    Keep::Drop
+                }
+            }
+        });
+        match (taken, lent) {
+            (Taken::Empty, None) => Intake::Empty,
+            (Taken::Kept(frame), Some((to, loan))) => Intake::Lent(LentDatagram {
+                flow: to.flow,
+                remote: to.remote,
+                data: to.data,
+                frame,
+                loan,
+            }),
+            // A port that kept what it was not asked to: the buffer goes back
+            // with the drop.
+            (Taken::Kept(_frame), None) => Intake::Read,
+            // A port that kept nothing it was asked to: the loan ends here.
+            (Taken::Empty | Taken::Read, Some((_, loan))) => {
+                pool.loans().give_back(loan);
+                Intake::Read
+            }
+            (Taken::Read, None) => Intake::Read,
+        }
     }
 
     /// End a burst of publications.
@@ -347,6 +420,22 @@ impl<
     /// [`StaleSocket`].
     pub fn close(&mut self, socket: SocketId<B>) -> Result<CommandId<B>, StaleSocket> {
         self.core.close(socket, &mut self.pool)
+    }
+
+    /// See [`Core::open_lending`]: the credit is granted from this owner's
+    /// pool.
+    ///
+    /// # Errors
+    /// [`OpenRefused`].
+    pub fn open_lending(
+        &mut self,
+        port: u16,
+        dscp: Dscp,
+        group: Group<B>,
+        credit: usize,
+    ) -> Result<SocketId<B>, OpenRefused> {
+        self.core
+            .open_lending(port, dscp, group, credit, &mut self.pool)
     }
 
     /// See [`Core::open_in`].

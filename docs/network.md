@@ -40,9 +40,9 @@ aliases and include optional and target-specific dependencies.
 
 | Crate | Owns | Does not own |
 | --- | --- | --- |
-| `oer-protocols-network-core` (`protocols/network/core`) | the sans-IO core with one owner: UDP, ARP, blocks, choosing work before a frame is built; linked by no image yet | tasks, queues, time |
-| `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task and its sockets over messages; linked by no image yet | protocol state, the port's implementation |
-| `oer-protocols-network-testing-model` (`protocols/network/testing/model`) | a host model of one shared medium with several peers, and the egress scenarios over the real stack | product code; no product package depends on it |
+| `oer-protocols-network-core` (`protocols/network/core`) | the sans-IO core with one owner: UDP, ARP, blocks, choosing work before a frame is built; the HIL `wifi-station` image links it | tasks, queues, time |
+| `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task, its sockets and its local producer, and `DevicePort`, whose frames carry the buffers' tickets and whose notices are the buffers' ends; the HIL `wifi-station` image links it | protocol state, the port's implementation |
+| `oer-protocols-network-testing-model` (`protocols/network/testing/model`) | a host model of one shared medium with several peers, the egress scenarios over the real stack, and the end-to-end station and network simulation against a simulated access point (its [README](../protocols/network/testing/model/README.md)) | product code; no product package depends on it |
 | `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, the `NetDevice` and `NetTransmit` contracts, and `FramePort`, `FrameSource` and `Egress`, the new core's port and its policy | queues, allocator, executor, hardware |
 | `oer-protocols-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-portable-wire` | decisions about a packet, IEEE 802.11 formats |
 | `oer-protocols-bridges-ieee80211-ethernet` (`protocols/bridges/ieee80211-ethernet`) | the requested WMM user priority of an outgoing frame from its VLAN PCP or IP DSCP | the final priority, which the station decides from its link |
@@ -102,8 +102,12 @@ station (P2)
 - `PpduTiming` includes preamble, SERVICE and tail bits, whole-symbol rounding
   and the 2.4 GHz signal extension; HT uses the exact bits per symbol, not
   rounded SGI rates. Supported: DSSS/CCK, ERP-OFDM, HT mixed format with one
-  stream, BCC, no STBC. HE is counted in `unestimated_ppdus`, not
-  approximated; a nonzero count makes totals partial.
+  stream, BCC, no STBC; HE20 SU with one stream, MCS 0-9, every GI/HE-LTF
+  and BCC or LDPC, from the APEP length through pre-FEC padding, the LDPC
+  extra symbol segment and the packet extension. The HE packet extension is
+  bounded by a 16-us nominal padding, since the backend does not program the
+  peer's. HE DCM is counted in `unestimated_ppdus`, not approximated; a
+  nonzero count makes totals partial.
 - `TxCost` separates data PPDU, SIFS plus ACK or BlockAck, CTS-to-self or
   RTS/CTS, and AIFS plus selected backoff. No response is an explicit zero; an
   unknown response rate or missing access facts stay `None`; overflow yields
@@ -128,6 +132,57 @@ station (P2)
 - `TxCompletion` exposes completion class, ACK SNR and trigger-flow packet
   counts (not retry counts); it exposes no response PHY or measured airtime.
 
+## Queued egress on the station (`oer::wifi::Queued`)
+
+The network core's egress is chosen by type: `wifi::Network<P, Queued>` takes
+the airtime egress (`AirtimeEgress`), `wifi::Network<P, Direct>` the first
+ready work with no table or account. How an application provides data, a
+local producer or a socket's blocks, does not depend on the mode; waiting work
+stays outside the transmit buffers in either, and a frame is built in one
+only after the policy chose it and the port gave the room.
+
+- **Accounts.** `StationAir` (`oer-protocols-ieee80211-runtime::station`)
+  keys the station's air by the link epoch: every frame of a station,
+  broadcast included, goes to its access point, so one account per
+  association. Control work goes first; flows take turns within the
+  account. Service classes are not separated yet.
+- **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
+  publications that reached the air by the backend's declared model: the
+  modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck
+  at the lowest mandatory rate of the PPDU's modulation class. AIFS, backoff
+  and CCA waits are not counted, nor publications that never reached the air.
+  It is the cost of that model, "PPDU + SIFS + ACK/BA", not a measured medium
+  occupancy and not a frame's service time. That the S31 MAC makes no
+  transmission of its own inside one publication is an unverified
+  assumption; it limits how far the model follows the air, and no airtime
+  guarantee rests on it.
+- **Split.** The data plane divides each attempt's cost among the frames the
+  attempt carried, exactly once, the first taking the remainder, and keeps
+  each frame's sum across its selective retries; a frame returns its memory
+  with that sum. An attempt the model cannot time makes its frames' cost
+  `Unknown` for good.
+- **Ceiling.** A frame of unknown cost is charged
+  `msdu_cost_ceiling_micros` (`lower_mac::arena`): up to the data plane's 32
+  aggregate attempts of a member, each its whole aggregate (HT within its
+  5484 us L-SIG TXTIME, HE the longest PPDU of the HE aggregate limit at HE
+  MCS 0, 4x HE-LTF, 3.2 us GI), then the largest single plan of any rate
+  record (32) at 1 Mb/s DSSS. It is a margin, not a statement of accuracy.
+- **Return and settlement are two events.** The station's buffer comes back
+  with its frame's cost (`TxSupply::give`) and waits with that end in
+  `Completions`; the buffer is free again only when the port hands the end
+  on to the policy (`TxBuffers::take_notice`). So no more frames are
+  unsettled than there are buffers, which is the policy's reservation
+  bound (`NETWORK_BUFFERS`). The port asks for returned buffers whether or
+  not it sends, so an idle network still settles. A frame lost with its
+  buffer at publication settles as `RadioNotice::Lost` at its ceiling; that
+  settles the account only and returns no memory. A new link epoch ends
+  the old association's account (`RadioNotice::Left`) before the next end:
+  each of its frames still out settles there once, at its ceiling, and the
+  account goes at once; the frame's buffer stays the port's until it comes
+  back, and its return only closes the ticket, with no second charge and
+  nothing on the new account. An outcome a socket already read is not
+  changed by this settlement.
+
 ## Physical storage contracts (`oer-portable-embassy-net::datapath`)
 
 - `SoftwareTxFrame`: an affine software owner and Ethernet view.
@@ -146,9 +201,21 @@ the settle interval.
 
 ## RX and wakes
 
-- RX is copied into the endpoint's RX pool (`OwnedRxPublisher`) before
-  publication. The network retains packet-pool storage independently of the
-  radio's DMA storage, and the packet returns to its pool when dropped.
+- Over Xarxa, RX is copied into the endpoint's RX pool (`OwnedRxPublisher`)
+  before publication. The network retains packet-pool storage independently
+  of the radio's DMA storage, and the packet returns to its pool when dropped.
+- Over the network core, a socket's receive mode is explicit at its bind
+  (`oer::wifi::Copying` or `oer::wifi::Lending<CREDIT>`). A lending socket
+  keeps a datagram in the station's receive buffer under a loan of its
+  credit. The station's lend count holds `LENT_RX` buffers; the account gives
+  the socket `CREDIT` of them and keeps the rest for frames on their way, a
+  const check holding `CREDIT` to that count. The station marks each copy
+  with its reason: by form (an A-MSDU, or an MSDU sharing its frame with the
+  EAPOL), which a lending socket takes in a block of its group, or by
+  pressure (no lend room), which it drops. A buffer's loan frees when its
+  memory returns, never at a stop; the station's stop confirms once the
+  network stopped, without waiting for lent buffers, which rejoin whichever
+  ring runs when they drop.
 - A turn's received frames wake the network once, at the end of the turn's
   receive stage; a frame the network takes tells the station only while it
   waits for room in that queue.

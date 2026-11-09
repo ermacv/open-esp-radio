@@ -24,13 +24,13 @@ const AP_QUEUE: WmmAccessCategory = WmmAccessCategory::Video;
 type ApCommand<'s> = AccessPointCommand<'s, Types<'s>, ModelCaps>;
 type ApProgress<'s> = AccessPointProgress<'s, Types<'s>, ModelCaps>;
 type ApPairwise<'s> = ModelPairwiseKey<'s, B<'s>, AccessPoint>;
-type StaPairwise<'s> = ModelPairwiseKey<'s, B<'s>, Station>;
-type Beacon<'s> = BeaconPermission<'s, ModelBeaconPath<B<'s>>>;
-type Admitted<'s> = ModelAdmitted<LocalId<'s>, ModelCaps, ()>;
+pub(super) type StaPairwise<'s> = ModelPairwiseKey<'s, B<'s>, Station>;
+pub(super) type Beacon<'s> = BeaconPermission<'s, ModelBeaconPath<B<'s>>>;
+pub(super) type Admitted<'s> = ModelAdmitted<LocalId<'s>, ModelCaps, ()>;
 
 /// How a single MPDU's terminal ended, as these cases tell them apart.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum End {
+pub(super) enum End {
     Delivered,
     Withdrawn(WithdrawCause),
     Other,
@@ -39,7 +39,7 @@ enum End {
 /// One transmission terminal the sink held, its ticket and buffer back with
 /// the harness.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Ended {
+pub(super) enum Ended {
     /// A single MPDU of the ticket.
     Frame(u8, End),
     /// The beacon of the ticket; its permission is back too.
@@ -49,7 +49,7 @@ enum Ended {
 /// Take the transmission terminals out of the sink, returning tickets and
 /// buffers to the harness and a beacon's permission to `beacon`. Every
 /// other terminal stays in the sink, in its order.
-fn settle<'s>(harness: &mut Harness<'s>, beacon: &mut Option<Beacon<'s>>) -> Vec<Ended> {
+pub(super) fn settle<'s>(harness: &mut Harness<'s>, beacon: &mut Option<Beacon<'s>>) -> Vec<Ended> {
     let terminals = core::mem::take(&mut harness.sink.terminals);
     let mut ended = Vec::new();
     for terminal in terminals {
@@ -75,7 +75,7 @@ fn settle<'s>(harness: &mut Harness<'s>, beacon: &mut Option<Beacon<'s>>) -> Vec
     ended
 }
 
-fn give_back<'s>(
+pub(super) fn give_back<'s>(
     harness: &mut Harness<'s>,
     completed: oer_protocols_ieee80211_contracts_port::SingleCompleted<'s, Types<'s>>,
 ) -> (u8, End) {
@@ -225,7 +225,7 @@ fn beacon<'s>(harness: &mut Harness<'s>, permission: Beacon<'s>) -> Admitted<'s>
     harness.port.admit_beacon(sealed)
 }
 
-fn submit<'s>(harness: &mut Harness<'s>, attempt: Admitted<'s>) -> u8 {
+pub(super) fn submit<'s>(harness: &mut Harness<'s>, attempt: Admitted<'s>) -> u8 {
     let ticket = attempt.operation.ticket().index();
     let now = harness.clock.now();
     harness
@@ -289,7 +289,7 @@ fn take_ap_configured<'s>(
 }
 
 /// Install the station's pairwise key and take it from its terminal.
-fn station_key<'s>(
+pub(super) fn station_key<'s>(
     harness: &mut Harness<'s>,
 ) -> (ModelAssociation<'s, B<'s>, Station>, StaPairwise<'s>) {
     let (start, _, _, [slot, _]) = harness.group.take().unwrap();
@@ -370,7 +370,7 @@ fn station_frame_on<'s>(harness: &mut Harness<'s>, category: WmmAccessCategory) 
 }
 
 /// A station data frame under `key`, on the station's queue.
-fn station_frame<'s>(
+pub(super) fn station_frame<'s>(
     harness: &mut Harness<'s>,
     key: &StaPairwise<'s>,
     number: u64,
@@ -562,7 +562,7 @@ fn a_beacon_the_stopped_radio_refuses_returns_its_permission_at_once() {
 /// Stop the started port of `harness` and reinstall it: the next
 /// installation's port and resources, with the earlier installation's
 /// tokens still with the caller.
-fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelResources<'s, B<'s>>) {
+pub(super) fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelResources<'s, B<'s>>) {
     let waker = harness.waker();
     let now = harness.clock.now();
     assert!(matches!(

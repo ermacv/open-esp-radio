@@ -27,6 +27,8 @@ impl oer_portable_diagnostics::DiagnosticPath for CredentialsError {
 pub struct StationSettings {
     ssid: Vec<u8, 32>,
     security: Security,
+    /// Whether the connection asks an access point that admits HE20 for it.
+    prefer_he20: bool,
 }
 enum Security {
     Open,
@@ -42,7 +44,17 @@ impl StationSettings {
         Ok(Self {
             ssid: Vec::from_slice(ssid).map_err(|_| CredentialsError::SsidLength)?,
             security: Security::Open,
+            prefer_he20: false,
         })
+    }
+
+    /// Experimental: these settings' connection asks an access point that
+    /// admits HE20 (HT Capabilities, HE-MCS 0..9 both ways on one stream, a
+    /// parseable HE Operation) for HE20; another access point gets the
+    /// station's HT request. Without it the station never asks for HE.
+    pub fn with_he20(mut self) -> Self {
+        self.prefer_he20 = true;
+        self
     }
     pub fn wpa2_passphrase(ssid: &[u8], passphrase: &[u8]) -> Result<Self, CredentialsError> {
         let mut settings = Self::open(ssid)?;
@@ -67,7 +79,11 @@ impl StationSettings {
     /// passphrase is erased before the first yield; cancellation erases the
     /// derivation's intermediate state. No password is retained for WPA2.
     pub async fn prepare(self) -> Result<PreparedCredentials, CredentialsError> {
-        let Self { ssid, security } = self;
+        let Self {
+            ssid,
+            security,
+            prefer_he20,
+        } = self;
         let pmk = match security {
             Security::Open => None,
             Security::Pmk(pmk) => Some(pmk),
@@ -90,7 +106,11 @@ impl StationSettings {
                 })
             }
         };
-        Ok(PreparedCredentials { ssid, pmk })
+        Ok(PreparedCredentials {
+            ssid,
+            pmk,
+            prefer_he20,
+        })
     }
 }
 impl core::fmt::Debug for StationSettings {
@@ -103,6 +123,7 @@ impl core::fmt::Debug for StationSettings {
 pub struct PreparedCredentials {
     pub(crate) ssid: Vec<u8, 32>,
     pub(crate) pmk: Option<Pmk>,
+    pub(crate) prefer_he20: bool,
 }
 impl PreparedCredentials {
     /// The station's profile of this network; the PMK moves, never copied.
@@ -110,13 +131,18 @@ impl PreparedCredentials {
         self,
     ) -> oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
         use oer_protocols_ieee80211_core_roles_sta::machine::StaSecurity;
-        let Self { ssid, pmk } = self;
+        let Self {
+            ssid,
+            pmk,
+            prefer_he20,
+        } = self;
         oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
             ssid,
             security: match pmk {
                 None => StaSecurity::Open,
                 Some(pmk) => StaSecurity::Wpa2Personal { pmk },
             },
+            prefer_he20,
         }
     }
 }
@@ -214,6 +240,23 @@ mod tests {
         assert!(matches!(
             protected.security,
             StaSecurity::Wpa2Personal { .. }
+        ));
+        assert!(!open.prefer_he20 && !protected.prefer_he20);
+    }
+    #[test]
+    fn only_settings_that_ask_for_he20_prefer_it() {
+        let he = embassy_futures::block_on(
+            StationSettings::wpa2_passphrase(b"lab", b"password")
+                .unwrap()
+                .with_he20()
+                .prepare(),
+        )
+        .unwrap()
+        .into_profile();
+        assert!(he.prefer_he20);
+        assert!(matches!(
+            he.security,
+            oer_protocols_ieee80211_core_roles_sta::machine::StaSecurity::Wpa2Personal { .. }
         ));
     }
     #[test]

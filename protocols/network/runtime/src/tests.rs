@@ -21,8 +21,8 @@ use oer_protocols_network_core::{
     claim,
 };
 use oer_protocols_network_port::{
-    Candidate, Egress, EthernetFrameView, FramePort, FrameSource, LinkSnapshot, LinkState,
-    Unpublished,
+    Candidate, CopyReason, Egress, EthernetFrame, EthernetFrameView, FrameLengthError, FramePort,
+    FrameSource, Holding, Keep, LinkSnapshot, LinkState, Taken, Unpublished,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
@@ -81,6 +81,35 @@ struct Wire {
     /// Ended frames, by ticket.
     ended: VecDeque<u32>,
     waker: Option<Waker>,
+    /// How the port holds what it shows: lendable buffers, or its copies.
+    holding: Option<Holding>,
+    /// Buffers the port lent and has not got back.
+    lent_out: Rc<std::cell::Cell<usize>>,
+}
+
+/// A buffer the wire lent: it counts itself back when dropped.
+struct WireHeld {
+    frame: Vec<u8>,
+    out: Rc<std::cell::Cell<usize>>,
+}
+
+impl Drop for WireHeld {
+    fn drop(&mut self) {
+        self.out.set(self.out.get() - 1);
+    }
+}
+
+impl EthernetFrame for WireHeld {
+    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+        let (header, payload) =
+            EthernetHeader::parse(&self.frame).map_err(|_| FrameLengthError::OutsideStorage)?;
+        Ok(EthernetFrameView {
+            destination: header.destination,
+            source: header.source,
+            ether_type: header.ether_type.value(),
+            payload,
+        })
+    }
 }
 
 impl Wire {
@@ -152,25 +181,31 @@ impl FramePort for WirePort {
 
 impl FrameSource for WirePort {
     type Notice = u32;
+    type Held = WireHeld;
 
     fn take_notice(&mut self) -> Option<u32> {
         self.0.borrow_mut().ended.pop_front()
     }
 
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
-        let frame = self.0.borrow_mut().incoming.pop_front();
-        match frame {
-            Some(frame) => {
-                let (header, payload) = EthernetHeader::parse(&frame).unwrap();
-                read(EthernetFrameView {
-                    destination: header.destination,
-                    source: header.source,
-                    ether_type: header.ether_type.value(),
-                    payload,
-                });
-                true
-            }
-            None => false,
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
+    ) -> Taken<WireHeld> {
+        let (frame, holding, out) = {
+            let mut wire = self.0.borrow_mut();
+            let Some(frame) = wire.incoming.pop_front() else {
+                return Taken::Empty;
+            };
+            let holding = wire.holding.unwrap_or(Holding::Copied(CopyReason::Format));
+            (frame, holding, wire.lent_out.clone())
+        };
+        out.set(out.get() + 1);
+        let mut held = WireHeld { frame, out };
+        let keep = read(held.view().unwrap(), holding);
+        if keep == Keep::Keep && holding == Holding::Lendable {
+            Taken::Kept(held)
+        } else {
+            Taken::Read
         }
     }
 
@@ -3025,6 +3060,7 @@ fn a_cancelled_run_keeps_the_policy_with_its_account() {
 }
 
 mod arbiter;
+mod lending;
 mod local;
 mod paced;
 mod reserve;

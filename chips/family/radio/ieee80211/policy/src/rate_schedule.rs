@@ -11,7 +11,6 @@
 //! (`chips/esp32s31/vendor/artifacts.toml`); a chip whose pinned library
 //! carries other arenas needs its own reviewed copy.
 
-#[cfg(test)]
 const RATE_SCHEDULE_KINDS: [RateScheduleKind; 9] = [
     RateScheduleKind::BarOfdm,
     RateScheduleKind::BasicOfdm,
@@ -356,6 +355,26 @@ pub fn schedule_publication_limit(schedule: RateScheduleRef) -> u8 {
     let [_, _, _, _, _, _, _, _, limit, _, _, _] = *schedule_bytes(schedule);
     limit
 }
+
+/// The largest ordinary-MPDU publication budget any record of any schedule
+/// grants ([`schedule_publication_limit`]): no single MPDU plan walked from
+/// these records publishes more. Computed from the records at compile time.
+pub const MAX_SCHEDULE_PUBLICATION_LIMIT: u8 = {
+    let mut most = 0_u8;
+    let mut kinds: &[RateScheduleKind] = &RATE_SCHEDULE_KINDS;
+    while let Some((kind, rest)) = kinds.split_first() {
+        let mut records = arena_records(*kind);
+        while let Some((record, others)) = records.split_first() {
+            let [_, _, _, _, _, _, _, _, limit, _, _, _] = *record;
+            if limit > most {
+                most = limit;
+            }
+            records = others;
+        }
+        kinds = rest;
+    }
+    most
+};
 
 /// Select the rate byte for a non-aggregate retry counter.
 ///

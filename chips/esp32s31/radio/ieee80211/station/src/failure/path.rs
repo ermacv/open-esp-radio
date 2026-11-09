@@ -122,8 +122,10 @@ impl DiagnosticPath for BackendFault {
                     PortCommandKind::CloseGate => "CloseGate",
                     PortCommandKind::SetEdca => "SetEdca",
                     PortCommandKind::SetBssColor => "SetBssColor",
+                    PortCommandKind::SetHe => "SetHe",
                 });
             }
+            Self::HeAssociationRange => path.name("HeAssociationRange"),
         }
     }
 }
@@ -377,12 +379,14 @@ impl DiagnosticPath for LifecycleFailure {
             }
             Self::StopUnconfirmed(observed) => {
                 path.name("StopUnconfirmed");
-                // Four flags in one word: a path keeps a few words only.
+                // Four flags and the network memory held in one word: a
+                // path keeps a few words only.
                 path.word(
                     u32::from(observed.deadline)
                         | u32::from(observed.arena_on_air) << 1
                         | u32::from(observed.network_running) << 2
-                        | u32::from(observed.network_lost) << 3,
+                        | u32::from(observed.network_lost) << 3
+                        | u32::from(observed.memory_held) << 16,
                 );
                 path.word(u32::from(observed.frames_out));
                 path.word(u32::from(observed.lent));

@@ -34,7 +34,7 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 };
 use oer_protocols_ieee80211_contracts_port::{
     Air, AmpduCapabilities, BlockAckReport, Channel, ChannelWidth, Ieee80211Capabilities,
-    MpduProtection, MpduStartSpacing, PhyRate, PortArena, Protection, TxPower, VifRole,
+    MpduProtection, MpduStartSpacing, PhyRate, PortArena, Protection, TxEstimate, TxPower, VifRole,
 };
 use oer_protocols_ieee80211_wire::ccmp::{CCMP_HEADER_LEN, CCMP_MIC_LEN, CcmpPacketNumber};
 use oer_protocols_ieee80211_wire::frame::{
@@ -172,7 +172,13 @@ pub struct ModelArenas {
     length_limit: Option<usize>,
     published: Vec<ModelArenaPublication>,
     fault: Option<ModelArenaFault>,
+    /// What each publication that reaches the air costs.
+    cost: TxEstimate,
 }
+
+/// What a model publication that reaches the air costs, until
+/// [`ModelArenas::set_cost`] says otherwise.
+pub const MODEL_PUBLICATION_COST: TxEstimate = TxEstimate::Estimated { micros: 100 };
 
 impl Default for ModelArenas {
     fn default() -> Self {
@@ -199,7 +205,13 @@ impl ModelArenas {
             length_limit: None,
             published: Vec::new(),
             fault: None,
+            cost: MODEL_PUBLICATION_COST,
         }
+    }
+
+    /// The cost each publication that reaches the air reports from now on.
+    pub fn set_cost(&mut self, cost: TxEstimate) {
+        self.cost = cost;
     }
 
     /// Install or remove the pairwise key a standalone [`ModelArena`]'s
@@ -511,7 +523,16 @@ impl ModelArenas {
             return Err(self.quarantine(ModelArenaFault::State));
         };
         slots.state = State::Completed { aggregate };
-        Ok(Some(Completion::new(arena, slots.len, end)))
+        // An aborted publication may have reached the air: its cost is not
+        // known.
+        let cost = if end.air().is_some() {
+            self.cost
+        } else if end.may_have_reached_air() {
+            TxEstimate::Unknown
+        } else {
+            TxEstimate::NONE
+        };
+        Ok(Some(Completion::new(arena, slots.len, end, cost)))
     }
 
     fn settle(

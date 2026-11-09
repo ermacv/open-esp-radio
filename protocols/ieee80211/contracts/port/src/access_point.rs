@@ -24,7 +24,9 @@
 //! refuses it explicitly, with its owners, at the operation's acceptance
 //! point: [`DataPort::submit`] for a beacon and for an attempt under an
 //! access-point key, [`AccessPointPort::access_point_command`] for every
-//! command. The station's operations do not check yet.
+//! command. The station's operations refuse them the same way
+//! ([`CommandRefusal::StalePermission`](crate::CommandRefusal::StalePermission),
+//! [`SubmitRefusal::StalePermission`](crate::SubmitRefusal::StalePermission)).
 //!
 //! # Acceptance and terminals
 //!

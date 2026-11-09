@@ -114,6 +114,10 @@ impl<N: Notifies> State<N> {
         self.operations.begin_epoch();
         // An ended epoch's unserved profile erases itself here.
         drop(self.profile.take());
+        // An ended epoch's stop ended with it: the new epoch's policy keeps
+        // only the configuration, and no stop deadline is pending.
+        self.policy.set(self.policy.get().next_epoch());
+        self.stop_deadline.set(None);
         self.set_status(Status {
             link: LinkSnapshot::DOWN,
             notice: None,
@@ -287,6 +291,12 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
     pub(crate) fn policy_register(&self, cx: &Context<'_>) {
         self.state.policy_waker.register(cx.waker());
         self.state.operations.register_released(cx);
+    }
+    /// Whether the policy has a command at `now`, looked at after
+    /// [`Self::policy_register`]: a wake of the policy that came before the
+    /// registration found no waker.
+    pub(crate) fn policy_pending(&self, now: oer_portable_time::Instant) -> bool {
+        self.policy_admissible() && self.state.policy.get().pending(now, self.linked())
     }
     /// The policy's next command; a station request takes its kind's
     /// permission, the one admission it shares with operations.
@@ -574,8 +584,13 @@ pub trait TxSupply<P> {
     /// the memory does not hold ([`TransmitError::InvalidLength`]) keeps the
     /// frame; a pool that refuses its own written memory loses both.
     fn write(&mut self, frame: P) -> Result<Self::Memory, TxRefused<P>>;
-    /// Memory the station gave back: free again.
-    fn give(&mut self, memory: Self::Memory);
+    /// Memory the station gave back, its MSDU ended at `cost`: free again
+    /// once the network settled that end.
+    fn give(
+        &mut self,
+        memory: Self::Memory,
+        cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
+    );
 }
 
 /// A frame [`TxSupply::write`] did not hand over.
@@ -610,6 +625,11 @@ impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
             link: state.network_link(),
             observed: LinkSnapshot::DOWN,
         }
+    }
+
+    /// The link this end reads, for another reader on the network's side.
+    pub const fn link_source(&self) -> &'c super::NetworkLink<N::NetworkWaker> {
+        self.link
     }
 }
 impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N: Notifies>
@@ -661,7 +681,7 @@ pub struct DeviceTransmit<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies = 
     /// station writes its MPDU header in place.
     transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
     /// The memory the station gave back, free for the next frames.
-    returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
+    returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
     supply: S,
     link: &'c super::NetworkLink<N::NetworkWaker>,
     packet: core::marker::PhantomData<fn(P)>,
@@ -671,7 +691,7 @@ impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, 
     /// link.
     pub fn new(
         transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
-        returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
+        returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
         supply: S,
         state: &'c State<N>,
     ) -> Self {
@@ -686,8 +706,8 @@ impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, 
     /// Take back every memory the station returned, here on the network's
     /// executor.
     fn take_returned(&mut self) {
-        while let Ok(Some(memory)) = self.returned.try_receive_with(Option::take) {
-            self.supply.give(memory);
+        while let Ok(Some(ended)) = self.returned.try_receive_with(Option::take) {
+            self.supply.give(ended.memory, ended.cost);
         }
     }
 }

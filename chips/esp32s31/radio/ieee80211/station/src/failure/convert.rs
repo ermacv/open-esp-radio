@@ -54,6 +54,7 @@ pub(crate) fn backend_fault(
         Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
         Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
         Source::CommandExpired(kind) => BackendFault::CommandExpired(command_kind(kind)),
+        Source::HeAssociationRange => BackendFault::HeAssociationRange,
     }
 }
 
@@ -133,6 +134,7 @@ pub(super) fn command_kind(
         Source::CloseGate => PortCommandKind::CloseGate,
         Source::SetEdca => PortCommandKind::SetEdca,
         Source::SetBssColor => PortCommandKind::SetBssColor,
+        Source::SetHe => PortCommandKind::SetHe,
     }
 }
 
@@ -791,7 +793,9 @@ pub(crate) fn lifecycle(
     use oer_protocols_ieee80211_runtime::datapath::ActorFault;
     use oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd as End;
     Some(match end {
-        End::Stopped | End::Restart(_) => return None,
+        End::Stopped | End::StoppedReturning(_) | End::StoppedNetworkLost(_) | End::Restart(_) => {
+            return None;
+        }
         End::StartRefused(refused) => LifecycleFailure::StartRefused(start_refused(refused)),
         End::StopUnconfirmed(observed) => LifecycleFailure::StopUnconfirmed(observed),
         End::RetuneUnconfirmed(unconfirmed) => LifecycleFailure::RetuneUnconfirmed(unconfirmed),

@@ -75,6 +75,10 @@ struct Hardware {
     published: std::rc::Rc<RefCell<Vec<MacLegacyTxProgram>>>,
     ht: Vec<(u8, MacHtTxProgram)>,
     he: Vec<(u8, MacHeTxProgram)>,
+    /// The HE BSS the MAC matches (color, enabled, partial) and the HE20
+    /// association it holds.
+    he_bss: Option<(u32, bool, bool)>,
+    he_association: Option<oer_chips_esp32s31_hal::types::MacHe20Association>,
     completion: [Option<MacTxCompletionObservation>; 4],
     block_ack_completion: [Option<MacHtAmpduCompletionObservation>; 4],
     timeout_pending: [bool; 4],
@@ -421,6 +425,34 @@ impl StationTbttHardware for Hardware {
 impl TxGateHardware for Hardware {
     fn set_power_save_tx_block(&mut self, blocked: bool) {
         self.tx_blocked = blocked;
+    }
+}
+
+impl crate::lower_mac::StaHeHardware for Hardware {
+    fn connect_he20_bss(
+        &mut self,
+        color: oer_chips_esp32s31_hal::types::MacHeBssColor,
+        enabled: bool,
+        partial: bool,
+    ) {
+        self.he_bss = Some((color.get(), enabled, partial));
+    }
+    fn install_he20_association(
+        &mut self,
+        association: oer_chips_esp32s31_hal::types::MacHe20Association,
+    ) {
+        // The association writes the response's color.
+        let peer = association.peer;
+        self.he_bss = Some((
+            peer.bss_color.get(),
+            peer.bss_color_enabled,
+            peer.partial_bss_color,
+        ));
+        self.he_association = Some(association);
+    }
+    fn clear_he20_association(&mut self) {
+        self.he_bss = None;
+        self.he_association = None;
     }
 }
 
@@ -2926,6 +2958,105 @@ fn the_station_s_he_bss_color_is_installed() {
             oer_protocols_ieee80211_contracts_port::BssColor::new(63).unwrap(),
         );
         assert_eq!(core.tx.policy().he_bss_color(), 63);
+    });
+}
+
+/// An HE20 association whose response names color 27: default PE 4, 16 us
+/// padding, ER-SU disabled, no co-hosted BSS, AID 42 and MMSS code 5.
+fn he20_association() -> oer_protocols_ieee80211_contracts_port::He20Association {
+    he20_association_colored(27)
+}
+
+/// [`he20_association`] whose response names `color`.
+fn he20_association_colored(color: u8) -> oer_protocols_ieee80211_contracts_port::He20Association {
+    oer_protocols_ieee80211_contracts_port::He20Association::new(
+        &oer_protocols_ieee80211_wire::he::He20PeerState {
+            capability_prefix: [0; 24],
+            packet_padding_eight_us: 2,
+            default_packet_extension_duration: 4,
+            bss_color: color,
+            bss_color_enabled: true,
+            partial_bss_color: false,
+            basic_mcs_nss_map: 0xfffc,
+            rts_threshold: None,
+            max_co_hosted_bssid_indicator: None,
+            extended_range_single_user_disabled: true,
+        },
+        42,
+        5,
+    )
+    .unwrap()
+}
+
+/// The HE BSS of color 27, enabled when `enabled`, not partial.
+fn he_bss(enabled: bool) -> oer_protocols_ieee80211_contracts_port::HeBssColor {
+    oer_protocols_ieee80211_contracts_port::HeBssColor::of(
+        &oer_protocols_ieee80211_wire::he::He20Operation {
+            bss_color: 27,
+            bss_color_enabled: enabled,
+            partial_bss_color: false,
+            basic_mcs_nss_map: 0xfffc,
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn an_he_connection_and_its_association_program_the_mac_and_color_he_transmissions() {
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        core.set_checked_he(&mut hardware, StationHe::Bss(he_bss(true)))
+            .unwrap();
+        assert_eq!(hardware.he_bss, Some((27, true, false)));
+        assert_eq!(hardware.he_association, None, "no association before it");
+        assert_eq!(core.tx.policy().he_bss_color(), 27);
+        core.set_checked_he(&mut hardware, StationHe::He20(he20_association()))
+            .unwrap();
+        let installed = hardware.he_association.expect("installed");
+        assert_eq!(installed.association_id.get(), 42);
+        assert_eq!(installed.minimum_mpdu_start_spacing.get(), 5);
+        assert_eq!(installed.peer.packet_padding_duration.get(), 16);
+        assert_eq!(installed.peer.default_packet_extension_duration.get(), 4);
+        assert_eq!(installed.peer.max_co_hosted_bssid_indicator, None);
+        assert!(installed.peer.extended_range_single_user_disabled);
+        // The association keeps the connection's color.
+        assert_eq!(hardware.he_bss, Some((27, true, false)));
+        assert_eq!(core.tx.policy().he_bss_color(), 27);
+
+        // Its end clears both; the next connection's color is its own.
+        core.set_checked_he(&mut hardware, StationHe::Off).unwrap();
+        assert_eq!((hardware.he_bss, hardware.he_association), (None, None));
+        assert_eq!(core.tx.policy().he_bss_color(), 0);
+        core.set_checked_he(&mut hardware, StationHe::Bss(he_bss(false)))
+            .unwrap();
+        // A disabled BSS color is no transmit color.
+        assert_eq!(core.tx.policy().he_bss_color(), 0);
+    });
+}
+
+#[test]
+fn the_response_s_color_replaces_the_scan_s_before_the_link_s_data() {
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    // The owner's counterexample: the scan heard color 27, the Association
+    // Response names 5. The MAC and the HE transmissions take 5.
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        core.set_checked_he(&mut hardware, StationHe::Bss(he_bss(true)))
+            .unwrap();
+        assert_eq!(core.tx.policy().he_bss_color(), 27);
+        core.set_checked_he(&mut hardware, StationHe::He20(he20_association_colored(5)))
+            .unwrap();
+        assert_eq!(hardware.he_bss, Some((5, true, false)));
+        assert_eq!(
+            hardware
+                .he_association
+                .map(|association| association.peer.bss_color.get()),
+            Some(5)
+        );
+        assert_eq!(core.tx.policy().he_bss_color(), 5);
     });
 }
 

@@ -196,6 +196,10 @@ struct State {
     station_tsf: u64,
     tbtt: Option<StaTbttSchedule>,
     tx_blocked: bool,
+    /// The HE BSS the MAC matches (its color, enabled, partial) and the
+    /// HE20 association it holds; `None` after a removal or before any.
+    he_bss: Option<(oer_chips_esp32s31_hal::types::MacHeBssColor, bool, bool)>,
+    he: Option<oer_chips_esp32s31_hal::types::MacHe20Association>,
     cca_forced: bool,
     breaks: Vec<RuleBreak>,
     counts: AtomCounts,
@@ -221,11 +225,23 @@ impl Atoms {
             station_tsf: 0,
             tbtt: None,
             tx_blocked: false,
+            he_bss: None,
+            he: None,
             cca_forced: false,
             breaks: Vec::new(),
             counts: AtomCounts::default(),
             clock,
         })))
+    }
+
+    /// The HE BSS the MAC matches now.
+    pub fn he_bss(&self) -> Option<(oer_chips_esp32s31_hal::types::MacHeBssColor, bool, bool)> {
+        self.0.borrow().he_bss
+    }
+
+    /// The HE20 association the MAC holds now.
+    pub fn he(&self) -> Option<oer_chips_esp32s31_hal::types::MacHe20Association> {
+        self.0.borrow().he
     }
 
     /// The PPDUs started since the last call.
@@ -278,6 +294,17 @@ impl Atoms {
     /// Whether the open receive policy is on.
     pub fn promiscuous(&self) -> bool {
         self.0.borrow().promiscuous
+    }
+
+    /// The key-table entries that hold a key, in installation order.
+    pub fn installed_keys(&self) -> Vec<u8> {
+        self.0.borrow().keys.iter().map(|(slot, _)| *slot).collect()
+    }
+
+    /// Put a key in the key table's entry `index`, as an earlier
+    /// installation's write left it.
+    pub fn seed_key(&self, index: u8, identity: MacCcmpKeyIdentity) {
+        self.0.borrow_mut().keys.push((index, identity));
     }
 
     fn queue<R>(&self, queue: u8, f: impl FnOnce(&mut Queue) -> R) -> R {
@@ -787,6 +814,39 @@ impl StationTbttHardware for ModelRegisters {
 impl TxGateHardware for ModelRegisters {
     fn set_power_save_tx_block(&mut self, blocked: bool) {
         self.atoms.with(|state| state.tx_blocked = blocked);
+    }
+}
+
+impl crate::lower_mac::StaHeHardware for ModelRegisters {
+    fn connect_he20_bss(
+        &mut self,
+        color: oer_chips_esp32s31_hal::types::MacHeBssColor,
+        enabled: bool,
+        partial: bool,
+    ) {
+        self.atoms
+            .with(|state| state.he_bss = Some((color, enabled, partial)));
+    }
+    fn install_he20_association(
+        &mut self,
+        association: oer_chips_esp32s31_hal::types::MacHe20Association,
+    ) {
+        self.atoms.with(|state| {
+            // The association writes the response's color.
+            let peer = association.peer;
+            state.he_bss = Some((
+                peer.bss_color,
+                peer.bss_color_enabled,
+                peer.partial_bss_color,
+            ));
+            state.he = Some(association);
+        });
+    }
+    fn clear_he20_association(&mut self) {
+        self.atoms.with(|state| {
+            state.he_bss = None;
+            state.he = None;
+        });
     }
 }
 

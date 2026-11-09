@@ -68,6 +68,36 @@ impl MacTxWork {
         NonZeroU32::new(self.ppdu_micros.checked_add(overhead)?)
     }
 
+    /// The work recorded after `earlier`, a snapshot of this same record:
+    /// the publications in between. A counter below its snapshot, or one
+    /// that saturated, leaves a saturated record, which no estimate takes.
+    pub fn since(&self, earlier: MacTxWork) -> MacTxWork {
+        let mut saturated = self.saturated;
+        let mut sub = |counter: u32, before: u32| {
+            counter.checked_sub(before).unwrap_or_else(|| {
+                saturated = true;
+                0
+            })
+        };
+        let work = MacTxWork {
+            publications: sub(self.publications, earlier.publications),
+            psdu_bytes: sub(self.psdu_bytes, earlier.psdu_bytes),
+            mpdus: sub(self.mpdus, earlier.mpdus),
+            nominal_data_micros: sub(self.nominal_data_micros, earlier.nominal_data_micros),
+            unestimated_publications: sub(
+                self.unestimated_publications,
+                earlier.unestimated_publications,
+            ),
+            ppdu_micros: sub(self.ppdu_micros, earlier.ppdu_micros),
+            unestimated_ppdus: sub(self.unestimated_ppdus, earlier.unestimated_ppdus),
+            aifs_slots: sub(self.aifs_slots, earlier.aifs_slots),
+            backoff_slots: sub(self.backoff_slots, earlier.backoff_slots),
+            unreported_contention: sub(self.unreported_contention, earlier.unreported_contention),
+            saturated: false,
+        };
+        MacTxWork { saturated, ..work }
+    }
+
     /// Add the work of another exchange that belongs to this one, such as
     /// the ordinary retries of MPDUs taken out of an aggregate.
     pub fn absorb(&mut self, other: MacTxWork) {

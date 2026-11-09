@@ -146,10 +146,10 @@ pub use interface::{Interface, InterfaceError, Ipv4};
 pub use loans::{Loan, Loans, LoansRefused, NotLent};
 pub use machine::{
     CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Eviction, FillFailed,
-    Grant, NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults, SendRefusal,
+    Grant, LendTo, NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults, SendRefusal,
     SendRefused, SocketId, StaleSocket, WorkId,
 };
-pub use owner::{NetworkOwner, Retired, Unsent};
+pub use owner::{Intake, LentDatagram, NetworkOwner, Retired, Unsent};
 
 #[cfg(test)]
 mod tests;

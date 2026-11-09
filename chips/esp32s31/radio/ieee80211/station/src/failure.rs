@@ -72,6 +72,8 @@ pub enum BackendFault {
     ReceiveAccounting,
     /// A command the data port held at its barrier passed its bound.
     CommandExpired(PortCommandKind),
+    /// An HE association the MAC's fields do not hold.
+    HeAssociationRange,
 }
 /// The lower-MAC operation a missing core view stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -120,6 +122,7 @@ pub enum PortCommandKind {
     CloseGate,
     SetEdca,
     SetBssColor,
+    SetHe,
 }
 /// Why the data arenas quarantined themselves.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

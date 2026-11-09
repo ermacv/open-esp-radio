@@ -1024,12 +1024,12 @@ pub mod mac {
 
     use oer_chips_esp32s31_hal::{
         radio::ieee80211::mac::WifiMacHal,
-        types::{MacRxStatisticsSnapshot, MacTxStatisticsSnapshot},
+        types::{MacHeTbStatistics, MacRxStatisticsSnapshot, MacTxStatisticsSnapshot},
     };
 
     /// The counts [`MacCounts::read`] gives, in the order of
     /// [`counts_of`].
-    pub const COUNTS: usize = 42;
+    pub const COUNTS: usize = 45;
 
     /// How often a turn reads them: the bank is forty-odd registers.
     const PERIOD_US: u32 = 50_000;
@@ -1063,8 +1063,9 @@ pub mod mac {
     pub fn bank(mac: &WifiMacHal<'_>) -> MacBank {
         let rx = mac.receive_statistics_snapshot();
         let tx = mac.transmit_statistics_snapshot();
+        let trigger = mac.he_trigger_based_statistics();
         MacBank {
-            counts: counts_of(&rx, &tx),
+            counts: counts_of(&rx, &tx, &trigger),
             frequency_offset: rx.primary.cfo_scaled_40,
         }
     }
@@ -1131,7 +1132,14 @@ pub mod mac {
     }
 
     /// The bank's counts in one order; the load service names them.
-    fn counts_of(rx: &MacRxStatisticsSnapshot, tx: &MacTxStatisticsSnapshot) -> [u32; COUNTS] {
+    /// The last three are the HE Trigger frames the MAC received, its HE TB
+    /// PPDUs and the QoS Nulls among them (`hal_he_get_rx_trigger_cnt`,
+    /// `hal_he_get_tb_times_cnt`, `hal_he_get_tb_qosnull_cnt`).
+    fn counts_of(
+        rx: &MacRxStatisticsSnapshot,
+        tx: &MacTxStatisticsSnapshot,
+        trigger: &MacHeTbStatistics,
+    ) -> [u32; COUNTS] {
         let (p, d, h) = (&rx.primary, &rx.decode_errors, &rx.hang);
         [
             p.mpdu_count.into(),
@@ -1176,6 +1184,9 @@ pub mod mac {
             tx.tx_cts,
             tx.track,
             tx.trcts,
+            trigger.rx_trigger_count.into(),
+            trigger.transmission_count.into(),
+            trigger.qos_null_count.into(),
         ]
     }
 }

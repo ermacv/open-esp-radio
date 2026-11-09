@@ -3,7 +3,8 @@
 Rust 2024 `no_std` radio stack for Espressif chips, today the ESP32-S31:
 Wi-Fi, Bluetooth LE and IEEE 802.15.4, without vendor radio binaries.
 Read [docs/architecture.md](docs/architecture.md) before any task: it is the
-system these rules serve.
+system these rules serve. This file holds the rules; the contracts of each
+subsystem live in its page or README, listed under **Subsystem contracts**.
 
 ## Code
 
@@ -27,9 +28,9 @@ system these rules serve.
   Only these owned partitions grant register access.
 - **Compile time first.** Every check that can run at compile time runs there;
   a runtime check stands only where that proof is impossible, and their number
-  tends to zero.
-  A `const fn` alone does not enforce this: fixed values use const items or
-  blocks, and generic geometry uses inline const checks at monomorphization.
+  tends to zero. A `const fn` alone does not enforce this: fixed values use
+  const items or blocks, and generic geometry uses inline const checks at
+  monomorphization.
 - **Errors stay errors.** An error never becomes a status, a dummy value or a
   success. A refusal for temporary unavailability exists only where it is
   needed and proven, and it names what comes next: a release event, a
@@ -39,142 +40,85 @@ system these rules serve.
   result. Every API names its acceptance point: before it a refusal, after it
   an outcome or a fault. A confirmed result never becomes unknown through a
   later failure, and a side effect of unknown result is not repeated
-  automatically. A removed panic leaves its owners kept, the operation's
-  outcome correct and progress assured; the panic count is a secondary
-  measure. [Operation results](docs/architecture.md#operation-results) is the
+  automatically. Air, peer, host and API input return a handled error.
+  [Operation results](docs/architecture.md#operation-results) is the
   decision procedure.
-- **Panics and unsafe.** A change introduces no new runtime panic sites or
-  `unsafe` code. Sans-IO crates (the layer in `docs/architecture.md`)
-  start with `#![forbid(unsafe_code)]` and contain no runtime panic paths:
-  `panic!`, `unreachable!`, `todo!`, `unimplemented!`, `assert*`,
-  `debug_assert*`, `vendor_assert!`, `unwrap`/`expect`, unchecked indexing
-  or slicing, overflow, invalid division and panicking core methods return
-  typed errors instead. They never depend on fatal, reset or retained-record
-  owners and never reset; only the image or HAL owner resets. Compile-time
-  checks use `const { if !cond { panic!("…") } }` as a const item or inline
-  const, never assertion macros. Compile-time panics and test assertions
-  are allowed. Unsafe contracts cover memory safety; operation order and
-  lifecycle are enforced by `&mut` ownership and typestate. Moving existing
-  unsafe sites into their narrow home (`oer-portable-riscv` for architectural
-  instructions, `oer-portable-memory` for cells, placement, DMA proofs and typed symbol exports, the HAL's
-  PSRAM owner for slice creation) may increase the home's count only by the
-  moved sites, when the touched crates' total decreases and no calling crate's
-  count increases; each site retains its narrow
-  contract and `// SAFETY:` proof.
-  The PHY-fault slot's ABI declaration belongs to the HAL, with one narrow
-  `LinkSlot` unsafe implementation; its one-site caller-count increase is
-  permitted. The trace clock slot belongs to `oer-portable-memory`, and trace retains
-  `forbid(unsafe_code)`. Other callers retain the no-growth rule.
-  Context-local mutable payloads use `oer-portable-memory::ContextCell` with a private
-  `ContextProof`; nested access is refused without consuming the payload.
-  Runtime code has zero panics; compile-time panics stay allowed. A reset or a
-  runtime panic exists only at the hardware level, behind a proof marked
-  `HW_PANIC_SOURCE: <name>` at the site and named in `[proofs]` of
-  `tools/test/layers/terminal-sites.toml`, so one search finds them all. The
-  proof is either a statement that the state is impossible, naming the model,
-  revision, preconditions, event order and limits (a cited value alone proves
-  no lifecycle invariant), or an observed hardware failure where continuing
-  would hand another owner memory or a peripheral the hardware may still use.
-  Otherwise return a handled typed error, and handle it at its own level: an
-  error never travels up the stack to end in a panic or reset. A software
-  contract violation not yet removed by types restarts the station and
-  records its cause, never the chip.
-  An impossible state returns a named fault retaining its source observations;
-  its owners stay quarantined, then the image calls safe `fatal::reset_recording`
-  to retain the reason for the next boot to print. A watchdog is not this mechanism.
-  Only the image or HAL owner carries out that terminal decision, without
-  `panic!`. Keep unconfirmed owners quarantined.
-  Product policy is record+reset even with a debugger; stopping requires an
-  explicit debug/probe mode with checked watchdog policy. Retained LP RAM
-  diagnostics are best effort, read alongside raw reset causes, with no
-  power-loss guarantee. Repeated boot failure requires record+explicit reset
-  with the watchdog preserved, not a retained retry counter or implicit expiry.
-  The [fatal/reset contract](docs/architecture.md#fatal-decisions-and-reset)
-  states implementation limits; `tools/test/layers/terminal-sites.toml`
-  inventories terminal sites, their classes and reset owners.
-  IEEE 802.15.4 startup is an affine pre-bind discard: mask delivery,
-  issue STOP and both timer stops, then write W1C for all fourteen event
-  lanes without a sample through the existing IRQ part. All pre-bind
-  pending is stale and cannot be serviced. Only then can the IRQ owner bind;
-  bound task activation publishes the same ten runtime events as later
-  sessions. A task never borrows its handler cell. Runtime acknowledgements
-  consume affine samples;
-  polling requires `Silent` after the same pre-bind discard.
-  Transmit security validates PHR-bounded MAC fields through `oer-portable-wire`
-  before every security setter. A malformed generated secured ACK is handled
-  API input: STOP, report its typed security error to the environment, deliver
-  the received frame without an ACK and select the next operation. It neither
-  publishes the ACK to DMA nor records/resets.
-  BLE terminal output release acknowledges sampled NRT with runtime admission
-  before the last visible fault check preceding masking and before final release
-  confirmation. Fault/overflow NRT pairs stay unacknowledged and return
-  `ReleaseNotQuiet`, as does residual visible status. Under the mask, release
-  uses sourced fixed non-fault primary/NRT W1C images and the sourced task WT
-  strobe. It never reopens enables or changes matrix routing for
-  observation. It verifies zero enables; hidden pending is not observable.
-  Fault lanes stay excluded from unconditional W1C, including NRT admission to
-  the shared clear words ([HAL transactions](chips/esp32s31/hal/README.md)).
-  Owned PHY transactions preserve their registration and restore obligations;
-  only consuming reunion with the exact affine return owner releases their
-  quarantine guard. Dropping either half records reason, operation and epoch
-  and resets, without automatic restoration or owner release. The HAL owns both
-  signatures of its fault binding through its exported reporter macro.
-  Isolated verifier probes keep their own terminal reporter and first fault
-  in session RAM; they do not link the staged runtime.
-  Remove existing runtime panics from image crates, including probes and
-  HIL; image panic budgets are reports with a target of 0, not build gates.
-  Compiler `panic_const_async_fn_resumed` sites have a separate row outside
-  the budgets and target of 0, based on the executor's runtime `DONE` check
-  (not a type guarantee) and `.await` never polling a completed child again.
-  Introduce no new runtime panics. `const` panics evaluated at
-  compile time are allowed. Air, peer, host and API input return a handled
-  error. New panic-lint `allow` and `expect` attributes are test-only. A crate
-  moves each clean panic lint to crate-root `deny` in the PR that clears it,
-  keeping workspace lint inheritance. Workspace `disallowed_methods`
-  stays `deny`; `disallowed_macros` keeps its default level. A cleaned sans-IO
-  crate's `clippy.toml` contains the union of the root's common entries,
-  `tools/test/layers/sans-io-lints.toml` and its existing local entries before
-  it explicitly denies both `disallowed_methods` and `disallowed_macros`
-  at the crate root.
-  Every local Clippy configuration retains all common method bans.
-  `debug_assert!` is not a guard.
+- **Runtime panics.** Runtime code has zero panics; a change adds no runtime
+  panic site. Compile-time panics and test assertions are allowed; a
+  compile-time check is `const { if !cond { panic!("…") } }` as a const item
+  or inline const, never an assertion macro. `debug_assert!` is not a guard.
   Arithmetic on peer values names its overflow behavior with `checked_`,
-  `wrapping_` or `saturating_` operations.
-- **Execution.** The critical section is hart-local; staged build/run checks
-  confine linked section entry points to the image's declared hart roots. A
-  secondary hart starts only through the image's declared hart set and the
-  root's one-shot launch permit, during boot, before executors; any failure
-  after release records and resets. An interrupt handler
-  never shares a lock with a task. A task waker stays on its executor's hart;
-  no waker crosses harts. Executor startup borrows the runtime's affine `Hart<H>` and const-checks its route's
-  hart. Interrupt enable consumes pre-admission authority and returns the
-  router with the same hart token; before enable they may be borrowed together.
-  An executor's urgent sources come from the typed observations returned by
-  the same constructors as its doorbells; an empty composition passes `()`.
-  A signal names its raisers at compile time. A raising handler sits strictly
-  above the receiving executor; the one exception is an
-  `Exempt(ExecutorLevel)` handler on that executor's hart and level
-  (`FromExecutorLevel`), whose signal the next round serves. A task of the
-  receiving executor itself raises through `FromOwnTask`, whose facts the
-  next round serves too. A task on
-  another hart raises through `FromPeerHart` (its hart differs, checked at
-  compile time); a cross-hart wake raises the peer executor's signal, every
-  software-interrupt raise fences `w, o` after its facts and every handler
-  lowers, then fences `o, rw` before taking them. Each hart's CLIC grant
-  becomes its controller only in that hart's handoff, on that hart; one
-  router per hart. The SAR/PWDET
-  pilot uses TIMG0 T0 at P2 on line 16, below the radio executor's line 17;
-  it advances one explicit conversion step per event with owned PHY custody.
-  Driver code never blocks or spins; it yields to its executor. The one exception is a
-  named settle of a known length up to 20 µs; the AES driver waits for a
-  Typical block on its `STATE` flag in one, a typed timeout otherwise. Before an executor exists
-  (the bootstrap and early boot) there is nothing to yield to: console
-  output there may wait for room in the USB FIFO up to a bounded budget per
-  record, and hardware bring-up (PLL, RC calibration, cache, MSPI, PSRAM)
-  may poll in named boot waits, each with its own bound from its source and
-  all under one boot deadline below the armed RTC watchdog; a timeout is a
-  typed boot failure, never a fallback value. Portable protocols take no
-  `critical-section` and no blocking mutex.
+  `wrapping_` or `saturating_` operations. A removed panic leaves its owners
+  kept, the operation's outcome correct and progress assured; the panic count
+  is a secondary measure. Remove existing runtime panics from image crates,
+  probes and HIL included; image panic budgets report counts against a
+  target of 0 and are not build gates.
+- **Sans-IO crates** (the layer in `docs/architecture.md`) start with
+  `#![forbid(unsafe_code)]` and contain no runtime panic paths: `panic!`,
+  `unreachable!`, `todo!`, `unimplemented!`, `assert*`, `debug_assert*`,
+  `vendor_assert!`, `unwrap`/`expect`, unchecked indexing or slicing,
+  overflow, invalid division and panicking core methods return typed errors
+  instead. They never depend on fatal, reset or retained-record owners and
+  never reset.
+- **Panic lints.** New panic-lint `allow` and `expect` attributes are
+  test-only. A crate moves each clean panic lint to crate-root `deny` in the
+  PR that clears it, keeping workspace lint inheritance. Workspace
+  `disallowed_methods` stays `deny`; `disallowed_macros` keeps its default
+  level. Every local Clippy configuration retains all common method bans; a
+  cleaned sans-IO crate's `clippy.toml` holds the union described in
+  [docs/unsafe.md](docs/unsafe.md) before it denies both lints at its root.
+- **Terminal decisions.** A reset or a runtime panic exists only at the
+  hardware level, behind a proof marked `HW_PANIC_SOURCE: <name>` at the
+  site and named in `[proofs]` of `tools/test/layers/terminal-sites.toml`.
+  The proof is a statement that the state is impossible, naming the model,
+  revision, preconditions, event order and limits (a cited value alone
+  proves no lifecycle invariant), or an observed hardware failure where
+  continuing would hand another owner memory or a peripheral the hardware
+  may still use. Without such a proof, return a handled typed error and
+  handle it at its own level: an error never travels up the stack to end in
+  a panic or reset. An impossible state returns a named fault retaining its
+  source observations; its owners stay quarantined, then the image or HAL
+  owner calls safe `fatal::reset_recording`, without `panic!`. A watchdog is
+  not this mechanism. That sequence is no license to poison: a new poison
+  (an owner or state quarantined without a recovery path) needs a proof
+  that no handled error can keep the owners, and the owner's approval
+  before any code is written. Existing PHY poison is debt to remove, never
+  a precedent to repeat. The subsystem contracts linked from this file do
+  not lift this requirement. A software contract violation not yet removed
+  by types restarts the station and records its cause, never the chip. The
+  policy and its limits (debugger, retained diagnostics, repeated boot
+  failure) are in [Fatal decisions and reset](docs/architecture.md#fatal-decisions-and-reset).
+- **Unsafe.** A change introduces no new `unsafe` code. Unsafe contracts
+  cover memory safety; operation order and lifecycle are enforced by `&mut`
+  ownership and typestate. `unsafe` stays in `portable/mmio` (volatile
+  access; generated register code has none), `portable/riscv`
+  (architectural instructions), `portable/memory` (cells, placement, DMA
+  proofs, typed symbol exports), `portable/waker`, Espressif interrupt
+  bindings in `chips/family/platform/interrupt-table`, the PAC's one root
+  claim, probe images, the placement constructor, the HAL's PSRAM owner
+  (slice creation) and the HAL's protocol core, narrow and with
+  `// SAFETY:`; crates above the HAL forbid it. Moving an existing site into
+  its narrow home may raise the home's count only by the moved sites, when
+  the touched crates' total falls and no calling crate's count grows; each
+  site retains its narrow contract and `// SAFETY:` proof. The permitted
+  exceptions are listed in [docs/unsafe.md](docs/unsafe.md). Only `oer-portable-riscv` contains `asm!`
+  for architectural operations. Entry/trap ABI assembly uses `global_asm!`
+  or `naked_asm!` only in staged entry/trap code, bootstrap and probes; host
+  compiler fixtures are test inputs.
+- **Execution.** The critical section is hart-local. An interrupt handler
+  never shares a lock with a task. A task waker stays on its executor's
+  hart; no waker crosses harts. A signal names its raisers at compile time;
+  a raising handler sits strictly above the receiving executor, with the
+  exceptions listed in [Execution](docs/architecture.md#execution). Driver
+  code never blocks or spins; it yields to its executor. The one exception
+  is a named settle of a known length up to 20 µs. Before an executor exists
+  (the bootstrap and early boot), console output may wait for room in the
+  USB FIFO up to a bounded budget per record, and hardware bring-up (PLL,
+  RC calibration, cache, MSPI, PSRAM) may poll in named boot waits, each
+  with its own bound from its source and all under one boot deadline below
+  the armed RTC watchdog; a timeout is a typed boot failure, never a
+  fallback value. Portable protocols take no `critical-section` and no
+  blocking mutex.
 - **Hardware facts.** A fact about the hardware (an address, a memory
   region, a peripheral, an interrupt source, a CPU line count, the number of
   cores, an ISA extension, a ROM function) has one source of truth in the
@@ -188,25 +132,8 @@ system these rules serve.
   generate --chip <chip>`), never written as a local mask or shift. Code
   preserves reserved and unknown bits; the one exception is a PAC policy
   fixed image marked `whole-word`, a vendor's store of a whole word with
-  its `SOURCE:`.
-  A typed trigger in a readable mixed word preserves ordinary fields and
-  unassigned bits, writes zero to WTC and other WT lanes, and sets only its
-  selected WT field. Generic modify remains unavailable for a WTC word.
-  A `read-observed` field grants observation without asserting hardware
-  read-only semantics. Its word has no generic writer or read-modify-write;
-  only a separately sourced `zero-register-writes` operation may publish
-  the complete zero word, without reading or implying an acknowledgement.
-  Generated register code has no `unsafe`: volatile access lives in
-  `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
-  instructions in `portable/riscv`, Espressif interrupt bindings in
-  `chips/family/platform/interrupt-table`, typed symbol export attributes in
-  `portable/memory`, the waker cell in `portable/waker`, the PAC's one root
-  claim, probe images,
-  the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
-  ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
-  Only `oer-portable-riscv` contains `asm!` for architectural operations. Entry/trap
-  ABI assembly uses `global_asm!` or `naked_asm!` only in staged entry/trap
-  code, bootstrap and probes; host compiler fixtures are test inputs.
+  its `SOURCE:`. Write-trigger (WT/WTC) and `read-observed` words follow
+  [tools/registers/model/README.md](tools/registers/model/README.md).
 - **Hardware dictionaries and geometry.** Field codes and opcodes are named
   values in the register model, including analog-I2C and hardware-consumed
   memory layouts; HAL selects the generated names. Field widths, maxima,
@@ -214,28 +141,28 @@ system these rules serve.
   Sequence settings remain HAL constants with `SOURCE:`. An observed image
   without an established code meaning stays cited configuration, not a model
   dictionary entry.
-- **Air formats** use the `oer-portable-wire` field macro and its bounded cursor; each
-  field names its clause of the standard. No hand-written masks or shifts.
+- **Air formats** use the `oer-portable-wire` field macro and its bounded
+  cursor; each field names its clause of the standard. No hand-written masks
+  or shifts.
 - **Tests.** Every behavioral change gets a focused regression test beside its
   module (`#[cfg(test)]`) or in the crate's `tests/`. Tests check behavior and
   ownership, never generated register addresses, masks, shifts or layout
-  constants; time comes from `oer-portable-time-virtual`. A test is hermetic and safe
-  in parallel: its own memory and its own temporary directory (`tempfile`);
-  no external program, process-wide state, fixed path, network port or real
-  time. The one exception is the pinned toolchain (`cargo`, `rustc`, `lld`)
-  run into the test's own build directory for compile-fail and
-  compiler-driven cases, and the vendor UDP receiver's link host test
-  (`hil/scenarios/wifi-load/tests/peer_link.rs`): it runs a host C11
-  compiler (`$OER_HOST_CC`, else `cc`) and the program it builds in its own
-  temporary directory, logs the compiler's path and `--version` line, and
-  fails when no compiler runs.
-- **Generated files.** `chips/*/pac/src/generated.rs`,
-  and `chips/*/vendor/facts/**/*.toml` (including TOML files directly in
-  `facts/`) are never read whole or edited by hand: grep them by path, regenerate them. `cargo registers generate
-  --chip <chip>` renders the PAC and
-  `chips/*/platform/layout/linker/dma-window.x`; the linker fragment may be read,
-  never edited. Its inputs are `chips/<chip>/registers/chip.toml`, `types/`,
-  `layouts/`, `evidence/` and the schema-6 `policy.toml`.
+  constants; time comes from `oer-portable-time-virtual`. A test is hermetic
+  and safe in parallel: its own memory and its own temporary directory
+  (`tempfile`); no external program, process-wide state, fixed path, network
+  port or real time. The exceptions are the pinned toolchain (`cargo`,
+  `rustc`, `lld`) run into the test's own build directory for compile-fail
+  and compiler-driven cases, and the vendor UDP receiver's link host test,
+  which builds with a host C11 compiler as
+  [hil/scenarios/wifi-load/README.md](hil/scenarios/wifi-load/README.md)
+  describes.
+- **Generated files.** `chips/*/pac/src/generated.rs` and
+  `chips/*/vendor/facts/**/*.toml` (including TOML files directly in
+  `facts/`) are never read whole or edited by hand: grep them by path,
+  regenerate them. `cargo registers generate --chip <chip>` renders the PAC
+  and `chips/*/platform/layout/linker/dma-window.x`; the linker fragment may
+  be read, never edited. Its inputs are `chips/<chip>/registers/chip.toml`,
+  `types/`, `layouts/`, `evidence/` and the schema-6 `policy.toml`.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
@@ -269,6 +196,20 @@ system these rules serve.
   several scenarios share one image. A HIL image is built on the product API
   (`oer`) and takes its runs' control at runtime from the host. Stand
   equipment, its drivers and its ESP-IDF peer firmware belong to `tools/lab`.
+
+## Subsystem contracts
+
+A change to one of these follows its page; this file does not repeat them.
+A page never relaxes a rule above: where they differ, the rule above holds.
+
+| Subject | Contract |
+|---|---|
+| Unsafe homes and their exceptions (PHY-fault `LinkSlot`, trace clock slot, `ContextCell`), lint catalogues, panic budgets and `panic_const_async_fn_resumed` | [docs/unsafe.md](docs/unsafe.md) |
+| Harts, executors, interrupt enable, signal raisers, pilot handlers and lines | [Execution](docs/architecture.md#execution), [interrupt-table](chips/family/platform/interrupt-table/README.md), [executor](chips/family/platform/executor/README.md) |
+| Fatal policy, terminal-site classes and reset owners | [Fatal decisions and reset](docs/architecture.md#fatal-decisions-and-reset), [terminal-site registry](tools/test/layers/README.md#terminal-site-registry) |
+| IEEE 802.15.4 pre-bind discard, runtime acknowledgements, secured ACK | [docs/unsafe.md](docs/unsafe.md), [engine](chips/family/radio/ieee802154/engine/README.md) |
+| BLE terminal output release, owned PHY transactions and their quarantine | [docs/unsafe.md](docs/unsafe.md), [HAL](chips/esp32s31/hal/README.md), [PHY](chips/family/radio/phy/README.md) |
+| WT/WTC triggers, `read-observed` and `zero-register-writes` words | [register model](tools/registers/model/README.md) |
 
 ## Work
 
@@ -306,16 +247,17 @@ system these rules serve.
   that can be rebuilt.
 - **Checks on the host:** `cargo test -p <pkg>`, `cargo clippy -p <pkg>
   --all-targets` and `cargo fmt --check` for what you changed, plus `cargo
-  test -p oer-tools-test-layers`. Images, image checks and sizes are built by CI.
-  Changed chip packages may also run `cargo check` and `cargo clippy` with
-  `--target riscv32imafc-unknown-none-elf -p <pkg>` as type-checks only,
-  without images or linking. A targeted image build measures one concrete
-  change in one image, with its reason and expected result recorded in the
-  PR before the build. First inspect captured ELF/type evidence. Image builds
-  never replace CI or survey other images/features. If three consecutive
-  builds do not improve the target metric, stop and report the reason and
-  question. Other images' results come from the PR's CI. Judge a check only by its own exit code,
+  test -p oer-tools-test-layers`. Images, image checks and sizes are built by
+  CI. Changed chip packages may also run `cargo check` and `cargo clippy`
+  with `--target riscv32imafc-unknown-none-elf -p <pkg>` as type-checks
+  only, without images or linking. Judge a check only by its own exit code,
   never through a pipe (redirect to a file and print `exit=$?`).
+- **Image builds.** A targeted image build measures one concrete change in
+  one image, with its reason and expected result recorded in the PR before
+  the build. First inspect captured ELF/type evidence. Image builds never
+  replace CI or survey other images/features; other images' results come
+  from the PR's CI. If three consecutive builds do not improve the target
+  metric, stop and report the reason and question.
 - **Sizes.** CI reports memory growth (code, `.rodata`, SRAM and PSRAM
   sections, a type, future or frame, an allocated task or interrupt stack);
   growth is not a stop. Stack guards are reported, never a gate; the proven
@@ -328,20 +270,19 @@ system these rules serve.
   ports apply. A claim about what the hardware puts on air is used only after
   a stand run confirms it.
 - **Branches and worktrees.** A branch per task; one worktree per session,
-  reused (`git switch -c <branch> origin/main`). A new worktree copies a warm
-  `target/` (`cp -a --reflink=auto`); never share `CARGO_TARGET_DIR`. Scratch
-  stays under the clone's `target/`, never in `/tmp`. Remove a merged
-  worktree with `git worktree remove` (never `--force`). Preserve unrelated
-  changes in a dirty tree.
+  reused (`git switch -c <branch> origin/main`). Never share
+  `CARGO_TARGET_DIR`. Scratch stays under the clone's `target/`, never in
+  `/tmp`. Remove a merged worktree with `git worktree remove` (never
+  `--force`). Preserve unrelated changes in a dirty tree.
 - **Long commands** (builds, CI watches, stand runs) run in the background;
   never block the conversation.
 - **Pull requests.** Conventional Commit subjects (`fix(esp32s31): …`). Open
   the PR as a draft at the start, mark it ready when done (`gh pr ready`).
   The owner merges; an agent never merges. CI builds everything; nobody waits
   for it: a PR is ready when its host checks pass. A red CI is fixed by
-  whoever broke it. Rebase only
-  on a conflict or when main changed the same files. Cite commit hashes as
-  `git` prints them. Pass lists of paths as arrays, not one string.
+  whoever broke it. Rebase only on a conflict or when main changed the same
+  files. Cite commit hashes as `git` prints them. Pass lists of paths as
+  arrays, not one string.
 - **GitHub.** Act only in the owner's repositories; upstream projects are
   read-only.
 - **Documents state the current state,** in English. No plans, history or

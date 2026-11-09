@@ -32,6 +32,7 @@ oer-protocols-bridges-ieee80211-ethernet = { path = "../../bridges/ieee80211-eth
 oer-protocols-ieee80211-core-security-rsn = { path = "../core/security/rsn" }
 
 [dev-dependencies]
+oer-protocols-ieee80211-wire = { path = "../wire" }
 oer-protocols-ieee80211-contracts-security = { path = "../contracts/security" }
 oer-portable-crypto = { path = "../../../portable/crypto", features = ["test-support"] }
 # The compile-fail example of a shareable command channel.
@@ -40,7 +41,6 @@ oer-protocols-ieee80211-testing-model = { path = "../testing/model", features = 
 oer-protocols-ieee80211-core-security-cipher = { path = "../core/security/cipher" }
 oer-protocols-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
 oer-protocols-ieee80211-core-roles-sta = { path = "../core/roles/sta", features = ["test-support"] }
-oer-protocols-ieee80211-wire = { path = "../wire" }
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
 oer-protocols-radio-port = { path = "../../radio/port", features = ["test-support"] }

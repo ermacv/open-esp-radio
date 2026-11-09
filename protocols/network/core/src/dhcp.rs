@@ -10,7 +10,14 @@
 //! counts from its REQUEST's first acceptance by the port, RFC 2131, 4.4.1 and
 //! 4.4.5; a renewal goes to the server identifier, RFC 2131, 4.1; an ACK
 //! without a lease time or subnet mask is refused, not given a default; a link
-//! that comes back with a lease runs INIT-REBOOT, RFC 2131, 3.2 and 4.4.2.
+//! that comes back with a lease runs INIT-REBOOT, RFC 2131, 3.2 and 4.4.2,
+//! its REQUEST at once and repeated on the DISCOVER's schedule until an ACK,
+//! a NAK or the lease's end. The address stays in use meanwhile (RFC 2131,
+//! 3.7), but only an ACK ends REBOOTING; the repeats never extend the lease,
+//! whose times count from the REQUEST that won it.
+//!
+//! No address conflict detection: an offered address is bound without an ARP
+//! probe (RFC 2131, 2.2 and 4.4.1; RFC 5227), and no DECLINE is ever sent.
 
 use oer_portable_time::{Duration, Instant};
 use oer_portable_wire::{Error, Writer};
@@ -31,9 +38,15 @@ const DISCOVER_MOST: Duration = Duration::from_secs(10);
 const REQUEST_FIRST: Duration = Duration::from_secs(5);
 /// REQUESTs to an OFFER before discovery starts again.
 const REQUEST_TRIES: u8 = 5;
-/// REQUESTs of an INIT-REBOOT before the client keeps its lease, RFC 2131,
-/// 3.2 (3). They start at [`DISCOVER_FIRST`]: the link just came up.
-const REBOOT_TRIES: u8 = 5;
+/// An INIT-REBOOT's REQUEST repeats on the DISCOVER's schedule, from
+/// [`DISCOVER_FIRST`] doubling to [`DISCOVER_MOST`], each wait jittered down
+/// by up to a quarter, until an ACK, a NAK or the lease's end: a rejoin meets
+/// the same race as a first join, its first message reaching the access
+/// point before the pairwise key and AUTHORIZED (oer-notes
+/// design/network-slice.md, findings at 9d0b0f7d4). RFC 2131, 3.7 lets a
+/// client use an unexpired lease while no server answers; asking for the
+/// whole remaining time is this client's policy. A repeat never extends the
+/// lease.
 /// RFC 2131, 4.4.5: the shortest wait between renewal or rebinding REQUESTs.
 const RENEW_LEAST: Duration = Duration::from_secs(60);
 /// RFC 2132, 9.8: the subnet mask, router and domain name servers.
@@ -288,7 +301,6 @@ enum Phase {
     Rebooting {
         next: Option<Instant>,
         wait: Duration,
-        tries: u8,
     },
 }
 
@@ -395,7 +407,6 @@ impl Client {
             self.phase = Phase::Rebooting {
                 next: None,
                 wait: DISCOVER_FIRST,
-                tries: 0,
             };
             self.owe(serial);
         } else {
@@ -451,16 +462,11 @@ impl Client {
                 }
                 true
             }
-            Phase::Rebooting { next, tries, .. } if due(next) => {
-                if tries >= REBOOT_TRIES {
-                    // RFC 2131, 3.2 (3): no answer, so the client MAY use the
-                    // lease for the rest of its time.
-                    self.owed = None;
-                    self.phase = Phase::Bound;
-                } else {
-                    self.owe(serial);
-                    self.set_next(None);
-                }
+            // Repeated until an answer, or the lease's end, which the tick
+            // takes before this.
+            Phase::Rebooting { next, .. } if due(next) => {
+                self.owe(serial);
+                self.set_next(None);
                 true
             }
             Phase::Bound | Phase::Renewing { .. } => {
@@ -585,23 +591,51 @@ impl Client {
         })
     }
 
-    /// The port took the message of `serial`, or refused it for good: its
-    /// retransmission time starts now.
+    /// The port took the message of `serial`: its retransmission time starts
+    /// now, the attempt counts toward its phase's backoff and tries, and a
+    /// REQUEST's lease counts from the first one the port took.
     pub(crate) fn sent(&mut self, now: Instant, serial: u64) {
-        if self.owed != Some(serial) {
+        if !self.end_attempt(now, serial) {
             return;
         }
-        self.owed = None;
-        let random = &mut self.random;
-        let lease = self.lease;
         match &mut self.phase {
-            Phase::Selecting { next, wait } => {
-                *next = Some(now.saturating_add(random.jitter(*wait)));
+            Phase::Selecting { wait, .. } | Phase::Rebooting { wait, .. } => {
                 *wait = Duration::from_micros(
                     wait.as_micros()
                         .saturating_mul(2)
                         .min(DISCOVER_MOST.as_micros()),
                 );
+            }
+            Phase::Requesting { tries, .. } => *tries = tries.saturating_add(1),
+            Phase::Bound | Phase::Renewing { .. } | Phase::Rebinding { .. } => {}
+        }
+        if !matches!(self.phase, Phase::Selecting { .. } | Phase::Bound) {
+            // The lease of an ACK counts from the first REQUEST taken.
+            self.sent.get_or_insert(now);
+        }
+    }
+
+    /// The message of `serial` was refused for good, by the port or for a
+    /// neighbor that never answered: nothing went, so neither a try nor the
+    /// lease's start counts, and the backoff stays where it is. The next
+    /// attempt still waits for its phase's time, so a refusal neither spins
+    /// nor loses the client's wake.
+    pub(crate) fn refused(&mut self, now: Instant, serial: u64) {
+        let _ended = self.end_attempt(now, serial);
+    }
+
+    /// End the attempt of `serial`, while it is owed: the next one comes at
+    /// the phase's present wait. Whether it was owed.
+    fn end_attempt(&mut self, now: Instant, serial: u64) -> bool {
+        if self.owed != Some(serial) {
+            return false;
+        }
+        self.owed = None;
+        let random = &mut self.random;
+        let lease = self.lease;
+        match &mut self.phase {
+            Phase::Selecting { next, wait } | Phase::Rebooting { next, wait } => {
+                *next = Some(now.saturating_add(random.jitter(*wait)));
             }
             Phase::Requesting { next, tries, .. } => {
                 let doubled = REQUEST_FIRST
@@ -609,14 +643,6 @@ impl Client {
                     .checked_shl(u32::from(*tries / 2))
                     .unwrap_or(u64::MAX);
                 *next = Some(now.saturating_add(random.jitter(Duration::from_micros(doubled))));
-                *tries = tries.saturating_add(1);
-                self.sent.get_or_insert(now);
-            }
-            Phase::Rebooting { next, wait, tries } => {
-                *next = Some(now.saturating_add(random.jitter(*wait)));
-                *wait = Duration::from_micros(wait.as_micros().saturating_mul(2));
-                *tries = tries.saturating_add(1);
-                self.sent.get_or_insert(now);
             }
             // RFC 2131, 4.4.5: half the time left to T2, or to the end, no
             // less than 60 s; a renewal never waits past T2.
@@ -626,17 +652,16 @@ impl Client {
                 });
                 let wait = half(left).max(RENEW_LEAST).min(left);
                 *next = Some(now.saturating_add(wait));
-                self.sent.get_or_insert(now);
             }
             Phase::Rebinding { next } => {
                 let left = lease.map_or(Duration::from_micros(0), |lease| {
                     lease.expires.saturating_duration_since(now)
                 });
                 *next = Some(now.saturating_add(half(left).max(RENEW_LEAST)));
-                self.sent.get_or_insert(now);
             }
             Phase::Bound => {}
         }
+        true
     }
 
     /// A server's message from IPv4 `source`, RFC 2131, 4.4.

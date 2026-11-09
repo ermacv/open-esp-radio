@@ -272,8 +272,31 @@ pub enum RetuneFailed<F> {
 pub enum StopOutcome {
     /// The radio is stopped and every owner of the run is back.
     Confirmed,
+    /// The radio is stopped and its data settled, but by the deadline the
+    /// network had not returned all it holds of the station: its transmit
+    /// memory, its stop or its lent receive units. The return goes on: the
+    /// actor completes it whenever the network takes its turn, and a
+    /// retirement waits for it. Nothing of the radio is unconfirmed.
+    Returning(ReturnObserved),
+    /// The radio is stopped and every owner of the run is back, the
+    /// network's included: its memory went to the return queue and its lent
+    /// units came back. But the network's stop participant was lost, so
+    /// its stop was never confirmed: a software error for the composition
+    /// to record, not a fault of the radio.
+    NetworkLost(ReturnObserved),
     /// The stop proved nothing by its deadline: what was still out.
     Unconfirmed(StopObserved),
+}
+
+/// What the network still owed a stopped radio at the stop's deadline.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReturnObserved {
+    /// The network's transmit memory the station still holds.
+    pub memory_held: u16,
+    /// The network was asked to stop and has not reported it.
+    pub network_running: bool,
+    /// Receive units the network still holds.
+    pub lent: u16,
 }
 
 /// What a stop does to the network side.
@@ -283,7 +306,8 @@ pub enum NetworkEnd {
     /// for the next installation.
     Stays,
     /// The radio retires: the stop asks the network to stop, and confirms
-    /// only once it stopped and returned every lent buffer.
+    /// once it stopped. Buffers it still holds lent stay lent, counted
+    /// against the lend credit, which outlives the installation.
     Stops,
 }
 
@@ -304,6 +328,10 @@ pub struct StopObserved {
     pub network_lost: bool,
     /// Receive units the network still holds.
     pub lent: u16,
+    /// The network's transmit memory the station still holds: ended
+    /// frames' memory the return queue had no room for, and MSDUs left in
+    /// the transmit queue.
+    pub memory_held: u16,
 }
 
 /// A broken contract that ends the actor: the port's named fault, or one
@@ -416,8 +444,8 @@ pub struct NetworkEnds<
 > {
     /// The MSDUs the network stack sends, in the network's memory.
     pub transmit: SlotReceiver<'c, Option<Outgoing<M>>, TX_DEPTH, N::Station, N::Network>,
-    /// The network's memory, back once its MSDU ended.
-    pub returned: SlotSender<'c, Option<M>, TX_DEPTH, N::Network, N::Station>,
+    /// The network's memory, back once its MSDU ended, with its cost.
+    pub returned: SlotSender<'c, Option<TxEnded<M>>, TX_DEPTH, N::Network, N::Station>,
     /// The MSDUs received for the network stack.
     pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH, N::Network, N::Station>,
     /// The copies `receive`'s marks stand for.

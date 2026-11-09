@@ -702,6 +702,38 @@ fn refusals_before_the_start_return_every_owner_unchanged() {
 }
 
 #[test]
+fn the_latest_he_setting_is_the_station_interface_s() {
+    use oer_protocols_ieee80211_contracts_port::{He20Association, StationHe};
+    with_harness(|harness| {
+        harness.start();
+        assert_eq!(harness.air.he(), StationHe::Off);
+        let peer = oer_protocols_ieee80211_wire::he::He20PeerState {
+            capability_prefix: [0; 24],
+            packet_padding_eight_us: 2,
+            default_packet_extension_duration: 0,
+            bss_color: 3,
+            bss_color_enabled: true,
+            partial_bss_color: false,
+            basic_mcs_nss_map: 0xfffc,
+            rts_threshold: None,
+            max_co_hosted_bssid_indicator: None,
+            extended_range_single_user_disabled: false,
+        };
+        let he = StationHe::He20(He20Association::new(&peer, 1, 0).unwrap());
+        assert!(matches!(
+            harness.command(PortCommand::SetHe(he)),
+            CommandProgress::Done
+        ));
+        assert_eq!(harness.air.he(), he);
+        assert!(matches!(
+            harness.command(PortCommand::SetHe(StationHe::Off)),
+            CommandProgress::Done
+        ));
+        assert_eq!(harness.air.he(), StationHe::Off);
+    });
+}
+
+#[test]
 fn no_data_port_call_wakes_its_caller() {
     with_harness(|harness| {
         harness.start();
@@ -1655,3 +1687,4 @@ fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication(
 }
 
 mod access_point;
+mod station_stale;

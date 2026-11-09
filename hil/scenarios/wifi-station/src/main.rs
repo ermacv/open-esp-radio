@@ -161,6 +161,7 @@ fn join(cx: &mut Cx<'_>) -> Result<(), Failure> {
         passphrase: heapless::String::try_from(passphrase.as_str())
             .map_err(|_| Failure::Incomplete("the generated passphrase is too long".into()))?,
         channel,
+        he20: false,
     };
     let _ = JOIN_STARTED.set(Instant::now());
     let answer = cx.call(request, JOIN_TIMEOUT)?;
@@ -315,7 +316,12 @@ fn leave(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let answer = cx.call(Leave, LEAVE_TIMEOUT)?;
     check(
         answer == Left::Down,
-        format!("the leave answered {answer:?}"),
+        match answer {
+            Left::DownNetworkLost => {
+                "the leave stopped the radio, but the network's stop participant was lost".into()
+            }
+            answer => format!("the leave answered {answer:?}"),
+        },
     )?;
     let after = status(cx)?;
     check(after.link.is_none(), format!("after leaving: {after:?}"))?;

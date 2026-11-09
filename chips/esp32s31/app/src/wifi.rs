@@ -272,6 +272,11 @@ pub(crate) async fn serve_station(start: StationStart) {
         .unwrap_or_else(|error| failure(error));
     match observed!(Station, runner.run(profile)).await {
         wifi::StationExit::Stopped => {}
+        // The radio stopped and every owner came back; the network's stop
+        // participant was lost. The exit, which the station's control
+        // keeps, records it ([`Station::stop`] answers it); nothing of the
+        // radio failed, so nothing resets.
+        wifi::StationExit::StoppedNetworkLost => {}
         wifi::StationExit::Unavailable(error) => failure(error),
         wifi::StationExit::Failed(failed) => super::fail_path(
             oer_portable_diagnostics::name!("wifi-failed"; 32),
@@ -474,6 +479,16 @@ impl Profile {
     pub fn wpa2(ssid: &[u8], passphrase: &[u8]) -> Result<Self, ProfileError> {
         wifi::StationSettings::wpa2_passphrase(ssid, passphrase).map(Self)
     }
+
+    /// Experimental, off unless asked: the connect asks an access point
+    /// that admits HE20 for HE20 (one spatial stream, HE-MCS 0 to 9, no
+    /// optional HE capability, no answer to Trigger frames); another access
+    /// point gets the HT request. [`Connected::phy`] names the mode the
+    /// station associated in; an access point that answers the HE request
+    /// without HE ends the connect with `ConnectError::Failed(HeNotGranted)`.
+    pub fn with_he20(self) -> Self {
+        Self(self.0.with_he20())
+    }
 }
 
 /// The network a connect joined.
@@ -543,6 +558,10 @@ pub enum StopError {
     /// The station ended by a failure, which the library records before it
     /// resets the chip.
     Failed,
+    /// The station stopped and every owner came back, but the network's
+    /// stop participant was lost: its stop was never confirmed. The radio's
+    /// stop was; nothing resets.
+    NetworkLost,
 }
 
 /// The station's network device: the boot hands it to the group
@@ -743,9 +762,10 @@ impl Station {
     }
 
     /// Leave the network and stop the station for good: the IP service
-    /// stops and returns every receive buffer it holds within the
-    /// configuration's drain ([`Config::with_drain`]), then the radio
-    /// retires. The future ends once the station stopped; a later connect
+    /// stops and returns every receive buffer it holds, then the radio
+    /// retires. The configuration's drain ([`Config::with_drain`]) bounds
+    /// the radio's stop; a network that returns late past it is no failure,
+    /// and the future ends once that return came. The future ends once the station stopped; a later connect
     /// answers [`ConnectError::Stopped`], and the IP service's waits end
     /// with its stop. A second stop ends with the first one's result.
     ///
@@ -759,6 +779,7 @@ impl Station {
         self.control.stop(deadline);
         match self.control.wait_stopped().await {
             Ok(wifi::StationExit::Stopped) => Ok(()),
+            Ok(wifi::StationExit::StoppedNetworkLost) => Err(StopError::NetworkLost),
             Ok(_) | Err(wifi::RunnerLost) => Err(StopError::Failed),
         }
     }

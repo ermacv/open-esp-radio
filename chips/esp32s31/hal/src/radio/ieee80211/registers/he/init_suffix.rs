@@ -11,6 +11,18 @@ use crate::radio::ieee80211::registers::{
 /// The entries of the hardware TX MPDU-length link table.
 const MPDU_LENGTH_LINK_COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::he_scratch::COUNT;
 
+/// The MAC's minimum transmit power, in dBm, which the HE init programs and
+/// an HE station's Power Capability element advertises.
+///
+/// SOURCE: complete pinned `libpp.a[hal_mac_tx.o]::hal_set_tx_min_pwr`,
+/// called with -11 by `libpp.a[hal_mac_ctl.o]::hal_he_init`; complete
+/// `libnet80211.a[ieee80211_he.o]::ieee80211_add_power_cap` writes the
+/// result of `hal_get_tx_min_pwr` as the element's minimum.
+pub const MAC_MINIMUM_TX_POWER_DBM: i8 = -11;
+/// The signed six-bit field's low four bits and high two bits.
+const MINIMUM_POWER_LOW: u32 = (MAC_MINIMUM_TX_POWER_DBM as u8 & 0x0f) as u32;
+const MINIMUM_POWER_HIGH: u32 = ((MAC_MINIMUM_TX_POWER_DBM as u8 >> 4) & 0x03) as u32;
+
 /// One hardware TX MPDU-length link-table entry.
 ///
 /// SOURCE: complete `libpp[hal_debug.o]::dbg_read_tx_mplen`.
@@ -142,8 +154,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         // Complete hal_set_tx_min_pwr(-11), then the parent field update.
         channel.modify_channel_tx_offset_control(|w| {
-            w.set_minimum_power_low(Bits::constant::<5>())
-                .set_minimum_power_high(Bits::constant::<3>());
+            w.set_minimum_power_low(Bits::constant::<MINIMUM_POWER_LOW>())
+                .set_minimum_power_high(Bits::constant::<MINIMUM_POWER_HIGH>());
         });
         init.modify_he_default_control(|w| {
             w.set_mpdu_length_offset(Bits::constant::<0x17c>());

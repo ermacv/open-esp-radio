@@ -67,6 +67,9 @@ pub struct Join {
     pub ssid: heapless::String<MAX_SSID>,
     pub passphrase: heapless::String<MAX_PASSPHRASE>,
     pub channel: u8,
+    /// Experimental: ask an access point that admits HE20 for it; another
+    /// gets the HT request. [`Joined::Linked`] names the mode.
+    pub he20: bool,
 }
 
 /// The answer to [`Join`].
@@ -128,6 +131,10 @@ pub struct Leave;
 pub enum Left {
     /// The link is down and the station stopped.
     Down,
+    /// The link is down and the radio's stop was confirmed, but the
+    /// network's stop participant was lost: the network never confirmed its
+    /// stop. A handled software error; nothing was reset.
+    DownNetworkLost,
     Refused(StationError),
 }
 

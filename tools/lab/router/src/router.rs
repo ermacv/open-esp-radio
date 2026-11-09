@@ -58,6 +58,9 @@ pub enum ChannelWidth {
     /// the secondary below on primaries 5 to 13 and above on 1 to 9; the
     /// profile takes it below wherever it may.
     Ht40,
+    /// `HE20`: HE 20 MHz, 802.11ax on (`ieee80211ax=1`). A station profile
+    /// of its own: every other width runs with HE off.
+    He20,
 }
 
 impl ChannelWidth {
@@ -67,6 +70,15 @@ impl ChannelWidth {
             Self::Ht20 => "HT20",
             Self::Ht40 if channel >= 5 => "HT40-",
             Self::Ht40 => "HT40+",
+            Self::He20 => "HE20",
+        }
+    }
+
+    /// The radio's `ieee80211ax` of a station profile this wide.
+    pub const fn ieee80211ax(self) -> &'static str {
+        match self {
+            Self::Ht20 | Self::Ht40 => "0",
+            Self::He20 => "1",
         }
     }
 
@@ -75,7 +87,7 @@ impl ChannelWidth {
     const fn centre_mhz(self, channel: u8) -> u32 {
         let primary = 2407 + 5 * channel as u32;
         match self {
-            Self::Ht20 => primary,
+            Self::Ht20 | Self::He20 => primary,
             Self::Ht40 if channel >= 5 => primary - 10,
             Self::Ht40 => primary + 10,
         }
@@ -244,8 +256,9 @@ impl Profile {
         })
     }
 
-    /// WPA2 station's WPA2-Personal/CCMP profile, with PMF and HE disabled,
-    /// 20 MHz wide unless [`Self::width`] widens it.
+    /// WPA2 station's WPA2-Personal/CCMP profile, with PMF disabled, HT
+    /// 20 MHz wide with HE disabled unless [`Self::width`] widens it or
+    /// asks for HE20.
     /// Callers generate the SSID and passphrase with [`crate::credentials`]
     /// for each run. The passphrase is write-only and zeroized on drop.
     pub fn station_wpa2(
@@ -341,7 +354,7 @@ impl Profile {
             }
         }
         if self.station_network() {
-            steps.push(set(&self.radio, "ieee80211ax", "0")?);
+            steps.push(set(&self.radio, "ieee80211ax", self.width.ieee80211ax())?);
             steps.push(set(
                 &self.ap_section,
                 "network",
@@ -848,13 +861,17 @@ impl Wireless {
                 || ap.option("ieee80211w") != Some("0")
                 || ap.option("wpa_group_rekey")
                     != Some(profile.group_rekey_seconds.to_string().as_str())
-                || radio.option("ieee80211ax") != Some("0"))
+                || radio.option("ieee80211ax") != Some(profile.width.ieee80211ax()))
         {
-            return Err(
-                "the committed WPA2 station profile is not WPA2/CCMP with FT, PMF and HE disabled \
-                 and the run's GTK rekey interval"
-                    .to_owned(),
-            );
+            return Err(format!(
+                "the committed WPA2 station profile is not WPA2/CCMP with FT and PMF disabled, \
+                 HE {} and the run's GTK rekey interval",
+                if profile.width == ChannelWidth::He20 {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            ));
         }
         self.refuse_others(profile)
     }
@@ -941,7 +958,7 @@ impl IwInfo {
     /// Why it is not yet the profile on `channel`, `width` wide.
     fn mismatch(&self, channel: u8, width: ChannelWidth) -> Option<String> {
         let wanted = match width {
-            ChannelWidth::Ht20 => Width::Ht20,
+            ChannelWidth::Ht20 | ChannelWidth::He20 => Width::Ht20,
             ChannelWidth::Ht40 => Width::Ht40 {
                 centre_mhz: width.centre_mhz(channel),
             },

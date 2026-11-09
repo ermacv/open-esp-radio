@@ -18,6 +18,7 @@ use std::sync::{
 
 mod keys_receive;
 mod lifecycle;
+mod stale;
 mod transmit;
 
 type Port<'id, Id> = Esp32s31Port<'id, Id, TestDevice, 512, Draws>;
@@ -107,7 +108,7 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
         >,
     >,
     group_permission:
-        Option<radio::Slot<'id, GroupPermission<Station>, radio::Child<radio::Root<Id>, 5>>>,
+        Option<IssuedSlot<'id, GroupPermission<Station>, radio::Child<radio::Root<Id>, 5>>>,
     gate: Option<GateOpen<'id, radio::Child<radio::Root<Id>, 1>>>,
     /// The terminals' access, which opens a single MPDU's terminal.
     access: Option<TerminalAccess<'id, Tickets, radio::Child<radio::Root<Id>, 2>>>,

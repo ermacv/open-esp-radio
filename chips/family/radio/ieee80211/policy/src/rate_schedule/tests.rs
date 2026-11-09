@@ -96,3 +96,17 @@ fn arithmetic_rate_maps_refuse_underflow_and_out_of_arena_positions() {
         assert_eq!(rate_to_schedule_index(map, u8::MAX), None);
     }
 }
+
+#[test]
+fn no_record_grants_more_publications_than_the_largest_budget() {
+    let mut largest_seen = false;
+    for kind in RATE_SCHEDULE_KINDS {
+        for index in 0..record_count(kind) {
+            let schedule = rate_schedule(kind, u8::try_from(index).unwrap()).unwrap();
+            let limit = schedule_publication_limit(schedule);
+            assert!(limit <= MAX_SCHEDULE_PUBLICATION_LIMIT);
+            largest_seen |= limit == MAX_SCHEDULE_PUBLICATION_LIMIT;
+        }
+    }
+    assert!(largest_seen, "the bound is a record's own budget");
+}

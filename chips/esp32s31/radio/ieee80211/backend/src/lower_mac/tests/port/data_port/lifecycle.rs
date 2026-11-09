@@ -346,7 +346,7 @@ fn encrypted(tag: u8) -> Box<WriteFrame> {
 /// Retire the stopped fixture's port and install its next installation:
 /// the fixture's transmit buffers and terminals go home first. A refusal
 /// names its reason and the port's fault.
-fn reinstall<'id, Id: radio::SlotIdentity + 'id>(
+pub(super) fn reinstall<'id, Id: radio::SlotIdentity + 'id>(
     fixture: Fixture<'id, Id>,
     installations: &mut Installations<Id, InstallationPools>,
 ) -> Result<Fixture<'id, Id>, (ReinstallRefused, Option<Fault>)> {
@@ -1028,6 +1028,73 @@ fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
     });
 }
 
+/// The port's MAC after `settings`, each a `SetHe` command it ran.
+fn he_after(
+    settings: &[oer_protocols_ieee80211_contracts_port::StationHe],
+) -> Option<oer_chips_esp32s31_hal::types::MacHe20Association> {
+    let mut held = None;
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        for &he in settings {
+            let now = fixture.now();
+            assert!(matches!(
+                fixture
+                    .port
+                    .command(PortCommand::SetHe(he), now, &mut fixture.outbox),
+                Ok(CommandProgress::Done)
+            ));
+            fixture.turn();
+        }
+        fixture.stop();
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        drop(buffers);
+        let device = port
+            .release()
+            .expect("the stopped port releases its device");
+        held = Some(device.hardware.he_association);
+    });
+    held.expect("the installation ran")
+}
+
+#[test]
+fn the_port_installs_an_he_connection_and_association_and_ends_them() {
+    use oer_protocols_ieee80211_contracts_port::{He20Association, HeBssColor, StationHe};
+    let peer = oer_protocols_ieee80211_wire::he::He20PeerState {
+        capability_prefix: [0; 24],
+        packet_padding_eight_us: 1,
+        default_packet_extension_duration: 2,
+        bss_color: 9,
+        bss_color_enabled: true,
+        partial_bss_color: true,
+        basic_mcs_nss_map: 0xfffc,
+        rts_threshold: Some(100),
+        max_co_hosted_bssid_indicator: Some(2),
+        extended_range_single_user_disabled: false,
+    };
+    let bss = StationHe::Bss(
+        HeBssColor::of(&oer_protocols_ieee80211_wire::he::He20Operation {
+            bss_color: 9,
+            bss_color_enabled: true,
+            partial_bss_color: true,
+            basic_mcs_nss_map: 0xfffc,
+        })
+        .expect("a color"),
+    );
+    let association = StationHe::He20(He20Association::new(&peer, 7, 0).expect("in range"));
+    let installed = he_after(&[bss, association]).expect("installed");
+    assert_eq!(installed.association_id.get(), 7);
+    assert_eq!(installed.peer.packet_padding_duration.get(), 8);
+    assert_eq!(installed.peer.max_co_hosted_bssid_indicator, Some(2));
+    // HE, then its end, then HE again: each command's state, in order.
+    assert_eq!(he_after(&[bss, association, StationHe::Off]), None);
+    assert_eq!(
+        he_after(&[bss, association, StationHe::Off, bss, association]),
+        Some(installed)
+    );
+}
+
 #[test]
 fn a_completion_without_effect_keeps_the_arena_watchdog_whose_expiry_cancels_the_arena() {
     with_fixture(|fixture| {
@@ -1420,4 +1487,133 @@ fn a_held_retune_starts_once_the_radio_answers_within_its_bound_and_is_refused_p
         assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
         fixture.stop();
     });
+}
+
+/// Install the station's pairwise key in its one slot and take it from its
+/// terminal.
+fn installed_pairwise<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &mut Fixture<'id, Id>,
+) -> PairwiseKey<'id, Id, Station> {
+    let (association, _, slot) = fixture.association();
+    let (install, _) = fixture.commands.install_pairwise(
+        &association,
+        slot,
+        IndividualAddress::new(BSSID).expect("peer"),
+        group_key(7),
+    );
+    assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+    match fixture.outbox.terminals.pop() {
+        Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) => key,
+        _ => panic!("the installation terminal returns the key"),
+    }
+}
+
+#[test]
+fn a_key_left_installed_is_erased_by_the_reinstall_and_its_slot_takes_the_next_key() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        // The lifecycle stops without removing its key.
+        let _left = installed_pairwise(&mut fixture);
+        fixture.stop();
+        let mut fixture = reinstall(fixture, installations).expect("reinstalled");
+        fixture.start();
+        // The next installation's key takes the same slot, and frames go
+        // out under it.
+        let key = installed_pairwise(&mut fixture);
+        let attempt = fixture.protected_mpdu(&key).expect("a frame");
+        let published = fixture.observed.borrow().publications;
+        fixture.submit_now(attempt);
+        let _ = fixture.turn();
+        assert_eq!(
+            fixture.observed.borrow().publications,
+            published + 1,
+            "the frame under the new key is published"
+        );
+    });
+}
+
+/// A single MPDU's plan that falls back from 24 to 6 Mb/s: its arena's end
+/// costs each publication at the rate it went at, PPDU, SIFS and the Ack
+/// the model declares, summed; never the last rate times the count.
+#[test]
+fn a_single_arena_s_cost_sums_each_publication_at_its_own_rate() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().statuses = std::vec![ACK_TIMEOUT, SUCCESS];
+        let [first, _second] = fixture.arenas();
+        fixture.fill(&first, &[10], plain);
+        let now = fixture.now();
+        let mut arenas = fixture.port.arena();
+        let fast = arenas
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm24M))
+            .expect("24 Mb/s");
+        let slow = arenas
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .expect("6 Mb/s");
+        let plan = plan(fast, 1).then(RetryStage {
+            rate: slow,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: Protection::None,
+        });
+        let plan = plan.unwrap_or_else(|_| panic!("two stages"));
+        arenas
+            .publish(publication(first, ArenaFormat::Single(plan)), now)
+            .unwrap_or_else(|_| panic!("published"));
+        let done = fixture.arena_end();
+        assert!(matches!(done.end(), AttemptEnd::Acked { .. }));
+        // By hand, IEEE Std 802.11-2020 17.4.3: the 30-octet MPDU and its
+        // FCS, 16 SERVICE and 6 tail bits, 4 us symbols of 96 or 24 bits,
+        // 20 us preamble, 6 us signal extension; each publication's SIFS of
+        // 10 us and Ack of 14 octets at 6 Mb/s.
+        let psdu = 30 + 4;
+        let ppdu =
+            |bits_per_symbol: u32| 20 + 4 * (16 + 8 * psdu + 6_u32).div_ceil(bits_per_symbol) + 6;
+        let ack = 10 + 20 + 4 * (16 + 8 * 14 + 6_u32).div_ceil(24) + 6;
+        assert_eq!(
+            done.cost(),
+            oer_protocols_ieee80211_contracts_port::TxEstimate::Estimated {
+                micros: ppdu(96) + ack + ppdu(24) + ack
+            }
+        );
+        let _first = fixture.port.arena().release(done, drop).expect("released");
+    });
+}
+
+impl<Id: radio::SlotIdentity> Fixture<'_, Id> {
+    /// The arena's end, letting a hardware timeout's abort settle.
+    fn arena_end_through_abort(&mut self) -> Completed<'_, Id> {
+        for _ in 0..16 {
+            if let Some(done) = self.turn() {
+                return done;
+            }
+            self.advance(crate::ordinary_tx::TX_ABORT_SETTLE);
+        }
+        panic!("the arena ends");
+    }
+}
+
+/// An aborted publication may have reached the air, so its attempt's cost
+/// is unknown, never zero: first alone, and after a publication of known
+/// cost, which the unknown one makes unknown too.
+#[test]
+fn an_aborted_publication_makes_its_attempt_s_cost_unknown() {
+    let histories: [&[(u8, u8)]; 2] = [&[TIMEOUT_EDGE], &[ACK_TIMEOUT, TIMEOUT_EDGE]];
+    for statuses in histories {
+        with_fixture(|fixture| {
+            fixture.start();
+            fixture.observed.borrow_mut().statuses = statuses.to_vec();
+            let [first, _second] = fixture.arenas();
+            fixture.fill(&first, &[10], plain);
+            let transmissions = u8::try_from(statuses.len()).expect("a short plan");
+            fixture.publish_single(first, transmissions);
+            let done = fixture.arena_end_through_abort();
+            assert!(matches!(done.end(), AttemptEnd::Aborted), "{statuses:?}");
+            assert_eq!(
+                done.cost(),
+                oer_protocols_ieee80211_contracts_port::TxEstimate::Unknown,
+                "{statuses:?}"
+            );
+            let _first = fixture.port.arena().release(done, drop).expect("released");
+        });
+    }
 }

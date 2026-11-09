@@ -59,16 +59,59 @@ struct Port {
     sent: Vec<Vec<u8>>,
     /// The link's epoch while it is up.
     up: Option<u64>,
+    /// Frames to take, each held as said.
+    received: std::collections::VecDeque<(Vec<u8>, oer_protocols_network_port::Holding)>,
+    /// Keeps no buffer it is asked to.
+    keeps_nothing: bool,
+}
+
+/// A frame the tests' port lent, in its own octets.
+#[derive(Debug)]
+struct Held(Vec<u8>);
+
+impl oer_protocols_network_port::EthernetFrame for Held {
+    fn view(
+        &mut self,
+    ) -> Result<
+        oer_protocols_network_port::EthernetFrameView<'_>,
+        oer_protocols_network_port::FrameLengthError,
+    > {
+        let (header, payload) = EthernetHeader::parse(&self.0)
+            .map_err(|_| oer_protocols_network_port::FrameLengthError::OutsideStorage)?;
+        Ok(oer_protocols_network_port::EthernetFrameView {
+            destination: header.destination,
+            source: header.source,
+            ether_type: header.ether_type.value(),
+            payload,
+        })
+    }
 }
 
 impl oer_protocols_network_port::FrameSource for Port {
     type Notice = ();
+    type Held = Held;
 
     fn take_frame(
         &mut self,
-        _: impl FnOnce(oer_protocols_network_port::EthernetFrameView<'_>),
-    ) -> bool {
-        false
+        read: impl FnOnce(
+            oer_protocols_network_port::EthernetFrameView<'_>,
+            oer_protocols_network_port::Holding,
+        ) -> oer_protocols_network_port::Keep,
+    ) -> oer_protocols_network_port::Taken<Held> {
+        use oer_protocols_network_port::{EthernetFrame, Holding, Keep, Taken};
+        let Some((bytes, holding)) = self.received.pop_front() else {
+            return Taken::Empty;
+        };
+        let mut held = Held(bytes);
+        let Ok(view) = held.view() else {
+            return Taken::Read;
+        };
+        let keep = read(view, holding);
+        if keep == Keep::Keep && holding == Holding::Lendable && !self.keeps_nothing {
+            Taken::Kept(held)
+        } else {
+            Taken::Read
+        }
     }
 
     fn take_notice(&mut self) -> Option<()> {
@@ -1770,4 +1813,5 @@ fn a_new_datagram_after_a_rejected_request_asks_anew() {
 
 mod dhcp;
 mod echo;
+mod lending;
 mod produced;

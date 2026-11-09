@@ -472,3 +472,31 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
         oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::TxSlotAccess::Free(_)
     ));
 }
+
+#[test]
+fn he_smpdu_publication_records_its_su_ppdu_duration() {
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::HeSmpduTxConfig;
+
+    // Work recorded by one HE S-MPDU publication of a 96-byte MPDU at `rate`.
+    let he_smpdu_work = |rate: HeRate| {
+        let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
+        let mut hardware = MockMmio::default();
+        let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+        let config = HeSmpduTxConfig::new(rate, 0, 96).unwrap();
+        slot.as_mut()
+            .submit_he_smpdu(&mut hardware, cookie, LegacyTxQueue::BestEffort, config)
+            .unwrap();
+        slot.work()
+    };
+    let gi = HeGuardIntervalAndLtf::TwoLtf1600Ns;
+    let work = he_smpdu_work(HeRate::new(HeMcs::Mcs0, gi));
+    // APEP 96 + 8 = 104 bytes, BCC MCS0: 854 bits = 7 x 117 + 35, so 8
+    // symbols with a = 2: 44 + 8 x 14.4 + 8 + 6 = 173.2 us.
+    assert_eq!(work.psdu_bytes, 104);
+    assert_eq!(work.ppdu_micros, 174);
+    assert_eq!(work.unestimated_ppdus, 0);
+
+    let work = he_smpdu_work(HeRate::bcc_dcm(HeBccDcmMcs::Mcs0, gi));
+    assert_eq!(work.ppdu_micros, 0);
+    assert_eq!(work.unestimated_ppdus, 1);
+}

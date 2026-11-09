@@ -65,6 +65,24 @@ fn a_station_profile_without_a_width_is_twenty_megahertz() {
 }
 
 #[test]
+fn the_he20_station_profile_is_its_own_width() {
+    let text = r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":6,"width":"he20"}"#;
+    let operation: RouterOperation = serde_json::from_str(text).unwrap();
+    assert!(matches!(
+        operation,
+        RouterOperation::ApplyStationProfile {
+            width: RouterChannelWidth::He20,
+            ..
+        }
+    ));
+    assert!(
+        serde_json::to_string(&operation)
+            .unwrap()
+            .contains(r#""width":"he20""#)
+    );
+}
+
+#[test]
 fn a_station_link_names_its_station() {
     let operation = RouterOperation::StationLink {
         mac: "02:00:00:00:00:01".to_owned(),

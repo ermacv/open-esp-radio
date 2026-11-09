@@ -581,9 +581,12 @@ pub enum StationRxKind {
     RefusedTooLong,
     RefusedQueueFull,
     RefusedNoNetwork,
-    /// MSDUs copied instead of lent, by reason.
+    /// MSDUs copied instead of lent, by reason: by form, an A-MSDU's or
+    /// one that shared its frame with the station's EAPOL; by pressure, one
+    /// whose buffer the backend kept.
     CopiedAggregated,
     CopiedKept,
+    CopiedShared,
     /// An MPDU the receive agreements admitted, in an A-MPDU, alone, or
     /// without evidence of either.
     MpduInAmpdu,
@@ -608,7 +611,7 @@ pub enum StationRxKind {
 }
 
 impl StationRxKind {
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 31] = [
         Self::DroppedHeader,
         Self::DroppedFrameKind,
         Self::DroppedAddress,
@@ -625,6 +628,7 @@ impl StationRxKind {
         Self::RefusedNoNetwork,
         Self::CopiedAggregated,
         Self::CopiedKept,
+        Self::CopiedShared,
         Self::MpduInAmpdu,
         Self::MpduSingle,
         Self::MpduUnknown,
@@ -934,6 +938,7 @@ fn service_rx(
         ServiceEvent::RxMsdusCopied(copied) => {
             emit(StationRxKind::CopiedAggregated, copied.aggregated.into());
             emit(StationRxKind::CopiedKept, copied.kept.into());
+            emit(StationRxKind::CopiedShared, copied.shared.into());
         }
         ServiceEvent::GroupKeyInstalled { .. } => {}
     }
@@ -1259,6 +1264,7 @@ mod tests {
             ServiceEvent::RxMsdusCopied(RxMsdusCopied {
                 aggregated: 2,
                 kept: 1,
+                shared: 4,
             }),
             &mut emit,
         );
@@ -1318,6 +1324,7 @@ mod tests {
                 (RefusedNoNetwork, 0),
                 (CopiedAggregated, 2),
                 (CopiedKept, 1),
+                (CopiedShared, 4),
                 (MpduInAmpdu, 1),
                 (ReleasedByTimeout, 5),
                 (MissingByTimeout, 2),

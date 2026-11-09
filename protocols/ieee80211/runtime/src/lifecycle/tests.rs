@@ -410,7 +410,7 @@ struct World<'b> {
     control: RefCell<Option<Control<'b, ModelCaps24, COMMANDS>>>,
     security: StaSecurity,
     stack: RefCell<SlotSender<'b, Option<Outgoing<Memory>>, TX_DEPTH>>,
-    returned: RefCell<SlotReceiver<'b, Option<Memory>, TX_DEPTH>>,
+    returned: RefCell<SlotReceiver<'b, Option<crate::station::TxEnded<Memory>>, TX_DEPTH>>,
     delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>>,
     copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
     /// The lifecycle task's waker.
@@ -427,6 +427,8 @@ struct World<'b> {
     lent: Cell<usize>,
     /// How much memory the actor gave back to the network.
     memory_back: Cell<usize>,
+    /// Whether the connects' profiles ask for HE20.
+    he20: Cell<bool>,
 }
 
 /// Let the other tasks run once.
@@ -466,6 +468,7 @@ impl<'b> World<'b> {
         oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
             ssid: heapless::Vec::from_slice(SSID).unwrap(),
             security: duplicate(&self.security),
+            prefer_he20: self.he20.get(),
         }
     }
 
@@ -500,11 +503,20 @@ impl<'b> World<'b> {
         *self.control.borrow_mut() = Some(control);
     }
 
+    /// Stop, the network taking back its memory meanwhile: a stop that
+    /// stops the network waits for its memory to be home.
     async fn stop(&self) {
         let mut control = self.control.borrow_mut().take().unwrap();
         // A lifecycle that already ended refuses it.
         let _refused = control.command(ControlCommand::Stop).await;
         *self.control.borrow_mut() = Some(control);
+        for _ in 0..2000 {
+            self.take_back_memory();
+            if self.status().stopped {
+                return;
+            }
+            yield_now().await;
+        }
     }
 
     fn status(&self) -> Status {
@@ -1002,7 +1014,8 @@ fn pair_with<const G: usize>(
             WakingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
         let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue = WakingSlotQueue::<Option<Outgoing<Memory>>, TX_DEPTH>::new();
-        let mut returned_queue = WakingSlotQueue::<Option<Memory>, TX_DEPTH>::new();
+        let mut returned_queue =
+            WakingSlotQueue::<Option<crate::station::TxEnded<Memory>>, TX_DEPTH>::new();
         let mut receive_queue = WakingSpscQueue::<Received<ModelLentRx>, RX_DEPTH>::new();
         let mut copies_queue = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
         let mut command_queue =
@@ -1065,6 +1078,7 @@ fn pair_with<const G: usize>(
             network_absent,
             lent: Cell::new(0),
             memory_back: Cell::new(0),
+            he20: Cell::new(false),
         };
         let record = {
             let heard = heard.clone();
@@ -1765,6 +1779,171 @@ fn a_station_frame_the_port_refuses_comes_back_withdrawn_and_the_station_goes_on
                 "{:?}",
                 completed.end
             );
+        },
+    );
+}
+
+/// An HE Capabilities element with HE-MCS 0..9 both ways on one stream.
+const HE_CAPABILITY: [u8; 24] = [
+    255, 22, 35, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x80, 0x00, 0xfd, 0xff, 0xfd, 0xff,
+];
+/// An HE Operation element: BSS color 27, default PE 4.
+const HE_OPERATION: [u8; 9] = [255, 7, 36, 0x04, 0x00, 0x00, 0x1b, 0xfc, 0xff];
+
+/// The HT Capabilities of an HT20 station or access point on channel 6.
+const fn ht_capability() -> [u8; 28] {
+    match oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
+        6,
+        oer_protocols_ieee80211_contracts_port::ChannelWidth::Mhz20,
+    ) {
+        Ok(channel) => oer_protocols_ieee80211_wire::ht::ht_capability_ie(
+            oer_protocols_ieee80211_wire::ht::HtLocalCapabilities::new(0, 0, 0xff, 1),
+            channel,
+        ),
+        Err(_) => panic!("channel 6"),
+    }
+}
+
+static HE_CAPABILITIES: oer_protocols_ieee80211_wire::station::AssociationCapabilities =
+    oer_protocols_ieee80211_wire::station::AssociationCapabilities {
+        ht20: ht_capability(),
+        ht40: ht_capability(),
+        he20_ht: ht_capability(),
+        he20: HE_CAPABILITY,
+        he20_extended: None,
+        wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
+    };
+
+/// An open station that prefers HE20 with an access point that admits it.
+fn he_open() -> TestConfig {
+    use oer_protocols_ieee80211_wire::station::{HeUlMuPowerCapability, StaPowerCapability};
+    let mut config = open();
+    config.0.association = &HE_CAPABILITIES;
+    config.0.phy = oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::PreferHe20 {
+        ht40: false,
+        power: oer_protocols_ieee80211_core_roles_sta::association::StaHePower {
+            power_capability: StaPowerCapability::new(-11, 20).unwrap(),
+            ul_mu_power: HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap(),
+        },
+    };
+    config
+}
+
+/// `frame` with `elements` appended.
+fn with_elements(frame: &[u8], elements: &[&[u8]]) -> Vec<u8> {
+    let mut frame = frame.to_vec();
+    for element in elements {
+        frame.extend_from_slice(element);
+    }
+    frame
+}
+
+/// The open network's beacon with HT, and with HE when `he`.
+fn ht_beacon(he: bool) -> Vec<u8> {
+    let operation = oer_protocols_ieee80211_wire::ht::ht_operation_ie(
+        oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
+            6,
+            oer_protocols_ieee80211_contracts_port::ChannelWidth::Mhz20,
+        )
+        .unwrap(),
+        Default::default(),
+    );
+    let ht = with_elements(&beacon(false), &[&ht_capability(), &operation]);
+    if he {
+        with_elements(&ht, &[&HE_CAPABILITY, &HE_OPERATION])
+    } else {
+        ht
+    }
+}
+
+/// The open network's Association Response with HT, and with HE when `he`.
+fn ht_association_response(he: bool) -> Vec<u8> {
+    let ht = with_elements(&association_response(false), &[&ht_capability()]);
+    if he {
+        with_elements(&ht, &[&HE_CAPABILITY, &HE_OPERATION])
+    } else {
+        ht
+    }
+}
+
+#[test]
+fn a_refused_he_association_restarts_the_station_and_its_next_ht_join_ends_the_bss() {
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    pair(
+        he_open,
+        std::vec![
+            script(|world| {
+                Box::pin(async move {
+                    // The BSS goes before authentication; the port refuses
+                    // the association after the response.
+                    world.he20.set(true);
+                    world.air.refuse_he_associations(1);
+                    let mut seen = 0;
+                    world.station_command(StaCommand::Connect).await;
+                    world.sent(&mut seen, PROBE_REQUEST).await;
+                    world.air.receive(&ht_beacon(true), meta());
+                    let authentication = world.sent(&mut seen, AUTHENTICATION).await;
+                    assert!(
+                        matches!(world.air.he(), StationHe::Bss(_)),
+                        "the BSS before authentication: {:?}",
+                        world.air.he()
+                    );
+                    let response = authentication_response(&authentication.plaintext).unwrap();
+                    world.air.receive(&response, meta());
+                    world.sent(&mut seen, ASSOCIATION_REQUEST).await;
+                    world.air.receive(&ht_association_response(true), meta());
+                    world.settle().await;
+                })
+            }),
+            script(|world| {
+                Box::pin(async move {
+                    // The next installation joins an access point without
+                    // HE: its join ends the BSS the refused one left.
+                    let mut seen = world.air.sent().len();
+                    assert!(matches!(world.air.he(), StationHe::Bss(_)));
+                    world.station_command(StaCommand::Connect).await;
+                    world.sent(&mut seen, PROBE_REQUEST).await;
+                    world.air.receive(&ht_beacon(false), meta());
+                    let authentication = world.sent(&mut seen, AUTHENTICATION).await;
+                    assert_eq!(world.air.he(), StationHe::Off);
+                    let response = authentication_response(&authentication.plaintext).unwrap();
+                    world.air.receive(&response, meta());
+                    world.sent(&mut seen, ASSOCIATION_REQUEST).await;
+                    world.air.receive(&ht_association_response(false), meta());
+                    world
+                        .notice(StaNotice::Connected {
+                            bssid: BSSID,
+                            channel: 6,
+                            phy: crate::station::contract::LinkPhy::Ht20,
+                        })
+                        .await;
+                    assert_eq!(world.air.he(), StationHe::Off);
+                    assert!(world.send_msdu([0x02, 0, 0, 0, 0, 0x07]));
+                    world.sent(&mut seen, DATA).await;
+                    world.stop().await;
+                })
+            }),
+        ],
+        |ends, air| {
+            assert_eq!(ends.len(), 2);
+            let first = ends[0].lifecycle.as_ref().unwrap();
+            assert!(
+                matches!(
+                    first.end,
+                    LifecycleEnd::Restart(StationFailure::CommandRefused {
+                        kind: oer_protocols_ieee80211_contracts_port::CommandKind::SetHe,
+                        reason: oer_protocols_ieee80211_contracts_port::CommandRefusal::Busy,
+                    })
+                ),
+                "{:?}",
+                first.end
+            );
+            assert!(!first.end.is_terminal(), "a refused setting is no reset");
+            assert_eq!(ends[0].actor, Some(ActorEnd::Reinstall));
+            assert!(stopped(&ends[1..]));
+            assert_eq!(air.he(), StationHe::Off);
+            assert_eq!(air.pending_rx(), 0);
         },
     );
 }

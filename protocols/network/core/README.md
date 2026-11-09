@@ -55,9 +55,12 @@ address is refused `SendRefusal::NoAddress` until the version moves.
 The client's messages are the core's own control work: no socket, block or
 command place. A message is owed while the link is up (`link`, which the
 owner reads from its port each turn), and built in the port's slot when it is
-chosen. It is sent when the port takes it, or refuses it for good; its
-retransmission time starts then, and a lease counts from its transaction's
-first accepted REQUEST. A first DISCOVER is repeated after 250 ms, doubling to
+chosen. It is sent when the port takes it: its retransmission time starts
+then, it counts toward its phase's backoff and tries, and a lease counts
+from its transaction's first REQUEST the port took. A message the port
+refuses for good, or one whose server's neighbor never answers, was not
+sent: it counts neither as a try nor as a lease's start, and its next
+attempt waits for the phase's present time. A first DISCOVER is repeated after 250 ms, doubling to
 10 s in one transaction, as a lost first one cost 10 s on the stand
 (Xarxa fbebde5); each wait is jittered down by up to a quarter. A REQUEST to
 an OFFER is repeated after 5 s, doubling every two, five in all, then
@@ -70,9 +73,19 @@ first, else half and seven eighths. An ACK whose lease, counted from its
 REQUEST, is already over is dropped (`LeaseFault::Expired`), and no send
 or frame uses an address past its lease's end, before any tick too. A NAK starts
 discovery over. A link that comes back at a new epoch runs INIT-REBOOT with a
-lease, keeping the address meanwhile, and five unanswered REQUESTs keep the
-lease for its time (RFC 2131, 3.2); without one, discovery starts over at
-once. While a client runs, data and echo replies protect at most all
+lease: its broadcast REQUEST names the held address with no server
+identifier at once, and repeats on the DISCOVER's schedule, as a rejoin's
+first message meets the same race with the access point's key as a first
+join's, until an ACK, a NAK or the lease's end. The address stays in use
+meanwhile (RFC 2131, 3.7), for configuration and data, but the client stays
+REBOOTING (`DhcpState::Rebooting`) until an ACK confirms the lease; the
+repeats never extend it. A NAK takes the address away and starts discovery
+over; at the lease's end the address goes. Without a lease, a new link
+starts discovery over at once.
+
+The client has no address conflict detection: an offered address is bound
+on its ACK without an ARP probe (RFC 2131, 2.2 and 4.4.1; RFC 5227), and no
+DECLINE is sent. While a client runs, data and echo replies protect at most all
 neighbor entries but one, so a renewal always finds one: a send that would
 protect an entry data does not protect yet costs a place, cached or not. Messages the client does not
 take are counted (`NetEvent::Dhcp`) and change nothing.

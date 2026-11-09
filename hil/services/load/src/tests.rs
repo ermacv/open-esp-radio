@@ -777,6 +777,8 @@ fn full_network() -> NetworkTurns {
         local_waits_changes: all,
         producer_wakes: all,
         producer_unknown: all,
+        drops: [all; DROP_KINDS],
+        loans_at_turn_end: [all; LOAN_BINS],
     }
 }
 
@@ -791,6 +793,8 @@ fn a_network_window_is_each_count_s_difference_and_the_end_s_availability() {
         reserve_by_size: [u32::MAX, 0, 1, 2, 3],
         local_offered: 5,
         producer_wakes: u32::MAX,
+        drops: core::array::from_fn(|kind| if kind == 11 { u32::MAX } else { 1 }),
+        loans_at_turn_end: [3, 0, 0, 0, 1, 0],
         ..NetworkTurns::default()
     };
     let end = NetworkTurns {
@@ -804,6 +808,8 @@ fn a_network_window_is_each_count_s_difference_and_the_end_s_availability() {
         local_offered: 9,
         local_waits_changes: 3,
         producer_wakes: 1,
+        drops: core::array::from_fn(|kind| if kind == 11 { 6 } else { 1 }),
+        loans_at_turn_end: [5, 0, 0, 0, 9, 0],
         ..NetworkTurns::default()
     };
     let window = NetworkTurns::window(&start, &end);
@@ -821,6 +827,12 @@ fn a_network_window_is_each_count_s_difference_and_the_end_s_availability() {
         ),
         (4, 3, 2)
     );
+    assert_eq!(
+        window.drops,
+        core::array::from_fn(|kind| u32::from(kind == 11) * 7),
+        "each reason's own difference, wrapping"
+    );
+    assert_eq!(window.loans_at_turn_end, [2, 0, 0, 0, 8, 0]);
     assert!(window.available);
     assert!(!NetworkTurns::window(&start, &NetworkTurns::default()).available);
 }

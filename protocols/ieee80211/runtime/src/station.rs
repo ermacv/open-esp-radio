@@ -33,6 +33,8 @@
 //!
 //! [`EthernetFrame`]: oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame
 
+mod air;
+pub use air::{Completions, FrameCost, StationAir, StationKey};
 mod commands;
 pub mod contract;
 mod events;
@@ -139,6 +141,16 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
     fn emit(&mut self, output: ServiceOutput<K>) {
         self(output);
     }
+}
+
+/// One MSDU's end, as the station gives it back: the network's memory and
+/// what its transmissions cost by the backend's model, the part of each
+/// attempt that carried it ([`TxEstimate`]): none for an MSDU that never
+/// reached the air.
+#[derive(Debug)]
+pub struct TxEnded<M> {
+    pub memory: M,
+    pub cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
 }
 
 /// One MSDU the network stack hands the station: the network's memory its

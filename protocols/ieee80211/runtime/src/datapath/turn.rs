@@ -308,7 +308,11 @@ where
                 ready = true;
             }
         }
-        if !self.data.freed.is_empty()
+        let owes_queued = matches!(
+            self.network_stopping,
+            NetworkStopping::Owed | NetworkStopping::Lost
+        ) && !network.transmit.is_empty();
+        if (!self.data.freed.is_empty() || owes_queued)
             && core::pin::pin!(network.returned.ready())
                 .poll(cx)
                 .is_ready()
@@ -386,6 +390,7 @@ where
         D::span(ActorSpan::Intake, true);
         taken?;
         self.return_freed(network);
+        self.return_network_memory(network);
         // Before the radio's deadline judges it: a stop that asked this turn
         // reads the answer the network already has.
         let _moved: bool = self.poll_network_stop(cx, network);
@@ -808,6 +813,14 @@ where
                 deadline,
                 network: end,
             } => self.stop(deadline, end, lifecycle, network)?,
+            ToActor::Retire if matches!(self.radio, Radio::Returning) => {
+                if self.pairwise.is_some() {
+                    return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
+                }
+                // The radio stopped; the actor ends once the network's
+                // return came.
+                self.retiring = true;
+            }
             ToActor::Retire | ToActor::Reinstall => {
                 if !matches!(self.radio, Radio::Halted | Radio::Stopped) {
                     // Only a stopped radio retires: the lifecycle stops it
@@ -957,9 +970,11 @@ where
             .clear(&mut PortBlockAcks(&mut self.port), &mut self.events);
         self.reply_out = None;
         self.return_freed(network);
+        // The network stops once its memory is home: the stopped radio's
+        // ended frames and its MSDUs still queued go back first
+        // ([`Self::return_network_memory`]).
         if end == NetworkEnd::Stops && self.network_stopping == NetworkStopping::NotAsked {
-            network.network.request_stop();
-            self.network_stopping = NetworkStopping::Asked;
+            self.network_stopping = NetworkStopping::Owed;
         }
         self.radio = match self.radio {
             Radio::Stopped | Radio::Halted => {
@@ -975,8 +990,8 @@ where
         Ok(())
     }
 
-    /// Follow the network side's stop, its report, then its lent units;
-    /// whether it moved, which the stop's turn then serves.
+    /// Follow the network side's stop and its report; whether it moved,
+    /// which the stop's turn then serves.
     fn poll_network_stop<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -988,28 +1003,71 @@ where
         network: &NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> bool {
         let before = self.network_stopping;
-        if self.network_stopping == NetworkStopping::Asked {
-            self.network_stopping = match network.network.poll_stopped(cx) {
-                Poll::Ready(Ok(())) => NetworkStopping::Stopped,
-                Poll::Ready(Err(_)) => NetworkStopping::Lost,
-                Poll::Pending => NetworkStopping::Asked,
-            };
-        }
-        if self.network_stopping == NetworkStopping::Stopped
-            && self.port.poll_lent_returned(cx).is_ready()
-        {
-            self.network_stopping = NetworkStopping::Returned;
+        match self.network_stopping {
+            NetworkStopping::Asked => {
+                self.network_stopping = match network.network.poll_stopped(cx) {
+                    Poll::Ready(Ok(())) => NetworkStopping::Stopped,
+                    Poll::Ready(Err(_)) => NetworkStopping::Lost,
+                    Poll::Pending => NetworkStopping::Asked,
+                };
+            }
+            // A participant lost before the stop asked it: its memory still
+            // goes home through the return queue, and no stop is asked.
+            NetworkStopping::Owed => {
+                if let Poll::Ready(Err(_)) = network.network.poll_stopped(cx) {
+                    self.network_stopping = NetworkStopping::Lost;
+                }
+            }
+            _ => {}
         }
         self.network_stopping != before
     }
 
     /// Whether the network side owes the stop nothing: no stop asked it to
-    /// stop, or it stopped and holds no unit.
+    /// stop, or it stopped. A unit it still holds does not hold the stop:
+    /// the lend count outlives the installation, and the unit rejoins
+    /// whichever ring runs when the network drops it. A stop it is owed
+    /// settles nothing yet.
     fn network_settled(&self) -> bool {
-        matches!(
-            self.network_stopping,
-            NetworkStopping::NotAsked | NetworkStopping::Returned
-        )
+        match self.network_stopping {
+            NetworkStopping::NotAsked | NetworkStopping::Stopped => true,
+            NetworkStopping::Lost => self.network_home(),
+            NetworkStopping::Owed | NetworkStopping::Asked => false,
+        }
+    }
+
+    /// Whether the station holds nothing of a lost network's any more:
+    /// every ended frame's memory went to the return queue and no MSDU waits
+    /// in the transmit queue. Units the network holds lent do not hold it, as
+    /// for a reported stop: the outcome says how many are out. Every caller
+    /// asks once the data settled (no arena on the air), so no later
+    /// settlement adds memory to the return.
+    fn network_home(&self) -> bool {
+        self.data_settled() && self.data.freed.is_empty() && self.queued == 0
+    }
+
+    /// Whether no arena owes its end: none on the air and none holding a
+    /// frame whose terminal has not come, so no later settlement adds the
+    /// network's memory to the return.
+    pub(super) fn data_settled(&self) -> bool {
+        self.data
+            .plane
+            .as_ref()
+            .is_none_or(|plane| !plane.on_air() && !plane.holds_frames())
+    }
+
+    /// The answer of a stop whose network settled: confirmed, or the
+    /// radio's confirmed stop with the network's participant lost.
+    fn network_outcome(&self, observed: &StopObserved) -> StopOutcome {
+        if self.network_stopping == NetworkStopping::Lost {
+            StopOutcome::NetworkLost(ReturnObserved {
+                memory_held: observed.memory_held,
+                network_running: false,
+                lent: observed.lent,
+            })
+        } else {
+            StopOutcome::Confirmed
+        }
     }
 
     /// What a stop still holds.
@@ -1017,10 +1075,18 @@ where
         StopObserved {
             port,
             deadline,
-            arena_on_air: self.data.plane.as_ref().is_some_and(DataPlane::on_air),
+            // An arena whose end is owed: on the air, or holding frames the
+            // port returned its right to before their terminal came.
+            arena_on_air: self
+                .data
+                .plane
+                .as_ref()
+                .is_some_and(|plane| plane.on_air() || plane.holds_frames()),
             frames_out: self.frames_out,
             network_running: self.network_stopping == NetworkStopping::Asked,
-            network_lost: self.network_stopping == NetworkStopping::Lost,
+            network_lost: self.network_lost(),
+            memory_held: u16::try_from(self.data.freed.len().saturating_add(self.queued))
+                .unwrap_or(u16::MAX),
             lent: u16::try_from(self.port.lent()).unwrap_or(u16::MAX),
         }
     }
@@ -1086,12 +1152,18 @@ where
                     // frames back.
                     Poll::Ready(Ok(())) => {
                         let observed = self.observed(None, late);
-                        if !observed.arena_on_air
-                            && observed.frames_out == 0
-                            && self.network_settled()
-                        {
-                            Some(StopOutcome::Confirmed)
-                        } else if late || observed.network_lost {
+                        let data_home = !observed.arena_on_air && observed.frames_out == 0;
+                        if data_home && self.network_settled() {
+                            Some(self.network_outcome(&observed))
+                        } else if data_home {
+                            // The radio and its data are done: what is left
+                            // is the network's, whose memory goes home
+                            // before it stops. A lost participant changes
+                            // nothing of the radio's stop.
+                            self.radio = Radio::Draining { deadline };
+                            self.again = true;
+                            None
+                        } else if late {
                             Some(StopOutcome::Unconfirmed(observed))
                         } else {
                             None
@@ -1110,16 +1182,29 @@ where
             Radio::Draining { deadline } => {
                 let late = now >= deadline;
                 let observed = self.observed(None, late);
-                let outcome = if self.network_settled() {
-                    Some(StopOutcome::Confirmed)
-                } else if late || observed.network_lost {
-                    Some(StopOutcome::Unconfirmed(observed))
-                } else {
-                    None
-                };
-                if let Some(outcome) = outcome {
+                if self.network_settled() {
                     self.radio = Radio::Halted;
-                    self.owed.stopped = Some(outcome);
+                    self.owed.stopped = Some(self.network_outcome(&observed));
+                } else if late {
+                    // The radio stopped: only the network's return is late.
+                    // The wait ends here; the return does not.
+                    self.radio = Radio::Returning;
+                    self.owed.stopped = Some(StopOutcome::Returning(ReturnObserved {
+                        memory_held: observed.memory_held,
+                        network_running: observed.network_running,
+                        lent: observed.lent,
+                    }));
+                }
+            }
+            Radio::Returning => {
+                // A lost participant settles once the station's own share
+                // came home ([`Self::network_home`]); the composition reads
+                // the loss ([`Actor::network_lost`]).
+                if self.network_settled() {
+                    self.radio = Radio::Halted;
+                    if self.retiring {
+                        self.end = Some(ActorEnd::Retired);
+                    }
                 }
             }
             Radio::Stopped | Radio::Running | Radio::Halted => {}

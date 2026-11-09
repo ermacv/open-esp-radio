@@ -4,7 +4,7 @@
 
 #[cfg(target_arch = "riscv32")]
 oer_protocols_hil_agent::image_keys! {
-    /// The SDK station image: the base module, the SDK station service, the
+    /// The station image: the base module, the SDK station service, the
     /// Wi-Fi station service, the fault service and the load service.
     pub(crate) KEYS = [
         oer_hil_services_sdk_station::Request,
@@ -47,6 +47,7 @@ mod tests {
             ssid: connect.ssid.clone(),
             passphrase: connect.passphrase.clone(),
             channel: u8::MAX,
+            he20: true,
         };
         let start = oer_hil_services_load::Start {
             run: u32::MAX,
