@@ -11,13 +11,15 @@ use core::marker::PhantomData;
 /// `Clone` nor `Copy`), so its place is vacant while the slot is out, and
 /// the places cover every `u8` index, so no slot lies outside them. A slot
 /// carries no value beyond its index: its place keeps that index alone,
-/// and a [`take`](Self::take) gives the same slot back. A bank only ever
-/// gives out slots that were put in, so it adds no capacity.
+/// and a [`take`](Self::take) gives the same slot back. Every slot put in
+/// stays obtainable until it is taken, whether the bank was made with it
+/// or not: a bank keeps each slot it consumes, and gives out only those.
 ///
 /// [`Mint`]: super::Mint
 pub struct SlotBank<'id, Kind, Path: PoolPath = Root<crate::LocalId<'id>>> {
-    /// The indices put in at construction: the pool's slots this bank keeps.
-    issued: [u64; 4],
+    /// The indices of every slot put in since the bank was made: the
+    /// slots it keeps, at home or out.
+    kept: [u64; 4],
     /// The indices whose slot is at home.
     home: [u64; 4],
     brand: Brand<'id>,
@@ -59,7 +61,7 @@ impl<'id, Kind, Path: PoolPath> SlotBank<'id, Kind, Path> {
     /// A bank of no slots, which gives none out.
     pub const fn empty() -> Self {
         Self {
-            issued: [0; 4],
+            kept: [0; 4],
             home: [0; 4],
             brand: PhantomData,
             kind: PhantomData,
@@ -71,24 +73,22 @@ impl<'id, Kind, Path: PoolPath> SlotBank<'id, Kind, Path> {
     pub fn new<const N: usize>(slots: [Slot<'id, Kind, Path>; N]) -> Self {
         let mut bank = Self::empty();
         for slot in slots {
-            let (word, bit) = place(slot.index);
-            *word_mut(&mut bank.issued, word) |= bit;
             bank.put(slot);
         }
         bank
     }
 
-    /// Return `slot` to its own place.
+    /// Return `slot` to its own place; the bank keeps it from here on.
     pub fn put(&mut self, slot: Slot<'id, Kind, Path>) {
         let (word, bit) = place(slot.index);
+        *word_mut(&mut self.kept, word) |= bit;
         *word_mut(&mut self.home, word) |= bit;
     }
 
     /// The slot of `index`, when it is at home.
     pub fn take(&mut self, index: u8) -> Option<Slot<'id, Kind, Path>> {
         let (word, bit) = place(index);
-        let kept = word_of(&self.issued, word) & word_of(&self.home, word) & bit != 0;
-        if !kept {
+        if word_of(&self.home, word) & bit == 0 {
             return None;
         }
         *word_mut(&mut self.home, word) &= !bit;
@@ -108,24 +108,20 @@ impl<'id, Kind, Path: PoolPath> SlotBank<'id, Kind, Path> {
     /// Whether the slot of `index` is at home.
     pub const fn is_home(&self, index: u8) -> bool {
         let (word, bit) = place(index);
-        word_of(&self.issued, word) & word_of(&self.home, word) & bit != 0
+        word_of(&self.home, word) & bit != 0
     }
 
     /// How many of the bank's slots are at home.
     pub fn at_home(&self) -> u32 {
-        self.issued
+        self.home
             .iter()
-            .zip(&self.home)
-            .map(|(issued, home)| (issued & home).count_ones())
+            .map(|home| home.count_ones())
             .fold(0, u32::saturating_add)
     }
 
-    /// Whether every slot the bank was made with is at home.
+    /// Whether every slot the bank keeps is at home.
     pub fn all_home(&self) -> bool {
-        self.issued
-            .iter()
-            .zip(&self.home)
-            .all(|(issued, home)| home & issued == *issued)
+        self.kept == self.home
     }
 }
 
@@ -166,21 +162,36 @@ mod tests {
     }
 
     #[test]
-    fn a_bank_gives_out_only_the_slots_it_was_made_with() {
+    fn a_slot_the_bank_was_not_made_with_stays_obtainable() {
         let [kept, other] = minted::<2>();
         let mut bank = SlotBank::new([kept]);
         assert!(bank.take(1).is_none(), "index 1 was never put in");
         assert!(bank.take(200).is_none());
         let kept = bank.take(0).expect("at home");
         assert!(bank.take_first().is_none());
-        bank.put(kept);
         bank.put(other);
-        assert_eq!(
-            bank.at_home(),
-            1,
-            "a slot it was not made with adds no capacity"
-        );
+        assert!(!bank.all_home(), "the slot it was made with is still out");
+        bank.put(kept);
+        assert_eq!(bank.at_home(), 2, "each slot put in is kept");
         assert!(bank.all_home());
+        let other = bank.take(1).expect("the slot put in comes back");
+        assert_eq!(other.index(), 1);
+        assert!(!bank.all_home(), "a slot it keeps is out");
+        bank.put(other);
+        assert!(bank.all_home());
+    }
+
+    #[test]
+    fn an_empty_bank_keeps_what_is_put_in() {
+        let [slot] = minted::<1>();
+        let mut bank = SlotBank::empty();
+        assert!(bank.all_home());
+        bank.put(slot);
+        assert_eq!(bank.at_home(), 1);
+        let slot = bank.take_first().expect("the slot put in");
+        assert_eq!(slot.index(), 0);
+        assert!(!bank.all_home());
+        bank.put(slot);
     }
 
     #[test]
