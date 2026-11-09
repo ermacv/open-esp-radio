@@ -428,10 +428,37 @@ and drop counters, air time each way, the average signal and the rates of
 the last frames each way, parsed into format, MCS, streams, width and
 guard interval), `iw dev <ap> info`'s channel line (channel, frequency and
 width), the in-use block of `iw dev <ap> survey dump` (active, busy,
-receive, BSS receive and transmit time, noise) and the station's TID 0 drops
-from mac80211's `aqm` debugfs file when it is readable. Directions are the
-AP's. A known line the host cannot read refuses the observation; a value the
-driver does not report stays absent.
+receive, BSS receive and transmit time, noise), the station's per-TID
+queues (mac80211's `stations/<mac>/aqm` debugfs file) and the radio's own
+queue (the phy's `aqm` file), each file when it is readable. Directions are
+the AP's. A known line the host cannot read refuses the observation; a value
+the driver does not report stays absent.
+
+The two `aqm` files are kept verbatim (`raw`: the read's time, the header
+line, the rows) beside typed values. Fields are found by the names of the
+file's own header line, never by position: a column or name the host does
+not know stays in `raw` and is listed as unknown, a known one the file lacks
+is listed as missing, and neither is a value. Each typed value carries what
+it counts, its unit (`packet`, `byte`, `operation`, `flow`), its kind
+(counter, level, setting), its scope (`station`, `station-tid`, `radio`) and
+the router's boot clock (`/proc/uptime`) just before its read. The meanings
+are those of mac80211 in backports v6.18.26, the router's
+`kmod-mac80211-6.12.94.6.18.26`:
+
+- a TID's `overlimit` counts drop operations, not packets: one operation
+  drops up to 32 packets of the radio's fattest flow and adds one;
+- a TID's `tx-packets` counts dequeues from the queue, not transmissions;
+- the radio file prints `fq->overmemory` as `fq_overlimit` and
+  `fq->overlimit` (every drop operation) as `fq_overmemory`;
+- the radio's values are every station's and never one station's.
+
+`station::link::queue::window` takes two such reads: each value's change, or
+why there is none (a read lacks it, the station associated again, its
+association time is missing, a counter went back by a reset or a 32-bit
+wrap). Its balance takes the station's `tx packets` (every TID) less every
+TID queue's dequeued, CoDel-dropped and backlog-change packets, TID 0 whole;
+the remainder is not attributed, and it stays open when a term is not the
+window's. No packet count of overlimit drops exists.
 `station::airtime` reads the AP radio's airtime queue limits (mac80211's
 AQL) per access category and the total threshold from the PHY's debugfs,
 and one station's own limits and pending airtime from its `aql` file; it
