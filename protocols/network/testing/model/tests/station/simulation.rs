@@ -215,7 +215,7 @@ type LendSock<T> = LendingSocket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDIT
 pub type NetDatagram<T> = Delivered<'static, 'static, T, BLOCK, LentBuffer>;
 /// The lending socket's credit: half the model's lend count, the rest kept
 /// for frames on their way.
-const LEND_CREDIT: usize = oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS / 2;
+pub const LEND_CREDIT: usize = oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS / 2;
 
 /// The application's socket, as the session's setup has it receive.
 enum AppSocket<T: 'static> {
@@ -1257,7 +1257,7 @@ async fn run<'s, T: 'static>(
             let network_task = async {
                 // `None`: the composition dropped the run future.
                 let cause = {
-                    let mut events = ();
+                    let mut events = observed.clone();
                     let mut run = core::pin::pin!(service.run(&*clock, &mut events));
                     match select3(
                         run.as_mut(),

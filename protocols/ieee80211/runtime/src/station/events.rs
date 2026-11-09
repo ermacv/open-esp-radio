@@ -46,6 +46,11 @@ pub struct RxMsdusRefused {
     pub too_long: u16,
     /// MSDUs the full receive queue to the application did not take.
     pub queue_full: u16,
+    /// MSDUs of a frame whose buffer the port could not lend, its network
+    /// holding all the port may lend, and whose copy the full queue to the
+    /// network did not take: pressure on the station's handoff, before any
+    /// socket is known.
+    pub pressure: u16,
     /// MSDUs of a composition without a network.
     pub no_network: u16,
 }

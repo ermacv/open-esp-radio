@@ -27,6 +27,7 @@ use oer_protocols_ieee80211_testing_model::{
     MODEL_MAX_MPDU, ModelAck, ModelAnyBuffer, ModelBackend, ModelBlockAckEvidence, ModelCaps24,
     ModelLentRx, ModelNetworkMemory, ModelPort, ModelSmall, ModelTypes,
 };
+use oer_protocols_network_core::{NetEvent, NotLent};
 use oer_protocols_network_port::{EthernetFrame, EthernetFrameView, FrameLengthError, Unpublished};
 use oer_protocols_network_runtime::{PortRefusal, TxBuffers};
 use oer_protocols_network_wire::ethernet::EthernetHeader;
@@ -104,6 +105,17 @@ pub struct Counts {
     pub tokens_lost: usize,
     /// Received frames the station dropped on their way to the network.
     pub rx_frames_dropped: usize,
+    /// Received MSDUs the station's full queues to the network did not take.
+    pub rx_queue_full: usize,
+    /// Received MSDUs the station refused for pressure on its handoff: no
+    /// lend, no room for a copy.
+    pub rx_pressure: usize,
+    /// Received MSDUs the station copied because the port kept their buffer.
+    pub rx_pressure_copies: usize,
+    /// A lending socket's datagrams the network dropped for want of credit.
+    pub no_credit: usize,
+    /// A lending socket's datagrams the network dropped as pressure copies.
+    pub pressure_copies_dropped: usize,
 }
 
 impl Observed {
@@ -114,10 +126,32 @@ impl Observed {
 
 impl EventSink<ServiceEvent> for Observed {
     fn event(&mut self, event: ServiceEvent) {
-        if matches!(event, ServiceEvent::RxFrameDropped(_)) {
-            self.0.borrow_mut().rx_frames_dropped += 1;
+        let mut counts = self.0.borrow_mut();
+        match event {
+            ServiceEvent::RxFrameDropped(_) => counts.rx_frames_dropped += 1,
+            ServiceEvent::RxMsdusRefused(refused) => {
+                counts.rx_queue_full += usize::from(refused.queue_full);
+                counts.rx_pressure += usize::from(refused.pressure);
+            }
+            ServiceEvent::RxMsdusCopied(copied) => {
+                counts.rx_pressure_copies += usize::from(copied.kept);
+            }
+            _ => {}
         }
     }
+}
+impl EventSink<NetEvent> for Observed {
+    fn event(&mut self, event: NetEvent) {
+        let mut counts = self.0.borrow_mut();
+        match event {
+            NetEvent::NotLent(NotLent::NoCredit) => counts.no_credit += 1,
+            NetEvent::PressureCopy => counts.pressure_copies_dropped += 1,
+            _ => {}
+        }
+    }
+}
+impl EventSink<oer_protocols_network_runtime::ServiceEvent> for Observed {
+    fn event(&mut self, _: oer_protocols_network_runtime::ServiceEvent) {}
 }
 impl EventSink<StaEvent> for Observed {
     fn event(&mut self, event: StaEvent) {

@@ -3,9 +3,18 @@
 //! station's frames to the lifecycle.
 //!
 //! A frame that delivered exactly one MSDU is lent to the network in place;
-//! the others are copied. While the network holds all the units it may, the
-//! frames in delivery order wait and the actor pulls no more: the port keeps
-//! further units in its ring until the network returns one.
+//! the others are copied. While the network holds all the units the port
+//! may lend, the frames in delivery order wait and the actor pulls no more,
+//! so the port keeps further units in its ring: a burst the network is on
+//! its way to loses nothing. A network that stays at its limit for
+//! [`NETWORK_LATE`] no longer holds the ring back: the actor walks it, a
+//! frame of one MSDU is copied by pressure while the copy queue has room,
+//! and an MSDU no queue takes is refused, counted ([`RxMsdusRefused`]), its
+//! buffer back to the ring at once. So the station's frames, the link's
+//! admission and the receive agreements go on whatever the network takes.
+//! The walk lasts until nothing waits in delivery order while the network
+//! has room again. The units the network holds stay lent until it drops
+//! them; the port never lends past its limit.
 
 use super::turn::{Failed, PortBlockAcks};
 use super::*;
@@ -24,6 +33,8 @@ use oer_protocols_network_port::{CopyReason, LentFrame};
 enum Refusal {
     TooLong,
     QueueFull,
+    /// The port kept the buffer and the copy found no room.
+    Pressure,
     NoNetwork,
 }
 
@@ -31,6 +42,7 @@ fn count(refused: &mut RxMsdusRefused, refusal: Option<Refusal>) {
     match refusal {
         Some(Refusal::TooLong) => refused.too_long = refused.too_long.saturating_add(1),
         Some(Refusal::QueueFull) => refused.queue_full = refused.queue_full.saturating_add(1),
+        Some(Refusal::Pressure) => refused.pressure = refused.pressure.saturating_add(1),
         Some(Refusal::NoNetwork) => refused.no_network = refused.no_network.saturating_add(1),
         None => {}
     }
@@ -131,9 +143,35 @@ where
         network.network.takes_frames() && !self.port.lend_room()
     }
 
+    /// Whether frames have waited for the network for [`NETWORK_LATE`].
+    pub(super) fn network_late(&self) -> bool {
+        self.held_back
+            .is_some_and(|since| since.saturating_add(NETWORK_LATE) <= self.now)
+    }
+
+    /// Whether received frames wait for the network: it holds all it may
+    /// and has not been late for [`NETWORK_LATE`] yet.
+    fn holds_back<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
+        &self,
+        network: &NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> bool {
+        self.network_full(network) && !self.network_late()
+    }
+
+    /// Frames no longer wait for the network once nothing waits in delivery
+    /// order and it has room: the next back-pressure starts its own bound.
+    fn caught_up<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
+        &mut self,
+        network: &NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) {
+        if !self.receive.has_ready() && !self.network_full(network) {
+            self.held_back = None;
+        }
+    }
+
     /// The turn's receive work: the frames in delivery order the network
-    /// has room for, the deferred management frame, then at most
-    /// [`RX_BUDGET`] units of the ring and the agreements' due deadlines.
+    /// takes, the deferred management frame, then at most [`RX_BUDGET`]
+    /// units of the ring and the agreements' due deadlines.
     pub(super) fn rx<
         const TO: usize,
         const FROM: usize,
@@ -150,6 +188,7 @@ where
     ) -> Result<(), Failed<'id, D>> {
         let now = self.now;
         self.pending(lifecycle, network)?;
+        self.caught_up(network);
         let continued = self.rx_later.is_some_and(|at| at <= now);
         if (signalled || continued) && self.radio_receives() {
             self.rx_later = None;
@@ -162,8 +201,10 @@ where
                     self.again = true;
                     break;
                 }
-                if self.receive.has_ready() && self.network_full(network) {
-                    // Back-pressure: the network's next return wakes us.
+                if self.receive.has_ready() && self.holds_back(network) {
+                    // Back-pressure: the network's next return, or its
+                    // lateness bound, wakes us.
+                    self.held_back.get_or_insert(now);
                     self.facts.rx = true;
                     break;
                 }
@@ -183,7 +224,10 @@ where
                             self.received(frame, meta, lifecycle, network)?;
                         }
                     }
-                    RxPull::Empty => break,
+                    RxPull::Empty => {
+                        self.caught_up(network);
+                        break;
+                    }
                     RxPull::Later(at) if at <= now => {
                         // The port's call ended at its own bound with the
                         // ring's work left: no alarm keeps an instant
@@ -195,6 +239,7 @@ where
                     }
                     RxPull::Later(at) => {
                         self.rx_later = Some(at);
+                        self.caught_up(network);
                         break;
                     }
                 }
@@ -219,8 +264,8 @@ where
         )
     }
 
-    /// Hand on the frames in delivery order while the network has room, and
-    /// the deferred management frames once their replies have a place.
+    /// Hand on the frames in delivery order the network takes, and the
+    /// deferred management frames once their replies have a place.
     fn pending<
         const TO: usize,
         const FROM: usize,
@@ -234,19 +279,39 @@ where
         lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
-        while !self.network_full(network) {
-            let Some((frame, meta)) = self.receive.pop_ready() else {
-                break;
-            };
-            self.route(frame, meta, lifecycle, network)?;
-        }
+        self.release_ready(lifecycle, network)?;
         while let Some((frame, meta)) = self.receive.pop_deferred() {
             self.received(frame, meta, lifecycle, network)?;
         }
         Ok(())
     }
 
-    /// Take one received unit: reorder it or hand it on.
+    /// Hand on the frames the receive agreements released in delivery
+    /// order, while the network does not hold them back.
+    fn release_ready<
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> Result<(), Failed<'id, D>> {
+        while !self.holds_back(network) {
+            let Some((frame, meta)) = self.receive.pop_ready() else {
+                break;
+            };
+            self.route(frame, meta, lifecycle, network)?;
+        }
+        Ok(())
+    }
+
+    /// Take one received unit: reorder it or hand it on, after the frames
+    /// it released or found released in delivery order.
     pub(super) fn received<
         const TO: usize,
         const FROM: usize,
@@ -273,10 +338,11 @@ where
                 .receive(self.now, local, frame, meta, &mut self.events)
             {
                 RxDisposition::Deliver(received) => received,
-                RxDisposition::Retained => return Ok(()),
+                RxDisposition::Retained => return self.release_ready(lifecycle, network),
                 RxDisposition::Recycle(frame) => {
+                    // A BlockAckReq may have released frames.
                     self.port.recycle(frame);
-                    return Ok(());
+                    return self.release_ready(lifecycle, network);
                 }
                 RxDisposition::Capacity(frame) => {
                     self.port.recycle(frame);
@@ -284,9 +350,10 @@ where
                     return Ok(());
                 }
             };
-        // A data frame waits behind the frames already waiting, or while the
-        // network is at its lend limit: neither copied nor dropped.
-        if self.network_full(network) || self.receive.has_ready() {
+        self.release_ready(lifecycle, network)?;
+        // A data frame waits behind the frames still waiting, or while the
+        // network holds it back: neither copied nor dropped.
+        if self.receive.has_ready() || self.holds_back(network) {
             return match self.receive.park(frame, meta) {
                 Parked::Waiting => Ok(()),
                 Parked::Deliver((frame, meta)) => self.route(frame, meta, lifecycle, network),
@@ -434,7 +501,11 @@ where
                         Err(refusal) => {
                             let buffer = refusal.buffer;
                             let refusal =
-                                copy_received(network, buffer.bytes(), &plan, CopyReason::Pressure);
+                                copy_received(network, buffer.bytes(), &plan, CopyReason::Pressure)
+                                    .map(|refusal| match refusal {
+                                        Refusal::QueueFull => Refusal::Pressure,
+                                        other => other,
+                                    });
                             if counted {
                                 copied.kept = copied.kept.saturating_add(1);
                             }
@@ -482,6 +553,7 @@ mod tests {
             Some(Refusal::TooLong),
             Some(Refusal::QueueFull),
             Some(Refusal::NoNetwork),
+            Some(Refusal::Pressure),
         ] {
             count(&mut refused, refusal);
         }
@@ -490,13 +562,13 @@ mod tests {
             RxMsdusRefused {
                 too_long: 1,
                 queue_full: 2,
+                pressure: 1,
                 no_network: 1,
             }
         );
         let mut saturated = RxMsdusRefused {
             too_long: u16::MAX,
-            queue_full: 0,
-            no_network: 0,
+            ..RxMsdusRefused::default()
         };
         count(&mut saturated, Some(Refusal::TooLong));
         assert_eq!(saturated.too_long, u16::MAX);
