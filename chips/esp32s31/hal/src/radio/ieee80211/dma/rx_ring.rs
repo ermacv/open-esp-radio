@@ -632,10 +632,11 @@ enum RxRecycleGroupShape {
 /// Unique ownership of one complete, possibly chained, RX unit.
 ///
 /// Segment indices are implicit contiguous ring indices beginning at
-/// [`head_index`](Self::head_index). Lengths are captured before recycle so a
-/// staging owner can copy every DMA segment without rereading mutable
-/// descriptor state. A physical ring may be deeper than one maximum-sized
-/// receive unit; unit metadata remains bounded separately below.
+/// [`head_index`](Self::head_index). Only the total length is captured at the
+/// take; a segment's own length stays in its descriptor's completed word,
+/// which no one rewrites before recycle. A physical ring may be deeper than
+/// one maximum-sized receive unit; unit metadata remains bounded separately
+/// below.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RxCompletedUnit {
     head_index: usize,
