@@ -7,6 +7,25 @@ use core::{
 };
 use oer_portable_time::{Duration, Instant, Timer};
 
+/// The owners a refused start returned, which end through [`Retire::retire`].
+pub(crate) trait Retire {
+    /// End the owners: a member of the radio system leaves it.
+    ///
+    /// # Errors
+    ///
+    /// The cause a posted leave ended with.
+    fn retire(self) -> impl Future<Output = Result<(), crate::failure::ReleaseCause>>;
+}
+
+/// End the owners a start's refusal for `cause` returned, keeping both
+/// outcomes.
+pub(crate) async fn refused<C, O: Retire>(cause: C, owners: O) -> crate::failure::Unavailable<C> {
+    crate::failure::Unavailable {
+        cause,
+        cleanup: owners.retire().await,
+    }
+}
+
 /// What one release of a stopped radio `R` did.
 pub(crate) enum Leave<R, C> {
     /// It left the radio system.
@@ -154,6 +173,36 @@ mod tests {
         ));
         assert_eq!(poll_now(release.as_mut()), Poll::Ready(Err("unanswered")));
         assert_eq!(attempts.get(), 1);
+    }
+
+    /// Owners whose end the test names.
+    struct Owners<'a>(Result<(), crate::failure::ReleaseCause>, &'a Cell<u8>);
+
+    impl Retire for Owners<'_> {
+        async fn retire(self) -> Result<(), crate::failure::ReleaseCause> {
+            self.1.set(self.1.get() + 1);
+            self.0
+        }
+    }
+
+    #[test]
+    fn a_refused_start_keeps_its_cause_and_its_failed_cleanup() {
+        let ends = Cell::new(0_u8);
+        let cleanup = Err(crate::failure::ReleaseCause::LeaveUnanswered([1, 2, 3, 4]));
+        let mut ended = core::pin::pin!(refused("storage", Owners(cleanup, &ends)));
+        assert_eq!(
+            poll_now(ended.as_mut()),
+            Poll::Ready(crate::failure::Unavailable {
+                cause: "storage",
+                cleanup,
+            })
+        );
+        assert_eq!(ends.get(), 1, "the owners end once");
+        let mut ended = core::pin::pin!(refused("radio", Owners(Ok(()), &ends)));
+        assert_eq!(
+            poll_now(ended.as_mut()),
+            Poll::Ready(crate::failure::Unavailable::took_nothing("radio"))
+        );
     }
 
     #[test]

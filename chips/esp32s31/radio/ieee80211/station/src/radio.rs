@@ -317,7 +317,7 @@ pub(crate) enum News<W: Binding> {
     /// commands' issuer and the lifecycle's tokens.
     Installed(Commands<W>, Tokens<W>),
     /// The first installation did not come up.
-    Unavailable(InitializationError),
+    Unavailable(crate::failure::Unavailable<InitializationError>),
     /// The port did not reinstall after the station's restart.
     Reinstall(crate::failure::ReinstallCause),
     /// The radio's release after the lifecycle retired the port.
@@ -440,7 +440,9 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
     let Some(mut installations) = W::take_installations() else {
         post(
             &mut mailbox,
-            News::Unavailable(InitializationError::Storage),
+            News::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Storage,
+            )),
         )
         .await;
         return;
@@ -449,16 +451,19 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
     let (parts, driver) = match install(boot, config, crate::supply::PORT_BUFFERS).await {
         Ok(installed) => installed,
         Err(refused) => {
-            // A started radio leaves before the refusal is told.
-            let _left = refused.owners.retire().await;
-            post(&mut mailbox, News::Unavailable(refused.cause)).await;
+            // A started radio leaves before the refusal is told, its
+            // outcome told with it.
+            let unavailable = crate::release::refused(refused.cause, refused.owners).await;
+            post(&mut mailbox, News::Unavailable(unavailable)).await;
             return;
         }
     };
     let Some(minted) = installations.first() else {
         post(
             &mut mailbox,
-            News::Unavailable(InitializationError::Registration),
+            News::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Registration,
+            )),
         )
         .await;
         return;
@@ -471,7 +476,9 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
     else {
         post(
             &mut mailbox,
-            News::Unavailable(InitializationError::Backend),
+            News::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Backend,
+            )),
         )
         .await;
         return;
@@ -662,13 +669,13 @@ pub(crate) enum Acquired<W: Binding> {
     },
 }
 
-impl<W: Binding> Acquired<W> {
+impl<W: Binding> crate::release::Retire for Acquired<W> {
     /// End what the refused install left. A member of the radio system
     /// leaves it: a started radio as [`release`] does, a refusal of its MAC
     /// tried again; a member whose track failed through its cell, the
     /// leave never posted again. The other owners end here, no hardware of
     /// theirs running: nothing was published to the MAC or its DMA.
-    pub(crate) async fn retire(self) -> Result<(), crate::failure::ReleaseCause> {
+    async fn retire(self) -> Result<(), crate::failure::ReleaseCause> {
         use oer_chips_esp32s31_radio_ieee80211_backend::startup::RadioStartFailure;
         match self {
             Self::Boot(_boot) => Ok(()),

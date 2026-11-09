@@ -544,6 +544,29 @@ pub enum PlatformClock {
     ModemCoexistence,
     ModemLowPowerTimer,
 }
+/// A role that never started: why its start refused, and how the owners
+/// that refusal returned ended. Both stand: a cleanup that failed never
+/// hides the refusal, and the refusal never hides the cleanup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Unavailable<C> {
+    /// Why the start refused.
+    pub cause: C,
+    /// How the refusal's owners ended: a started radio's release, or a
+    /// member's leave. An error names a posted leave that ended for its
+    /// cause; the owners went with it, and none is kept.
+    pub cleanup: Result<(), ReleaseCause>,
+}
+
+impl<C> Unavailable<C> {
+    /// A refusal that left nothing to end.
+    pub const fn took_nothing(cause: C) -> Self {
+        Self {
+            cause,
+            cleanup: Ok(()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReleaseCause {
     /// The stopped device still held a live or failed radio frontier.

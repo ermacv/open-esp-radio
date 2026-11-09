@@ -297,8 +297,9 @@ pub enum ApExit {
         /// Why the release refused.
         cause: crate::failure::ReleaseCause,
     },
-    /// Its radio's install refused before the runner existed.
-    Unavailable(InitializationError),
+    /// It never served: its refusal before the runner existed, and how the
+    /// owners that refusal returned ended.
+    Unavailable(crate::failure::Unavailable<InitializationError>),
 }
 
 /// The access point's task: it owns the radio.
@@ -437,13 +438,17 @@ impl<W: Binding> AccessPointRunner<W> {
         };
         boot.config = config;
         let Some(mut installations) = W::take_installations() else {
-            return ApExit::Unavailable(InitializationError::Storage);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Storage,
+            ));
         };
         // The PMK of the passphrase, a step at a time between the
         // executor's other work.
         let Ok(mut derivation) = PmkDerivation::new(&settings.passphrase, settings.ssid.as_bytes())
         else {
-            return ApExit::Unavailable(InitializationError::Ssid);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Ssid,
+            ));
         };
         let pmk = loop {
             if let Some(pmk) = derivation.step() {
@@ -452,7 +457,9 @@ impl<W: Binding> AccessPointRunner<W> {
             embassy_futures::yield_now().await;
         };
         let Some(gtk_bytes) = nonces.nonce() else {
-            return ApExit::Unavailable(InitializationError::Storage);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Storage,
+            ));
         };
         let mut gtk = [0; 16];
         for (octet, source) in gtk.iter_mut().zip(gtk_bytes) {
@@ -461,13 +468,17 @@ impl<W: Binding> AccessPointRunner<W> {
         let (parts, driver) = match radio::install(boot, config, AP_BANK).await {
             Ok(installed) => installed,
             Err(refused) => {
-                // A started radio leaves before the refusal is told.
-                let _left = refused.owners.retire().await;
-                return ApExit::Unavailable(refused.cause);
+                // A started radio leaves before the refusal is told, its
+                // outcome told with it.
+                return ApExit::Unavailable(
+                    crate::release::refused(refused.cause, refused.owners).await,
+                );
             }
         };
         let Some(minted) = installations.first() else {
-            return ApExit::Unavailable(InitializationError::Registration);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Registration,
+            ));
         };
         let Ok(PortInstallation {
             port,
@@ -475,7 +486,9 @@ impl<W: Binding> AccessPointRunner<W> {
             resources,
         }) = Port::<W>::install(parts, minted, driver)
         else {
-            return ApExit::Unavailable(InitializationError::Backend);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Backend,
+            ));
         };
         let address = port_address::<W>(&port);
         let channel = config.supported;
@@ -517,7 +530,9 @@ impl<W: Binding> AccessPointRunner<W> {
             beacon: resources.access_point_beacon,
         };
         let Some(key_id) = GroupKeyId::new(GROUP_KEY_ID) else {
-            return ApExit::Unavailable(InitializationError::Storage);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Storage,
+            ));
         };
         let Ok(service) = AccessPointService::<Interface>::new(
             address,
@@ -528,7 +543,9 @@ impl<W: Binding> AccessPointRunner<W> {
             AccessPointInactiveTimeout::default(),
             peers.lend(),
         ) else {
-            return ApExit::Unavailable(InitializationError::Storage);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Storage,
+            ));
         };
         let wire_channel = channel.channel();
         let Ok(beacon) = ApBeacon::new(
@@ -542,14 +559,18 @@ impl<W: Binding> AccessPointRunner<W> {
             SequenceNumber::ZERO,
             ApSecurityPolicy::Wpa2Personal,
         ) else {
-            return ApExit::Unavailable(InitializationError::Ssid);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Ssid,
+            ));
         };
         let engine = ApEngine::new(service, beacon, ADVERTISEMENT, wire_channel, key_id);
         let (Some(management_transmissions), Some(data_transmissions)) = (
             core::num::NonZeroU8::new(MANAGEMENT_TRANSMISSIONS),
             core::num::NonZeroU8::new(lmac::SHORT_RETRY_LIMIT),
         ) else {
-            return ApExit::Unavailable(InitializationError::Tx);
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Tx,
+            ));
         };
         let policy = ApPolicy {
             // The BSS's lowest basic rate, the archive's beacon rate.

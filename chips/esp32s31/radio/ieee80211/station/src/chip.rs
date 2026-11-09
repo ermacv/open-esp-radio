@@ -558,8 +558,9 @@ pub enum StationExit {
     Failed(crate::failure::LifecycleFailure),
     /// Stopped, but the Wi-Fi radio release did not complete.
     ReleaseFailed(crate::failure::ReleaseCause),
-    /// The station never started.
-    Unavailable(InitializationError),
+    /// The station never started: its refusal, and how the owners it
+    /// returned ended.
+    Unavailable(crate::failure::Unavailable<InitializationError>),
 }
 /// The station's link and receive end.
 pub type StationNetwork<W> = Network<'static, <W as Binding>::Notifies>;

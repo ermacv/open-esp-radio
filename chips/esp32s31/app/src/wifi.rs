@@ -276,7 +276,12 @@ pub(crate) async fn serve_station(start: StationStart) {
         .unwrap_or_else(|error| failure(error));
     match observed!(Station, runner.run(profile)).await {
         wifi::StationExit::Stopped => {}
-        wifi::StationExit::Unavailable(error) => failure(error),
+        wifi::StationExit::Unavailable(unavailable) => match unavailable.cleanup {
+            Ok(()) => failure(unavailable.cause),
+            // The install's refusal and its radio's failed release both
+            // stand: the release is the later, unresolved one.
+            Err(_) => super::fail(oer_portable_diagnostics::name!("wifi-release"; 32)),
+        },
         wifi::StationExit::Failed(failed) => super::fail_path(
             oer_portable_diagnostics::name!("wifi-failed"; 32),
             &oer_portable_diagnostics::DiagPath::of(&failed),
