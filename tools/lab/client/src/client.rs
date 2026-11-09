@@ -23,7 +23,7 @@ pub type Result<T> = std::result::Result<T, String>;
 /// Output an operation may have waiting for its reader in this client; more
 /// is dropped and counted, never waited for, so a slow reader never holds
 /// the replies behind it.
-const ROUTE_BUDGET: usize = 1 << 20;
+pub const ROUTE_BUDGET: usize = 1 << 20;
 /// How often a client waiting for its lease looks whether it was cancelled.
 const WAIT_POLL: std::time::Duration = std::time::Duration::from_millis(200);
 
