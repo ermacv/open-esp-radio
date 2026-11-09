@@ -1713,13 +1713,15 @@ pub(super) fn settle_lent<D: Device<B>, const B: usize>(
     rx_out: &Cell<usize>,
     device: &mut D,
 ) -> Result<(), Fault> {
-    let transferred = network.take_transferred();
-    rx_out.set(
-        rx_out
-            .get()
-            .checked_sub(transferred)
-            .ok_or(Fault::ReceiveAccounting)?,
-    );
+    // A lend leaves a buffer the held count holds, so the lends read here
+    // are within it; refused, nothing is settled and both counts stay.
+    let transferred = network.transferred();
+    let held = rx_out
+        .get()
+        .checked_sub(transferred)
+        .ok_or(Fault::ReceiveAccounting)?;
+    rx_out.set(held);
+    network.settle_transferred(transferred);
     if network.take_returned() {
         device.returned();
     }

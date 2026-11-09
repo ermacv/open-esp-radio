@@ -783,6 +783,21 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
     }
 
+    /// Count `units` lost beyond the buffers the caller holds, which the
+    /// held count excludes.
+    #[cfg(test)]
+    pub(crate) fn lose_for_test(&self, units: usize) {
+        self.shared
+            .lost
+            .fetch_add(units, core::sync::atomic::Ordering::AcqRel);
+    }
+
+    /// The received units the caller holds.
+    #[cfg(test)]
+    pub(crate) fn held_for_test(&self) -> usize {
+        self.rx_out.get()
+    }
+
     /// Report `fault` as the port would.
     #[cfg(test)]
     pub(crate) fn fault_for_test(&mut self, fault: Fault) {
@@ -2386,18 +2401,28 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // Units of buffers dropped unrecycled are back in the ring: they
         // leave the held count here, and the loss stays the port's cause
         // until this recovery.
-        let lost = self.shared.take_lost();
+        //
+        // The held count is the installation's live buffers, plus its
+        // lends not yet settled, plus its losses not yet settled: a buffer
+        // joins it once at its admission and leaves it once, by its
+        // recycle, its lend's settlement or its loss's settlement here; a
+        // loss is counted only by a buffer the count holds. A retirement
+        // needs the count at zero, so a reinstallation starts with no
+        // buffer, lend or loss of the previous one. The losses read here
+        // are therefore within the held count, and the settlement below
+        // subtracts exactly them, so a loss recorded meanwhile stays.
+        let lost = self.shared.lost_units();
         if lost > 0 {
-            match self.rx_out.get().checked_sub(lost) {
-                Some(held) => {
-                    self.rx_out.set(held);
-                    self.device.returned();
-                    self.record(Fault::ReceiveLost);
-                }
-                None => {
-                    self.record(Fault::ReceiveAccounting);
-                }
-            }
+            let Some(held) = self.rx_out.get().checked_sub(lost) else {
+                // Excluded by the count above. Nothing is settled: the
+                // held and lost counts and the port's cause stay as they
+                // were, and no recovery follows a failed settlement.
+                return false;
+            };
+            self.rx_out.set(held);
+            self.shared.settle_lost(lost);
+            self.device.returned();
+            self.record(Fault::ReceiveLost);
         }
         let recoverable = self.fault.is_some_and(|fault| fault.leaves_owners_whole());
         if recoverable {

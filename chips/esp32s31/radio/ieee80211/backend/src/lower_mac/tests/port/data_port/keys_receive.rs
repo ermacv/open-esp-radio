@@ -759,6 +759,66 @@ fn a_lent_unit_lends_its_storage_and_its_drop_returns_it_to_the_ring() {
 }
 
 #[test]
+fn a_loss_past_the_held_count_settles_nothing_and_keeps_the_earlier_cause() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.deliver(1);
+        let now = fixture.now();
+        let RxPull::Unit { frame: kept, .. } = fixture.port.receive(8, now).expect("receive")
+        else {
+            panic!("a received unit");
+        };
+        assert_eq!(fixture.port.held_for_test(), 1);
+        // An earlier cause a stop recovers from, then two losses where the
+        // caller holds one unit: a count the held count excludes.
+        let earlier = Fault::Unpublished(crate::port::Unpublished::Key);
+        fixture.port.fault_for_test(earlier);
+        fixture.port.lose_for_test(2);
+        assert!(
+            !fixture.port.recover_for_stop(),
+            "no recovery follows a failed settlement"
+        );
+        assert_eq!(
+            fixture.port.fault(),
+            Some(earlier),
+            "the earlier cause stays"
+        );
+        assert_eq!(fixture.port.held_for_test(), 1, "the held count stays");
+        assert!(
+            !fixture.port.recover_for_stop(),
+            "the losses stay unsettled for the next look"
+        );
+        fixture.port.recycle(kept);
+    });
+}
+
+#[test]
+fn a_loss_settles_exactly_the_units_it_read() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.deliver(2);
+        let now = fixture.now();
+        let RxPull::Unit { frame: lost, .. } = fixture.port.receive(8, now).expect("receive")
+        else {
+            panic!("a received unit");
+        };
+        let RxPull::Unit { frame: later, .. } = fixture.port.receive(8, now).expect("receive")
+        else {
+            panic!("a received unit");
+        };
+        drop(lost);
+        assert!(fixture.port.recover_for_stop(), "the unit is back");
+        assert_eq!(fixture.port.held_for_test(), 1, "one unit left the count");
+        // A loss after the settlement is the port's again, not erased by it.
+        drop(later);
+        assert_eq!(fixture.port.fault(), Some(Fault::ReceiveLost));
+        assert!(fixture.port.recover_for_stop());
+        assert_eq!(fixture.port.held_for_test(), 0);
+        assert_eq!(fixture.port.fault(), None);
+    });
+}
+
+#[test]
 fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit_goes_back() {
     use oer_protocols_ieee80211_contracts_port::LendRefused;
     with_installations(|mut fixture, _| {

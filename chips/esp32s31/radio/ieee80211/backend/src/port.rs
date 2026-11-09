@@ -595,9 +595,16 @@ impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
     fn lost(&self) -> bool {
         self.lost.load(Ordering::Acquire) != 0
     }
-    /// The units dropped without their recycle since the last take.
-    fn take_lost(&self) -> usize {
-        self.lost.swap(0, Ordering::AcqRel)
+    /// The units dropped without their recycle and not yet settled.
+    fn lost_units(&self) -> usize {
+        self.lost.load(Ordering::Acquire)
+    }
+    /// Settle `units` the caller's held count just gave up; a loss
+    /// recorded since they were read stays for the next settlement.
+    fn settle_lost(&self, units: usize) {
+        // `units` were read from this count and only a settlement lowers
+        // it, so it holds them: the subtraction does not wrap.
+        self.lost.fetch_sub(units, Ordering::AcqRel);
     }
 }
 
