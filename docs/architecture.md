@@ -864,9 +864,12 @@ The terminal policy is:
   stop or a restart: `StartRefused` (the first start, with its cause),
   `StopUnconfirmed`, `RetuneUnconfirmed`, `Faulted` (the actor ended on the
   port's named fault or its own broken contract, owners kept) and
-  `Contract` (an owner the lifecycle did not send), plus a failed reinstall
-  and a failed radio release (`ReleaseFailed`). The image records each with
-  its typed cause path and resets; air input never ends the actor. A first
+  `Contract` (an owner the lifecycle did not send), plus a failed
+  reinstall. The image records each with its typed cause path and resets;
+  air input never ends the actor. A refused start (`Unavailable`) and a
+  confirmed stop whose radio release failed (`ReleaseFailed`) reset
+  nothing: `Station::connect` and `Station::stop` answer their typed
+  causes, and a leave the release posted is never posted again. A first
   fault that leaves every owner in its place is no terminal exit: the port
   takes it back (`DataPort::recover_for_stop`) and from then on admits and
   publishes nothing new, however late the stop comes, while what is out comes

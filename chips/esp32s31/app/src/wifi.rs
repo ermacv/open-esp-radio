@@ -262,9 +262,10 @@ pub(crate) async fn datapath(datapath: Datapath) {
 }
 
 /// The station lifecycle's task: an ordinary stop ends it; a restart of
-/// the station stays inside the facade; a start the radio refused keeps its
-/// typed cause with the control; every other terminal exit records its
-/// typed cause and resets.
+/// the station stays inside the facade; a start the radio refused and a
+/// confirmed stop whose radio release failed keep their typed causes with
+/// the control; every other terminal exit records its typed cause and
+/// resets.
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
         runner,
@@ -285,9 +286,10 @@ pub(crate) async fn serve_station(start: StationStart) {
             oer_portable_diagnostics::name!("wifi-failed"; 32),
             &oer_portable_diagnostics::DiagPath::of(&failed),
         ),
-        wifi::StationExit::ReleaseFailed(_) => {
-            super::fail(oer_portable_diagnostics::name!("wifi-release"; 32))
-        }
+        // The stop was confirmed; the release's typed error stays with the
+        // control ([`Station::stop`] answers it). A leave it posted is never
+        // posted again: resetting would repeat nothing and prove nothing.
+        wifi::StationExit::ReleaseFailed(_) => {}
     }
 }
 
@@ -660,6 +662,9 @@ pub enum StopError {
     /// The station ended by a failure, which the library records before it
     /// resets the chip.
     Failed,
+    /// The station stopped, and its radio's release did not complete, for
+    /// this cause. A leave the release posted is never posted again.
+    ReleaseFailed(wifi::failure::ReleaseCause),
 }
 
 /// The station's network device: the boot hands it to the group
@@ -790,6 +795,8 @@ impl Station {
     ///
     /// # Errors
     /// [`StopError::Failed`]: the station ended by a failure instead.
+    /// [`StopError::ReleaseFailed`]: the station stopped and its radio's
+    /// release failed, nothing reset.
     pub async fn stop(&mut self) -> Result<(), StopError> {
         let deadline = {
             use oer_portable_time::Clock as _;
@@ -798,6 +805,7 @@ impl Station {
         self.control.stop(deadline);
         match self.control.wait_stopped().await {
             Ok(wifi::StationExit::Stopped) => Ok(()),
+            Ok(wifi::StationExit::ReleaseFailed(cause)) => Err(StopError::ReleaseFailed(cause)),
             Ok(_) | Err(wifi::RunnerLost) => Err(StopError::Failed),
         }
     }

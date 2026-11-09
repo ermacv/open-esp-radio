@@ -549,14 +549,16 @@ pub(crate) struct ServiceRunner<W: Binding> {
         <W::Notifies as crate::Notifies>::Channels,
     >,
 }
-/// How the station ended: an ordinary stop, or a typed cause the image
-/// records before it resets. A restart of the station never ends it.
+/// How the station ended: an ordinary stop, a refused start or a stop
+/// whose radio release failed (typed, nothing resets), or a failure the
+/// image records before it resets. A restart of the station never ends it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationExit {
     Stopped,
     /// The lifecycle or the datapath actor under it ended terminally.
     Failed(crate::failure::LifecycleFailure),
-    /// Stopped, but the Wi-Fi radio release did not complete.
+    /// Stopped, but the Wi-Fi radio release did not complete: the stop is
+    /// confirmed and nothing resets; a posted leave is never posted again.
     ReleaseFailed(crate::failure::ReleaseCause),
     /// The station never started: its refusal, and how the owners it
     /// returned ended.
