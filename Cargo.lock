@@ -3438,6 +3438,7 @@ dependencies = [
  "oer-tools-lab-model",
  "oer-tools-os-durable",
  "oer-tools-os-process",
+ "rustix",
  "serde",
  "serde_json",
  "shlex",

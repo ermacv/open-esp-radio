@@ -157,6 +157,43 @@ impl Output {
     }
 }
 
+impl Output {
+    /// Queue all of `bytes` for the client, or refuse: a client that is
+    /// gone or reads too slowly takes none of the rest. For a stream a gap
+    /// would corrupt. A slow reader's refused bytes, from the refused chunk
+    /// to the end, are counted as lost; a gone client loses nothing to a
+    /// reader, as in `write`.
+    pub fn try_write(&self, bytes: &[u8]) -> Result<(), String> {
+        let mut sent = 0usize;
+        for chunk in bytes.chunks(oer_tools_lab_client::protocol::MAX_FRAME / 2) {
+            let frame = Frame::Data {
+                operation: self.operation,
+                bytes: chunk.to_vec(),
+            };
+            match self.outbox.push_data_whole(frame, chunk.len()) {
+                Ok(()) => sent = sent.saturating_add(chunk.len()),
+                Err(Refusal::Gone) => return Err("the client is gone".to_owned()),
+                Err(Refusal::Slow) => {
+                    let refused = bytes.len().saturating_sub(sent) as u64;
+                    let mut lost = lock(&self.lost);
+                    *lost = lost.saturating_add(refused);
+                    return Err("the client reads the output too slowly".to_owned());
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Why the outbox refused output a stream needs whole.
+#[derive(Debug, PartialEq)]
+enum Refusal {
+    /// The outbox is closed: nobody reads any more.
+    Gone,
+    /// The output budget is full: the reader is slow.
+    Slow,
+}
+
 /// The frames waiting for one connection's writer.
 struct Outbox {
     queue: Mutex<Queue>,
@@ -205,6 +242,22 @@ impl Outbox {
         queue.frames.push_back(frame);
         self.ready.notify_all();
         true
+    }
+
+    /// Queue output within the budget, or say why not: a closed outbox
+    /// has no reader, a full one a slow reader.
+    fn push_data_whole(&self, frame: Frame, length: usize) -> Result<(), Refusal> {
+        let mut queue = lock(&self.queue);
+        if queue.closed {
+            return Err(Refusal::Gone);
+        }
+        if queue.data_bytes.saturating_add(length) > OUTPUT_BUDGET {
+            return Err(Refusal::Slow);
+        }
+        queue.data_bytes += length;
+        queue.frames.push_back(frame);
+        self.ready.notify_all();
+        Ok(())
     }
 
     fn close(&self) {

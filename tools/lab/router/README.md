@@ -469,6 +469,28 @@ and one station's own limits and pending airtime from its `aql` file; it
 writes one category's limits into `aql_txq_limit` and confirms them by
 reading back, and restores every category to mac80211's defaults. AQL holds
 frames in mac80211's queue and never drops one.
+`monitor::capture` creates the monitor interface `oercap0` on the AP
+radio's PHY, on one channel, and streams `tcpdump -y IEEE802_11_RADIO -w -`
+into a sink until it cancels. It refuses before any change when an
+interface of that name exists anywhere on the router or the radio's PHY
+has any interface: it takes over nothing it did not create. From the
+creation on, every ending (a failed creation, start or readiness, a
+cancellation, a refused write, the process's own end) stops the process
+by its PID; drains its stream to the end within 10 s (into the sink after
+a cancellation, so the pcap's tail is kept; otherwise discarding and
+counting); waits for its exit within 10 s; stops the stream's reader and
+joins it: the reader waits in `poll` on its source and on a stop pipe it
+alone reads, so dropping the channel's receiving end (a blocked send
+fails) and the stop pipe's writing end (`poll` wakes) ends it whatever its
+source does, and it is never detached; confirms the process gone on the
+router; removes the interface and confirms that on the router. Every wait
+is bounded on an injected clock (the host's in the service; the tests
+drive a manual one on events). Each step
+runs whatever the one before returned and keeps its own result. The
+capture succeeds only when it was cancelled, its stream ended in the
+bound with nothing discarded, `tcpdump` exited with success, the reader
+ended without an error and the interface is gone. The pcap bytes go to
+the sink alone; `tcpdump`'s stderr goes into the report or the error.
 `station::lease` reads its DHCP address and lifetime from the isolated lease
 file. `station::stream::Capture::start_peer` observes peer-originated ICMP
 requests and DUT replies; a complete capture requires every pair and clean
