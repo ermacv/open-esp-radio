@@ -590,6 +590,9 @@ pub struct Delta {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Invalid {
+    /// The router's boot clock went back between the reads: it restarted,
+    /// and every count began again, however far it has grown since.
+    ClockWentBack,
     /// The station associated again between the reads.
     Reassociated,
     /// A read names no association time.
@@ -663,17 +666,31 @@ pub struct QueueWindow {
     pub balance: Balance,
 }
 
-/// The change of one value from `start` to `end`; a station's value only
-/// within one association.
-fn change(start: Option<&Observed>, end: Option<&Observed>, association: Association) -> Change {
+/// What two reads of a link share: whether the station kept its
+/// association and whether the router's clock went back between them.
+#[derive(Clone, Copy)]
+struct Reads {
+    association: Association,
+    /// The end's station read is strictly earlier on the router's boot
+    /// clock than the start's. Equal times stand: the clock steps 10 ms.
+    clock_went_back: bool,
+}
+
+/// The change of one value from `start` to `end`: none across a router
+/// restart (its own reads' clock, or the link's, went back), a station's
+/// value only within one association.
+fn change(start: Option<&Observed>, end: Option<&Observed>, reads: Reads) -> Change {
     let (Some(start), Some(end)) = (start, end) else {
         return Change::Unavailable;
     };
     if start.counts != end.counts || start.scope != end.scope {
         return Change::Invalid(Invalid::Mismatched);
     }
+    if reads.clock_went_back || end.observed_at_ms < start.observed_at_ms {
+        return Change::Invalid(Invalid::ClockWentBack);
+    }
     if start.scope != Scope::Radio {
-        match association {
+        match reads.association {
             Association::Same => {}
             Association::Changed => return Change::Invalid(Invalid::Reassociated),
             Association::Unconfirmed => return Change::Invalid(Invalid::AssociationUnconfirmed),
@@ -696,13 +713,9 @@ fn change(start: Option<&Observed>, end: Option<&Observed>, association: Associa
     }
 }
 
-fn tid_change(
-    start: Option<&TidQueue>,
-    end: Option<&TidQueue>,
-    association: Association,
-) -> TidChange {
+fn tid_change(start: Option<&TidQueue>, end: Option<&TidQueue>, reads: Reads) -> TidChange {
     let c = |field: fn(&TidQueue) -> Option<&Observed>| {
-        change(start.and_then(field), end.and_then(field), association)
+        change(start.and_then(field), end.and_then(field), reads)
     };
     TidChange {
         backlog_bytes: c(|queue| queue.backlog_bytes.as_ref()),
@@ -770,6 +783,10 @@ pub fn window(start: &StationLink, end: &StationLink) -> QueueWindow {
         (Some(_), Some(_)) => Association::Changed,
         _ => Association::Unconfirmed,
     };
+    let reads = Reads {
+        association,
+        clock_went_back: end.observed_at_ms < start.observed_at_ms,
+    };
     let mut tid_numbers = [start, end]
         .iter()
         .filter_map(|link| link.station_queues.as_ref())
@@ -782,7 +799,7 @@ pub fn window(start: &StationLink, end: &StationLink) -> QueueWindow {
         .map(|tid| {
             (
                 tid,
-                tid_change(tid_queue(start, tid), tid_queue(end, tid), association),
+                tid_change(tid_queue(start, tid), tid_queue(end, tid), reads),
             )
         })
         .collect::<BTreeMap<_, _>>();
@@ -793,11 +810,7 @@ pub fn window(start: &StationLink, end: &StationLink) -> QueueWindow {
         .map(|name| {
             (
                 name.clone(),
-                change(
-                    radio_value(start, name),
-                    radio_value(end, name),
-                    association,
-                ),
+                change(radio_value(start, name), radio_value(end, name), reads),
             )
         })
         .collect();
@@ -809,7 +822,7 @@ pub fn window(start: &StationLink, end: &StationLink) -> QueueWindow {
             link.observed_at_ms,
         )
     };
-    let entry = change(Some(&entry(start)), Some(&entry(end)), association);
+    let entry = change(Some(&entry(start)), Some(&entry(end)), reads);
     let skew = |link: &StationLink| {
         link.station_queues
             .as_ref()

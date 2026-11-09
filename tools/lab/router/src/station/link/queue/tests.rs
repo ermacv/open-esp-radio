@@ -388,3 +388,84 @@ fn the_clock_reads_hundredths_of_seconds() {
         assert!(parse_clock(refused).is_err(), "{refused}");
     }
 }
+
+#[test]
+fn a_station_change_across_a_router_clock_that_went_back_is_invalid() {
+    // The owner's counterexample: the first read at 100 s with the counter
+    // at 100, the second at 5 s with it already at 200, the association
+    // time numerically equal.
+    let file = |tx: u64| station(&format!("0 0 0 0 0 0 0 0 {tx}"), "0 0 0 0 0 0 0 0 0");
+    let start = read(&answer(
+        "100.00",
+        Some("1.000s"),
+        100,
+        "100.00",
+        &file(100),
+        "",
+    ));
+    let end = read(&answer("5.00", Some("1.000s"), 200, "5.00", &file(200), ""));
+    let queues = window(&start, &end);
+    assert_eq!(queues.association, Association::Same);
+    assert_eq!(
+        queues.balance.entry,
+        Change::Invalid(Invalid::ClockWentBack)
+    );
+    let tid0 = queues.tids.get(&0).unwrap();
+    for change in [
+        tid0.tx_packets,
+        tid0.drops,
+        tid0.backlog_packets,
+        tid0.overlimit,
+    ] {
+        assert_eq!(change, Change::Invalid(Invalid::ClockWentBack));
+    }
+    assert_eq!(
+        queues.tids.get(&7).unwrap().tx_packets,
+        Change::Invalid(Invalid::ClockWentBack)
+    );
+    assert!(matches!(queues.balance.remainder, Remainder::Open(_)));
+    // Equal times stand: the clock steps 10 ms.
+    let same_tick = read(&answer(
+        "100.00",
+        Some("1.000s"),
+        200,
+        "100.00",
+        &file(200),
+        "",
+    ));
+    let queues = window(&start, &same_tick);
+    assert_eq!(delta(queues.balance.entry), 100);
+    assert_eq!(delta(queues.tids.get(&0).unwrap().tx_packets), 100);
+    assert_eq!(queues.balance.remainder, Remainder::Packets(0));
+}
+
+#[test]
+fn a_radio_change_across_a_router_clock_that_went_back_is_invalid() {
+    // The owner's counterexample on the radio: 100 at 100 s, 200 at 5 s.
+    let radio = |count: u64| RADIO.replace("fq_overmemory 9", &format!("fq_overmemory {count}"));
+    let start = read(&answer("100.00", None, 1, "100.00", "", &radio(100)));
+    let end = read(&answer("5.00", None, 1, "5.00", "", &radio(200)));
+    let queues = window(&start, &end);
+    assert_eq!(
+        *queues.radio.get("fq_overmemory").unwrap(),
+        Change::Invalid(Invalid::ClockWentBack)
+    );
+    assert!(
+        queues
+            .radio
+            .values()
+            .all(|change| *change == Change::Invalid(Invalid::ClockWentBack)),
+        "every radio value"
+    );
+    // Its own read's clock suffices, though the station's went forward.
+    let late = read(&answer("200.00", None, 1, "5.00", "", &radio(200)));
+    assert_eq!(
+        *window(&start, &late).radio.get("fq_overmemory").unwrap(),
+        Change::Invalid(Invalid::ClockWentBack)
+    );
+    let forward = read(&answer("100.00", None, 1, "100.00", "", &radio(200)));
+    assert_eq!(
+        delta(*window(&start, &forward).radio.get("fq_overmemory").unwrap()),
+        100
+    );
+}

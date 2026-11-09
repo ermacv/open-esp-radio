@@ -453,9 +453,10 @@ are those of mac80211 in backports v6.18.26, the router's
 - the radio's values are every station's and never one station's.
 
 `station::link::queue::window` takes two such reads: each value's change, or
-why there is none (a read lacks it, the station associated again, its
-association time is missing, a counter went back by a reset or a 32-bit
-wrap). Its balance takes the station's `tx packets` (every TID) less every
+why there is none (a read lacks it, the router's boot clock went back
+between the reads, the station associated again, its association time is
+missing, a counter went back by a reset or a 32-bit wrap). Equal clock
+readings stand: the clock steps 10 ms. Its balance takes the station's `tx packets` (every TID) less every
 TID queue's dequeued, CoDel-dropped and backlog-change packets, TID 0 whole;
 the remainder is not attributed, and it stays open when a term is not the
 window's. No packet count of overlimit drops exists.
