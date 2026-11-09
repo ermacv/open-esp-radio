@@ -36,7 +36,8 @@ const MPDU_GROWTH: u32 = 26 + 8 + 8 + 8 + 4 - 14;
 /// grant with the full rate (mode, MCS, streams, width, guard interval and
 /// LTF) and the frame length, the ceiling with the length, whose bounds are
 /// this composition's constants. Another input computes it again, which a
-/// trace build tells `O` ([`crate::observation::AirCostComputed`]); `Noop` hears nothing.
+/// trace build tells `O` ([`crate::observation::AirCostComputed`]); `Noop`
+/// hears nothing.
 #[derive(Debug, Default)]
 pub struct S31Ceiling<O = Noop> {
     least: Cell<Option<(PhyRate, usize, NonZeroU32)>>,
