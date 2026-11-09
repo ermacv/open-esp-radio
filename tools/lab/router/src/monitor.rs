@@ -17,13 +17,15 @@
 //! Each step is attempted whatever the one before returned, and each
 //! result is kept. A capture succeeds only when it was cancelled, its
 //! stream ended within the bound with nothing discarded, the process
-//! exited with success, its reader ended without an error and the
-//! interface is confirmed gone. Every wait is bounded on an injected
+//! exited with success, its reader ended without an error, the interface
+//! is confirmed gone and its diagnostics were read whole. Every wait is bounded on an injected
 //! [`Clock`]: the service uses the host's, tests drive their own.
 //!
 //! The pcap bytes go to the [`Sink`] alone; the process's diagnostics and
 //! the run's ending go into the [`Report`] or the error, never into the
-//! stream.
+//! stream. Diagnostics that could not be read whole (a read error, an
+//! unbounded or non-UTF-8 stderr, a panic of their reader) fail the
+//! capture, with the prefix that was read.
 
 use std::time::Duration;
 
@@ -32,7 +34,12 @@ pub use stream::{Clock, HostClock, Next, Observer, ReaderEvent, STREAM_DEPTH, St
 
 use serde::Serialize;
 
-use crate::ssh::Result;
+use crate::ssh::{Result, Stderr, read_stderr};
+use std::{
+    io::Read,
+    sync::{Arc, Mutex, PoisonError},
+    thread::JoinHandle,
+};
 
 /// The interface the capture creates: no stand file names it.
 pub const INTERFACE: &str = "oercap0";
@@ -69,7 +76,59 @@ pub trait Process {
     /// process still running are errors.
     fn wait_exit<C: Clock>(&mut self, clock: &C, until: C::Instant) -> Result<String>;
     /// Its diagnostics, bounded; complete only after `wait_exit`.
-    fn diagnostics(&mut self) -> String;
+    fn diagnostics(&mut self) -> Diagnostics;
+}
+
+/// A process's diagnostics: the bounded text read, and why reading it
+/// failed, if it did. A failure fails the capture; the text is kept.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Diagnostics {
+    pub text: String,
+    pub error: Option<String>,
+}
+
+/// A process's stderr, read on its own thread by [`read_stderr`]. The
+/// lines read so far outlive a panic of that thread.
+pub struct StderrReader {
+    thread: JoinHandle<Stderr>,
+    seen: Arc<Mutex<String>>,
+}
+
+impl StderrReader {
+    /// Read `source` on a new thread, handing each line to `line`.
+    pub fn spawn(
+        source: impl Read + Send + 'static,
+        mut line: impl FnMut(&str) + Send + 'static,
+    ) -> Self {
+        let seen = Arc::new(Mutex::new(String::new()));
+        let kept = seen.clone();
+        let thread = std::thread::spawn(move || {
+            read_stderr(source, |text| {
+                kept.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push_str(text);
+                line(text);
+            })
+        });
+        Self { thread, seen }
+    }
+
+    /// Join the reader once its source ended: its text, and its read error
+    /// or its panic as the diagnostics' error.
+    pub fn join(self) -> Diagnostics {
+        match self.thread.join() {
+            Ok(stderr) => Diagnostics {
+                text: stderr.text,
+                error: stderr.error,
+            },
+            Err(_) => Diagnostics {
+                text: std::mem::take(
+                    &mut *self.seen.lock().unwrap_or_else(PoisonError::into_inner),
+                ),
+                error: Some("the capture's stderr reader panicked".to_owned()),
+            },
+        }
+    }
 }
 
 /// The router side of a capture.
@@ -191,7 +250,7 @@ struct Teardown {
     drain: Option<Drain>,
     exit: Option<Result<String>>,
     removed: Result<()>,
-    diagnostics: String,
+    diagnostics: Diagnostics,
 }
 
 impl Teardown {
@@ -200,6 +259,7 @@ impl Teardown {
             && self.drain.as_ref().is_none_or(Drain::clean)
             && self.exit.as_ref().is_none_or(Result::is_ok)
             && self.removed.is_ok()
+            && self.diagnostics.error.is_none()
     }
 
     fn describe(&self) -> String {
@@ -214,7 +274,7 @@ impl Teardown {
             Some(Err(error)) => error.clone(),
         };
         format!(
-            "stop: {}; drain: {}; exit: {exit}; interface removal: {}; diagnostics: {}",
+            "stop: {}; drain: {}; exit: {exit}; interface removal: {}; diagnostics: {}{}",
             step(&self.stop),
             self.drain
                 .as_ref()
@@ -222,7 +282,13 @@ impl Teardown {
             self.removed
                 .as_ref()
                 .map_or_else(Clone::clone, |()| "confirmed".to_owned()),
-            self.diagnostics.trim()
+            self.diagnostics.text.trim(),
+            self.diagnostics
+                .error
+                .as_ref()
+                .map_or_else(String::new, |error| format!(
+                    "; the diagnostics' read failed: {error}"
+                ))
         )
     }
 }
@@ -236,7 +302,7 @@ fn teardown<H: Host, C: Clock>(
     clock: &C,
 ) -> Teardown {
     let (stop, drained, exit, diagnostics) = match process {
-        None => (None, None, None, String::new()),
+        None => (None, None, None, Diagnostics::default()),
         Some((process, sink)) => {
             let stop = process.stop();
             let drained = drain(process, sink, clock);
@@ -348,7 +414,7 @@ pub fn capture<H: Host, S: Sink, C: Clock>(
             channel,
             bytes,
             exit: exit.clone(),
-            diagnostics: teardown.diagnostics,
+            diagnostics: teardown.diagnostics.text,
         }),
         _ => Err(format!(
             "the capture ended: {}; {bytes} bytes; {}",
@@ -405,15 +471,14 @@ pub fn parse_listing(text: &str) -> Result<Listing> {
 
 /// The router over SSH.
 pub mod ssh {
-    use super::{Clock, Host, Listing, Next, Process, Stream, Wait, parse_listing};
+    use super::{
+        Clock, Diagnostics, Host, Listing, Next, Process, StderrReader, Stream, Wait, parse_listing,
+    };
     use crate::{
         router::quote,
-        ssh::{Remote, Result, Ssh, Stderr, read_stderr},
+        ssh::{Remote, Result, Ssh},
     };
-    use std::{
-        sync::{Arc, Mutex, PoisonError, mpsc},
-        thread::JoinHandle,
-    };
+    use std::sync::{Arc, Mutex, PoisonError, mpsc};
 
     /// The router's `radio` (its UCI `wifi-device` section) over `ssh`.
     pub struct SshHost {
@@ -474,8 +539,8 @@ pub mod ssh {
         stream: Stream,
         ready: mpsc::Receiver<()>,
         pid: Arc<Mutex<Option<u32>>>,
-        stderr: Option<JoinHandle<Stderr>>,
-        diagnostics: String,
+        stderr: Option<StderrReader>,
+        diagnostics: Diagnostics,
     }
 
     impl SshProcess {
@@ -487,16 +552,14 @@ pub mod ssh {
             let pid = Arc::new(Mutex::new(None));
             let (announce, ready) = mpsc::sync_channel(1);
             let seen = pid.clone();
-            let stderr = std::thread::spawn(move || {
-                read_stderr(stderr, |line| {
-                    let line = line.trim();
-                    if let Some(number) = line.strip_prefix("oer-capture-pid ") {
-                        *seen.lock().unwrap_or_else(PoisonError::into_inner) =
-                            number.trim().parse().ok();
-                    } else if line.starts_with("listening on ") {
-                        let _ = announce.try_send(());
-                    }
-                })
+            let stderr = StderrReader::spawn(stderr, move |line| {
+                let line = line.trim();
+                if let Some(number) = line.strip_prefix("oer-capture-pid ") {
+                    *seen.lock().unwrap_or_else(PoisonError::into_inner) =
+                        number.trim().parse().ok();
+                } else if line.starts_with("listening on ") {
+                    let _ = announce.try_send(());
+                }
             });
             Ok(Self {
                 ssh,
@@ -505,7 +568,7 @@ pub mod ssh {
                 ready,
                 pid,
                 stderr: Some(stderr),
-                diagnostics: String::new(),
+                diagnostics: Diagnostics::default(),
             })
         }
 
@@ -543,11 +606,9 @@ pub mod ssh {
             }
             // The stream stops its reader whatever the source does.
             let read = self.stream.close(clock, until);
+            // Its read error or panic fails the capture, after every step.
             if let Some(stderr) = self.stderr.take() {
-                self.diagnostics = stderr.join().map_or_else(
-                    |_| "the capture's stderr reader failed".to_owned(),
-                    |stderr| stderr.text,
-                );
+                self.diagnostics = stderr.join();
             }
             // Gone on the router too, whatever the local side saw.
             let gone = match self.pid() {
@@ -579,7 +640,7 @@ pub mod ssh {
             }
         }
 
-        fn diagnostics(&mut self) -> String {
+        fn diagnostics(&mut self) -> Diagnostics {
             self.diagnostics.clone()
         }
     }

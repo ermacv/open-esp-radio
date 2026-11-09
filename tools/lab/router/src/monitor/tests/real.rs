@@ -136,6 +136,43 @@ struct PipeProcess {
     /// Chunks the reader must have delivered before the capture runs.
     ready_after: u64,
     exit_ok: bool,
+    /// The scripted stderr's reader, and the signal that lets its script
+    /// fail: sent at the stop request, dropped at the exit at the latest.
+    stderr: Option<StderrReader>,
+    stderr_signal: Option<mpsc::Sender<()>>,
+    diagnostics: Diagnostics,
+}
+
+/// How a scripted stderr ends once the capture's stop was requested,
+/// after its readiness.
+#[derive(Clone, Copy, Debug)]
+enum StderrEnd {
+    ReadError,
+    Panic,
+}
+
+/// A stderr that names its process, then waits for the stop request and
+/// ends as scripted.
+struct StderrScript {
+    first: bool,
+    signal: mpsc::Receiver<()>,
+    end: StderrEnd,
+}
+
+const PID_LINE: &str = "oer-capture-pid 7\n";
+
+impl Read for StderrScript {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if std::mem::take(&mut self.first) {
+            buffer[..PID_LINE.len()].copy_from_slice(PID_LINE.as_bytes());
+            return Ok(PID_LINE.len());
+        }
+        let _ = self.signal.recv();
+        match self.end {
+            StderrEnd::ReadError => Err(std::io::Error::other("ssh died")),
+            StderrEnd::Panic => panic!("the scripted stderr reader panics"),
+        }
+    }
 }
 
 impl Process for PipeProcess {
@@ -155,11 +192,20 @@ impl Process for PipeProcess {
     fn stop(&mut self) -> Result<()> {
         self.clock.signal_sent();
         let _ = self.signal.send(());
+        if let Some(signal) = &self.stderr_signal {
+            let _ = signal.send(());
+        }
         Ok(())
     }
 
     fn wait_exit<C: Clock>(&mut self, clock: &C, until: C::Instant) -> Result<String> {
-        let read = self.stream.close(clock, until)?;
+        let read = self.stream.close(clock, until);
+        // The process is gone: its stderr ends, and its reader is joined.
+        drop(self.stderr_signal.take());
+        if let Some(stderr) = self.stderr.take() {
+            self.diagnostics = stderr.join();
+        }
+        let read = read?;
         if self.exit_ok {
             Ok(format!("exited (0), {read} bytes read"))
         } else {
@@ -167,8 +213,8 @@ impl Process for PipeProcess {
         }
     }
 
-    fn diagnostics(&mut self) -> String {
-        String::new()
+    fn diagnostics(&mut self) -> Diagnostics {
+        self.diagnostics.clone()
     }
 }
 
@@ -326,15 +372,41 @@ fn capture_over(
     exit_ok: bool,
     sink: Sink,
 ) -> (Captured, u64, Arc<AtomicBool>) {
+    capture_with_stderr(script, ready_after, exit_ok, sink, None)
+}
+
+/// [`capture_over`], with a scripted stderr when `stderr` names its end.
+fn capture_with_stderr(
+    script: Script,
+    ready_after: u64,
+    exit_ok: bool,
+    sink: Sink,
+    stderr: Option<StderrEnd>,
+) -> (Captured, u64, Arc<AtomicBool>) {
     let clock = ManualClock::new();
     let (source, writer, dropped) = pipe(&clock, script);
     let stream = Stream::spawn(source, clock.clone()).unwrap();
+    let (stderr, stderr_signal) = match stderr {
+        None => (None, None),
+        Some(end) => {
+            let (signal, signals) = mpsc::channel();
+            let script = StderrScript {
+                first: true,
+                signal: signals,
+                end,
+            };
+            (Some(StderrReader::spawn(script, |_| {})), Some(signal))
+        }
+    };
     let process = PipeProcess {
         stream,
         signal: writer.signal.clone(),
         clock: clock.clone(),
         ready_after,
         exit_ok,
+        stderr,
+        stderr_signal,
+        diagnostics: Diagnostics::default(),
     };
     let log = Log::default();
     let mut host = PipeHost {
@@ -472,6 +544,69 @@ fn an_exit_other_than_success_fails_a_cancelled_capture() {
     assert!(error.contains("exited with 1"), "{error}");
     assert!(captured.log.removed());
     assert!(dropped.load(Ordering::SeqCst));
+}
+
+/// A capture whose stderr fails after its readiness, as `end` scripts:
+/// it fails with the stderr's failure and the prefix read, after every
+/// teardown step (the exit, the reader's join, the interface's removal).
+fn a_failed_stderr_fails_the_capture(end: StderrEnd, failure: &str) {
+    let (captured, _, dropped) = capture_with_stderr(
+        Script {
+            chunks: 2,
+            closes: true,
+            fail_after: None,
+        },
+        2,
+        true,
+        Sink {
+            cancel_after: Some(2),
+            ..sink()
+        },
+        Some(end),
+    );
+    let error = captured.result.unwrap_err();
+    assert!(error.contains("the capture ended: cancelled"), "{error}");
+    assert!(error.contains("exit: exited (0)"), "{error}");
+    assert!(error.contains("interface removal: confirmed"), "{error}");
+    assert!(
+        error.contains("diagnostics: oer-capture-pid 7; the diagnostics' read failed: "),
+        "{error}"
+    );
+    assert!(error.contains(failure), "{error}");
+    assert!(captured.log.removed());
+    assert!(dropped.load(Ordering::SeqCst));
+    // Every byte of the stream still reached the sink.
+    assert_eq!(captured.sink.bytes.len(), 2 * CHUNK + TAIL.len());
+}
+
+#[test]
+fn a_stderr_read_error_after_readiness_fails_a_cancelled_capture() {
+    a_failed_stderr_fails_the_capture(StderrEnd::ReadError, "cannot read router stderr");
+}
+
+#[test]
+fn a_stderr_reader_panic_after_readiness_fails_a_cancelled_capture() {
+    a_failed_stderr_fails_the_capture(StderrEnd::Panic, "the capture's stderr reader panicked");
+}
+
+#[test]
+fn a_whole_stderr_leaves_a_cancelled_capture_successful() {
+    // The control: the same capture, its stderr ending without a failure.
+    let (captured, _, _) = capture_over(
+        Script {
+            chunks: 2,
+            closes: true,
+            fail_after: None,
+        },
+        2,
+        true,
+        Sink {
+            cancel_after: Some(2),
+            ..sink()
+        },
+    );
+    let report = captured.result.unwrap();
+    assert_eq!(report.bytes, (2 * CHUNK + TAIL.len()) as u64);
 }
 
 #[test]
