@@ -31,5 +31,7 @@ mod frames;
 mod line;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 mod record;
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+mod shutdown;
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}

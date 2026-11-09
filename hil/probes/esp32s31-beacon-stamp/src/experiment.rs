@@ -62,8 +62,8 @@ static RECORDS: static_cell::ConstStaticCell<[Record; frames::ROUNDS as usize]> 
 
 pub(super) struct Resources<'a> {
     pub(super) access: &'a mut RadioAccess,
-    pub(super) subject: Pin<&'static mut TxSlot<TX_BUFFER>>,
-    pub(super) blocker: Pin<&'static mut TxSlot<TX_BUFFER>>,
+    pub(super) subject: Pin<&'a mut TxSlot<TX_BUFFER>>,
+    pub(super) blocker: Pin<&'a mut TxSlot<TX_BUFFER>>,
     pub(super) tx_power: PhyTxTargetPowerProfile,
     pub(super) tx_ceiling: TxCeiling,
     pub(super) ap: [u8; 6],
@@ -281,15 +281,26 @@ async fn round(
     Ok(record)
 }
 
-/// What the run left: the records it completed and why it ended early.
-struct Ran {
+/// What the measurement left: the records it completed and its clock
+/// samples. Its error is the measurement's result, kept apart.
+pub(super) struct Ran {
     count: usize,
-    start: Sample,
+    start: Option<Sample>,
     end: Option<Sample>,
-    error: Option<Name<32>>,
 }
 
-async fn rounds(resources: &mut Resources<'_>, records: &mut [Record]) -> Result<Ran, Name<32>> {
+/// The run's records, claimed before the walker starts.
+pub(super) fn records() -> Result<&'static mut [Record; frames::ROUNDS as usize], Name<32>> {
+    RECORDS.try_take().ok_or(name!("records-claimed"; 32))
+}
+
+/// Every round in order. Whatever ends it, `ran` keeps what was recorded;
+/// the caller runs the shared cleanup on every result.
+pub(super) async fn measure(
+    resources: &mut Resources<'_>,
+    records: &mut [Record],
+    ran: &mut Ran,
+) -> Result<(), Name<32>> {
     let addresses = Addresses {
         ap: resources.ap,
         absent: frames::ABSENT,
@@ -305,25 +316,15 @@ async fn rounds(resources: &mut Resources<'_>, records: &mut [Record]) -> Result
         .access
         .wifi_mac_hal()
         .reset_and_start_access_point_tsf();
-    let start = sample(resources.access);
-    let first = EmbassyClock
+    ran.start = Some(sample(resources.access));
+    let mut at = EmbassyClock
         .now()
         .checked_add(PERIOD)
         .ok_or(name!("round-deadline"; 32))?;
-    let mut ran = Ran {
-        count: 0,
-        start,
-        end: None,
-        error: None,
-    };
-    let mut at = first;
     for (n, slot) in (0..frames::ROUNDS).zip(records.iter_mut()) {
         wait_until(at).await;
         at = at.checked_add(PERIOD).ok_or(name!("round-deadline"; 32))?;
-        let Some((kind, arm)) = frames::round(n) else {
-            ran.error = Some(name!("round-schedule"; 32));
-            return Ok(ran);
-        };
+        let (kind, arm) = frames::round(n).ok_or(name!("round-schedule"; 32))?;
         let this = Round {
             n,
             kind,
@@ -332,19 +333,37 @@ async fn rounds(resources: &mut Resources<'_>, records: &mut [Record]) -> Result
             k: frames::k_of(n),
             channel: CHANNEL,
         };
-        match round(resources, this, addresses, power).await {
-            Ok(record) => {
-                *slot = record;
-                ran.count = ran.count.saturating_add(1);
-            }
-            Err(error) => {
-                ran.error = Some(error);
-                return Ok(ran);
-            }
-        }
+        *slot = round(resources, this, addresses, power).await?;
+        ran.count = ran.count.saturating_add(1);
     }
     ran.end = Some(sample(resources.access));
-    Ok(ran)
+    Ok(())
+}
+
+impl Ran {
+    pub(super) const fn new() -> Self {
+        Self {
+            count: 0,
+            start: None,
+            end: None,
+        }
+    }
+}
+
+/// Whether both transmit slots are free, every publication ended: the
+/// final check, run only after a confirmed walker stop.
+pub(super) fn slots_free(
+    subject: &Pin<&'static mut TxSlot<TX_BUFFER>>,
+    blocker: &Pin<&'static mut TxSlot<TX_BUFFER>>,
+) -> Result<(), Name<32>> {
+    let free = |slot: &Pin<&'static mut TxSlot<TX_BUFFER>>| {
+        slot.state() == oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::TxDmaState::Free
+    };
+    if free(subject) && free(blocker) {
+        Ok(())
+    } else {
+        Err(name!("tx-slot-held"; 32))
+    }
 }
 
 async fn line(console: &mut usb::Console, bytes: &[u8]) -> Result<(), Name<32>> {
@@ -353,59 +372,79 @@ async fn line(console: &mut usb::Console, bytes: &[u8]) -> Result<(), Name<32>> 
         .map_err(|_| name!("console-write"; 32))
 }
 
-/// Run every round, then print the records.
-pub(super) async fn run(
+/// The begin line, printed before the walker starts.
+pub(super) async fn begin(
     console: &mut usb::Console,
-    mut resources: Resources<'_>,
+    run: u32,
+    ap: [u8; 6],
 ) -> Result<(), Name<32>> {
-    let records = RECORDS.try_take().ok_or(name!("records-claimed"; 32))?;
-    let ran = rounds(&mut resources, records).await?;
-    let rx_full = resources.access.wifi_mac_hal().rx_buffer_full_count();
     let mut begin = crate::line::Line::<160>::new();
     begin
         .text(b"STAMP v1 begin run=")
-        .and_then(|l| l.hex32(resources.run))
+        .and_then(|l| l.hex32(run))
         .and_then(|l| l.text(b" channel="))
         .and_then(|l| l.decimal(u64::from(CHANNEL)))
         .and_then(|l| l.text(b" rounds="))
         .and_then(|l| l.decimal(u64::from(frames::ROUNDS)))
         .and_then(|l| l.text(b" ap="))
-        .and_then(|l| l.hex_bytes(&resources.ap))
+        .and_then(|l| l.hex_bytes(&ap))
         .and_then(|l| l.text(b" absent="))
         .and_then(|l| l.hex_bytes(&frames::ABSENT))
         .and_then(|l| l.text(b" blocker="))
         .and_then(|l| l.decimal(frames::BLOCKER_BODY as u64))
         .and_then(|l| l.text(b" rate=dsss1\n"))
         .map_err(|_| name!("line-full"; 32))?;
-    line(console, begin.as_bytes()).await?;
-    let start = record::clock_line(b"start", ran.start).map_err(|_| name!("line-full"; 32))?;
-    line(console, start.as_bytes()).await?;
+    line(console, begin.as_bytes()).await
+}
+
+/// How the run ended, for its end line.
+pub(super) struct End<'a> {
+    pub(super) rx_full: u16,
+    pub(super) cause: Option<&'a Name<32>>,
+    pub(super) mac: &'static str,
+    pub(super) dma: &'static str,
+    pub(super) finish: &'a [u8],
+}
+
+/// The clock samples, the completed records and the end line. Records are
+/// CPU memory: printing them touches no buffer the hardware may hold.
+pub(super) async fn dump(
+    console: &mut usb::Console,
+    ran: &Ran,
+    records: &[Record],
+    end: End<'_>,
+) -> Result<(), Name<32>> {
+    if let Some(start) = ran.start {
+        let start = record::clock_line(b"start", start).map_err(|_| name!("line-full"; 32))?;
+        line(console, start.as_bytes()).await?;
+    }
     for record in records.iter().take(ran.count) {
         let text = record::record_line(record).map_err(|_| name!("line-full"; 32))?;
         line(console, text.as_bytes()).await?;
     }
-    if let Some(end) = ran.end {
-        let end = record::clock_line(b"end", end).map_err(|_| name!("line-full"; 32))?;
-        line(console, end.as_bytes()).await?;
+    if let Some(stop) = ran.end {
+        let stop = record::clock_line(b"end", stop).map_err(|_| name!("line-full"; 32))?;
+        line(console, stop.as_bytes()).await?;
     }
-    let mut last = crate::line::Line::<96>::new();
+    let mut last = crate::line::Line::<160>::new();
     last.text(b"STAMP end records=")
         .and_then(|l| l.decimal(ran.count as u64))
         .and_then(|l| l.text(b" rxfull="))
-        .and_then(|l| l.decimal(u64::from(rx_full)))
+        .and_then(|l| l.decimal(u64::from(end.rx_full)))
         .and_then(|l| l.text(b" error="))
         .and_then(|l| {
             l.text(
-                ran.error
-                    .as_ref()
-                    .map_or(b"-".as_slice(), |e| e.as_str().as_bytes()),
+                end.cause
+                    .map_or(b"-".as_slice(), |cause| cause.as_str().as_bytes()),
             )
         })
+        .and_then(|l| l.text(b" mac="))
+        .and_then(|l| l.text(end.mac.as_bytes()))
+        .and_then(|l| l.text(b" dma="))
+        .and_then(|l| l.text(end.dma.as_bytes()))
+        .and_then(|l| l.text(b" finish="))
+        .and_then(|l| l.text(end.finish))
         .and_then(|l| l.text(b"\n"))
         .map_err(|_| name!("line-full"; 32))?;
-    line(console, last.as_bytes()).await?;
-    match ran.error {
-        Some(error) => Err(error),
-        None => Ok(()),
-    }
+    line(console, last.as_bytes()).await
 }

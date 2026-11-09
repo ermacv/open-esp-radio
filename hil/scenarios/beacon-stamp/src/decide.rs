@@ -4,7 +4,9 @@
 //!
 //! - H1 `CallerValue`: the frame went on the air with the caller's K.
 //! - H2 `ApTsfAtTransmission`: the AP TSF at the frame's transmission.
-//! - H3 `LocalTimeAtTransmission`: the MAC local time at transmission.
+//! - H3 `LocalTimeAtTransmission`: the MAC local time at transmission, a
+//!   32-bit counter, in the low word and zero in the high word (the vendor
+//!   writes `hal_now()` low and zero high): all eight octets predicted.
 //! - H4 `CallerPlusElapsed`: K plus the time from publication to
 //!   transmission.
 //! - `Other`: a partial overwrite (some octets keep K in every frame and
@@ -12,6 +14,23 @@
 //!   handoff rather than at transmission, frames of one kind that follow
 //!   different rules, or a change no clock explains.
 //! - `Insufficient`: the run or the capture cannot separate the hypotheses.
+//!
+//! Every hypothesis explains all eight octets; a value whose low word fits
+//! a clock but whose high word the hypothesis does not predict is other
+//! behaviour.
+//!
+//! Run conditions. A run whose shared cleanup was not confirmed (an error,
+//! a MAC still active, an unconfirmed walker stop, a failed final check)
+//! or whose MAC reported RX buffer overflows decides nothing: its outcome
+//! is kept as withheld evidence and the verdict is insufficient. An RX
+//! overflow is not shown to leave transmission alone, so it never becomes
+//! grounds for a Timestamp capability.
+//!
+//! Conditions of every outcome, which limit what it says of the vendor
+//! path: AIFSN 2 and CW 0 on both queues (the vendor's VO uses CW 3..7);
+//! probe responses unsolicited, to an absent receiver, without the
+//! vendor's TX-control bit 27, which has no equivalent here; the blocker on
+//! VI ahead of the VO subject, not in the subject's own queue.
 //!
 //! Clocks. The device gives, per frame, the pair (MAC local time, AP TSF)
 //! read before and after its publication and when its completion was seen;
@@ -69,6 +88,10 @@ pub const J_SNIFFER_MIN_US: f64 = 4.0;
 /// +-25 ppm of IEEE Std 802.11-2020 15.4.4.5 / 17.3.9.7 on each side, with
 /// margin.
 pub const RHO_MAX_PPM: f64 = 100.0;
+/// The largest residual of the undelayed frames' rate fit accepted. A
+/// sniffer TSFT from the sniffer MAC's own TSF follows the air within
+/// microseconds; a host receive time does not.
+pub const J_SNIFFER_MAX_US: f64 = 50.0;
 /// The largest AP TSF/MAC local rate difference accepted.
 pub const DEVICE_RATE_MAX_PPM: f64 = 100.0;
 /// Between the publication samples and a value the hardware takes at its
@@ -112,6 +135,18 @@ pub enum Other {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shortfall {
+    /// The probe's run did not end cleanly: its error and its cleanup.
+    DeviceRun {
+        error: Option<String>,
+        mac: String,
+        dma: String,
+        finish: String,
+    },
+    /// The MAC reported RX buffer overflows during the run.
+    RxOverflow {
+        count: u32,
+    },
+    NoStartClock,
     NoEndClock,
     ClockSeparation {
         micros: i64,
@@ -125,6 +160,11 @@ pub enum Shortfall {
     },
     SnifferRate {
         ppm: f64,
+    },
+    /// The undelayed frames scatter beyond `J_SNIFFER_MAX_US` around the
+    /// rate fit: the TSFT does not follow the air.
+    SnifferJitter {
+        micros: f64,
     },
     TagMismatch {
         n: u16,
@@ -184,6 +224,8 @@ pub struct Evidence {
     pub readback_kept: usize,
     pub readback_air: usize,
     pub readback_other: usize,
+    /// The outcome a run condition withheld.
+    pub withheld: Option<Outcome>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -354,14 +396,14 @@ fn fit(points: &[(f64, f64)]) -> Option<(f64, f64, f64)> {
 }
 
 fn clocks(run: &Run, all: &[Joined<'_>]) -> Result<Clocks, Shortfall> {
+    let start = run.start.ok_or(Shortfall::NoStartClock)?;
     let end = run.end.ok_or(Shortfall::NoEndClock)?;
-    let separation =
-        i64::from(run.start.local_before) - i64::try_from(run.start.tsf).unwrap_or(i64::MAX);
+    let separation = i64::from(start.local_before) - i64::try_from(start.tsf).unwrap_or(i64::MAX);
     if separation < CLOCK_SEPARATION_MIN_US {
         return Err(Shortfall::ClockSeparation { micros: separation });
     }
-    let local_span = local_delta(run.start.local_before, end.local_before);
-    let tsf_rate = tsft_delta(run.start.tsf, end.tsf) / local_span;
+    let local_span = local_delta(start.local_before, end.local_before);
+    let tsf_rate = tsft_delta(start.tsf, end.tsf) / local_span;
     let ppm = (tsf_rate - 1.0) * 1e6;
     if !ppm.is_finite() || ppm.abs() > DEVICE_RATE_MAX_PPM {
         return Err(Shortfall::DeviceClockRate { ppm });
@@ -388,6 +430,9 @@ fn clocks(run: &Run, all: &[Joined<'_>]) -> Result<Clocks, Shortfall> {
     let ppm = (slope - 1.0) * 1e6;
     if ppm.abs() > RHO_MAX_PPM {
         return Err(Shortfall::SnifferRate { ppm });
+    }
+    if jitter > J_SNIFFER_MAX_US {
+        return Err(Shortfall::SnifferJitter { micros: jitter });
     }
     Ok(Clocks {
         tsf_rate,
@@ -419,6 +464,10 @@ fn offset(joined: &Joined<'_>, family: Family) -> Option<f64> {
                 .then(|| (value - i128::from(record.published.tsf)) as f64)
         }
         Family::LocalTime => {
+            // The counter is 32 bits wide: the high word is zero.
+            if joined.value >> 32 != 0 {
+                return None;
+            }
             let low = joined.value as u32;
             in_window_32(low, record.published.local_before, width)
                 .then(|| local_delta(record.published.local_before, low))
@@ -520,14 +569,7 @@ fn unchanged(joined: &[Joined<'_>]) -> u8 {
 /// The one family every frame's value fits, or the reason none does.
 fn family(joined: &[Joined<'_>]) -> Result<Family, Other> {
     let families = [Family::ApTsf, Family::LocalTime, Family::CallerPlusElapsed];
-    let fits = |family: Family| {
-        let all = joined.iter().all(|frame| offset(frame, family).is_some());
-        let high_constant = family != Family::LocalTime
-            || joined
-                .windows(2)
-                .all(|pair| matches!(pair, [a, b] if a.value >> 32 == b.value >> 32));
-        all && high_constant
-    };
+    let fits = |family: Family| joined.iter().all(|frame| offset(frame, family).is_some());
     let matching: Vec<Family> = families.into_iter().filter(|f| fits(*f)).collect();
     match matching.as_slice() {
         [family] => Ok(*family),
@@ -596,7 +638,25 @@ fn instant(
     }
 }
 
-fn verdict(kind: Kind, joining: Joining<'_>, clocks: &Result<Clocks, Shortfall>) -> Verdict {
+/// The run's own condition that withholds every kind's outcome.
+fn run_condition(run: &Run) -> Option<Shortfall> {
+    if run.error.is_some() || !run.stops.confirmed() {
+        return Some(Shortfall::DeviceRun {
+            error: run.error.clone(),
+            mac: run.stops.mac.clone(),
+            dma: run.stops.dma.clone(),
+            finish: run.stops.finish.clone(),
+        });
+    }
+    (run.rx_full != 0).then_some(Shortfall::RxOverflow { count: run.rx_full })
+}
+
+fn verdict(
+    run: &Run,
+    kind: Kind,
+    joining: Joining<'_>,
+    clocks: &Result<Clocks, Shortfall>,
+) -> Verdict {
     let joined = &joining.joined;
     let mut evidence = Evidence {
         matched: joined.len(),
@@ -654,6 +714,13 @@ fn verdict(kind: Kind, joining: Joining<'_>, clocks: &Result<Clocks, Shortfall>)
             Err(other) => Outcome::Other(other),
         }
     })();
+    let outcome = match run_condition(run) {
+        Some(condition) if outcome.decided() => {
+            evidence.withheld = Some(outcome);
+            Outcome::Insufficient(condition)
+        }
+        _ => outcome,
+    };
     Verdict {
         kind,
         outcome,
@@ -675,7 +742,7 @@ pub fn decide(run: &Run, capture: &Capture) -> (Result<Clocks, Shortfall>, Vec<V
     let clocks = clocks(run, &all);
     let verdicts = joinings
         .into_iter()
-        .map(|(kind, joining)| verdict(kind, joining, &clocks))
+        .map(|(kind, joining)| verdict(run, kind, joining, &clocks))
         .collect();
     (clocks, verdicts)
 }

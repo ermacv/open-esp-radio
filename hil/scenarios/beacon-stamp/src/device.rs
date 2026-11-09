@@ -81,12 +81,31 @@ pub struct Run {
     pub ap: [u8; 6],
     pub absent: [u8; 6],
     pub blocker_body: usize,
-    pub start: Sample,
+    pub start: Option<Sample>,
     pub end: Option<Sample>,
     pub records: Vec<Record>,
-    /// The probe's own end line: its record count and its error, if any.
+    /// The probe's own end line: its record count, its error, if any, the
+    /// MAC's RX buffer-full count, both stop results and the final check.
     pub reported: usize,
     pub error: Option<String>,
+    pub rx_full: u32,
+    pub stops: Stops,
+}
+
+/// How the probe's shared cleanup ended.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Stops {
+    pub mac: String,
+    pub dma: String,
+    pub finish: String,
+}
+
+impl Stops {
+    /// The MAC went inactive, the walker stopped and the final check
+    /// passed.
+    pub fn confirmed(&self) -> bool {
+        self.mac == "inactive" && self.dma == "stopped" && self.finish == "passed"
+    }
 }
 
 fn field<'a>(line: &'a str, name: &str) -> Result<&'a str, String> {
@@ -213,11 +232,17 @@ pub fn parse(log: &str) -> Result<Run, String> {
                 blocker_body: field(line, "blocker")?
                     .parse()
                     .map_err(|_| "blocker".to_owned())?,
-                start: Sample::default(),
+                start: None,
                 end: None,
                 records: Vec::new(),
                 reported: 0,
                 error: None,
+                rx_full: 0,
+                stops: Stops {
+                    mac: String::new(),
+                    dma: String::new(),
+                    finish: String::new(),
+                },
             });
             continue;
         }
@@ -230,7 +255,7 @@ pub fn parse(log: &str) -> Result<Run, String> {
         if line.starts_with("STAMP clock ") {
             let value = sample(field(line, "s")?)?;
             match field(line, "at")? {
-                "start" => current.start = value,
+                "start" => current.start = Some(value),
                 "end" => current.end = Some(value),
                 other => return Err(format!("clock at `{other}`")),
             }
@@ -243,6 +268,14 @@ pub fn parse(log: &str) -> Result<Run, String> {
             current.error = match field(line, "error")? {
                 "-" => None,
                 error => Some(error.to_owned()),
+            };
+            current.rx_full = field(line, "rxfull")?
+                .parse()
+                .map_err(|_| "rxfull".to_owned())?;
+            current.stops = Stops {
+                mac: field(line, "mac")?.to_owned(),
+                dma: field(line, "dma")?.to_owned(),
+                finish: field(line, "finish")?.to_owned(),
             };
             ended = true;
         } else {
@@ -273,7 +306,7 @@ mod tests {
         STAMP rec n=0 kind=b arm=u k=1122334455667788 bpub=- bdone=- bq=- pub=001e9000,0000000000000b85,001e9002 hand=001e9004,0000000000000b89,001e9006 done=001e9100,0000000000000c85,001e9102,00,00 rb=8877665544332211\n\
         STAMP rec n=1 kind=b arm=d k=2233445566778899 bpub=001f0000,0000000000016b85,001f0002 bdone=001f3080,0000000000019c05,001f3082,00,00 bq=03 pub=001f0400,0000000000016f85,001f0402 hand=001f0404,0000000000016f89,001f0406 done=001f3100,0000000000019c85,001f3102,00,00 rb=-\n\
         STAMP clock at=end s=002e8480,0000000000f42405,002e8482\n\
-        STAMP end records=2 rxfull=0 error=-\n\
+        STAMP end records=2 rxfull=0 error=- mac=inactive dma=stopped finish=passed\n\
         OER-RESULT: pass beacon-stamp\n";
 
     #[test]
@@ -281,7 +314,9 @@ mod tests {
         let run = parse(LOG).unwrap();
         assert_eq!(run.run, 0x0bad_c0de);
         assert_eq!(run.ap, [0x60, 0x55, 0xf9, 1, 2, 3]);
-        assert_eq!(run.start.local_before, 0x001e_8480);
+        assert_eq!(run.start.unwrap().local_before, 0x001e_8480);
+        assert_eq!(run.rx_full, 0);
+        assert!(run.stops.confirmed());
         assert_eq!(run.end.unwrap().tsf, 0xf4_2405);
         assert_eq!(run.records.len(), 2);
         let undelayed = run.records[0];
@@ -321,11 +356,22 @@ mod tests {
     }
 
     #[test]
-    fn the_probes_error_is_kept() {
-        let failed = LOG.replace("error=-", "error=completion-timeout");
-        assert_eq!(
-            parse(&failed).unwrap().error.as_deref(),
-            Some("completion-timeout")
+    fn the_probes_error_rx_overflow_and_stops_are_kept() {
+        let failed = LOG.replace(
+            "rxfull=0 error=- mac=inactive dma=stopped finish=passed",
+            "rxfull=7 error=completion-timeout mac=still-active dma=unconfirmed finish=not-run",
         );
+        let run = parse(&failed).unwrap();
+        assert_eq!(run.error.as_deref(), Some("completion-timeout"));
+        assert_eq!(run.rx_full, 7);
+        assert_eq!(run.stops.mac, "still-active");
+        assert_eq!(run.stops.dma, "unconfirmed");
+        assert!(!run.stops.confirmed());
+    }
+
+    #[test]
+    fn an_end_line_without_its_stops_is_refused() {
+        let old = LOG.replace(" mac=inactive dma=stopped finish=passed", "");
+        assert!(parse(&old).is_err());
     }
 }

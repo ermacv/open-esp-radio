@@ -4,9 +4,9 @@
 //!
 //! ```text
 //! STAMP v1 begin run=<8 hex> channel=<dec> rounds=<dec> ap=<12 hex> absent=<12 hex> blocker=<dec> rate=dsss1
-//! STAMP clock at=<start|end> s=<sample>
+//! STAMP clock at=<start|end> s=<sample>        (each only once its sample exists)
 //! STAMP rec n=<dec> kind=<b|p|a> arm=<u|d> k=<16 hex> bpub=<sample|-> bdone=<completion|-> bq=<2 hex|-> pub=<sample> hand=<sample> done=<completion|-> rb=<16 hex|->
-//! STAMP end records=<dec> rxfull=<dec> error=<name|->
+//! STAMP end records=<dec> rxfull=<dec> error=<name|-> mac=<inactive|still-active|deadline-overflow|wait-overflow> dma=<stopped|unconfirmed> finish=<passed|not-run|name>
 //! ```
 //!
 //! A `<sample>` is `<local before>,<AP TSF>,<local after>` in hexadecimal

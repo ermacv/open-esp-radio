@@ -1,18 +1,17 @@
 //! TEMPORARY experiment host program (branch `probe/beacon-timestamp`,
 //! never merged): who writes the Timestamp of a transmitted beacon.
 //!
-//! `run <board> <bundle-directory> <console-log>` builds nothing: the
-//! probe's bundle is built first by the standard
+//! `run <board> <bundle-directory> <console-log> <capture.pcap>` builds
+//! nothing: the probe's bundle is built first by the standard
 //! `cargo fw build esp32s31-beacon-stamp`, outside any lease, and its
 //! identity comes from that build's own records (`bundle.rs`). Under one
-//! lease on the board and the air it writes the bundle and reads the
-//! probe's console from its reset to its `OER-RESULT:` line into the log.
-//! The probe needs no network, peer or secret: its frames go out open, to
-//! the broadcast address or to an absent receiver.
-//!
-//! The capture is not this program's: the stand's monitor interface
-//! records the probe's channel (13) with radiotap TSFT into a pcap file
-//! from before the probe's reset until after its result line.
+//! lease on the board, the router and the air it starts the router's
+//! monitor capture of the probe's channel (`sniffer.rs`), writes the
+//! bundle, reads the probe's console from its reset to its `OER-RESULT:`
+//! line into the log, stops the capture and releases the lease; each of
+//! the three results is kept. The probe needs no network, peer or secret:
+//! its frames go out open, to the broadcast address or to an absent
+//! receiver.
 //!
 //! `decide <console-log> <capture.pcap>` reads both and applies the rule
 //! of `decide.rs` to each kind of subject frame. It exits 0 when every
@@ -25,12 +24,14 @@ mod console;
 mod decide;
 mod device;
 mod result;
+mod sniffer;
 
 use std::{path::Path, process::ExitCode, time::Duration};
 
 use oer_tools_lab_arbiter::{
     claims::{AIR, Claim},
     journal::ImageIdentity,
+    readiness::ROUTER,
 };
 use oer_tools_lab_client::{
     client::Client,
@@ -40,6 +41,8 @@ use oer_tools_lab_client::{
 use crate::{bundle::Identity, console::ConsoleSession, result::ProbeResult};
 
 const IMAGE: &str = "esp32s31-beacon-stamp";
+/// The probe's channel (`hil/probes/esp32s31-beacon-stamp/src/image.rs`).
+const CHANNEL: u8 = 13;
 /// From the probe's reset to its result line: boot, RF start, the clock
 /// separation, 96 rounds of 100 ms and the dump.
 const CONSOLE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -50,8 +53,13 @@ fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     match words.as_slice() {
-        ["run", board, bundle, console] => {
-            match run(board, Path::new(bundle), Path::new(console)) {
+        ["run", board, bundle, console, capture] => {
+            match run(
+                board,
+                Path::new(bundle),
+                Path::new(console),
+                Path::new(capture),
+            ) {
                 Ok(true) => ExitCode::SUCCESS,
                 Ok(false) => ExitCode::from(1),
                 Err(error) => {
@@ -70,15 +78,16 @@ fn main() -> ExitCode {
         },
         _ => {
             eprintln!(
-                "usage: oer-hil-scenarios-beacon-stamp run <board> <bundle-directory> <console-log>\n       oer-hil-scenarios-beacon-stamp decide <console-log> <capture.pcap>"
+                "usage: oer-hil-scenarios-beacon-stamp run <board> <bundle-directory> <console-log> <capture.pcap>\n       oer-hil-scenarios-beacon-stamp decide <console-log> <capture.pcap>"
             );
             ExitCode::from(2)
         }
     }
 }
 
-/// `Ok(true)` when the probe printed its pass line.
-fn run(board_id: &str, bundle: &Path, console: &Path) -> Result<bool> {
+/// `Ok(true)` when the probe printed its pass line, the capture stopped
+/// and the lease was released.
+fn run(board_id: &str, bundle: &Path, console: &Path, capture: &Path) -> Result<bool> {
     let identity = bundle::identity(bundle)?;
     eprintln!(
         "beacon-stamp: bundle of {} at {} (dirty {}), application {}",
@@ -103,19 +112,44 @@ fn run(board_id: &str, bundle: &Path, console: &Path) -> Result<bool> {
             work: format!("beacon-stamp probe on {board_id}"),
             scenarios: Vec::new(),
             run: None,
-            claims: vec![Claim::board(&board.mac), Claim::exclusive(AIR)],
+            claims: vec![
+                Claim::board(&board.mac),
+                Claim::exclusive(ROUTER),
+                Claim::exclusive(AIR),
+            ],
             maintenance: None,
             divisible: false,
         },
         &mut |message| eprintln!("beacon-stamp: {message}"),
     )?;
     eprintln!("beacon-stamp: lease {} granted", granted.lease);
-    let ran = leased(&mut client, &board.mac, &owner, bundle, &identity, console);
+    let captured = sniffer::with_capture(&mut sniffer::RouterMonitor, CHANNEL, capture, || {
+        leased(&mut client, &board.mac, &owner, bundle, &identity, console)
+    });
     let released = client.release();
     eprintln!("beacon-stamp: lease {} released", granted.lease);
-    let passed = ran?;
-    released?;
-    Ok(passed)
+    ended(captured, released)
+}
+
+/// The run's result only when the probe ran, the capture stopped and the
+/// lease was released; otherwise every failure, together.
+fn ended(captured: sniffer::Captured<bool>, released: Result<()>) -> Result<bool> {
+    let probe = match captured.body {
+        None => Err("the probe was not run".to_owned()),
+        Some(result) => result,
+    };
+    match (probe, captured.capture, released) {
+        (Ok(passed), Ok(file), Ok(())) => {
+            eprintln!("beacon-stamp: capture {}", file.display());
+            Ok(passed)
+        }
+        (probe, capture, released) => Err(format!(
+            "probe: {}; capture: {}; release: {}",
+            probe.map_or_else(|e| e, |passed| format!("ran, pass {passed}")),
+            capture.map_or_else(|e| e, |file| format!("stopped, {}", file.display())),
+            released.map_or_else(|e| e, |()| "released".to_owned()),
+        )),
+    }
 }
 
 fn leased(
@@ -186,6 +220,11 @@ fn decide(console: &Path, capture: &Path) -> Result<bool> {
         capture.without_tsft,
         capture.bad_fcs
     );
+    println!(
+        "probe cleanup: mac {} dma {} final check {}; RX buffer overflows {}",
+        run.stops.mac, run.stops.dma, run.stops.finish, run.rx_full
+    );
+    println!("conditions: {CONDITIONS}");
     let (clocks, verdicts) = decide::decide(&run, &capture);
     match &clocks {
         Ok(clocks) => println!(
@@ -218,7 +257,59 @@ fn decide(console: &Path, capture: &Path) -> Result<bool> {
             evidence.readback_air,
             evidence.readback_other
         );
+        if let Some(withheld) = &evidence.withheld {
+            println!("  withheld by the run's condition: {}", withheld.name());
+        }
         decided &= verdict.outcome.decided();
     }
     Ok(decided)
+}
+
+/// What every outcome is conditional on: it says nothing of the vendor
+/// path beyond them.
+const CONDITIONS: &str = "AP interface, DSSS 1 Mb/s, one attempt; AIFSN 2 and CW 0 on both queues (vendor VO: CW 3..7); \
+the blocker on VI ahead of the VO subject, not in the subject's queue; probe responses unsolicited, to an absent receiver, \
+without the vendor's TX-control bit 27 (no equivalent here): a probe-response outcome does not describe the vendor's \
+unicast probe-response path";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn only_a_run_whose_capture_stopped_and_lease_ended_has_a_result() {
+        let captured = sniffer::Captured {
+            body: Some(Ok(true)),
+            capture: Ok(PathBuf::from("run.pcap")),
+        };
+        assert_eq!(ended(captured, Ok(())), Ok(true));
+        let captured = sniffer::Captured {
+            body: Some(Ok(true)),
+            capture: Ok(PathBuf::from("run.pcap")),
+        };
+        assert!(
+            ended(captured, Err("lab gone".into()))
+                .unwrap_err()
+                .contains("lab gone")
+        );
+    }
+
+    #[test]
+    fn every_failure_is_kept_together() {
+        let captured = sniffer::Captured::<bool> {
+            body: Some(Err("console timeout".into())),
+            capture: Err("tcpdump lost".into()),
+        };
+        let error = ended(captured, Err("release refused".into())).unwrap_err();
+        for cause in ["console timeout", "tcpdump lost", "release refused"] {
+            assert!(error.contains(cause), "{error}");
+        }
+        let captured = sniffer::Captured::<bool> {
+            body: None,
+            capture: Err("the capture did not start".into()),
+        };
+        let error = ended(captured, Ok(())).unwrap_err();
+        assert!(error.contains("not run") && error.contains("did not start"));
+    }
 }

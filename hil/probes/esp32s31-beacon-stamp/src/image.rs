@@ -496,27 +496,68 @@ async fn capture(boot: Boot) {
     } = boot;
     let booted = usb::text(&mut console, b"STAMP boot\n").await;
     let outcome = run_direct(&mut console, mac_irq, ap, run).await;
-    let parts: [&[u8]; 3] = match &outcome {
-        Err(reason) => [
-            b"OER-RESULT: fail beacon-stamp error=",
-            reason.as_str().as_bytes(),
-            b"\n",
-        ],
-        Ok(()) => [b"OER-RESULT: pass beacon-stamp", b"", b"\n"],
-    };
-    let mut written = Ok(());
-    for part in parts {
-        if written.is_ok() {
-            written = usb::text(&mut console, part).await;
-        }
+    let mut line = crate::line::Line::<192>::new();
+    if result_line(&outcome, &mut line).is_err() {
+        line = crate::line::Line::new();
+        let _ = line.text(b"OER-RESULT: fail beacon-stamp report-overflow\n");
     }
+    let written = usb::text(&mut console, line.as_bytes()).await;
     // The console is this image's only output: a write it refuses has no
     // other place to be reported, and no other line replaces the result.
     let _ = (booted, written);
 }
 
+type Name = oer_portable_diagnostics::Name<32>;
+
+fn finish_name(finish: &crate::shutdown::Finish<Name>) -> &[u8] {
+    match finish {
+        crate::shutdown::Finish::NotRun => b"not-run",
+        crate::shutdown::Finish::Passed => b"passed",
+        crate::shutdown::Finish::Failed(error) => error.as_str().as_bytes(),
+    }
+}
+
+/// The run's one result line: a pass only for a completed run.
+fn result_line<const N: usize>(
+    outcome: &Result<crate::shutdown::RunOutcome<Name>, Name>,
+    line: &mut crate::line::Line<N>,
+) -> Result<(), crate::line::LineFull> {
+    use crate::shutdown::RunOutcome;
+    match outcome {
+        Err(reason) => {
+            line.text(b"OER-RESULT: fail beacon-stamp error=")?
+                .text(reason.as_str().as_bytes())?
+                .text(b"\n")?;
+        }
+        Ok(RunOutcome::Completed) => {
+            line.text(b"OER-RESULT: pass beacon-stamp\n")?;
+        }
+        Ok(RunOutcome::Failed {
+            cause,
+            mac,
+            dma,
+            finish,
+        }) => {
+            line.text(b"OER-RESULT: fail beacon-stamp cleanup cause=")?
+                .text(
+                    cause
+                        .as_ref()
+                        .map_or(b"none".as_slice(), |c| c.as_str().as_bytes()),
+                )?
+                .text(b" mac=")?
+                .text(mac.name().as_bytes())?
+                .text(b" dma=")?
+                .text(dma.name().as_bytes())?
+                .text(b" finish=")?
+                .text(finish_name(finish))?
+                .text(b"\n")?;
+        }
+    }
+    Ok(())
+}
+
 /// Wait `by` on the executor's timer.
-async fn wait(by: Duration) -> Result<(), oer_portable_diagnostics::Name<32>> {
+async fn wait(by: Duration) -> Result<(), Name> {
     let at = EmbassyClock
         .now()
         .checked_add(by)
@@ -525,12 +566,14 @@ async fn wait(by: Duration) -> Result<(), oer_portable_diagnostics::Name<32>> {
     Ok(())
 }
 
+/// Everything up to the walker start returns early: nothing runs yet.
+/// From the start on, every path goes through the one shared cleanup.
 async fn run_direct(
     console: &mut usb::Console,
     mut mac_irq: oer_chips_esp32s31_hal::system::owner::MacInterruptRegisters,
     ap: [u8; 6],
     run: u32,
-) -> Result<(), oer_portable_diagnostics::Name<32>> {
+) -> Result<crate::shutdown::RunOutcome<Name>, Name> {
     let deadline = EmbassyClock
         .now()
         .checked_add(Duration::from_secs(5))
@@ -547,6 +590,31 @@ async fn run_direct(
     let tx_power = output.tx_power;
     let tx_ceiling = output.tx_ceiling;
     let access = &mut output.access;
+    // The transmit side and the records are prepared before the walker
+    // starts: a refusal here returns before anything runs.
+    let records = experiment::records()?;
+    let pool = PlacedTxPool::pin(
+        TX_POOL
+            .take()
+            .ok_or(oer_portable_diagnostics::name!("tx-pool-claimed"; 32))?,
+    )
+    .map_err(|_| oer_portable_diagnostics::name!("tx-pool-place"; 32))?;
+    let mut subject = slot(
+        &SUBJECT_SLOT,
+        TX_SUBJECT
+            .take()
+            .ok_or(oer_portable_diagnostics::name!("tx-subject-claimed"; 32))?,
+        &pool,
+        0,
+    )?;
+    let mut blocker = slot(
+        &BLOCKER_SLOT,
+        TX_BLOCKER
+            .take()
+            .ok_or(oer_portable_diagnostics::name!("tx-blocker-claimed"; 32))?,
+        &pool,
+        1,
+    )?;
     let placed = RxDmaStorage::place(
         RX.take()
             .ok_or(oer_portable_diagnostics::name!("rx-claimed"; 32))?,
@@ -559,71 +627,125 @@ async fn run_direct(
     let stopped_ring = ready
         .publish(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-publish"; 32))?;
+    experiment::begin(console, run, ap).await?;
     let ring = stopped_ring
         .try_start(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-start"; 32))?;
+    // From here every path, the last round, a fatal RAW right after the
+    // start, a transmit preparation's or a round's error, goes through the
+    // one shared cleanup (`shutdown`): no early return before both stops.
+    let mut ran = experiment::Ran::new();
     let stale = mac_irq.mac_interrupt_raw();
-    if stale.fatal_assertion_raw().is_some() {
-        return Err(oer_portable_diagnostics::name!("initial-fatal"; 32));
-    }
-    mac_irq.acknowledge_mac_interrupt_raw(stale);
-    // The production order: the walker runs, then the MAC runtime starts.
-    access.wifi_mac_hal().start_mac_runtime(&ring);
-    mac_irq.mask_all_mac_interrupts();
-    // The transmit side: one pool of two buffers, one descriptor for the
-    // subject on VO and one for the blocker on VI.
-    let pool = PlacedTxPool::pin(
-        TX_POOL
-            .take()
-            .ok_or(oer_portable_diagnostics::name!("tx-pool-claimed"; 32))?,
-    )
-    .map_err(|_| oer_portable_diagnostics::name!("tx-pool-place"; 32))?;
-    let subject = slot(
-        &SUBJECT_SLOT,
-        TX_SUBJECT
-            .take()
-            .ok_or(oer_portable_diagnostics::name!("tx-subject-claimed"; 32))?,
-        &pool,
-        0,
-    )?;
-    let blocker = slot(
-        &BLOCKER_SLOT,
-        TX_BLOCKER
-            .take()
-            .ok_or(oer_portable_diagnostics::name!("tx-blocker-claimed"; 32))?,
-        &pool,
-        1,
-    )?;
-    let observation = experiment::run(
-        console,
-        experiment::Resources {
-            access,
-            subject,
-            blocker,
+    let measured = if stale.fatal_assertion_raw().is_some() {
+        Err(oer_portable_diagnostics::name!("initial-fatal"; 32))
+    } else {
+        mac_irq.acknowledge_mac_interrupt_raw(stale);
+        // The production order: the walker runs, then the MAC runtime.
+        access.wifi_mac_hal().start_mac_runtime(&ring);
+        mac_irq.mask_all_mac_interrupts();
+        let mut resources = experiment::Resources {
+            access: &mut *access,
+            subject: subject.as_mut(),
+            blocker: blocker.as_mut(),
             tx_power,
             tx_ceiling,
             ap,
             run,
+        };
+        experiment::measure(&mut resources, records, &mut ran).await
+    };
+    // A register read: it touches no buffer.
+    let rx_full = access.wifi_mac_hal().rx_buffer_full_count();
+    let mut stop = ProbeStop {
+        access,
+        ring: Some(ring),
+        halted: None,
+    };
+    let (mac, dma) = crate::shutdown::shut_down(&mut stop).await;
+    // The final check runs only on a confirmed walker stop; otherwise the
+    // ring, the slots and their buffers stay held, never reused, whether or
+    // not the board is reset after the run.
+    let outcome = crate::shutdown::conclude(measured, mac, dma, || {
+        experiment::slots_free(&subject, &blocker)
+    });
+    let (cause, finish) = match &outcome {
+        crate::shutdown::RunOutcome::Completed => (None, b"passed".as_slice()),
+        crate::shutdown::RunOutcome::Failed { cause, finish, .. } => {
+            (cause.as_ref(), finish_name(finish))
+        }
+    };
+    experiment::dump(
+        console,
+        &ran,
+        records,
+        experiment::End {
+            rx_full,
+            cause,
+            mac: mac.name(),
+            dma: dma.name(),
+            finish,
         },
     )
-    .await;
-    access.wifi_mac_hal().request_channel_stop();
-    let deadline = EmbassyClock
-        .now()
-        .checked_add(Duration::from_millis(50))
-        .ok_or(oer_portable_diagnostics::name!("stop-deadline"; 32))?;
-    while access.wifi_mac_hal().channel_active_state() != 0 {
-        if EmbassyClock.now() >= deadline {
-            return Err(oer_portable_diagnostics::name!("mac-stop"; 32));
-        }
-        wait(Duration::from_millis(1)).await?;
+    .await?;
+    Ok(outcome)
+}
+
+/// The cleanup's port: the MAC channel, the clock for its bounded wait and
+/// the walker. A walker that does not read back as stopped stays here.
+struct ProbeStop<'a> {
+    access: &'a mut oer_chips_esp32s31_hal::system::owner::RadioAccess,
+    ring:
+        Option<oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingLive<'static, COUNT>>,
+    halted: Option<
+        oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingHalted<'static, COUNT>,
+    >,
+}
+
+impl crate::shutdown::StopPort for ProbeStop<'_> {
+    type Deadline = oer_portable_time::Instant;
+
+    fn request_mac_stop(&mut self) {
+        self.access.wifi_mac_hal().request_channel_stop();
     }
-    let _halted = ring
-        .try_stop(access.rx_dma())
-        .map_err(|_| oer_portable_diagnostics::name!("walker-stop"; 32))?;
-    // The static backend, the rings, the slots and the pool keep every
-    // owner until the leased host reset.
-    observation
+
+    fn mac_active(&mut self) -> bool {
+        self.access.wifi_mac_hal().channel_active_state() != 0
+    }
+
+    fn deadline(&mut self) -> Option<Self::Deadline> {
+        EmbassyClock
+            .now()
+            .checked_add(Duration::from_millis(crate::shutdown::MAC_STOP_MS))
+    }
+
+    fn passed(&mut self, deadline: &Self::Deadline) -> bool {
+        EmbassyClock.now() >= *deadline
+    }
+
+    async fn tick(&mut self) -> Result<(), ()> {
+        let at = EmbassyClock
+            .now()
+            .checked_add(Duration::from_millis(1))
+            .ok_or(())?;
+        EmbassyClock.wait_until(at).await;
+        Ok(())
+    }
+
+    fn stop_walker(&mut self) -> bool {
+        let Some(ring) = self.ring.take() else {
+            return self.halted.is_some();
+        };
+        match ring.try_stop(self.access.rx_dma()) {
+            Ok(halted) => {
+                self.halted = Some(halted);
+                true
+            }
+            Err((ring, _)) => {
+                self.ring = Some(ring);
+                false
+            }
+        }
+    }
 }
 
 /// One transmit slot over `descriptor`, with buffer `index` of `pool`

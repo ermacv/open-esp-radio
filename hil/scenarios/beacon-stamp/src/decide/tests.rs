@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::capture::{AirFrame, Capture, Tag};
-use crate::device::{Blocker, Completion, Record, Run, Sample};
+use crate::device::{Blocker, Completion, Record, Run, Sample, Stops};
 
 const AP: [u8; 6] = [0x60, 0x55, 0xf9, 1, 2, 3];
 const RUN: u32 = 0x0bad_c0de;
@@ -30,6 +30,9 @@ enum Writer {
     Mixed,
     /// The AP TSF at transmission, 30 us late on delayed rounds.
     TsfAtAirSkewed,
+    /// The owner's counterexample: the MAC local time at transmission in
+    /// the low word under a constant high word 0xdeadbeef.
+    LocalUnderDeadbeef,
 }
 
 #[derive(Clone, Copy)]
@@ -45,6 +48,13 @@ struct Model {
     captured_per_kind: u16,
     /// The SRAM read back holds the on-air value.
     write_back: bool,
+    /// The MAC's RX buffer-full count the probe reports.
+    rx_full: u32,
+    /// The probe's cleanup: MAC, walker, final check.
+    stops: [&'static str; 3],
+    /// A sniffer timestamp scattered by this much around the air, as a
+    /// host receive time would be.
+    sniffer_scatter_us: u64,
 }
 
 const MODEL: Model = Model {
@@ -54,6 +64,9 @@ const MODEL: Model = Model {
     late_subject: false,
     captured_per_kind: ROUNDS_PER_KIND,
     write_back: false,
+    rx_full: 0,
+    stops: ["inactive", "stopped", "passed"],
+    sniffer_scatter_us: 0,
 };
 
 /// K of round n: no zero octet and a non-zero high word, as the probe's.
@@ -93,7 +106,10 @@ fn kind_of(index: usize) -> Kind {
 }
 
 fn simulate(model: Model) -> (Run, Capture) {
-    let sniffer = |t: u64| SNIFFER_ORIGIN + (t as f64 * (1.0 + model.sniffer_ppm * 1e-6)) as u64;
+    let sniffer = |t: u64| {
+        let scatter = (t / 1_000 % 7) * model.sniffer_scatter_us / 3;
+        SNIFFER_ORIGIN + (t as f64 * (1.0 + model.sniffer_ppm * 1e-6)) as u64 + scatter
+    };
     let start = TSF_RESET + 10;
     let mut records = Vec::new();
     let mut frames = Vec::new();
@@ -154,6 +170,7 @@ fn simulate(model: Model) -> (Run, Capture) {
             Writer::LowWordTsf => (k & 0xffff_ffff_0000_0000) | (tsf(air) & 0xffff_ffff),
             Writer::TsfAtAirSkewed if delayed => tsf(air) + 30,
             Writer::TsfAtAirSkewed => tsf(air),
+            Writer::LocalUnderDeadbeef => 0xdead_beef_0000_0000 | u64::from(local(air)),
             Writer::Mixed if n % 2 == 0 => tsf(air),
             Writer::Mixed => k,
         };
@@ -209,11 +226,17 @@ fn simulate(model: Model) -> (Run, Capture) {
         ap: AP,
         absent: [2, 0x4f, 0x45, 0, 0, 1],
         blocker_body: 1500,
-        start: sample(start),
+        start: Some(sample(start)),
         end: Some(sample(end)),
         reported: records.len(),
         records,
         error: None,
+        rx_full: model.rx_full,
+        stops: Stops {
+            mac: model.stops[0].to_owned(),
+            dma: model.stops[1].to_owned(),
+            finish: model.stops[2].to_owned(),
+        },
     };
     (
         run,
@@ -465,7 +488,8 @@ fn a_run_without_its_end_clock_or_clock_separation_is_insufficient() {
     run.end = None;
     assert_eq!(decide(&run, &capture).0, Err(Shortfall::NoEndClock));
     let (mut run, capture) = simulate(MODEL);
-    run.start.tsf = u64::from(run.start.local_before) - 10;
+    let start = run.start.as_mut().unwrap();
+    start.tsf = u64::from(start.local_before) - 10;
     assert!(matches!(
         decide(&run, &capture).0,
         Err(Shortfall::ClockSeparation { .. })
@@ -482,4 +506,74 @@ fn a_buffer_the_hardware_wrote_back_is_reported() {
         assert_eq!(verdict.evidence.readback_air, 32);
         assert_eq!(verdict.evidence.readback_kept, 0);
     }
+}
+
+#[test]
+fn the_owners_local_time_under_a_constant_high_word_is_other_behaviour() {
+    // The low word follows the MAC local time at transmission, but H3
+    // predicts a zero high word: 0xdeadbeef is explained by nothing.
+    let model = Model {
+        writers: [Writer::LocalUnderDeadbeef; 3],
+        ..MODEL
+    };
+    assert_eq!(outcomes(model), vec![Outcome::Other(Other::Unexplained); 3]);
+}
+
+#[test]
+fn an_rx_overflow_withholds_every_outcome() {
+    let model = Model {
+        rx_full: 3,
+        ..MODEL
+    };
+    for verdict in verdicts(model) {
+        assert_eq!(
+            verdict.outcome,
+            Outcome::Insufficient(Shortfall::RxOverflow { count: 3 })
+        );
+        assert_eq!(
+            verdict.evidence.withheld,
+            Some(Outcome::ApTsfAtTransmission)
+        );
+    }
+}
+
+#[test]
+fn an_unconfirmed_cleanup_or_a_probe_error_withholds_every_outcome() {
+    let model = Model {
+        stops: ["still-active", "unconfirmed", "not-run"],
+        writers: [Writer::Caller; 3],
+        ..MODEL
+    };
+    for verdict in verdicts(model) {
+        assert!(
+            matches!(
+                &verdict.outcome,
+                Outcome::Insufficient(Shortfall::DeviceRun { mac, dma, finish, error: None })
+                    if mac == "still-active" && dma == "unconfirmed" && finish == "not-run"
+            ),
+            "{:?}",
+            verdict.outcome
+        );
+        assert_eq!(verdict.evidence.withheld, Some(Outcome::CallerValue));
+    }
+    let (mut run, capture) = simulate(MODEL);
+    run.error = Some("completion-timeout".to_owned());
+    for verdict in decide(&run, &capture).1 {
+        assert!(matches!(
+            verdict.outcome,
+            Outcome::Insufficient(Shortfall::DeviceRun { error: Some(_), .. })
+        ));
+    }
+}
+
+#[test]
+fn a_sniffer_timestamp_that_does_not_follow_the_air_is_insufficient() {
+    let model = Model {
+        sniffer_scatter_us: 300,
+        ..MODEL
+    };
+    let (run, capture) = simulate(model);
+    assert!(
+        matches!(decide(&run, &capture).0, Err(Shortfall::SnifferJitter { micros }) if micros > 50.0)
+    );
 }
