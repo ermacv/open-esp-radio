@@ -6,21 +6,29 @@
 //! the others are copied. While the network holds all the units the port
 //! may lend, the frames in delivery order wait and the actor pulls no more,
 //! so the port keeps further units in its ring: a burst the network is on
-//! its way to loses nothing, and a network that takes slowly paces the
-//! ring, whose full slots the recipient does not acknowledge, so the peer
-//! sends them again. A network that returns nothing for [`NETWORK_LATE`]
-//! no longer holds the ring back: the actor walks it, a frame of one MSDU
-//! is copied by pressure while the copy queue has room, and an MSDU no
-//! queue takes is refused, counted ([`RxMsdusRefused`]), its buffer back to
-//! the ring at once. So the station's frames, the link's admission and the
-//! receive agreements go on whatever the network takes. The walk lasts
-//! until the network has room again. The units the network holds stay lent
-//! until it drops them; the port never lends past its limit.
+//! its way to loses nothing, and a slower network paces the peer, whose
+//! frames in full ring slots the recipient does not acknowledge.
+//!
+//! A pressure episode lasts from that first stop until the pull reaches the
+//! ring's end with nothing waiting in delivery order; the network's returns
+//! do not extend it. Once it has lasted [`NETWORK_LATE`] the actor walks
+//! the ring to its end: every frame is admitted and reordered, the
+//! station's frames go to the lifecycle, and an MSDU the port cannot lend
+//! is refused, counted as pressure ([`RxMsdusRefused`]), its buffer back to
+//! the ring at once. The walk ends the episode; the next stop begins
+//! another. So the station's frames wait at most [`NETWORK_LATE`] and one
+//! walk behind the network.
+//!
+//! This removes the software barrier only. A unit the network holds keeps
+//! its descriptor, and the backend rearms its ring in order behind it: a
+//! loan held while the ring comes round still stops reception there. The
+//! units the network holds stay lent until it drops them; the port never
+//! lends past its limit.
 
 use super::turn::{Failed, PortBlockAcks};
 use super::*;
 use crate::station::{CopiedMark, NetworkRx, RxDrop, RxMsdusCopied, RxMsdusRefused, ServiceEvent};
-use oer_protocols_ieee80211_contracts_port::RxPull;
+use oer_protocols_ieee80211_contracts_port::{LendRefusal, LendRefused, RxPull};
 use oer_protocols_ieee80211_core_roles_sta::data::{
     MAX_ETHERNET_PAYLOAD_LEN, MsduDelivery, MsduPlan, PlannedCopyError,
 };
@@ -34,7 +42,7 @@ use oer_protocols_network_port::{CopyReason, LentFrame};
 enum Refusal {
     TooLong,
     QueueFull,
-    /// The port kept the buffer and the copy found no room.
+    /// The network held all the port may lend.
     Pressure,
     NoNetwork,
 }
@@ -144,14 +152,14 @@ where
         network.network.takes_frames() && !self.port.lend_room()
     }
 
-    /// Whether frames have waited for the network for [`NETWORK_LATE`].
+    /// Whether the pressure episode has lasted [`NETWORK_LATE`].
     pub(super) fn network_late(&self) -> bool {
         self.held_back
             .is_some_and(|since| since.saturating_add(NETWORK_LATE) <= self.now)
     }
 
     /// Whether received frames wait for the network: it holds all it may
-    /// and has not been late for [`NETWORK_LATE`] yet.
+    /// and the pressure episode has not lasted [`NETWORK_LATE`] yet.
     fn holds_back<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
         &self,
         network: &NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
@@ -159,14 +167,11 @@ where
         self.network_full(network) && !self.network_late()
     }
 
-    /// A network with room returned a unit since frames began to wait: it
-    /// makes progress, however slowly, and the next back-pressure starts
-    /// its own bound.
-    fn progressed<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
-        &mut self,
-        network: &NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
-    ) {
-        if !self.network_full(network) {
+    /// The pull reached the ring's end with nothing waiting in delivery
+    /// order: the pressure episode is over, and the next one starts its own
+    /// bound. A return of the network alone does not end it.
+    fn caught_up(&mut self) {
+        if !self.receive.has_ready() {
             self.held_back = None;
         }
     }
@@ -189,7 +194,6 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         let now = self.now;
-        self.progressed(network);
         self.pending(lifecycle, network)?;
         let continued = self.rx_later.is_some_and(|at| at <= now);
         if (signalled || continued) && self.radio_receives() {
@@ -226,7 +230,10 @@ where
                             self.received(frame, meta, lifecycle, network)?;
                         }
                     }
-                    RxPull::Empty => break,
+                    RxPull::Empty => {
+                        self.caught_up();
+                        break;
+                    }
                     RxPull::Later(at) if at <= now => {
                         // The port's call ended at its own bound with the
                         // ring's work left: no alarm keeps an instant
@@ -238,6 +245,7 @@ where
                     }
                     RxPull::Later(at) => {
                         self.rx_later = Some(at);
+                        self.caught_up();
                         break;
                     }
                 }
@@ -496,14 +504,23 @@ where
                 Some(plan) => {
                     let refusal = match self.port.lend(frame) {
                         Ok(lent) => queue_lent(network, lent, plan),
-                        Err(refusal) => {
-                            let buffer = refusal.buffer;
+                        // The network holds all the port may lend: the
+                        // frame was admitted and reordered, its MSDU is
+                        // refused and its buffer goes back at once.
+                        Err(LendRefused {
+                            buffer,
+                            reason: LendRefusal::Capacity,
+                        }) => {
+                            self.port.recycle(buffer);
+                            Some(Refusal::Pressure)
+                        }
+                        // A backend that lends nothing now: a copy.
+                        Err(LendRefused {
+                            buffer,
+                            reason: LendRefusal::Unsupported | LendRefusal::Stopping,
+                        }) => {
                             let refusal =
-                                copy_received(network, buffer.bytes(), &plan, CopyReason::Pressure)
-                                    .map(|refusal| match refusal {
-                                        Refusal::QueueFull => Refusal::Pressure,
-                                        other => other,
-                                    });
+                                copy_received(network, buffer.bytes(), &plan, CopyReason::Pressure);
                             if counted {
                                 copied.kept = copied.kept.saturating_add(1);
                             }

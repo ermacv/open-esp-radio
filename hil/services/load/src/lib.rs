@@ -434,7 +434,7 @@ pub struct StationRx {
     pub dropped_security: u32,
     pub dropped_draining: u32,
     /// MSDUs not delivered: too long, the full queue to the application,
-    /// pressure on the station's handoff (no lend and no room for a copy),
+    /// pressure on the station's handoff (no lend past the pressure bound),
     /// no network.
     pub refused_too_long: u32,
     pub refused_queue_full: u32,

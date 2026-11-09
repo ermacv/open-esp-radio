@@ -110,12 +110,8 @@ pub struct Counts {
     /// Received MSDUs the station refused for pressure on its handoff: no
     /// lend, no room for a copy.
     pub rx_pressure: usize,
-    /// Received MSDUs the station copied because the port kept their buffer.
-    pub rx_pressure_copies: usize,
     /// A lending socket's datagrams the network dropped for want of credit.
     pub no_credit: usize,
-    /// A lending socket's datagrams the network dropped as pressure copies.
-    pub pressure_copies_dropped: usize,
 }
 
 impl Observed {
@@ -133,20 +129,14 @@ impl EventSink<ServiceEvent> for Observed {
                 counts.rx_queue_full += usize::from(refused.queue_full);
                 counts.rx_pressure += usize::from(refused.pressure);
             }
-            ServiceEvent::RxMsdusCopied(copied) => {
-                counts.rx_pressure_copies += usize::from(copied.kept);
-            }
             _ => {}
         }
     }
 }
 impl EventSink<NetEvent> for Observed {
     fn event(&mut self, event: NetEvent) {
-        let mut counts = self.0.borrow_mut();
-        match event {
-            NetEvent::NotLent(NotLent::NoCredit) => counts.no_credit += 1,
-            NetEvent::PressureCopy => counts.pressure_copies_dropped += 1,
-            _ => {}
+        if event == NetEvent::NotLent(NotLent::NoCredit) {
+            self.0.borrow_mut().no_credit += 1;
         }
     }
 }

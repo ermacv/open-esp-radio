@@ -4,22 +4,23 @@
 //! point keeps sending. The first fills the socket's credit, never the
 //! port's lend limit, and loses only its own datagrams. The second fills
 //! the port's lend limit: the station holds its ring back for at most
-//! [`NETWORK_LATE`], then walks it, so it still hears its access point,
-//! and refuses what no queue takes, counted as pressure on its handoff.
-//! Every loan comes back once the consumer resumes.
+//! [`NETWORK_LATE`] from the episode's first stop, then walks it, so it
+//! still hears its access point, and refuses what the port cannot lend,
+//! counted as pressure on its handoff. Every loan comes back once the
+//! consumer resumes.
 //!
 //! The model's port lends [`MODEL_RX_EVENTS`] buffers, the lending socket's
-//! credit is half of them ([`LEND_CREDIT`]), the copy queue holds
-//! [`RX_COPIED_DEPTH`] copies and the station's queue to the network is
-//! deeper than both. The model's ring is unbounded: a ring the radio no
-//! longer walks shows as frames left in it ([`ModelAir::pending_rx`]), where
-//! a bounded hardware ring would drop them before the recipient.
+//! credit is half of them ([`LEND_CREDIT`]), and the station's queue to the
+//! network is deeper. The model's ring here is unbounded: a ring the radio
+//! no longer walks shows as frames left in it ([`ModelAir::pending_rx`]).
+//! What a finite ring does behind a held loan is the backend's case
+//! (`a_held_early_loan_stops_a_finite_ring_once_the_walker_comes_round`):
+//! walking this queue does not show that a finite ring keeps working.
 //!
 //! [`ModelAir::pending_rx`]: oer_protocols_ieee80211_testing_model::ModelAir::pending_rx
 
 use oer_portable_time::Duration;
 use oer_protocols_ieee80211_runtime::datapath::NETWORK_LATE;
-use oer_protocols_ieee80211_runtime::station::RX_COPIED_DEPTH;
 use oer_protocols_ieee80211_runtime::station::contract::{DisconnectReason, Notice};
 use oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS;
 use oer_protocols_network_runtime::Received;
@@ -95,13 +96,9 @@ fn an_application_keeping_its_credit_loses_only_its_own_datagrams() {
             assert_eq!(world.air.pending_rx(), 0, "the ring is walked to its end");
             let counts = world.counts();
             assert_eq!(
-                counts.rx_pressure_copies, 0,
-                "the port's lend limit never filled"
-            );
-            assert_eq!(
                 counts.rx_queue_full + counts.rx_pressure,
                 0,
-                "the station dropped nothing"
+                "the port's lend limit never held the ring back past its bound"
             );
             assert_eq!(counts.rx_frames_dropped, 0);
             for received in kept {
@@ -132,10 +129,10 @@ fn an_application_keeping_its_credit_loses_only_its_own_datagrams() {
 /// sends a burst and then the access point deauthenticates the station.
 /// The port's lend limit fills first: the station lends that many frames
 /// and holds the rest back in its ring, the Deauthentication behind them.
-/// Once the network has been late for its bound, the station walks the
-/// ring: it copies by pressure as many as its copy queue holds and refuses
-/// the rest for pressure on its handoff, counted, their buffers back at
-/// once, and hears the Deauthentication while the network is still late.
+/// Once the episode has lasted its bound, the station walks the ring: it
+/// refuses the frames the port cannot lend for pressure on its handoff,
+/// counted, their buffers back at once, and hears the Deauthentication
+/// while the network is still late.
 /// Once the network resumes, it takes what the station queued and every
 /// loan and block comes home.
 #[test]
@@ -163,16 +160,11 @@ fn a_late_network_leaves_the_station_hearing_its_access_point() {
             }));
             assert_eq!(world.air.pending_rx(), 0, "the ring is walked to its end");
             let counts = world.counts();
-            let queued = MODEL_RX_EVENTS + RX_COPIED_DEPTH;
-            assert_eq!(counts.rx_pressure, usize::from(BURST) - queued);
+            assert_eq!(counts.rx_pressure, usize::from(BURST) - MODEL_RX_EVENTS);
             assert_eq!(counts.rx_queue_full, 0);
             assert_eq!(
                 counts.no_credit, 0,
                 "no socket is named for the handoff's drops"
-            );
-            assert_eq!(
-                counts.rx_pressure_copies,
-                usize::from(BURST) - MODEL_RX_EVENTS
             );
             world.suspend_network(false);
         })
@@ -181,9 +173,9 @@ fn a_late_network_leaves_the_station_hearing_its_access_point() {
 }
 
 /// The network's task is late while the peer sends a burst: the station
-/// lends up to the port's limit and, once the network has been late for
-/// its bound, copies by pressure what its copy queue holds and refuses the
-/// rest for pressure, counted, and walks the ring to its end. Once
+/// lends up to the port's limit and, once the episode has lasted its bound,
+/// refuses the rest for pressure, counted, and walks the ring to its end.
+/// Once
 /// the network resumes, the application receives exactly what the station
 /// queued, in order, the received and the dropped add up to the burst, the
 /// network answers a ping, and a second burst reaches the application
@@ -205,7 +197,7 @@ fn a_late_network_that_resumes_gets_what_was_queued_and_the_counts_close() {
             world.sleep(NETWORK_LATE).await;
             assert_eq!(world.air.pending_rx(), 0, "the ring is walked to its end");
             world.suspend_network(false);
-            let queued = MODEL_RX_EVENTS + RX_COPIED_DEPTH;
+            let queued = MODEL_RX_EVENTS;
             for n in 0..u16::try_from(queued).unwrap() {
                 let mut received = world.receive().await;
                 assert_eq!(data_of(&mut received), datagram(n));

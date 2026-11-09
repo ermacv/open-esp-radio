@@ -740,10 +740,9 @@ fn the_networks_lend_limit_holds_frames_until_its_bound_then_the_ring_is_walked(
         // in the ring, the station's frame behind them.
         assert_eq!(bench.air.pending_rx(), 13 - 5);
         assert!(bench.next().is_none());
-        // The network stays late for the bound: the actor's alarm walks the
-        // ring. The copy queue takes four copies by pressure, which fills
-        // the network's queue, the rest go back to the ring at once, and
-        // the station's frame reaches the lifecycle.
+        // The episode reaches its bound: the actor's alarm walks the ring.
+        // The frames the port cannot lend go back to it at once, none
+        // copied, and the station's frame reaches the lifecycle.
         bench.advance(NETWORK_LATE.as_micros());
         bench.settle();
         assert_eq!(bench.air.pending_rx(), 0, "the ring is walked to its end");
@@ -755,12 +754,15 @@ fn the_networks_lend_limit_holds_frames_until_its_bound_then_the_ring_is_walked(
         while let Some(frame) = bench.receive.try_receive() {
             queued.push(frame);
         }
-        assert_eq!(queued.len(), RX_DEPTH);
-        let lent = queued
-            .iter()
-            .filter(|frame| matches!(frame, Received::Lent(_)))
-            .count();
-        assert_eq!(lent, oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS);
+        assert_eq!(
+            queued.len(),
+            oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS
+        );
+        assert!(
+            queued
+                .iter()
+                .all(|frame| matches!(frame, Received::Lent(_)))
+        );
         assert!(
             bench.events.0.borrow().is_empty(),
             "no reorder or lane drop"

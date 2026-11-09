@@ -1335,6 +1335,91 @@ fn a_returned_lease_rearms_an_exhausted_walker_without_a_mac_interrupt() {
     assert_eq!(harness.report().units, COUNT as u32 + 1);
 }
 
+/// The physical bound behind one held loan: the upper layer keeps the
+/// first unit and returns every later one at once, while the access point
+/// offers three rings' worth of frames. Each lands only in an armed
+/// descriptor at the walker's NEXT, and the walker stops at one that is
+/// not armed, as the DMA engine does. Descriptors rearm in ring order, so
+/// the returned ones behind the held one wait for it: once the walker has
+/// come round, no descriptor is armed and no frame lands, whatever the
+/// software above takes. The held loan's return rearms the ring and frames
+/// land again.
+#[test]
+fn a_held_early_loan_stops_a_finite_ring_once_the_walker_comes_round() {
+    let (mut harness, held, holding, _) = returning_harness();
+    let armed =
+        oer_chips_esp32s31_hal::radio::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32)
+            .unwrap();
+    // The descriptor at the walker's NEXT, while the walker runs.
+    let next = |harness: &Harness| {
+        let low = harness.host.walker.borrow().next_descriptor_low;
+        (low != 0).then(|| ((low - (harness.base & 0x000f_ffff)) / DESCRIPTOR_BYTES) as usize)
+    };
+    // Offer one frame: whether it landed. The DMA engine lands it at NEXT
+    // when that descriptor is armed (a cold walker's reserved unit first)
+    // and follows the link; at a descriptor it does not own it stops,
+    // exhausted, with NEXT zero.
+    let offer = |harness: &mut Harness| {
+        match next(harness) {
+            Some(COUNT) => {}
+            Some(index) if harness.rx.descriptors()[index].word0() == armed => {
+                harness.next = index;
+            }
+            _ => return false,
+        }
+        harness.complete_unit(&[100]);
+        if harness.rx.descriptors()[harness.next].word0() != armed {
+            let (base, last) = (harness.base, (harness.next + COUNT - 1) % COUNT);
+            harness
+                .host
+                .walker
+                .borrow_mut()
+                .set_cursor(base, last, None);
+        }
+        harness.rx_event();
+        harness.settle();
+        true
+    };
+    assert!(offer(&mut harness));
+    assert_eq!(held.borrow().len(), 1);
+    holding.set(false);
+    let mut lost = 0;
+    let mut lost_in_a_row = 0;
+    for _ in 1..3 * COUNT {
+        if offer(&mut harness) {
+            lost_in_a_row = 0;
+        } else {
+            lost += 1;
+            lost_in_a_row += 1;
+        }
+    }
+    let landed = harness.report().units;
+    // One ring's worth lands, the held unit's included, then nothing does.
+    assert_eq!(landed, COUNT as u32);
+    assert_eq!(lost, 3 * COUNT - COUNT);
+    let report = harness.report();
+    assert_eq!(report.service_errors, 0);
+    assert_eq!(report.reload.walker_on_detached, 0);
+    assert_eq!(
+        lost_in_a_row, lost,
+        "once stopped, the ring never lands again"
+    );
+    assert_eq!(held.borrow().len(), 1, "only the early loan is held");
+    assert!(
+        harness
+            .rx
+            .descriptors()
+            .iter()
+            .all(|descriptor| descriptor.word0() != armed),
+        "no descriptor is armed"
+    );
+    // The held loan comes back: the ring rearms and frames land again.
+    held.borrow_mut().clear();
+    harness.settle();
+    assert!(offer(&mut harness));
+    assert_eq!(harness.report().units, landed + 1);
+}
+
 #[test]
 fn a_return_while_rx_is_live_is_harmless() {
     let (mut harness, held, holding, notifier) = returning_harness();

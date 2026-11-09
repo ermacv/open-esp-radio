@@ -608,9 +608,8 @@ pub enum StationRxKind {
     AgreementStopped,
     /// A connected RSN input the station dropped.
     RsnInputDropped,
-    /// MSDUs not delivered for pressure on the station's handoff: the port
-    /// could not lend their buffer and the queue to the network took no
-    /// copy.
+    /// MSDUs not delivered for pressure on the station's handoff: the
+    /// network held all the port may lend past the pressure bound.
     RefusedPressure,
 }
 
