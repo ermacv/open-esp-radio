@@ -200,7 +200,7 @@ fn a_lost_message4_is_read_protected_by_the_key_installed_before_message3() {
             assert_eq!(air.installed_pairwise(VifRole::AccessPoint), 1);
             stop_and_finish(&counted, &air, &shared).await;
         };
-        let runner = stopped(drive(runner.run(&shared, &counted), script).await);
+        stopped(drive(runner.run(&shared, &counted), script).await);
         assert!(runner.association.is_some());
         assert_eq!(air.installed_pairwise(VifRole::AccessPoint), 0);
     }));

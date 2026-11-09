@@ -193,7 +193,7 @@ fn on_the_s31_port(
         );
         let (_device, _transmit, end) =
             leak(ApNetworkStorage::new()).split::<core::convert::Infallible>();
-        let runner = ApRunner::new(
+        let mut runner = ApRunner::new(
             port,
             commands,
             ap_resources,
@@ -215,6 +215,13 @@ fn on_the_s31_port(
             Nonces,
         );
         let shared = ApShared::new();
+        // Observations, not limits: what the runner, its end and its run
+        // occupy over the S31 port.
+        std::println!(
+            "sizes: runner {} B, end {} B",
+            core::mem::size_of_val(&runner),
+            core::mem::size_of::<ApEnd<oer_chips_esp32s31_radio_ieee80211_backend::port::Fault>>(),
+        );
         let seen = RefCell::new(Seen {
             running: false,
             ended: None,
@@ -225,14 +232,18 @@ fn on_the_s31_port(
         let mut run = pin!(async {
             let end = runner.run(&shared, &airy).await;
             seen.borrow_mut().ended = Some(match end {
-                ApEnd::Stopped(_) => "stopped".into(),
-                ApEnd::StartRefused(_, refused) => std::format!("start refused: {refused:?}"),
-                ApEnd::StopUnconfirmed(_, unconfirmed) => std::format!("{unconfirmed:?}"),
-                ApEnd::Faulted(_, fault) => std::format!("faulted: {fault:?}"),
-                ApEnd::Contract(_, contract) => std::format!("contract: {contract:?}"),
-                ApEnd::Refused(_, refusal) => std::format!("refused: {refusal:?}"),
+                ApEnd::Stopped => "stopped".into(),
+                ApEnd::StartRefused(refused) => std::format!("start refused: {refused:?}"),
+                ApEnd::StopUnconfirmed(unconfirmed) => std::format!("{unconfirmed:?}"),
+                ApEnd::Faulted(fault) => std::format!("faulted: {fault:?}"),
+                ApEnd::Contract(contract) => std::format!("contract: {contract:?}"),
+                ApEnd::Refused(refusal) => std::format!("refused: {refusal:?}"),
             });
         });
+        std::println!(
+            "sizes: run with its bench {} B",
+            core::mem::size_of_val(&*run)
+        );
         let mut task = Task::new(run.as_mut());
 
         let mut until = |what: &str, done: &mut dyn FnMut(&ApShared) -> bool| {

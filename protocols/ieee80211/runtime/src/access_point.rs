@@ -230,26 +230,26 @@ pub trait ApNonces {
 
 /// Why the runner ended.
 #[derive(Debug)]
-pub enum ApEnd<R, F> {
-    /// The access point stopped and the radio with it; every owner is back.
-    Stopped(R),
-    /// The radio did not start, for the port's cause; every owner is back.
-    StartRefused(R, oer_protocols_ieee80211_contracts_port::StartRefused<F>),
-    /// The radio's stop is not confirmed: the port keeps what the hardware
-    /// may still use, and the runner returns with it.
-    StopUnconfirmed(R, StopUnconfirmed),
-    /// The port reported its named fault; the runner returns with every
-    /// owner.
-    Faulted(R, F),
+pub enum ApEnd<F> {
+    /// The access point stopped and the radio with it; every owner is back
+    /// in the runner.
+    Stopped,
+    /// The radio did not start, for the port's cause; every owner is in
+    /// the runner.
+    StartRefused(oer_protocols_ieee80211_contracts_port::StartRefused<F>),
+    /// The radio's stop is not confirmed, as the port observed it: the
+    /// runner holds what the hardware may still use.
+    StopUnconfirmed(StopUnconfirmed),
+    /// The port reported its named fault; every owner is in the runner.
+    Faulted(F),
     /// A terminal named an owner the runner did not send, or the engine
-    /// refused one of the runner's own steps; the runner returns with every
-    /// owner, the ones without a place among them ([`ApRunner::take_kept`]).
-    Contract(R, ApContract),
+    /// refused one of the runner's own steps; every owner is in the runner,
+    /// the ones without a place among its kept ([`ApRunner::take_kept`]).
+    Contract(ApContract),
     /// The port refused one of the access point's commands for its
-    /// refusal: the runner stopped serving and returns with the port and
-    /// every owner, the refused command among them
-    /// ([`ApRunner::take_refused`]).
-    Refused(R, AccessPointRefusal),
+    /// refusal; every owner is in the runner, the refused command among
+    /// them ([`ApRunner::take_refused`]).
+    Refused(AccessPointRefusal),
 }
 
 /// Why a step of the runner ended the run.
@@ -707,13 +707,14 @@ where
         }
     }
 
-    /// Run the access point until its stop: start, serve, stop, and return
-    /// the port and the runner's owners.
+    /// Run the access point until its stop: start, serve, stop. The runner
+    /// keeps the port and every owner across the end, in place: the end
+    /// says why, and the caller reads the owners from the runner.
     pub async fn run<T: Timer>(
-        mut self,
+        &mut self,
         shared: &ApShared,
         clock: &T,
-    ) -> ApEnd<Self, PortFault<'id, P>> {
+    ) -> ApEnd<PortFault<'id, P>> {
         // The radio starts on the BSS's channel.
         let started = poll_fn(|cx| {
             let now = clock.now();
@@ -721,7 +722,7 @@ where
         })
         .await;
         if let Err(refused) = started {
-            return ApEnd::StartRefused(self, refused);
+            return ApEnd::StartRefused(refused);
         }
         if let Err(halt) = self.begin(clock.now()) {
             return self.halted(halt, shared);
@@ -838,36 +839,36 @@ where
         self.status.running = false;
         shared.publish(self.status);
         match stopped {
-            Ok(()) => ApEnd::Stopped(self),
-            Err(unconfirmed) => ApEnd::StopUnconfirmed(self, unconfirmed),
+            Ok(()) => ApEnd::Stopped,
+            Err(unconfirmed) => ApEnd::StopUnconfirmed(unconfirmed),
         }
     }
 
     /// The end of a run a step halted: a refusal returns the runner with
     /// every owner, the access point no longer serving.
     fn halted(
-        mut self,
+        &mut self,
         halt: Halt<PortFault<'id, P>>,
         shared: &ApShared,
-    ) -> ApEnd<Self, PortFault<'id, P>> {
+    ) -> ApEnd<PortFault<'id, P>> {
         match halt {
             Halt::Faulted(fault) => {
                 self.status.running = false;
                 self.network.set_link(false);
                 shared.publish(self.status);
-                ApEnd::Faulted(self, fault)
+                ApEnd::Faulted(fault)
             }
             Halt::Contract(contract) => {
                 self.status.running = false;
                 self.network.set_link(false);
                 shared.publish(self.status);
-                ApEnd::Contract(self, contract)
+                ApEnd::Contract(contract)
             }
             Halt::Refused(refusal) => {
                 self.status.running = false;
                 self.network.set_link(false);
                 shared.publish(self.status);
-                ApEnd::Refused(self, refusal)
+                ApEnd::Refused(refusal)
             }
         }
     }

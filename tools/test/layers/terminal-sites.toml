@@ -4,7 +4,6 @@
 version = 1
 
 [proofs]
-ap-radio-unreleased = "HW_PANIC_SOURCE: observed hardware failure, chips/esp32s31/app/src/wifi/access_point.rs serve_access_point. The access point's run ended and the S31 port's poll_stop was not confirmed within its bound, or radio::release did not complete: the MAC's TX and RX DMA may still own the runner's buffers and descriptors in the DMA window and the radio's interrupt banks, which stay quarantined; continuing would hand that memory or the radio to another owner. Owner approval pending."
 invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SOC_CPU_CORES_NUM and pinned rev0 ROM boot role; only InvalidHart is hardware-impossible, conditional on a conforming ESP32-S31 rev0, correct mhartid read and intact code/data. Its model admits IDs 0 and 1; this proves no DMA/event-order invariant."
 
 [sites]

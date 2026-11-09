@@ -215,7 +215,7 @@ macro_rules! fixture {
         );
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
         let ($device, _transmit, end) = network.split::<Infallible>();
-        let $runner = ApRunner::new(
+        let mut $runner = ApRunner::new(
             port,
             commands,
             resources,
@@ -360,24 +360,24 @@ impl<F: core::future::Future> core::future::Future for Woken<F> {
 
 /// Run `script` beside the runner, the runner polled only when woken; the
 /// runner's end once the script asked it to stop and let it finish.
-async fn drive<R, F>(
-    run: impl core::future::Future<Output = ApEnd<R, F>>,
+async fn drive<F>(
+    run: impl core::future::Future<Output = ApEnd<F>>,
     script: impl core::future::Future<Output = ()>,
-) -> ApEnd<R, F> {
+) -> ApEnd<F> {
     match select(Woken::new(run), script).await {
         Either::First(end) => end,
         Either::Second(()) => panic!("the runner does not stop by the script's end"),
     }
 }
 
-fn stopped<R, F: core::fmt::Debug>(end: ApEnd<R, F>) -> R {
+fn stopped<F: core::fmt::Debug>(end: ApEnd<F>) {
     match end {
-        ApEnd::Stopped(runner) => runner,
-        ApEnd::StartRefused(_, refused) => panic!("the radio starts: {refused:?}"),
-        ApEnd::StopUnconfirmed(_, unconfirmed) => panic!("the stop is confirmed: {unconfirmed:?}"),
-        ApEnd::Faulted(_, fault) => panic!("the port faulted: {fault:?}"),
-        ApEnd::Contract(_, contract) => panic!("the runner's contract: {contract:?}"),
-        ApEnd::Refused(_, refusal) => panic!("the port takes every command: {refusal:?}"),
+        ApEnd::Stopped => {}
+        ApEnd::StartRefused(refused) => panic!("the radio starts: {refused:?}"),
+        ApEnd::StopUnconfirmed(unconfirmed) => panic!("the stop is confirmed: {unconfirmed:?}"),
+        ApEnd::Faulted(fault) => panic!("the port faulted: {fault:?}"),
+        ApEnd::Contract(contract) => panic!("the runner's contract: {contract:?}"),
+        ApEnd::Refused(refusal) => panic!("the port takes every command: {refusal:?}"),
     }
 }
 
@@ -424,7 +424,7 @@ fn the_runner_beacons_answers_a_probe_and_stops_with_every_owner() {
             assert!(sent_controls(&air).contains(&0x50), "a probe response");
             stop_and_finish(&counted, &air, &shared).await;
         };
-        let runner = stopped(drive(runner.run(&shared, &counted), script).await);
+        stopped(drive(runner.run(&shared, &counted), script).await);
         // Every ticket and buffer is home, the interface closed, its TSF
         // stopped, the beacon permission and the group key's owners back.
         assert_eq!(
@@ -470,7 +470,7 @@ fn a_stop_behind_a_held_group_removal_waits_for_the_port_without_turning() {
             air.hold_group_commands(false);
             stop_and_finish(&counted, &air, &shared).await;
         };
-        let runner = stopped(drive(runner.run(&shared, &counted), script).await);
+        stopped(drive(runner.run(&shared, &counted), script).await);
         assert!(runner.group_slot.is_some() && runner.group_permission.is_some());
     }));
 }
@@ -495,7 +495,7 @@ fn a_held_beacon_completion_waits_for_the_port_without_turning() {
             air.hold_completion(WmmAccessCategory::Voice, false);
             stop_and_finish(&counted, &air, &shared).await;
         };
-        let runner = stopped(drive(runner.run(&shared, &counted), script).await);
+        stopped(drive(runner.run(&shared, &counted), script).await);
         assert!(runner.beacon.is_some());
     }));
 }
@@ -524,7 +524,7 @@ fn a_probe_response_waiting_for_its_queue_waits_without_turning() {
             );
             stop_and_finish(&counted, &air, &shared).await;
         };
-        let runner = stopped(drive(runner.run(&shared, &counted), script).await);
+        stopped(drive(runner.run(&shared, &counted), script).await);
         assert_eq!(
             runner.tickets.len(),
             oer_protocols_ieee80211_testing_model::MODEL_TICKETS
@@ -559,7 +559,7 @@ fn a_unit_the_group_removal_cuts_is_read_and_recycled() {
         };
         // The stop ends with every owner: a cut unit kept from the port
         // would have quarantined it.
-        let runner = stopped(drive(runner.run(&shared, &counted), script).await);
+        stopped(drive(runner.run(&shared, &counted), script).await);
         assert!(runner.group_slot.is_some() && runner.group_permission.is_some());
     }));
 }
@@ -580,8 +580,8 @@ fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
             Either::First(end) => end,
             Either::Second(()) => unreachable!(),
         };
-        let ApEnd::Refused(mut runner, refusal) = end else {
-            panic!("a refusal returns the runner");
+        let ApEnd::Refused(refusal) = end else {
+            panic!("a refusal ends the run");
         };
         let Some(command) = runner.take_refused() else {
             panic!("the refused command comes back");

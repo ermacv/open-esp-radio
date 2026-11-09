@@ -175,13 +175,13 @@ impl AccessPoint {
     }
 }
 
-/// The access point's task: the runner and the IP service together. An
-/// end the runner returned every owner from (`ApExit::Ended`: a stop, a
-/// refused start or command, a port fault, a broken contract) ends the
-/// access point without a reset, its cause in [`AccessPoint::exit`]; an
-/// IP service that ends stops the access point, its cause in the service's
-/// status. A reset stays only where the hardware may still hold the radio's
-/// memory.
+/// The access point's task: the runner and the IP service together. Every
+/// end of the access point keeps its typed cause in [`AccessPoint::exit`]
+/// and resets nothing: an ended run returned its owners and released the
+/// radio; an unconfirmed stop or a refused release keeps the runner, with
+/// every owner the hardware may still use, in its task; a refused install
+/// names its cause. An IP service that ends stops the access point, its
+/// cause in the service's status.
 pub(crate) async fn serve_access_point(start: ApStart) {
     let ApStart {
         runner,
@@ -190,20 +190,9 @@ pub(crate) async fn serve_access_point(start: ApStart) {
     let ip = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
     let stop = runner.stop_handle();
     let mut run = core::pin::pin!(runner.run());
-    let exit = match select(run.as_mut(), ip).await {
-        Either::First(exit) => exit,
-        Either::Second(_) => {
-            // The stack's end is in its status; the access point stops.
-            stop.request_stop();
-            run.await
-        }
-    };
-    match exit {
-        ApExit::Ended(_) => {}
-        // HW_PANIC_SOURCE: ap-radio-unreleased
-        ApExit::Unreleased { .. } => {
-            crate::fail(oer_portable_diagnostics::name!("ap-unreleased"; 32))
-        }
-        ApExit::Unavailable(error) => failure(error),
+    if let Either::Second(_) = select(run.as_mut(), ip).await {
+        // The stack's end is in its status; the access point stops.
+        stop.request_stop();
+        run.await;
     }
 }
