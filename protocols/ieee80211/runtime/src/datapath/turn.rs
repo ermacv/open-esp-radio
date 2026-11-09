@@ -990,8 +990,8 @@ where
         Ok(())
     }
 
-    /// Follow the network side's stop and its report, and a lost one's lent
-    /// units; whether it moved, which the stop's turn then serves.
+    /// Follow the network side's stop and its report; whether it moved,
+    /// which the stop's turn then serves.
     fn poll_network_stop<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -1020,13 +1020,7 @@ where
             }
             _ => {}
         }
-        // Only what the lent units are: the memory's part is looked at when
-        // the stop decides, after the data settled ([`Self::network_home`]).
-        let lent_before = self.lent_home;
-        if self.network_stopping == NetworkStopping::Lost {
-            self.lent_home = self.port.poll_lent_returned(cx).is_ready();
-        }
-        self.network_stopping != before || self.lent_home != lent_before
+        self.network_stopping != before
     }
 
     /// Whether the network side owes the stop nothing: no stop asked it to
@@ -1043,12 +1037,13 @@ where
     }
 
     /// Whether the station holds nothing of a lost network's any more:
-    /// every ended frame's memory went to the return queue, no MSDU waits in
-    /// the transmit queue and every lent unit came back. Every caller asks
-    /// once the data settled (no arena on the air), so no later settlement
-    /// adds memory to the return.
+    /// every ended frame's memory went to the return queue and no MSDU waits
+    /// in the transmit queue. Units the network holds lent do not hold it, as
+    /// for a reported stop: the outcome says how many are out. Every caller
+    /// asks once the data settled (no arena on the air), so no later
+    /// settlement adds memory to the return.
     fn network_home(&self) -> bool {
-        self.data_settled() && self.data.freed.is_empty() && self.queued == 0 && self.lent_home
+        self.data_settled() && self.data.freed.is_empty() && self.queued == 0
     }
 
     /// Whether no arena owes its end: none on the air and none holding a

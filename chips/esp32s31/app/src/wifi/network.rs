@@ -28,8 +28,11 @@
 //! the station's transmit buffer itself. A stop ends the sockets, ends each
 //! of the producer's open works `Retired` and sets its end flag, and gives
 //! back every frame in the port's queue, so the station has its received
-//! buffers back. The other owners stay parked for the rest of the boot:
-//! nothing starts a second network, and no contract ends the first one.
+//! buffers back. Once the stop is confirmed, the network's task takes back
+//! the loan of each buffer a lending socket still held as it returns, until
+//! the pool's account is closed. The other owners stay parked for the rest
+//! of the boot: nothing starts a second network, and no contract ends the
+//! first one.
 
 use super::*;
 use core::task::{Context as TaskContext, Poll};
@@ -748,7 +751,8 @@ impl<P: Produce + 'static, M: TransmitMode, R: ReceiveMode> Network<P, M, R> {
 
 /// The network's task: the service until a stop or the port's fault, which
 /// records and resets. A stop drops the port, with the frames of the station
-/// it still holds, before the station hears of it.
+/// it still holds, before the station hears of it; the task then serves the
+/// late returns of lent buffers' loans until none is out.
 async fn serve_network<P: Produce + 'static, M: TransmitMode>(start: NetworkStart<P, M>) {
     let NetworkStart {
         service,
@@ -777,30 +781,40 @@ async fn serve_network<P: Produce + 'static, M: TransmitMode>(start: NetworkStar
     if cause != EndCause::Stopped {
         crate::fail(oer_portable_diagnostics::name!("network-ended"; 32));
     }
-    if let Some(ended) = service.take().map(Service::retire) {
-        let Ended {
-            retired,
-            sockets,
-            adopted,
-            returns,
-            producers,
-            ..
-        } = ended;
-        let Retired {
-            results,
-            pool,
-            brand,
-            mut port,
-        } = retired;
-        // The queues outlive the port, so dropping it returns no frame and
-        // takes back no memory: both happen here first.
-        port.give_back();
-        drop(port);
-        // Memory, lanes and result places are all static, so what a late
-        // socket or observer reaches stays.
-        let _parked = core::mem::ManuallyDrop::new((
-            results, pool, brand, sockets, adopted, returns, producers,
-        ));
-    }
+    let Some(ended) = service.take().map(Service::retire) else {
+        stopper.stopped();
+        return;
+    };
+    let Ended {
+        retired,
+        mut sockets,
+        mut adopted,
+        returns,
+        producers,
+        ..
+    } = ended;
+    let Retired {
+        results,
+        mut pool,
+        brand,
+        mut port,
+    } = retired;
+    // The queues outlive the port, so dropping it returns no frame and
+    // takes back no memory: both happen here first.
+    port.give_back();
+    drop(port);
+    // The stop is confirmed first: it waits for no lent buffer.
     stopper.stopped();
+    // Then this task takes each lent buffer's loan back as it returns,
+    // until the pool's account is closed. A buffer held for ever keeps it
+    // waiting, as nothing expires.
+    oer_protocols_network_runtime::serve_late_loans(
+        &mut pool,
+        [&mut sockets[..], &mut adopted[..]],
+    )
+    .await;
+    // Memory, lanes and result places are all static, so what a late socket
+    // or observer reaches stays.
+    let _parked =
+        core::mem::ManuallyDrop::new((results, pool, brand, sockets, adopted, returns, producers));
 }

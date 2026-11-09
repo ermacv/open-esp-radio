@@ -331,3 +331,36 @@ fn a_credit_the_account_cannot_hold_refuses_the_bind_and_returns_the_storage() {
             .is_ok()
     );
 }
+
+#[test]
+fn serving_late_loans_after_a_stop_waits_for_the_held_buffer_and_closes_the_account() {
+    #[derive(Debug)]
+    struct Net;
+    let (mut service, _copying, mut lending, wire, stop) = lending::<Net>(4, 1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut drops = Drops::default();
+    let drive = async {
+        arrive(&wire, LENDING, b"held");
+        let held = lending.receive().await.unwrap();
+        stop.try_send(()).ok().unwrap();
+        held
+    };
+    let (_, held) = run_tasks(clock, service.run(clock, &mut drops), drive);
+    let mut ended = service.retire();
+    assert_eq!(ended.retired.pool.loans().outstanding(), 1);
+    let woken = std::sync::Arc::new(super::Woken(std::sync::atomic::AtomicBool::new(false)));
+    let waker = core::task::Waker::from(woken.clone());
+    let cx = &mut core::task::Context::from_waker(&waker);
+    {
+        let mut serving = core::pin::pin!(ended.serve_loans());
+        assert!(serving.as_mut().poll(cx).is_pending(), "a loan is out");
+        drop(held);
+        assert!(
+            woken.0.load(std::sync::atomic::Ordering::SeqCst),
+            "the return wakes the server"
+        );
+        assert!(serving.as_mut().poll(cx).is_ready(), "the account closes");
+    }
+    assert!(ended.retired.pool.loans().released());
+    assert_eq!(lent_out(&wire), 0);
+}

@@ -160,6 +160,16 @@ impl<
         }
     }
 
+    /// With no service to come, take back each lent buffer's loan as it
+    /// returns, until none is out; see [`serve_late_loans`].
+    pub async fn serve_loans(&mut self) {
+        serve_late_loans(
+            &mut self.retired.pool,
+            [&mut self.sockets[..], &mut self.adopted[..]],
+        )
+        .await;
+    }
+
     /// With no service to come, bring home what has arrived.
     pub fn collect(&mut self) {
         let pool = &mut self.retired.pool;
@@ -172,6 +182,44 @@ impl<
             }
         }
     }
+}
+
+/// With no service to come, bring home into `pool` what the `late` sockets
+/// give back, and wait for the rest, until no receive loan of the pool is
+/// out: a late return closes the pool's accounting. A loan whose buffer is
+/// held for ever keeps this waiting, and nothing expires. A cancelled wait
+/// loses nothing: what came back is in `pool`, and the rest still counts.
+pub async fn serve_late_loans<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const DEPTH: usize,
+    const RECEIVED: usize,
+    const BLOCKS: usize,
+    const GROUPS: usize,
+>(
+    pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    mut late: [&mut [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, RECEIVED>>]; GROUPS],
+) {
+    poll_fn(|cx| {
+        // Each hears its next return first; a return before that is taken
+        // below.
+        for socket in late.iter_mut().flat_map(|group| group.iter_mut()).flatten() {
+            let _ready = socket.poll(cx);
+        }
+        for place in late.iter_mut().flat_map(|group| group.iter_mut()) {
+            if place.as_mut().is_some_and(|socket| socket.collect(pool)) {
+                *place = None;
+            }
+        }
+        if pool.loans().released() {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await;
 }
 
 /// A service's watch, which its end, retirement or drop, ends: a cancelled

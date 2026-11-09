@@ -34,10 +34,11 @@ use oer_hil_services_load::{LoadError, Start};
 /// run names this one.
 pub(crate) const PORT: u16 = 5001;
 
-/// Datagrams the channel socket holds in the station's buffers at once: a
-/// run reads each at once, and an echo holds one until its reply's block
-/// came.
-pub(crate) const CREDIT: usize = 4;
+/// Datagrams the channel socket holds in the station's buffers at once, of
+/// the station's 15: an experiment's setting. The core takes up to eight
+/// frames a turn and a returned loan counts at the next, so a credit of four
+/// runs out within one batch however fast the run reads.
+pub(crate) const CREDIT: usize = 12;
 
 /// How the channel socket receives.
 pub(crate) type Receive = wifi::Lending<CREDIT>;
