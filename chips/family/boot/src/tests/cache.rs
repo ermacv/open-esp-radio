@@ -322,6 +322,8 @@ struct Fetch {
     autoload: bool,
     frozen: bool,
     freeze_responds: bool,
+    /// The idle wait that never finishes, if any.
+    never_idle: Option<&'static str>,
 }
 
 impl Fetch {
@@ -331,6 +333,7 @@ impl Fetch {
             autoload,
             frozen: false,
             freeze_responds: true,
+            never_idle: None,
         }
     }
 
@@ -340,7 +343,7 @@ impl Fetch {
 
     fn idle(&self, name: &'static str) -> bool {
         self.record(FetchOp::Idle(name));
-        true
+        self.never_idle != Some(name)
     }
 }
 
@@ -448,6 +451,85 @@ fn a_freeze_that_never_takes_effect_is_undone_and_the_operation_never_runs() {
             FetchOp::Autoload(true)
         ]
     );
+}
+
+#[test]
+fn the_first_idle_wait_that_never_finishes_ends_the_suspension_and_is_undone_once() {
+    let clock = VirtualClock::new();
+    let ticking = Ticking::new(&clock);
+    let mut fetch = Fetch::new(true);
+    fetch.never_idle = Some("preload");
+    let ran = Cell::new(false);
+    let result = with_fetch_suspended(&mut fetch, SUSPEND, &deadline(&ticking), || ran.set(true));
+    assert_eq!(
+        result,
+        Err(BootFailure::Wait(WaitFailure::TimedOut("icache-preload")))
+    );
+    assert!(!ran.get());
+    let ops = fetch.log.take();
+    // The waits before the stuck one ran in order; the ones after never ran.
+    assert_eq!(
+        &ops[..3],
+        &[
+            FetchOp::Shut(true),
+            FetchOp::Autoload(false),
+            FetchOp::Idle("autoload"),
+        ]
+    );
+    assert!(ops.len() > 5, "the stuck wait was polled");
+    assert!(
+        ops[3..ops.len() - 2]
+            .iter()
+            .all(|op| *op == FetchOp::Idle("preload"))
+    );
+    assert!(!ops.contains(&FetchOp::Idle("sync")));
+    assert!(!ops.contains(&FetchOp::Idle("lock")));
+    assert!(!ops.contains(&FetchOp::FreezeModeZero));
+    // One rollback: the bus opens and autoload restarts, each once; the
+    // cache was never frozen, so nothing thaws.
+    assert_eq!(
+        &ops[ops.len() - 2..],
+        &[FetchOp::Shut(false), FetchOp::Autoload(true)]
+    );
+    assert_eq!(
+        ops.iter().filter(|op| **op == FetchOp::Shut(false)).count(),
+        1
+    );
+    assert_eq!(
+        ops.iter()
+            .filter(|op| **op == FetchOp::Autoload(true))
+            .count(),
+        1
+    );
+    assert!(!ops.iter().any(|op| matches!(op, FetchOp::Freeze(_))));
+}
+
+#[test]
+fn a_secondary_s_stuck_shared_engine_keeps_its_bus_shut_and_ends_the_opening() {
+    let clock = VirtualClock::new();
+    let ticking = Ticking::new(&clock);
+    let mut caches = Harts::new(true);
+    caches.cache_mut(0).never_idle = Some("sync");
+    assert_eq!(
+        open_secondary_fetch(&mut caches, 0b110, SUSPEND, &deadline(&ticking)),
+        Err(BootFailure::Wait(WaitFailure::TimedOut("cache-sync-idle")))
+    );
+    // Core 0's cache is asked about the sync engine only; lock never runs.
+    let shared = caches.log(0);
+    assert!(!shared.is_empty());
+    assert!(shared.iter().all(|op| *op == FetchOp::Idle("sync")));
+    let ops = caches.log(1);
+    assert_eq!(
+        ops,
+        [
+            FetchOp::Shut(true),
+            FetchOp::Autoload(false),
+            FetchOp::Idle("autoload"),
+            FetchOp::Idle("preload"),
+            FetchOp::Autoload(true),
+        ]
+    );
+    assert!(caches.log(2).is_empty());
 }
 
 /// Core 0's instruction cache and two secondaries' (harts 1 and 2), each

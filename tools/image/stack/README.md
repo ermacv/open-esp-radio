@@ -204,12 +204,15 @@ stack depth, while the fall-through path remains in the local graph.
 
 Bounds fail closed. A root has a number only when nothing it reaches is
 unresolved; otherwise `Bound::reasons` counts the unresolved sites and
-functions by `Reason`, and `Reason::closed_by` names the stage of the stack
-analysis that resolves each: indirect calls through a stack slot
+functions by `Reason`: indirect calls through a stack slot
 (`core::hint::black_box`), through a loaded pointer or another register,
 indirect tail calls through a pointer, transfers outside the image (ROM) or into
 a function's middle, functions without a frame, recursion, and indirect
-sites whose facts found no target. `Bound::partial` is the deepest path over
+sites whose facts found no target. `Reason::needs` names the proof that would
+resolve each under the rules below, and the report prints it as
+`(needs: …)` after every unresolved site. It is a hint, not a status: the
+site stays unresolved, the bound does not use it, and no stage is promised
+to supply the proof. `Bound::partial` is the deepest path over
 what is resolved: the bound when nothing is unresolved, otherwise `partial +
 ?`, neither an upper nor a lower bound, since a hole may reach deeper and a
 path may be infeasible. Interrupt contexts (`LevelStack`, `HartStack`) carry

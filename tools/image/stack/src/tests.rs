@@ -488,6 +488,30 @@ fn an_unresolved_call_leaves_the_bound_unknown_with_its_reason() {
 }
 
 #[test]
+fn every_reason_names_the_proof_it_needs_and_promises_no_stage() {
+    let reasons = [
+        Reason::StackSlotCall,
+        Reason::LoadedCall,
+        Reason::RegisterCall,
+        Reason::IndirectJump,
+        Reason::OutsideImage,
+        Reason::IntoFunction,
+        Reason::Unframed,
+        Reason::Recursion,
+        Reason::NoCandidate,
+    ];
+    let hints: BTreeSet<&str> = reasons.iter().map(|reason| reason.needs()).collect();
+    // Each reason has its own hint.
+    assert_eq!(hints.len(), reasons.len());
+    for hint in hints {
+        assert!(!hint.is_empty());
+        for promise in ["MIR", "stage", "closed by", "review"] {
+            assert!(!hint.contains(promise), "{hint}");
+        }
+    }
+}
+
+#[test]
 fn a_declared_exit_ends_the_path_of_a_resolved_transfer_and_any_other_target_stays_a_hole() {
     let root = Symbol {
         name: "root",
