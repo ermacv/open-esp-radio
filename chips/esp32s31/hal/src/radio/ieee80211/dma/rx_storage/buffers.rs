@@ -250,10 +250,10 @@ impl<'id, 's, const N: usize, const B: usize, const S: usize, D: DmaSpace>
     fn buffer<const RESERVED: bool>(
         &self,
         index: usize,
-    ) -> Result<&'s RxDmaBuffer<B, S>, RxRingError> {
+    ) -> Result<BoundBuffer<'s, B, S>, RxRingError> {
         // RESERVED is selected by the ring's grant type, not tested per frame.
         if RESERVED {
-            Ok(&self.source().reserved_buffer)
+            Ok(BoundBuffer::Arena(&self.source().reserved_buffer))
         } else {
             self.source()
                 .buffer_for_descriptor(index)
@@ -264,22 +264,29 @@ impl<'id, 's, const N: usize, const B: usize, const S: usize, D: DmaSpace>
         &self,
         grant: RecycleGrant<'id, '_, Rearm, RESERVED>,
     ) -> Result<(), RxRingError> {
-        self.buffer::<RESERVED>(grant.index())?
-            .prepare_for_recycle()
+        match self.buffer::<RESERVED>(grant.index())? {
+            BoundBuffer::Arena(buffer) => buffer.prepare_for_recycle(),
+            // TEMPORARY experiment: a spare is never leased.
+            BoundBuffer::Spare(_) => Ok(()),
+        }
     }
     pub(crate) fn prepare_observed_for_recycle(
         &self,
         grant: RecycleGrant<'id, '_>,
     ) -> Result<(), RxRingError> {
-        self.buffer::<false>(grant.index())?
-            .prepare_observed_for_recycle()
+        match self.buffer::<false>(grant.index())? {
+            BoundBuffer::Arena(buffer) => buffer.prepare_observed_for_recycle(),
+            BoundBuffer::Spare(_) => Ok(()),
+        }
     }
     pub(crate) fn prepare_for_stopped_ring<const RESERVED: bool>(
         &self,
         grant: RecycleGrant<'id, '_, Rearm, RESERVED>,
     ) -> Result<(), RxRingError> {
-        self.buffer::<RESERVED>(grant.index())?
-            .prepare_for_stopped_ring()
+        match self.buffer::<RESERVED>(grant.index())? {
+            BoundBuffer::Arena(buffer) => buffer.prepare_for_stopped_ring(),
+            BoundBuffer::Spare(_) => Ok(()),
+        }
     }
     pub(crate) fn completed_bytes<'bytes>(
         &self,
@@ -288,7 +295,11 @@ impl<'id, 's, const N: usize, const B: usize, const S: usize, D: DmaSpace>
     where
         's: 'bytes,
     {
-        Ok(self.buffer::<false>(grant.index())?.completed())
+        match self.buffer::<false>(grant.index())? {
+            BoundBuffer::Arena(buffer) => Ok(buffer.completed()),
+            // TEMPORARY experiment: a spare is never borrowed by reference.
+            BoundBuffer::Spare(_) => Err(RxRingError::BufferOwnershipConflict),
+        }
     }
 }
 // Single-descriptor completion already cached its validated allocation when
@@ -411,8 +422,8 @@ impl<
         if self.unit.descriptor_count() != 1 {
             return Err(RxRingError::Count);
         }
-        // TEMPORARY experiment: a rebound descriptor's buffer is never leased.
-        if self.storage.rebind_published(self.unit.head_index()) != Some(RxBinding::Placed) {
+        // TEMPORARY experiment: a spare is never leased.
+        if self.storage.rebind_published(self.unit.head_index()) != Some(RxBinding::Arena) {
             return Err(RxRingError::BufferOwnershipConflict);
         }
         // A single descriptor's length always fits its own length field.

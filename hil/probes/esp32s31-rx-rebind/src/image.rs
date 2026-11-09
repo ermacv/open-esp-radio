@@ -41,7 +41,7 @@ const COUNT: usize = 32;
 const BUFFER: usize = 1664;
 const CHANNEL: u8 = 13;
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
-type Spares = RxSpareBank<BUFFER, BUFFER>;
+type Spares = RxSpareBank<BUFFER>;
 type Backend = Esp32s31Radio<
     ChipClocks,
     oer_chips_family_platform_executor::Cooperative<Esp32s31, EmbassyClock>,
@@ -63,11 +63,11 @@ oer_chips_esp32s31_hal::dma_static! { static SPARES: Spares = zeroed in ".dma.bs
 
 use crate::phy_pilot;
 
-// SAFETY: the production runtime script maps .hot.text.* to executable SRAM;
-// each generated wrapper retains the interrupt-table ABI and owned part.
+// The handlers keep the default text placement: this probe adds no unsafe
+// attribute.
 oer_chips_family_platform_interrupt_table::interrupt_table! {
     lines: oer_chips_family_platform_runtime::interrupts::LINES,
-    handler_attributes: [#[unsafe(link_section = ".hot.text.rx_rebind_vectors")]];
+    handler_attributes: [];
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
     wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
     // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:
@@ -461,18 +461,34 @@ async fn capture(boot: Boot) {
         mac_irq,
     } = boot;
     usb::text(&mut console, b"REBIND boot\n").await;
-    let result = run_direct(&mut console, mac_irq).await;
-    if let Err(reason) = result {
-        usb::text(&mut console, reason.as_str().as_bytes()).await;
-        usb::text(&mut console, b"\nOER-RESULT: fail rx-rebind\n").await;
-    } else {
-        usb::text(&mut console, b"OER-RESULT: pass rx-rebind\n").await;
+    match run_direct(&mut console, mac_irq).await {
+        Err(reason) => {
+            usb::text(&mut console, reason.as_str().as_bytes()).await;
+            usb::text(&mut console, b"\nOER-RESULT: fail rx-rebind error\n").await;
+        }
+        Ok(crate::verdict::Verdict::Pass) => {
+            usb::text(&mut console, b"OER-RESULT: pass rx-rebind\n").await;
+        }
+        Ok(crate::verdict::Verdict::Fail(kind)) => {
+            usb::text(&mut console, b"OER-RESULT: fail rx-rebind violation=").await;
+            usb::text(&mut console, kind.name().as_bytes()).await;
+            usb::text(&mut console, b"\n").await;
+        }
+        Ok(crate::verdict::Verdict::Insufficient(shortfall)) => {
+            usb::text(
+                &mut console,
+                b"OER-RESULT: fail rx-rebind insufficient-experiment=",
+            )
+            .await;
+            usb::text(&mut console, shortfall.name().as_bytes()).await;
+            usb::text(&mut console, b"\n").await;
+        }
     }
 }
 async fn run_direct(
     console: &mut usb::Console,
     mut mac_irq: oer_chips_esp32s31_hal::system::owner::MacInterruptRegisters,
-) -> Result<(), oer_portable_diagnostics::Name<32>> {
+) -> Result<crate::verdict::Verdict, oer_portable_diagnostics::Name<32>> {
     let deadline = EmbassyClock
         .now()
         .checked_add(Duration::from_secs(5))
@@ -495,26 +511,22 @@ async fn run_direct(
     };
     let access = &mut output.access;
     let (state, frame) = experiment::take()?;
-    let placed = RxDmaStorage::place(
+    // Every buffer the walker can reach is a spare, painted while it is
+    // still the CPU's; the bank stays with the arena until reset.
+    let (placed, bank) = RxDmaStorage::place_with_spares(
         RX.take()
             .ok_or(oer_portable_diagnostics::name!("rx-claimed"; 32))?,
+        SPARES
+            .take()
+            .ok_or(oer_portable_diagnostics::name!("spares-claimed"; 32))?,
+        |spare, bytes| {
+            for (word, chunk) in bytes.chunks_exact_mut(4).enumerate() {
+                chunk.copy_from_slice(&experiment::canary(spare, word).to_le_bytes());
+            }
+        },
     )
     .map_err(|_| oer_portable_diagnostics::name!("rx-place"; 32))?;
     let storage = placed.storage();
-    // The spares are painted while they are still the CPU's, before the
-    // ring exists; they stay with the arena until reset.
-    let bank = storage
-        .attach_rebind_spares(
-            SPARES
-                .take()
-                .ok_or(oer_portable_diagnostics::name!("spares-claimed"; 32))?,
-            |spare, bytes| {
-                for (word, chunk) in bytes.chunks_exact_mut(4).enumerate() {
-                    chunk.copy_from_slice(&experiment::canary(spare, word).to_le_bytes());
-                }
-            },
-        )
-        .map_err(|_| oer_portable_diagnostics::name!("spares-attach"; 32))?;
     let prepared = placed
         .prepare_ring(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-prepare"; 32))?;
@@ -534,7 +546,7 @@ async fn run_direct(
     mac_irq.mask_all_mac_interrupts();
     usb::text(
         console,
-        b"REBIND begin v=1 channel=13 count=32 buffer=1664 spares=64 segment_ms=2500 action_ms=80 arms=fixed,rebind,rebind,fixed\n",
+        b"REBIND begin v=2 channel=13 count=32 buffer=1664 spares=96 pool=64 segment_ms=2500 action_ms=80 arms=fixed,rebind,rebind,fixed-late\n",
     )
     .await;
     let observation =
@@ -565,9 +577,10 @@ async fn run_direct(
     experiment::dump(state, console).await?;
     observation?;
     finished?;
-    // The static backend, storage and spares retain every owner until the
-    // leased host reset; nothing is returned to the network.
-    Ok(())
+    // The verdict is decided only now: after the walker stopped and the
+    // evidence was printed. The static backend, storage and spares retain
+    // every owner until the leased host reset; nothing reaches the network.
+    Ok(crate::verdict::decide(&experiment::observations(state)))
 }
 
 oer_chips_family_platform_executor::time_driver!(Esp32s31);

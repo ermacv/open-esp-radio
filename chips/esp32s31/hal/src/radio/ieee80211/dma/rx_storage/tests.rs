@@ -3721,25 +3721,23 @@ fn stopped_ring_grants_restore_returned_buffers_before_a_new_recycle_epoch() {
     assert!(live.try_stop(&mut ring.walker).is_ok());
 }
 
-/// TEMPORARY experiment (`rx_rebind`): a live ring of four with spares
-/// attached and frames landed in descriptors 0 and 1, LAST on 1, NEXT on 2.
+/// TEMPORARY experiment (`rx_rebind`): a live ring of four placed on spares,
+/// with frames landed in descriptors 0 and 1, LAST on 1, NEXT on 2.
 fn rebind_ring() -> (
     &'static RxDmaStorage<4, 16, 16, HostDma>,
-    &'static crate::radio::ieee80211::dma::rx_rebind::RxSpareBank<16, 16>,
+    &'static crate::radio::ieee80211::dma::rx_rebind::RxSpareBank<16>,
     MockRxDma,
     RxRingLive<'static, 4>,
 ) {
     const ADDRESS_LOW_MASK: u32 = crate::radio::ieee80211::registers::WifiDescriptorAddressLow::MAX;
-    let storage = Box::leak(Box::new(RxDmaStorage::<4, 16, 16, HostDma>::new()));
-    let placed = place(storage);
+    let (placed, bank) = RxDmaStorage::<4, 16, 16, HostDma>::place_with_spares(
+        Placed::host(Box::leak(Box::new(RxDmaStorage::new()))),
+        Placed::host(Box::leak(Box::new(bytemuck::Zeroable::zeroed()))),
+        |spare, bytes| bytes.fill(spare as u8 + 1),
+    )
+    .expect("the experiment arena places");
     let storage = placed.storage();
     let base = placed.descriptor_base();
-    let bank = storage
-        .attach_rebind_spares(
-            Placed::host(Box::leak(Box::new(bytemuck::Zeroable::zeroed()))),
-            |spare, bytes| bytes.fill(spare as u8 + 1),
-        )
-        .expect("spares attach before the first ring");
     let mut mmio = MockRxDma::default();
     let live = placed
         .prepare_ring(&mut mmio)
@@ -3762,9 +3760,22 @@ use crate::radio::ieee80211::dma::descriptor::DESCRIPTOR_BYTES;
 use crate::radio::ieee80211::dma::rx_rebind::RxBinding;
 
 #[test]
-fn a_rebound_descriptor_publishes_and_accounts_its_spare() {
+fn an_experiment_arena_publishes_only_spares() {
+    let (storage, bank, mut mmio, live) = rebind_ring();
+    for (index, descriptor) in storage.descriptors().iter().enumerate() {
+        assert_eq!(Some(descriptor.buffer_address()), bank.address(index));
+        assert_eq!(
+            storage.rebind_published(index),
+            Some(RxBinding::Spare(index))
+        );
+    }
+    assert!(storage.rebind_spare_unbound(4));
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn a_rebound_descriptor_publishes_and_reads_its_new_spare() {
     let (storage, bank, mut mmio, mut live) = rebind_ring();
-    let placed_address = storage.descriptors()[0].buffer_address();
     let cursor = live.freeze_cursor(&mut mmio).unwrap();
     let mut unit = storage
         .take_completed_unit(&mut live, cursor)
@@ -3773,36 +3784,66 @@ fn a_rebound_descriptor_publishes_and_accounts_its_spare() {
     unit.detach_before_last(&mut mmio, cursor)
         .expect("descriptor 0 is strictly before LAST");
     assert!(!storage.descriptors()[0].word0().owner());
-    unit.rebind_next(0).expect("spare 0 is unbound");
-    // Until the re-arm stores BUFFER, the accounting names the old buffer.
-    assert_eq!(storage.rebind_published(0), Some(RxBinding::Placed));
-    assert_eq!(storage.descriptors()[0].buffer_address(), placed_address);
+    unit.rebind_next(4).expect("spare 4 is unbound");
+    // Until the re-arm stores BUFFER, the accounting names the old spare.
+    assert_eq!(storage.rebind_published(0), Some(RxBinding::Spare(0)));
+    assert_eq!(
+        Some(storage.descriptors()[0].buffer_address()),
+        bank.address(0)
+    );
     unit.retain_discard()
         .expect("unit is at the recycle frontier")
         .append(&mut mmio)
         .expect("the production append re-arms the descriptor");
     let descriptor = &storage.descriptors()[0];
     assert!(descriptor.word0().owner());
-    assert_eq!(Some(descriptor.buffer_address()), bank.address(0));
-    assert_eq!(storage.rebind_published(0), Some(RxBinding::Spare(0)));
-    assert!(core::ptr::eq(
-        storage.buffer_for_descriptor(0).unwrap(),
-        &bank.buffers()[0]
-    ));
-    assert!(storage.rebind_placed_retired(0));
-    assert!(!storage.rebind_spare_unbound(0));
-    assert!(storage.rebind_spare_unbound(1));
+    assert_eq!(Some(descriptor.buffer_address()), bank.address(4));
+    assert_eq!(storage.rebind_published(0), Some(RxBinding::Spare(4)));
+    assert!(storage.rebind_spare_retired(0));
+    assert!(!storage.rebind_spare_unbound(4));
     live.complete_pending_reload(&mut mmio, frozen_settle())
         .expect("reload settles");
     assert!(live.topology_snapshot().valid);
+    // Every CPU read of descriptor 0 now names spare 4.
+    assert!(matches!(
+        storage.buffer_for_descriptor(0),
+        Some(BoundBuffer::Spare(spare)) if core::ptr::eq(spare, &bank.buffers[4])
+    ));
+    // The next frontier unit, descriptor 1, is copied from its spare by
+    // volatile reads.
+    let cursor = live.freeze_cursor(&mut mmio).unwrap();
+    let mut copy = [0; 4];
+    assert_eq!(
+        storage.copy_first_completed_unit_bytes_through_cursor(&live, cursor, 0, &mut copy),
+        Ok(true)
+    );
+    assert_eq!(copy, [2; 4]);
     let Ok(halted) = live.try_stop(&mut mmio) else {
         panic!("the walker stops");
     };
-    // An arena with a rebind is never rebuilt.
+    // An experiment arena is never rebuilt.
     assert!(matches!(
         storage.prepare_halted(halted, &mut mmio),
         Err((_, RxRingError::ResetRequired))
     ));
+}
+
+#[test]
+fn spares_are_never_lent_by_reference_or_lease() {
+    let (storage, _bank, mut mmio, mut live) = rebind_ring();
+    let cursor = live.freeze_cursor(&mut mmio).unwrap();
+    assert_eq!(
+        storage.take_completed(&mut live, cursor, 0).err(),
+        Some(RxRingError::BufferOwnershipConflict)
+    );
+    let unit = storage
+        .take_completed_unit(&mut live, cursor)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        unit.detach_single(&mut mmio).err(),
+        Some(RxRingError::BufferOwnershipConflict)
+    );
 }
 
 #[test]
@@ -3832,7 +3873,7 @@ fn detach_before_last_refuses_last_without_a_write() {
         Err(RxRingError::Corrupt)
     );
     assert_eq!(storage.descriptors()[1].word0(), before);
-    assert_eq!(last.rebind_next(0), Err(RxRingError::Corrupt));
+    assert_eq!(last.rebind_next(4), Err(RxRingError::Corrupt));
     last.retain_for_deferred_recycle();
 }
 
@@ -3844,12 +3885,12 @@ fn a_spare_binds_once_and_a_rebind_needs_a_detach() {
         .take_completed_unit(&mut live, cursor)
         .unwrap()
         .unwrap();
-    assert_eq!(unit.rebind_next(0), Err(RxRingError::Corrupt));
+    assert_eq!(unit.rebind_next(4), Err(RxRingError::Corrupt));
     unit.detach_before_last(&mut mmio, cursor).unwrap();
-    unit.rebind_next(0).unwrap();
+    unit.rebind_next(4).unwrap();
     // A second rebind while the first is pending is refused.
-    assert_eq!(unit.rebind_next(1), Err(RxRingError::Corrupt));
+    assert_eq!(unit.rebind_next(5), Err(RxRingError::Corrupt));
     unit.retain_for_deferred_recycle();
-    assert!(!storage.rebind_spare_unbound(0));
-    assert!(storage.rebind_spare_unbound(1));
+    assert!(!storage.rebind_spare_unbound(4));
+    assert!(storage.rebind_spare_unbound(5));
 }

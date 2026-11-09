@@ -1,9 +1,15 @@
-//! TEMPORARY experiment: one live RX ring run in four time segments, fixed
-//! binding, rebind, rebind, fixed (A–B–B–A), with the same detach cadence in
-//! every segment. Only completed single-descriptor units strictly before the
-//! frozen LAST are detached; LAST, the descriptor NEXT names and R are never
-//! touched by the experiment.
+//! TEMPORARY experiment: one live RX ring run in four time segments: fixed
+//! binding A, rebind B, rebind B, then A′, fixed binding on the already
+//! changed bindings (late-write observation, not a restored control), with
+//! the same detach cadence in every segment. Only completed
+//! single-descriptor units strictly before the frozen LAST are detached;
+//! LAST, the descriptor NEXT names and R are never touched.
+//!
+//! Every buffer the walker can reach is a spare of the bank; the probe
+//! reads spares only by the bank's volatile copies.
 use super::{BUFFER, COUNT, Spares, Storage, usb};
+use crate::crc::{CRC32, crc32};
+use crate::verdict::{Counts, Kind, LATE_SEGMENT, Observations, REBIND_SEGMENT, SEGMENTS};
 use bytemuck::Zeroable;
 use core::fmt::Write as _;
 use oer_chips_esp32s31_hal::{
@@ -11,8 +17,8 @@ use oer_chips_esp32s31_hal::{
         dma::{
             descriptor::cursor_ring_index,
             rx_rebind::{RX_REBIND_SPARES, RxBinding},
-            rx_ring::{RxRingError, RxRingLive, RxSegment},
-            rx_storage::RxDmaBuffer,
+            rx_ring::{RxFrozenCursor, RxRingError, RxRingLive, RxSegment},
+            rx_storage::RxDmaCompletedUnit,
         },
         registers::{MacInterruptMask, MacRxInterrupts},
     },
@@ -27,23 +33,18 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::zeroed::ZeroedStatic;
 use oer_portable_time::{Clock, Duration, Instant, settle::Settle};
 
-pub(super) const SEGMENTS: usize = 4;
-/// The arm of each segment: A–B–B–A.
-const REBIND_SEGMENT: [bool; SEGMENTS] = [false, true, true, false];
 const SEGMENT_MS: u64 = 2500;
 /// One detach (and, in a rebind segment, one rebind) at most this often.
 const ACTION_MS: u32 = 80;
 const UNITS_PER_SCAN: usize = 8;
 const RETIRED_CHECKS_PER_SCAN: usize = 2;
 const SPARE_CHECKS_PER_SCAN: usize = 1;
-const RETIRED_CAPACITY: usize = COUNT + RX_REBIND_SPARES;
 const VIOLATION_CAPACITY: usize = 16;
-const WORDS: usize = BUFFER / 4;
-/// Words compared between the HAL's copy and the bound buffer itself.
-const COPY_WORDS: usize = 16;
+/// Bytes compared between the HAL's copy and the bound spare.
+const COPY_BYTES: usize = 64;
 const _: () = {
-    if !BUFFER.is_multiple_of(4) || COPY_WORDS > WORDS {
-        panic!("buffer geometry");
+    if !BUFFER.is_multiple_of(4) || COPY_BYTES > BUFFER || COUNT > RX_REBIND_SPARES {
+        panic!("experiment geometry");
     }
 };
 
@@ -54,49 +55,11 @@ pub(super) const fn canary(spare: usize, word: usize) -> u32 {
 
 #[derive(Clone, Copy, Zeroable)]
 #[repr(C)]
-struct Counts {
-    services: u32,
-    units: u32,
-    chained: u32,
-    frames: u32,
-    prefix_ok: u32,
-    prefix_err: u32,
-    fcs_ok: u32,
-    fcs_bad: u32,
-    fcs_absent: u32,
-    frames_on_spare: u32,
-    first_landings: u32,
-    detached: u32,
-    rebound: u32,
-    spares_exhausted: u32,
-    not_before_last: u32,
-    window_checks: u32,
-    retired_checks: u32,
-    spare_checks: u32,
-    violations: u32,
-    reload_deferred: u32,
-    hw_mpdu: u32,
-    hw_fcs_error: u32,
-    hw_buffer_full: u32,
-    hw_data_success: u32,
-}
-
-const KIND_BINDING: u32 = 1;
-const KIND_COPY: u32 = 2;
-const KIND_LANDING: u32 = 3;
-const KIND_WINDOW: u32 = 4;
-const KIND_RETIRED: u32 = 5;
-const KIND_SPARE: u32 = 6;
-const KIND_ACCOUNTING: u32 = 7;
-
-#[derive(Clone, Copy, Zeroable)]
-#[repr(C)]
 struct Violation {
     kind: u32,
     segment: u32,
-    /// Placed buffer `i` as `i`, spare `k` as `0x100 + k`.
-    buffer: u32,
-    word: u32,
+    spare: u32,
+    offset: u32,
     expected: u32,
     observed: u32,
 }
@@ -104,32 +67,38 @@ struct Violation {
 #[derive(Clone, Copy, Zeroable)]
 #[repr(C)]
 struct Retired {
-    /// Binding code: 0 placed buffer of `descriptor`, k + 1 spare k.
-    binding: u32,
+    spare: u32,
     descriptor: u32,
     crc: u32,
     segment: u32,
+    /// Descriptors completed before this spare retired.
+    descriptors_at_retire: u32,
 }
 
 #[derive(Zeroable)]
 pub(super) struct State {
     counts: [Counts; SEGMENTS],
-    retired: [Retired; RETIRED_CAPACITY],
+    retired: [Retired; RX_REBIND_SPARES],
     retired_len: usize,
     retired_cursor: usize,
     violations: [Violation; VIOLATION_CAPACITY],
     violations_len: usize,
-    /// Per descriptor, the binding the probe expects: 0 placed, k + 1 spare k.
+    violations_total: u32,
+    first_violation: u32,
+    /// Per descriptor, the spare the probe bound it to.
     expected: [u32; COUNT],
-    /// Per descriptor, whether its spare has received no frame yet.
-    fresh: [bool; COUNT],
+    /// Per descriptor, the segment + 1 of a rebind whose new spare has
+    /// received no checked frame yet; zero otherwise.
+    fresh: [u32; COUNT],
     next_spare: usize,
     spare_cursor: usize,
+    descriptors_total: u32,
     hw_last: [u16; 4],
-    final_retired: u32,
-    final_retired_violations: u32,
-    final_spares: u32,
-    final_spare_violations: u32,
+    retired_final_checks: u32,
+    retired_with_lap: u32,
+    min_lap_descriptors: u32,
+    unbound: u32,
+    unbound_final_checks: u32,
 }
 
 /// The HAL's copy of one completed frame.
@@ -141,6 +110,10 @@ static FRAME: ZeroedStatic<Frame> = ZeroedStatic::new();
 pub(super) fn take() -> Result<(&'static mut State, &'static mut Frame), Name<32>> {
     let state = STATE.try_take().ok_or(name!("state-claimed"; 32))?;
     let frame = FRAME.try_take().ok_or(name!("frame-claimed"; 32))?;
+    for (descriptor, expected) in state.expected.iter_mut().enumerate() {
+        *expected = descriptor as u32;
+    }
+    state.next_spare = COUNT;
     Ok((state, frame))
 }
 
@@ -148,82 +121,29 @@ fn bump(counter: &mut u32) {
     *counter = counter.saturating_add(1);
 }
 
-fn binding_code(binding: RxBinding) -> u32 {
-    match binding {
-        RxBinding::Placed => 0,
-        RxBinding::Spare(spare) => spare as u32 + 1,
-    }
+fn word_at(bytes: &[u8], word: usize) -> Option<u32> {
+    let start = word.checked_mul(4)?;
+    let chunk: [u8; 4] = bytes.get(start..start.checked_add(4)?)?.try_into().ok()?;
+    Some(u32::from_le_bytes(chunk))
 }
 
-fn buffer_label(code: u32, descriptor: usize) -> u32 {
-    if code == 0 {
-        descriptor as u32
-    } else {
-        0x100 + code - 1
-    }
-}
-
-/// The buffer a binding code names.
-fn buffer_of(
-    storage: &'static Storage,
-    bank: &'static Spares,
-    descriptor: usize,
-    code: u32,
-) -> Option<&'static RxDmaBuffer<BUFFER, BUFFER>> {
-    if code == 0 {
-        storage
-            .buffers()
-            .get(storage.descriptor_buffer_id(descriptor)?)
-    } else {
-        bank.buffers().get(usize::try_from(code - 1).ok()?)
-    }
-}
-
-fn address_of(buffer: &RxDmaBuffer<BUFFER, BUFFER>) -> u32 {
-    // ChipDma: a field's address is its DMA address.
-    core::ptr::from_ref(buffer).addr() as u32
-}
-
-// The experiment observes DMA memory the hardware may write at any time:
-// value-only volatile loads, never a byte reference.
-#[allow(
-    unsafe_code,
-    reason = "probe-only volatile observation of a placed RX DMA buffer"
-)]
-fn read_word(buffer: &RxDmaBuffer<BUFFER, BUFFER>, word: usize) -> Option<u32> {
-    if word >= WORDS {
-        return None;
-    }
-    // SAFETY: `RxDmaBuffer` is `repr(C, align(4))` with its
-    // `UnsafeCell<[u8; BUFFER]>` byte cell at offset zero, so `word * 4 + 4
-    // <= BUFFER` lies inside that cell and is u32 aligned. The buffer is a
-    // live `'static` DMA allocation of this image. The load creates no
-    // reference to the bytes and transfers no ownership; DMA may write the
-    // cell concurrently, which is what the observation records.
-    Some(unsafe {
-        core::ptr::from_ref(buffer)
-            .cast::<u32>()
-            .add(word)
-            .read_volatile()
-    })
-}
-
-use crate::crc::{CRC32, crc32};
-
-/// CRC-32 over a whole buffer by volatile word loads.
-fn crc_buffer(buffer: &RxDmaBuffer<BUFFER, BUFFER>) -> u32 {
+/// CRC-32 over a volatile copy of a whole spare.
+fn crc_spare(bank: &Spares, spare: usize) -> Option<u32> {
+    let image = bank.read(spare)?;
     let mut digest = CRC32.digest();
-    for word in 0..WORDS {
-        digest.update(&read_word(buffer, word).unwrap_or(0).to_le_bytes());
-    }
-    digest.finalize()
+    digest.update(&image);
+    Some(digest.finalize())
 }
 
 impl State {
     fn record(&mut self, segment: usize, violation: Violation) {
         if let Some(counts) = self.counts.get_mut(segment) {
-            counts.violations = counts.violations.saturating_add(1);
+            bump(&mut counts.violations);
         }
+        if self.violations_total == 0 {
+            self.first_violation = violation.kind;
+        }
+        bump(&mut self.violations_total);
         if let Some(slot) = self.violations.get_mut(self.violations_len) {
             *slot = violation;
             self.violations_len = self.violations_len.saturating_add(1);
@@ -235,7 +155,8 @@ impl State {
     }
 
     /// Check one committed single-descriptor frame, copied by the HAL from
-    /// the buffer its accounting names, before it is detached or recycled.
+    /// the spare its accounting names, before it is detached or recycled.
+    #[allow(clippy::too_many_arguments)]
     fn check_frame(
         &mut self,
         segment: usize,
@@ -249,101 +170,83 @@ impl State {
             .descriptors()
             .get(index)
             .ok_or(name!("frame-descriptor"; 32))?;
-        let code = *self.expected.get(index).ok_or(name!("expected"; 32))?;
-        let buffer = buffer_of(storage, bank, index, code).ok_or(name!("frame-buffer"; 32))?;
-        let published = storage
-            .rebind_published(index)
-            .map(binding_code)
-            .ok_or(name!("published"; 32))?;
-        let counts = self.counts(segment)?;
-        counts.frames = counts.frames.saturating_add(1);
-        if code != 0 {
-            counts.frames_on_spare = counts.frames_on_spare.saturating_add(1);
+        let spare = usize::try_from(*self.expected.get(index).ok_or(name!("expected"; 32))?)
+            .map_err(|_| name!("expected"; 32))?;
+        let address = bank.address(spare).ok_or(name!("spare-address"; 32))?;
+        let published = storage.rebind_published(index);
+        let fresh = *self.fresh.get(index).ok_or(name!("fresh"; 32))?;
+        bump(&mut self.counts(segment)?.frames);
+        if fresh != 0 {
+            bump(&mut self.counts(segment)?.frames_on_rebound);
         }
-        if descriptor.buffer_address() != address_of(buffer) || published != code {
+        let mut clean = true;
+        if descriptor.buffer_address() != address || published != Some(RxBinding::Spare(spare)) {
+            clean = false;
             self.record(
                 segment,
                 Violation {
-                    kind: KIND_BINDING,
+                    kind: Kind::Binding as u32,
                     segment: segment as u32,
-                    buffer: buffer_label(code, index),
-                    word: published,
-                    expected: address_of(buffer),
+                    spare: spare as u32,
+                    offset: 0,
+                    expected: address,
                     observed: descriptor.buffer_address(),
                 },
             );
         }
         let frame = frame.get(..length).ok_or(name!("frame-length"; 32))?;
-        let mut copy_mismatch = None;
-        let mut canary_words = 0u32;
-        let spare = usize::try_from(code).ok().and_then(|c| c.checked_sub(1));
-        for (word, chunk) in frame.chunks_exact(4).take(COPY_WORDS).enumerate() {
-            let copied = u32::from_le_bytes([
-                *chunk.first().ok_or(name!("chunk"; 32))?,
-                *chunk.get(1).ok_or(name!("chunk"; 32))?,
-                *chunk.get(2).ok_or(name!("chunk"; 32))?,
-                *chunk.get(3).ok_or(name!("chunk"; 32))?,
-            ]);
-            let observed = read_word(buffer, word).ok_or(name!("copy-word"; 32))?;
-            if copied != observed && copy_mismatch.is_none() {
-                copy_mismatch = Some((word, copied, observed));
-            }
-            if spare.is_some_and(|spare| copied == canary(spare, word)) {
-                canary_words = canary_words.saturating_add(1);
-            }
-        }
-        if let Some((word, copied, observed)) = copy_mismatch {
+        let image = bank.read(spare).ok_or(name!("spare-read"; 32))?;
+        let compared = length.min(COPY_BYTES);
+        if let Some(offset) = (0..compared).find(|&i| frame.get(i) != image.get(i)) {
+            clean = false;
             self.record(
                 segment,
                 Violation {
-                    kind: KIND_COPY,
+                    kind: Kind::Copy as u32,
                     segment: segment as u32,
-                    buffer: buffer_label(code, index),
-                    word: word as u32,
-                    expected: copied,
-                    observed,
+                    spare: spare as u32,
+                    offset: offset as u32,
+                    expected: u32::from(frame.get(offset).copied().unwrap_or(0)),
+                    observed: u32::from(image.get(offset).copied().unwrap_or(0)),
                 },
             );
         }
-        let fresh = self.fresh.get_mut(index).ok_or(name!("fresh"; 32))?;
-        let first = core::mem::replace(fresh, false);
-        if first {
-            let counts = self.counts(segment)?;
-            counts.first_landings = counts.first_landings.saturating_add(1);
-        }
+        let canary_words = (0..compared / 4)
+            .filter(|&word| word_at(frame, word) == Some(canary(spare, word)))
+            .count();
         if canary_words != 0 {
+            clean = false;
             self.record(
                 segment,
                 Violation {
-                    kind: KIND_LANDING,
+                    kind: Kind::Landing as u32,
                     segment: segment as u32,
-                    buffer: buffer_label(code, index),
-                    word: u32::from(first),
+                    spare: spare as u32,
+                    offset: 0,
                     expected: 0,
-                    observed: canary_words,
+                    observed: canary_words as u32,
                 },
             );
         }
-        let segment_view = RxSegment {
+        let view = RxSegment {
             descriptor_address: 0,
             descriptor_word0: descriptor.word0(),
             buffer: frame,
             next_descriptor_address: 0,
         };
         let layout = first_segment_layout(
-            &segment_view,
+            &view,
             RxIngressConfig {
                 ring_entry_limit: COUNT,
                 csi_config: 0,
                 flags: 0,
             },
         );
-        let counts = self.counts(segment)?;
         let Ok(layout) = layout else {
-            counts.prefix_err = counts.prefix_err.saturating_add(1);
+            bump(&mut self.counts(segment)?.prefix_err);
             return Ok(());
         };
-        counts.prefix_ok = counts.prefix_ok.saturating_add(1);
+        bump(&mut self.counts(segment)?.prefix_ok);
         let body_end = layout
             .frame_offset
             .checked_add(layout.expected_frame_length)
@@ -351,6 +254,7 @@ impl State {
         let fcs_end = body_end
             .checked_add(FCS_SIZE)
             .ok_or(name!("fcs-range"; 32))?;
+        let counts = self.counts(segment)?;
         match (
             frame.get(layout.frame_offset..body_end),
             frame.get(body_end..fcs_end),
@@ -359,21 +263,27 @@ impl State {
                 let stored =
                     u32::from_le_bytes(fcs.try_into().map_err(|_| name!("fcs-width"; 32))?);
                 if crc32(body) == stored {
-                    counts.fcs_ok = counts.fcs_ok.saturating_add(1);
+                    bump(&mut counts.fcs_ok);
                 } else {
-                    counts.fcs_bad = counts.fcs_bad.saturating_add(1);
+                    bump(&mut counts.fcs_bad);
                 }
             }
-            _ => counts.fcs_absent = counts.fcs_absent.saturating_add(1),
+            _ => bump(&mut counts.fcs_absent),
+        }
+        // The rebind is covered: the BUFFER word named the new spare, DMA
+        // landed this frame in it, and every check ran on it.
+        if fresh != 0 && clean {
+            let rebind_segment = usize::try_from(fresh - 1).map_err(|_| name!("fresh"; 32))?;
+            bump(&mut self.counts(rebind_segment)?.covered_rebinds);
+            *self.fresh.get_mut(index).ok_or(name!("fresh"; 32))? = 0;
         }
         Ok(())
     }
 
-    /// Recheck `limit` retired buffers round-robin.
+    /// Recheck `limit` retired spares round-robin.
     fn check_retired(
         &mut self,
         segment: usize,
-        storage: &'static Storage,
         bank: &'static Spares,
         limit: usize,
     ) -> Result<(), Name<32>> {
@@ -381,21 +291,17 @@ impl State {
             let position = self.retired_cursor % self.retired_len.max(1);
             self.retired_cursor = position.saturating_add(1);
             let retired = *self.retired.get(position).ok_or(name!("retired"; 32))?;
-            let descriptor =
-                usize::try_from(retired.descriptor).map_err(|_| name!("retired"; 32))?;
-            let buffer = buffer_of(storage, bank, descriptor, retired.binding)
-                .ok_or(name!("retired-buffer"; 32))?;
-            let counts = self.counts(segment)?;
-            counts.retired_checks = counts.retired_checks.saturating_add(1);
-            let crc = crc_buffer(buffer);
+            let spare = usize::try_from(retired.spare).map_err(|_| name!("retired"; 32))?;
+            bump(&mut self.counts(segment)?.retired_checks);
+            let crc = crc_spare(bank, spare).ok_or(name!("retired-read"; 32))?;
             if crc != retired.crc {
                 self.record(
                     segment,
                     Violation {
-                        kind: KIND_RETIRED,
+                        kind: Kind::Retired as u32,
                         segment: segment as u32,
-                        buffer: buffer_label(retired.binding, descriptor),
-                        word: retired.segment,
+                        spare: retired.spare,
+                        offset: retired.segment,
                         expected: retired.crc,
                         observed: crc,
                     },
@@ -405,37 +311,34 @@ impl State {
         Ok(())
     }
 
-    /// Check spare `spare`'s canary when it was never bound; the first
-    /// differing word is recorded.
+    /// Check never bound spare `spare`'s canary; `None` when it was bound.
     fn check_spare(
         &mut self,
         segment: usize,
         storage: &'static Storage,
         bank: &'static Spares,
         spare: usize,
-    ) -> Result<Option<bool>, Name<32>> {
+    ) -> Result<Option<()>, Name<32>> {
         if !storage.rebind_spare_unbound(spare) {
             return Ok(None);
         }
-        let buffer = bank.buffers().get(spare).ok_or(name!("spare"; 32))?;
-        for word in 0..WORDS {
-            let observed = read_word(buffer, word).ok_or(name!("spare-word"; 32))?;
-            if observed != canary(spare, word) {
-                self.record(
-                    segment,
-                    Violation {
-                        kind: KIND_SPARE,
-                        segment: segment as u32,
-                        buffer: 0x100 + spare as u32,
-                        word: word as u32,
-                        expected: canary(spare, word),
-                        observed,
-                    },
-                );
-                return Ok(Some(false));
-            }
+        let image = bank.read(spare).ok_or(name!("spare-read"; 32))?;
+        if let Some(word) =
+            (0..BUFFER / 4).find(|&word| word_at(&image, word) != Some(canary(spare, word)))
+        {
+            self.record(
+                segment,
+                Violation {
+                    kind: Kind::Spare as u32,
+                    segment: segment as u32,
+                    spare: spare as u32,
+                    offset: word as u32,
+                    expected: canary(spare, word),
+                    observed: word_at(&image, word).unwrap_or(0),
+                },
+            );
         }
-        Ok(Some(true))
+        Ok(Some(()))
     }
 
     fn check_spares(
@@ -449,8 +352,7 @@ impl State {
             let spare = self.spare_cursor % RX_REBIND_SPARES;
             self.spare_cursor = spare.saturating_add(1);
             if self.check_spare(segment, storage, bank, spare)?.is_some() {
-                let counts = self.counts(segment)?;
-                counts.spare_checks = counts.spare_checks.saturating_add(1);
+                bump(&mut self.counts(segment)?.spare_checks);
             }
         }
         Ok(())
@@ -577,11 +479,14 @@ fn scan(
             unit.retain_for_deferred_recycle();
             return Err(name!("take-head"; 32));
         }
+        let descriptors = u32::try_from(unit.descriptor_count()).unwrap_or(u32::MAX);
+        state.descriptors_total = state.descriptors_total.saturating_add(descriptors);
         {
             let counts = state.counts(segment)?;
-            counts.units = counts.units.saturating_add(1);
+            bump(&mut counts.units);
+            counts.descriptors = counts.descriptors.saturating_add(descriptors);
             if unit.descriptor_count() != 1 {
-                counts.chained = counts.chained.saturating_add(1);
+                bump(&mut counts.chained);
             }
         }
         if copied && let Err(error) = state.check_frame(segment, storage, bank, frame, head, length)
@@ -592,9 +497,8 @@ fn scan(
         if copied && *action {
             if !before_last {
                 bump(&mut state.counts(segment)?.not_before_last);
-            } else if let Err(error) = act(
-                state, segment, rebind, storage, bank, &mut unit, frozen, access,
-            ) {
+            } else if let Err(error) = act(state, segment, rebind, bank, &mut unit, frozen, access)
+            {
                 unit.retain_for_deferred_recycle();
                 return Err(error);
             } else {
@@ -608,57 +512,49 @@ fn scan(
             Ok(_) => {}
             Err(RxRingError::ReloadPending) => {
                 // The settle rang the doorbell again; the unit stays observed
-                // and is appended by a later deferred claim.
+                // and is appended by the next deferred claim.
                 bump(&mut state.counts(segment)?.reload_deferred);
             }
             Err(_) => return Err(name!("append"; 32)),
         }
         reload(ring, access)?;
     }
-    state.check_retired(segment, storage, bank, RETIRED_CHECKS_PER_SCAN)?;
+    state.check_retired(segment, bank, RETIRED_CHECKS_PER_SCAN)?;
     state.check_spares(segment, storage, bank, SPARE_CHECKS_PER_SCAN)?;
     state.sample_hardware(segment, access)
 }
 
-/// Detach the taken unit in place; in a rebind segment bind its next re-arm
-/// to the next unbound spare and retire the old buffer with its CRC; in a
-/// fixed segment recheck the old buffer before the same re-arm.
-#[allow(clippy::too_many_arguments)]
+/// Detach the taken unit in place. A rebind segment binds its next re-arm to
+/// the next unbound spare and retires the old one with its CRC taken now; a
+/// fixed segment rechecks the old spare once more before the same re-arm
+/// (a short window only).
 fn act(
     state: &mut State,
     segment: usize,
     rebind: bool,
-    storage: &'static Storage,
     bank: &'static Spares,
-    unit: &mut oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_storage::RxDmaCompletedUnit<
-        'static,
-        '_,
-        '_,
-        COUNT,
-        BUFFER,
-        BUFFER,
-    >,
-    frozen: oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxFrozenCursor,
+    unit: &mut RxDmaCompletedUnit<'static, '_, '_, COUNT, BUFFER, BUFFER>,
+    frozen: RxFrozenCursor,
     access: &mut RadioAccess,
 ) -> Result<(), Name<32>> {
     let index = unit.head_index();
     unit.detach_before_last(access.rx_dma(), frozen)
         .map_err(|_| name!("detach"; 32))?;
-    let code = *state.expected.get(index).ok_or(name!("expected"; 32))?;
-    let old = buffer_of(storage, bank, index, code).ok_or(name!("old-buffer"; 32))?;
-    let crc = crc_buffer(old);
+    let old = *state.expected.get(index).ok_or(name!("expected"; 32))?;
+    let old_spare = usize::try_from(old).map_err(|_| name!("expected"; 32))?;
+    let crc = crc_spare(bank, old_spare).ok_or(name!("old-read"; 32))?;
     bump(&mut state.counts(segment)?.detached);
     if !rebind {
         bump(&mut state.counts(segment)?.window_checks);
-        let again = crc_buffer(old);
+        let again = crc_spare(bank, old_spare).ok_or(name!("old-read"; 32))?;
         if again != crc {
             state.record(
                 segment,
                 Violation {
-                    kind: KIND_WINDOW,
+                    kind: Kind::Window as u32,
                     segment: segment as u32,
-                    buffer: buffer_label(code, index),
-                    word: 0,
+                    spare: old,
+                    offset: 0,
                     expected: crc,
                     observed: again,
                 },
@@ -678,15 +574,16 @@ fn act(
         .get_mut(state.retired_len)
         .ok_or(name!("retired-full"; 32))?;
     *slot = Retired {
-        binding: code,
+        spare: old,
         descriptor: index as u32,
         crc,
         segment: segment as u32,
+        descriptors_at_retire: state.descriptors_total,
     };
     state.retired_len = state.retired_len.saturating_add(1);
-    *state.expected.get_mut(index).ok_or(name!("expected"; 32))? = spare as u32 + 1;
-    *state.fresh.get_mut(index).ok_or(name!("fresh"; 32))? = true;
-    bump(&mut state.counts(segment)?.rebound);
+    *state.expected.get_mut(index).ok_or(name!("expected"; 32))? = spare as u32;
+    *state.fresh.get_mut(index).ok_or(name!("fresh"; 32))? = segment as u32 + 1;
+    bump(&mut state.counts(segment)?.rebinds);
     Ok(())
 }
 
@@ -753,62 +650,60 @@ pub(super) async fn run(
             access,
             irq,
         )?;
-        yield_once().await;
         // An action that found no eligible unit stays due for the next scan.
         if due && !action {
             next_action = now
                 .checked_add(Duration::from_millis(ACTION_MS))
                 .ok_or(name!("action-deadline"; 32))?;
         }
+        yield_once().await;
     }
     irq.mask_all_mac_interrupts();
     Ok(())
 }
 
-/// After the walker stopped: recheck every retired buffer and every never
+/// After the walker stopped: recheck every retired spare and every never
 /// bound spare, and the HAL's retirement accounting.
 pub(super) fn finish(
     state: &mut State,
     storage: &'static Storage,
     bank: &'static Spares,
 ) -> Result<(), Name<32>> {
-    let last = SEGMENTS - 1;
+    let last = LATE_SEGMENT;
+    state.min_lap_descriptors = u32::MAX;
     for position in 0..state.retired_len {
         let retired = *state.retired.get(position).ok_or(name!("retired"; 32))?;
-        let descriptor = usize::try_from(retired.descriptor).map_err(|_| name!("retired"; 32))?;
-        let buffer = buffer_of(storage, bank, descriptor, retired.binding)
-            .ok_or(name!("retired-buffer"; 32))?;
-        let accounted = if retired.binding == 0 {
-            storage.rebind_placed_retired(descriptor)
-        } else {
-            storage.rebind_spare_retired(
-                usize::try_from(retired.binding - 1).map_err(|_| name!("retired"; 32))?,
-            )
-        };
-        if !accounted {
+        let spare = usize::try_from(retired.spare).map_err(|_| name!("retired"; 32))?;
+        if !storage.rebind_spare_retired(spare) {
             state.record(
                 last,
                 Violation {
-                    kind: KIND_ACCOUNTING,
-                    segment: last as u32,
-                    buffer: buffer_label(retired.binding, descriptor),
-                    word: 0,
+                    kind: Kind::Accounting as u32,
+                    segment: 0xf,
+                    spare: retired.spare,
+                    offset: 0,
                     expected: 1,
                     observed: 0,
                 },
             );
         }
-        state.final_retired = state.final_retired.saturating_add(1);
-        let crc = crc_buffer(buffer);
+        let held = state
+            .descriptors_total
+            .saturating_sub(retired.descriptors_at_retire);
+        state.min_lap_descriptors = state.min_lap_descriptors.min(held);
+        if held >= COUNT as u32 {
+            bump(&mut state.retired_with_lap);
+        }
+        bump(&mut state.retired_final_checks);
+        let crc = crc_spare(bank, spare).ok_or(name!("retired-read"; 32))?;
         if crc != retired.crc {
-            state.final_retired_violations = state.final_retired_violations.saturating_add(1);
             state.record(
                 last,
                 Violation {
-                    kind: KIND_RETIRED,
+                    kind: Kind::Retired as u32,
                     segment: 0xf,
-                    buffer: buffer_label(retired.binding, descriptor),
-                    word: retired.segment,
+                    spare: retired.spare,
+                    offset: retired.segment,
                     expected: retired.crc,
                     observed: crc,
                 },
@@ -816,37 +711,64 @@ pub(super) fn finish(
         }
     }
     for spare in 0..RX_REBIND_SPARES {
-        match state.check_spare(last, storage, bank, spare)? {
-            None => {}
-            Some(clean) => {
-                state.final_spares = state.final_spares.saturating_add(1);
-                if !clean {
-                    state.final_spare_violations = state.final_spare_violations.saturating_add(1);
-                }
-            }
+        if storage.rebind_spare_unbound(spare) {
+            bump(&mut state.unbound);
+        }
+        if state.check_spare(last, storage, bank, spare)?.is_some() {
+            bump(&mut state.unbound_final_checks);
         }
     }
     Ok(())
 }
 
+fn kind(code: u32) -> Option<Kind> {
+    [
+        Kind::Binding,
+        Kind::Copy,
+        Kind::Landing,
+        Kind::Window,
+        Kind::Retired,
+        Kind::Spare,
+        Kind::Accounting,
+    ]
+    .into_iter()
+    .find(|kind| *kind as u32 == code)
+}
+
+/// The observations the verdict decides on.
+pub(super) fn observations(state: &State) -> Observations {
+    Observations {
+        counts: state.counts,
+        violations: state.violations_total,
+        first_violation: kind(state.first_violation),
+        retired: state.retired_len as u32,
+        retired_final_checks: state.retired_final_checks,
+        retired_with_lap: state.retired_with_lap,
+        unbound: state.unbound,
+        unbound_final_checks: state.unbound_final_checks,
+    }
+}
+
 pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<(), Name<32>> {
-    let mut line = heapless::String::<512>::new();
+    let mut line = heapless::String::<640>::new();
     for (segment, counts) in state.counts.iter().enumerate() {
         line.clear();
-        let arm = if REBIND_SEGMENT.get(segment).copied().unwrap_or(false) {
-            "rebind"
-        } else {
-            "fixed"
+        let arm = match (REBIND_SEGMENT.get(segment).copied(), segment) {
+            (Some(true), _) => "rebind",
+            (_, LATE_SEGMENT) => "fixed-late",
+            _ => "fixed",
         };
         writeln!(
             &mut line,
-            "SEG {segment} arm={arm} services={} units={} chained={} frames={} prefix_ok={} \
-             prefix_err={} fcs_ok={} fcs_bad={} fcs_absent={} frames_on_spare={} \
-             first_landings={} detached={} rebound={} spares_exhausted={} not_before_last={} \
-             window_checks={} retired_checks={} spare_checks={} violations={} \
-             reload_deferred={} hw_mpdu={} hw_fcs_error={} hw_buffer_full={} hw_data_success={}",
+            "SEG {segment} arm={arm} services={} units={} descriptors={} chained={} frames={} \
+             prefix_ok={} prefix_err={} fcs_ok={} fcs_bad={} fcs_absent={} \
+             frames_on_rebound={} detached={} window_checks={} rebinds={} covered_rebinds={} \
+             spares_exhausted={} not_before_last={} retired_checks={} spare_checks={} \
+             reload_deferred={} violations={} hw_mpdu={} hw_fcs_error={} hw_buffer_full={} \
+             hw_data_success={}",
             counts.services,
             counts.units,
+            counts.descriptors,
             counts.chained,
             counts.frames,
             counts.prefix_ok,
@@ -854,17 +776,17 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             counts.fcs_ok,
             counts.fcs_bad,
             counts.fcs_absent,
-            counts.frames_on_spare,
-            counts.first_landings,
+            counts.frames_on_rebound,
             counts.detached,
-            counts.rebound,
+            counts.window_checks,
+            counts.rebinds,
+            counts.covered_rebinds,
             counts.spares_exhausted,
             counts.not_before_last,
-            counts.window_checks,
             counts.retired_checks,
             counts.spare_checks,
-            counts.violations,
             counts.reload_deferred,
+            counts.violations,
             counts.hw_mpdu,
             counts.hw_fcs_error,
             counts.hw_buffer_full,
@@ -876,13 +798,22 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
     line.clear();
     writeln!(
         &mut line,
-        "FINAL retired={} retired_violations={} unbound_spares={} spare_violations={} \
-         spares_used={} violations_recorded={}",
-        state.final_retired,
-        state.final_retired_violations,
-        state.final_spares,
-        state.final_spare_violations,
+        "FINAL retired={} retired_final_checks={} retired_with_lap={} \
+         min_held_descriptors={} unbound={} unbound_final_checks={} spares_used={} \
+         descriptors={} violations={} violations_recorded={}",
+        state.retired_len,
+        state.retired_final_checks,
+        state.retired_with_lap,
+        if state.retired_len == 0 {
+            0
+        } else {
+            state.min_lap_descriptors
+        },
+        state.unbound,
+        state.unbound_final_checks,
         state.next_spare,
+        state.descriptors_total,
+        state.violations_total,
         state.violations_len,
     )
     .map_err(|_| name!("format"; 32))?;
@@ -891,11 +822,11 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
         line.clear();
         writeln!(
             &mut line,
-            "V kind={} seg={:x} buffer={:x} word={:x} expected={:x} observed={:x}",
-            violation.kind,
+            "V kind={} seg={:x} spare={:x} offset={:x} expected={:x} observed={:x}",
+            kind(violation.kind).map_or("unknown", Kind::name),
             violation.segment,
-            violation.buffer,
-            violation.word,
+            violation.spare,
+            violation.offset,
             violation.expected,
             violation.observed,
         )
