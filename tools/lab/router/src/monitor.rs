@@ -8,15 +8,27 @@
 //! a partial start (the interface, the process or its readiness refused),
 //! a cancellation (which a client's disconnect is, to the service), a
 //! write error of the stream, or the process's own end. The teardown asks
-//! the process to stop, waits for its exit within a bound, removes the
-//! interface and reads the router back to confirm it is gone; each step is
-//! attempted whatever the one before returned, and each result is kept.
+//! the process to stop; drains its stream to the end within a bound (after
+//! a cancellation into the sink, so the pcap's tail is kept; otherwise
+//! discarding and counting); waits for its exit within a bound, closing the
+//! stream so its reader can never stay blocked, and joins the reader;
+//! removes the interface and reads the router back to confirm it is gone.
+//! Each step is attempted whatever the one before returned, and each
+//! result is kept. A capture succeeds only when it was cancelled, its
+//! stream ended within the bound with nothing discarded, the process
+//! exited with success, its reader ended without an error and the
+//! interface is confirmed gone.
 //!
 //! The pcap bytes go to the [`Sink`] alone; the process's diagnostics and
 //! the run's ending go into the [`Report`] or the error, never into the
 //! stream.
 
-use std::time::Duration;
+use std::{
+    io::Read,
+    sync::mpsc,
+    thread::JoinHandle,
+    time::{Duration, Instant},
+};
 
 use serde::Serialize;
 
@@ -60,10 +72,102 @@ pub trait Process {
     fn next(&mut self, wait: Duration) -> Next;
     /// Ask it to exit.
     fn stop(&mut self) -> Result<()>;
-    /// Wait for its exit, then confirm it is gone; how it ended.
+    /// Wait for its exit within `within`, then close its stream and join
+    /// the stream's reader within the same bound, then confirm the process
+    /// gone; how it ended. An exit other than success, a reader that
+    /// failed or did not end, and a process still running are errors.
     fn wait_exit(&mut self, within: Duration) -> Result<String>;
     /// Its diagnostics, bounded; complete only after `wait_exit`.
     fn diagnostics(&mut self) -> String;
+}
+
+/// A process's output read by a thread of its own into a bounded channel.
+///
+/// The reader blocks on its source or on a full channel; [`Self::close`]
+/// drops the receiving end, so a send fails at once, and joins the reader
+/// within a bound: closing never waits on a consumer that stopped reading.
+pub struct Stream {
+    chunks: Option<mpsc::Receiver<Vec<u8>>>,
+    ended: mpsc::Receiver<()>,
+    reader: Option<JoinHandle<Result<u64>>>,
+}
+
+/// Signals the reader's end on every exit of its thread, a panic included.
+struct EndSignal(mpsc::SyncSender<()>);
+
+impl Drop for EndSignal {
+    fn drop(&mut self) {
+        let _ = self.0.try_send(());
+    }
+}
+
+/// The capacity of a stream's channel, in chunks.
+pub const STREAM_DEPTH: usize = 64;
+const CHUNK: usize = 64 * 1024;
+
+impl Stream {
+    /// Read `source` until its end, an error or a closed channel.
+    pub fn spawn(mut source: impl Read + Send + 'static) -> Self {
+        let (send, chunks) = mpsc::sync_channel(STREAM_DEPTH);
+        let (signal, ended) = mpsc::sync_channel(1);
+        let reader = std::thread::spawn(move || {
+            let _signal = EndSignal(signal);
+            let mut buffer = vec![0u8; CHUNK];
+            let mut total = 0u64;
+            loop {
+                match source.read(&mut buffer) {
+                    Ok(0) => return Ok(total),
+                    Ok(count) => {
+                        let chunk = buffer.get(..count).unwrap_or_default().to_vec();
+                        total = total.saturating_add(count as u64);
+                        if send.send(chunk).is_err() {
+                            return Err(format!(
+                                "the stream was closed with its output still flowing \
+                                 ({total} bytes read)"
+                            ));
+                        }
+                    }
+                    Err(error) => return Err(format!("the stream's read failed: {error}")),
+                }
+            }
+        });
+        Self {
+            chunks: Some(chunks),
+            ended,
+            reader: Some(reader),
+        }
+    }
+
+    /// The next chunk, waiting up to `wait`.
+    pub fn next(&mut self, wait: Duration) -> Next {
+        let Some(chunks) = &self.chunks else {
+            return Next::Ended;
+        };
+        match chunks.recv_timeout(wait) {
+            Ok(chunk) => Next::Bytes(chunk),
+            Err(mpsc::RecvTimeoutError::Timeout) => Next::Idle,
+            Err(mpsc::RecvTimeoutError::Disconnected) => Next::Ended,
+        }
+    }
+
+    /// Close the channel and join the reader within `within`: what it read
+    /// in all, or why it ended otherwise.
+    pub fn close(&mut self, within: Duration) -> Result<u64> {
+        drop(self.chunks.take());
+        let Some(reader) = self.reader.take() else {
+            return Err("the stream was already closed".into());
+        };
+        if self.ended.recv_timeout(within).is_err() {
+            // Still blocked on its source: left running, never joined.
+            return Err(format!(
+                "the stream's reader did not end within {} s",
+                within.as_secs()
+            ));
+        }
+        reader
+            .join()
+            .map_err(|_| "the stream's reader panicked".to_owned())?
+    }
 }
 
 /// The router side of a capture.
@@ -103,9 +207,82 @@ pub struct Report {
     pub diagnostics: String,
 }
 
+/// What the drain after the stop request did.
+#[derive(Debug, Default)]
+struct Drain {
+    /// Bytes taken into the sink after the stop.
+    tail: u64,
+    /// Bytes read and not written: the capture has a gap.
+    discarded: u64,
+    /// The stream ended within the bound.
+    ended: bool,
+    write_error: Option<String>,
+}
+
+impl Drain {
+    fn clean(&self) -> bool {
+        self.ended && self.discarded == 0 && self.write_error.is_none()
+    }
+
+    fn describe(&self) -> String {
+        format!(
+            "{} tail bytes kept, {} discarded, {}{}",
+            self.tail,
+            self.discarded,
+            if self.ended {
+                "the stream ended"
+            } else {
+                "the stream did not end within the bound"
+            },
+            self.write_error
+                .as_ref()
+                .map_or_else(String::new, |error| format!(
+                    ", the tail's write failed: {error}"
+                ))
+        )
+    }
+}
+
+/// Read the stream to its end within `EXIT`: into `sink` while it takes
+/// the bytes, discarding and counting otherwise.
+fn drain(process: &mut impl Process, mut sink: Option<&mut dyn Sink>) -> Drain {
+    let mut drain = Drain::default();
+    let deadline = Instant::now() + EXIT;
+    while Instant::now() < deadline {
+        match process.next(POLL) {
+            Next::Bytes(chunk) => {
+                let length = chunk.len() as u64;
+                let kept = match sink.as_mut() {
+                    Some(sink) => match sink.write(&chunk) {
+                        Ok(()) => true,
+                        Err(error) => {
+                            drain.write_error = Some(error);
+                            false
+                        }
+                    },
+                    None => false,
+                };
+                if kept {
+                    drain.tail = drain.tail.saturating_add(length);
+                } else {
+                    sink = None;
+                    drain.discarded = drain.discarded.saturating_add(length);
+                }
+            }
+            Next::Idle => {}
+            Next::Ended => {
+                drain.ended = true;
+                break;
+            }
+        }
+    }
+    drain
+}
+
 /// The teardown's results, each step's own.
 struct Teardown {
     stop: Option<Result<()>>,
+    drain: Option<Drain>,
     exit: Option<Result<String>>,
     removed: Result<()>,
     diagnostics: String,
@@ -114,6 +291,7 @@ struct Teardown {
 impl Teardown {
     fn clean(&self) -> bool {
         self.stop.as_ref().is_none_or(Result::is_ok)
+            && self.drain.as_ref().is_none_or(Drain::clean)
             && self.exit.as_ref().is_none_or(Result::is_ok)
             && self.removed.is_ok()
     }
@@ -130,8 +308,11 @@ impl Teardown {
             Some(Err(error)) => error.clone(),
         };
         format!(
-            "stop: {}; exit: {exit}; interface removal: {}; diagnostics: {}",
+            "stop: {}; drain: {}; exit: {exit}; interface removal: {}; diagnostics: {}",
             step(&self.stop),
+            self.drain
+                .as_ref()
+                .map_or_else(|| "not started".to_owned(), Drain::describe),
             self.removed
                 .as_ref()
                 .map_or_else(Clone::clone, |()| "confirmed".to_owned()),
@@ -140,15 +321,20 @@ impl Teardown {
     }
 }
 
-/// Stop `process` if there is one, wait for it, remove the interface and
-/// confirm it gone: every step whatever the others returned.
-fn teardown<H: Host>(host: &mut H, process: Option<&mut H::Process>) -> Teardown {
-    let (stop, exit, diagnostics) = match process {
-        None => (None, None, String::new()),
-        Some(process) => {
+/// Stop `process` if there is one, drain its stream (into `sink` when
+/// given), wait for it, remove the interface and confirm it gone: every
+/// step whatever the others returned.
+fn teardown<H: Host>(
+    host: &mut H,
+    process: Option<(&mut H::Process, Option<&mut dyn Sink>)>,
+) -> Teardown {
+    let (stop, drained, exit, diagnostics) = match process {
+        None => (None, None, None, String::new()),
+        Some((process, sink)) => {
             let stop = process.stop();
+            let drained = drain(process, sink);
             let exit = process.wait_exit(EXIT);
-            (Some(stop), Some(exit), process.diagnostics())
+            (Some(stop), Some(drained), Some(exit), process.diagnostics())
         }
     };
     let removal = host.remove(INTERFACE);
@@ -166,6 +352,7 @@ fn teardown<H: Host>(host: &mut H, process: Option<&mut H::Process>) -> Teardown
     };
     Teardown {
         stop,
+        drain: drained,
         exit,
         removed,
         diagnostics,
@@ -177,7 +364,7 @@ fn teardown<H: Host>(host: &mut H, process: Option<&mut H::Process>) -> Teardown
 /// # Errors
 /// A refused start before anything changed; otherwise the stream's ending
 /// together with every teardown step's result.
-pub fn capture<H: Host>(host: &mut H, channel: u8, sink: &mut impl Sink) -> Result<Report> {
+pub fn capture<H: Host, S: Sink>(host: &mut H, channel: u8, sink: &mut S) -> Result<Report> {
     let listing = host.listing()?;
     if listing.all.iter().any(|name| name == INTERFACE) {
         return Err(format!(
@@ -211,7 +398,7 @@ pub fn capture<H: Host>(host: &mut H, channel: u8, sink: &mut impl Sink) -> Resu
         }
     };
     if let Err(error) = process.ready(READY) {
-        let teardown = teardown(host, Some(&mut process));
+        let teardown = teardown(host, Some((&mut process, None)));
         return Err(format!(
             "the capture did not become ready: {error}; {}",
             teardown.describe()
@@ -233,7 +420,15 @@ pub fn capture<H: Host>(host: &mut H, channel: u8, sink: &mut impl Sink) -> Resu
             Next::Ended => break Ended::ProcessEnded,
         }
     };
-    let teardown = teardown(host, Some(&mut process));
+    // After a cancellation the tail goes on into the sink; after a write
+    // error or the process's own end there is nothing to keep it for.
+    let keep: Option<&mut dyn Sink> = match ended {
+        Ended::Cancelled => Some(sink),
+        Ended::WriteError(_) | Ended::ProcessEnded => None,
+    };
+    let teardown = teardown(host, Some((&mut process, keep)));
+    let tail = teardown.drain.as_ref().map_or(0, |drain| drain.tail);
+    let bytes = bytes.saturating_add(tail);
     match (&ended, teardown.clean(), &teardown.exit) {
         (Ended::Cancelled, true, Some(Ok(exit))) => Ok(Report {
             interface: INTERFACE.to_owned(),
@@ -297,13 +492,12 @@ pub fn parse_listing(text: &str) -> Result<Listing> {
 
 /// The router over SSH.
 pub mod ssh {
-    use super::{Host, Listing, Next, Process, parse_listing};
+    use super::{Host, Listing, Next, Process, Stream, parse_listing};
     use crate::{
         router::quote,
         ssh::{Remote, Result, Ssh, Stderr, read_stderr},
     };
     use std::{
-        io::Read,
         sync::{Arc, Mutex, PoisonError, mpsc},
         thread::JoinHandle,
         time::Duration,
@@ -361,14 +555,13 @@ pub mod ssh {
         }
     }
 
-    /// `tcpdump` on the router, its stream read by a thread of its own.
+    /// `tcpdump` on the router, its stream read by a [`Stream`].
     pub struct SshProcess {
         ssh: Ssh,
         child: oer_tools_os_process::owned::Child,
-        chunks: mpsc::Receiver<Vec<u8>>,
+        stream: Stream,
         ready: mpsc::Receiver<()>,
         pid: Arc<Mutex<Option<u32>>>,
-        stdout: Option<JoinHandle<()>>,
         stderr: Option<JoinHandle<Stderr>>,
         diagnostics: String,
     }
@@ -376,23 +569,9 @@ pub mod ssh {
     impl SshProcess {
         fn start(ssh: Ssh, script: &str) -> Result<Self> {
             let mut child = ssh.start(script)?;
-            let mut stdout = child.take_stdout().ok_or("the capture has no stdout")?;
+            let stdout = child.take_stdout().ok_or("the capture has no stdout")?;
             let stderr = child.take_stderr().ok_or("the capture has no stderr")?;
-            let (send, chunks) = mpsc::sync_channel(64);
-            let stdout = std::thread::spawn(move || {
-                let mut buffer = vec![0u8; 64 * 1024];
-                loop {
-                    match stdout.read(&mut buffer) {
-                        Ok(0) | Err(_) => break,
-                        Ok(count) => {
-                            let chunk = buffer.get(..count).unwrap_or_default().to_vec();
-                            if send.send(chunk).is_err() {
-                                break;
-                            }
-                        }
-                    }
-                }
-            });
+            let stream = Stream::spawn(stdout);
             let pid = Arc::new(Mutex::new(None));
             let (announce, ready) = mpsc::sync_channel(1);
             let seen = pid.clone();
@@ -410,10 +589,9 @@ pub mod ssh {
             Ok(Self {
                 ssh,
                 child,
-                chunks,
+                stream,
                 ready,
                 pid,
-                stdout: Some(stdout),
                 stderr: Some(stderr),
                 diagnostics: String::new(),
             })
@@ -432,11 +610,7 @@ pub mod ssh {
         }
 
         fn next(&mut self, wait: Duration) -> Next {
-            match self.chunks.recv_timeout(wait) {
-                Ok(chunk) => Next::Bytes(chunk),
-                Err(mpsc::RecvTimeoutError::Timeout) => Next::Idle,
-                Err(mpsc::RecvTimeoutError::Disconnected) => Next::Ended,
-            }
+            self.stream.next(wait)
         }
 
         fn stop(&mut self) -> Result<()> {
@@ -451,9 +625,8 @@ pub mod ssh {
             if waited.is_err() {
                 let _ = self.child.kill();
             }
-            if let Some(stdout) = self.stdout.take() {
-                let _ = stdout.join();
-            }
+            // Closed first: a reader blocked on a full channel ends.
+            let read = self.stream.close(within);
             if let Some(stderr) = self.stderr.take() {
                 self.diagnostics = stderr.join().map_or_else(
                     |_| "the capture's stderr reader failed".to_owned(),
@@ -471,14 +644,22 @@ pub mod ssh {
                     ))
                     .map(|_| ()),
             };
-            match (waited, gone) {
-                (Ok(status), Ok(())) => Ok(format!("exited ({status})")),
-                (Err(error), Ok(())) => Err(format!(
-                    "the local side did not end within {} s ({error}); the process is gone on \
-                     the router",
+            let exit = match waited {
+                Ok(status) if status.success() => Ok(format!("exited ({status})")),
+                Ok(status) => Err(format!("the capture exited with {status}")),
+                Err(error) => Err(format!(
+                    "the local side did not end within {} s ({error})",
                     within.as_secs()
                 )),
-                (_, Err(error)) => Err(format!("the process may still run on the router: {error}")),
+            };
+            match (exit, read, gone) {
+                (Ok(exit), Ok(bytes), Ok(())) => Ok(format!("{exit}, {bytes} bytes read")),
+                (exit, read, gone) => Err(format!(
+                    "exit: {}; reader: {}; on the router: {}",
+                    exit.unwrap_or_else(|e| e),
+                    read.map_or_else(|e| e, |bytes| format!("{bytes} bytes read")),
+                    gone.map_or_else(|e| format!("may still run: {e}"), |()| "gone".to_owned())
+                )),
             }
         }
 

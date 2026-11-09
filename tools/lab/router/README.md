@@ -445,11 +445,17 @@ interface of that name exists anywhere on the router or the radio's PHY
 has any interface: it takes over nothing it did not create. From the
 creation on, every ending (a failed creation, start or readiness, a
 cancellation, a refused write, the process's own end) stops the process
-by its PID, waits for its exit within 10 s, confirms it gone on the
-router, removes the interface and confirms that on the router; each step
-runs whatever the one before returned and keeps its own result. The pcap
-bytes go to the sink alone; `tcpdump`'s stderr goes into the report or
-the error.
+by its PID; drains its stream to the end within 10 s (into the sink after
+a cancellation, so the pcap's tail is kept; otherwise discarding and
+counting); waits for its exit within 10 s; closes the stream's channel
+before joining its reader, so a reader blocked on a full channel ends,
+and joins it within the same bound; confirms the process gone on the
+router; removes the interface and confirms that on the router. Each step
+runs whatever the one before returned and keeps its own result. The
+capture succeeds only when it was cancelled, its stream ended in the
+bound with nothing discarded, `tcpdump` exited with success, the reader
+ended without an error and the interface is gone. The pcap bytes go to
+the sink alone; `tcpdump`'s stderr goes into the report or the error.
 `station::lease` reads its DHCP address and lifetime from the isolated lease
 file. `station::stream::Capture::start_peer` observes peer-originated ICMP
 requests and DUT replies; a complete capture requires every pair and clean
