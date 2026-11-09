@@ -20,7 +20,7 @@
 //!
 //! Bounds fail closed: a root has a number only when nothing it reaches is
 //! unresolved. Otherwise [`Bound::reasons`] counts what is, by reason, and
-//! [`Reason`] names the stage that closes it.
+//! [`Reason::needs`] names the proof that would close it.
 
 #![forbid(unsafe_code)]
 
