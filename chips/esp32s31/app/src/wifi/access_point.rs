@@ -6,7 +6,7 @@
 //! [`AccessPoint::start`] runs in the image's boot; the application then
 //! names the channel and the BSS once with [`AccessPoint::serve`]. Once the
 //! executor runs, the library's access-point task serves the BSS and the
-//! stack together; an exit other than an ordinary stop records and resets.
+//! stack together; every exit keeps its typed cause and resets nothing.
 
 use super::*;
 use oer_chips_esp32s31_radio_ieee80211_station::access_point::{
@@ -178,10 +178,11 @@ impl AccessPoint {
 /// The access point's task: the runner and the IP service together. Every
 /// end of the access point keeps its typed cause in [`AccessPoint::exit`]
 /// and resets nothing: an ended run returned its owners and released the
-/// radio; an unconfirmed stop or a refused release keeps the runner, with
-/// every owner the hardware may still use, in its task; a refused install
-/// names its cause. An IP service that ends stops the access point, its
-/// cause in the service's status.
+/// radio; until its stop is confirmed and its release ended, the runner
+/// keeps every owner in its task and the exit says how far the end came; a
+/// refused install names its cause, its started radio released. An IP
+/// service that ends stops the access point, its cause in the service's
+/// status.
 pub(crate) async fn serve_access_point(start: ApStart) {
     let ApStart {
         runner,
