@@ -2259,6 +2259,7 @@ dependencies = [
  "oer-tools-lab-client",
  "oer-tools-lab-model",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

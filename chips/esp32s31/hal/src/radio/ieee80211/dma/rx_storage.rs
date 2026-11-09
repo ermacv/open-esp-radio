@@ -46,7 +46,7 @@ pub(crate) enum BoundBuffer<'a, const BUFFER_SIZE: usize, const STORAGE_SIZE: us
     Arena(&'a RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>),
     /// A spare: never leased and never borrowed; its return state is
     /// permanently attached.
-    Spare(&'a DmaBytes<BUFFER_SIZE>),
+    Spare(&'a [DmaBytes<4>]),
 }
 
 impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
@@ -409,7 +409,8 @@ pub struct RxDmaStorage<
     arena: RxArenaWords,
     /// TEMPORARY experiment (`rx_rebind`, branch only): the spare bank an
     /// experiment arena was placed with.
-    spare_buffers: OnceValue<&'static [DmaBytes<BUFFER_SIZE>; RX_REBIND_SPARES]>,
+    /// Every spare's words, spare after spare.
+    spare_buffers: OnceValue<&'static [DmaBytes<4>]>,
     space: PhantomData<S>,
 }
 
@@ -621,18 +622,24 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     ///
     /// The ring is larger than the bank or the rebind table, the arena is not
     /// reusable, or an address does not fit the DMA address width.
+    /// `paint(spare, word)` gives each word's initial value.
     #[allow(clippy::type_complexity)]
-    pub fn place_with_spares(
+    pub fn place_with_spares<const WORDS: usize>(
         placed: Placed<Self>,
-        spares: Placed<RxSpareBank<BUFFER_SIZE>>,
-        mut paint: impl FnMut(usize, &mut [u8; BUFFER_SIZE]),
+        spares: Placed<RxSpareBank<WORDS>>,
+        mut paint: impl FnMut(usize, usize) -> u32,
     ) -> Result<
         (
             PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
-            &'static RxSpareBank<BUFFER_SIZE>,
+            &'static RxSpareBank<WORDS>,
         ),
         RxDmaStorageError,
     > {
+        const {
+            if WORDS * 4 != BUFFER_SIZE {
+                panic!("a spare holds exactly one buffer of words");
+            }
+        }
         if COUNT > RX_REBIND_SPARES {
             return Err(RxDmaStorageError::Count);
         }
@@ -646,16 +653,16 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             if !bank.addresses.record(spare, address) {
                 return Err(RxDmaStorageError::Count);
             }
-            let mut image = [0; BUFFER_SIZE];
-            paint(spare, &mut image);
-            buffer.write(&image);
+            for (word, bytes) in buffer.iter_mut().enumerate() {
+                bytes.write(&paint(spare, word).to_le_bytes());
+            }
         }
-        let bank: &'static RxSpareBank<BUFFER_SIZE> = bank;
+        let bank: &'static RxSpareBank<WORDS> = bank;
         let placed = Self::place_inner(placed, 0, Some(&bank.addresses))?;
         placed
             .storage
             .spare_buffers
-            .set(&bank.buffers)
+            .set(bank.buffers.as_flattened())
             .map_err(|_| RxDmaStorageError::Count)?;
         placed
             .storage
@@ -754,7 +761,14 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             RxBinding::Arena => self
                 .buffer_by_id(self.descriptor_buffer_id(descriptor_index)?)
                 .map(BoundBuffer::Arena),
-            RxBinding::Spare(spare) => self.spare_buffers.get()?.get(spare).map(BoundBuffer::Spare),
+            RxBinding::Spare(spare) => {
+                let words = BUFFER_SIZE / 4;
+                let start = spare.checked_mul(words)?;
+                self.spare_buffers
+                    .get()?
+                    .get(start..start.checked_add(words)?)
+                    .map(BoundBuffer::Spare)
+            }
         }
     }
 
@@ -1108,8 +1122,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         };
         // TEMPORARY experiment: a spare is copied out by volatile reads.
         if let Some(BoundBuffer::Spare(spare)) = self.buffer_for_descriptor(index) {
-            let image = spare.read();
-            output.copy_from_slice(image.get(offset..end).ok_or(RxRingError::Size)?);
+            for (at, byte) in (offset..end).zip(output.iter_mut()) {
+                let word = spare.get(at / 4).ok_or(RxRingError::Size)?.read();
+                *byte = *word.get(at % 4).ok_or(RxRingError::Size)?;
+            }
             return Ok(true);
         }
         // SAFETY: the frozen cursor and terminal unit frontier establish that

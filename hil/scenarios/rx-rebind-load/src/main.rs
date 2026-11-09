@@ -17,17 +17,17 @@
 //! laptop's managed interface state, then releases the lease.
 #![forbid(unsafe_code)]
 
+mod console;
+mod load;
+mod prepared;
+mod result;
+
 use std::{
     io::{BufRead as _, BufReader, Read as _, Write as _},
     net::{Ipv4Addr, SocketAddrV4, UdpSocket},
     path::Path,
     process::{Child, Command, ExitCode, Stdio},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc,
-    },
-    thread::JoinHandle,
+    sync::mpsc,
     time::{Duration, Instant},
 };
 
@@ -42,6 +42,8 @@ use oer_tools_lab_client::{
 };
 use serde_json::{Value, json};
 
+use crate::{console::ConsoleSession, load::Load, prepared::Prepared, result::ProbeResult};
+
 const IMAGE: &str = "esp32s31-rx-rebind";
 const HELPER: &str = "/usr/local/sbin/open-radio-net";
 const WPA_CONTROL: &str = "/run/open-radio-wpa-control";
@@ -50,6 +52,11 @@ const FREQUENCY_MHZ: u32 = 2472;
 const DATAGRAM: usize = 1472;
 /// The discard port (RFC 863) on the gateway; nothing need answer.
 const SINK_PORT: u16 = 9;
+/// One blocked UDP send returns within this.
+const SEND_TIMEOUT: Duration = Duration::from_millis(100);
+/// One `iw` sample returns within this, or is killed.
+const SAMPLE_TIMEOUT: Duration = Duration::from_secs(2);
+const SAMPLE_PERIOD: Duration = Duration::from_secs(1);
 /// From the probe's reset to its result line: boot, RF start, four
 /// 2.5-s segments, the final checks and the dump.
 const CONSOLE_TIMEOUT: Duration = Duration::from_secs(90);
@@ -58,13 +65,23 @@ type Result<T> = std::result::Result<T, String>;
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let [board, bundle, console] = arguments.as_slice() else {
-        eprintln!(
-            "usage: oer-hil-scenarios-rx-rebind-load <board> <bundle-directory> <console-log>"
-        );
-        return ExitCode::from(2);
+    let outcome = match arguments
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        ["prepare", bundle] => prepare(Path::new(bundle)).map(|()| true),
+        ["run", board, bundle, console] => run(board, Path::new(bundle), Path::new(console)),
+        _ => {
+            eprintln!(
+                "usage: oer-hil-scenarios-rx-rebind-load prepare <bundle-directory>\n       \
+                 oer-hil-scenarios-rx-rebind-load run <board> <bundle-directory> <console-log>"
+            );
+            return ExitCode::from(2);
+        }
     };
-    match run(board, Path::new(bundle), Path::new(console)) {
+    match outcome {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::from(1),
         Err(error) => {
@@ -74,14 +91,40 @@ fn main() -> ExitCode {
     }
 }
 
-/// `Ok(true)` when the console printed the probe's pass line.
-fn run(board_id: &str, bundle: &Path, console: &Path) -> Result<bool> {
-    if !bundle.is_dir() {
-        return Err(format!(
-            "no prepared bundle at {}: run `cargo fw build {IMAGE}` first",
-            bundle.display()
-        ));
+fn git(arguments: &[&str]) -> Result<String> {
+    let output = Command::new("git")
+        .args(arguments)
+        .output()
+        .map_err(|error| format!("git: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("git {} failed", arguments.join(" ")));
     }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+/// Build the image once, outside any lease, and record what was built.
+fn prepare(bundle: &Path) -> Result<()> {
+    let commit = git(&["rev-parse", "HEAD"])?;
+    let dirty = !git(&["status", "--porcelain"])?.is_empty();
+    let status = Command::new("cargo")
+        .args(["fw", "build", IMAGE])
+        .env("CARGO_INCREMENTAL", "0")
+        .status()
+        .map_err(|error| format!("cargo fw build: {error}"))?;
+    if !status.success() {
+        return Err(format!("cargo fw build {IMAGE} exited with {status}"));
+    }
+    let prepared = prepared::write(bundle, &commit, dirty)?;
+    eprintln!(
+        "load: prepared {IMAGE} from {} (dirty {}), application {}",
+        prepared.commit, prepared.dirty, prepared.application_sha256
+    );
+    Ok(())
+}
+
+/// `Ok(true)` when the probe printed its pass line.
+fn run(board_id: &str, bundle: &Path, console: &Path) -> Result<bool> {
+    let prepared = prepared::read(bundle)?;
     let stand = oer_tools_lab_model::path()
         .and_then(|path| oer_tools_lab_model::Stand::load(&path))
         .map_err(|error| format!("the stand file: {error}"))?;
@@ -119,13 +162,15 @@ fn run(board_id: &str, bundle: &Path, console: &Path) -> Result<bool> {
     )?;
     eprintln!("load: lease {} granted", granted.lease);
     let mut station = Station::default();
-    // `leased` drops its load before it returns, on every path.
+    // `leased` ends its console and its load before it returns, on every
+    // path: only then is the station stopped and the laptop restored.
     let ran = leased(
         &mut client,
         &mut station,
         &board.mac,
         &owner,
         bundle,
+        &prepared,
         console,
     );
     let restored = station.restore();
@@ -330,150 +375,38 @@ fn routed_over_station(from: Ipv4Addr, to: Ipv4Addr) -> Result<()> {
     }
 }
 
-/// The station's current transmit bitrate as `iw` reports it.
+/// The station's current transmit bitrate as `iw` reports it, within
+/// `SAMPLE_TIMEOUT`: a slower `iw` is killed and the sample says so.
 fn tx_bitrate() -> String {
-    Command::new("iw")
+    let Ok(mut child) = Command::new("iw")
         .args(["dev", "wlan0", "link"])
-        .output()
-        .ok()
-        .and_then(|output| {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .find_map(|line| line.trim().strip_prefix("tx bitrate:").map(str::trim))
-                .map(str::to_owned)
-        })
-        .unwrap_or_else(|| "unknown".to_owned())
-}
-
-/// The UDP sender and the bitrate sampler. Dropping it stops and joins
-/// both, so no exit path leaves the load running.
-struct Load {
-    stop: Arc<AtomicBool>,
-    sent: Arc<AtomicU64>,
-    refused: Arc<AtomicU64>,
-    started: Instant,
-    sender: Option<JoinHandle<()>>,
-    sampler: Option<JoinHandle<Vec<String>>>,
-}
-
-struct LoadReport {
-    seconds: f64,
-    datagrams: u64,
-    refused: u64,
-    bitrates: Vec<String>,
-}
-
-impl Load {
-    fn start(address: Ipv4Addr, gateway: Ipv4Addr) -> Result<Self> {
-        let socket = UdpSocket::bind(SocketAddrV4::new(address, 0))
-            .and_then(|socket| {
-                socket
-                    .connect(SocketAddrV4::new(gateway, SINK_PORT))
-                    .map(|()| socket)
-            })
-            .map_err(|error| format!("load socket: {error}"))?;
-        let stop = Arc::new(AtomicBool::new(false));
-        let sent = Arc::new(AtomicU64::new(0));
-        let refused = Arc::new(AtomicU64::new(0));
-        let sender = {
-            let (stop, sent, refused) = (stop.clone(), sent.clone(), refused.clone());
-            std::thread::spawn(move || {
-                let payload = [0x5a_u8; DATAGRAM];
-                while !stop.load(Ordering::Relaxed) {
-                    match socket.send(&payload) {
-                        Ok(_) => sent.fetch_add(1, Ordering::Relaxed),
-                        Err(_) => refused.fetch_add(1, Ordering::Relaxed),
-                    };
-                }
-            })
-        };
-        let sampler = {
-            let stop = stop.clone();
-            std::thread::spawn(move || {
-                let mut samples = Vec::new();
-                while !stop.load(Ordering::Relaxed) {
-                    samples.push(tx_bitrate());
-                    std::thread::sleep(Duration::from_secs(1));
-                }
-                samples
-            })
-        };
-        Ok(Self {
-            stop,
-            sent,
-            refused,
-            started: Instant::now(),
-            sender: Some(sender),
-            sampler: Some(sampler),
-        })
-    }
-
-    fn halt(&mut self) -> Vec<String> {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(sender) = self.sender.take() {
-            let _ = sender.join();
-        }
-        self.sampler
-            .take()
-            .and_then(|sampler| sampler.join().ok())
-            .unwrap_or_default()
-    }
-
-    fn finish(mut self) -> LoadReport {
-        let bitrates = self.halt();
-        LoadReport {
-            seconds: self.started.elapsed().as_secs_f64(),
-            datagrams: self.sent.load(Ordering::Relaxed),
-            refused: self.refused.load(Ordering::Relaxed),
-            bitrates,
-        }
-    }
-}
-
-impl Drop for Load {
-    fn drop(&mut self) {
-        let _ = self.halt();
-    }
-}
-
-/// Read the console from the probe's reset to its result line into
-/// `console`; `Ok(true)` on its pass line.
-fn probe_console(client: &mut Client, mac: &str, console: &Path) -> Result<bool> {
-    let mut log = std::fs::File::create(console)
-        .map_err(|error| format!("{}: {error}", console.display()))?;
-    let running = client.start(Operation::Console {
-        board: mac.to_owned(),
-        reset: true,
-    })?;
-    let cancel = running.input();
-    let (send, lines) = mpsc::channel::<String>();
-    std::thread::spawn(move || {
-        for line in BufReader::new(running).split(b'\n') {
-            let Ok(line) = line else { break };
-            if send
-                .send(String::from_utf8_lossy(&line).trim_end().to_owned())
-                .is_err()
-            {
-                break;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return "iw-unavailable".to_owned();
+    };
+    let deadline = Instant::now() + SAMPLE_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return "iw-timeout".to_owned();
             }
         }
-    });
-    let deadline = Instant::now() + CONSOLE_TIMEOUT;
-    let verdict = loop {
-        let Some(left) = deadline.checked_duration_since(Instant::now()) else {
-            break Err("no OER-RESULT line within the console timeout".to_owned());
-        };
-        let Ok(line) = lines.recv_timeout(left) else {
-            break Err("the console ended without an OER-RESULT line".to_owned());
-        };
-        writeln!(log, "{line}").map_err(|error| format!("{}: {error}", console.display()))?;
-        if let Some(result) = line.split("OER-RESULT: ").nth(1) {
-            eprintln!("load: OER-RESULT: {result}");
-            break Ok(result.starts_with("pass "));
-        }
-    };
-    let _ = cancel.cancel();
-    verdict
+    }
+    let mut text = String::new();
+    if let Some(mut stdout) = child.stdout.take() {
+        let _ = stdout.read_to_string(&mut text);
+    }
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix("tx bitrate:").map(str::trim))
+        .map_or_else(|| "no-tx-bitrate".to_owned(), str::to_owned)
 }
 
 fn leased(
@@ -482,24 +415,18 @@ fn leased(
     mac: &str,
     owner: &str,
     bundle: &Path,
+    prepared: &Prepared,
     console: &Path,
 ) -> Result<bool> {
-    let git = |arguments: &[&str]| {
-        Command::new("git")
-            .args(arguments)
-            .output()
-            .ok()
-            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-    };
     client.run(
         Operation::Flash {
             board: mac.to_owned(),
             bundle: bundle.display().to_string(),
             image: ImageIdentity {
                 name: IMAGE.to_owned(),
-                sha256: String::new(),
-                commit: git(&["rev-parse", "HEAD"]),
-                dirty: git(&["status", "--porcelain"]).map(|status| !status.is_empty()),
+                sha256: prepared.application_sha256.clone(),
+                commit: Some(prepared.commit.clone()),
+                dirty: Some(prepared.dirty),
                 origin: std::env::args().collect::<Vec<_>>().join(" "),
             },
             owner: owner.to_owned(),
@@ -509,7 +436,10 @@ fn leased(
         &mut std::io::sink(),
         None,
     )?;
-    eprintln!("load: wrote the probe bundle");
+    eprintln!(
+        "load: wrote the probe bundle, application {}",
+        prepared.application_sha256
+    );
     let ssid = format!("oer-rebind-{}", secret(6)?);
     let passphrase = secret(16)?;
     client.run(
@@ -536,10 +466,40 @@ fn leased(
         "load: station lease taken, legacy profile; tx bitrate {}",
         tx_bitrate()
     );
-    let load = Load::start(address, gateway)?;
+    let socket = UdpSocket::bind(SocketAddrV4::new(address, 0))
+        .and_then(|socket| {
+            socket
+                .connect(SocketAddrV4::new(gateway, SINK_PORT))
+                .map(|()| socket)
+        })
+        .and_then(|socket| {
+            socket
+                .set_write_timeout(Some(SEND_TIMEOUT))
+                .map(|()| socket)
+        })
+        .map_err(|error| format!("load socket: {error}"))?;
+    let payload = [0x5a_u8; DATAGRAM];
+    // Declared before the console: on an early return the console ends
+    // first, then the load, both before the station is restored.
+    let load = Load::start(
+        move || socket.send(&payload).map(|_| ()),
+        tx_bitrate,
+        SAMPLE_PERIOD,
+    );
     std::thread::sleep(Duration::from_secs(2));
     eprintln!("load: UDP running; reading the probe from its reset");
-    let verdict = probe_console(client, mac, console);
+    let mut log = std::fs::File::create(console)
+        .map_err(|error| format!("{}: {error}", console.display()))?;
+    let running = client.start(Operation::Console {
+        board: mac.to_owned(),
+        reset: true,
+    })?;
+    let cancel = running.input();
+    let session = ConsoleSession::new(running, move || {
+        let _ = cancel.cancel();
+    });
+    let verdict = session.result(&mut log, CONSOLE_TIMEOUT);
+    session.finish();
     // The router's view of the station's last frames, while it still sends.
     let link = client.run(
         Operation::Router {
@@ -550,7 +510,7 @@ fn leased(
     );
     let report = load.finish();
     eprintln!(
-        "load: sent {} datagrams of {DATAGRAM} bytes in {:.1} s ({:.1} Mbit/s), {} refused sends",
+        "load: sent {} datagrams of {DATAGRAM} bytes in {:.1} s ({:.1} Mbit/s), {} refused or timed-out sends",
         report.datagrams,
         report.seconds,
         report.datagrams as f64 * DATAGRAM as f64 * 8.0 / report.seconds / 1e6,
@@ -558,7 +518,7 @@ fn leased(
     );
     eprintln!(
         "load: station tx bitrate samples: {}",
-        report.bitrates.join(" | ")
+        report.samples.join(" | ")
     );
     match &link {
         Ok(link) => eprintln!(
@@ -569,5 +529,11 @@ fn leased(
         ),
         Err(error) => eprintln!("load: router station link unavailable: {error}"),
     }
-    verdict
+    match verdict? {
+        ProbeResult::Pass => Ok(true),
+        ProbeResult::Fail(reason) => {
+            eprintln!("load: probe result: fail {reason}");
+            Ok(false)
+        }
+    }
 }

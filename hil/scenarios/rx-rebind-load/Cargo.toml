@@ -14,5 +14,8 @@ oer-tools-lab-client = { path = "../../../tools/lab/client" }
 oer-tools-lab-model = { path = "../../../tools/lab/model" }
 serde_json = "1.0"
 
+[dev-dependencies]
+tempfile = "=3.27.0"
+
 [lints]
 workspace = true

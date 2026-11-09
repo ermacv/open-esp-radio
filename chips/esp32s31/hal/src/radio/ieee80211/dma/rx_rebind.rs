@@ -5,7 +5,8 @@
 //! An experiment arena is placed with a [`RxSpareBank`]
 //! (`RxDmaStorage::place_with_spares`): descriptor `i` starts bound to spare
 //! `i`, and the remaining spares are the rebind pool. Every buffer the walker
-//! can reach is a spare, a [`DmaBytes`] the CPU reads only by volatile
+//! can reach is a spare, an array of four-byte [`DmaBytes`] words the CPU
+//! reads only by volatile word copies (no buffer-sized value is ever made)
 //! copies; the arena's own ring buffers are never published.
 //!
 //! A completed, detached descriptor strictly before the frozen LAST may be
@@ -42,15 +43,19 @@ pub(crate) const RX_REBIND_DESCRIPTORS: usize = 96;
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
 #[zeroable(bound = "")]
-pub struct RxSpareBank<const BUFFER_SIZE: usize> {
-    pub(crate) buffers: [DmaBytes<BUFFER_SIZE>; RX_REBIND_SPARES],
+pub struct RxSpareBank<const WORDS: usize> {
+    pub(crate) buffers: [[DmaBytes<4>; WORDS]; RX_REBIND_SPARES],
     pub(crate) addresses: PlacedAddresses<RX_REBIND_SPARES>,
 }
 
-impl<const BUFFER_SIZE: usize> RxSpareBank<BUFFER_SIZE> {
-    /// A volatile copy of spare `spare`'s bytes; no reference to DMA memory.
-    pub fn read(&self, spare: usize) -> Option<[u8; BUFFER_SIZE]> {
-        self.buffers.get(spare).map(DmaBytes::read)
+impl<const WORDS: usize> RxSpareBank<WORDS> {
+    /// A volatile copy of word `word` of spare `spare`, little-endian; no
+    /// reference to DMA memory.
+    pub fn read_word(&self, spare: usize, word: usize) -> Option<u32> {
+        self.buffers
+            .get(spare)?
+            .get(word)
+            .map(|bytes| u32::from_le_bytes(bytes.read()))
     }
 
     /// The DMA address recorded for spare `spare` at placement.

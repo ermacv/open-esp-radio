@@ -42,6 +42,8 @@ const SPARE_CHECKS_PER_SCAN: usize = 1;
 const VIOLATION_CAPACITY: usize = 16;
 /// Bytes compared between the HAL's copy and the bound spare.
 const COPY_BYTES: usize = 64;
+/// The words of one spare.
+const WORDS: usize = BUFFER / 4;
 const _: () = {
     if !BUFFER.is_multiple_of(4) || COPY_BYTES > BUFFER || COUNT > RX_REBIND_SPARES {
         panic!("experiment geometry");
@@ -127,11 +129,13 @@ fn word_at(bytes: &[u8], word: usize) -> Option<u32> {
     Some(u32::from_le_bytes(chunk))
 }
 
-/// CRC-32 over a volatile copy of a whole spare.
+/// CRC-32 over a whole spare, one volatile word copy at a time: no
+/// buffer-sized value is made.
 fn crc_spare(bank: &Spares, spare: usize) -> Option<u32> {
-    let image = bank.read(spare)?;
     let mut digest = CRC32.digest();
-    digest.update(&image);
+    for word in 0..WORDS {
+        digest.update(&bank.read_word(spare, word)?.to_le_bytes());
+    }
     Some(digest.finalize())
 }
 
@@ -195,9 +199,12 @@ impl State {
             );
         }
         let frame = frame.get(..length).ok_or(name!("frame-length"; 32))?;
-        let image = bank.read(spare).ok_or(name!("spare-read"; 32))?;
         let compared = length.min(COPY_BYTES);
-        if let Some(offset) = (0..compared).find(|&i| frame.get(i) != image.get(i)) {
+        let spare_byte = |at: usize| {
+            bank.read_word(spare, at / 4)
+                .and_then(|word| word.to_le_bytes().get(at % 4).copied())
+        };
+        if let Some(offset) = (0..compared).find(|&i| frame.get(i).copied() != spare_byte(i)) {
             clean = false;
             self.record(
                 segment,
@@ -207,7 +214,7 @@ impl State {
                     spare: spare as u32,
                     offset: offset as u32,
                     expected: u32::from(frame.get(offset).copied().unwrap_or(0)),
-                    observed: u32::from(image.get(offset).copied().unwrap_or(0)),
+                    observed: u32::from(spare_byte(offset).unwrap_or(0)),
                 },
             );
         }
@@ -322,9 +329,8 @@ impl State {
         if !storage.rebind_spare_unbound(spare) {
             return Ok(None);
         }
-        let image = bank.read(spare).ok_or(name!("spare-read"; 32))?;
         if let Some(word) =
-            (0..BUFFER / 4).find(|&word| word_at(&image, word) != Some(canary(spare, word)))
+            (0..WORDS).find(|&word| bank.read_word(spare, word) != Some(canary(spare, word)))
         {
             self.record(
                 segment,
@@ -334,7 +340,7 @@ impl State {
                     spare: spare as u32,
                     offset: word as u32,
                     expected: canary(spare, word),
-                    observed: word_at(&image, word).unwrap_or(0),
+                    observed: bank.read_word(spare, word).unwrap_or(0),
                 },
             );
         }

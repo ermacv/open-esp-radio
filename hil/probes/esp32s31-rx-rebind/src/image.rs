@@ -41,7 +41,7 @@ const COUNT: usize = 32;
 const BUFFER: usize = 1664;
 const CHANNEL: u8 = 13;
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
-type Spares = RxSpareBank<BUFFER>;
+type Spares = RxSpareBank<{ BUFFER / 4 }>;
 type Backend = Esp32s31Radio<
     ChipClocks,
     oer_chips_family_platform_executor::Cooperative<Esp32s31, EmbassyClock>,
@@ -519,11 +519,7 @@ async fn run_direct(
         SPARES
             .take()
             .ok_or(oer_portable_diagnostics::name!("spares-claimed"; 32))?,
-        |spare, bytes| {
-            for (word, chunk) in bytes.chunks_exact_mut(4).enumerate() {
-                chunk.copy_from_slice(&experiment::canary(spare, word).to_le_bytes());
-            }
-        },
+        experiment::canary,
     )
     .map_err(|_| oer_portable_diagnostics::name!("rx-place"; 32))?;
     let storage = placed.storage();

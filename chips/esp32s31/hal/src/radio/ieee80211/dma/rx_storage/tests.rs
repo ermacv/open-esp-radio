@@ -3725,7 +3725,7 @@ fn stopped_ring_grants_restore_returned_buffers_before_a_new_recycle_epoch() {
 /// with frames landed in descriptors 0 and 1, LAST on 1, NEXT on 2.
 fn rebind_ring() -> (
     &'static RxDmaStorage<4, 16, 16, HostDma>,
-    &'static crate::radio::ieee80211::dma::rx_rebind::RxSpareBank<16>,
+    &'static crate::radio::ieee80211::dma::rx_rebind::RxSpareBank<4>,
     MockRxDma,
     RxRingLive<'static, 4>,
 ) {
@@ -3733,7 +3733,7 @@ fn rebind_ring() -> (
     let (placed, bank) = RxDmaStorage::<4, 16, 16, HostDma>::place_with_spares(
         Placed::host(Box::leak(Box::new(RxDmaStorage::new()))),
         Placed::host(Box::leak(Box::new(bytemuck::Zeroable::zeroed()))),
-        |spare, bytes| bytes.fill(spare as u8 + 1),
+        |spare, _word| u32::from_le_bytes([spare as u8 + 1; 4]),
     )
     .expect("the experiment arena places");
     let storage = placed.storage();
@@ -3807,7 +3807,7 @@ fn a_rebound_descriptor_publishes_and_reads_its_new_spare() {
     // Every CPU read of descriptor 0 now names spare 4.
     assert!(matches!(
         storage.buffer_for_descriptor(0),
-        Some(BoundBuffer::Spare(spare)) if core::ptr::eq(spare, &bank.buffers[4])
+        Some(BoundBuffer::Spare(spare)) if core::ptr::eq(spare.as_ptr(), bank.buffers[4].as_ptr())
     ));
     // The next frontier unit, descriptor 1, is copied from its spare by
     // volatile reads.
