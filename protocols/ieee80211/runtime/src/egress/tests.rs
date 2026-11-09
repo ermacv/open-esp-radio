@@ -694,8 +694,75 @@ fn a_ticket_given_twice_or_past_the_places_is_a_fault() {
     let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
     assert_eq!(policy.accepted(held, 1), Err(AirtimeFault::TicketInUse));
     assert_eq!(policy.in_flight(), 1, "the first frame keeps its place");
+    // The refused place's frame was accepted and settled at once: its
+    // reservation is free again, the first frame's end still settles, and
+    // with both ended the association retires whole.
+    let (_, again) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    policy.refused(again).unwrap();
+    let first = Exchange {
+        ticket: 1,
+        charged: Some(micros(COST)),
+        rate: None,
+    };
+    policy.notice(RadioNotice::Ended(first)).unwrap();
+    assert_eq!((policy.in_flight(), policy.unsettled()), (0, 0));
+    policy.retire(1).unwrap();
+    assert_eq!(policy.balance_micros(1), None, "no reservation pins it");
     let mut storage = self::storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
     assert_eq!(policy.accepted(held, 2), Err(AirtimeFault::NoPlace));
+    assert_eq!(
+        policy.balance_micros(1),
+        Some(i64::from(QUANTUM) - i64::from(CEILING)),
+        "settled at its ceiling, not refunded as unsent"
+    );
+    // Both reservations are free: two more frames fit.
+    for ticket in 0..2 {
+        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        policy.accepted(held, ticket).unwrap();
+    }
+}
+
+#[test]
+fn reviewer_ticket_collision_does_not_orphan_the_accepted_reservation() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0)];
+    let (_, first) = policy.choose(ready.into_iter()).unwrap().unwrap();
+    policy.accepted(first, 1).unwrap();
+    let (_, second) = policy.choose(ready.into_iter()).unwrap().unwrap();
+    assert_eq!(policy.accepted(second, 1), Err(AirtimeFault::TicketInUse));
+    // Complete the first physical return after its association leaves.
+    policy.notice(RadioNotice::Left(1)).unwrap();
+    policy
+        .notice(RadioNotice::Ended(Exchange {
+            ticket: 1,
+            charged: Some(micros(COST)),
+            rate: None,
+        }))
+        .unwrap();
+    assert_eq!(policy.in_flight(), 0);
+    assert_eq!(policy.unsettled(), 0);
+    assert_eq!(
+        policy.balance_micros(1),
+        None,
+        "the fault must not strand the second accepted frame's reservation"
+    );
+}
+
+#[test]
+fn reviewer_an_out_of_range_ticket_does_not_orphan_the_accepted_reservation() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let (_, held) = policy.choose([data(1, 0)].into_iter()).unwrap().unwrap();
+    assert_eq!(policy.accepted(held, 2), Err(AirtimeFault::NoPlace));
+    policy.notice(RadioNotice::Left(1)).unwrap();
+    assert_eq!(policy.in_flight(), 0);
+    assert_eq!(policy.unsettled(), 0);
+    assert_eq!(
+        policy.balance_micros(1),
+        None,
+        "the fault must not strand the accepted frame's reservation"
+    );
 }

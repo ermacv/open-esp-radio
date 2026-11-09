@@ -26,8 +26,8 @@ pub type PeerKey = (u8, u16);
 
 /// Names a frame by its buffer's place at the port, below the port's depth,
 /// as the station's buffers do: no other frame has it until the frame's
-/// notice is taken.
-pub type Ticket = u16;
+/// notice is taken. As wide as a place, so every place has its own.
+pub type Ticket = usize;
 
 /// One peer's rate and addresses.
 #[derive(Clone, Copy, Debug)]
@@ -248,7 +248,7 @@ impl State {
         if let Some(held) = self.held.get_mut(place) {
             *held = true;
         }
-        let ticket = Ticket::try_from(place).unwrap_or(Ticket::MAX);
+        let ticket = place;
         self.flights.push_back(Flight {
             ticket,
             ends_at,
@@ -492,7 +492,7 @@ impl FrameSource for Medium {
         state.taken = state.taken.saturating_add(1);
         // The end frees its frame's buffer.
         if let RadioNotice::Ended(Exchange { ticket, .. }) | RadioNotice::Lost(ticket) = notice
-            && let Some(held) = state.held.get_mut(usize::from(ticket))
+            && let Some(held) = state.held.get_mut(ticket)
         {
             *held = false;
         }
@@ -545,5 +545,21 @@ impl PeerAir for Medium {
 
     /// The medium's estimates do not depend on a rate, and it reports none.
     fn reported(&mut self, _key: PeerKey, _rate: oer_protocols_ieee80211_runtime::egress::PhyRate) {
+    }
+}
+
+#[cfg(test)]
+mod reviewer_ticket_width {
+    use super::*;
+
+    #[test]
+    fn distinct_valid_buffer_places_have_distinct_tickets() {
+        let last = usize::from(u16::MAX);
+        let medium = Medium::new([2, 0, 0, 0, 0, 1], [192, 0, 2, 1], last + 2, &[]);
+        let mut state = medium.0.borrow_mut();
+        let frame = [0_u8; 14];
+        let a = state.fly(last, &frame);
+        let b = state.fly(last + 1, &frame);
+        assert_ne!(a, b, "two distinct valid places must not alias one ticket");
     }
 }

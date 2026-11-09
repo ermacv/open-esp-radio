@@ -73,10 +73,13 @@ pub enum RadioNotice<T, K> {
 pub enum AirtimeFault {
     Airtime(AirtimeError),
     /// An accepted frame's ticket names no place below the reservations: the
-    /// port has more buffers than the policy reserves for.
+    /// port has more buffers than the policy reserves for. The frame settled
+    /// at once at its ceiling, or its reservation if that is more, as a frame
+    /// of unknown end does.
     NoPlace,
     /// An accepted frame's ticket names a frame still in flight: the port
-    /// gave its buffer again before that frame's notice.
+    /// gave its buffer again before that frame's notice. The frame in flight
+    /// keeps its place; the new one settled at once as for [`Self::NoPlace`].
     TicketInUse,
     /// A completion names no frame in flight.
     UnknownTicket,
@@ -284,17 +287,6 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
         )
     }
 
-    /// Hold `flight` at `place` for its completion. A refusal settles
-    /// nothing here: the caller's fault keeps the charge.
-    fn fly(&mut self, place: usize, flight: Flight<'o, A::Key>) -> Result<(), AirtimeFault> {
-        let slot = self.flights.get_mut(place).ok_or(AirtimeFault::NoPlace)?;
-        if slot.is_some() {
-            return Err(AirtimeFault::TicketInUse);
-        }
-        *slot = Some(flight);
-        Ok(())
-    }
-
     /// Settle `flight` at `charged`.
     fn settle(
         &mut self,
@@ -393,13 +385,22 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
         if let Some(flow) = flow {
             self.remember(reservation.key(), flow);
         }
-        self.fly(
-            ticket.into(),
-            Flight::Open {
-                flight: reservation.published(),
-                ceiling,
-            },
-        )
+        // The port took the frame: from here its reservation is published
+        // and only a settlement ends it, never a cancellation.
+        let flight = reservation.published();
+        let fault = match self.flights.get_mut(ticket.into()) {
+            Some(slot @ None) => {
+                *slot = Some(Flight::Open { flight, ceiling });
+                return Ok(());
+            }
+            Some(Some(_)) => AirtimeFault::TicketInUse,
+            None => AirtimeFault::NoPlace,
+        };
+        // No place keeps the frame for its end: it settles now as a frame of
+        // unknown end, and the fault names why.
+        let charged = ceiling.max(flight.reserved_micros());
+        self.settle(flight, charged)?;
+        Err(fault)
     }
 
     fn refused(&mut self, held: Held<'o, A::Key>) -> Result<(), AirtimeFault> {
