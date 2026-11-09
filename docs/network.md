@@ -149,9 +149,7 @@ only after the policy chose it and the port gave the room.
 - **Choice.** A choice reads the ready work, the network's whole backlog,
   once: each work's least grant once, kept per account as the largest and
   with the work next in turn, which is all the scheduler and the pick read
-  of it. `StationAir` keeps the last frame length's least grant and
-  ceiling, as a backlog is mostly of one length. The scan stays one pass
-  over the backlog per frame sent.
+  of it. The scan stays one pass over the backlog per frame sent.
 - **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
   publications that reached the air by the backend's declared model: the
   modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck

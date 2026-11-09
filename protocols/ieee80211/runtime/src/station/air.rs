@@ -14,7 +14,6 @@
 //! end is handed on, and the buffer goes back to its owner only then: so no
 //! more frames are unsettled than there are buffers.
 
-use core::cell::Cell;
 use core::num::NonZeroU32;
 
 use oer_portable_memory::QueueNotify;
@@ -31,66 +30,22 @@ pub type StationKey = u64;
 /// What the backend's model says of a frame of a given Ethernet length: the
 /// least it costs, its least useful grant, and the most it can cost on the
 /// path the backend executes, which an egress policy charges where the cost
-/// is not known. Within one association each answer is a function of the
-/// length alone: [`StationAir`] keeps the last one, keyed by the link epoch
-/// and the length. A cost model that reads anything else, such as the rate
-/// the station last reported, does not fit this contract.
+/// is not known.
 pub trait FrameCost {
     fn least(&self, frame_octets: usize) -> NonZeroU32;
     fn ceiling(&self, frame_octets: usize) -> NonZeroU32;
 }
 
 /// The station's air over `link`, the network side's view of its link,
-/// with `C` charging a frame of unknown cost. Each charge depends on the
-/// association and the frame's length alone ([`FrameCost`]), and the last
-/// ones are kept with their epoch and length: the egress asks every ready
-/// frame's least grant at each choice, and a backlog is mostly of one
-/// length. A new association computes them again.
+/// with `C` charging a frame of unknown cost.
 pub struct StationAir<'a, N, C> {
     link: &'a NetworkLink<N>,
     ceiling: C,
-    least_of: Cell<Option<Kept>>,
-    ceiling_of: Cell<Option<Kept>>,
 }
 
 impl<'a, N, C> StationAir<'a, N, C> {
     pub const fn new(link: &'a NetworkLink<N>, ceiling: C) -> Self {
-        Self {
-            link,
-            ceiling,
-            least_of: Cell::new(None),
-            ceiling_of: Cell::new(None),
-        }
-    }
-}
-
-/// A charge, with the epoch and the length it was computed for.
-#[derive(Clone, Copy)]
-struct Kept {
-    epoch: u64,
-    length: usize,
-    micros: NonZeroU32,
-}
-
-/// `charge` of `length` under `epoch`, from `kept` when it holds that one,
-/// which it holds from then on.
-fn kept_charge(
-    kept: &Cell<Option<Kept>>,
-    epoch: u64,
-    length: usize,
-    charge: impl FnOnce(usize) -> NonZeroU32,
-) -> NonZeroU32 {
-    match kept.get() {
-        Some(last) if last.epoch == epoch && last.length == length => last.micros,
-        _ => {
-            let micros = charge(length);
-            kept.set(Some(Kept {
-                epoch,
-                length,
-                micros,
-            }));
-            micros
-        }
+        Self { link, ceiling }
     }
 }
 
@@ -106,17 +61,12 @@ impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
         }
         Some(AirtimeCandidate {
             key: link.epoch,
-            minimum_micros: kept_charge(&self.least_of, link.epoch, ready.length, |length| {
-                self.ceiling.least(length)
-            }),
+            minimum_micros: self.ceiling.least(ready.length),
         })
     }
 
     fn ceiling(&self, ready: &Ready) -> NonZeroU32 {
-        let epoch = self.link.snapshot().epoch;
-        kept_charge(&self.ceiling_of, epoch, ready.length, |length| {
-            self.ceiling.ceiling(length)
-        })
+        self.ceiling.ceiling(ready.length)
     }
 }
 
