@@ -212,6 +212,7 @@ A page never relaxes a rule above: where they differ, the rule above holds.
 | IEEE 802.15.4 pre-bind discard, runtime acknowledgements, secured ACK | [docs/unsafe.md](docs/unsafe.md), [engine](chips/family/radio/ieee802154/engine/README.md) |
 | BLE terminal output release, owned PHY transactions and their quarantine | [docs/unsafe.md](docs/unsafe.md), [HAL](chips/esp32s31/hal/README.md), [PHY](chips/family/radio/phy/README.md) |
 | WT/WTC triggers, `read-observed` and `zero-register-writes` words | [register model](tools/registers/model/README.md) |
+| Runtime-switchable network-core diagnostics, the one exception to zero-cost instrumentation | [Switchable network-core diagnostics](docs/architecture.md#switchable-network-core-diagnostics) |
 
 ## Work
 
