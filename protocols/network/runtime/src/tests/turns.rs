@@ -88,8 +88,13 @@ impl EventSink<NetEvent> for Tape {
 /// One turn, as its events tell it.
 #[derive(Debug, Default)]
 struct Turn {
+    /// The turn said it began, before anything else.
+    began: bool,
     took: Vec<RequestKind>,
     spent: usize,
+    /// Received frames it took in, and notices it handed the policy.
+    frames: usize,
+    notices: usize,
     accepted: usize,
     published: Vec<PublishEnd>,
     end: Option<TurnEnd>,
@@ -134,11 +139,21 @@ fn turns(events: &[ServiceEvent]) -> Vec<Turn> {
     let mut turn = Turn::default();
     for event in events {
         match *event {
+            ServiceEvent::TurnBegan => {
+                assert!(
+                    !turn.began && turn.took.is_empty() && turn.frames == 0,
+                    "a turn begins before anything of it"
+                );
+                turn.began = true;
+            }
             ServiceEvent::Took(kind) => turn.took.push(kind),
             ServiceEvent::BudgetSpent => turn.spent += 1,
+            ServiceEvent::FrameTaken => turn.frames += 1,
+            ServiceEvent::Noticed => turn.notices += 1,
             ServiceEvent::Accepted => turn.accepted += 1,
             ServiceEvent::Published(end) => turn.published.push(end),
             ServiceEvent::TurnEnded(end) => {
+                assert!(turn.began, "every turn that ends began");
                 turn.end = Some(end);
                 turns.push(core::mem::take(&mut turn));
             }
@@ -449,6 +464,37 @@ fn a_full_intake_says_so() {
         1,
         "only the first turn met more than it takes"
     );
+}
+
+#[test]
+fn each_turn_tells_the_frames_it_took_in_and_the_notices_it_handed_on() {
+    brand!(Net);
+    let (mut service, _socket, wire, _stop) = flow::<Net>();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut seen = Seen::default();
+    {
+        let mut run = pin!(service.run(clock, &mut seen));
+        // One more frame than a turn takes in, and three notices.
+        arrive(&wire, 9);
+        wire.0.borrow_mut().ended.extend(0..3);
+        pass(&mut run);
+        pass(&mut run);
+    }
+    let turns = turns(&seen.0);
+    let frames: Vec<_> = turns.iter().map(|turn| turn.frames).collect();
+    let notices: Vec<_> = turns.iter().map(|turn| turn.notices).collect();
+    assert_eq!(
+        frames.first().copied(),
+        Some(8),
+        "the first turn takes in its budget"
+    );
+    assert_eq!(frames.iter().sum::<usize>(), 9, "every frame, once");
+    assert_eq!(
+        notices.first().copied(),
+        Some(3),
+        "the first turn hands on every notice"
+    );
+    assert_eq!(notices.iter().sum::<usize>(), 3, "every notice, once");
 }
 
 /// An egress whose reservations are all out: it chooses nothing until a

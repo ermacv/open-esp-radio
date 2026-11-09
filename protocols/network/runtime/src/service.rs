@@ -725,6 +725,7 @@ impl<
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> bool {
         let mut moved = false;
+        report(events, || ServiceEvent::TurnBegan);
         self.local.turn_begins();
         self.owner.observe_link(now);
         self.owner.tick(now, events);
@@ -743,6 +744,7 @@ impl<
                 Intake::Read => {}
                 Intake::Lent(datagram) => self.lend(datagram, events),
             }
+            report(events, || ServiceEvent::FrameTaken);
             moved = true;
         }
         seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
@@ -753,6 +755,7 @@ impl<
                 break;
             };
             moved = true;
+            report(events, || ServiceEvent::Noticed);
             let answer = self.egress.notice(notice);
             self.note(answer);
             if self.fault.is_some() {

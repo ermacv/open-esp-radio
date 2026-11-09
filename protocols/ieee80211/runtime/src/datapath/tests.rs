@@ -85,11 +85,19 @@ impl<'s> DatapathPort<'s> for TestPort<'s> {
     fn received(frame: &[u8], _: &ModelRxMeta) {
         OBSERVED.with(|observed| observed.borrow_mut().push(frame.to_vec()));
     }
+
+    const OBSERVES_RETURNS: bool = true;
+
+    fn returned(burst: super::ReturnBurst) {
+        BURSTS.with(|bursts| bursts.borrow_mut().push(burst));
+    }
 }
 
 std::thread_local! {
     /// The units the actor's observation saw on this test's thread.
     static OBSERVED: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
+    /// The return bursts the actor's observation saw on this test's thread.
+    static BURSTS: RefCell<Vec<super::ReturnBurst>> = const { RefCell::new(Vec::new()) };
 }
 
 type P<'s> = TestPort<'s>;
@@ -1981,6 +1989,54 @@ fn a_lost_network_settles_only_once_every_ended_frame_s_memory_went_home() {
         assert_eq!(home, total, "every MSDU's memory is home");
         bench.send(ToActor::Retire);
         assert_eq!(bench.end, Some(ActorEnd::Retired));
+    });
+}
+
+/// Each burst of returned memory tells what it queued, the queue before and
+/// after it and what stayed with the actor: a full queue holds the rest
+/// back, and the burst after the network emptied it carries them, from an
+/// empty queue.
+#[test]
+fn each_return_burst_tells_its_size_the_queue_around_it_and_what_stayed() {
+    bench(|bench| {
+        BURSTS.with(|bursts| bursts.borrow_mut().clear());
+        bench.start();
+        bench.connect(link(true, None));
+        bench.send_msdu(msdu(0, &[0; 8]));
+        bench.settle();
+        let _traffic = bench.next();
+        for round in 1..TX_DEPTH + 4 {
+            bench.send_msdu(msdu(0, &[u8::try_from(round).unwrap(); 8]));
+            bench.settle();
+            bench.advance(1_000);
+            bench.settle();
+        }
+        assert_eq!(bench.returned.len(), TX_DEPTH, "the queue is full");
+        let filled = BURSTS.with(|bursts| bursts.borrow().clone());
+        assert!(!filled.is_empty());
+        for burst in &filled {
+            assert!(burst.queued >= 1, "a burst queues something: {burst:?}");
+            assert_eq!(burst.after, burst.before + burst.queued, "{burst:?}");
+            assert!(burst.after <= TX_DEPTH, "{burst:?}");
+        }
+        let queued: usize = filled.iter().map(|burst| burst.queued).sum();
+        assert_eq!(queued, TX_DEPTH, "every burst so far went into the queue");
+        let last = filled.last().copied().unwrap();
+        assert_eq!(last.after, TX_DEPTH, "the last burst filled it");
+        while bench.returned.try_receive_with(Option::take).is_ok() {}
+        bench.settle();
+        let after = BURSTS.with(|bursts| bursts.borrow().clone());
+        let rest = after.get(filled.len()..).unwrap_or_default();
+        assert_eq!(rest.len(), 1, "the rest come back as one burst: {rest:?}");
+        let rest = rest[0];
+        assert_eq!(rest.before, 0, "from the emptied queue");
+        assert_eq!(rest.after, rest.queued);
+        assert_eq!(rest.held, 0, "nothing stays with the actor");
+        assert_eq!(
+            queued + rest.queued,
+            bench.data_sent().len(),
+            "every end went back in a burst"
+        );
     });
 }
 

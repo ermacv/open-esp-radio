@@ -108,6 +108,33 @@ holds the PHY's temperature after the window's last tracked tick and its
 conversion is established. `tick_us` is the ticks' whole time and
 `longest_tick_us` the longest.
 
+Each level's `turn_profile` records each network turn's active cycles on
+hart 1 against the work it did, and prints one line (`turn profile
+<level>:`); only a trace image counts it (`available` false otherwise).
+A turn's cycles run from its beginning to its end on hart 1's cycle
+counter, interrupts and the trace's own counting included; nothing is kept
+per turn. `moments` holds the sums over the window's turns of every
+product of two of the variables `one`, `frames` (received frames the turn
+took in), `accepted` (frames its port accepted), `notices` (transmit
+notices it handed the policy), `requests` (requests it took from the
+sockets' lanes) and `cycles`, from which a least-squares fit of cycles to
+the four counts follows. `empty` holds the turns with none of the four
+(count, cycles, cycles squared), `idle` the turns a wait followed, and
+`gaps` the cycles from a turn's end to the next turn's beginning by how
+the pass after it went on (`after_yield`, `after_ready_wait`,
+`after_pending_wait`, the last with the executor's other tasks and its
+sleep). `receive_only`, `transmit_only` and `notice_only` hold the turns
+that did one kind of work only, by its count, with their mean cycles.
+`cycles_by_log2` counts the turns below 2^9 cycles, then by power of two
+to 2^23 and more; `notices_by_turn` and `frames_by_turn` the turns by
+their notices and frames; `settling` the turns that handed on a notice,
+those of them whose port accepted a frame and the frames accepted in
+them. `returns` counts the station's bursts of the network's memory back
+through its return queue, each ended by one flush: the memories they
+queued, the bursts by size (`queued_by_burst`), the queue's occupancy
+before and after each burst, and the bursts that left memory with the
+station for want of room (`held_bursts`, `held`).
+
 Each level's `network_turns` records what the network core's service did
 in its turns over the window, and prints one line (`network turns
 <level>:`); only a trace build counts them (`available` false otherwise). `requests` counts the requests
