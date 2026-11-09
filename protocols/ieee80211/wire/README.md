@@ -37,7 +37,7 @@ in-place moves admit both ranges before changing any byte.
 ## Known defects
 
 - **Channel 14 is admitted regardless of the regulatory domain and the PHY.**
-  `channel.rs::WifiChannel::new_2_4_ghz` accepts channel 14 at 20 MHz, while
+  `channel.rs::Ghz2_4Channel::new` accepts channel 14 at 20 MHz, while
   the ESP32-S31 PHY rejects it (`PhyChipChannelRequest::validate`). A caller
   gets a channel the radio cannot tune and that most countries forbid.
   Channel 14 is legal only where the regulatory domain allows it and the PHY

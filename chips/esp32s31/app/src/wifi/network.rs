@@ -37,7 +37,7 @@
 use super::*;
 use core::task::{Context as TaskContext, Poll};
 use oer_portable_memory::WakingSpscSender;
-use oer_protocols_ieee80211_contracts_port::TxEstimate;
+use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
 use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, RadioNotice};
 use oer_protocols_ieee80211_runtime::station::{Completions, StationKey, TxRefused, TxSupply};
@@ -122,8 +122,10 @@ pub type NetworkBlock = Block<'static, Brand, BLOCK>;
 /// The port of the service over the station.
 type Port = DevicePort<wifi::Network<'static, Notifies>, Transmit, WifiBuffers>;
 
-/// Names a frame in the station's transmit buffers: its buffer's index,
-/// which no other frame has until the station gives the buffer back.
+/// Names a frame in the station's transmit buffers: its buffer's place
+/// among the network's ([`wifi::TxSlot::place`]), below
+/// [`wifi::NETWORK_BUFFERS`], which no other frame has until the station
+/// gives the buffer back and its end is handed on.
 pub type TxTicket = u8;
 /// What the port tells the egress policy.
 pub type TxNotice = RadioNotice<TxTicket, StationKey>;
@@ -192,7 +194,7 @@ impl TransmitMode for Queued {
     ) -> Airtime {
         AirtimeEgress::new(
             storage,
-            wifi::StationAir::<Notifies>::new(link, wifi::S31Ceiling),
+            wifi::StationAir::<Notifies>::new(link, wifi::S31Ceiling::new()),
         )
     }
 }
@@ -403,17 +405,17 @@ impl FreeSlots {
         self.slots.lend(heapless::Vec::pop).ok().flatten()
     }
 
-    /// The station gave `slot` back, its frame ended at `cost`: it waits
+    /// The station gave `slot` back, its frame ended so (`end`): it waits
     /// with that end for the port.
-    fn ended(&self, slot: wifi::TxSlot, cost: TxEstimate) {
-        let ticket = slot.index();
+    fn ended(&self, slot: wifi::TxSlot, end: TxEnd) {
+        let ticket = slot.place();
         let mut slot = Some(slot);
         // Only the network's task lends this, so a lend is never refused.
         let refused = self
             .ended
             .lend(|ended| {
                 let slot = slot.take()?;
-                ended.returned(slot, ticket, cost).err()
+                ended.returned(slot, ticket, end).err()
             })
             .ok()
             .flatten();
@@ -527,7 +529,7 @@ impl TxSupply<TxPacket> for WifiTx {
     }
     fn write(&mut self, frame: TxPacket) -> Result<wifi::TxMemory, TxRefused<TxPacket>> {
         let WrittenFrame { slot, length } = frame;
-        let ticket = slot.index();
+        let ticket = slot.place();
         self.publisher
             .publish(slot, 0, length)
             .map_err(|refused| match refused {
@@ -543,8 +545,8 @@ impl TxSupply<TxPacket> for WifiTx {
                 }
             })
     }
-    fn give(&mut self, memory: wifi::TxMemory, cost: TxEstimate) {
-        FREE.ended(self.publisher.slot(memory), cost);
+    fn give(&mut self, memory: wifi::TxMemory, end: TxEnd) {
+        FREE.ended(self.publisher.slot(memory), end);
     }
 }
 
@@ -561,7 +563,7 @@ impl TxBuffers for WifiBuffers {
     type Ticket = TxTicket;
     type Notice = TxNotice;
     fn ticket(&self, frame: &WrittenFrame) -> TxTicket {
-        frame.slot.index()
+        frame.slot.place()
     }
     fn take_notice(&mut self) -> Option<TxNotice> {
         FREE.take_notice(self.link.snapshot())

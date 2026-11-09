@@ -16,7 +16,7 @@ use clap::Parser;
 use oer_tools_analysis_riscv_analysis::writes::function_writes;
 use oer_tools_analysis_riscv_model::*;
 use oer_tools_analysis_riscv_program::facts::ImageFacts;
-use oer_tools_image_stack::{DebugMetadata, Field, TableLayout, interrupt_table, read_debug};
+use oer_tools_image_stack::{Field, TableLayout, interrupt_table, read_debug};
 use serde::Deserialize;
 use std::rc::Rc;
 use sweep::TransferKind;
@@ -116,14 +116,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     }
     let mut keep = Ledger::new(&memory, &mut control)?;
     let debug = (inline_context || stack_observation)
-        .then(|| {
-            let metadata = if stack_observation {
-                DebugMetadata::TypedLocations
-            } else {
-                DebugMetadata::Standard
-            };
-            read_debug(&bytes, metadata, &mut keep, &mut control)
-        })
+        .then(|| read_debug(&bytes, &mut keep, &mut control))
         .transpose()?;
     let function = image
         .functions()

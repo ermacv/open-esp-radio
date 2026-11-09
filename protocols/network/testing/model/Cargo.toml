@@ -32,6 +32,8 @@ oer-protocols-ieee80211-testing-model = { path = "../../../ieee80211/testing/mod
 oer-protocols-ieee80211-wire = { path = "../../../ieee80211/wire" }
 oer-protocols-network-core = { path = "../../core", features = ["test-support"] }
 oer-protocols-network-runtime = { path = "../../runtime" }
+# The test-only link publisher, for a network side composed without a lifecycle.
+oer-protocols-ieee80211-runtime = { path = "../../../ieee80211/runtime", features = ["test-support"] }
 oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-protocols-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
 

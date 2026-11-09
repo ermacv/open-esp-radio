@@ -166,3 +166,23 @@ fn a_graceful_stop_of_a_station_without_a_link_ends() {
     });
     report.assert_stopped_with_every_owner();
 }
+
+/// The association's slowest data rate reaches the network side with the
+/// link: the access point's set (1, 2, 5.5 and 11 Mb/s) ends at DSSS 1 Mb/s,
+/// where the station's least grants start.
+#[test]
+fn the_link_carries_the_association_s_slowest_rate() {
+    use oer_protocols_ieee80211_wire::phy::{LegacyRate, PhyRate};
+    struct Net;
+    let report = simulate::<Net>(Setup::default(), |world| {
+        Box::pin(async move {
+            assert_eq!(world.link_floor(), None, "nothing before an association");
+            world.join().await;
+            assert_eq!(
+                world.link_floor(),
+                Some(PhyRate::Legacy(LegacyRate::Dsss1M))
+            );
+        })
+    });
+    report.assert_stopped_with_every_owner();
+}

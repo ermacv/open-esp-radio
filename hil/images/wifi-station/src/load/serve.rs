@@ -30,8 +30,9 @@ use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
     Addba, AddbaCollected, Collected, Counters, CountersCollected, Hart1Collected, Hart1Window,
     Link, LinkCollected, Load, LoadError, Mac, MacCollected, NetworkCollected, PartsCollected,
-    Positions, PositionsCollected, Report, Request, SamplesCollected, Sent, Stall, StallCollected,
-    StallMac, StallMacCollected, Start, Started, Tracking, TrackingCollected, Transmit,
+    Positions, PositionsCollected, ProfileCollected, Report, Request, SamplesCollected, Sent,
+    Stall, StallCollected, StallMac, StallMacCollected, Start, Started, Tracking,
+    TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
@@ -80,6 +81,7 @@ pub(crate) enum Answer {
     StallMac(StallMacCollected),
     Network(NetworkCollected),
     Addba(AddbaCollected),
+    Profile(ProfileCollected),
     Samples(SamplesCollected),
     Cpu(Load),
     /// The boot hart's relay answers it: a page of samples.
@@ -104,6 +106,7 @@ impl Answer {
             Self::StallMac(mac) => answer(identity, &mac),
             Self::Network(network) => answer(identity, &network),
             Self::Addba(addba) => answer(identity, &addba),
+            Self::Profile(profile) => answer(identity, &profile),
             Self::Samples(samples) => answer(identity, &samples),
             Self::Cpu(load) => answer(identity, &load),
             Self::Relayed => {}
@@ -192,6 +195,7 @@ async fn kept_answer(
         // closes.
         Kept::Network => Answer::Network(NetworkCollected::Report(udp::network_window(net))),
         Kept::Addba => Answer::Addba(AddbaCollected::Report(ended.addba)),
+        Kept::Profile { page } => Answer::Profile(udp::profile_page(net, page)),
         Kept::Samples { from, hart } => match ended.sampled.get(usize::from(hart)) {
             // Hart 0's samples are in the boot hart's buffer: its relay
             // answers with the page.
@@ -248,6 +252,7 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::Running(Kept::StallMac) => Answer::StallMac(StallMacCollected::Running),
         Decided::Running(Kept::Network) => Answer::Network(NetworkCollected::Running),
         Decided::Running(Kept::Addba) => Answer::Addba(AddbaCollected::Running),
+        Decided::Running(Kept::Profile { .. }) => Answer::Profile(ProfileCollected::Running),
         Decided::Running(Kept::Samples { .. }) => Answer::Samples(SamplesCollected::Running),
         Decided::UnknownRun(Kept::Report) => Answer::Collected(Collected::Refused(unknown)),
         Decided::UnknownRun(Kept::Parts { .. }) => Answer::Parts(PartsCollected::Refused(unknown)),
@@ -269,6 +274,9 @@ fn decided_answer(decided: Decided) -> Answer {
         }
         Decided::UnknownRun(Kept::Network) => Answer::Network(NetworkCollected::Refused(unknown)),
         Decided::UnknownRun(Kept::Addba) => Answer::Addba(AddbaCollected::Refused(unknown)),
+        Decided::UnknownRun(Kept::Profile { .. }) => {
+            Answer::Profile(ProfileCollected::Refused(unknown))
+        }
         Decided::UnknownRun(Kept::Samples { .. }) => {
             Answer::Samples(SamplesCollected::Refused(unknown))
         }

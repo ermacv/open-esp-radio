@@ -534,7 +534,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             || parts.config.publication_timeout == Duration::ZERO
             || IndividualAddress::for_interface(parts.access_point_address.get()).is_err()
             || !Esp32s31Caps::<B>::CAPS
-                .supports_channel(Channel::from_wifi_channel(parts.config.channel))
+                .supports_channel(Channel::from_ghz2_4_channel(parts.config.channel))
             || B < crate::ordinary_tx::TX_METADATA_SIZE
                 + 24
                 + crate::ordinary_tx::TX_CCMP_MIC_SIZE
@@ -629,7 +629,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             gate: issuer,
             loan,
             receipt: Some(receipt),
-            channel: Channel::from_wifi_channel(config.channel),
+            channel: Channel::from_ghz2_4_channel(config.channel),
             addresses,
             config,
             coex,
@@ -689,7 +689,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         if tsf_epoch == self.config.tsf_epoch {
             return Err(ReinstallRefused::SameEpoch);
         }
-        let Some(channel) = self.channel.wifi_channel() else {
+        let Some(channel) = self.channel.ghz2_4_channel() else {
             return Err(ReinstallRefused::ChannelUnset);
         };
         let Some(receipt) = self.receipt.take() else {
@@ -735,7 +735,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.gate = issuer;
         self.loan = loan;
         self.receipt = Some(receipt);
-        self.channel = Channel::from_wifi_channel(channel);
+        self.channel = Channel::from_ghz2_4_channel(channel);
         self.rx_out.set(0);
         self.serials = Serials::new(generation);
         self.expired = 0;
@@ -2563,7 +2563,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             // What the device began of the start stops first.
             return self.roll_back_start(cx, StartFailure::Deadline, now);
         }
-        let Some(wifi) = channel.channel().wifi_channel() else {
+        let Some(wifi) = channel.channel().ghz2_4_channel() else {
             self.state = PortState::Stopped;
             return Poll::Ready(Err(StartRefused::Retune(Fault::ChannelUnsupported)));
         };

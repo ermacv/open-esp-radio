@@ -17,7 +17,7 @@
 use core::num::NonZeroU32;
 
 use oer_portable_memory::QueueNotify;
-use oer_protocols_ieee80211_contracts_port::TxEstimate;
+use oer_protocols_ieee80211_contracts_port::{PhyRate, TxEnd, TxEstimate};
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeCandidate;
 use oer_protocols_network_port::{LinkSnapshot, LinkState, Ready};
 
@@ -32,20 +32,34 @@ pub type StationKey = u64;
 /// path the backend executes, which an egress policy charges where the cost
 /// is not known.
 pub trait FrameCost {
-    fn least(&self, frame_octets: usize) -> NonZeroU32;
+    /// The frame's least useful grant at the full rate `rate`: the one its
+    /// association's last settled frame went at, or before one did, the
+    /// association's slowest data rate. [`StationAir`] asks only with a
+    /// rate it resolved for a live association.
+    fn least(&self, frame_octets: usize, rate: PhyRate) -> NonZeroU32;
     fn ceiling(&self, frame_octets: usize) -> NonZeroU32;
 }
 
 /// The station's air over `link`, the network side's view of its link,
-/// with `C` charging a frame of unknown cost.
+/// with `C` charging a frame of unknown cost. It keeps the full rate the
+/// association's last settled frame went at, and asks each frame's least
+/// grant at it: until a frame of the association that runs now reports one,
+/// at that association's slowest data rate, which the link publishes with
+/// its epoch.
 pub struct StationAir<'a, N, C> {
     link: &'a NetworkLink<N>,
     ceiling: C,
+    /// The association and its last reported rate.
+    last: Option<(StationKey, PhyRate)>,
 }
 
 impl<'a, N, C> StationAir<'a, N, C> {
     pub const fn new(link: &'a NetworkLink<N>, ceiling: C) -> Self {
-        Self { link, ceiling }
+        Self {
+            link,
+            ceiling,
+            last: None,
+        }
     }
 }
 
@@ -53,28 +67,48 @@ impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
     type Key = StationKey;
 
     /// While the link is up, its association's account, with the frame's
-    /// least useful grant.
+    /// least useful grant at the rate resolved for it. A live link carries
+    /// its association's slowest rate, which the lifecycle publishes with
+    /// the association; a link up with no rate resolved offers no account,
+    /// so no frame is charged at a rate the association was not given.
     fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<StationKey>> {
-        let link = self.link.snapshot();
+        let (link, floor) = self.link.read();
         if link.state != LinkState::Up {
             return None;
         }
+        // Another association's rate says nothing of this one's air; the
+        // association's own slowest rate stands until it reports one.
+        let rate = self
+            .last
+            .filter(|(key, _)| *key == link.epoch)
+            .map(|(_, rate)| rate)
+            .or(floor)?;
         Some(AirtimeCandidate {
             key: link.epoch,
-            minimum_micros: self.ceiling.least(ready.length),
+            minimum_micros: self.ceiling.least(ready.length, rate),
         })
     }
 
     fn ceiling(&self, ready: &Ready) -> NonZeroU32 {
         self.ceiling.ceiling(ready.length)
     }
+
+    /// A report keeps its frame's own epoch, and only one of the
+    /// association that runs now counts: a late completion of an earlier
+    /// association never changes the current one's rate.
+    fn reported(&mut self, key: StationKey, rate: PhyRate) {
+        if key == self.link.snapshot().epoch {
+            self.last = Some((key, rate));
+        }
+    }
 }
 
 /// How a frame the station took ended, for its settlement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum End {
-    /// The station gave its buffer back; the cost its transmissions had.
-    Returned(TxEstimate),
+    /// The station gave its buffer back; the cost its transmissions had and
+    /// the rate of the last on the air.
+    Returned(TxEnd),
     /// Lost with its buffer when the station took it: nothing comes back.
     Lost,
 }
@@ -109,16 +143,16 @@ impl<B, T, const N: usize> Completions<B, T, N> {
         }
     }
 
-    /// The station gave `buffer` back, its frame `ticket` ended at `cost`.
+    /// The station gave `buffer` back, its frame `ticket` ended so (`end`).
     ///
     /// # Errors
     /// The buffer, when `N` ends wait already: more buffers than this holds
     /// were taken, which the composition's sizes exclude.
-    pub fn returned(&mut self, buffer: B, ticket: T, cost: TxEstimate) -> Result<(), B> {
+    pub fn returned(&mut self, buffer: B, ticket: T, end: TxEnd) -> Result<(), B> {
         let completed = Completed {
             buffer: Some(buffer),
             ticket,
-            end: End::Returned(cost),
+            end: End::Returned(end),
         };
         match self.ended.push_back(completed) {
             Ok(()) => Ok(()),
@@ -177,9 +211,10 @@ impl<B, T, const N: usize> Completions<B, T, N> {
             end,
         } = self.ended.pop_front()?;
         let notice = match end {
-            End::Returned(cost) => RadioNotice::Ended(Exchange {
+            End::Returned(end) => RadioNotice::Ended(Exchange {
                 ticket,
-                charged: charged(cost),
+                charged: charged(end.cost),
+                rate: end.rate,
             }),
             End::Lost => RadioNotice::Lost(ticket),
         };

@@ -33,8 +33,8 @@ use std::rc::Rc;
 use oer_tools_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
 use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use oer_tools_image_stack::{
-    Analysis, Bound, DebugMetadata, Dwarf, Function, Reason, Resolutions, Summary, analyze,
-    image_resolutions, parse_summaries, read_debug, stack_sizes,
+    Analysis, Bound, Dwarf, Function, Reason, Resolutions, Summary, analyze, image_resolutions,
+    location_queries, parse_summaries, read_debug, read_locations, stack_sizes,
 };
 
 use crate::stack::budget::{Budget, LIMITS};
@@ -263,8 +263,7 @@ impl Image {
         // What the image keeps of the analysis, admitted while it counts
         // against the budget.
         let mut keep = Ledger::new(&memory, &mut control)?;
-        let (dwarf, types) =
-            read_debug(&elf, DebugMetadata::TypedLocations, &mut keep, &mut control)?;
+        let (dwarf, mut types) = read_debug(&elf, &mut keep, &mut control)?;
         let mut preliminary = BTreeMap::new();
         let traps = if let Some(contract) = &contract {
             let interrupts = &contract.interrupts;
@@ -335,6 +334,13 @@ impl Image {
                 let name = keep.string(&oer_tools_analysis_elf::demangle(name), &mut control)?;
                 keep.insert(&mut names, function.address, name, &mut control)?;
             }
+        }
+        // The typed locations the resolutions can ask for, which only the
+        // instruction pass names.
+        {
+            let mut scratch = Ledger::new(&memory, &mut control)?;
+            let queries = location_queries(&facts, &analysis, &mut scratch, &mut control)?;
+            read_locations(&mut types, &queries, &mut keep, &mut control)?;
         }
         let resolutions =
             image_resolutions(&facts, &analysis, &dwarf, &types, &mut keep, &mut control)?;

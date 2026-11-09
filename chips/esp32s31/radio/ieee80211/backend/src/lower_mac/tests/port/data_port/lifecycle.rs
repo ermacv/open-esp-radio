@@ -126,7 +126,7 @@ impl Returned {
 impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn poll_start_on(
         &mut self,
-        wifi: oer_protocols_ieee80211_wire::channel::WifiChannel,
+        wifi: oer_protocols_ieee80211_wire::channel::Ghz2_4Channel,
     ) -> Poll<Result<(), StartRefused<Fault>>> {
         let waker = self.waker();
         let now = self.now();
@@ -1383,7 +1383,7 @@ fn a_port_that_transmitted_reinstalls_with_every_owner_home_and_transmits_again(
 #[test]
 fn the_last_started_channel_survives_a_stop_and_reinstall() {
     with_installations(|mut fixture, installations| {
-        let tuned = Channel::from_wifi_channel(channel(11));
+        let tuned = Channel::from_ghz2_4_channel(channel(11));
         assert_eq!(fixture.poll_start_on(channel(11)), Poll::Ready(Ok(())));
         assert_eq!(DataPort::channel(&fixture.port), tuned);
         fixture.stop();

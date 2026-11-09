@@ -262,7 +262,7 @@ pub trait Device<const B: usize>: Sized + 'static {
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
-        channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
+        channel: oer_protocols_ieee80211_wire::channel::Ghz2_4Channel,
     ) -> Poll<Result<(), Fault>>;
     fn poll_stop(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>>;
     /// The port's facts: take the interrupt facts but the receive ones

@@ -578,6 +578,32 @@ fn a_parked_data_frame_waits_behind_released_frames_and_management_passes() {
 }
 
 #[test]
+fn the_agreements_hold_frames_from_a_retained_mpdu_until_its_release_is_taken() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    assert!(!view.holds_frames());
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
+        .unwrap();
+    let reply = view.next_reply().unwrap();
+    view.sent(reply.place);
+    // 101 waits in the window for the hole at 100.
+    assert!(matches!(
+        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    assert!(view.holds_frames() && !view.has_ready());
+    // 100 releases both; they are held until taken.
+    assert!(matches!(
+        view.receive(now(2), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    assert!(view.holds_frames());
+    while view.pop_ready().is_some() {}
+    assert!(!view.holds_frames());
+}
+
+#[test]
 fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
     let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
     let mut view = storage.view();

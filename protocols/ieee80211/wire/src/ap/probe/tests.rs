@@ -66,9 +66,9 @@ fn rejects_foreign_addresses_and_malformed_or_ambiguous_requests() {
 fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
     use crate::{
         beacon::write_ht_beacon,
-        channel::WifiChannel,
+        channel::Ghz2_4Channel,
         security::{BssSecurityElements, test_elements},
-        ssid::WifiSsid,
+        ssid::Ssid,
     };
     for security in [
         BssSecurityElements::OPEN,
@@ -80,8 +80,8 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
             &TEST_ADVERTISEMENT,
             &mut beacon,
             AP,
-            &WifiSsid::new(b"ap").unwrap(),
-            crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(13).unwrap()),
+            &Ssid::new(b"ap").unwrap(),
+            crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(13).unwrap()),
             100,
             2,
             seq(0),
@@ -123,15 +123,15 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
 
 fn probe_parsers_never_panic(count: usize) {
     use crate::{
-        beacon::write_ht_beacon, channel::WifiChannel, security::test_elements, ssid::WifiSsid,
+        beacon::write_ht_beacon, channel::Ghz2_4Channel, security::test_elements, ssid::Ssid,
     };
     let mut beacon = [0; 256];
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut beacon,
         AP,
-        &WifiSsid::new(b"ap").unwrap(),
-        crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(13).unwrap()),
+        &Ssid::new(b"ap").unwrap(),
+        crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(13).unwrap()),
         100,
         2,
         seq(0),

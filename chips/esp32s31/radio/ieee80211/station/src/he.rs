@@ -44,7 +44,7 @@ pub(crate) const HE20_HT: [u8; 28] = ht_capability_ie(
     ),
     match Channel::ghz2_4(
         1,
-        oer_protocols_ieee80211_wire::channel::WifiChannelWidth::Mhz20,
+        oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
     ) {
         Ok(channel) => channel,
         Err(_) => panic!("HE20 HT advertisement geometry"),

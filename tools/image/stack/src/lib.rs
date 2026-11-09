@@ -54,10 +54,11 @@ use std::fmt;
 pub use cha::{
     AddressUseAudit, CallbackLoadField, FunctionPointerAudit, FunctionPointerType, PcRelativeUse,
     StorageEvidence, TypeFacts, TypedStore, UnknownUse, audit_function_addresses,
-    function_pointer_resolutions, typed_function_pointer_resolutions,
+    function_pointer_resolutions, location_queries, typed_function_pointer_resolutions,
 };
 pub use contexts::{HartStack, LevelStack, Stacks, Vector, exception_copies, interrupt_stacks};
-pub use dwarf::{DebugMetadata, Dwarf, Marked, Returned, read as read_debug};
+pub use dwarf::locations::LocationQueries;
+pub use dwarf::{Dwarf, Marked, Returned, read as read_debug, read_locations};
 use image::ReadOnlyTables;
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};

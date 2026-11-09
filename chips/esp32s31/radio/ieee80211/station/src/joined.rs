@@ -99,7 +99,7 @@ use oer_protocols_ieee80211_runtime::{
 };
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, IndividualAddress, OwnAddress},
-    channel::{WifiChannel, WifiChannelWidth},
+    channel::Ghz2_4Channel,
     security::LinkProtection,
     station::StaDataHeaderTemplate,
 };
@@ -431,11 +431,7 @@ impl TxSupply<WrittenFrame> for Supply {
                 TxPublishRefused::Lost => TxRefused::Lost,
             })
     }
-    fn give(
-        &mut self,
-        memory: TxMemory,
-        _cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
-    ) {
+    fn give(&mut self, memory: TxMemory, _end: oer_protocols_ieee80211_contracts_port::TxEnd) {
         self.free
             .ended
             .borrow_mut()
@@ -774,8 +770,8 @@ struct Bench<'b, 's, T: 'static> {
     start_took: Duration,
 }
 
-fn channel() -> WifiChannel {
-    WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap()
+fn channel() -> Ghz2_4Channel {
+    Ghz2_4Channel::new(6, ChannelWidth::Mhz20).unwrap()
 }
 
 fn domain() -> RegulatoryDomain {
@@ -1297,10 +1293,16 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
         assert!(self.link.try_send(link).is_ok(), "the mailbox is empty");
         self.send(ToActor::Connect);
         self.send(ToActor::Release);
-        self.runner.publish_link_for_test(LinkSnapshot {
-            state: LinkState::Up,
-            epoch: 1,
-        });
+        // The test's association admits DSSS 1 Mb/s.
+        self.runner.publish_link_for_test(
+            LinkSnapshot {
+                state: LinkState::Up,
+                epoch: 1,
+            },
+            Some(oer_protocols_ieee80211_wire::phy::PhyRate::Legacy(
+                oer_protocols_ieee80211_wire::phy::LegacyRate::Dsss1M,
+            )),
+        );
         self.settle();
     }
 

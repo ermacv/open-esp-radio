@@ -87,6 +87,8 @@ oer_protocols_hil_protocol::messages! {
     topic NetworkCollected = "load/network-report";
     endpoint CollectAddba = "load/addba" => AddbaCollected;
     topic AddbaCollected = "load/addba-report";
+    endpoint CollectProfile = "load/profile" => ProfileCollected;
+    topic ProfileCollected = "load/profile-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -434,9 +436,11 @@ pub struct StationRx {
     pub dropped_security: u32,
     pub dropped_draining: u32,
     /// MSDUs not delivered: too long, the full queue to the application,
+    /// pressure on the station's handoff (no lend past the pressure bound),
     /// no network.
     pub refused_too_long: u32,
     pub refused_queue_full: u32,
+    pub refused_pressure: u32,
     pub refused_no_network: u32,
     /// MSDUs copied instead of lent: of a frame with several, or whose
     /// buffer the backend kept.
@@ -531,6 +535,7 @@ impl StationRx {
             refused_queue_full: end
                 .refused_queue_full
                 .wrapping_sub(start.refused_queue_full),
+            refused_pressure: end.refused_pressure.wrapping_sub(start.refused_pressure),
             refused_no_network: end
                 .refused_no_network
                 .wrapping_sub(start.refused_no_network),
@@ -1170,6 +1175,139 @@ impl NetworkTurns {
     }
 }
 
+/// One page of what the network core's turns and the station's return
+/// bursts did within run `run`'s window ([`ProfileCollected`]): page 0 the
+/// [`TurnMoments`], 1 the [`TurnCells`], 2 the [`TurnSpread`]. Only a trace
+/// image counts them; others report `available: false` and zeros.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectProfile {
+    pub run: u32,
+    pub page: u8,
+}
+
+/// The pages of a run's profile.
+pub const PROFILE_PAGES: u8 = 3;
+
+/// The answer to [`CollectProfile`]: its page, or a page past
+/// [`PROFILE_PAGES`] refused as `InvalidParameters`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum ProfileCollected {
+    Moments(TurnMoments),
+    Cells(TurnCells),
+    Spread(TurnSpread),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// The variables of [`TurnMoments::moments`]: one, the frames a turn took
+/// in, the frames its port accepted, the notices it handed the policy, the
+/// requests it took from the sockets' lanes, and its active cycles on the
+/// network's hart.
+pub const PROFILE_VARIABLES: usize = 6;
+/// Every product of two of the variables, each pair once.
+pub const PROFILE_MOMENTS: usize = PROFILE_VARIABLES * (PROFILE_VARIABLES + 1) / 2;
+/// The gaps between turns of [`TurnMoments::gaps`]: after a yield, after a
+/// wait that found something, after a wait that found nothing.
+pub const PROFILE_GAPS: usize = 3;
+
+/// The sums of a least-squares fit of each turn's active cycles to its
+/// work, within one window. A turn's cycles run from its beginning to its
+/// end on the network's hart's cycle counter, interrupts and the trace's
+/// own counting of its items included.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TurnMoments {
+    /// Whether the image counts them.
+    pub available: bool,
+    /// The sums over the turns of `v[i] * v[j]`, `i <= j`, of the
+    /// variables `v` ([`PROFILE_VARIABLES`]), row by row: `[n, Σf, Σa, Σn,
+    /// Σr, Σc, Σf², Σfa, …, Σc²]`.
+    pub moments: [u64; PROFILE_MOMENTS],
+    /// Turns with none of the four items: count, cycles, cycles squared.
+    pub empty: [u64; 3],
+    /// Turns a wait followed, which moved nothing: count and cycles.
+    pub idle: [u64; 2],
+    /// The gaps from a turn's end to the next one's beginning
+    /// ([`PROFILE_GAPS`]): count and cycles. The gap after a wait that found
+    /// nothing holds the executor's other tasks and its sleep.
+    pub gaps: [[u64; 2]; PROFILE_GAPS],
+}
+
+/// Turns of one count of one kind of work and none of the others: how many,
+/// their cycles, and their requests (a notice cell: their notices).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TurnCell {
+    pub turns: u32,
+    pub cycles: u64,
+    pub items: u32,
+}
+
+/// The cells of [`TurnCells::receive_only`] and [`TurnCells::transmit_only`]:
+/// one to seven items, and eight or more.
+pub const PROFILE_ITEM_CELLS: usize = 8;
+/// The cells of [`TurnCells::notice_only`]: 1, 2, 3 to 4, 5 to 8, 9 to 16,
+/// 17 to 32, and 33 or more notices.
+pub const PROFILE_NOTICE_CELLS: usize = 7;
+
+/// Within one window, the turns that did one kind of work only, by its
+/// count: a check of the fit's linearity in each kind.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TurnCells {
+    /// Turns that took in frames, and had no frame accepted and no notice.
+    pub receive_only: [TurnCell; PROFILE_ITEM_CELLS],
+    /// Turns whose port accepted frames, which took in none and had no
+    /// notice.
+    pub transmit_only: [TurnCell; PROFILE_ITEM_CELLS],
+    /// Turns that handed on notices, which took in no frame and had none
+    /// accepted.
+    pub notice_only: [TurnCell; PROFILE_NOTICE_CELLS],
+}
+
+/// The bins of [`TurnSpread::cycles_by_log2`]: below 2^9 cycles, then one
+/// per power of two, the last 2^23 and more.
+pub const PROFILE_CYCLE_BINS: usize = 16;
+/// The bins of [`TurnSpread::notices_by_turn`]: 0, then the notice cells'.
+pub const PROFILE_NOTICE_BINS: usize = PROFILE_NOTICE_CELLS + 1;
+/// The bins of [`TurnSpread::frames_by_turn`]: 0 to 7 frames, and 8 or more.
+pub const PROFILE_FRAME_BINS: usize = 9;
+/// The bins of [`ReturnBursts::queued_by_burst`]: 1, 2, 3 to 4, 5 to 8, 9
+/// to 12, 13 to 16, and 17 or more memories.
+pub const RETURN_BURST_BINS: usize = 7;
+/// The bins of a return queue's occupancy: 0, 1 to 4, 5 to 8, 9 to 12, 13
+/// to 15, and 16 or more.
+pub const RETURN_OCCUPANCY_BINS: usize = 6;
+
+/// Within one window, the turns by their cycles, their notices and their
+/// frames, the publications in the turns that settled, and the station's
+/// return bursts.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TurnSpread {
+    pub cycles_by_log2: [u32; PROFILE_CYCLE_BINS],
+    pub notices_by_turn: [u32; PROFILE_NOTICE_BINS],
+    pub frames_by_turn: [u32; PROFILE_FRAME_BINS],
+    /// Turns that handed on a notice, those of them whose port accepted a
+    /// frame, and the frames accepted in them.
+    pub settling: [u32; 3],
+    pub returns: ReturnBursts,
+}
+
+/// The station's bursts of the network's memory back through its return
+/// queue within one window, each ended by one flush.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct ReturnBursts {
+    /// Bursts, which are the queue's flushes, and the memories they queued.
+    pub bursts: u32,
+    pub queued: u32,
+    pub queued_by_burst: [u32; RETURN_BURST_BINS],
+    /// The queue's occupancy before and after each burst.
+    pub before_by_burst: [u32; RETURN_OCCUPANCY_BINS],
+    pub after_by_burst: [u32; RETURN_OCCUPANCY_BINS],
+    /// Bursts after which memory stayed with the actor for want of room,
+    /// and those memories.
+    pub held_bursts: u32,
+    pub held: u32,
+}
+
 /// The L1 cache's access counts within one window, by bus: the image
 /// clears each bus's counts at the window's start and reads them at its
 /// end. Instruction bus 0 carries hart 0's fetches and instruction bus 1
@@ -1633,6 +1771,7 @@ oer_protocols_hil_agent::service! {
         CollectStallMac(CollectStallMac) => stall_mac,
         CollectNetwork(CollectNetwork) => network,
         CollectAddba(CollectAddba) => addba,
+        CollectProfile(CollectProfile) => profile,
     }
 }
 

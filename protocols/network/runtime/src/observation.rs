@@ -66,10 +66,12 @@ pub struct TurnEnd {
     pub loans: usize,
 }
 
-/// What a service did, for a sink that counts. A turn reports its requests
-/// as it takes them, then [`Self::BudgetSpent`] for each socket it left
+/// What a service did, for a sink that counts. A turn reports
+/// [`Self::TurnBegan`] first, its requests as it takes them, one
+/// [`Self::FrameTaken`] for each received frame it took in, then [`Self::BudgetSpent`] for each socket it left
 /// requests in, then [`Self::IntakeFull`] when it took in its whole budget of
-/// received frames, one [`Self::Accepted`] for each frame the port took, one
+/// received frames, one [`Self::Noticed`] for each notice of the port it
+/// handed the policy, one [`Self::Accepted`] for each frame the port took, one
 /// [`Self::Published`] and last [`Self::TurnEnded`]. Between turns,
 /// [`Self::Local`] counts what a turn did with its producer, and what a
 /// wait registered it for.
@@ -77,13 +79,20 @@ pub struct TurnEnd {
 /// went on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ServiceEvent {
+    /// A turn begins.
+    TurnBegan,
     /// The turn took this request from a socket's lane.
     Took(RequestKind),
     /// A socket's lane still held requests once the turn had taken its budget
     /// of them: the next turn finds them.
     BudgetSpent,
+    /// The turn took in one received frame from the port.
+    FrameTaken,
     /// The turn took in its whole budget of received frames: more may wait.
     IntakeFull,
+    /// The turn handed the policy one notice of the port: one settlement of
+    /// one transmitted frame.
+    Noticed,
     /// The port accepted a frame.
     Accepted,
     /// How the turn's publishing ended.

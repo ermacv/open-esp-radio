@@ -15,7 +15,7 @@ use oer_protocols_ieee80211_wire::{
     ht::HtLocalCapabilities,
     security::spp::Association,
     sequence::SequenceNumber,
-    ssid::WifiSsid,
+    ssid::Ssid,
 };
 
 const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 1];
@@ -102,7 +102,7 @@ fn engine<'s>(
         beacon,
         &ADVERTISEMENT,
         AP,
-        &WifiSsid::new(SSID).unwrap(),
+        &Ssid::new(SSID).unwrap(),
         channel(),
         100,
         2,

@@ -26,6 +26,7 @@ pub mod cpu;
 pub mod link;
 pub mod network;
 pub mod parts;
+pub mod profile;
 pub mod tracking;
 
 /// A reading ran while the counter's writer wrote: it holds no state the

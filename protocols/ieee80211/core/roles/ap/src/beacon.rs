@@ -34,7 +34,7 @@ use oer_protocols_ieee80211_wire::{
     },
     channel::Channel,
     protection::ApBssProtection,
-    ssid::WifiSsid,
+    ssid::Ssid,
 };
 
 use crate::{security_policy::ApSecurityPolicy, tbtt::next_tbtt};
@@ -115,7 +115,7 @@ impl<'storage> ApBeacon<'storage> {
         storage: &'storage mut [u8; AP_BEACON_CAPACITY],
         advertisement: &Advertisement,
         access_point: [u8; 6],
-        ssid: &WifiSsid,
+        ssid: &Ssid,
         channel: Channel,
         beacon_interval_tu: u16,
         dtim_period: u8,
@@ -154,7 +154,7 @@ impl<'storage> ApBeacon<'storage> {
         &mut self,
         advertisement: &Advertisement,
         access_point: [u8; 6],
-        ssid: &WifiSsid,
+        ssid: &Ssid,
         channel: Channel,
         beacon_interval_tu: u16,
         dtim_period: u8,

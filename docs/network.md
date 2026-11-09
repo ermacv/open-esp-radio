@@ -150,6 +150,23 @@ only after the policy chose it and the port gave the room.
   once: each work's least grant once, kept per account as the largest and
   with the work next in turn, which is all the scheduler and the pick read
   of it. The scan stays one pass over the backlog per frame sent.
+- **Least grant.** A frame's least useful grant is its PPDU at the full rate
+  (mode, MCS, streams, width, guard interval and LTF) of its association's
+  last settled frame: each frame's end carries its own last established rate
+  (`TxEnd`), the data plane keeping it per frame as it keeps the cost, to
+  `Completions` and the policy, which hands it to `StationAir` under the
+  frame's own association. A report of an earlier association changes
+  nothing. Until the current association reports one, the grant is the PPDU
+  at its slowest data rate, `NegotiatedLegacyRates::slowest`: where every
+  rate walk of its plans ends, supported non-basic rates included, so an
+  OFDM-only access point starts at 6 Mb/s. The link publishes that rate in
+  the same word as its epoch. `rate: None` in an end means no established
+  rate, not that nothing was sent. The cost model is asked only with
+  a resolved rate (`FrameCost::least` takes a `PhyRate`): a link up without
+  its association's rate offers no account, so no frame is charged at a rate
+  its association was not given. The S31's cost model keeps its last answers
+  keyed by the resolved rate and the length (the grant) and by the length
+  (the ceiling); a frame no PPDU at its rate carries asks the most.
 - **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
   publications that reached the air by the backend's declared model: the
   modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck
@@ -176,7 +193,14 @@ only after the policy chose it and the port gave the room.
   `Completions`; the buffer is free again only when the port hands the end
   on to the policy (`TxBuffers::take_notice`). So no more frames are
   unsettled than there are buffers, which is the policy's reservation
-  bound (`NETWORK_BUFFERS`). The port asks for returned buffers whether or
+  bound (`NETWORK_BUFFERS`). A frame's ticket is its buffer's place among
+  the network's (`TxSlot::place`, below `NETWORK_BUFFERS`), and the policy
+  keeps each frame in flight at that place: an acceptance and an end read
+  one place, and a ticket given again before its end, or past the places,
+  is the policy's fault. The station returns ended frames' memory as one
+  burst with one wake at its end; a network turn hands the policy up to 64
+  notices before it publishes, so a Block Ack's ends that reached it settle
+  in that turn and the turn publishes again. The port asks for returned buffers whether or
   not it sends, so an idle network still settles. A frame lost with its
   buffer at publication settles as `RadioNotice::Lost` at its ceiling; that
   settles the account only and returns no memory. A new link epoch ends
@@ -216,7 +240,18 @@ the settle interval.
   const check holding `CREDIT` to that count. The station marks each copy
   with its reason: by form (an A-MSDU, or an MSDU sharing its frame with the
   EAPOL), which a lending socket takes in a block of its group, or by
-  pressure (no lend room), which it drops. A buffer's loan frees when its
+  pressure (a backend that lends nothing, as when it stops), which it
+  drops. With every lendable buffer out
+  the station stops its pull and the frames wait in the ring, so a slow
+  network paces the peer through unacknowledged ring slots. Such a
+  pressure episode lasts at most the runtime's `NETWORK_LATE` from its
+  first stop, whatever the network returns meanwhile; then the station
+  walks the ring to its end, management, EAPOL and Block Ack frames are
+  served, and an MSDU the port cannot lend is refused, counted as handoff
+  pressure (`RxMsdusRefused::pressure`), its buffer back at once. This
+  removes the software barrier only: a buffer the network holds keeps its
+  descriptor, and the ring rearms in order behind it, so a loan held while
+  the ring comes round still stops reception until it returns. A buffer's loan frees when its
   memory returns, never at a stop; the station's stop confirms once the
   network stopped, without waiting for lent buffers, which rejoin whichever
   ring runs when they drop.

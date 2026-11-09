@@ -25,7 +25,7 @@ use oer_chips_esp32s31_radio_client::{
 use oer_chips_esp32s31_radio_phy::PhyTxTargetPowerProfile;
 use oer_portable_time::Duration;
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
-use oer_protocols_ieee80211_wire::channel::WifiChannel;
+use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 
 use crate::runtime::{WifiStopped, enter_esp32s31_wifi_runtime};
 use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
@@ -44,7 +44,7 @@ pub trait WifiMacPlatform: MacSlowClockCalibrationSource {
 pub struct WifiColdStartConfig {
     /// The channel the regulatory domain permits.
     pub initial_channel:
-        Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+        Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>>,
     /// The most any transmission radiates: the domain's, the board's and the
     /// chip's limits together.
     pub tx_ceiling: TxCeiling,
@@ -53,7 +53,7 @@ pub struct WifiColdStartConfig {
 impl WifiColdStartConfig {
     pub const fn new(
         initial_channel: Permitted<
-            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>,
         >,
         tx_ceiling: TxCeiling,
     ) -> Self {
@@ -129,7 +129,7 @@ impl RadioStartConfig {
 /// What the bring-up observed, kept with the stopped owner.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WifiStartReport {
-    pub initial_channel: WifiChannel,
+    pub initial_channel: Ghz2_4Channel,
     /// The RF epoch Wi-Fi joined.
     pub epoch: RfEpoch,
     /// How the join prepared the PHY domain.

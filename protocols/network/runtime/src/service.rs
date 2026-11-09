@@ -31,6 +31,12 @@ const TURN_COMMANDS: usize = 4;
 /// Frames one turn takes in, and publishes; offers a producer is asked for in
 /// one turn, and its declared works open at once.
 pub(crate) const TURN_FRAMES: usize = 8;
+/// Notices one turn hands the policy before it publishes. A turn that finds
+/// no more within them publishes, so a Block Ack's ends, fewer than this
+/// (the S31 station's aggregates hold 32 MPDUs), settle together and the same
+/// turn publishes again. A notice is one settlement of one frame, so this
+/// bounds the turn's work as [`TURN_FRAMES`] does.
+pub(crate) const TURN_NOTICES: usize = 64;
 
 /// The egress with no policy: the first ready work goes, no account is kept and
 /// a completion says nothing.
@@ -719,6 +725,7 @@ impl<
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> bool {
         let mut moved = false;
+        report(events, || ServiceEvent::TurnBegan);
         self.local.turn_begins();
         self.owner.observe_link(now);
         self.owner.tick(now, events);
@@ -737,16 +744,18 @@ impl<
                 Intake::Read => {}
                 Intake::Lent(datagram) => self.lend(datagram, events),
             }
+            report(events, || ServiceEvent::FrameTaken);
             moved = true;
         }
         seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
         let mut told_all = false;
-        for _ in 0..TURN_FRAMES {
+        for _ in 0..TURN_NOTICES {
             let Some(notice) = self.owner.take_notice() else {
                 told_all = true;
                 break;
             };
             moved = true;
+            report(events, || ServiceEvent::Noticed);
             let answer = self.egress.notice(notice);
             self.note(answer);
             if self.fault.is_some() {

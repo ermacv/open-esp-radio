@@ -559,6 +559,66 @@ impl core::fmt::Display for ActorSpan {
     }
 }
 
+/// One burst of the network's memory the datapath actor gave back through
+/// the return queue, ended by one flush: the memories it `queued`, the
+/// queue's occupancy `before` and `after` it, and the memories `held` with
+/// the actor for want of room. Counts above 255 read 255.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ActorReturned {
+    pub queued: u8,
+    pub before: u8,
+    pub after: u8,
+    pub held: u8,
+}
+
+impl ActorReturned {
+    /// The event of `burst`.
+    pub fn of(burst: oer_protocols_ieee80211_runtime::datapath::ReturnBurst) -> Self {
+        let byte = |count: usize| u8::try_from(count).unwrap_or(u8::MAX);
+        Self {
+            queued: byte(burst.queued),
+            before: byte(burst.before),
+            after: byte(burst.after),
+            held: byte(burst.held),
+        }
+    }
+}
+
+impl Event for ActorReturned {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 35);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [
+            u32::from_le_bytes([self.queued, self.before, self.after, self.held]),
+            0,
+        ]
+    }
+
+    fn decode([word, rest]: [u32; 2]) -> Option<Self> {
+        if rest != 0 {
+            return None;
+        }
+        let [queued, before, after, held] = word.to_le_bytes();
+        Some(Self {
+            queued,
+            before,
+            after,
+            held,
+        })
+    }
+}
+
+impl core::fmt::Display for ActorReturned {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "station.returned queued={} before={} after={} held={}",
+            self.queued, self.before, self.after, self.held
+        )
+    }
+}
+
 /// What the station service decided about received frames: the kind of
 /// one decision, which [`StationRx`] counts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -608,10 +668,13 @@ pub enum StationRxKind {
     AgreementStopped,
     /// A connected RSN input the station dropped.
     RsnInputDropped,
+    /// MSDUs not delivered for pressure on the station's handoff: the
+    /// network held all the port may lend past the pressure bound.
+    RefusedPressure,
 }
 
 impl StationRxKind {
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 32] = [
         Self::DroppedHeader,
         Self::DroppedFrameKind,
         Self::DroppedAddress,
@@ -643,6 +706,7 @@ impl StationRxKind {
         Self::AgreementStarted,
         Self::AgreementStopped,
         Self::RsnInputDropped,
+        Self::RefusedPressure,
     ];
 
     fn from_raw(raw: u32) -> Option<Self> {
@@ -933,6 +997,7 @@ fn service_rx(
         ServiceEvent::RxMsdusRefused(refused) => {
             emit(StationRxKind::RefusedTooLong, refused.too_long.into());
             emit(StationRxKind::RefusedQueueFull, refused.queue_full.into());
+            emit(StationRxKind::RefusedPressure, refused.pressure.into());
             emit(StationRxKind::RefusedNoNetwork, refused.no_network.into());
         }
         ServiceEvent::RxMsdusCopied(copied) => {
@@ -1230,6 +1295,7 @@ mod tests {
             StationTxHoles::KIND,
             StationAddba::KIND,
             TxRateSelected::KIND,
+            ActorReturned::KIND,
         ]
         .map(Kind::raw);
         for (at, kind) in kinds.iter().enumerate() {
@@ -1256,6 +1322,7 @@ mod tests {
         service_rx(
             ServiceEvent::RxMsdusRefused(RxMsdusRefused {
                 queue_full: 3,
+                pressure: 2,
                 ..RxMsdusRefused::default()
             }),
             &mut emit,
@@ -1321,6 +1388,7 @@ mod tests {
                 (DroppedReplay, 1),
                 (RefusedTooLong, 0),
                 (RefusedQueueFull, 3),
+                (RefusedPressure, 2),
                 (RefusedNoNetwork, 0),
                 (CopiedAggregated, 2),
                 (CopiedKept, 1),
@@ -1437,6 +1505,28 @@ mod tests {
         round_trip(TxHardwareTimeout);
         round_trip(TxQueueCollision);
         round_trip(ControlDelivered);
+        round_trip(ActorReturned {
+            queued: 16,
+            before: 0,
+            after: 16,
+            held: 255,
+        });
+        assert_eq!(ActorReturned::decode([0, 1]), None);
+        assert_eq!(
+            ActorReturned::of(oer_protocols_ieee80211_runtime::datapath::ReturnBurst {
+                queued: 3,
+                before: 2,
+                after: 5,
+                held: 300,
+            }),
+            ActorReturned {
+                queued: 3,
+                before: 2,
+                after: 5,
+                held: u8::MAX,
+            },
+            "a count past a byte reads 255"
+        );
         round_trip(TxRateSelected { kbps: None });
         round_trip(TxRateSelected { kbps: Some(65_000) });
         assert_eq!(StationBeacon::decode([7, 1]), None);

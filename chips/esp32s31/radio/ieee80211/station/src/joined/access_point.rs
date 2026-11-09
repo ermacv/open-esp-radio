@@ -22,7 +22,7 @@ use oer_protocols_ieee80211_runtime::access_point::{
 };
 use oer_protocols_ieee80211_wire::{
     beacon::AP_BEACON_CAPACITY, phy::LegacyRate, security::spp::Interface,
-    sequence::SequenceNumber, ssid::WifiSsid,
+    sequence::SequenceNumber, ssid::Ssid,
 };
 
 struct Nonces;
@@ -181,7 +181,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             leak([0; AP_BEACON_CAPACITY]),
             &ADVERTISEMENT,
             ACCESS_POINT,
-            &WifiSsid::new(b"s31-ap").unwrap(),
+            &Ssid::new(b"s31-ap").unwrap(),
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
             100,
             1,

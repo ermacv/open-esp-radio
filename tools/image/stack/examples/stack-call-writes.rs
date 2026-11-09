@@ -11,7 +11,9 @@ use oer_tools_analysis_riscv_lift::StructuralRiscvDecoder;
 use oer_tools_analysis_riscv_model::*;
 use oer_tools_analysis_riscv_program::ProgramView;
 use oer_tools_analysis_riscv_program::facts::ImageFacts;
-use oer_tools_image_stack::{DebugMetadata, analyze, parse_summaries, read_debug};
+use oer_tools_image_stack::{
+    analyze, location_queries, parse_summaries, read_debug, read_locations,
+};
 use std::{collections::BTreeSet, rc::Rc};
 
 #[derive(Debug, Parser)]
@@ -53,19 +55,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
     let rom = ImageFacts::new(&rom, &[], &memory, &mut control)?;
     let mut keep = Ledger::new(&memory, &mut control)?;
-    let (dwarf, types) = read_debug(
-        &bytes,
-        if cli.checked_stack_context {
-            DebugMetadata::TypedLocations
-        } else {
-            DebugMetadata::Standard
-        },
-        &mut keep,
-        &mut control,
-    )?;
+    let (dwarf, mut types) = read_debug(&bytes, &mut keep, &mut control)?;
     // The existing joint stack analysis validates companion identities and
     // reviewed frame/call contracts. These are not memory-effect contracts.
     let analysis = analyze(&image, &[&rom], &summaries, &dwarf, &mut keep, &mut control)?;
+    if cli.checked_stack_context {
+        let queries = location_queries(&image, &analysis, &mut keep, &mut control)?;
+        read_locations(&mut types, &queries, &mut keep, &mut control)?;
+    }
     let caller = image
         .functions()
         .iter()

@@ -6,8 +6,9 @@
 //! portable boundary.
 //!
 //! [`Channel`] names a channel in either band a radio port serves;
-//! [`WifiChannel`] is the 2.4 GHz channel the station and access-point
-//! owners configure today, and converts into it without loss.
+//! [`Ghz2_4Channel`] is the 2.4 GHz channel the station and access-point
+//! owners configure today, and converts into it without loss. Both use one
+//! [`ChannelWidth`].
 
 use core::fmt;
 
@@ -34,9 +35,6 @@ impl ChannelWidth {
     }
 }
 
-/// The width of a 2.4 GHz [`WifiChannel`]: the same values as [`ChannelWidth`].
-pub type WifiChannelWidth = ChannelWidth;
-
 /// Frequency band of a channel.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Band {
@@ -48,7 +46,7 @@ pub enum Band {
 
 /// Validated IEEE 802.11 channel in the 2.4 GHz or 5 GHz band.
 ///
-/// 2.4 GHz channels follow [`WifiChannel`]: channels 1 through 14, channel 14
+/// 2.4 GHz channels follow [`Ghz2_4Channel`]: channels 1 through 14, channel 14
 /// at 20 MHz only and 40 MHz only where the secondary channel stays in 1
 /// through 13. 5 GHz channels are those of the global operating classes of
 /// IEEE 802.11-2020 Table E-4: 20 MHz channels 36-64 and 100-144 in steps
@@ -98,14 +96,14 @@ impl Channel {
     }
 
     /// The channel of a validated 2.4 GHz definition.
-    pub const fn from_wifi_channel(channel: WifiChannel) -> Self {
+    pub const fn from_ghz2_4_channel(channel: Ghz2_4Channel) -> Self {
         Self(channel.0)
     }
 
     /// The 2.4 GHz definition of this channel; `None` for a 5 GHz channel.
-    pub const fn wifi_channel(self) -> Option<WifiChannel> {
+    pub const fn ghz2_4_channel(self) -> Option<Ghz2_4Channel> {
         match self.band() {
-            Band::Ghz2_4 => Some(WifiChannel(self.0)),
+            Band::Ghz2_4 => Some(Ghz2_4Channel(self.0)),
             Band::Ghz5 => None,
         }
     }
@@ -194,7 +192,7 @@ macro_rules! channel_table {
         const _: () = {
             let mut entries = CHANNELS.as_slice();
             let mut slot = 0;
-            let mut wifi_count = 0;
+            let mut ghz2_4_count = 0;
             while let Some((entry, remaining)) = entries.split_first() {
                 if !(entry.index as usize == slot) { panic!("channel index disagrees with its table slot"); };
                 slot += 1;
@@ -204,7 +202,7 @@ macro_rules! channel_table {
                 // and secondary-channel relationship, not just a valid span.
                 let valid = match entry.band {
                     Band::Ghz2_4 => {
-                        wifi_count += 1;
+                        ghz2_4_count += 1;
                         match entry.width {
                             ChannelWidth::Mhz20 => entry.number >= 1 && entry.number <= 14,
                             ChannelWidth::Mhz40Above => entry.number >= 1 && entry.number <= 9,
@@ -249,7 +247,7 @@ macro_rules! channel_table {
             }
             // Valid, unique rows of these rule-derived cardinalities cover
             // every geometry: 32 in 2.4 GHz and 56 in 5 GHz.
-            if !(wifi_count == 14 + 9 + 9) { panic!("incomplete 2.4 GHz channel table"); };
+            if !(ghz2_4_count == 14 + 9 + 9) { panic!("incomplete 2.4 GHz channel table"); };
             if !(CHANNELS.len() == 14 + 9 + 9 + 2 * (8 + 12 + 8)) { panic!("incomplete channel table"); };
         };
     };
@@ -348,18 +346,18 @@ channel_table! {
     C5Ch177Mhz40Below = 87: Ghz5, 177, Mhz40Below;
 }
 
-impl From<WifiChannel> for Channel {
-    fn from(channel: WifiChannel) -> Self {
-        Self::from_wifi_channel(channel)
+impl From<Ghz2_4Channel> for Channel {
+    fn from(channel: Ghz2_4Channel) -> Self {
+        Self::from_ghz2_4_channel(channel)
     }
 }
 
-impl TryFrom<Channel> for WifiChannel {
+impl TryFrom<Channel> for Ghz2_4Channel {
     type Error = ChannelError;
 
     /// The 2.4 GHz definition; a 5 GHz channel has none.
     fn try_from(channel: Channel) -> Result<Self, ChannelError> {
-        channel.wifi_channel().ok_or(ChannelError::InvalidNumber {
+        channel.ghz2_4_channel().ok_or(ChannelError::InvalidNumber {
             band: channel.band(),
             number: channel.number(),
         })
@@ -401,35 +399,32 @@ impl core::error::Error for ChannelError {}
 
 /// Validated IEEE 802.11 2.4 GHz channel definition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WifiChannel(ChannelIndex);
+pub struct Ghz2_4Channel(ChannelIndex);
 
-impl WifiChannel {
+impl Ghz2_4Channel {
     /// Construct a 2.4 GHz channel supported by the current radio family.
     ///
     /// Channel 14 is admitted only at 20 MHz. Forty-megahertz definitions
     /// require the complete secondary channel to remain in channels 1..=13.
-    pub const fn new_2_4_ghz(
-        primary: u8,
-        width: WifiChannelWidth,
-    ) -> Result<Self, WifiChannelError> {
+    pub const fn new(primary: u8, width: ChannelWidth) -> Result<Self, Ghz2_4ChannelError> {
         match Channel::ghz2_4(primary, width) {
             Ok(channel) => Ok(Self(channel.0)),
             Err(ChannelError::InvalidNumber { .. }) => {
-                Err(WifiChannelError::InvalidPrimary(primary))
+                Err(Ghz2_4ChannelError::InvalidPrimary(primary))
             }
             Err(ChannelError::InvalidWidth { .. }) => {
-                Err(WifiChannelError::InvalidSecondary { primary, width })
+                Err(Ghz2_4ChannelError::InvalidSecondary { primary, width })
             }
         }
     }
 
-    pub const fn mhz20(primary: u8) -> Result<Self, WifiChannelError> {
-        Self::new_2_4_ghz(primary, WifiChannelWidth::Mhz20)
+    pub const fn mhz20(primary: u8) -> Result<Self, Ghz2_4ChannelError> {
+        Self::new(primary, ChannelWidth::Mhz20)
     }
     pub const fn primary(self) -> u8 {
         self.0.entry().number
     }
-    pub const fn width(self) -> WifiChannelWidth {
+    pub const fn width(self) -> ChannelWidth {
         self.0.entry().width
     }
     pub const fn bandwidth_mhz(self) -> u16 {
@@ -445,15 +440,12 @@ impl WifiChannel {
 
 /// Invalid portable channel geometry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WifiChannelError {
+pub enum Ghz2_4ChannelError {
     InvalidPrimary(u8),
-    InvalidSecondary {
-        primary: u8,
-        width: WifiChannelWidth,
-    },
+    InvalidSecondary { primary: u8, width: ChannelWidth },
 }
 
-impl fmt::Display for WifiChannelError {
+impl fmt::Display for Ghz2_4ChannelError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPrimary(primary) => {
@@ -467,7 +459,7 @@ impl fmt::Display for WifiChannelError {
     }
 }
 
-impl core::error::Error for WifiChannelError {}
+impl core::error::Error for Ghz2_4ChannelError {}
 
 #[cfg(test)]
 mod tests;

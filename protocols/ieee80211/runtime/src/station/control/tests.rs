@@ -1,12 +1,12 @@
 use super::*;
 use crate::station::{Outgoing, TxEnded};
-use oer_protocols_ieee80211_contracts_port::TxEstimate;
+use oer_protocols_ieee80211_contracts_port::TxEnd;
 
 /// `memory` back from an MSDU that never reached the air.
 fn ended(memory: Vec<u8>) -> TxEnded<Vec<u8>> {
     TxEnded {
         memory,
-        cost: TxEstimate::NONE,
+        end: TxEnd::NONE,
     }
 }
 use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
@@ -56,7 +56,7 @@ impl<P: oer_protocols_network_port::EthernetFrame> TxSupply<P> for Supply {
         memory[at + 14..][..view.payload.len()].copy_from_slice(view.payload);
         Ok(memory)
     }
-    fn give(&mut self, memory: Vec<u8>, _cost: TxEstimate) {
+    fn give(&mut self, memory: Vec<u8>, _end: TxEnd) {
         self.0.borrow_mut().push(memory);
     }
 }
@@ -860,7 +860,7 @@ impl<P> TxSupply<P> for Losing {
         drop(frame);
         Err(TxRefused::Lost)
     }
-    fn give(&mut self, _: Vec<u8>, _: TxEstimate) {}
+    fn give(&mut self, _: Vec<u8>, _: TxEnd) {}
 }
 
 #[test]

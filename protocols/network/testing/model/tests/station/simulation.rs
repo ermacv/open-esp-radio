@@ -74,9 +74,7 @@ use oer_protocols_ieee80211_testing_model::{
 };
 use oer_protocols_ieee80211_wire::address::{IndividualAddress, OwnAddress};
 use oer_protocols_ieee80211_wire::station::AssociationCapabilities;
-use oer_protocols_network_core::{
-    Configuration, Datagram, Group, Interface, NetworkOwner, Remote, claim,
-};
+use oer_protocols_network_core::{Configuration, Group, Interface, NetworkOwner, Remote, claim};
 use oer_protocols_network_port::{
     EthernetFrameView, FramePort, FrameSource, LinkSnapshot, Unpublished,
 };
@@ -161,7 +159,11 @@ const PEERS: usize = 4;
 struct ModelCeiling;
 
 impl FrameCost for ModelCeiling {
-    fn least(&self, _frame_octets: usize) -> core::num::NonZeroU32 {
+    fn least(
+        &self,
+        _frame_octets: usize,
+        _rate: oer_protocols_ieee80211_contracts_port::PhyRate,
+    ) -> core::num::NonZeroU32 {
         let TxEstimate::Estimated { micros } = MODEL_PUBLICATION_COST else {
             return core::num::NonZeroU32::MIN;
         };
@@ -215,7 +217,7 @@ type LendSock<T> = LendingSocket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDIT
 pub type NetDatagram<T> = Delivered<'static, 'static, T, BLOCK, LentBuffer>;
 /// The lending socket's credit: half the model's lend count, the rest kept
 /// for frames on their way.
-const LEND_CREDIT: usize = oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS / 2;
+pub const LEND_CREDIT: usize = oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS / 2;
 
 /// The application's socket, as the session's setup has it receive.
 enum AppSocket<T: 'static> {
@@ -656,9 +658,17 @@ pub struct World<'b, T: 'static> {
     network_loses_its_stop: Cell<bool>,
     /// The network service's `run` future is dropped.
     cancel_run: Signal,
+    /// The link the network side reads.
+    network_link: &'b runtime::NetworkLink<<runtime::SameHart as runtime::Notifies>::NetworkWaker>,
 }
 
 impl<'b, T: 'static> World<'b, T> {
+    /// The association's slowest data rate, as the link publishes it to the
+    /// network side.
+    pub fn link_floor(&self) -> Option<oer_protocols_ieee80211_contracts_port::PhyRate> {
+        self.network_link.read().1
+    }
+
     pub fn now(&self) -> Instant {
         self.clock.now()
     }
@@ -1219,6 +1229,7 @@ async fn run<'s, T: 'static>(
         let heard = Rc::new(Heard::default());
         *hearing.borrow_mut() = heard.clone();
         let world = World {
+            network_link: link,
             clock: clock.clone(),
             air: air.clone(),
             access_point: access_point.clone(),
@@ -1257,7 +1268,7 @@ async fn run<'s, T: 'static>(
             let network_task = async {
                 // `None`: the composition dropped the run future.
                 let cause = {
-                    let mut events = ();
+                    let mut events = observed.clone();
                     let mut run = core::pin::pin!(service.run(&*clock, &mut events));
                     match select3(
                         run.as_mut(),
@@ -1468,4 +1479,138 @@ fn execute(
         "{PASSES} passes without an end at {:?}: a task spins: {polls:?}",
         clock.now()
     );
+}
+
+/// The network side alone over the station's ends, with the queued egress:
+/// a link up without its association's rate holds the service waiting, and
+/// the rate's publication wakes it.
+#[cfg(test)]
+mod rate_wake {
+    use super::*;
+
+    #[test]
+    fn publishing_the_association_s_rate_wakes_the_waiting_service_and_its_frame_goes() {
+        struct Net;
+        let mut transmit_queue = WakingSlotQueue::<Option<Outgoing<Memory>>, TX_DEPTH>::new();
+        let mut returned_queue = WakingSlotQueue::<Option<TxEnded<Memory>>, TX_DEPTH>::new();
+        let mut receive_queue = WakingSpscQueue::<StationReceived<ModelLentRx>, RX_DEPTH>::new();
+        let mut copies_queue = WakingSpscQueue::<StationFrame, RX_COPIED_DEPTH>::new();
+        let mut command_queue = WakingSpscQueue::<ServiceCommand<ModelCaps24>, COMMANDS>::new();
+        let (stack, mut transmit_end) = transmit_queue.split(|| None);
+        let (_returned_end, returned) = returned_queue.split(|| None);
+        let (_receive_end, delivered) = receive_queue.split();
+        let (_copies_end, copies) = copies_queue.split();
+        let (application, _commands) = command_queue.split();
+        let state = State::new();
+        let (_control, runner) = Control::new(application, &state)
+            .map_err(|refused| refused.reason)
+            .expect("the control");
+        let free = FreeMemory::new(NETWORK_BUFFERS);
+        let device = Device::new(delivered, copies, &state);
+        let transmit = DeviceTransmit::new(stack, returned, Supply(free.clone()), &state);
+        let link = device.link_source();
+        let port = DevicePort::new(
+            device,
+            transmit,
+            Buffers {
+                free: free.clone(),
+                link,
+            },
+        );
+        let memory = Box::leak(Box::new([[0_u8; BLOCK]; BLOCKS]));
+        let (pool, brand) = claim::<Net, BLOCK, BLOCKS>(memory)
+            .map_err(|refused| refused.reason)
+            .expect("the network's brand");
+        let interface =
+            Interface::new(STATION, [192, 0, 2, 100], 24, None, MTU).expect("the interface");
+        let owner = NetworkOwner::new(brand, interface, pool, Held(Some(port)));
+        let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+        let airtime = Box::leak(Box::new(AirtimeStorage::new(
+            core::num::NonZeroU32::new(1_000).expect("a quantum"),
+        )));
+        let egress = AirtimeEgress::new(airtime, StationAir::new(link, ModelCeiling));
+        let mut service: NetService<'_, Net> =
+            Service::new(owner, egress, MemoryPolicy::KEEP, stopping);
+        let mut socket = service
+            .bind(
+                PORT,
+                Dscp::default(),
+                Group::shared(),
+                Box::leak(Box::new(SocketLanes::new())),
+            )
+            .map_err(|refused| refused.reason)
+            .expect("the socket opens");
+
+        // The link is up, and its association's rate is not published.
+        let up = LinkSnapshot {
+            state: oer_protocols_network_port::LinkState::Up,
+            epoch: 1,
+        };
+        runner.publish_link_for_test(up, None);
+        let clock: VirtualClock = VirtualClock::new();
+        let flag = Arc::new(Flag::default());
+        let waker = Waker::from(flag.clone());
+        let cx = &mut Context::from_waker(&waker);
+        let mut events = ();
+        let mut run = core::pin::pin!(service.run(&clock, &mut events));
+        macro_rules! poll {
+            () => {{
+                flag.0.store(false, Ordering::SeqCst);
+                assert!(run.as_mut().poll(cx).is_pending());
+            }};
+        }
+        // A datagram for a peer on the link: its first frame is ARP's.
+        let block = loop {
+            if let Some(block) = socket.try_reserve().expect("open") {
+                break block;
+            }
+            poll!();
+        };
+        let mut block = block;
+        block.fill(b"waits for the rate").expect("it fits");
+        let _observer = socket
+            .send(
+                Remote {
+                    address: [192, 0, 2, 2],
+                    port: 9,
+                },
+                block,
+            )
+            .ok()
+            .expect("the socket takes it");
+        for _ in 0..8 {
+            poll!();
+            if !flag.0.load(Ordering::SeqCst) {
+                break;
+            }
+        }
+        assert!(!flag.0.load(Ordering::SeqCst), "the service waits, unwoken");
+        assert!(transmit_end.is_empty(), "no frame goes without the rate");
+        for _ in 0..4 {
+            poll!();
+            assert!(!flag.0.load(Ordering::SeqCst), "and wakes not itself");
+        }
+        assert!(transmit_end.is_empty());
+
+        // The association's rate is published: the waiting service hears it.
+        runner.publish_link_for_test(
+            up,
+            Some(oer_protocols_ieee80211_contracts_port::PhyRate::Legacy(
+                oer_protocols_ieee80211_wire::phy::LegacyRate::Dsss1M,
+            )),
+        );
+        assert!(
+            flag.0.load(Ordering::SeqCst),
+            "the publication wakes the service"
+        );
+        poll!();
+        assert!(
+            transmit_end
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_some(),
+            "the frame goes once woken"
+        );
+    }
 }

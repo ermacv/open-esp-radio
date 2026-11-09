@@ -12,7 +12,7 @@ use std::task::{Context, Poll, Waker};
 
 use oer_portable_events::EventSink;
 use oer_protocols_ieee80211_contracts_port::ReturnedMpdu;
-use oer_protocols_ieee80211_contracts_port::TxEstimate;
+use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET;
 use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
@@ -27,6 +27,7 @@ use oer_protocols_ieee80211_testing_model::{
     MODEL_MAX_MPDU, ModelAck, ModelAnyBuffer, ModelBackend, ModelBlockAckEvidence, ModelCaps24,
     ModelLentRx, ModelNetworkMemory, ModelPort, ModelSmall, ModelTypes,
 };
+use oer_protocols_network_core::{NetEvent, NotLent};
 use oer_protocols_network_port::{EthernetFrame, EthernetFrameView, FrameLengthError, Unpublished};
 use oer_protocols_network_runtime::{PortRefusal, TxBuffers};
 use oer_protocols_network_wire::ethernet::EthernetHeader;
@@ -104,6 +105,13 @@ pub struct Counts {
     pub tokens_lost: usize,
     /// Received frames the station dropped on their way to the network.
     pub rx_frames_dropped: usize,
+    /// Received MSDUs the station's full queues to the network did not take.
+    pub rx_queue_full: usize,
+    /// Received MSDUs the station refused for pressure on its handoff: no
+    /// lend, no room for a copy.
+    pub rx_pressure: usize,
+    /// A lending socket's datagrams the network dropped for want of credit.
+    pub no_credit: usize,
 }
 
 impl Observed {
@@ -114,10 +122,26 @@ impl Observed {
 
 impl EventSink<ServiceEvent> for Observed {
     fn event(&mut self, event: ServiceEvent) {
-        if matches!(event, ServiceEvent::RxFrameDropped(_)) {
-            self.0.borrow_mut().rx_frames_dropped += 1;
+        let mut counts = self.0.borrow_mut();
+        match event {
+            ServiceEvent::RxFrameDropped(_) => counts.rx_frames_dropped += 1,
+            ServiceEvent::RxMsdusRefused(refused) => {
+                counts.rx_queue_full += usize::from(refused.queue_full);
+                counts.rx_pressure += usize::from(refused.pressure);
+            }
+            _ => {}
         }
     }
+}
+impl EventSink<NetEvent> for Observed {
+    fn event(&mut self, event: NetEvent) {
+        if event == NetEvent::NotLent(NotLent::NoCredit) {
+            self.0.borrow_mut().no_credit += 1;
+        }
+    }
+}
+impl EventSink<oer_protocols_network_runtime::ServiceEvent> for Observed {
+    fn event(&mut self, _: oer_protocols_network_runtime::ServiceEvent) {}
 }
 impl EventSink<StaEvent> for Observed {
     fn event(&mut self, event: StaEvent) {
@@ -216,32 +240,45 @@ pub struct FreeMemory {
     /// port hands the end on.
     ended: RefCell<Completions<Memory, Ticket, { super::NETWORK_BUFFERS }>>,
     total: usize,
+    /// Each buffer's address, at its place: as the S31 names a frame by
+    /// its buffer's place among the network's.
+    places: Vec<usize>,
     waker: Cell<Option<Waker>>,
     /// Frames' ends the port handed on, with a known cost and without.
     settled: Cell<(usize, usize)>,
 }
 
-/// The name of a frame in transmit memory: its buffer's address, which no
-/// other buffer has while the station holds this one.
+/// The name of a frame in transmit memory: its buffer's place, below the
+/// buffers' count, which no other frame has while the station holds this
+/// one and until its end is handed on.
 pub type Ticket = usize;
 
 /// What the port tells the egress policy.
 pub type Notice = RadioNotice<Ticket, StationKey>;
 
-fn ticket_of(memory: &Memory) -> Ticket {
-    memory.as_ptr().addr()
-}
-
 impl FreeMemory {
     /// `total` buffers of an MPDU each.
     pub fn new(total: usize) -> Rc<Self> {
+        let free: Vec<Memory> = (0..total).map(|_| Box::new([0; MODEL_MAX_MPDU])).collect();
+        let places = free.iter().map(|memory| memory.as_ptr().addr()).collect();
         Rc::new(Self {
-            free: RefCell::new((0..total).map(|_| Box::new([0; MODEL_MAX_MPDU])).collect()),
+            free: RefCell::new(free),
             ended: RefCell::new(Completions::new()),
             settled: Cell::new((0, 0)),
             total,
+            places,
             waker: Cell::new(None),
         })
+    }
+
+    /// The place of `memory`, a buffer of these; past every place for any
+    /// other, which the policy refuses.
+    fn ticket_of(&self, memory: &Memory) -> Ticket {
+        let address = memory.as_ptr().addr();
+        self.places
+            .iter()
+            .position(|place| *place == address)
+            .unwrap_or(usize::MAX)
     }
 
     /// The memory no frame holds: free, or given back with an end the port
@@ -311,10 +348,10 @@ impl TxSupply<WrittenFrame> for Supply {
     fn write(&mut self, frame: WrittenFrame) -> Result<Memory, TxRefused<WrittenFrame>> {
         Ok(frame.memory)
     }
-    fn give(&mut self, memory: Memory, cost: TxEstimate) {
-        let ticket = ticket_of(&memory);
+    fn give(&mut self, memory: Memory, end: TxEnd) {
+        let ticket = self.0.ticket_of(&memory);
         // One end a buffer, and the queue holds every buffer.
-        if let Err(memory) = self.0.ended.borrow_mut().returned(memory, ticket, cost) {
+        if let Err(memory) = self.0.ended.borrow_mut().returned(memory, ticket, end) {
             self.0.give(memory);
         }
         if let Some(waker) = self.0.waker.take() {
@@ -335,7 +372,7 @@ impl TxBuffers for Buffers<'_> {
     type Ticket = Ticket;
     type Notice = Notice;
     fn ticket(&self, frame: &WrittenFrame) -> Ticket {
-        ticket_of(&frame.memory)
+        self.free.ticket_of(&frame.memory)
     }
     fn take_notice(&mut self) -> Option<Notice> {
         let (notice, memory) = self

@@ -69,20 +69,29 @@ the analysis keeps (each function's facts, the DWARF facts and type facts
 of `read_debug`, the vtables, taken addresses, frame records and
 resolutions) through the caller's `Ledger`, which it holds while it keeps
 them, and what one function's sweep and value analysis build through a
-ledger released with it. `read_debug` reads the DWARF once, from sections
-borrowed from the ELF's bytes; its inline chains are addr2line's over the
-same bytes (`Symbolizer::shared`), whose lazily grown caches are library
-internals the working memory does not account.
+ledger released with it. `read_debug` reads the DWARF once (and
+`read_locations` once more), from sections borrowed from the ELF's bytes;
+its inline chains are addr2line's over the same bytes
+(`Symbolizer::shared`), whose lazily grown caches are library internals the
+working memory does not account.
 
-The image pipeline requests `DebugMetadata::TypedLocations` from `read_debug`:
-local/parameter locations and global storage types are collected in the same
-DIE walk. `audit_function_addresses` prepares instruction aliases once and
-audits the existing `ImageFacts::address_uses` observations. Both resolvers
-accept this same `FunctionPointerAudit`; neither loads DWARF or rebuilds an
-ELF/symbol index. `DebugMetadata::Standard` remains available to callers that
-need no local locations; their code stores stay unknown to the audit. The
-experimental local resolver requires prepared local locations. No global
-cache is used.
+`read_debug` collects global storage types but no local/parameter
+locations. After the instruction pass, the image pipeline builds the
+`location_queries` of its `Analysis` and `read_locations` walks the DIEs again,
+keeping a location only when `LocationQueries` can ask for it: its half-open
+range contains a queried PC (a target load, a witness of its base, an
+unresolved transfer, or a word store, and the instruction after it, in the
+lifetime of a register an address-use low materializes), or it is a register
+place of a complete word or the whole value and intersects the PCs of a
+function with target loads, where a Waker proof joins neighbouring entries.
+Every other location is one each consumer skips on its own conditions, so
+their answers are those of the complete collection.
+`audit_function_addresses` prepares instruction aliases once and audits the
+existing `ImageFacts::address_uses` observations. Both resolvers accept this
+same `FunctionPointerAudit`; neither loads DWARF or rebuilds an ELF/symbol
+index. Callers that read no locations leave their code stores unknown to the
+audit. The experimental local resolver requires read local locations. No
+global cache is used.
 
 Local locations preserve exact half-open PC ranges, location-list gaps and
 independent byte-aligned aggregate pieces. Missing or unsupported pieces
@@ -325,9 +334,9 @@ proof, not a guarantee for arbitrary ELF or incorrect debug information;
 it introduces no additional `Assumption`. Missing or unsupported metadata
 leaves the site unresolved.
 
-With `read_debug(..., DebugMetadata::TypedLocations, ...)`,
-`waker_resolutions` can prove a target load without a Waker method scope.
-Its `TypeFacts`, `Dwarf` and `Analysis` must describe the same ELF. It
+With locations from `read_locations`, `waker_resolutions` can prove a
+target load without a Waker method scope. Its `TypeFacts`, `Dwarf` and
+`Analysis` must describe the same ELF. It
 projects the complete four-byte `vtable` field of exactly
 `core::task::wake::Waker` or `core::task::wake::RawWaker` from the DWARF
 layout. A register piece must cover the entire byte interval from the

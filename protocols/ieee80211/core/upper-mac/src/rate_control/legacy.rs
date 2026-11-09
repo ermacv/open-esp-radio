@@ -1,6 +1,6 @@
 //! The nonempty legacy-rate set carried from association into rate selection.
 
-use oer_protocols_ieee80211_wire::phy::LegacyRate;
+use oer_protocols_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::rates::{LEGACY_RATES, LegacyRateSet, RateSelection};
 
 /// All legacy rates admitted by an association. Unlike
@@ -53,6 +53,14 @@ impl NegotiatedLegacyRates {
             .any(|candidate| candidate.kbps() == rate.kbps())
     }
 
+    /// The slowest admitted rate: where every rate walk ends, as its last
+    /// stage, DSSS 1 Mb/s, is constrained to this set. Supported non-basic
+    /// rates count as the basic ones do, so a set of 6 Mb/s supported and
+    /// 12 Mb/s basic ends at 6 Mb/s, and an OFDM-only set never at DSSS.
+    pub fn slowest(self) -> LegacyRate {
+        self.constrain(LegacyRate::Dsss1M)
+    }
+
     /// Whether a legacy association can use an ERP-OFDM schedule.
     pub fn has_ofdm(self) -> bool {
         self.rates().any(LegacyRate::is_ofdm)
@@ -71,6 +79,44 @@ impl NegotiatedLegacyRates {
                 || constrain_in(self.set, self.first, proposed),
                 |chosen| chosen.unwrap_or(proposed),
             )
+    }
+}
+
+/// A legacy rate as its place in the rate table, 1 to 12, so that one word
+/// carries it in four bits; DSSS and CCK rates at the long preamble, as an
+/// association's set admits them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LegacyRateCode(u8);
+
+impl LegacyRateCode {
+    /// The code of `rate`, by its rate; `None` for a rate of no legacy
+    /// table entry.
+    pub fn of(rate: PhyRate) -> Option<Self> {
+        let PhyRate::Legacy(rate) = rate else {
+            return None;
+        };
+        let place = LEGACY_RATES
+            .iter()
+            .position(|(_, entry)| entry.kbps() == rate.kbps())?;
+        u8::try_from(place.checked_add(1)?).ok().map(Self)
+    }
+
+    /// The code `bits` names, 1 to 12; `None` for any other.
+    pub fn from_bits(bits: u8) -> Option<Self> {
+        let place = usize::from(bits).checked_sub(1)?;
+        LEGACY_RATES.get(place).map(|_| Self(bits))
+    }
+
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    /// The rate the code names.
+    pub fn rate(self) -> Option<PhyRate> {
+        let place = usize::from(self.0).checked_sub(1)?;
+        LEGACY_RATES
+            .get(place)
+            .map(|(_, rate)| PhyRate::Legacy(*rate))
     }
 }
 
@@ -100,6 +146,36 @@ fn constrain_in(set: LegacyRateSet, first: LegacyRate, proposed: LegacyRate) -> 
 mod tests {
     use super::*;
     use oer_protocols_ieee80211_wire::phy::DsssPreamble;
+
+    /// The association's floor is its slowest data rate, non-basic rates
+    /// included and the basic bit ignored.
+    #[test]
+    fn the_slowest_rate_counts_supported_non_basic_rates() {
+        // 6 Mb/s supported, 12 Mb/s basic: 6.
+        let rates = NegotiatedLegacyRates::from_rate_elements(&[0x0c, 0x98], &[]).unwrap();
+        assert_eq!(rates.slowest(), LegacyRate::Ofdm6M);
+        // An OFDM-only access point on 2.4 GHz: never DSSS.
+        let ofdm =
+            NegotiatedLegacyRates::from_rate_elements(&[0x8c, 0x12, 0x98, 0x24], &[0x30]).unwrap();
+        assert_eq!(ofdm.slowest(), LegacyRate::Ofdm6M);
+        let basic_dsss =
+            NegotiatedLegacyRates::from_rate_elements(&[0x82, 0x84, 0x0b, 0x16], &[0x0c]).unwrap();
+        assert_eq!(basic_dsss.slowest(), LegacyRate::Dsss1M);
+        let from_two = NegotiatedLegacyRates::from_rate_elements(&[0x84, 0x0c], &[]).unwrap();
+        assert_eq!(from_two.slowest(), LegacyRate::Dsss2M(DsssPreamble::Long));
+    }
+
+    #[test]
+    fn a_legacy_rate_code_names_its_rate_and_nothing_else() {
+        for (place, (_, rate)) in LEGACY_RATES.iter().enumerate() {
+            let code = LegacyRateCode::of(PhyRate::Legacy(*rate)).unwrap();
+            assert_eq!(usize::from(code.bits()), place + 1);
+            assert_eq!(code.rate(), Some(PhyRate::Legacy(*rate)));
+            assert_eq!(LegacyRateCode::from_bits(code.bits()), Some(code));
+        }
+        assert_eq!(LegacyRateCode::from_bits(0), None);
+        assert_eq!(LegacyRateCode::from_bits(13), None);
+    }
 
     #[test]
     fn selection_keeps_supported_nonbasic_and_extended_rates() {

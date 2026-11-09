@@ -15,18 +15,18 @@
 
 use super::turn::Failed;
 use super::*;
-use oer_protocols_ieee80211_contracts_port::TxEstimate;
+use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_ieee80211_contracts_port::arena::{ArenaFormat, PublishError, TxArena};
 use oer_protocols_ieee80211_contracts_port::{PortArena, PortCompleted};
 use oer_protocols_ieee80211_core_roles_sta::data::plane::{
     AggregateRate, Intake, PpduKind, SettleError,
 };
 
-/// Keep `memory`, whose MSDU ended at `cost`, for the network; the bound
+/// Keep `memory`, whose MSDU ended so (`end`), for the network; the bound
 /// holds every memory the plane can hold, so a refusal keeps it quarantined
 /// rather than dropping it.
-fn free<M>(freed: &mut heapless::Deque<TxEnded<M>, HELD>, memory: M, cost: TxEstimate) {
-    if let Err(ended) = freed.push_back(TxEnded { memory, cost }) {
+fn free<M>(freed: &mut heapless::Deque<TxEnded<M>, HELD>, memory: M, end: TxEnd) {
+    if let Err(ended) = freed.push_back(TxEnded { memory, end }) {
         let _quarantined = core::mem::ManuallyDrop::new(ended);
     }
 }
@@ -173,7 +173,7 @@ where
                     Intake::Refused { memory, reason } => {
                         owed.refused(reason.into());
                         // Refused before any arena: it never went.
-                        free(freed, memory, TxEstimate::NONE);
+                        free(freed, memory, TxEnd::NONE);
                     }
                 }
                 // The air waits for a completion, not for the next frame.
@@ -303,7 +303,7 @@ where
                 &mut arena,
                 done,
                 *now,
-                |memory, cost| free(freed, memory, cost),
+                |memory, end| free(freed, memory, end),
                 events,
             )
         };
@@ -378,14 +378,14 @@ where
                 )
             });
             // It waited for the standby: it never went.
-            free(freed, msdu.memory, TxEstimate::NONE);
+            free(freed, msdu.memory, TxEnd::NONE);
         }
         let Some(plane) = plane.as_mut() else {
             return Ok(());
         };
         let mut arena = port.arena();
         plane
-            .stop(&mut arena, |memory, cost| free(freed, memory, cost), events)
+            .stop(&mut arena, |memory, end| free(freed, memory, end), events)
             .map(drop)
             .map_err(ActorFault::Port)
     }
@@ -404,7 +404,7 @@ where
         };
         let mut arena = port.arena();
         plane
-            .withdraw_unpublished(&mut arena, |memory, cost| free(freed, memory, cost), events)
+            .withdraw_unpublished(&mut arena, |memory, end| free(freed, memory, end), events)
             .map_err(ActorFault::Port)
     }
 
@@ -441,7 +441,7 @@ where
             });
             // The deque is empty, so it holds this one memory. The station
             // never took it: it never went.
-            free(&mut self.data.freed, memory, TxEstimate::NONE);
+            free(&mut self.data.freed, memory, TxEnd::NONE);
             self.return_freed(network);
         }
         self.queued = network.transmit.len();
@@ -457,7 +457,11 @@ where
     }
 
     /// Give the network the memory of ended frames while its queue has
-    /// room.
+    /// room, as one burst: a network waiting for its first return is told
+    /// once, after the burst's last ([`SlotSender::try_send_held_with`]),
+    /// so its turn finds all of them, a whole Block Ack's when the queue
+    /// holds it. The burst's end tells a network that armed meanwhile; one
+    /// that armed before any fill rechecks the queue at its arming.
     pub(super) fn return_freed<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -467,18 +471,41 @@ where
         &mut self,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) {
+        let mut burst = false;
+        // Only an observing port reads the queue for its burst.
+        let before = if D::OBSERVES_RETURNS {
+            TX_DEPTH.saturating_sub(network.returned.free_capacity())
+        } else {
+            0
+        };
+        let mut queued = 0_usize;
         while network.returned.free_capacity() != 0 {
             let Some(memory) = self.data.freed.pop_front() else {
-                return;
+                break;
             };
             let mut memory = Some(memory);
-            let _sent = network.returned.try_send_with(|slot| {
+            let _sent = network.returned.try_send_held_with(|slot| {
                 *slot = memory.take();
                 Ok::<_, core::convert::Infallible>(())
             });
+            burst = true;
+            if D::OBSERVES_RETURNS {
+                queued = queued.saturating_add(1);
+            }
             if let Some(memory) = memory {
                 // The room was checked: the queue only keeps it when broken.
                 let _quarantined = core::mem::ManuallyDrop::new(memory);
+            }
+        }
+        if burst {
+            network.returned.flush();
+            if D::OBSERVES_RETURNS {
+                D::returned(super::ReturnBurst {
+                    queued,
+                    before,
+                    after: TX_DEPTH.saturating_sub(network.returned.free_capacity()),
+                    held: self.data.freed.len(),
+                });
             }
         }
     }

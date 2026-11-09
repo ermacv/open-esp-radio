@@ -1377,6 +1377,26 @@ its model and conformance case.
   network-time calculations stay in the core; wire codecs write ready IE
   values. Configuration is admitted in any radio state.
 
+### Names of standard mechanisms
+
+- A mechanism or format defined by a standard is named after that
+  standard's term. Inside a protocol crate the crate already names the
+  standard: `protocols/ieee80211` says `Ssid`, `AccessCategory`,
+  `UserPriority`, not `Ieee80211Ssid`.
+- A Wi-Fi Alliance name stays where the code implements exactly a WFA
+  format, profile or policy (a WMM element, WPA2 and WPA3 profiles), also
+  inside sans-IO crates. A WFA profile name never stands for a general
+  mechanism, and a rename never suggests wider support than is implemented.
+- A mapping taken from another standard is named after that one: the DSCP
+  classification follows RFC 8325, not IEEE 802.11.
+- `wifi` stays in the product API (`oer::wifi`) and in the exact names of
+  vendor hardware blocks. Symbols quoted in a `SOURCE:` stay verbatim.
+- Generations in protocol code are named by their PHY mechanism: HT, VHT,
+  HE, EHT.
+- A rename keeps the type's guarantees (a closed value set stays closed),
+  numeric codes and record formats, and migrates every consumer of the name
+  in the same change.
+
 ## Instrumentation and probes
 
 A protocol owner reports what it decided to the sink its caller lends one

@@ -145,7 +145,7 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
 }
 
 fn supported(
-    channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
+    channel: oer_protocols_ieee80211_wire::channel::Ghz2_4Channel,
 ) -> SupportedChannel<Caps> {
     SupportedChannel::new(
         oer_protocols_radio_regulatory::RegulatoryDomain::of(
@@ -154,7 +154,7 @@ fn supported(
         .expect("domain fixture")
         .permit(
             oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                Channel::from_wifi_channel(channel),
+                Channel::from_ghz2_4_channel(channel),
             ),
         )
         .expect("permitted test channel"),

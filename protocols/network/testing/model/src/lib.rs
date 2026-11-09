@@ -24,6 +24,11 @@ const BROADCAST_KEY: PeerKey = (u8::MAX, 0);
 /// An association: a peer's number and its generation.
 pub type PeerKey = (u8, u16);
 
+/// Names a frame by its buffer's place at the port, below the port's depth,
+/// as the station's buffers do: no other frame has it until the frame's
+/// notice is taken. As wide as a place, so every place has its own.
+pub type Ticket = usize;
+
 /// One peer's rate and addresses.
 #[derive(Clone, Copy, Debug)]
 pub struct PeerSpec {
@@ -79,7 +84,7 @@ struct Peer {
 
 #[derive(Debug)]
 struct Flight {
-    ticket: u32,
+    ticket: Ticket,
     ends_at: u64,
     cost: u32,
     peer: Option<usize>,
@@ -94,14 +99,21 @@ struct State {
     broadcast: Spent,
     flows: BTreeMap<u16, Spent>,
     flights: VecDeque<Flight>,
-    depth: usize,
     now: u64,
     busy_until: u64,
-    tickets: u32,
+    /// Which places hold a frame whose notice was not taken: one place for
+    /// each frame the port holds at once.
+    held: Vec<bool>,
     refusals: u32,
     refused: u64,
     received: VecDeque<Vec<u8>>,
-    notices: VecDeque<RadioNotice<u32, PeerKey>>,
+    /// Ends that landed, until a batch of them is told at once.
+    landing: Vec<RadioNotice<Ticket, PeerKey>>,
+    /// Ends told together: one, or a Block Ack's.
+    batch: usize,
+    notices: VecDeque<RadioNotice<Ticket, PeerKey>>,
+    /// Notices taken.
+    taken: u64,
     waker: Option<Waker>,
 }
 
@@ -218,7 +230,7 @@ impl State {
         Some(header.ports.source)
     }
 
-    fn fly(&mut self, frame: &[u8]) -> u32 {
+    fn fly(&mut self, place: usize, frame: &[u8]) -> Ticket {
         let header = EthernetHeader::parse(frame).ok();
         let destination = header.as_ref().map(|(header, _)| header.destination);
         let peer = destination
@@ -233,8 +245,10 @@ impl State {
         let start = self.now.max(self.busy_until);
         let ends_at = start.saturating_add(u64::from(cost));
         self.busy_until = ends_at;
-        self.tickets = self.tickets.wrapping_add(1);
-        let ticket = self.tickets;
+        if let Some(held) = self.held.get_mut(place) {
+            *held = true;
+        }
+        let ticket = place;
         self.flights.push_back(Flight {
             ticket,
             ends_at,
@@ -259,10 +273,23 @@ impl State {
         if let Some(port) = flight.port {
             self.flows.entry(port).or_default().add(flight.cost);
         }
-        self.notices.push_back(RadioNotice::Ended(Exchange {
+        // The medium models no PHY rate.
+        self.landing.push(RadioNotice::Ended(Exchange {
             ticket: flight.ticket,
             charged,
+            rate: None,
         }));
+    }
+
+    /// Tell the landed ends once a batch of them landed or the air is idle:
+    /// whether any were told.
+    fn tell(&mut self) -> bool {
+        if self.landing.is_empty() || (self.landing.len() < self.batch && !self.flights.is_empty())
+        {
+            return false;
+        }
+        self.notices.extend(self.landing.drain(..));
+        true
     }
 }
 
@@ -291,14 +318,16 @@ impl Medium {
             broadcast: Spent::default(),
             flows: BTreeMap::new(),
             flights: VecDeque::new(),
-            depth,
             now: 0,
             busy_until: 0,
-            tickets: 0,
+            held: vec![false; depth],
             refusals: 0,
             refused: 0,
             received: VecDeque::new(),
+            landing: Vec::new(),
+            batch: 1,
             notices: VecDeque::new(),
+            taken: 0,
             waker: None,
         })))
     }
@@ -307,7 +336,6 @@ impl Medium {
     pub fn advance(&self, now: Instant) {
         let mut state = self.0.borrow_mut();
         state.now = now.as_micros();
-        let mut landed = false;
         while state
             .flights
             .front()
@@ -315,12 +343,23 @@ impl Medium {
         {
             if let Some(flight) = state.flights.pop_front() {
                 state.land(flight);
-                landed = true;
             }
         }
-        if landed {
+        if state.tell() {
             state.wake();
         }
+    }
+
+    /// From now on, the ends of `frames` landed frames are told together,
+    /// or fewer once the air is idle: a Block Ack's settlements.
+    pub fn batch(&self, frames: usize) {
+        self.0.borrow_mut().batch = frames.max(1);
+    }
+
+    /// Notices the port handed on so far.
+    #[must_use]
+    pub fn notices_taken(&self) -> u64 {
+        self.0.borrow().taken
     }
 
     /// When the frame on the air ends.
@@ -394,30 +433,31 @@ impl Medium {
 
 impl FramePort for Medium {
     type Refusal = NoRoom;
-    type Ticket = u32;
+    type Ticket = Ticket;
 
     fn publish<E>(
         &mut self,
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
-    ) -> Result<u32, Unpublished<NoRoom, E>> {
+    ) -> Result<Ticket, Unpublished<NoRoom, E>> {
         let mut state = self.0.borrow_mut();
         if state.refusals > 0 {
             state.refusals = state.refusals.saturating_sub(1);
             state.refused = state.refused.saturating_add(1);
             return Err(Unpublished::Port(NoRoom));
         }
-        if state.flights.len() >= state.depth {
+        // A buffer is free once its frame's notice was taken.
+        let Some(place) = state.held.iter().position(|held| !*held) else {
             return Err(Unpublished::Port(NoRoom));
-        }
+        };
         let mut frame = vec![0; length];
         fill(&mut frame).map_err(Unpublished::Fill)?;
-        Ok(state.fly(&frame))
+        Ok(state.fly(place, &frame))
     }
 }
 
 impl FrameSource for Medium {
-    type Notice = RadioNotice<u32, PeerKey>;
+    type Notice = RadioNotice<Ticket, PeerKey>;
     /// The medium lends no buffer: each frame is its copy.
     type Held = oer_protocols_network_port::NeverHeld;
 
@@ -447,7 +487,16 @@ impl FrameSource for Medium {
     }
 
     fn take_notice(&mut self) -> Option<Self::Notice> {
-        self.0.borrow_mut().notices.pop_front()
+        let mut state = self.0.borrow_mut();
+        let notice = state.notices.pop_front()?;
+        state.taken = state.taken.saturating_add(1);
+        // The end frees its frame's buffer.
+        if let RadioNotice::Ended(Exchange { ticket, .. }) | RadioNotice::Lost(ticket) = notice
+            && let Some(held) = state.held.get_mut(ticket)
+        {
+            *held = false;
+        }
+        Some(notice)
     }
 
     /// The model's medium is up from the start, at one epoch.
@@ -492,5 +541,25 @@ impl PeerAir for Medium {
         let state = self.0.borrow();
         let ceiling = state.ceiling(state.peer_of(ready.peer), ready.length);
         NonZeroU32::new(ceiling).unwrap_or(NonZeroU32::MIN)
+    }
+
+    /// The medium's estimates do not depend on a rate, and it reports none.
+    fn reported(&mut self, _key: PeerKey, _rate: oer_protocols_ieee80211_runtime::egress::PhyRate) {
+    }
+}
+
+#[cfg(test)]
+mod reviewer_ticket_width {
+    use super::*;
+
+    #[test]
+    fn distinct_valid_buffer_places_have_distinct_tickets() {
+        let last = usize::from(u16::MAX);
+        let medium = Medium::new([2, 0, 0, 0, 0, 1], [192, 0, 2, 1], last + 2, &[]);
+        let mut state = medium.0.borrow_mut();
+        let frame = [0_u8; 14];
+        let a = state.fly(last, &frame);
+        let b = state.fly(last + 1, &frame);
+        assert_ne!(a, b, "two distinct valid places must not alias one ticket");
     }
 }

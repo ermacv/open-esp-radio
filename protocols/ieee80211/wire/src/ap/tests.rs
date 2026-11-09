@@ -304,7 +304,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
     );
 
     let ht40 =
-        crate::channel::Channel::ghz2_4(6, crate::channel::WifiChannelWidth::Mhz40Below).unwrap();
+        crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz40Below).unwrap();
     write_ht_association_response(
         &TEST_ADVERTISEMENT,
         &mut body,
@@ -558,7 +558,7 @@ fn association_retains_the_peers_complete_ht40_receive_facts() {
     association[16..22].copy_from_slice(&access_point);
     association[28..34].copy_from_slice(&[1, 4, 0x82, 0x84, 0x0c, 0x6c]);
     let channel =
-        crate::channel::Channel::ghz2_4(6, crate::channel::WifiChannelWidth::Mhz40Above).unwrap();
+        crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz40Above).unwrap();
     association[34..].copy_from_slice(&crate::ht::ht_capability_ie(TEST_HT_CAPABILITIES, channel));
 
     let Some(ApManagementRequest::Association {
@@ -572,7 +572,7 @@ fn association_retains_the_peers_complete_ht40_receive_facts() {
     };
     assert_eq!(maximum_legacy_rate_500kbps, 108);
     assert!(ht.supports_40_mhz());
-    assert!(ht.supports_short_guard_interval(crate::channel::WifiChannelWidth::Mhz40Above));
+    assert!(ht.supports_short_guard_interval(crate::channel::ChannelWidth::Mhz40Above));
     assert_eq!(ht.highest_rx_mcs(), 7);
     assert!(qos_supported);
 }

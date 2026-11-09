@@ -28,7 +28,7 @@ use oer_chips_esp32s31_radio_system::Esp32s31Radio;
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
-use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
+use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;
 
@@ -363,7 +363,7 @@ fn direct_future(
         };
         use oer_chips_esp32s31_radio_client::wifi::{WifiJoin, WifiTrack};
         use oer_chips_esp32s31_radio_system::ClientBackend;
-        let channel = WifiChannel::new_2_4_ghz(CHANNEL, WifiChannelWidth::Mhz20)
+        let channel = Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20)
             .map_err(|_| oer_portable_diagnostics::name!("direct-channel"; 32))?;
         let domain = Country::new(*b"DE")
             .ok()

@@ -32,7 +32,7 @@ use oer_protocols_ieee80211_wire::{
     phy::LegacyRate,
     security::spp::Association,
     sequence::SequenceNumber,
-    ssid::WifiSsid,
+    ssid::Ssid,
 };
 use oer_protocols_radio_port::{Installations, LocalId, SlotIdentity, with_local_slot};
 
@@ -198,7 +198,7 @@ macro_rules! fixture {
             template,
             &ADVERTISEMENT,
             ACCESS_POINT,
-            &WifiSsid::new(SSID).unwrap(),
+            &Ssid::new(SSID).unwrap(),
             channel(),
             100,
             2,

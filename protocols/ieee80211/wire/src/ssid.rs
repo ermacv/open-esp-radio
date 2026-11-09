@@ -10,18 +10,18 @@ use crate::management::MAX_SSID_LEN;
 /// access-point and scan policy instead of making those roles depend on each
 /// other solely for a wire-protocol type.
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
-pub struct WifiSsid {
+pub struct Ssid {
     bytes: [u8; MAX_SSID_LEN],
     length: oer_portable_wire::PrefixLength<MAX_SSID_LEN>,
 }
 
-impl WifiSsid {
-    pub fn new(bytes: &[u8]) -> Result<Self, WifiSsidError> {
+impl Ssid {
+    pub fn new(bytes: &[u8]) -> Result<Self, SsidError> {
         if bytes.is_empty() {
-            return Err(WifiSsidError::Empty);
+            return Err(SsidError::Empty);
         }
         let length =
-            oer_portable_wire::PrefixLength::new(bytes.len()).ok_or(WifiSsidError::TooLong {
+            oer_portable_wire::PrefixLength::new(bytes.len()).ok_or(SsidError::TooLong {
                 length: bytes.len(),
                 maximum: MAX_SSID_LEN,
             })?;
@@ -48,22 +48,22 @@ impl WifiSsid {
     }
 }
 
-impl fmt::Debug for WifiSsid {
+impl fmt::Debug for Ssid {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("WifiSsid")
+            .debug_struct("Ssid")
             .field("bytes", &self.as_bytes())
             .finish()
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WifiSsidError {
+pub enum SsidError {
     Empty,
     TooLong { length: usize, maximum: usize },
 }
 
-impl fmt::Display for WifiSsidError {
+impl fmt::Display for SsidError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => formatter.write_str("an IEEE 802.11 SSID cannot be empty"),
@@ -75,7 +75,7 @@ impl fmt::Display for WifiSsidError {
     }
 }
 
-impl core::error::Error for WifiSsidError {}
+impl core::error::Error for SsidError {}
 
 #[cfg(test)]
 mod tests;

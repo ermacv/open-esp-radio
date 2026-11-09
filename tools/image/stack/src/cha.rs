@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod audit;
 mod locations;
 mod provenance;
+mod queries;
 mod references;
 mod wakers;
 pub use audit::{
@@ -17,6 +18,7 @@ pub use audit::{
     audit_function_addresses,
 };
 pub use provenance::{CallbackLoadField, typed_function_pointer_resolutions};
+pub use queries::location_queries;
 
 /// One type's name and layout.
 #[derive(Debug)]

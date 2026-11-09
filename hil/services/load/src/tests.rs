@@ -496,6 +496,7 @@ fn full_rx() -> RxCounts {
             dropped_draining: all,
             refused_too_long: all,
             refused_queue_full: all,
+            refused_pressure: all,
             refused_no_network: all,
             copied_aggregated: all,
             copied_kept: all,
@@ -605,9 +606,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_fifteen_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_sixteen_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 30);
+    assert_eq!(keys.len(), 32);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
@@ -856,4 +857,62 @@ fn a_network_request_round_trips() {
             answer
         );
     }
+}
+
+#[test]
+fn every_profile_page_at_its_largest_fits_one_response() {
+    let mut buffer = [0; 1024];
+    let cell = TurnCell {
+        turns: u32::MAX,
+        cycles: u64::MAX,
+        items: u32::MAX,
+    };
+    let pages = [
+        ProfileCollected::Moments(TurnMoments {
+            available: true,
+            moments: [u64::MAX; PROFILE_MOMENTS],
+            empty: [u64::MAX; 3],
+            idle: [u64::MAX; 2],
+            gaps: [[u64::MAX; 2]; PROFILE_GAPS],
+        }),
+        ProfileCollected::Cells(TurnCells {
+            receive_only: [cell; PROFILE_ITEM_CELLS],
+            transmit_only: [cell; PROFILE_ITEM_CELLS],
+            notice_only: [cell; PROFILE_NOTICE_CELLS],
+        }),
+        ProfileCollected::Spread(TurnSpread {
+            cycles_by_log2: [u32::MAX; PROFILE_CYCLE_BINS],
+            notices_by_turn: [u32::MAX; PROFILE_NOTICE_BINS],
+            frames_by_turn: [u32::MAX; PROFILE_FRAME_BINS],
+            settling: [u32::MAX; 3],
+            returns: ReturnBursts {
+                bursts: u32::MAX,
+                queued: u32::MAX,
+                queued_by_burst: [u32::MAX; RETURN_BURST_BINS],
+                before_by_burst: [u32::MAX; RETURN_OCCUPANCY_BINS],
+                after_by_burst: [u32::MAX; RETURN_OCCUPANCY_BINS],
+                held_bursts: u32::MAX,
+                held: u32::MAX,
+            },
+        }),
+        ProfileCollected::Running,
+        ProfileCollected::Refused(LoadError::InvalidParameters),
+    ];
+    for page in pages {
+        let encoded = postcard::to_slice(&page, &mut buffer).unwrap();
+        assert!(encoded.len() <= 512, "{page:?}: {}", encoded.len());
+        assert_eq!(
+            postcard::from_bytes::<ProfileCollected>(encoded).unwrap(),
+            page
+        );
+    }
+    let request = CollectProfile {
+        run: u32::MAX,
+        page: u8::MAX,
+    };
+    let encoded = postcard::to_slice(&request, &mut buffer).unwrap();
+    assert_eq!(
+        postcard::from_bytes::<CollectProfile>(encoded).unwrap(),
+        request
+    );
 }

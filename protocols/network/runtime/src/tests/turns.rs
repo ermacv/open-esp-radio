@@ -72,11 +72,29 @@ impl EventSink<NetEvent> for Seen {
     fn event(&mut self, _: NetEvent) {}
 }
 
+/// Every event, in order, where the test reads it while the service runs.
+struct Tape(Rc<RefCell<Vec<ServiceEvent>>>);
+
+impl EventSink<ServiceEvent> for Tape {
+    fn event(&mut self, event: ServiceEvent) {
+        self.0.borrow_mut().push(event);
+    }
+}
+
+impl EventSink<NetEvent> for Tape {
+    fn event(&mut self, _: NetEvent) {}
+}
+
 /// One turn, as its events tell it.
 #[derive(Debug, Default)]
 struct Turn {
+    /// The turn said it began, before anything else.
+    began: bool,
     took: Vec<RequestKind>,
     spent: usize,
+    /// Received frames it took in, and notices it handed the policy.
+    frames: usize,
+    notices: usize,
     accepted: usize,
     published: Vec<PublishEnd>,
     end: Option<TurnEnd>,
@@ -121,11 +139,21 @@ fn turns(events: &[ServiceEvent]) -> Vec<Turn> {
     let mut turn = Turn::default();
     for event in events {
         match *event {
+            ServiceEvent::TurnBegan => {
+                assert!(
+                    !turn.began && turn.took.is_empty() && turn.frames == 0,
+                    "a turn begins before anything of it"
+                );
+                turn.began = true;
+            }
             ServiceEvent::Took(kind) => turn.took.push(kind),
             ServiceEvent::BudgetSpent => turn.spent += 1,
+            ServiceEvent::FrameTaken => turn.frames += 1,
+            ServiceEvent::Noticed => turn.notices += 1,
             ServiceEvent::Accepted => turn.accepted += 1,
             ServiceEvent::Published(end) => turn.published.push(end),
             ServiceEvent::TurnEnded(end) => {
+                assert!(turn.began, "every turn that ends began");
                 turn.end = Some(end);
                 turns.push(core::mem::take(&mut turn));
             }
@@ -438,6 +466,37 @@ fn a_full_intake_says_so() {
     );
 }
 
+#[test]
+fn each_turn_tells_the_frames_it_took_in_and_the_notices_it_handed_on() {
+    brand!(Net);
+    let (mut service, _socket, wire, _stop) = flow::<Net>();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut seen = Seen::default();
+    {
+        let mut run = pin!(service.run(clock, &mut seen));
+        // One more frame than a turn takes in, and three notices.
+        arrive(&wire, 9);
+        wire.0.borrow_mut().ended.extend(0..3);
+        pass(&mut run);
+        pass(&mut run);
+    }
+    let turns = turns(&seen.0);
+    let frames: Vec<_> = turns.iter().map(|turn| turn.frames).collect();
+    let notices: Vec<_> = turns.iter().map(|turn| turn.notices).collect();
+    assert_eq!(
+        frames.first().copied(),
+        Some(8),
+        "the first turn takes in its budget"
+    );
+    assert_eq!(frames.iter().sum::<usize>(), 9, "every frame, once");
+    assert_eq!(
+        notices.first().copied(),
+        Some(3),
+        "the first turn hands on every notice"
+    );
+    assert_eq!(notices.iter().sum::<usize>(), 3, "every notice, once");
+}
+
 /// An egress whose reservations are all out: it chooses nothing until a
 /// notice, which never comes here.
 struct Exhausted;
@@ -554,4 +613,62 @@ fn ready_work_the_egress_does_not_choose_leaves_the_service_waiting() {
             .any(|event| matches!(event, ServiceEvent::Waited { ready: false })),
         "it waits, nothing ready"
     );
+}
+
+/// What a turn hands on of the port's notices: a Block Ack's 32 ends wait
+/// at once, with room for the datagram that waited for one. The turn that
+/// finds them settles all and publishes in the same turn: no publication
+/// waits behind a part of one aggregate's ends.
+#[test]
+fn a_block_ack_s_ends_settle_in_one_turn_which_publishes_again() {
+    brand!(Net);
+    const AGGREGATE: u32 = 32;
+    let (mut service, mut socket, wire, _stop) = flow::<Net>();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let tape = Rc::new(RefCell::new(Vec::new()));
+    let mut seen = Tape(tape.clone());
+    {
+        let mut run = core::pin::pin!(service.run(clock, &mut seen));
+        let mut send = |run: &mut core::pin::Pin<&mut _>| {
+            let block = loop {
+                if let Some(block) = socket.try_reserve().unwrap() {
+                    break block;
+                }
+                pass(run);
+            };
+            drop(socket.send(peer(), block).ok().unwrap());
+            for _ in 0..8 {
+                pass(run);
+            }
+        };
+        // The peer's address resolves, and the first datagram goes.
+        send(&mut run);
+        assert_eq!(datagrams(&wire.0.borrow()).len(), 1);
+        // The port is full: an aggregate is out, and the next datagram waits.
+        wire.0.borrow_mut().full = true;
+        send(&mut run);
+        assert_eq!(datagrams(&wire.0.borrow()).len(), 1);
+        // Its Block Ack: every end at once, and the room they free.
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.ended.extend(0..AGGREGATE);
+            wire.full = false;
+        }
+        let before = turns(&tape.borrow()).len();
+        while !wire.0.borrow().ended.is_empty() || datagrams(&wire.0.borrow()).len() < 2 {
+            pass(&mut run);
+            assert!(
+                turns(&tape.borrow()).len() < before + 8,
+                "the ends are handed on"
+            );
+        }
+        let ack = &turns(&tape.borrow())[before..];
+        assert_eq!(ack.len(), 1, "one turn settles them all: {ack:?}");
+        assert_eq!(
+            ack[0].published,
+            [PublishEnd::Chose],
+            "it publishes; nothing is deferred"
+        );
+        assert_eq!(ack[0].accepted, 1, "the waiting datagram goes in that turn");
+    }
 }

@@ -26,12 +26,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut control = || Ok(());
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
     let mut keep = Ledger::new(&memory, &mut control)?;
-    let (dwarf, _) = oer_tools_image_stack::read_debug(
-        &bytes,
-        oer_tools_image_stack::DebugMetadata::Standard,
-        &mut keep,
-        &mut control,
-    )?;
+    let (dwarf, _) = oer_tools_image_stack::read_debug(&bytes, &mut keep, &mut control)?;
     let caller = image
         .functions()
         .iter()

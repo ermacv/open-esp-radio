@@ -48,13 +48,39 @@ pub(crate) fn ledger() -> Ledger<'static> {
 
 /// [`crate::read_debug`] of `elf` without a work budget.
 pub(crate) fn debug(elf: &[u8]) -> (Dwarf, TypeFacts) {
-    crate::read_debug(
-        &std::rc::Rc::from(elf),
-        DebugMetadata::Standard,
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap()
+    crate::read_debug(&std::rc::Rc::from(elf), &mut ledger(), &mut || Ok(())).unwrap()
+}
+
+/// [`debug`] with the typed locations that the instruction pass of `elf`
+/// (no companions) asks for, read as the image pipeline reads them.
+pub(crate) fn typed_debug(elf: &[u8]) -> (Dwarf, TypeFacts) {
+    let (dwarf, mut types) = debug(elf);
+    let analysis = analyze(elf, &[], &[]).unwrap();
+    with_facts(elf, |image| {
+        let queries = crate::location_queries(image, &analysis, &mut ledger(), &mut || Ok(()))?;
+        crate::read_locations(&mut types, &queries, &mut ledger(), &mut || Ok(()))
+    })
+    .unwrap();
+    (dwarf, types)
+}
+
+/// [`debug`] with the locations every PC of `elf`'s functions can ask for:
+/// the reference a filtered read must answer like.
+pub(crate) fn every_pc_debug(elf: &[u8]) -> (Dwarf, TypeFacts) {
+    let (dwarf, mut types) = debug(elf);
+    with_facts(elf, |image| {
+        let mut keep = ledger();
+        let mut queries = crate::LocationQueries::default();
+        for function in image.functions() {
+            for pc in function.address..function.address + function.size {
+                queries.point(pc, &mut keep, &mut || Ok(()))?;
+            }
+        }
+        queries.finish(&mut || Ok(()))?;
+        crate::read_locations(&mut types, &queries, &mut keep, &mut || Ok(()))
+    })
+    .unwrap();
+    (dwarf, types)
 }
 
 /// [`crate::analyze`] of `elf` and its `companions` under `memory` and `control`.
@@ -72,12 +98,7 @@ fn analyze_within(
         .collect::<Result<Vec<_>>>()?;
     let companions: Vec<&ImageFacts<'_>> = companions.iter().collect();
     let mut keep = Ledger::new(memory, control)?;
-    let (dwarf, _) = crate::read_debug(
-        &std::rc::Rc::from(elf),
-        DebugMetadata::Standard,
-        &mut keep,
-        control,
-    )?;
+    let (dwarf, _) = crate::read_debug(&std::rc::Rc::from(elf), &mut keep, control)?;
     crate::analyze(&image, &companions, summaries, &dwarf, &mut keep, control)
 }
 
@@ -3063,14 +3084,9 @@ fn the_analyzers_own_structures_fail_on_working_memory() {
     let elf = compiled(WAKER_PROGRAM);
     let shared = std::rc::Rc::from(&elf[..]);
     limited(
-        crate::read_debug(
-            &shared,
-            DebugMetadata::Standard,
-            &mut kept(&tiny),
-            &mut || Ok(()),
-        )
-        .err()
-        .unwrap(),
+        crate::read_debug(&shared, &mut kept(&tiny), &mut || Ok(()))
+            .err()
+            .unwrap(),
     );
     with_facts(&elf, |facts| {
         limited(crate::stack_sizes(facts, &mut kept(&tiny), &mut || Ok(())).unwrap_err());
@@ -3132,7 +3148,6 @@ fn a_compressed_debug_section_is_an_error_not_a_read() {
     let compressed = compiled_linking(WRITER_PROGRAM, &["--compress-debug-sections=zlib"], "s");
     let error = crate::read_debug(
         &std::rc::Rc::from(&compressed[..]),
-        DebugMetadata::Standard,
         &mut ledger(),
         &mut || Ok(()),
     )

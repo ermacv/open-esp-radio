@@ -32,8 +32,11 @@
 //!    holds at its barrier stops the messages until it ran, but a stop
 //!    behind it withdraws it;
 //! 3. at most [`RX_BUDGET`] received units, reordered, admitted by the link
-//!    and handed on; the network at its lend limit stops the pull until it
-//!    returns a unit. While the message budget left messages queued, the
+//!    and handed on; the network at its lend limit stops the pull for at
+//!    most [`NETWORK_LATE`] from the episode's first stop, then the actor
+//!    walks the ring to its end and refuses, counted as pressure, what the
+//!    port cannot lend. While the
+//!    message budget left messages queued, the
 //!    units wait for the next turn: a link handed over before them is in
 //!    force when they are routed;
 //! 4. at most `TX_DEPTH` network MSDUs into the standby arena, which
@@ -51,7 +54,10 @@
 //!
 //! Air input never ends the actor: a frame with no reordering place or no
 //! lifecycle lane goes back to the ring, counted ([`ActorEvent`]); the
-//! network at its lend limit is back-pressure. A refusal returns its
+//! network at its lend limit is back-pressure for at most [`NETWORK_LATE`],
+//! after which an MSDU the port cannot lend is refused, counted
+//! ([`ServiceEvent::RxMsdusRefused`](crate::station::ServiceEvent::RxMsdusRefused)).
+//! A refusal returns its
 //! owners to the lifecycle ([`Returned`]). Only a broken contract ends the
 //! run: the port's named fault or the actor's own ([`ActorFault`]); every
 //! owner then stays where it was, and the lifecycle hears it
@@ -124,6 +130,16 @@ pub const DUE_REPOSTS: u8 = 4;
 /// The received units one turn pulls from the port at most.
 pub const RX_BUDGET: u8 = 32;
 
+/// How long a pressure episode lasts at most: from the first stop of the
+/// pull for a network that holds every unit the port may lend, whatever the
+/// network returns meanwhile, to the walk of the ring that ends it. Within
+/// it the units wait in the ring: a burst the network is on its way to
+/// loses nothing, and a slow network paces the peer. At it the actor walks
+/// the ring to its end, so the station's frames and the receive agreements
+/// go on, and refuses, counted as pressure, the MSDUs the port cannot lend.
+/// The runtime's named policy, not a hardware bound.
+pub const NETWORK_LATE: Duration = Duration::from_millis(10);
+
 /// The lifecycle's messages one turn takes at most.
 pub const MESSAGE_BUDGET: u8 = 8;
 
@@ -185,6 +201,26 @@ pub trait DatapathPort<'id>: Sized + 'id {
     /// Observe a terminal the port gave, before the lifecycle takes it; by
     /// default nothing observes it.
     fn terminal(_terminal: &LowerMacTerminal<'id, Self::Types>) {}
+
+    /// Whether [`Self::returned`] observes the bursts of returned memory:
+    /// without it the actor reads nothing for them.
+    const OBSERVES_RETURNS: bool = false;
+
+    /// Observe one burst of the network's memory the actor gave back
+    /// ([`ReturnBurst`]); called only when [`Self::OBSERVES_RETURNS`].
+    fn returned(_burst: ReturnBurst) {}
+}
+
+/// One burst of the network's memory the actor gave back through the
+/// return queue, ended by one flush: how many it queued, how many the queue
+/// held before and after it, and how many stayed with the actor for want of
+/// room.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReturnBurst {
+    pub queued: usize,
+    pub before: usize,
+    pub after: usize,
+    pub held: usize,
 }
 
 /// A stretch of the actor's work, which it reports at both ends
@@ -438,6 +474,10 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     facts: Facts,
     /// The receive ring has work from this instant on.
     rx_later: Option<Instant>,
+    /// The start of the pressure episode: the first stop of the pull for a
+    /// network that holds every unit the port may lend, until the pull
+    /// finds the ring empty while the actor holds no received unit.
+    held_back: Option<Instant>,
     /// A budget ran out with work left.
     again: bool,
     /// The alarm's deadline as armed.
@@ -525,6 +565,7 @@ where
             owed: Owed::new(),
             facts: Facts::default(),
             rx_later: None,
+            held_back: None,
             again: false,
             armed: None,
             due_streak: 0,
@@ -592,6 +633,7 @@ where
                 owed: Owed::new(),
                 facts: Facts::default(),
                 rx_later: None,
+                held_back: None,
                 again: false,
                 armed: None,
                 due_streak: 0,

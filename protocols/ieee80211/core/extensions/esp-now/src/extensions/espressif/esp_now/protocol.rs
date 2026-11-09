@@ -11,7 +11,7 @@ use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use {
     oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter,
     oer_protocols_ieee80211_wire::{
-        channel::WifiChannel,
+        channel::Ghz2_4Channel,
         extensions::espressif::esp_now::{
             ESP_NOW_V1_MAX_PAYLOAD_LEN, ESP_NOW_V2_MAX_PAYLOAD_LEN, EspNowDestination,
             EspNowRandomValue, EspNowUnicastAddress, EspNowV1Frame, EspNowV1Payload,
@@ -105,13 +105,13 @@ impl EspNowPeerCapability {
 pub struct EspNowConfig {
     station: BoundVirtualInterface,
     local_address: EspNowUnicastAddress,
-    home_channel: WifiChannel,
+    home_channel: Ghz2_4Channel,
 }
 
 impl EspNowConfig {
     pub fn new(
         station: BoundVirtualInterface,
-        home_channel: WifiChannel,
+        home_channel: Ghz2_4Channel,
     ) -> Result<Self, EspNowConfigError> {
         if station.interface.role != VifRole::Station {
             return Err(EspNowConfigError::RequiresStationInterface);
@@ -133,7 +133,7 @@ impl EspNowConfig {
         self.local_address
     }
 
-    pub const fn home_channel(self) -> WifiChannel {
+    pub const fn home_channel(self) -> Ghz2_4Channel {
         self.home_channel
     }
 
@@ -182,12 +182,12 @@ pub struct EspNowPeerConfig {
 /// number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EspNowPeerChannelPolicy {
-    HomeChannel(WifiChannel),
-    StandaloneFixed(WifiChannel),
+    HomeChannel(Ghz2_4Channel),
+    StandaloneFixed(Ghz2_4Channel),
 }
 
 impl EspNowPeerChannelPolicy {
-    pub const fn channel(self) -> WifiChannel {
+    pub const fn channel(self) -> Ghz2_4Channel {
         match self {
             Self::HomeChannel(channel) | Self::StandaloneFixed(channel) => channel,
         }
@@ -201,7 +201,7 @@ impl EspNowPeerChannelPolicy {
 impl EspNowPeerConfig {
     /// Configure a peer on the service's home channel using the supported
     /// standard one-megabit Action-frame profile.
-    pub const fn plaintext(destination: EspNowDestination, channel: WifiChannel) -> Self {
+    pub const fn plaintext(destination: EspNowDestination, channel: Ghz2_4Channel) -> Self {
         Self {
             destination,
             channel: EspNowPeerChannelPolicy::HomeChannel(channel),
@@ -215,7 +215,7 @@ impl EspNowPeerConfig {
     /// table rejects it when `channel` is the protocol home channel.
     pub const fn plaintext_off_channel(
         destination: EspNowDestination,
-        channel: WifiChannel,
+        channel: Ghz2_4Channel,
     ) -> Self {
         Self {
             destination,
@@ -227,7 +227,7 @@ impl EspNowPeerConfig {
 
     /// Configure an explicitly v2-capable peer. The same peer remains valid
     /// for v1 sends because v2 receivers are backwards-compatible.
-    pub const fn plaintext_v2(destination: EspNowDestination, channel: WifiChannel) -> Self {
+    pub const fn plaintext_v2(destination: EspNowDestination, channel: Ghz2_4Channel) -> Self {
         Self::plaintext(destination, channel).with_capability(EspNowPeerCapability::V2Capable)
     }
 
@@ -235,7 +235,7 @@ impl EspNowPeerConfig {
     /// off-channel.
     pub const fn plaintext_v2_off_channel(
         destination: EspNowDestination,
-        channel: WifiChannel,
+        channel: Ghz2_4Channel,
     ) -> Self {
         Self::plaintext_off_channel(destination, channel)
             .with_capability(EspNowPeerCapability::V2Capable)
@@ -258,7 +258,7 @@ impl EspNowPeerConfig {
         self.destination
     }
 
-    pub const fn channel(self) -> WifiChannel {
+    pub const fn channel(self) -> Ghz2_4Channel {
         self.channel.channel()
     }
 
@@ -311,13 +311,13 @@ impl EspNowPeerSlot {
 
 /// Fixed-capacity plaintext peer owner with explicit per-peer channel policy.
 pub struct EspNowPeerTable<const N: usize = ESP_NOW_DEFAULT_PEER_CAPACITY> {
-    home_channel: WifiChannel,
+    home_channel: Ghz2_4Channel,
     slots: [EspNowPeerSlot; N],
     length: usize,
 }
 
 impl<const N: usize> EspNowPeerTable<N> {
-    pub const fn new(home_channel: WifiChannel) -> Self {
+    pub const fn new(home_channel: Ghz2_4Channel) -> Self {
         Self {
             home_channel,
             slots: [EspNowPeerSlot::EMPTY; N],
@@ -325,7 +325,7 @@ impl<const N: usize> EspNowPeerTable<N> {
         }
     }
 
-    pub const fn home_channel(&self) -> WifiChannel {
+    pub const fn home_channel(&self) -> Ghz2_4Channel {
         self.home_channel
     }
 
@@ -484,10 +484,10 @@ pub enum EspNowPeerTableError {
     },
     Duplicate(EspNowDestination),
     ChannelMismatch {
-        peer: WifiChannel,
-        home: WifiChannel,
+        peer: Ghz2_4Channel,
+        home: Ghz2_4Channel,
     },
-    OffChannelMatchesHome(WifiChannel),
+    OffChannelMatchesHome(Ghz2_4Channel),
     GenerationExhausted,
     Stale(EspNowPeerId),
 }
@@ -571,7 +571,7 @@ impl<const N: usize> EspNowProtocol<N> {
     pub fn begin_rx_epoch(
         &self,
         active_station: BoundVirtualInterface,
-        active_channel: WifiChannel,
+        active_channel: Ghz2_4Channel,
     ) -> Result<EspNowRxEpoch<N>, EspNowReceiveError> {
         validate_active_binding(self.config, active_station, active_channel)?;
 
@@ -723,7 +723,7 @@ impl<const N: usize> EspNowProtocol<N> {
     pub fn receive_v1<'frame>(
         &self,
         active_station: BoundVirtualInterface,
-        active_channel: WifiChannel,
+        active_channel: Ghz2_4Channel,
         bytes: &'frame [u8],
     ) -> Result<EspNowReceivedV1<'frame>, EspNowReceiveError> {
         validate_active_binding(self.config, active_station, active_channel)?;
@@ -753,7 +753,7 @@ impl<const N: usize> EspNowProtocol<N> {
     pub fn receive_v2<'frame>(
         &self,
         active_station: BoundVirtualInterface,
-        active_channel: WifiChannel,
+        active_channel: Ghz2_4Channel,
         bytes: &'frame [u8],
     ) -> Result<EspNowReceivedV2<'frame>, EspNowV2ReceiveError> {
         if active_station != self.config.station {
@@ -797,7 +797,7 @@ impl<const N: usize> EspNowProtocol<N> {
 fn validate_active_binding(
     config: EspNowConfig,
     active_station: BoundVirtualInterface,
-    active_channel: WifiChannel,
+    active_channel: Ghz2_4Channel,
 ) -> Result<(), EspNowReceiveError> {
     if active_station != config.station {
         return Err(EspNowReceiveError::StationBindingMismatch {
@@ -977,7 +977,7 @@ pub enum EspNowV2RxOutcome<'frame> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EspNowPreparedV1Tx<'payload> {
     peer: EspNowPeerId,
-    home_channel: WifiChannel,
+    home_channel: Ghz2_4Channel,
     channel_policy: EspNowPeerChannelPolicy,
     station: BoundVirtualInterface,
     phy_mode: EspNowPhyMode,
@@ -993,12 +993,12 @@ impl EspNowPreparedV1Tx<'_> {
         self.frame.destination()
     }
 
-    pub const fn home_channel(self) -> WifiChannel {
+    pub const fn home_channel(self) -> Ghz2_4Channel {
         self.home_channel
     }
 
     /// Exact channel on which the backend may publish this frame.
-    pub const fn transmit_channel(self) -> WifiChannel {
+    pub const fn transmit_channel(self) -> Ghz2_4Channel {
         self.channel_policy.channel()
     }
 
@@ -1038,7 +1038,7 @@ impl EspNowPreparedV1Tx<'_> {
 #[derive(Clone, Copy, Debug)]
 pub struct EspNowPreparedV2Tx<'payload> {
     peer: EspNowPeerId,
-    home_channel: WifiChannel,
+    home_channel: Ghz2_4Channel,
     channel_policy: EspNowPeerChannelPolicy,
     station: BoundVirtualInterface,
     phy_mode: EspNowPhyMode,
@@ -1054,12 +1054,12 @@ impl EspNowPreparedV2Tx<'_> {
         self.frame.destination()
     }
 
-    pub const fn home_channel(self) -> WifiChannel {
+    pub const fn home_channel(self) -> Ghz2_4Channel {
         self.home_channel
     }
 
     /// Exact channel on which the backend may publish this frame.
-    pub const fn transmit_channel(self) -> WifiChannel {
+    pub const fn transmit_channel(self) -> Ghz2_4Channel {
         self.channel_policy.channel()
     }
 
@@ -1331,8 +1331,8 @@ pub enum EspNowReceiveError {
         active: BoundVirtualInterface,
     },
     ChannelMismatch {
-        configured: WifiChannel,
-        active: WifiChannel,
+        configured: Ghz2_4Channel,
+        active: Ghz2_4Channel,
     },
     Wire(EspNowV1WireError),
     ForeignDestination(EspNowDestination),
@@ -1370,8 +1370,8 @@ pub enum EspNowV2ReceiveError {
         active: BoundVirtualInterface,
     },
     ChannelMismatch {
-        configured: WifiChannel,
-        active: WifiChannel,
+        configured: Ghz2_4Channel,
+        active: Ghz2_4Channel,
     },
     Wire(EspNowV2WireError),
     ForeignDestination(EspNowDestination),

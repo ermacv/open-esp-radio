@@ -29,7 +29,7 @@ use oer_protocols_ieee80211_runtime::access_point::{
 };
 use oer_protocols_ieee80211_wire::{
     beacon::AP_BEACON_CAPACITY, phy::LegacyRate, security::spp::Interface,
-    sequence::SequenceNumber, ssid::WifiSsid,
+    sequence::SequenceNumber, ssid::Ssid,
 };
 
 /// The transmit buffers the access point holds: the port keeps them from
@@ -57,7 +57,7 @@ pub const MANAGEMENT_TRANSMISSIONS: u8 = 4;
 /// The BSS the access point serves.
 pub struct ApSettings {
     /// Its SSID.
-    pub ssid: WifiSsid,
+    pub ssid: Ssid,
     /// Its WPA2-Personal passphrase: 8 to 63 characters, erased on drop.
     pub passphrase: zeroize::Zeroizing<heapless::Vec<u8, 63>>,
     /// The beacon interval, in TU.
@@ -99,7 +99,7 @@ impl ApSettings {
     ///
     /// The value that is not a BSS's.
     pub fn wpa2(ssid: &[u8], passphrase: &[u8], clients: u8) -> Result<Self, ApSettingsError> {
-        let ssid = WifiSsid::new(ssid).map_err(|_| ApSettingsError::Ssid)?;
+        let ssid = Ssid::new(ssid).map_err(|_| ApSettingsError::Ssid)?;
         if !(8..=63).contains(&passphrase.len()) {
             return Err(ApSettingsError::Passphrase);
         }

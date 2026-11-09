@@ -29,7 +29,7 @@ use oer_chips_family_platform_interrupt_table::signal::{
 use oer_portable_time::Clock;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::ConnectionFrame;
-use oer_protocols_ieee80211_wire::channel::WifiChannelWidth;
+use oer_protocols_ieee80211_wire::channel::ChannelWidth;
 use oer_protocols_radio_port::SlotIdentity;
 use oer_protocols_radio_regulatory::Country;
 use std::{
@@ -128,8 +128,8 @@ struct Bench {
     walker: &'static RefCell<RxWalkerModel>,
 }
 
-fn channel() -> oer_protocols_ieee80211_wire::channel::WifiChannel {
-    oer_protocols_ieee80211_wire::channel::WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20)
+fn channel() -> oer_protocols_ieee80211_wire::channel::Ghz2_4Channel {
+    oer_protocols_ieee80211_wire::channel::Ghz2_4Channel::new(6, ChannelWidth::Mhz20)
         .expect("channel 6 is a 2.4 GHz channel")
 }
 

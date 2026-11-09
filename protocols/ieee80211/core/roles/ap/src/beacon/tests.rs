@@ -44,7 +44,7 @@ fn publication_beacon(storage: &mut [u8; AP_BEACON_CAPACITY]) -> ApBeacon<'_> {
         storage,
         &ADVERTISEMENT,
         [2; 6],
-        &WifiSsid::new(b"ap").unwrap(),
+        &Ssid::new(b"ap").unwrap(),
         Channel::ghz2_4(
             6,
             oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
@@ -143,7 +143,7 @@ fn empty_dtim_never_grants_a_group_release() {
 #[test]
 fn static_storage_owns_beacon_dtim_and_next_deadline() {
     let mut storage = [0; AP_BEACON_CAPACITY];
-    let ssid = WifiSsid::new(b"ap").unwrap();
+    let ssid = Ssid::new(b"ap").unwrap();
     let mut beacon = ApBeacon::new(
         &mut storage,
         &ADVERTISEMENT,
@@ -203,7 +203,7 @@ fn static_storage_owns_beacon_dtim_and_next_deadline() {
 #[test]
 fn late_publication_does_not_move_the_absolute_tbtt_schedule() {
     let mut storage = [0; AP_BEACON_CAPACITY];
-    let ssid = WifiSsid::new(b"ap").unwrap();
+    let ssid = Ssid::new(b"ap").unwrap();
     let mut beacon = ApBeacon::new(
         &mut storage,
         &ADVERTISEMENT,
@@ -264,7 +264,7 @@ fn the_tbtt_schedule_survives_the_u32_microsecond_boundary() {
     // About 71.6 minutes after boot the executor clock passes 2^32 µs; the
     // schedule keeps counting on the u64 axis instead of a wrapping tick.
     let mut storage = [0; AP_BEACON_CAPACITY];
-    let ssid = WifiSsid::new(b"ap").unwrap();
+    let ssid = Ssid::new(b"ap").unwrap();
     let mut beacon = ApBeacon::new(
         &mut storage,
         &ADVERTISEMENT,
@@ -316,7 +316,7 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
     };
 
     let mut storage = [0; AP_BEACON_CAPACITY];
-    let ssid = WifiSsid::new(b"ap").unwrap();
+    let ssid = Ssid::new(b"ap").unwrap();
     let mut beacon = ApBeacon::new(
         &mut storage,
         &ADVERTISEMENT,

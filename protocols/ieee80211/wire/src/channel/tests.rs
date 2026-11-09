@@ -2,29 +2,29 @@ use super::*;
 
 #[test]
 fn channel_fourteen_has_its_nonuniform_frequency() {
-    let channel = WifiChannel::mhz20(14).unwrap();
+    let channel = Ghz2_4Channel::mhz20(14).unwrap();
     assert_eq!(channel.primary_frequency_mhz(), 2_484);
     assert_eq!(channel.center_frequency_mhz(), 2_484);
 }
 
 #[test]
 fn forty_megahertz_geometry_is_bounded_to_real_secondary_channels() {
-    let above = WifiChannel::new_2_4_ghz(9, WifiChannelWidth::Mhz40Above).unwrap();
-    let below = WifiChannel::new_2_4_ghz(5, WifiChannelWidth::Mhz40Below).unwrap();
+    let above = Ghz2_4Channel::new(9, ChannelWidth::Mhz40Above).unwrap();
+    let below = Ghz2_4Channel::new(5, ChannelWidth::Mhz40Below).unwrap();
     assert_eq!(above.center_frequency_mhz(), 2_462);
     assert_eq!(below.center_frequency_mhz(), 2_422);
     assert_eq!(
-        WifiChannel::new_2_4_ghz(10, WifiChannelWidth::Mhz40Above),
-        Err(WifiChannelError::InvalidSecondary {
+        Ghz2_4Channel::new(10, ChannelWidth::Mhz40Above),
+        Err(Ghz2_4ChannelError::InvalidSecondary {
             primary: 10,
-            width: WifiChannelWidth::Mhz40Above,
+            width: ChannelWidth::Mhz40Above,
         })
     );
     assert_eq!(
-        WifiChannel::new_2_4_ghz(4, WifiChannelWidth::Mhz40Below),
-        Err(WifiChannelError::InvalidSecondary {
+        Ghz2_4Channel::new(4, ChannelWidth::Mhz40Below),
+        Err(Ghz2_4ChannelError::InvalidSecondary {
             primary: 4,
-            width: WifiChannelWidth::Mhz40Below,
+            width: ChannelWidth::Mhz40Below,
         })
     );
 }
@@ -37,12 +37,12 @@ fn every_2_4_ghz_channel_converts_both_ways() {
             ChannelWidth::Mhz40Above,
             ChannelWidth::Mhz40Below,
         ] {
-            let legacy = WifiChannel::new_2_4_ghz(primary, width);
+            let legacy = Ghz2_4Channel::new(primary, width);
             let channel = Channel::ghz2_4(primary, width);
             assert_eq!(legacy.is_ok(), channel.is_ok(), "{primary} {width:?}");
             if let (Ok(legacy), Ok(channel)) = (legacy, channel) {
                 assert_eq!(Channel::from(legacy), channel);
-                assert_eq!(WifiChannel::try_from(channel), Ok(legacy));
+                assert_eq!(Ghz2_4Channel::try_from(channel), Ok(legacy));
                 assert_eq!(channel.band(), Band::Ghz2_4);
                 assert_eq!(
                     channel.center_frequency_mhz(),
@@ -85,8 +85,8 @@ fn five_gigahertz_channels_follow_the_global_operating_classes() {
     let channel = Channel::ghz5(36, ChannelWidth::Mhz40Above).unwrap();
     assert_eq!(channel.primary_frequency_mhz(), 5_180);
     assert_eq!(channel.center_frequency_mhz(), 5_190);
-    assert_eq!(channel.wifi_channel(), None);
-    assert!(WifiChannel::try_from(channel).is_err());
+    assert_eq!(channel.ghz2_4_channel(), None);
+    assert!(Ghz2_4Channel::try_from(channel).is_err());
 }
 
 #[test]
@@ -104,5 +104,5 @@ fn every_channel_selects_its_own_cell_of_an_exact_table() {
         );
     }
     assert!(Channel::ghz5(255, ChannelWidth::Mhz40Above).is_err());
-    assert!(WifiChannel::mhz20(0).is_err());
+    assert!(Ghz2_4Channel::mhz20(0).is_err());
 }

@@ -358,6 +358,12 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         self.header.ready_len != 0
     }
 
+    /// Whether the agreements hold any received frame: in a reorder window,
+    /// in delivery order, parked or deferred.
+    pub fn holds_frames(&self) -> bool {
+        self.frames.iter().any(Option::is_some)
+    }
+
     /// Hold one data MPDU released for delivery while its consumer has no
     /// room: it waits behind the frames already in delivery order. A
     /// management or control frame is not held; the caller delivers it.

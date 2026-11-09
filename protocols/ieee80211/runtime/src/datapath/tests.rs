@@ -85,11 +85,19 @@ impl<'s> DatapathPort<'s> for TestPort<'s> {
     fn received(frame: &[u8], _: &ModelRxMeta) {
         OBSERVED.with(|observed| observed.borrow_mut().push(frame.to_vec()));
     }
+
+    const OBSERVES_RETURNS: bool = true;
+
+    fn returned(burst: super::ReturnBurst) {
+        BURSTS.with(|bursts| bursts.borrow_mut().push(burst));
+    }
 }
 
 std::thread_local! {
     /// The units the actor's observation saw on this test's thread.
     static OBSERVED: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
+    /// The return bursts the actor's observation saw on this test's thread.
+    static BURSTS: RefCell<Vec<super::ReturnBurst>> = const { RefCell::new(Vec::new()) };
 }
 
 type P<'s> = TestPort<'s>;
@@ -747,27 +755,63 @@ fn a_unit_landing_behind_the_queued_handover_is_routed_under_the_link() {
 }
 
 #[test]
-fn the_networks_lend_limit_holds_frames_until_it_returns_one() {
+fn the_networks_lend_limit_holds_frames_until_its_bound_then_the_ring_is_walked() {
     bench(|bench| {
         bench.start();
         bench.connect(link(true, None));
-        for sequence in 0..6 {
+        for sequence in 0..12 {
+            bench
+                .air
+                .receive(&data_from_ap(sequence, &[sequence as u8; 4]), meta());
+        }
+        bench.air.receive(&management(12), meta());
+        bench.settle();
+        // The model lends four units: the fifth waits in order and the rest
+        // in the ring, the station's frame behind them.
+        assert_eq!(bench.air.pending_rx(), 13 - 5);
+        assert!(bench.next().is_none());
+        // The episode reaches its bound: the actor's alarm walks the ring.
+        // The frames the port cannot lend go back to it at once, none
+        // copied, and the station's frame reaches the lifecycle.
+        bench.advance(NETWORK_LATE.as_micros());
+        bench.settle();
+        assert_eq!(bench.air.pending_rx(), 0, "the ring is walked to its end");
+        let Some(FromActor::Received { frame, .. }) = bench.next() else {
+            panic!("the station's frame reaches the lifecycle");
+        };
+        bench.send(ToActor::Recycle(frame));
+        let mut queued = Vec::new();
+        while let Some(frame) = bench.receive.try_receive() {
+            queued.push(frame);
+        }
+        assert_eq!(
+            queued.len(),
+            oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS
+        );
+        assert!(
+            queued
+                .iter()
+                .all(|frame| matches!(frame, Received::Lent(_)))
+        );
+        assert!(
+            bench.events.0.borrow().is_empty(),
+            "no reorder or lane drop"
+        );
+        // The network drops what it took: the loans come back and the next
+        // frames are lent again.
+        drop(queued);
+        for sequence in 13..17 {
             bench
                 .air
                 .receive(&data_from_ap(sequence, &[sequence as u8; 4]), meta());
         }
         bench.settle();
-        // The model lends four units: the others wait in order.
-        let mut lent = Vec::new();
+        let mut again = 0;
         while let Some(frame) = bench.receive.try_receive() {
-            lent.push(frame);
+            assert!(matches!(frame, Received::Lent(_)));
+            again += 1;
         }
-        assert_eq!(lent.len(), 4);
-        // The network returns one: the next frame follows.
-        drop(lent.pop());
-        bench.settle();
-        assert!(bench.receive.try_receive().is_some());
-        assert!(bench.events.0.borrow().is_empty(), "nothing dropped");
+        assert_eq!(again, 4);
     });
 }
 
@@ -2100,4 +2144,100 @@ fn a_terminal_the_full_lifecycle_refuses_waits_in_the_port_and_comes_once_its_ro
         assert!(bench.returns.try_receive().is_none(), "nothing comes again");
         assert!(bench.end.is_none());
     });
+}
+
+/// Each burst of returned memory tells what it queued, the queue before and
+/// after it and what stayed with the actor: a full queue holds the rest
+/// back, and the burst after the network emptied it carries them, from an
+/// empty queue.
+#[test]
+fn each_return_burst_tells_its_size_the_queue_around_it_and_what_stayed() {
+    bench(|bench| {
+        BURSTS.with(|bursts| bursts.borrow_mut().clear());
+        bench.start();
+        bench.connect(link(true, None));
+        bench.send_msdu(msdu(0, &[0; 8]));
+        bench.settle();
+        let _traffic = bench.next();
+        for round in 1..TX_DEPTH + 4 {
+            bench.send_msdu(msdu(0, &[u8::try_from(round).unwrap(); 8]));
+            bench.settle();
+            bench.advance(1_000);
+            bench.settle();
+        }
+        assert_eq!(bench.returned.len(), TX_DEPTH, "the queue is full");
+        let filled = BURSTS.with(|bursts| bursts.borrow().clone());
+        assert!(!filled.is_empty());
+        for burst in &filled {
+            assert!(burst.queued >= 1, "a burst queues something: {burst:?}");
+            assert_eq!(burst.after, burst.before + burst.queued, "{burst:?}");
+            assert!(burst.after <= TX_DEPTH, "{burst:?}");
+        }
+        let queued: usize = filled.iter().map(|burst| burst.queued).sum();
+        assert_eq!(queued, TX_DEPTH, "every burst so far went into the queue");
+        let last = filled.last().copied().unwrap();
+        assert_eq!(last.after, TX_DEPTH, "the last burst filled it");
+        while bench.returned.try_receive_with(Option::take).is_ok() {}
+        bench.settle();
+        let after = BURSTS.with(|bursts| bursts.borrow().clone());
+        let rest = after.get(filled.len()..).unwrap_or_default();
+        assert_eq!(rest.len(), 1, "the rest come back as one burst: {rest:?}");
+        let rest = rest[0];
+        assert_eq!(rest.before, 0, "from the emptied queue");
+        assert_eq!(rest.after, rest.queued);
+        assert_eq!(rest.held, 0, "nothing stays with the actor");
+        assert_eq!(
+            queued + rest.queued,
+            bench.data_sent().len(),
+            "every end went back in a burst"
+        );
+    });
+}
+
+/// Ends the network has not taken back wait in the actor while the queue
+/// is full; once the network takes the queue's, the actor returns the rest
+/// as one burst. A network waiting for a return is told once, at the
+/// burst's end, and finds the whole burst; one that arms only after the
+/// burst finds it at its arming, with no wake to lose.
+#[test]
+fn freed_memory_goes_back_as_one_burst_with_one_wake() {
+    for armed in [true, false] {
+        bench(|bench| {
+            bench.start();
+            bench.connect(link(true, None));
+            bench.send_msdu(msdu(0, &[0; 8]));
+            bench.settle();
+            let _traffic = bench.next();
+            // More ends than the queue holds.
+            for round in 1..TX_DEPTH + 4 {
+                bench.send_msdu(msdu(0, &[u8::try_from(round).unwrap(); 8]));
+                bench.settle();
+                bench.advance(1_000);
+                bench.settle();
+            }
+            assert_eq!(bench.returned.len(), TX_DEPTH, "the queue is full");
+            let mut back = 0;
+            while bench.returned.try_receive_with(Option::take).is_ok() {
+                back += 1;
+            }
+            let told = Arc::new(Counter(AtomicUsize::new(0)));
+            let waker = Waker::from(told.clone());
+            let mut cx = core::task::Context::from_waker(&waker);
+            if armed {
+                let ready = core::pin::pin!(bench.returned.ready()).poll(&mut cx);
+                assert!(ready.is_pending(), "the queue is empty");
+            }
+            bench.settle();
+            let burst = bench.returned.len();
+            assert!(burst >= 2, "the rest come back together: {burst}");
+            assert_eq!(back + burst, bench.data_sent().len(), "every end is back");
+            if armed {
+                assert_eq!(told.0.load(Ordering::Relaxed), 1, "one wake for the burst");
+            } else {
+                let ready = core::pin::pin!(bench.returned.ready()).poll(&mut cx);
+                assert!(ready.is_ready(), "its arming finds the burst");
+                assert_eq!(told.0.load(Ordering::Relaxed), 0);
+            }
+        });
+    }
 }

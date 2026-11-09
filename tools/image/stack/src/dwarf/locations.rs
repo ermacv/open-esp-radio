@@ -1,6 +1,8 @@
-//! Optional PC-specific variable/parameter locations, collected by read_debug.
-//! Attribute inheritance and piece acceptance retain the typed consumer's
-//! rules; machine-register aliases are prepared separately from instructions.
+//! Optional PC-specific variable/parameter locations, read by
+//! [`crate::read_locations`] for the [`LocationQueries`] the instruction pass
+//! built. Attribute inheritance and piece acceptance retain the typed
+//! consumer's rules; machine-register aliases are prepared separately from
+//! instructions.
 use super::{Entry, Reader, Unit, dwarf_error, next_operation, origin_reference, reference};
 use oer_tools_analysis_elf::dwarf::gimli;
 use oer_tools_analysis_riscv_model::*;
@@ -27,6 +29,118 @@ pub(crate) struct Location {
     pub(crate) place: Place,
 }
 
+/// Where the typed-location consumers can ask, built from the instruction
+/// pass before the locations are read ([`crate::location_queries`]). A
+/// [`Location`] is kept only when [`Self::keeps`] it; every other one is
+/// skipped by each consumer on its own conditions, so the answers are those
+/// of the complete collection.
+#[derive(Debug, Default)]
+pub struct LocationQueries {
+    /// PCs at which a register of any place may be asked (`fields`,
+    /// `value_field`): sorted and unique once finished.
+    points: Vec<u32>,
+    /// Half-open PC ranges in which a complete register word may be asked
+    /// with its continuation (`waker_register`): sorted, disjoint and
+    /// non-adjacent once finished.
+    windows: Vec<(u32, u64)>,
+}
+
+impl LocationQueries {
+    pub(crate) fn point(
+        &mut self,
+        pc: u32,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
+    ) -> Result<()> {
+        keep.push(&mut self.points, pc, control)
+    }
+
+    /// An empty range asks nothing and is not retained.
+    pub(crate) fn window(
+        &mut self,
+        start: u32,
+        end: u64,
+        keep: &mut Ledger<'_>,
+        control: &mut dyn RunControl,
+    ) -> Result<()> {
+        if u64::from(start) >= end {
+            return Ok(());
+        }
+        keep.push(&mut self.windows, (start, end), control)
+    }
+
+    /// Sort the points and merge the windows in place; a union intersects a
+    /// range exactly when one of its members does.
+    pub(crate) fn finish(&mut self, control: &mut dyn RunControl) -> Result<()> {
+        let charge = |count: usize| {
+            (count as u64).saturating_mul(u64::from(usize::BITS - count.leading_zeros()))
+        };
+        control.checkpoint(charge(self.points.len()))?;
+        self.points.sort_unstable();
+        self.points.dedup();
+        control.checkpoint(charge(self.windows.len()))?;
+        self.windows.sort_unstable();
+        // Sorted by start, a window overlapping or adjoining the last kept
+        // one extends it.
+        self.windows.dedup_by(|next, kept| {
+            let joins = u64::from(next.0) <= kept.1;
+            if joins {
+                kept.1 = kept.1.max(next.1);
+            }
+            joins
+        });
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn points(&self) -> &[u32] {
+        &self.points
+    }
+
+    /// Queries of exactly `points` and `windows`, finished.
+    #[cfg(test)]
+    pub(crate) fn asking(points: &[u32], windows: &[(u32, u64)]) -> Self {
+        let mut keep = crate::tests::ledger();
+        let mut queries = Self::default();
+        for &pc in points {
+            queries.point(pc, &mut keep, &mut || Ok(())).unwrap();
+        }
+        for &(start, end) in windows {
+            queries
+                .window(start, end, &mut keep, &mut || Ok(()))
+                .unwrap();
+        }
+        queries.finish(&mut || Ok(())).unwrap();
+        queries
+    }
+
+    /// `location` is kept when its range `[start, end)` contains a point, or,
+    /// for a register place whose piece is a complete word or the whole value,
+    /// when it intersects a window. A point consumer reads only locations
+    /// containing its PC. The window consumer reads only such register places
+    /// (a piece of another size never has its four bytes), and only those
+    /// intersecting its range `[pc, end)`: its first location contains `pc`,
+    /// and each joined continuation starts at or before a covered PC below
+    /// `end` and ends after a covered PC above `pc`.
+    pub(crate) fn keeps(&self, location: &Location) -> bool {
+        let at = self.points.partition_point(|&pc| pc < location.start);
+        if self.points.get(at).is_some_and(|&pc| pc < location.end) {
+            return true;
+        }
+        if !matches!(location.place, Place::Register(_))
+            || location.bytes.is_some_and(|bytes| bytes != 4)
+        {
+            return false;
+        }
+        let at = self
+            .windows
+            .partition_point(|&(_, end)| end <= u64::from(location.start));
+        self.windows
+            .get(at)
+            .is_some_and(|&(start, _)| start < location.end)
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct LocalLocations {
     /// A concrete/abstract variable's own type and its origin.
@@ -49,9 +163,13 @@ impl LocalLocations {
     fn add(
         &mut self,
         location: Location,
+        queries: &LocationQueries,
         keep: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<()> {
+        if !queries.keeps(&location) {
+            return Ok(());
+        }
         let register = match location.place {
             Place::Register(register)
             | Place::Memory(register, _)
@@ -71,6 +189,7 @@ impl LocalLocations {
         encoding: gimli::Encoding,
         owner: usize,
         ranges: &[(u32, u32)],
+        queries: &LocationQueries,
         keep: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<()> {
@@ -127,6 +246,7 @@ impl LocalLocations {
                                     bytes: Some(bytes),
                                     place,
                                 },
+                                queries,
                                 keep,
                                 control,
                             )?;
@@ -153,6 +273,7 @@ impl LocalLocations {
                         bytes: None,
                         place,
                     },
+                    queries,
                     keep,
                     control,
                 )?;
@@ -163,20 +284,23 @@ impl LocalLocations {
 }
 
 /// Per-unit lexical state; its reservations are released at the unit boundary.
-pub(super) struct LocationWalk<'f, 'm> {
+pub(super) struct LocationWalk<'f, 'q, 'm> {
     facts: &'f mut LocalLocations,
+    queries: &'q LocationQueries,
     scopes: Vec<(isize, Vec<(u32, u32)>)>,
     scratch: Ledger<'m>,
 }
 
-impl<'f, 'm> LocationWalk<'f, 'm> {
+impl<'f, 'q, 'm> LocationWalk<'f, 'q, 'm> {
     pub(super) fn new(
         facts: &'f mut LocalLocations,
+        queries: &'q LocationQueries,
         memory: &'m WorkingMemory,
         control: &mut dyn RunControl,
     ) -> Result<Self> {
         Ok(Self {
             facts,
+            queries,
             scopes: Vec::new(),
             scratch: Ledger::new(memory, control)?,
         })
@@ -239,6 +363,7 @@ impl<'f, 'm> LocationWalk<'f, 'm> {
                         unit.encoding(),
                         owner,
                         ranges,
+                        self.queries,
                         keep,
                         control,
                     )?;
@@ -257,6 +382,7 @@ impl<'f, 'm> LocationWalk<'f, 'm> {
                                 unit.encoding(),
                                 owner,
                                 &[(start, end)],
+                                self.queries,
                                 keep,
                                 control,
                             )?;
