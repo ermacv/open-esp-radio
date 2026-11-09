@@ -293,7 +293,8 @@ pub enum Violation {
     Lifecycle,
     /// A refusal changed or lost an owner, or named another reason.
     Refusal,
-    /// A receive pull ignored the room, or lost or invented a unit.
+    /// A receive pull ignored the room, lost or invented a unit, or the
+    /// port refused the recycle of a unit it gave.
     Receive,
     /// A barrier command ran early or never ran.
     Barrier,
@@ -375,7 +376,7 @@ fn quiet_calls<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Viol
         .map_err(|_| Violation::Fault)?;
     match port.receive(8, now).map_err(|_| Violation::Fault)? {
         RxPull::Unit { frame, .. } => {
-            port.recycle(frame);
+            let _recycled = port.recycle(frame);
             return Err(Violation::Receive);
         }
         RxPull::Empty | RxPull::Later(_) => {}
@@ -424,7 +425,7 @@ fn receive_room<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
     let now = harness.now();
     let (port, _) = harness.parts();
     if let RxPull::Unit { frame, .. } = port.receive(0, now).map_err(|_| Violation::Fault)? {
-        port.recycle(frame);
+        let _recycled = port.recycle(frame);
         return Err(Violation::Receive);
     }
     let mut taken = 0;
@@ -433,7 +434,7 @@ fn receive_room<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
         let (port, _) = harness.parts();
         match port.receive(3, now).map_err(|_| Violation::Fault)? {
             RxPull::Unit { frame, .. } => {
-                port.recycle(frame);
+                port.recycle(frame).map_err(|_| Violation::Receive)?;
                 taken += 1;
             }
             RxPull::Later(at) if at <= now => {}

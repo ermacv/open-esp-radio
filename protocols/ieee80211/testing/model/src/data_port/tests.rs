@@ -336,7 +336,7 @@ impl<'s> Harness<'s> {
         let frames = core::mem::take(&mut self.sink.received);
         let count = frames.len();
         for (frame, _) in frames {
-            self.port.recycle(frame);
+            assert!(self.port.recycle(frame).is_ok());
         }
         count
     }
@@ -757,7 +757,7 @@ fn no_data_port_call_wakes_its_caller() {
         let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
             panic!("a delivered unit");
         };
-        harness.port.recycle(frame);
+        assert!(harness.port.recycle(frame).is_ok());
         let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
             panic!("the second unit");
         };
@@ -782,6 +782,44 @@ fn no_data_port_call_wakes_its_caller() {
 }
 
 #[test]
+fn a_recycle_its_count_refuses_comes_back_whole_and_the_count_stays() {
+    use oer_protocols_ieee80211_contracts_port::{ReceiveAccounting, ReceiveOperation, RxBuffer};
+    with_harness(|harness| {
+        harness.start();
+        harness.deliver(1);
+        let now = harness.clock.now();
+        let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
+            panic!("one unit");
+        };
+        let bytes = frame.bytes().to_vec();
+        harness.air.refuse_recycles(1);
+        let Err(refused) = harness.port.recycle(frame) else {
+            panic!("the count refuses it");
+        };
+        assert_eq!(
+            refused.fault,
+            ReceiveAccounting {
+                operation: ReceiveOperation::Recycle,
+                held: 1,
+                requested: 1,
+            }
+        );
+        assert_eq!(refused.unit.bytes(), bytes.as_slice());
+        // Nothing was taken: the held unit still fills the room, and no
+        // fault was recorded.
+        assert!(matches!(
+            harness.port.receive(1, now).unwrap(),
+            RxPull::Empty
+        ));
+        assert!(harness.port.recycle(refused.unit).is_ok());
+        assert!(matches!(
+            harness.port.receive(1, now).unwrap(),
+            RxPull::Empty
+        ));
+    });
+}
+
+#[test]
 fn a_receive_pull_takes_one_unit_within_the_callers_room() {
     with_harness(|harness| {
         harness.start();
@@ -799,11 +837,11 @@ fn a_receive_pull_takes_one_unit_within_the_callers_room() {
             1,
             "the other unit waits in the ring"
         );
-        harness.port.recycle(first);
+        assert!(harness.port.recycle(first).is_ok());
         let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
             panic!("the waiting unit");
         };
-        harness.port.recycle(frame);
+        assert!(harness.port.recycle(frame).is_ok());
         assert!(matches!(
             harness.port.receive(1, now).unwrap(),
             RxPull::Empty
@@ -1048,8 +1086,8 @@ fn the_receive_limits_bind_each_at_its_own_place() {
         assert!(!harness.port.lend_room());
         let refused = harness.port.lend(units.pop().unwrap()).err().unwrap();
         assert_eq!(refused.reason, LendRefusal::Capacity);
-        harness.port.recycle(refused.buffer);
-        harness.port.recycle(units.pop().unwrap());
+        assert!(harness.port.recycle(refused.buffer).is_ok());
+        assert!(harness.port.recycle(units.pop().unwrap()).is_ok());
         drop(lent);
         assert!(harness.port.lend_room());
         harness.recycle_received();
@@ -1113,12 +1151,12 @@ fn the_model_holds_its_receive_bound_and_keeps_the_rest_in_the_ring() {
         assert_eq!(held.len(), MODEL_RX_EVENTS);
         assert_eq!(harness.air.pending_rx(), 1);
         for frame in held {
-            harness.port.recycle(frame);
+            assert!(harness.port.recycle(frame).is_ok());
         }
         let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
             panic!("room again");
         };
-        harness.port.recycle(frame);
+        assert!(harness.port.recycle(frame).is_ok());
     });
 }
 
@@ -1408,7 +1446,7 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
             }
         );
         assert_eq!(harness.port.fault(), Some(fault));
-        harness.port.recycle(frame);
+        assert!(harness.port.recycle(frame).is_ok());
     });
 }
 

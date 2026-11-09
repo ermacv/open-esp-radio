@@ -408,8 +408,7 @@ pub enum Fault {
     ChannelUnsupported,
     /// A key a command names is not installed, or no key place is free.
     KeySlotMissing(KeyOp),
-    /// The caller returned more received units than it held, or the
-    /// network more lends than the caller made.
+    /// The network returned more lends than the caller made.
     ReceiveAccounting,
     /// An HE association the MAC's fields do not hold, which the port
     /// contract's ranges exclude.

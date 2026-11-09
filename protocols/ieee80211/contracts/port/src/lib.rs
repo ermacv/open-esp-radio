@@ -173,8 +173,9 @@ pub use interface_commands::{
     ConfigurePermission, Configured, InterfaceCommandPool, InterfaceGrant, InterfacePermissions,
 };
 pub use rx::{
-    AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus,
-    RxEvidence, RxMeta, RxMetadata, SignalMetadata,
+    AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, ReceiveAccounting,
+    ReceiveOperation, RecycleRefused, RxBuffer, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata,
+    SignalMetadata,
 };
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,

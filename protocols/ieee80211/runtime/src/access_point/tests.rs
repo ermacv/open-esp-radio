@@ -378,6 +378,7 @@ fn stopped<F: core::fmt::Debug>(end: ApEnd<F>) {
         ApEnd::Faulted(fault) => panic!("the port faulted: {fault:?}"),
         ApEnd::Contract(contract) => panic!("the runner's contract: {contract:?}"),
         ApEnd::Refused(refusal) => panic!("the port takes every command: {refusal:?}"),
+        ApEnd::Unrecycled(fault) => panic!("the port takes every unit back: {fault:?}"),
     }
 }
 
@@ -688,7 +689,10 @@ macro_rules! expired {
         );
         assert!($runner.take_kept().is_none(), "nothing kept beside it");
         let mut reported = 0;
-        $runner.finish_stop($counted, |_| reported += 1).await;
+        assert_eq!(
+            $runner.finish_stop($counted, |_| reported += 1).await,
+            Ok(())
+        );
         assert_eq!(reported, 0, "the stop is never unconfirmed");
         drop(command);
     }};

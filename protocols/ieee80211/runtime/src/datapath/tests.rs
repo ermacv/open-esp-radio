@@ -402,8 +402,20 @@ impl<'s> Bench<'_, 's> {
     }
 }
 
+/// The actor a bench ran, once its run is gone.
+type BenchActor<'s> = Actor<'s, P<'s>, EspressifRateSelection<ModelCaps24>, Recorder>;
+
 /// Run `test` against a fresh actor on the model.
 fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
+    bench_then(test, |_, _| {});
+}
+
+/// Run `test` against a fresh actor on the model; then hand `after` the
+/// actor and the end of one poll of a new run of it.
+fn bench_then(
+    test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>),
+    after: impl for<'s> FnOnce(&mut BenchActor<'s>, Poll<ActorEnd<ModelPortFault>>),
+) {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Clocked {
             inner: Rc::new(VirtualClock::new()),
@@ -498,33 +510,43 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
             receive_copied: copies_end,
             network: &network_side,
         };
-        let run = actor.run(&mut lifecycle, &mut network, &clock);
-        let mut run = core::pin::pin!(run);
-        let mut bench = Bench {
-            clock: &clock,
-            network: &network_side,
-            air,
-            run: run.as_mut(),
-            counter: Arc::new(Counter(AtomicUsize::new(0))),
-            events,
-            end: None,
-            polls: 0,
-            to_actor,
-            from_actor,
-            returns,
-            link,
-            link_return,
-            transmit,
-            returned,
-            receive,
-            tickets,
-            small,
-            commands,
-            association: Some(station_association),
-            pairwise: Some(station_pairwise),
+        {
+            let run = actor.run(&mut lifecycle, &mut network, &clock);
+            let mut run = core::pin::pin!(run);
+            let mut bench = Bench {
+                clock: &clock,
+                network: &network_side,
+                air,
+                run: run.as_mut(),
+                counter: Arc::new(Counter(AtomicUsize::new(0))),
+                events,
+                end: None,
+                polls: 0,
+                to_actor,
+                from_actor,
+                returns,
+                link,
+                link_return,
+                transmit,
+                returned,
+                receive,
+                tickets,
+                small,
+                commands,
+                association: Some(station_association),
+                pairwise: Some(station_pairwise),
+            };
+            bench.settle();
+            test(&mut bench);
+        }
+        let rerun = {
+            let run = actor.run(&mut lifecycle, &mut network, &clock);
+            let mut run = core::pin::pin!(run);
+            let waker = Waker::from(Arc::new(Counter(AtomicUsize::new(0))));
+            run.as_mut()
+                .poll(&mut core::task::Context::from_waker(&waker))
         };
-        bench.settle();
-        test(&mut bench);
+        after(&mut actor, rerun);
     }));
 }
 
@@ -956,6 +978,52 @@ fn a_command_the_faulted_port_gives_back_returns_unrun_and_the_port_recovers() {
         }
         assert!(recovering, "the port recovered for the stop");
     });
+}
+
+#[test]
+fn a_recycle_the_port_refuses_ends_the_actor_and_its_unit_comes_back_once() {
+    let fault = oer_protocols_ieee80211_contracts_port::ReceiveAccounting {
+        operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+        held: 1,
+        requested: 1,
+    };
+    bench_then(
+        |bench| {
+            bench.start();
+            bench.connect(link(true, None));
+            bench.air.refuse_recycles(1);
+            bench.air.receive(&foreign_data(1), meta());
+            bench.settle();
+            assert_eq!(
+                bench.end,
+                Some(ActorEnd::Faulted(ActorFault::Receive(fault)))
+            );
+            let mut faulted = false;
+            while let Some(message) = bench.next() {
+                assert!(
+                    !matches!(message, FromActor::Recovering(_)),
+                    "a refused recycle asks for no restart"
+                );
+                faulted |= matches!(message, FromActor::Faulted(ActorFault::Receive(_)));
+            }
+            assert!(faulted, "the lifecycle hears the count");
+        },
+        |actor, rerun| {
+            // No turn runs while the unit is kept.
+            assert_eq!(
+                rerun,
+                Poll::Ready(ActorEnd::Faulted(ActorFault::Receive(fault)))
+            );
+            let refused = actor.take_unrecycled().expect("the unit");
+            assert_eq!(refused.fault, fault);
+            assert_eq!(
+                oer_protocols_ieee80211_contracts_port::RxBuffer::bytes(&refused.unit),
+                foreign_data(1).as_slice()
+            );
+            assert!(actor.take_unrecycled().is_none(), "once");
+            assert!(actor.port_mut().recycle(refused.unit).is_ok());
+        },
+    );
 }
 
 #[test]

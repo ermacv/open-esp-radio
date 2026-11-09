@@ -2,7 +2,8 @@
 //! lifecycle's messages and the radio's start, move and stop.
 
 use super::*;
-use oer_protocols_ieee80211_contracts_port::PortCompleted;
+use oer_protocols_ieee80211_contracts_port::{PortCompleted, RecycleRefused};
+use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckRefused;
 
 /// What [`Actor::collect`] found.
 pub(super) struct Collected {
@@ -128,8 +129,11 @@ impl<'id, P: DataPort<'id>> RxBlockAckPort<PortRxBlockAck<'id, P::Types>> for Po
         self.0.remove_block_ack(running)
     }
 
-    fn recycle(&mut self, frame: <P::Types as PortTypes<'id>>::RxBuffer) {
-        self.0.recycle(frame);
+    fn recycle(
+        &mut self,
+        frame: <P::Types as PortTypes<'id>>::RxBuffer,
+    ) -> Result<(), RecycleRefused<<P::Types as PortTypes<'id>>::RxBuffer>> {
+        self.0.recycle(frame)
     }
 }
 
@@ -773,22 +777,26 @@ where
                 outcome,
             } => self.rates.learn(self.now, rates, current, &outcome),
             ToActor::RxAgreement(request) => {
-                if self
-                    .receive
-                    .offer(
-                        self.now,
-                        request.epoch(),
-                        request.bssid(),
-                        request.action(),
-                        request.supported(),
-                        &mut PortBlockAcks(&mut self.port),
-                        &mut self.events,
-                    )
-                    .is_err()
-                {
+                match self.receive.offer(
+                    self.now,
+                    request.epoch(),
+                    request.bssid(),
+                    request.action(),
+                    request.supported(),
+                    &mut PortBlockAcks(&mut self.port),
+                    &mut self.events,
+                ) {
+                    Ok(()) => {}
                     // No reply place or bank is left for the request: the
                     // access point hears nothing and asks again.
-                    report(&mut self.events, || ActorEvent::RepliesFull);
+                    Err(RxBlockAckRefused::Capacity(_)) => {
+                        report(&mut self.events, || ActorEvent::RepliesFull);
+                    }
+                    // The previous association's frames stay in their
+                    // places; the run ends on the count.
+                    Err(RxBlockAckRefused::Clear(fault)) => {
+                        return Err(ActorFault::Receive(fault));
+                    }
                 }
             }
             ToActor::BlockAckReplied(place) => {
@@ -802,7 +810,7 @@ where
                 self.owed.gate = Some(self.port.open_gate(closed));
             }
             ToActor::Recycle(frame) => {
-                self.port.recycle(frame);
+                self.recycle(frame)?;
                 self.frames_out = self.frames_out.saturating_sub(1);
                 // The room it frees may let the ring give units it held
                 // back: the next turn pulls again.
@@ -929,7 +937,8 @@ where
     ) -> Result<(), Failed<'id, D>> {
         self.stop_data()?;
         self.receive
-            .clear(&mut PortBlockAcks(&mut self.port), &mut self.events);
+            .clear(&mut PortBlockAcks(&mut self.port), &mut self.events)
+            .map_err(ActorFault::Receive)?;
         self.reply_out = None;
         let Some(link) = self.link.take() else {
             return Err(ActorFault::Contract(ActorViolation::LinkMailbox));
@@ -980,7 +989,8 @@ where
         }
         self.stop_data()?;
         self.receive
-            .clear(&mut PortBlockAcks(&mut self.port), &mut self.events);
+            .clear(&mut PortBlockAcks(&mut self.port), &mut self.events)
+            .map_err(ActorFault::Receive)?;
         self.reply_out = None;
         self.return_freed(network);
         // The network stops once its memory is home: the stopped radio's
@@ -1346,6 +1356,18 @@ where
         }
     }
 
+    /// Return `frame` to the port. A refusal keeps the unit with the actor
+    /// and ends the run: the caller returns the fault at once, and no turn
+    /// runs while the unit is kept ([`Actor::take_unrecycled`]), so the
+    /// one place is empty here.
+    pub(super) fn recycle(&mut self, frame: ActorRxBuffer<'id, D>) -> Result<(), Failed<'id, D>> {
+        self.port.recycle(frame).map_err(|refused| {
+            let fault = refused.fault;
+            self.retained.unrecycled = Some(refused);
+            ActorFault::Receive(fault)
+        })
+    }
+
     /// Serve `fault`: the first one the port can stop past asks the
     /// lifecycle for a restart. Any other ends the run; the lifecycle hears
     /// it when its queue has room, and every owner stays where it is.
@@ -1354,7 +1376,9 @@ where
         lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         fault: Failed<'id, D>,
     ) {
+        // A refused recycle is final: its unit stays kept, so no restart.
         if !self.recovering
+            && !matches!(fault, ActorFault::Receive(_))
             && self.port.recover_for_stop()
             && lifecycle
                 .from_actor

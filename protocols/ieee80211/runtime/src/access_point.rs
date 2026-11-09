@@ -28,7 +28,9 @@
 //! that ends in any way is not sent again: the next TBTT's beacon replaces
 //! it. The beacon's Timestamp is written at its preparation
 //! ([`BeaconTimestamp::Caller`]): the runner's time since the TSF restart;
-//! the deadline says nothing of its accuracy on the air.
+//! the deadline says nothing of its accuracy on the air. Over a port that
+//! declares no such rule no beacon is admitted: each TBTT's beacon ends
+//! unsent, its ticket and buffer home.
 //!
 //! # Waiting
 //!
@@ -81,11 +83,12 @@ use oer_protocols_ieee80211_contracts_port::{
     AccessPointReceive, AccessPointRefusal, Attempt, AttemptKey, BeaconAttempt, BeaconPermission,
     BeaconStamp, BeaconTimestamp, CommandFailed, ConfigurePermission, Configured, ConnectionFrame,
     DataPort, Facts, GroupKeyId, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
-    NumberedKey, PhyRate, PortSink, PortTypes, Protection, ReceiveFilter, Removed, RemovedKey,
-    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd,
-    StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl,
-    TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool,
-    TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
+    NumberedKey, PhyRate, PortSink, PortTypes, Protection, ReceiveAccounting, ReceiveFilter,
+    RecycleRefused, Removed, RemovedKey, RetryPlan, RetryStage, RxCryptoStatus, RxEvidence,
+    RxMetadata, RxPull, SingleEnd, StopUnconfirmed, SupportedChannel, SupportedFilter,
+    SupportedPower, SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass,
+    TxBufferMemory, TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower,
+    TxProtection, TxSource,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
     ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
@@ -264,12 +267,20 @@ pub enum ApEnd<F> {
     /// refusal; every owner is in the runner, the refused command among
     /// them ([`ApRunner::take_returned`]).
     Refused(AccessPointRefusal),
+    /// The port refused a received unit's recycle for its count: the unit
+    /// is in the runner ([`ApRunner::take_unrecycled`]), every other owner
+    /// in its place. The runner returns no unit more, its stop
+    /// ([`ApRunner::finish_stop`]) included.
+    Unrecycled(ReceiveAccounting),
 }
 
 /// Why a step of the runner ended the run.
 enum Halt<F> {
     Faulted(F),
     Contract(ApContract),
+    /// The port refused a unit's recycle, which the runner holds
+    /// ([`ApRunner::take_unrecycled`]).
+    Unrecycled(ReceiveAccounting),
     /// The port refused a command, which the runner holds
     /// ([`ApRunner::take_returned`]).
     Refused(AccessPointRefusal),
@@ -577,6 +588,9 @@ where
     /// Owners a terminal brought that have no home of the runner's: the
     /// port returned more than the runner lent it.
     kept: heapless::Deque<Kept<'id, P, C>, KEPT>,
+    /// The unit whose recycle the port refused. The first refusal ends the
+    /// run and the runner returns no unit after it, so it is the only one.
+    unrecycled: Option<RecycleRefused<<Ty<'id, P> as PortTypes<'id>>::RxBuffer>>,
     /// The first break of the runner's contract a terminal showed: the run
     /// ends with it once the port's call returned.
     broken: Option<ApContract>,
@@ -1316,6 +1330,7 @@ where
                 held: None,
                 returned: None,
                 kept: heapless::Deque::new(),
+                unrecycled: None,
                 broken: None,
                 begins: heapless::Deque::new(),
                 cut: heapless::Deque::new(),
@@ -1336,6 +1351,10 @@ where
         shared: &ApShared,
         clock: &T,
     ) -> ApEnd<PortFault<'id, P>> {
+        // A unit the port refused stays until its owner takes it: no run.
+        if let Some(refused) = self.homes.unrecycled.as_ref() {
+            return ApEnd::Unrecycled(refused.fault);
+        }
         // The radio starts on the BSS's channel.
         let channel = self.homes.channel;
         let started = poll_fn(|cx| {
@@ -1454,7 +1473,13 @@ where
         }
         self.homes.status.running = false;
         shared.publish(self.homes.status);
-        match self.watch_stop(clock, |_| true).await {
+        let watched = self.watch_stop(clock, |_| true).await;
+        if let Some(refused) = self.homes.unrecycled.as_ref() {
+            // The stop's watch found a unit the port refused; the stop is
+            // watched on by [`ApRunner::finish_stop`] if not confirmed.
+            return ApEnd::Unrecycled(refused.fault);
+        }
+        match watched {
             Ok(()) => ApEnd::Stopped,
             Err(unconfirmed) => ApEnd::StopUnconfirmed(unconfirmed),
         }
@@ -1468,11 +1493,17 @@ where
     /// again, only watched. A port fault is taken back first when the port
     /// can ([`DataPort::recover_for_stop`]). Nothing is sent and no command
     /// goes meanwhile. It returns only once the port confirmed the stop.
+    ///
+    /// # Errors
+    ///
+    /// The port refused a unit's recycle, before or during the stop: the
+    /// count that refused it; the unit is in the runner
+    /// ([`ApRunner::take_unrecycled`]) and no unit went back after it.
     pub async fn finish_stop<T: Timer>(
         &mut self,
         clock: &T,
         mut unconfirmed: impl FnMut(StopUnconfirmed),
-    ) {
+    ) -> Result<(), ReceiveAccounting> {
         if self.homes.faulted {
             self.homes.faulted = !self.port.recover_for_stop();
         }
@@ -1480,7 +1511,12 @@ where
         // its ring: the port counts it out until then.
         for _ in 0..self.homes.kept.len() {
             match self.homes.kept.pop_front() {
-                Some(Kept::Unit(frame)) => self.port.recycle(frame),
+                Some(Kept::Unit(frame)) if self.homes.unrecycled.is_none() => {
+                    if let Err(refused) = self.port.recycle(frame) {
+                        // The first refusal: no unit goes back after it.
+                        self.homes.unrecycled = Some(refused);
+                    }
+                }
                 Some(other) => {
                     // Its own place, which the pop freed.
                     if let Err(other) = self.homes.kept.push_back(other) {
@@ -1500,6 +1536,10 @@ where
                 false
             })
             .await;
+        match self.homes.unrecycled.as_ref() {
+            Some(refused) => Err(refused.fault),
+            None => Ok(()),
+        }
     }
 
     /// Watch the radio's stop: serve the port at its facts and its due
@@ -1535,9 +1575,14 @@ where
                     &mut self.homes,
                 );
                 // The stop reads nothing a cut hands over: each unit goes
-                // back to its ring at once.
-                while let Some((frame, _)) = self.homes.cut.pop_front() {
-                    self.port.recycle(frame);
+                // back to its ring at once, until the port refuses one;
+                // after it, every unit stays in its place.
+                while self.homes.unrecycled.is_none()
+                    && let Some((frame, _)) = self.homes.cut.pop_front()
+                {
+                    if let Err(refused) = self.port.recycle(frame) {
+                        self.homes.unrecycled = Some(refused);
+                    }
                 }
             }
             facts = Facts::default();
@@ -1613,6 +1658,7 @@ where
             }
             Halt::Contract(contract) => ApEnd::Contract(contract),
             Halt::Refused(refusal) => ApEnd::Refused(refusal),
+            Halt::Unrecycled(fault) => ApEnd::Unrecycled(fault),
         }
     }
 
@@ -1625,6 +1671,28 @@ where
     /// The next owner a terminal brought that had no home of the runner's.
     pub fn take_kept(&mut self) -> Option<Kept<'id, P, C>> {
         self.homes.kept.pop_front()
+    }
+
+    /// The unit whose recycle the port refused, with the count that
+    /// refused it, once ([`ApEnd::Unrecycled`]).
+    pub fn take_unrecycled(
+        &mut self,
+    ) -> Option<RecycleRefused<<Ty<'id, P> as PortTypes<'id>>::RxBuffer>> {
+        self.homes.unrecycled.take()
+    }
+
+    /// Return `frame` to the port. A refusal keeps the unit in the runner
+    /// and ends the run: the caller returns at once, and no step returns
+    /// a unit after it, so the one place is empty here.
+    fn recycle(
+        &mut self,
+        frame: <Ty<'id, P> as PortTypes<'id>>::RxBuffer,
+    ) -> Result<(), Halt<PortFault<'id, P>>> {
+        self.port.recycle(frame).map_err(|refused| {
+            let fault = refused.fault;
+            self.homes.unrecycled = Some(refused);
+            Halt::Unrecycled(fault)
+        })
     }
 
     /// The port, for the composition's release once the stop is confirmed.
@@ -1727,7 +1795,7 @@ where
                 integrity(&meta),
                 now,
             );
-            self.port.recycle(frame);
+            self.recycle(frame)?;
             result?;
         }
         while let Some(peer) = self.homes.begins.pop_front() {
@@ -1764,7 +1832,7 @@ where
                 integrity(&meta),
                 now,
             );
-            self.port.recycle(frame);
+            self.recycle(frame)?;
             result?;
         }
         Ok(())

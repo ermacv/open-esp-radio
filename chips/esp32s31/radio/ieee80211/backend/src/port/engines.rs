@@ -23,8 +23,9 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 use oer_protocols_ieee80211_contracts_port::{
     CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, PairwiseIssue,
     PortArena, PortCommand, PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer,
-    PortRxPull, PortSink, RxPull, StartFailure, StartRefused, StationSubmission, StopCause,
-    StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
+    PortRxPull, PortSink, ReceiveAccounting, ReceiveOperation, RecycleRefused, RxPull,
+    StartFailure, StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed,
+    SubmitRefusal, TxFacts,
 };
 use oer_protocols_radio_port::{Installation as Receipt, Installations, Minted};
 
@@ -790,6 +791,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.shared
             .lost
             .fetch_add(units, core::sync::atomic::Ordering::AcqRel);
+    }
+
+    /// Set the received units the caller holds: a count a unit did not
+    /// join.
+    #[cfg(test)]
+    pub(crate) fn set_held_for_test(&self, held: usize) {
+        self.rx_out.set(held);
     }
 
     /// The received units the caller holds.
@@ -2155,15 +2163,25 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         Ok(RxPull::Later(now))
     }
 
-    fn recycle(&mut self, unit: PortRxBuffer<'id, Self>) {
-        let unit = unit.into_unit();
-        self.device.recycle(unit);
-        match self.rx_out.get().checked_sub(1) {
-            Some(held) => self.rx_out.set(held),
-            None => {
-                self.record(Fault::ReceiveAccounting);
-            }
-        }
+    fn recycle(
+        &mut self,
+        unit: PortRxBuffer<'id, Self>,
+    ) -> Result<(), RecycleRefused<PortRxBuffer<'id, Self>>> {
+        // The count first: a refused unit is not touched.
+        let held = self.rx_out.get();
+        let Some(after) = held.checked_sub(1) else {
+            return Err(RecycleRefused {
+                unit,
+                fault: ReceiveAccounting {
+                    operation: ReceiveOperation::Recycle,
+                    held,
+                    requested: 1,
+                },
+            });
+        };
+        self.rx_out.set(after);
+        self.device.recycle(unit.into_unit());
+        Ok(())
     }
 
     fn lend(

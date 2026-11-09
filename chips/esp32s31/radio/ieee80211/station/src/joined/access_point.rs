@@ -241,13 +241,17 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                 ApEnd::Faulted(fault) => std::format!("faulted: {fault:?}"),
                 ApEnd::Contract(contract) => std::format!("contract: {contract:?}"),
                 ApEnd::Refused(refusal) => std::format!("refused: {refusal:?}"),
+                ApEnd::Unrecycled(fault) => std::format!("unrecycled: {fault:?}"),
             });
             if !matches!(end, ApEnd::Stopped) {
                 // The run ended before its stop: the stop goes on until the
                 // port confirms it.
-                runner.finish_stop(&airy, |_| {}).await;
+                let finished = runner.finish_stop(&airy, |_| {}).await;
                 if let Some(ended) = seen.borrow_mut().ended.as_mut() {
-                    ended.push_str(", stop confirmed");
+                    ended.push_str(match finished {
+                        Ok(()) => ", stop confirmed",
+                        Err(_) => ", stop confirmed, a unit unrecycled",
+                    });
                 }
             }
         });
@@ -316,17 +320,21 @@ impl Timer for Airy {
 
 #[test]
 fn the_access_point_starts_and_stops_on_the_s31_port() {
-    on_the_s31_port(|until, shared, _, _| {
+    on_the_s31_port(|until, shared, _, clock| {
         // The receive rules, the group key through its receive cut, then
         // the TSF: the access point runs.
         until("the access point runs", &mut |shared, ended| {
             assert_eq!(ended, None, "the run goes on");
             shared.status().running
         });
-        // Its beacons go at their TBTTs.
-        until("a beacon ends", &mut |shared, ended| {
+        // The S31 declares no beacon Timestamp rule: its TBTTs pass and no
+        // beacon goes, the run going on.
+        let start = clock.now();
+        until("three TBTTs pass", &mut |shared, ended| {
             assert_eq!(ended, None, "the run goes on");
-            shared.status().beacons >= 2
+            assert_eq!(shared.status().beacons, 0, "no beacon without a stamp");
+            clock.now().saturating_duration_since(start)
+                >= oer_portable_time::Duration::from_millis(320)
         });
         shared.request_stop();
         until("the access point stops", &mut |shared, ended| {

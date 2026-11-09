@@ -175,7 +175,7 @@ where
                         D::received(frame.bytes(), &meta);
                         if matches!(self.radio, Radio::Stopping { .. } | Radio::Unstopped) {
                             // A stopping radio's units go back unread.
-                            self.port.recycle(frame);
+                            self.recycle(frame)?;
                             report(&mut self.events, || {
                                 ServiceEvent::RxFrameDropped(RxDrop::Draining)
                             });
@@ -275,11 +275,10 @@ where
                 RxDisposition::Deliver(received) => received,
                 RxDisposition::Retained => return Ok(()),
                 RxDisposition::Recycle(frame) => {
-                    self.port.recycle(frame);
-                    return Ok(());
+                    return self.recycle(frame);
                 }
                 RxDisposition::Capacity(frame) => {
-                    self.port.recycle(frame);
+                    self.recycle(frame)?;
                     report(&mut self.events, || ActorEvent::ReorderFull);
                     return Ok(());
                 }
@@ -291,7 +290,7 @@ where
                 Parked::Waiting => Ok(()),
                 Parked::Deliver((frame, meta)) => self.route(frame, meta, lifecycle, network),
                 Parked::Capacity(frame) => {
-                    self.port.recycle(frame);
+                    self.recycle(frame)?;
                     report(&mut self.events, || ActorEvent::ReorderFull);
                     Ok(())
                 }
@@ -306,13 +305,13 @@ where
         &mut self,
         message: FromActor<'id, D>,
         lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
-    ) {
+    ) -> Result<(), Failed<'id, D>> {
         let lane = usize::from(self.frames_out) < LIFECYCLE_FRAMES;
         let refused = if lane {
             match lifecycle.from_actor.try_send(message) {
                 Ok(()) => {
                     self.frames_out = self.frames_out.saturating_add(1);
-                    return;
+                    return Ok(());
                 }
                 Err(refused) => refused.0,
             }
@@ -321,7 +320,7 @@ where
         };
         match refused {
             FromActor::Received { frame, .. } | FromActor::Eapol { frame, .. } => {
-                self.port.recycle(frame);
+                self.recycle(frame)?;
             }
             // Only frames take the lane.
             other => {
@@ -329,6 +328,7 @@ where
             }
         }
         report(&mut self.events, || ActorEvent::LaneFull);
+        Ok(())
     }
 
     /// Hand on one frame in delivery order: the link admits its data to the
@@ -351,8 +351,7 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         let Some(link) = self.link.as_mut() else {
-            self.hand_to_lifecycle(FromActor::Received { frame, meta }, lifecycle);
-            return Ok(());
+            return self.hand_to_lifecycle(FromActor::Received { frame, meta }, lifecycle);
         };
         // Delivery runs for every sink; only an enabled one counts.
         let counted = <O as EventSink<ServiceEvent>>::ENABLED;
@@ -402,8 +401,7 @@ where
         };
         let result = match routed {
             LinkRx::Station => {
-                self.hand_to_lifecycle(FromActor::Received { frame, meta }, lifecycle);
-                return Ok(());
+                return self.hand_to_lifecycle(FromActor::Received { frame, meta }, lifecycle);
             }
             LinkRx::Taken(result) => result,
         };
@@ -424,10 +422,10 @@ where
                         protection,
                     },
                     lifecycle,
-                );
+                )?;
             }
             None => match first {
-                None => self.port.recycle(frame),
+                None => self.recycle(frame)?,
                 Some(plan) => {
                     let refusal = match self.port.lend(frame) {
                         Ok(lent) => queue_lent(network, lent, plan),
@@ -438,7 +436,7 @@ where
                             if counted {
                                 copied.kept = copied.kept.saturating_add(1);
                             }
-                            self.port.recycle(buffer);
+                            self.recycle(buffer)?;
                             refusal
                         }
                     };

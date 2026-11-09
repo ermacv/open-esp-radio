@@ -1535,13 +1535,28 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         })
     }
 
-    fn recycle(&mut self, unit: PortRxBuffer<'id, Self>) {
+    fn recycle(
+        &mut self,
+        unit: PortRxBuffer<'id, Self>,
+    ) -> Result<(), oer_protocols_ieee80211_contracts_port::RecycleRefused<PortRxBuffer<'id, Self>>>
+    {
+        // The count first: a return without a charge, or one the air's
+        // knob refuses, leaves the unit whole.
+        if self.air.take_recycle_refusal() {
+            let fault = oer_protocols_ieee80211_contracts_port::ReceiveAccounting {
+                operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+                held: self.held.rx_held(),
+                requested: 1,
+            };
+            return Err(oer_protocols_ieee80211_contracts_port::RecycleRefused { unit, fault });
+        }
+        if let Err(fault) = self.held.release_rx() {
+            return Err(oer_protocols_ieee80211_contracts_port::RecycleRefused { unit, fault });
+        }
         let mut owner = unit.owner;
         owner.recycled = true;
         drop(owner);
-        // A return without a charge breaks the model's count: the air
-        // quarantines, and the next fallible call reports it.
-        self.held.release_rx();
+        Ok(())
     }
 
     fn lend(
@@ -1571,7 +1586,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             .held
             .fetch_add(1, core::sync::atomic::Ordering::AcqRel);
         drop(owner);
-        self.held.release_rx();
+        // A lend without a charge breaks the model's count: the air
+        // quarantines, and the next fallible call reports it.
+        if self.held.release_rx().is_err() {
+            self.held.poison();
+        }
         Ok(ModelLentRx {
             bytes,
             mpdu_len,

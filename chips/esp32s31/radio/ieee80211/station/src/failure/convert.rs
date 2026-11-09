@@ -790,6 +790,7 @@ pub(crate) fn lifecycle(
         End::RetuneUnconfirmed(unconfirmed) => LifecycleFailure::RetuneUnconfirmed(unconfirmed),
         End::Faulted(ActorFault::Port(fault)) => LifecycleFailure::Port(backend_fault(fault)),
         End::Faulted(ActorFault::Contract(violation)) => LifecycleFailure::Actor(violation),
+        End::Faulted(ActorFault::Receive(fault)) => LifecycleFailure::Receive(fault),
         End::Contract(violation) => LifecycleFailure::Contract(violation),
     })
 }
@@ -808,6 +809,7 @@ pub(crate) fn restart(
             Some(LifecycleFailure::Port(backend_fault(fault)))
         }
         Failure::Fault(ActorFault::Contract(violation)) => Some(LifecycleFailure::Actor(violation)),
+        Failure::Fault(ActorFault::Receive(fault)) => Some(LifecycleFailure::Receive(fault)),
         _ => None,
     }
 }

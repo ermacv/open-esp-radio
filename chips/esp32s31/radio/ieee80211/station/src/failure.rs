@@ -566,6 +566,9 @@ pub enum LifecycleFailure {
     Port(BackendFault),
     /// The datapath actor broke its own contract.
     Actor(oer_protocols_ieee80211_runtime::datapath::ActorViolation),
+    /// The port refused a received unit's recycle for its count; the unit
+    /// stays with the actor.
+    Receive(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
     /// The actor returned an owner the lifecycle did not send.
     Contract(oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation),
     /// The port did not reinstall after the station's restart.

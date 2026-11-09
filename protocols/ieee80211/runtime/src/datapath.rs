@@ -79,8 +79,9 @@ use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed,
     GateOpen, Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, PortBlockAckSlot,
-    PortCommand, PortSingleOutcome, PortSink, PortTypes, RxBuffer, StartRefused, StopUnconfirmed,
-    SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool, TxFacts,
+    PortCommand, PortSingleOutcome, PortSink, PortTypes, RecycleRefused, RxBuffer, StartRefused,
+    StopUnconfirmed, SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool,
+    TxFacts,
 };
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::data::plane::{DataPlane, OutboundMsdu, TxWindow};
@@ -460,6 +461,9 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
 
 /// Owners a broken contract leaves with the actor.
 struct Retained<'id, D: DatapathPort<'id>> {
+    /// The unit whose recycle the port refused: the run ended on it, and
+    /// no turn runs while it is kept, so no second refusal comes.
+    unrecycled: Option<RecycleRefused<ActorRxBuffer<'id, D>>>,
     link: Option<ActorLink<'id, D>>,
     returned: Option<Returned<'id, D>>,
     completed: Option<oer_protocols_ieee80211_contracts_port::PortCompleted<'id, D::Port>>,
@@ -527,6 +531,7 @@ where
             progressed: false,
             now: Instant::EPOCH,
             retained: Retained {
+                unrecycled: None,
                 link: None,
                 returned: None,
                 completed: None,
@@ -593,6 +598,7 @@ where
                 progressed: false,
                 now: Instant::EPOCH,
                 retained: Retained {
+                    unrecycled: None,
                     link: None,
                     returned: None,
                     completed: None,
@@ -623,6 +629,13 @@ where
     /// longer calls it.
     pub fn port_mut(&mut self) -> &mut D::Port {
         &mut self.port
+    }
+
+    /// The unit whose recycle the port refused, with the count that
+    /// refused it, once: the run ended on it
+    /// ([`ActorFault::Receive`]). The actor runs no turn while it keeps it.
+    pub fn take_unrecycled(&mut self) -> Option<RecycleRefused<ActorRxBuffer<'id, D>>> {
+        self.retained.unrecycled.take()
     }
 
     /// The rate selection.
@@ -757,6 +770,11 @@ where
     ) -> Poll<ActorEnd<<D::Port as DataPort<'id>>::Fault>> {
         if let Some(end) = self.end.take() {
             return Poll::Ready(end);
+        }
+        // A unit the port refused ends every run until its owner takes it:
+        // no turn takes or returns a unit meanwhile.
+        if let Some(refused) = self.retained.unrecycled.as_ref() {
+            return Poll::Ready(ActorEnd::Faulted(ActorFault::Receive(refused.fault)));
         }
         let reposted = core::mem::take(&mut self.again);
         let fresh = self.collect_facts(cx);

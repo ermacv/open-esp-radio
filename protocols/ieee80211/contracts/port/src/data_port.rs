@@ -65,7 +65,7 @@ use oer_protocols_radio_port::ClockError;
 use crate::{
     AdmittedAttempt, AmpduCapabilities, AmpduRate, Channel, CommandTypes, GateClosed, GateOpen,
     Ieee80211Capabilities, Ieee80211Instant, LendRefused, LowerMacTerminal, PhyRate,
-    PortBlockAckSlot, PortCommand, PortRate, PortTypes, Station, SupportedBlockAck,
+    PortBlockAckSlot, PortCommand, PortRate, PortTypes, RecycleRefused, Station, SupportedBlockAck,
     SupportedChannel, TbttEvent,
     arena::{ArenaCompleted, TxArena},
 };
@@ -563,8 +563,19 @@ pub trait DataPort<'id> {
     /// The backend's contract fault.
     fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, Self::Fault>;
 
-    /// Return a received unit to the ring.
-    fn recycle(&mut self, unit: PortRxBuffer<'id, Self>);
+    /// Return a received unit to the ring. The port checks its count of
+    /// the caller's units before it touches the unit.
+    ///
+    /// # Errors
+    ///
+    /// The port holds fewer of the caller's units than one: the unit,
+    /// unchanged, with the count
+    /// ([`ReceiveAccounting`](crate::ReceiveAccounting)). Nothing was taken
+    /// and no fault recorded; the caller keeps the unit.
+    fn recycle(
+        &mut self,
+        unit: PortRxBuffer<'id, Self>,
+    ) -> Result<(), RecycleRefused<PortRxBuffer<'id, Self>>>;
 
     /// Move a received unit to the network without copying it.
     ///

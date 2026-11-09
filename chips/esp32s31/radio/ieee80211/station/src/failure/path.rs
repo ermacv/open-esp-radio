@@ -401,6 +401,11 @@ impl DiagnosticPath for LifecycleFailure {
                 path.name("Actor");
                 path.name(actor_violation(*violation));
             }
+            // The counts are observations, outside the path's names.
+            Self::Receive(_) => {
+                path.name("Receive");
+                path.name("Recycle");
+            }
             Self::Contract(violation) => {
                 path.name("Contract");
                 path.name(lifecycle_violation(*violation));

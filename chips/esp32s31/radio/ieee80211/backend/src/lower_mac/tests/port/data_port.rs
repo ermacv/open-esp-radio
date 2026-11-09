@@ -697,7 +697,7 @@ fn no_data_port_call_wakes_its_caller() {
             .lend(units.pop().expect("unit"))
             .ok()
             .expect("lent");
-        fixture.port.recycle(units.pop().expect("unit"));
+        assert!(fixture.port.recycle(units.pop().expect("unit")).is_ok());
         let color = BssColor::new(5).expect("color");
         assert!(matches!(
             fixture
@@ -732,6 +732,46 @@ fn no_data_port_call_wakes_its_caller() {
 }
 
 #[test]
+fn a_recycle_its_count_refuses_comes_back_whole_and_latches_no_fault() {
+    use oer_protocols_ieee80211_contracts_port::{ReceiveAccounting, ReceiveOperation, RxBuffer};
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.deliver(1);
+        let now = fixture.now();
+        let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+            panic!("one unit");
+        };
+        let bytes = frame.bytes().to_vec();
+        // The count no longer holds the unit.
+        fixture.port.set_held_for_test(0);
+        let Err(refused) = fixture.port.recycle(frame) else {
+            panic!("the count refuses it");
+        };
+        assert_eq!(
+            refused.fault,
+            ReceiveAccounting {
+                operation: ReceiveOperation::Recycle,
+                held: 0,
+                requested: 1,
+            }
+        );
+        assert_eq!(
+            refused.unit.bytes(),
+            bytes.as_slice(),
+            "the unit, unchanged"
+        );
+        // No fault latched: the next call serves, and the count stayed.
+        assert!(matches!(fixture.port.receive(8, now), Ok(RxPull::Empty)));
+        assert_eq!(fixture.port.held_for_test(), 0);
+        // The same unit goes back once its count holds it.
+        fixture.port.set_held_for_test(1);
+        assert!(fixture.port.recycle(refused.unit).is_ok());
+        assert_eq!(fixture.port.held_for_test(), 0);
+        fixture.stop();
+    });
+}
+
+#[test]
 fn a_receive_pull_stops_at_the_held_units_and_keeps_the_rest_on_the_ring() {
     with_fixture(|fixture| {
         fixture.start();
@@ -744,7 +784,7 @@ fn a_receive_pull_stops_at_the_held_units_and_keeps_the_rest_on_the_ring() {
         // The port gives at most RX_HELD units out at once.
         assert_eq!(held.len(), RX_HELD);
         assert_eq!(fixture.observed.borrow().received.len(), 4);
-        fixture.port.recycle(held.pop().expect("unit"));
+        assert!(fixture.port.recycle(held.pop().expect("unit")).is_ok());
         assert!(matches!(
             fixture.port.receive(32, now),
             Ok(RxPull::Unit { .. })
@@ -757,7 +797,7 @@ fn a_receive_pull_stops_at_the_held_units_and_keeps_the_rest_on_the_ring() {
         ));
         assert_eq!(fixture.observed.borrow().received.len(), 3);
         for frame in held {
-            fixture.port.recycle(frame);
+            assert!(fixture.port.recycle(frame).is_ok());
         }
     });
 }
@@ -798,7 +838,7 @@ fn a_served_receive_continuation_leaves_the_ports_deadline() {
         );
         fixture.observed.borrow_mut().continuous_rx = false;
         for frame in held {
-            fixture.port.recycle(frame);
+            assert!(fixture.port.recycle(frame).is_ok());
         }
     });
 }
@@ -989,7 +1029,7 @@ fn a_group_installation_delivers_its_cut_units_before_its_terminal() {
         ));
         assert_eq!(fixture.observed.borrow().resumed_cuts, 1);
         for (frame, _) in core::mem::take(&mut fixture.outbox.received) {
-            fixture.port.recycle(frame);
+            assert!(fixture.port.recycle(frame).is_ok());
         }
     });
 }

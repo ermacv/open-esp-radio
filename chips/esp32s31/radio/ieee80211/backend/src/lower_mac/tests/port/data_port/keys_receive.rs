@@ -302,7 +302,7 @@ fn the_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
                         } else {
                             Event::NewRx
                         });
-                        fixture.port.recycle(frame);
+                        assert!(fixture.port.recycle(frame).is_ok());
                     }
                     Seen::Terminal(
                         LowerMacTerminal::GroupKeyReplaced { key, permission }
@@ -342,7 +342,7 @@ fn the_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
                     inactive_accepted = true;
                     events.push(Event::OldRx);
                 }
-                fixture.port.recycle(frame);
+                assert!(fixture.port.recycle(frame).is_ok());
             }
             assert_eq!(
                 fixture.observed.borrow().undecryptable,
@@ -717,7 +717,7 @@ fn a_received_unit_keeps_its_bytes_and_owner_until_it_is_recycled() {
         assert_eq!(meta.common().rssi_dbm, RxEvidence::HardwareObserved(-42));
         assert_eq!(frame.bytes(), &crate::lower_mac::tests::data_frame(STATION));
         assert_eq!(count(&fixture.released), 0, "the caller holds the unit");
-        fixture.port.recycle(frame);
+        assert!(fixture.port.recycle(frame).is_ok());
         assert_eq!(count(&fixture.released), 1, "recycled once");
         fixture.stop();
         let Fixture {
@@ -787,7 +787,7 @@ fn a_loss_past_the_held_count_settles_nothing_and_keeps_the_earlier_cause() {
             !fixture.port.recover_for_stop(),
             "the losses stay unsettled for the next look"
         );
-        fixture.port.recycle(kept);
+        assert!(fixture.port.recycle(kept).is_ok());
     });
 }
 
@@ -880,7 +880,7 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
             Err(LendRefused { buffer, .. }) => buffer,
             Ok(_) => panic!("a faulted port lends nothing"),
         };
-        fixture.port.recycle(kept);
+        assert!(fixture.port.recycle(kept).is_ok());
         assert_eq!(count(&fixture.released), 2, "the kept unit returned too");
         fixture.advance(COMMAND_BOUND);
         let now = fixture.now();
@@ -943,7 +943,7 @@ fn a_continuous_burst_reaches_the_caller_through_its_pulls_within_the_continuati
             let now = fixture.now();
             match fixture.port.receive(32, now).expect("receive") {
                 RxPull::Unit { frame, .. } => {
-                    fixture.port.recycle(frame);
+                    assert!(fixture.port.recycle(frame).is_ok());
                     taken += 1;
                 }
                 RxPull::Later(at) => {
@@ -1032,7 +1032,7 @@ fn idle_fact_polls_leave_the_ring_unpulled_until_it_holds_a_unit() {
         let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
             panic!("the announced unit");
         };
-        fixture.port.recycle(frame);
+        assert!(fixture.port.recycle(frame).is_ok());
         assert_eq!(count(&fixture.released), 1);
     });
 }
@@ -1159,7 +1159,7 @@ fn a_unit_a_cut_drains_past_the_held_units_goes_back_to_the_ring_beside_the_faul
         );
         assert!(fixture.outbox.received.is_empty(), "the caller got none");
         for frame in held {
-            fixture.port.recycle(frame);
+            assert!(fixture.port.recycle(frame).is_ok());
         }
     });
 }

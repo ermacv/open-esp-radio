@@ -268,6 +268,9 @@ pub enum ApEnded {
     Contract(oer_protocols_ieee80211_runtime::access_point::ApContract),
     /// The port refused one of its commands.
     Refused(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
+    /// The port refused a received unit's recycle for its count; the unit
+    /// stayed with the runner and ended with it after the release.
+    Unrecycled(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
 }
 
 /// How the access point ended, or how far its end came.
@@ -296,6 +299,17 @@ pub enum ApExit {
         ended: ApEnded,
         /// Why the release refused.
         cause: crate::failure::ReleaseCause,
+    },
+    /// It ended for its cause, and the stop that followed found a received
+    /// unit whose recycle the port refused for its count: the unit stayed
+    /// with the runner and ended with it after the release.
+    Unrecycled {
+        /// Why it ended.
+        ended: ApEnded,
+        /// The count that refused the unit.
+        fault: oer_protocols_ieee80211_contracts_port::ReceiveAccounting,
+        /// How the release ended.
+        released: Result<(), crate::failure::ReleaseCause>,
     },
     /// It never served: its refusal before the runner existed, and how the
     /// owners that refusal returned ended.
@@ -620,6 +634,7 @@ impl<W: Binding> AccessPointRunner<W> {
             ),
             ApEnd::Contract(contract) => (ApEnded::Contract(contract), Stop::Owed),
             ApEnd::Refused(refusal) => (ApEnded::Refused(refusal), Stop::Owed),
+            ApEnd::Unrecycled(fault) => (ApEnded::Unrecycled(fault), Stop::Owed),
         };
         retire::<W>(slot, runner, ended, stop).await
     }
@@ -664,21 +679,34 @@ async fn retire<W: Binding>(
         slot.ended
             .set(Some(ApExit::StopUnconfirmed { ended, observed }))
     };
-    match stop {
-        Stop::Confirmed => {}
+    let finished = match stop {
+        Stop::Confirmed => Ok(()),
         Stop::Unconfirmed(observed) => {
             unconfirmed(observed);
-            runner.finish_stop(&EmbassyClock, unconfirmed).await;
+            runner.finish_stop(&EmbassyClock, unconfirmed).await
         }
         Stop::Owed => runner.finish_stop(&EmbassyClock, unconfirmed).await,
-    }
+    };
+    // A unit the port refused stays here until the runner ends, after the
+    // release.
+    let unrecycled = runner.take_unrecycled();
     let refused = |cause| {
         slot.ended
             .set(Some(ApExit::ReleaseRefused { ended, cause }))
     };
-    match radio::release::<W>(runner.port_mut(), refused).await {
-        Ok(()) => ApExit::Ended(ended),
-        Err(cause) => ApExit::ReleaseRefused { ended, cause },
+    let released = radio::release::<W>(runner.port_mut(), refused).await;
+    drop(unrecycled);
+    match (ended, finished, released) {
+        // A refusal the stop found after another cause.
+        (ended, Err(fault), released) if !matches!(ended, ApEnded::Unrecycled(_)) => {
+            ApExit::Unrecycled {
+                ended,
+                fault,
+                released,
+            }
+        }
+        (ended, _, Ok(())) => ApExit::Ended(ended),
+        (ended, _, Err(cause)) => ApExit::ReleaseRefused { ended, cause },
     }
 }
 

@@ -353,6 +353,10 @@ pub enum ActorFault<F> {
     Port(F),
     /// The actor's own contract.
     Contract(ActorViolation),
+    /// The port refused a received unit's recycle for its count: the unit
+    /// stays with the actor ([`Actor::take_unrecycled`]), which takes no
+    /// unit more.
+    Receive(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
 }
 
 /// A broken contract the actor names.

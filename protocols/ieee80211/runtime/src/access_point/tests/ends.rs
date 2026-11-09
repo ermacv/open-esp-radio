@@ -50,7 +50,8 @@ fn an_unconfirmed_stop_that_the_port_confirms_later_returns_every_owner() {
             observed.set(observed.get() + 1);
         });
         match select(Woken::new(finish), script).await {
-            Either::First(()) => {}
+            Either::First(Ok(())) => {}
+            Either::First(Err(fault)) => panic!("the port takes every unit back: {fault:?}"),
             Either::Second(()) => panic!("the port confirms the stop once the MAC is quiet"),
         }
         // Every owner is home: tickets, buffers, the beacon permission, the
@@ -107,5 +108,55 @@ fn the_terminals_of_one_call_each_bring_their_owners_home() {
         assert!(runner.homes.purposes.iter().all(Option::is_none));
         assert!(runner.take_kept().is_none());
         assert!(runner.homes.held.is_none() && runner.homes.returned.is_none());
+    }));
+}
+
+#[test]
+fn a_recycle_the_port_refuses_ends_the_run_and_its_unit_comes_back_with_the_stop() {
+    let fault = oer_protocols_ieee80211_contracts_port::ReceiveAccounting {
+        operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+        held: 1,
+        requested: 1,
+    };
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        let script = async {
+            counted.idle(64).await;
+            air.refuse_recycles(1);
+            air.receive(&probe_request(), ModelRxMeta::new(channel(), -40, -90));
+            for _ in 0..64 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+        };
+        let end = drive(runner.run(&shared, &counted), script).await;
+        let ApEnd::Unrecycled(ended) = end else {
+            panic!("the refused unit ends the run: {}", kind(&end));
+        };
+        assert_eq!(ended, fault);
+        // A new run does not start while the unit is kept.
+        let rerun = drive(runner.run(&shared, &counted), core::future::pending()).await;
+        assert!(matches!(rerun, ApEnd::Unrecycled(again) if again == fault));
+        // The stop that follows returns no unit and names the count.
+        let script = async {
+            for _ in 0..256 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+            core::future::pending::<()>().await;
+        };
+        match select(Woken::new(runner.finish_stop(&counted, |_| {})), script).await {
+            Either::First(finished) => assert_eq!(finished, Err(fault)),
+            Either::Second(()) => panic!("the port confirms the stop"),
+        }
+        let refused = runner.take_unrecycled().expect("the unit");
+        assert_eq!(refused.fault, fault);
+        assert!(runner.take_unrecycled().is_none(), "once");
+        // The unit is the probe request, whole; it goes back once the
+        // port's count takes it.
+        assert_eq!(
+            oer_protocols_ieee80211_contracts_port::RxBuffer::bytes(&refused.unit),
+            probe_request().as_slice()
+        );
+        assert!(runner.port_mut().recycle(refused.unit).is_ok());
     }));
 }

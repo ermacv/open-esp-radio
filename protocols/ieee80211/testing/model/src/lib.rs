@@ -1770,6 +1770,9 @@ pub struct ModelAir {
     rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<u8>,
+    /// The port's count refuses the next recycles, as a count that lost
+    /// their units would.
+    refuse_recycle: Cell<u8>,
     /// The next enable fails after the MAC began it, its stop not
     /// confirmed: the port answers `StartRefused::Unstopped` and stops.
     unstop_enable: Cell<bool>,
@@ -1852,6 +1855,7 @@ impl ModelAir {
             rx: Default::default(),
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
+            refuse_recycle: Default::default(),
             refuse_access_point: Default::default(),
             refuse_he_association: Default::default(),
             group_held: Default::default(),
@@ -2448,6 +2452,20 @@ impl ModelAir {
             .set(self.confirmed_stops.get().saturating_add(1));
     }
 
+    /// Refuse the next `count` recycles for the port's count: each unit
+    /// comes back whole with a [`ReceiveAccounting`](oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
+    /// and the count stays.
+    pub fn refuse_recycles(&self, count: u8) {
+        self.refuse_recycle.set(count);
+    }
+
+    /// Whether this recycle is refused: one of the refusals asked for.
+    pub(crate) fn take_recycle_refusal(&self) -> bool {
+        let left = self.refuse_recycle.get();
+        self.refuse_recycle.set(left.saturating_sub(1));
+        left != 0
+    }
+
     /// Refuse the next `count` enables.
     pub fn refuse_enables(&self, count: u8) {
         self.refuse_enable.set(count);
@@ -2849,14 +2867,25 @@ impl<'id, B: ModelComposition> ModelHeld<'id, B> {
         }
     }
 
+    /// The receive buffers out with the caller.
+    fn rx_held(&self) -> usize {
+        self.rx_out.get()
+    }
+
     /// Return one received buffer's capacity. Each buffer is charged once
-    /// when delivered, so a return with none charged is a broken model
-    /// invariant: it poisons instead of hiding the count.
-    fn release_rx(&self) {
-        match self.rx_out.get().checked_sub(1) {
-            Some(out) => self.rx_out.set(out),
-            None => self.poison(),
-        }
+    /// when delivered, so a return with none charged is refused with the
+    /// count, which stays as it was.
+    fn release_rx(&self) -> Result<(), oer_protocols_ieee80211_contracts_port::ReceiveAccounting> {
+        let held = self.rx_out.get();
+        let Some(out) = held.checked_sub(1) else {
+            return Err(oer_protocols_ieee80211_contracts_port::ReceiveAccounting {
+                operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+                held,
+                requested: 1,
+            });
+        };
+        self.rx_out.set(out);
+        Ok(())
     }
 }
 
