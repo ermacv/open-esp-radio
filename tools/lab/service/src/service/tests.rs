@@ -1100,3 +1100,26 @@ fn a_board_alone_is_granted_and_used_while_the_router_is_unreachable() {
     );
     run.release().unwrap();
 }
+
+#[test]
+fn a_whole_write_is_refused_for_a_gone_or_slow_client_and_counted_lost() {
+    let outbox = Outbox::new();
+    let lost = Arc::new(Mutex::new(0));
+    let output = Output {
+        outbox: outbox.clone(),
+        operation: 7,
+        lost: lost.clone(),
+    };
+    assert_eq!(output.try_write(b"pcap"), Ok(()));
+    // Three chunks: the first fits beside "pcap", the second is refused
+    // and the third is never offered; both count as lost.
+    let stream = vec![0u8; OUTPUT_BUDGET + OUTPUT_BUDGET / 4];
+    let slow = output.try_write(&stream).unwrap_err();
+    assert!(slow.contains("too slowly"), "{slow}");
+    assert_eq!(*lock(&lost), (OUTPUT_BUDGET - OUTPUT_BUDGET / 4) as u64);
+    outbox.close();
+    let gone = output.try_write(b"x").unwrap_err();
+    assert!(gone.contains("gone"), "{gone}");
+    // Nobody reads any more: nothing more is lost to a reader.
+    assert_eq!(*lock(&lost), (OUTPUT_BUDGET - OUTPUT_BUDGET / 4) as u64);
+}

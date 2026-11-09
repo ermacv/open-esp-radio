@@ -1,8 +1,8 @@
 //! The lab router's operations, run by the service over the router's SSH
 //! with the logic of `oer-tools-lab-router`: the AP profile a run applies, the
 //! station, station link, DHCP and ping views, the WPA2 checks, a deauthentication, the
-//! routed network's check, the echo and departure observers, and the AP
-//! radio's airtime queue limits. Every one needs a lease that holds the
+//! routed network's check, the echo and departure observers, the AP
+//! radio's airtime queue limits and a monitor capture. Every one needs a lease that holds the
 //! router. The stand file names the router and
 //! its AP; its secrets never leave the service.
 
@@ -13,6 +13,7 @@ use oer_tools_lab_client::protocol::{RouterAccessCategory, RouterChannelWidth, R
 use oer_tools_lab_model::Stand;
 use oer_tools_lab_router::{
     mac::Mac,
+    monitor,
     router::{ChannelWidth, Profile},
     ssh::{Remote, Ssh},
     station::{
@@ -202,6 +203,22 @@ pub(crate) fn run(
                 &mut |entry| record(journal, owner.clone(), entry),
             )?)
         }
+        RouterOperation::MonitorCapture { channel } => {
+            if !router.channels.contains(channel) {
+                return Err(format!(
+                    "channel {channel} is not among the router's channels {:?} in the stand file",
+                    router.channels
+                ));
+            }
+            let mut host = monitor::ssh::SshHost::new(router.ssh.parallel(), &router.radio);
+            let mut sink = Capture { io };
+            json(monitor::capture(
+                &mut host,
+                *channel,
+                &mut sink,
+                &monitor::HostClock,
+            )?)
+        }
         RouterOperation::AirtimeLimits { mac: station } => {
             let station = station.as_deref().map(mac).transpose()?;
             json(airtime::read(
@@ -210,6 +227,22 @@ pub(crate) fn run(
                 station.map(|station| (router.interface.as_str(), station)),
             )?)
         }
+    }
+}
+
+/// The capture's stream: the operation's output, which refuses what its
+/// client does not take; the operation's stop is the cancellation.
+struct Capture<'a> {
+    io: &'a OperationIo,
+}
+
+impl monitor::Sink for Capture<'_> {
+    fn write(&mut self, bytes: &[u8]) -> Result<()> {
+        self.io.output.try_write(bytes)
+    }
+
+    fn cancelled(&self) -> bool {
+        self.io.stop.load(Ordering::SeqCst)
     }
 }
 

@@ -500,6 +500,16 @@ impl Drivers for StandDrivers {
                             .to_owned(),
                     );
                 }
+                if matches!(
+                    request,
+                    oer_tools_lab_client::protocol::RouterOperation::MonitorCapture { .. }
+                ) && !covers(claims, &[Claim::exclusive(ROUTER)])
+                {
+                    return Err(
+                        "a monitor capture needs a lease that holds the router exclusively"
+                            .to_owned(),
+                    );
+                }
                 crate::router::run(request, &self.stand()?, &io, &self.journal)
             }
             Operation::ProbeRouter => {
