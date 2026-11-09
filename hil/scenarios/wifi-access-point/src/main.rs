@@ -14,7 +14,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_hil_services_wifi_access_point::{GetStatus, Ipv4, Serve, Served, Status, Stop, Stopped};
+use oer_hil_services_wifi_access_point::{
+    AccessPointError, GetStatus, Ipv4, Serve, Served, Status, Stop, Stopped,
+};
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{Case, Cx, Failure, Scenario, check};
 
@@ -168,6 +170,13 @@ fn serve(cx: &mut Cx<'_>) -> Result<(), Failure> {
     };
     let address = match cx.call(request, SERVE_TIMEOUT)? {
         Served::Beaconing { address } => address,
+        Served::Refused(AccessPointError::Unsupported) => {
+            return Err(Failure::Fail(
+                "serve refused: the radio cannot serve an access point (its port declares no \
+                 beacon Timestamp rule); refused before the radio started"
+                    .into(),
+            ));
+        }
         Served::Refused(error) => return Err(Failure::Fail(format!("serve refused: {error:?}"))),
     };
     cx.measure("bssid", serde_json::json!(mac(address)));

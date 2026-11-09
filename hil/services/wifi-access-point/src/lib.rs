@@ -124,6 +124,10 @@ pub enum AccessPointError {
     InvalidSettings,
     /// It served already: the image serves once per boot.
     AlreadyServing,
+    /// The radio cannot serve an access point: its port declares no beacon
+    /// Timestamp rule the access point writes. Refused before the radio
+    /// started.
+    Unsupported,
     /// It does not serve.
     NotServing,
     /// It did not reach the state in the image's bound.

@@ -5,7 +5,7 @@
 use oer::{
     AppResult, Boot, Console, Error, Peripherals, Started,
     time::{Duration, Instant, Timer},
-    wifi::{self, AccessPoint, ApSettings, Ipv4Configuration},
+    wifi::{self, AccessPoint, ApSettings, Ipv4Configuration, StartRefused},
 };
 use oer_hil_agent::{Inbox, Mailbox, answer};
 use oer_hil_services_wifi_access_point::{
@@ -92,8 +92,14 @@ async fn serve(access_point: &AccessPoint, serving: &mut bool, request: Serve) -
     ) else {
         return Served::Refused(AccessPointError::InvalidSettings);
     };
-    if access_point.serve(config, settings).is_err() {
-        return Served::Refused(AccessPointError::AlreadyServing);
+    match access_point.serve(config, settings) {
+        Ok(()) => {}
+        Err(StartRefused::AlreadyStarted(_)) => {
+            return Served::Refused(AccessPointError::AlreadyServing);
+        }
+        Err(StartRefused::Unsupported { .. }) => {
+            return Served::Refused(AccessPointError::Unsupported);
+        }
     }
     *serving = true;
     let beaconing = || {

@@ -22,3 +22,24 @@ fn the_service_names_three_endpoints_and_their_answers_by_distinct_keys() {
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
+
+#[test]
+fn an_unsupported_radio_is_its_own_answer() {
+    let mut buffer = [0; 16];
+    let unsupported =
+        postcard::to_slice(&Served::Refused(AccessPointError::Unsupported), &mut buffer)
+            .unwrap()
+            .to_vec();
+    let mut buffer = [0; 16];
+    let served = postcard::to_slice(
+        &Served::Refused(AccessPointError::AlreadyServing),
+        &mut buffer,
+    )
+    .unwrap()
+    .to_vec();
+    assert_ne!(unsupported, served);
+    assert_eq!(
+        postcard::from_bytes::<Served>(&unsupported).unwrap(),
+        Served::Refused(AccessPointError::Unsupported)
+    );
+}
