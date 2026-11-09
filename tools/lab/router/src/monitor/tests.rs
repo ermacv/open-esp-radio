@@ -1,5 +1,6 @@
 //! The capture's life over a fake router: each start, ending and teardown
-//! path, the order of its steps and the results each keeps.
+//! path, the order of its steps and the results each keeps. The fake
+//! process never waits; its clock never needs to move.
 
 use super::*;
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
@@ -94,12 +95,12 @@ impl Host for FakeHost {
 }
 
 impl Process for FakeProcess {
-    fn ready(&mut self, _: Duration) -> Result<()> {
+    fn ready<C: Clock>(&mut self, _: &C, _: C::Instant) -> Result<()> {
         self.log.borrow_mut().push("ready".into());
         failing(self.script.borrow().ready_fails, "ready")
     }
 
-    fn next(&mut self, _: Duration) -> Next {
+    fn next<C: Clock>(&mut self, _: &C, _: C::Instant) -> Next {
         match self.stream.pop_front() {
             Some(next) => next,
             // Idle while it runs; a stopped process's stream ends.
@@ -114,7 +115,7 @@ impl Process for FakeProcess {
         failing(self.script.borrow().stop_fails, "stop")
     }
 
-    fn wait_exit(&mut self, _: Duration) -> Result<String> {
+    fn wait_exit<C: Clock>(&mut self, _: &C, _: C::Instant) -> Result<String> {
         self.log.borrow_mut().push("wait".into());
         failing(self.script.borrow().exit_fails, "wait")?;
         Ok("exited (0)".into())
@@ -195,7 +196,7 @@ fn a_cancelled_capture_streams_only_pcap_and_tears_down_in_order() {
         cancel_after: Some(2),
         ..sink()
     };
-    let report = capture(&mut host, 13, &mut sink).unwrap();
+    let report = capture(&mut host, 13, &mut sink, &clock::ManualClock::new()).unwrap();
     assert_eq!(sink.bytes, b"pcap-headerrecord");
     assert_eq!(report.bytes, 17);
     assert_eq!(report.interface, INTERFACE);
@@ -220,7 +221,12 @@ fn a_client_disconnect_before_any_byte_is_a_cancellation_with_the_same_teardown(
         cancel_after: Some(0),
         ..sink()
     };
-    assert_eq!(capture(&mut host, 13, &mut sink).unwrap().bytes, 0);
+    assert_eq!(
+        capture(&mut host, 13, &mut sink, &clock::ManualClock::new())
+            .unwrap()
+            .bytes,
+        0
+    );
     assert!(log_of(&log).ends_with(&TEARDOWN.map(str::to_owned)));
 }
 
@@ -230,7 +236,7 @@ fn an_existing_interface_of_its_name_is_never_taken_over() {
         existing: vec![INTERFACE.to_owned()],
         ..Script::default()
     });
-    assert!(capture(&mut host, 13, &mut sink()).is_err());
+    assert!(capture(&mut host, 13, &mut sink(), &clock::ManualClock::new()).is_err());
     assert_eq!(log_of(&log), ["listing"]);
 }
 
@@ -240,7 +246,7 @@ fn an_interface_already_on_the_radio_refuses_the_start() {
         on_radio: vec!["mon0".to_owned()],
         ..Script::default()
     });
-    let error = capture(&mut host, 13, &mut sink()).unwrap_err();
+    let error = capture(&mut host, 13, &mut sink(), &clock::ManualClock::new()).unwrap_err();
     assert!(error.contains("mon0"), "{error}");
     assert_eq!(log_of(&log), ["listing"]);
 }
@@ -251,7 +257,7 @@ fn a_partial_create_removes_the_interface_it_left() {
         create_fails: true,
         ..Script::default()
     });
-    let error = capture(&mut host, 13, &mut sink()).unwrap_err();
+    let error = capture(&mut host, 13, &mut sink(), &clock::ManualClock::new()).unwrap_err();
     assert!(
         error.contains("create failed") && error.contains("confirmed"),
         "{error}"
@@ -274,7 +280,7 @@ fn a_process_that_does_not_start_or_listen_is_stopped_and_its_interface_removed(
         ..Script::default()
     });
     assert!(
-        capture(&mut host, 13, &mut sink())
+        capture(&mut host, 13, &mut sink(), &clock::ManualClock::new())
             .unwrap_err()
             .contains("start failed")
     );
@@ -284,7 +290,7 @@ fn a_process_that_does_not_start_or_listen_is_stopped_and_its_interface_removed(
         ..Script::default()
     });
     assert!(
-        capture(&mut host, 13, &mut sink())
+        capture(&mut host, 13, &mut sink(), &clock::ManualClock::new())
             .unwrap_err()
             .contains("ready failed")
     );
@@ -302,7 +308,7 @@ fn a_write_error_ends_the_capture_through_the_teardown() {
         fail_at: Some(2),
         ..sink()
     };
-    let error = capture(&mut host, 13, &mut sink).unwrap_err();
+    let error = capture(&mut host, 13, &mut sink, &clock::ManualClock::new()).unwrap_err();
     assert!(error.contains("the client is gone"), "{error}");
     assert_eq!(sink.bytes, b"pcap-header");
     assert!(log_of(&log).ends_with(&TEARDOWN.map(str::to_owned)));
@@ -314,7 +320,7 @@ fn a_process_that_ends_by_itself_is_an_error_and_still_torn_down() {
         stream: chunks(),
         ..Script::default()
     });
-    let error = capture(&mut host, 13, &mut sink()).unwrap_err();
+    let error = capture(&mut host, 13, &mut sink(), &clock::ManualClock::new()).unwrap_err();
     assert!(error.contains("ended by itself"), "{error}");
     assert!(log_of(&log).ends_with(&TEARDOWN.map(str::to_owned)));
 }
@@ -333,7 +339,7 @@ fn failed_teardown_steps_do_not_skip_the_next_and_every_cause_is_kept() {
         cancel_after: Some(0),
         ..sink()
     };
-    let error = capture(&mut host, 13, &mut sink).unwrap_err();
+    let error = capture(&mut host, 13, &mut sink, &clock::ManualClock::new()).unwrap_err();
     for cause in [
         "stop failed",
         "wait failed",
@@ -356,7 +362,7 @@ fn a_removal_the_router_confirms_counts_even_if_its_command_complained() {
         cancel_after: Some(0),
         ..sink()
     };
-    assert!(capture(&mut host, 13, &mut sink).is_ok());
+    assert!(capture(&mut host, 13, &mut sink, &clock::ManualClock::new()).is_ok());
 }
 
 #[test]
@@ -377,256 +383,5 @@ fn a_listing_names_the_radio_and_every_interface() {
     assert!(parse_listing("phy0\n0\nInterface a\n").is_err());
 }
 
-/// The capture over a real pipe, a real reader thread and the real bounded
-/// channel: a writer thread plays `tcpdump`, writing until it is stopped,
-/// then its tail.
-mod real_stream {
-    use super::*;
-    use std::{
-        io::Write as _,
-        sync::{
-            Arc,
-            atomic::{AtomicBool, AtomicU64, Ordering},
-        },
-    };
-
-    const TAIL: &[u8] = b"the-pcap-tail";
-
-    struct PipeProcess {
-        stream: Stream,
-        stop: Arc<AtomicBool>,
-        written: Arc<AtomicU64>,
-        writer: Option<std::thread::JoinHandle<()>>,
-        exit_ok: bool,
-    }
-
-    impl PipeProcess {
-        fn new(exit_ok: bool) -> Self {
-            let (reader, mut writer) = std::io::pipe().unwrap();
-            let stop = Arc::new(AtomicBool::new(false));
-            let written = Arc::new(AtomicU64::new(0));
-            let (flag, count) = (stop.clone(), written.clone());
-            let writer = std::thread::spawn(move || {
-                let chunk = [0x5au8; 4096];
-                while !flag.load(Ordering::SeqCst) {
-                    if writer.write_all(&chunk).is_err() {
-                        return;
-                    }
-                    count.fetch_add(chunk.len() as u64, Ordering::SeqCst);
-                }
-                if writer.write_all(TAIL).is_ok() {
-                    count.fetch_add(TAIL.len() as u64, Ordering::SeqCst);
-                }
-            });
-            Self {
-                stream: Stream::spawn(reader),
-                stop,
-                written,
-                writer: Some(writer),
-                exit_ok,
-            }
-        }
-
-        /// Wait until the writer stalls: the pipe and the channel are full.
-        fn fill(&self) {
-            let mut last = u64::MAX;
-            for _ in 0..500 {
-                std::thread::sleep(Duration::from_millis(20));
-                let now = self.written.load(Ordering::SeqCst);
-                if now == last && now > (STREAM_DEPTH as u64) * 4096 {
-                    return;
-                }
-                last = now;
-            }
-            panic!("the writer never stalled");
-        }
-    }
-
-    impl Process for PipeProcess {
-        fn ready(&mut self, _: Duration) -> Result<()> {
-            Ok(())
-        }
-
-        fn next(&mut self, wait: Duration) -> Next {
-            self.stream.next(wait)
-        }
-
-        fn stop(&mut self) -> Result<()> {
-            self.stop.store(true, Ordering::SeqCst);
-            Ok(())
-        }
-
-        fn wait_exit(&mut self, within: Duration) -> Result<String> {
-            let read = self.stream.close(within);
-            if let Some(writer) = self.writer.take() {
-                writer
-                    .join()
-                    .map_err(|_| "the writer panicked".to_owned())?;
-            }
-            let bytes = read?;
-            if self.exit_ok {
-                Ok(format!("exited (0), {bytes} bytes read"))
-            } else {
-                Err("the capture exited with 1".into())
-            }
-        }
-
-        fn diagnostics(&mut self) -> String {
-            String::new()
-        }
-    }
-
-    struct PipeHost {
-        process: Option<PipeProcess>,
-        created: bool,
-        log: Log,
-    }
-
-    impl Host for PipeHost {
-        type Process = PipeProcess;
-
-        fn listing(&mut self) -> Result<Listing> {
-            self.log.borrow_mut().push("listing".into());
-            Ok(Listing {
-                phy: "phy0".into(),
-                on_radio: Vec::new(),
-                all: if self.created {
-                    vec![INTERFACE.to_owned()]
-                } else {
-                    Vec::new()
-                },
-            })
-        }
-
-        fn create(&mut self, _: &str, _: &str, _: u8) -> Result<()> {
-            self.created = true;
-            Ok(())
-        }
-
-        fn start(&mut self, _: &str) -> Result<PipeProcess> {
-            self.process
-                .take()
-                .ok_or_else(|| "started twice".to_owned())
-        }
-
-        fn remove(&mut self, name: &str) -> Result<()> {
-            self.log.borrow_mut().push(format!("remove {name}"));
-            self.created = false;
-            Ok(())
-        }
-    }
-
-    fn host(process: PipeProcess) -> (PipeHost, Log) {
-        let log = Log::default();
-        (
-            PipeHost {
-                process: Some(process),
-                created: false,
-                log: log.clone(),
-            },
-            log,
-        )
-    }
-
-    fn removed(log: &Log) -> bool {
-        log_of(log).ends_with(&["remove oercap0".to_owned(), "listing".to_owned()])
-    }
-
-    #[test]
-    fn a_cancel_with_the_pipe_and_channel_full_keeps_every_byte_and_the_tail() {
-        let process = PipeProcess::new(true);
-        process.fill();
-        let written = process.written.clone();
-        let (mut host, log) = host(process);
-        let mut sink = FakeSink {
-            cancel_after: Some(0),
-            ..sink()
-        };
-        let report = capture(&mut host, 13, &mut sink).unwrap();
-        assert!(sink.bytes.ends_with(TAIL));
-        assert_eq!(sink.bytes.len() as u64, written.load(Ordering::SeqCst));
-        assert_eq!(report.bytes, sink.bytes.len() as u64);
-        assert!(removed(&log));
-    }
-
-    #[test]
-    fn a_write_error_with_the_channel_full_still_ends_the_reader_and_removes_the_interface() {
-        let process = PipeProcess::new(true);
-        process.fill();
-        let (mut host, log) = host(process);
-        let mut sink = FakeSink {
-            fail_at: Some(1),
-            ..sink()
-        };
-        let error = capture(&mut host, 13, &mut sink).unwrap_err();
-        assert!(error.contains("the client is gone"), "{error}");
-        assert!(!error.contains(" 0 discarded"), "{error}");
-        assert!(sink.bytes.is_empty());
-        assert!(removed(&log));
-    }
-
-    #[test]
-    fn an_exit_other_than_success_fails_a_cancelled_capture() {
-        let (mut host, log) = host(PipeProcess::new(false));
-        let mut sink = FakeSink {
-            cancel_after: Some(3),
-            ..sink()
-        };
-        let error = capture(&mut host, 13, &mut sink).unwrap_err();
-        assert!(error.contains("exited with 1"), "{error}");
-        assert!(removed(&log));
-    }
-
-    /// A source that gives some bytes, then fails.
-    struct Failing(u32);
-
-    impl Read for Failing {
-        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-            if self.0 == 0 {
-                return Err(std::io::Error::other("ssh died"));
-            }
-            self.0 -= 1;
-            let count = buffer.len().min(100);
-            buffer[..count].fill(1);
-            Ok(count)
-        }
-    }
-
-    #[test]
-    fn a_read_error_of_the_stream_is_a_failure_of_its_close() {
-        let mut stream = Stream::spawn(Failing(3));
-        let mut bytes = 0;
-        loop {
-            match stream.next(Duration::from_secs(5)) {
-                Next::Bytes(chunk) => bytes += chunk.len(),
-                Next::Idle => {}
-                Next::Ended => break,
-            }
-        }
-        assert_eq!(bytes, 300);
-        assert!(
-            stream
-                .close(Duration::from_secs(5))
-                .unwrap_err()
-                .contains("ssh died")
-        );
-    }
-
-    #[test]
-    fn closing_a_stream_whose_reader_waits_on_a_full_channel_never_hangs() {
-        // An endless source nobody consumes: the reader blocks on send.
-        let mut stream = Stream::spawn(std::io::repeat(0));
-        std::thread::sleep(Duration::from_millis(50));
-        let error = stream.close(Duration::from_secs(5)).unwrap_err();
-        assert!(error.contains("still flowing"), "{error}");
-    }
-
-    #[test]
-    fn closing_a_stream_whose_source_never_answers_is_bounded() {
-        let (reader, writer) = std::io::pipe().unwrap();
-        let mut stream = Stream::spawn(reader);
-        let error = stream.close(Duration::from_millis(100)).unwrap_err();
-        assert!(error.contains("did not end"), "{error}");
-        drop(writer);
-    }
-}
+mod clock;
+mod real;

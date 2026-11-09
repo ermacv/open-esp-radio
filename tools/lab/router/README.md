@@ -447,10 +447,14 @@ creation on, every ending (a failed creation, start or readiness, a
 cancellation, a refused write, the process's own end) stops the process
 by its PID; drains its stream to the end within 10 s (into the sink after
 a cancellation, so the pcap's tail is kept; otherwise discarding and
-counting); waits for its exit within 10 s; closes the stream's channel
-before joining its reader, so a reader blocked on a full channel ends,
-and joins it within the same bound; confirms the process gone on the
-router; removes the interface and confirms that on the router. Each step
+counting); waits for its exit within 10 s; stops the stream's reader and
+joins it: the reader waits in `poll` on its source and on a stop pipe it
+alone reads, so dropping the channel's receiving end (a blocked send
+fails) and the stop pipe's writing end (`poll` wakes) ends it whatever its
+source does, and it is never detached; confirms the process gone on the
+router; removes the interface and confirms that on the router. Every wait
+is bounded on an injected clock (the host's in the service; the tests
+drive a manual one on events). Each step
 runs whatever the one before returned and keeps its own result. The
 capture succeeds only when it was cancelled, its stream ended in the
 bound with nothing discarded, `tcpdump` exited with success, the reader

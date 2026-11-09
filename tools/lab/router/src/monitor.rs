@@ -10,25 +10,25 @@
 //! write error of the stream, or the process's own end. The teardown asks
 //! the process to stop; drains its stream to the end within a bound (after
 //! a cancellation into the sink, so the pcap's tail is kept; otherwise
-//! discarding and counting); waits for its exit within a bound, closing the
-//! stream so its reader can never stay blocked, and joins the reader;
+//! discarding and counting); waits for its exit within a bound; stops the
+//! stream's controlled reader (`stream.rs`: it waits in `poll` on its
+//! source and a stop pipe, so the stop always ends it) and joins it;
 //! removes the interface and reads the router back to confirm it is gone.
 //! Each step is attempted whatever the one before returned, and each
 //! result is kept. A capture succeeds only when it was cancelled, its
 //! stream ended within the bound with nothing discarded, the process
 //! exited with success, its reader ended without an error and the
-//! interface is confirmed gone.
+//! interface is confirmed gone. Every wait is bounded on an injected
+//! [`Clock`]: the service uses the host's, tests drive their own.
 //!
 //! The pcap bytes go to the [`Sink`] alone; the process's diagnostics and
 //! the run's ending go into the [`Report`] or the error, never into the
 //! stream.
 
-use std::{
-    io::Read,
-    sync::mpsc,
-    thread::JoinHandle,
-    time::{Duration, Instant},
-};
+use std::time::Duration;
+
+mod stream;
+pub use stream::{Clock, HostClock, Next, Observer, ReaderEvent, STREAM_DEPTH, Stream, Wait};
 
 use serde::Serialize;
 
@@ -40,7 +40,8 @@ pub const INTERFACE: &str = "oercap0";
 pub const READY: Duration = Duration::from_secs(10);
 /// How long the process may take to exit after the stop request.
 pub const EXIT: Duration = Duration::from_secs(10);
-/// How long one look at the stream waits before the cancellation is read.
+/// How long one look at the stream waits before the cancellation is read
+/// again.
 pub const POLL: Duration = Duration::from_millis(100);
 
 /// The router's interfaces as the capture needs them.
@@ -54,120 +55,21 @@ pub struct Listing {
     pub all: Vec<String>,
 }
 
-/// What the stream held at one look.
-#[derive(Debug, Eq, PartialEq)]
-pub enum Next {
-    Bytes(Vec<u8>),
-    /// Nothing within the wait.
-    Idle,
-    /// The process's stream ended.
-    Ended,
-}
-
 /// The capture process on the router.
 pub trait Process {
-    /// Wait until it listens on the interface.
-    fn ready(&mut self, within: Duration) -> Result<()>;
-    /// The next bytes of its pcap stream, waiting up to `wait`.
-    fn next(&mut self, wait: Duration) -> Next;
+    /// Wait until it listens on the interface, until `until`.
+    fn ready<C: Clock>(&mut self, clock: &C, until: C::Instant) -> Result<()>;
+    /// The next bytes of its pcap stream, waiting until `until`.
+    fn next<C: Clock>(&mut self, clock: &C, until: C::Instant) -> Next;
     /// Ask it to exit.
     fn stop(&mut self) -> Result<()>;
-    /// Wait for its exit within `within`, then close its stream and join
-    /// the stream's reader within the same bound, then confirm the process
-    /// gone; how it ended. An exit other than success, a reader that
-    /// failed or did not end, and a process still running are errors.
-    fn wait_exit(&mut self, within: Duration) -> Result<String>;
+    /// Wait for its exit until `until`, then close its stream and join the
+    /// stream's reader, then confirm the process gone; how it ended. An
+    /// exit other than success, a reader that failed or did not end, and a
+    /// process still running are errors.
+    fn wait_exit<C: Clock>(&mut self, clock: &C, until: C::Instant) -> Result<String>;
     /// Its diagnostics, bounded; complete only after `wait_exit`.
     fn diagnostics(&mut self) -> String;
-}
-
-/// A process's output read by a thread of its own into a bounded channel.
-///
-/// The reader blocks on its source or on a full channel; [`Self::close`]
-/// drops the receiving end, so a send fails at once, and joins the reader
-/// within a bound: closing never waits on a consumer that stopped reading.
-pub struct Stream {
-    chunks: Option<mpsc::Receiver<Vec<u8>>>,
-    ended: mpsc::Receiver<()>,
-    reader: Option<JoinHandle<Result<u64>>>,
-}
-
-/// Signals the reader's end on every exit of its thread, a panic included.
-struct EndSignal(mpsc::SyncSender<()>);
-
-impl Drop for EndSignal {
-    fn drop(&mut self) {
-        let _ = self.0.try_send(());
-    }
-}
-
-/// The capacity of a stream's channel, in chunks.
-pub const STREAM_DEPTH: usize = 64;
-const CHUNK: usize = 64 * 1024;
-
-impl Stream {
-    /// Read `source` until its end, an error or a closed channel.
-    pub fn spawn(mut source: impl Read + Send + 'static) -> Self {
-        let (send, chunks) = mpsc::sync_channel(STREAM_DEPTH);
-        let (signal, ended) = mpsc::sync_channel(1);
-        let reader = std::thread::spawn(move || {
-            let _signal = EndSignal(signal);
-            let mut buffer = vec![0u8; CHUNK];
-            let mut total = 0u64;
-            loop {
-                match source.read(&mut buffer) {
-                    Ok(0) => return Ok(total),
-                    Ok(count) => {
-                        let chunk = buffer.get(..count).unwrap_or_default().to_vec();
-                        total = total.saturating_add(count as u64);
-                        if send.send(chunk).is_err() {
-                            return Err(format!(
-                                "the stream was closed with its output still flowing \
-                                 ({total} bytes read)"
-                            ));
-                        }
-                    }
-                    Err(error) => return Err(format!("the stream's read failed: {error}")),
-                }
-            }
-        });
-        Self {
-            chunks: Some(chunks),
-            ended,
-            reader: Some(reader),
-        }
-    }
-
-    /// The next chunk, waiting up to `wait`.
-    pub fn next(&mut self, wait: Duration) -> Next {
-        let Some(chunks) = &self.chunks else {
-            return Next::Ended;
-        };
-        match chunks.recv_timeout(wait) {
-            Ok(chunk) => Next::Bytes(chunk),
-            Err(mpsc::RecvTimeoutError::Timeout) => Next::Idle,
-            Err(mpsc::RecvTimeoutError::Disconnected) => Next::Ended,
-        }
-    }
-
-    /// Close the channel and join the reader within `within`: what it read
-    /// in all, or why it ended otherwise.
-    pub fn close(&mut self, within: Duration) -> Result<u64> {
-        drop(self.chunks.take());
-        let Some(reader) = self.reader.take() else {
-            return Err("the stream was already closed".into());
-        };
-        if self.ended.recv_timeout(within).is_err() {
-            // Still blocked on its source: left running, never joined.
-            return Err(format!(
-                "the stream's reader did not end within {} s",
-                within.as_secs()
-            ));
-        }
-        reader
-            .join()
-            .map_err(|_| "the stream's reader panicked".to_owned())?
-    }
 }
 
 /// The router side of a capture.
@@ -245,11 +147,15 @@ impl Drain {
 
 /// Read the stream to its end within `EXIT`: into `sink` while it takes
 /// the bytes, discarding and counting otherwise.
-fn drain(process: &mut impl Process, mut sink: Option<&mut dyn Sink>) -> Drain {
+fn drain<C: Clock>(
+    process: &mut impl Process,
+    mut sink: Option<&mut dyn Sink>,
+    clock: &C,
+) -> Drain {
     let mut drain = Drain::default();
-    let deadline = Instant::now() + EXIT;
-    while Instant::now() < deadline {
-        match process.next(POLL) {
+    let deadline = clock.after(clock.now(), EXIT);
+    while clock.now() < deadline {
+        match process.next(clock, deadline) {
             Next::Bytes(chunk) => {
                 let length = chunk.len() as u64;
                 let kept = match sink.as_mut() {
@@ -324,16 +230,17 @@ impl Teardown {
 /// Stop `process` if there is one, drain its stream (into `sink` when
 /// given), wait for it, remove the interface and confirm it gone: every
 /// step whatever the others returned.
-fn teardown<H: Host>(
+fn teardown<H: Host, C: Clock>(
     host: &mut H,
     process: Option<(&mut H::Process, Option<&mut dyn Sink>)>,
+    clock: &C,
 ) -> Teardown {
     let (stop, drained, exit, diagnostics) = match process {
         None => (None, None, None, String::new()),
         Some((process, sink)) => {
             let stop = process.stop();
-            let drained = drain(process, sink);
-            let exit = process.wait_exit(EXIT);
+            let drained = drain(process, sink, clock);
+            let exit = process.wait_exit(clock, clock.after(clock.now(), EXIT));
             (Some(stop), Some(drained), Some(exit), process.diagnostics())
         }
     };
@@ -359,12 +266,18 @@ fn teardown<H: Host>(
     }
 }
 
-/// Capture the radio's `channel` into `sink` until it cancels.
+/// Capture the radio's `channel` into `sink` until it cancels; every wait
+/// is bounded on `clock`.
 ///
 /// # Errors
 /// A refused start before anything changed; otherwise the stream's ending
 /// together with every teardown step's result.
-pub fn capture<H: Host, S: Sink>(host: &mut H, channel: u8, sink: &mut S) -> Result<Report> {
+pub fn capture<H: Host, S: Sink, C: Clock>(
+    host: &mut H,
+    channel: u8,
+    sink: &mut S,
+    clock: &C,
+) -> Result<Report> {
     let listing = host.listing()?;
     if listing.all.iter().any(|name| name == INTERFACE) {
         return Err(format!(
@@ -381,7 +294,7 @@ pub fn capture<H: Host, S: Sink>(host: &mut H, channel: u8, sink: &mut S) -> Res
     }
     // From here the interface is the capture's: it was absent.
     if let Err(error) = host.create(&listing.phy, INTERFACE, channel) {
-        let teardown = teardown(host, None);
+        let teardown = teardown(host, None, clock);
         return Err(format!(
             "the monitor was not created: {error}; {}",
             teardown.describe()
@@ -390,15 +303,15 @@ pub fn capture<H: Host, S: Sink>(host: &mut H, channel: u8, sink: &mut S) -> Res
     let mut process = match host.start(INTERFACE) {
         Ok(process) => process,
         Err(error) => {
-            let teardown = teardown(host, None);
+            let teardown = teardown(host, None, clock);
             return Err(format!(
                 "the capture did not start: {error}; {}",
                 teardown.describe()
             ));
         }
     };
-    if let Err(error) = process.ready(READY) {
-        let teardown = teardown(host, Some((&mut process, None)));
+    if let Err(error) = process.ready(clock, clock.after(clock.now(), READY)) {
+        let teardown = teardown(host, Some((&mut process, None)), clock);
         return Err(format!(
             "the capture did not become ready: {error}; {}",
             teardown.describe()
@@ -409,7 +322,7 @@ pub fn capture<H: Host, S: Sink>(host: &mut H, channel: u8, sink: &mut S) -> Res
         if sink.cancelled() {
             break Ended::Cancelled;
         }
-        match process.next(POLL) {
+        match process.next(clock, clock.after(clock.now(), POLL)) {
             Next::Bytes(chunk) => {
                 if let Err(error) = sink.write(&chunk) {
                     break Ended::WriteError(error);
@@ -426,7 +339,7 @@ pub fn capture<H: Host, S: Sink>(host: &mut H, channel: u8, sink: &mut S) -> Res
         Ended::Cancelled => Some(sink),
         Ended::WriteError(_) | Ended::ProcessEnded => None,
     };
-    let teardown = teardown(host, Some((&mut process, keep)));
+    let teardown = teardown(host, Some((&mut process, keep)), clock);
     let tail = teardown.drain.as_ref().map_or(0, |drain| drain.tail);
     let bytes = bytes.saturating_add(tail);
     match (&ended, teardown.clean(), &teardown.exit) {
@@ -492,7 +405,7 @@ pub fn parse_listing(text: &str) -> Result<Listing> {
 
 /// The router over SSH.
 pub mod ssh {
-    use super::{Host, Listing, Next, Process, Stream, parse_listing};
+    use super::{Clock, Host, Listing, Next, Process, Stream, Wait, parse_listing};
     use crate::{
         router::quote,
         ssh::{Remote, Result, Ssh, Stderr, read_stderr},
@@ -500,7 +413,6 @@ pub mod ssh {
     use std::{
         sync::{Arc, Mutex, PoisonError, mpsc},
         thread::JoinHandle,
-        time::Duration,
     };
 
     /// The router's `radio` (its UCI `wifi-device` section) over `ssh`.
@@ -571,7 +483,7 @@ pub mod ssh {
             let mut child = ssh.start(script)?;
             let stdout = child.take_stdout().ok_or("the capture has no stdout")?;
             let stderr = child.take_stderr().ok_or("the capture has no stderr")?;
-            let stream = Stream::spawn(stdout);
+            let stream = Stream::spawn(stdout, ())?;
             let pid = Arc::new(Mutex::new(None));
             let (announce, ready) = mpsc::sync_channel(1);
             let seen = pid.clone();
@@ -603,14 +515,17 @@ pub mod ssh {
     }
 
     impl Process for SshProcess {
-        fn ready(&mut self, within: Duration) -> Result<()> {
-            self.ready
-                .recv_timeout(within)
-                .map_err(|_| format!("tcpdump did not listen within {} s", within.as_secs()))
+        fn ready<C: Clock>(&mut self, clock: &C, until: C::Instant) -> Result<()> {
+            match clock.recv(&self.ready, until) {
+                Wait::Message(()) => Ok(()),
+                Wait::Timeout | Wait::Disconnected => {
+                    Err("tcpdump did not report that it listens".into())
+                }
+            }
         }
 
-        fn next(&mut self, wait: Duration) -> Next {
-            self.stream.next(wait)
+        fn next<C: Clock>(&mut self, clock: &C, until: C::Instant) -> Next {
+            self.stream.next(clock, until)
         }
 
         fn stop(&mut self) -> Result<()> {
@@ -620,13 +535,14 @@ pub mod ssh {
             Ok(())
         }
 
-        fn wait_exit(&mut self, within: Duration) -> Result<String> {
+        fn wait_exit<C: Clock>(&mut self, clock: &C, until: C::Instant) -> Result<String> {
+            let within = clock.remaining(until);
             let waited = self.child.wait_timeout(Some(within));
             if waited.is_err() {
                 let _ = self.child.kill();
             }
-            // Closed first: a reader blocked on a full channel ends.
-            let read = self.stream.close(within);
+            // The stream stops its reader whatever the source does.
+            let read = self.stream.close(clock, until);
             if let Some(stderr) = self.stderr.take() {
                 self.diagnostics = stderr.join().map_or_else(
                     |_| "the capture's stderr reader failed".to_owned(),

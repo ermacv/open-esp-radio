@@ -212,7 +212,12 @@ pub(crate) fn run(
             }
             let mut host = monitor::ssh::SshHost::new(router.ssh.parallel(), &router.radio);
             let mut sink = Capture { io };
-            json(monitor::capture(&mut host, *channel, &mut sink)?)
+            json(monitor::capture(
+                &mut host,
+                *channel,
+                &mut sink,
+                &monitor::HostClock,
+            )?)
         }
         RouterOperation::AirtimeLimits { mac: station } => {
             let station = station.as_deref().map(mac).transpose()?;

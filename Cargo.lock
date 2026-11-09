@@ -2016,6 +2016,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-probes-esp32s31-ack-responder"
+version = "0.1.0"
+dependencies = [
+ "embedded-io-async",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-platform-board",
+ "oer-chips-esp32s31-platform-layout",
+ "oer-chips-esp32s31-platform-runtime",
+ "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-phy",
+ "oer-chips-esp32s31-radio-system",
+ "oer-chips-family-drivers-usb-serial-jtag",
+ "oer-chips-family-platform-executor",
+ "oer-chips-family-platform-interrupt-table",
+ "oer-chips-family-platform-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-portable-trace",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-regulatory",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-hil-probes-esp32s31-aes-timing"
 version = "0.1.0"
 dependencies = [
@@ -3478,6 +3506,7 @@ dependencies = [
  "oer-tools-lab-model",
  "oer-tools-os-durable",
  "oer-tools-os-process",
+ "rustix",
  "serde",
  "serde_json",
  "shlex",

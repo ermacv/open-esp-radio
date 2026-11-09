@@ -15,6 +15,7 @@ oer-tools-lab-model = { path = "../model" }
 oer-tools-os-process = { path = "../../os/process" }
 oer-tools-os-durable = { path = "../../os/durable" }
 serde_json = "1.0"
+rustix = { version = "=1.1.4", features = ["event"] }
 tempfile = "3"
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
