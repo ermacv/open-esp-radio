@@ -186,12 +186,12 @@ impl oer_protocols_radio_port::PoolSet for GatePool {
 /// The install's unique gate place, held inside exactly one gate state.
 #[must_use = "the unique gate place stays in one gate state"]
 struct GatePlace<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
-    slot: Slot<'id, GateKind, Path>,
+    slot: Slot<'id, oer_protocols_radio_port::Slots<GateKind, 1>, Path>,
 }
 
 impl<'id, Path: PoolPath> GatePlace<'id, Path> {
     fn mint(
-        [slot]: [Slot<'id, GateKind, Path>; 1],
+        [slot]: [Slot<'id, oer_protocols_radio_port::Slots<GateKind, 1>, Path>; 1],
     ) -> (GateOpen<'id, Path>, GateIssuer<'id, Path>) {
         (
             GateOpen {

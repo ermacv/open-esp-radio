@@ -114,7 +114,7 @@ use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress, ccmp::GroupKeyId, qos::WmmAccessCategory,
 };
-use oer_protocols_radio_port::{BodyLoan, LocalId, PoolPath, Root, Slot};
+use oer_protocols_radio_port::{BodyLoan, LocalId, PoolPath, Root, Slot, Slots};
 
 use crate::issued::{IssuedSlot, IssuedSlots, SlotGrant};
 use crate::{
@@ -323,7 +323,7 @@ impl<'id, Path: PoolPath> BeaconGrant<'id, Path> {
 /// installation ([`SubmitRefusal::StalePermission`](crate::SubmitRefusal::StalePermission)).
 #[must_use = "the beacon permission returns only with its beacon's terminal"]
 pub struct BeaconPermission<'id, Path: PoolPath = Root<LocalId<'id>>> {
-    slot: IssuedSlot<'id, BeaconKind, Path>,
+    slot: IssuedSlot<'id, Slots<BeaconKind, 1>, Path>,
 }
 
 impl<Path: PoolPath> core::fmt::Debug for BeaconPermission<'_, Path> {

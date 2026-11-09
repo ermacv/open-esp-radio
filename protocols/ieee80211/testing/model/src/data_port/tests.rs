@@ -98,7 +98,7 @@ type GroupTokens<'s> = (
         MODEL_KEY_SLOTS],
     oer_protocols_ieee80211_contracts_port::IssuedSlot<
         's,
-        ModelGroupPermission<Station>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
         ModelPool<LocalId<'s>, 8>,
     >,
     [PairwiseKeySlot<'s, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<LocalId<'s>, 5>>;
@@ -112,9 +112,19 @@ struct Harness<'s> {
     port: Port<'s>,
     commands: ModelCommands<'s, LocalId<'s>>,
     sink: Sink<'s>,
-    tickets: Vec<Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>>,
+    tickets: Vec<
+        Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
+    >,
     small: Vec<ModelBuffer<'s, B<'s>, ModelSmall>>,
-    terminal_access: TerminalAccess<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+    terminal_access: TerminalAccess<
+        's,
+        oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+        ModelPool<LocalId<'s>, 1>,
+    >,
     configure: Option<
         ConfigurePermission<
             's,
@@ -131,7 +141,11 @@ struct Harness<'s> {
     /// The station MPDU the last station terminal returned `Sent`, kept for a
     /// retransmission.
     station: Option<(
-        Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         ModelSent<'s, B<'s>, ModelSmall>,
     )>,
 }
@@ -218,7 +232,11 @@ impl<'s> Harness<'s> {
     /// admitted by the port.
     fn admitted(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
     ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
         self.admitted_under(ticket, buffer, None)
@@ -226,7 +244,11 @@ impl<'s> Harness<'s> {
 
     fn admitted_under(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: Option<&ModelPairwiseKey<'s, B<'s>, Station>>,
     ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
@@ -236,7 +258,11 @@ impl<'s> Harness<'s> {
     /// The station's protected data frame under `key`, numbered `number`.
     fn admitted_under_number(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: &ModelPairwiseKey<'s, B<'s>, Station>,
         number: u64,
@@ -246,7 +272,11 @@ impl<'s> Harness<'s> {
 
     fn admitted_numbered(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: Option<(&ModelPairwiseKey<'s, B<'s>, Station>, u64)>,
     ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
@@ -256,7 +286,11 @@ impl<'s> Harness<'s> {
     /// The station's data frame under one stage of `transmissions`.
     fn admitted_planned(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         mut buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: Option<(&ModelPairwiseKey<'s, B<'s>, Station>, u64)>,
         transmissions: NonZeroU8,

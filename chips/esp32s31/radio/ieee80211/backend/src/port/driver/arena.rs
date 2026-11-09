@@ -8,7 +8,7 @@ use oer_protocols_ieee80211_contracts_port::arena::TxArena;
 
 /// The station's data arenas of an installation over its two chains.
 pub(in crate::port) type DataArenas<'id, Id, const B: usize> =
-    Esp32s31TxArena<'id, 'static, TxBacking<B>, CorePath<Id>, TX_AMPDU_SUBFRAMES>;
+    Esp32s31TxArena<'id, 'static, TxBacking<B>, CorePath<Id>, TX_AMPDU_SUBFRAMES, TX_TICKETS>;
 
 /// One step's arena port of an installation.
 pub(in crate::port) type Port<'a, 'id, Id, D, const B: usize, O> = ArenaPort<

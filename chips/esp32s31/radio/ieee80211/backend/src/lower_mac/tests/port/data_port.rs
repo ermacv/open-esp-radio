@@ -24,7 +24,8 @@ mod stale;
 mod transmit;
 
 type Port<'id, Id> = Esp32s31Port<'id, Id, TestDevice, 512, Draws>;
-type Ticket<'id, Id> = radio::Slot<'id, Tickets, radio::Child<radio::Root<Id>, 2>>;
+type Ticket<'id, Id> =
+    radio::Slot<'id, radio::Slots<Tickets, TX_TICKETS>, radio::Child<radio::Root<Id>, 2>>;
 type TestBuffer<'id, Id> = Buffer<'id, Id, TestDevice, 512, Draws>;
 type Configure<'id, Id> = ConfigurePermission<'id, Station, radio::Child<radio::Root<Id>, 8>, Tag>;
 
@@ -130,11 +131,18 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
             radio::Child<radio::Root<Id>, 0>,
         >,
     >,
-    group_permission:
-        Option<IssuedSlot<'id, GroupPermission<Station>, radio::Child<radio::Root<Id>, 5>>>,
+    group_permission: Option<
+        IssuedSlot<
+            'id,
+            radio::Slots<GroupPermission<Station>, 1>,
+            radio::Child<radio::Root<Id>, 5>,
+        >,
+    >,
     gate: Option<GateOpen<'id, radio::Child<radio::Root<Id>, 1>>>,
     /// The terminals' access, which opens a single MPDU's terminal.
-    access: Option<TerminalAccess<'id, Tickets, radio::Child<radio::Root<Id>, 2>>>,
+    access: Option<
+        TerminalAccess<'id, radio::Slots<Tickets, TX_TICKETS>, radio::Child<radio::Root<Id>, 2>>,
+    >,
     /// The station MPDU the last station terminal returned `Sent`, kept for a
     /// retransmission.
     station: Option<(Ticket<'id, Id>, Sent<'id, Id, TestDevice, 512, Draws>)>,

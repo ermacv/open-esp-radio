@@ -10,7 +10,7 @@ impl<const B: usize> TxBufferClass for BufferClass<B> {
 
 /// Affine memory owner. Only MPDU octets are lent to the portable core.
 pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    pub(super) place: Slot<'id, Buffers, Part<Id, 3>>,
+    pub(super) place: Slot<'id, radio::Slots<Buffers, TX_BUFFERS>, Part<Id, 3>>,
     pub(super) dma: ReturnableBuffer<B>,
     pub(super) admission: Option<Instant>,
     pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>,
@@ -215,11 +215,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations,
     fn into_admission(
         self,
         context: D::Context<'id, Id>,
-        ticket: Slot<'id, Tickets, Part<Id, 2>>,
+        ticket: Slot<'id, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
         _: Admission<Self>,
     ) -> AdmissionOwners<
         Self::OwnedContext,
-        Slot<'static, Tickets, Part<Id, 2>>,
+        Slot<'static, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
         Self::OwnedPayload,
         Execution<Id>,
     > {
@@ -416,7 +416,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, Id, D, B, O, R, K>;
     type KeyIdentity = keys::KeyIdentity<'id, Id>;
     type TxBody = D::Body;
-    type TicketKind = Tickets;
+    type TicketKind = radio::Slots<Tickets, TX_TICKETS>;
     type AckEvidence = Ack;
     type BlockAckEvidence = BlockAckAnswer;
     type AirDenied = Infallible;

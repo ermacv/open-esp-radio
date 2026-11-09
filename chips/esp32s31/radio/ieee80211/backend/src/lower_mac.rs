@@ -597,6 +597,7 @@ pub trait LowerMacSink<
     'slot,
     const BUFFER_SIZE: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
 >
 {
     /// An attempt ended: its queue place, ticket and slot come back with
@@ -609,8 +610,8 @@ pub trait LowerMacSink<
     /// next service or disable, never repeating the hardware's end.
     fn tx_completed(
         &mut self,
-        completion: TxCompletion<'core, 'slot, BUFFER_SIZE, Path>,
-    ) -> Result<(), TxCompletion<'core, 'slot, BUFFER_SIZE, Path>>;
+        completion: TxCompletion<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    ) -> Result<(), TxCompletion<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>;
     /// The last admitted use returned and the programmed key was cleared.
     ///
     /// # Errors
@@ -636,9 +637,10 @@ pub struct TxCompletion<
     'slot,
     const BUFFER_SIZE: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
 > {
     pub queue: FreeQueue<'core, Path>,
-    pub ticket: TxTicket<'core, Path>,
+    pub ticket: TxTicket<'core, Path, TICKETS>,
     pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
     pub end: PublicationEnd,
     pub rate: PhyRate,
@@ -918,13 +920,13 @@ struct KeyBank<'core, Path: PoolPath, const TICKETS: usize> {
 
 /// Offer every finished receipt of kind `S` to `sink`; one it refuses waits
 /// in its place.
-fn offer_removed<'core, 'slot, const BUFFER_SIZE: usize, Path, K, S>(
+fn offer_removed<'core, 'slot, const BUFFER_SIZE: usize, const TICKETS: usize, Path, K, S>(
     removals: &mut keys::removals::Removals<'core, Path>,
     sink: &mut K,
     _kind: PhantomData<S>,
 ) where
     Path: PoolPath,
-    K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     S: RemovableSlot<'core, Path>,
 {
     for removal in S::places(removals) {
@@ -944,7 +946,7 @@ fn offer_removed<'core, 'slot, const BUFFER_SIZE: usize, Path, K, S>(
 /// its receipt to `sink`; refused, the receipt waits in the removal's
 /// place: the key is cleared once, and only the receipt is offered again.
 /// Whether a removal of this kind was pending for it.
-fn finish_removal<'core, 'slot, const BUFFER_SIZE: usize, Path, H, K, S>(
+fn finish_removal<'core, 'slot, const BUFFER_SIZE: usize, const TICKETS: usize, Path, H, K, S>(
     removals: &mut keys::removals::Removals<'core, Path>,
     index: usize,
     hardware: &mut H,
@@ -954,7 +956,7 @@ fn finish_removal<'core, 'slot, const BUFFER_SIZE: usize, Path, H, K, S>(
 where
     Path: PoolPath,
     H: CcmpKeyHardware,
-    K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     S: RemovableSlot<'core, Path>,
 {
     let Some(removal) = S::places(removals)
@@ -1037,17 +1039,17 @@ impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
 
 /// An ended attempt on its way to the sink, with what its queue's place
 /// keeps of it when the sink refuses it.
-struct Ended<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
+struct Ended<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath, const TICKETS: usize> {
     role: VifRole,
     admitted_at: oer_portable_time::Instant,
-    completion: TxCompletion<'core, 'slot, BUFFER_SIZE, Path>,
+    completion: TxCompletion<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
 }
 
 /// The attempt occupying one queue.
-struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
+struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath, const TICKETS: usize> {
     queue: FreeQueue<'core, Path>,
     role: VifRole,
-    admission: TxAdmission<'core, Path>,
+    admission: TxAdmission<'core, Path, TICKETS>,
     /// The rate of its publication, which its completion reports.
     rate: PhyRate,
     admitted_at: oer_portable_time::Instant,
@@ -1140,7 +1142,7 @@ pub struct LowerMacCore<
     expired_msdus: u32,
     /// The attempt of each ordinary queue, by its hardware index
     /// ([`LegacyTxQueue::hardware_index`]).
-    queues: [Option<Attempt<'core, 'slot, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
+    queues: [Option<Attempt<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>; LOWER_MAC_TX_QUEUES],
     /// The queues, by hardware index bit, whose published aggregate's
     /// timeout abort forces CCA now ([`Self::service_ampdu`]).
     ampdu_settling: u8,
@@ -1337,7 +1339,7 @@ where
         self.queues[usize::from(queue.hardware_index())].is_some()
     }
 
-    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, BUFFER_SIZE, Path>> {
+    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, BUFFER_SIZE, Path, TICKETS>> {
         self.queues.iter().flatten()
     }
 
@@ -1412,10 +1414,10 @@ where
         &mut self,
         hardware: &mut H,
         queue: FreeQueue<'core, Path>,
-        admission: TxAdmission<'core, Path>,
+        admission: TxAdmission<'core, Path, TICKETS>,
         values: MpduValues<'slot, BUFFER_SIZE>,
         publish: bool,
-    ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path>> {
+    ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path, TICKETS>> {
         let MpduValues {
             role,
             admitted_at,
@@ -1523,7 +1525,7 @@ where
         role: VifRole,
         rate: TxPhyRate,
         protection: Protection,
-        admission: &TxAdmission<'core, Path>,
+        admission: &TxAdmission<'core, Path, TICKETS>,
         power_ceiling_dbm: Option<i8>,
         backoff_slots: u16,
     ) -> CommonAdmission {
@@ -1678,7 +1680,7 @@ where
     /// A fault of the transmit owner.
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -1816,12 +1818,15 @@ where
         clippy::too_many_arguments,
         reason = "one terminal returns the complete admitted attempt"
     )]
-    fn finish_attempt<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    fn finish_attempt<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &mut self,
         hardware: &mut H,
         role: VifRole,
         queue: FreeQueue<'core, Path>,
-        admission: TxAdmission<'core, Path>,
+        admission: TxAdmission<'core, Path, TICKETS>,
         slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
         end: PublicationEnd,
         rate: PhyRate,
@@ -1866,9 +1871,9 @@ where
 
     /// Offer an ended attempt to `sink`. Refused, it waits whole in its
     /// queue's place, which its attempt just left, until a later offer.
-    fn offer_completion<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    fn offer_completion<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>(
         &mut self,
-        ended: Ended<'core, 'slot, BUFFER_SIZE, Path>,
+        ended: Ended<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
         sink: &mut K,
     ) {
         let Ended {
@@ -1906,7 +1911,10 @@ where
     /// Offer again what a sink refused before: every ended attempt waiting
     /// in its queue's place and every finished removal's receipt. Nothing
     /// is repeated on the hardware; a refused offer keeps its place.
-    pub fn offer_kept<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(&mut self, sink: &mut K) {
+    pub fn offer_kept<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>(
+        &mut self,
+        sink: &mut K,
+    ) {
         for index in 0..LOWER_MAC_TX_QUEUES {
             let Some(place) = self.queues.get_mut(index) else {
                 continue;
@@ -1996,7 +2004,7 @@ where
 
     /// End a queue's held attempt as [`PublicationEnd::Withdrawn`]: it
     /// never reached the hardware, and its slot comes back with it.
-    fn abort_held<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    fn abort_held<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>(
         &mut self,
         hardware: &mut H,
         index: usize,
@@ -2033,7 +2041,7 @@ where
     /// Return every held attempt without publishing it.
     fn withdraw_held_attempts<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -2416,7 +2424,10 @@ where
 
     /// Return one admitted right to its key's count. A right naming no bank
     /// position poisons the core; its ticket still returns.
-    fn release_key(&mut self, key: KeyUse<'core, Path>) -> (usize, TxTicket<'core, Path>) {
+    fn release_key(
+        &mut self,
+        key: KeyUse<'core, Path, TICKETS>,
+    ) -> (usize, TxTicket<'core, Path, TICKETS>) {
         let index = key.index;
         let ticket = match self.keys.uses.get_mut(index) {
             Some(uses) => uses.release(key),
@@ -2435,8 +2446,8 @@ where
     pub fn admit_key(
         &mut self,
         key: &KeyHandle<'core, Path>,
-        ticket: TxTicket<'core, Path>,
-    ) -> Result<KeyUse<'core, Path>, KeyAdmissionRefused<'core, Path>> {
+        ticket: TxTicket<'core, Path, TICKETS>,
+    ) -> Result<KeyUse<'core, Path, TICKETS>, KeyAdmissionRefused<'core, Path, TICKETS>> {
         if self.fault.is_some() {
             return Err(KeyAdmissionRefused {
                 ticket,
@@ -2459,7 +2470,7 @@ where
     pub(in crate::lower_mac) fn arena_aggregate(
         &self,
         values: ArenaValues,
-        admission: &TxAdmission<'core, Path>,
+        admission: &TxAdmission<'core, Path, TICKETS>,
         min_mpdu_start_spacing: u8,
         he: Option<crate::mac::tx::ampdu::HeAmpduPolicy>,
     ) -> Result<ampdu::AmpduSettings, AmpduRefusal> {
@@ -2493,7 +2504,7 @@ where
     pub(in crate::lower_mac) fn arena_single(
         &self,
         values: ArenaValues,
-        admission: &TxAdmission<'core, Path>,
+        admission: &TxAdmission<'core, Path, TICKETS>,
         mpdu_length: u16,
         hardware_mic_length: u8,
         individual: bool,
@@ -2582,7 +2593,7 @@ where
     fn arena_common(
         &self,
         values: ArenaValues,
-        admission: &TxAdmission<'core, Path>,
+        admission: &TxAdmission<'core, Path, TICKETS>,
     ) -> CommonAdmission {
         self.plan_common(
             values.access_category,
@@ -2600,13 +2611,13 @@ where
     /// last use finishes, reported to `sink`.
     pub(in crate::lower_mac) fn release_arena_key<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
-        key: KeyUse<'core, Path>,
+        key: KeyUse<'core, Path, TICKETS>,
         sink: &mut K,
-    ) -> TxTicket<'core, Path> {
+    ) -> TxTicket<'core, Path, TICKETS> {
         let (index, ticket) = self.release_key(key);
         self.finish_key_removal(hardware, index, sink);
         ticket
@@ -2648,7 +2659,7 @@ where
     /// [`Self::take_removed`].
     pub fn remove_checked_key<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
         S: RemovableSlot<'core, Path>,
     >(
         &mut self,
@@ -2688,7 +2699,7 @@ where
     #[cfg(test)]
     pub(crate) fn remove_key_for_test<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -2757,7 +2768,10 @@ where
         )
     }
 
-    fn finish_key_removal<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    fn finish_key_removal<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &mut self,
         hardware: &mut H,
         index: usize,
@@ -2814,13 +2828,13 @@ where
     /// returned ticket admits nothing it refuses.
     pub fn return_admission<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
-        admission: TxAdmission<'core, Path>,
+        admission: TxAdmission<'core, Path, TICKETS>,
         sink: &mut K,
-    ) -> TxTicket<'core, Path> {
+    ) -> TxTicket<'core, Path, TICKETS> {
         match admission {
             TxAdmission::Open(ticket) => ticket,
             TxAdmission::Protected(key) => {
@@ -3011,7 +3025,10 @@ where
     /// Report the station TBTT whose event the power interrupt delivered
     /// (`MacPowerInterruptObservation::sta_tbtt`). Without a schedule the edge is stale
     /// and reports nothing.
-    pub fn station_tbtt<H: StationTsfHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub fn station_tbtt<
+        H: StationTsfHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &self,
         hardware: &mut H,
         sink: &mut K,
@@ -3071,11 +3088,12 @@ pub struct SubmitFault<
     'slot,
     const BUFFER_SIZE: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
 > {
     pub queue: FreeQueue<'core, Path>,
     pub fault: LowerMacFault,
     pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
-    pub admission: TxAdmission<'core, Path>,
+    pub admission: TxAdmission<'core, Path, TICKETS>,
 }
 
 /// An interface configuration the receive policies cannot take.

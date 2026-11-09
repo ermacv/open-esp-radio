@@ -432,7 +432,7 @@ pub enum ModelBlockAcks {}
 /// A transmit buffer of the class `C`: its token and its memory, which
 /// moves with it; only the install mints one.
 pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
-    slot: Slot<'id, C, C::Path<B::Identity>>,
+    slot: Slot<'id, C::Layout, C::Path<B::Identity>>,
     loan: Option<BodyLoan<'id, B::Identity, B>>,
     memory: ModelMemory,
     admitted_at: Option<RadioInstant<Ieee80211Radio>>,
@@ -1124,7 +1124,7 @@ impl<'id, B: ModelComposition + 'id> PortTypes<'id> for ModelTypes<B> {
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = ModelPrepared<'k, 'p, 'id, R, K, B>;
     type KeyIdentity = KeyIdentity<'id, B::Identity>;
     type TxBody = ModelBodyOf<B>;
-    type TicketKind = ModelTickets;
+    type TicketKind = oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>;
     type AckEvidence = ModelAck;
     type BlockAckEvidence = ModelBlockAckEvidence;
     type AirDenied = ModelAirDenied;
@@ -1213,7 +1213,7 @@ impl<'id, B: ModelComposition + 'id, R: ModelRole + 'id> KeyTypes<'id> for Model
     type GroupKey = ModelGroupKey<'id, B, R>;
     type GroupPermission = oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
-        ModelGroupPermission<R>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<R>, 1>,
         R::GroupPermissionPath<B::Identity>,
     >;
     type Identity = KeyIdentity<'id, B::Identity>;
@@ -1458,11 +1458,17 @@ pub struct ModelResources<'id, B: ModelComposition> {
 /// receive Block Ack slots and the gate its arbiter holds.
 pub struct ModelShared<'id, B: ModelComposition> {
     /// The transmit tickets.
-    pub tickets: Vec<Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>>,
+    pub tickets: Vec<
+        Slot<
+            'id,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<<B as ModelComposition>::Identity, 1>,
+        >,
+    >,
     /// Sole permission for the body to unpack TX terminals.
     pub terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
         'id,
-        ModelTickets,
+        oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
         ModelPool<<B as ModelComposition>::Identity, 1>,
     >,
     /// The small transmit buffers.
@@ -1497,8 +1503,11 @@ pub struct ModelStationPermissions<'id, B: ModelComposition> {
         oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
     >,
     /// The install's single epoch-source slot; Station constructs its source.
-    pub connection_epoch:
-        Slot<'id, ConnectionEpochKind, ModelPool<<B as ModelComposition>::Identity, 4>>,
+    pub connection_epoch: Slot<
+        'id,
+        oer_protocols_radio_port::Slots<ConnectionEpochKind, 1>,
+        ModelPool<<B as ModelComposition>::Identity, 4>,
+    >,
     /// Its pairwise key slots.
     pub pairwise: [PairwiseKeySlot<
         'id,
@@ -1518,7 +1527,7 @@ pub struct ModelStationPermissions<'id, B: ModelComposition> {
     /// Its sole GTK mutation permission.
     pub group_permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
-        ModelGroupPermission<Station>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
         ModelPool<<B as ModelComposition>::Identity, 8>,
     >,
 }
@@ -1558,7 +1567,7 @@ pub struct ModelAccessPointPermissions<'id, B: ModelComposition> {
     /// Its sole GTK mutation permission.
     pub group_permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
-        ModelGroupPermission<AccessPoint>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
         oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 0>,
     >,
     /// The installation's one beacon permission.
@@ -2701,7 +2710,7 @@ struct AnswerShapeMismatch;
 
 type StationGroupPermission<'id, B> = oer_protocols_ieee80211_contracts_port::IssuedSlot<
     'id,
-    ModelGroupPermission<Station>,
+    oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
     ModelPool<<B as ModelComposition>::Identity, 8>,
 >;
 
@@ -2712,7 +2721,7 @@ struct PendingGroupInstall<'id, B: ModelComposition, R: ModelRole> {
     slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
     permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
-        ModelGroupPermission<R>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<R>, 1>,
         R::GroupPermissionPath<B::Identity>,
     >,
     key_id: GroupKeyId,
@@ -2732,7 +2741,7 @@ trait GroupInstallationRole: ModelRole + Sized {
         key: ModelGroupKey<'o, B, Self>,
         permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
-            ModelGroupPermission<Self>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<Self>, 1>,
             Self::GroupPermissionPath<B::Identity>,
         >,
     ) -> OwnedInstalledGroup<'o, B>;
@@ -2768,7 +2777,7 @@ impl GroupInstallationRole for AccessPoint {
         key: ModelGroupKey<'o, B, Self>,
         permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
-            ModelGroupPermission<Self>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<Self>, 1>,
             oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
         >,
     ) -> OwnedInstalledGroup<'o, B> {
@@ -2805,7 +2814,11 @@ type Work<'id, B> = Box<Prepared<'id, B>>;
 
 type ModelInFlight<'id, B, M> = InFlight<
     ModelContextOf<B>,
-    Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>,
+    Slot<
+        'id,
+        oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+        ModelPool<<B as ModelComposition>::Identity, 1>,
+    >,
     M,
 >;
 
@@ -3659,11 +3672,19 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
     fn into_admission(
         self,
         context: <Self::Types as PortTypes<'id>>::Context,
-        ticket: Slot<'id, ModelTickets, ModelPool<B::Identity, 1>>,
+        ticket: Slot<
+            'id,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<B::Identity, 1>,
+        >,
         _: oer_protocols_ieee80211_contracts_port::Admission<Self>,
     ) -> oer_protocols_ieee80211_contracts_port::AdmissionOwners<
         Self::OwnedContext,
-        Slot<'static, ModelTickets, ModelPool<B::Identity, 1>>,
+        Slot<
+            'static,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<B::Identity, 1>,
+        >,
         Self::OwnedPayload,
         Self::Execution,
     > {
@@ -3690,6 +3711,8 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
 pub trait ModelClass: TxBufferClass + Sized {
     /// Nominal component of the backing memory slots.
     type Path<Id: SlotIdentity>: oer_protocols_radio_port::PoolPath<Identity = Id>;
+    /// The layout of the class's buffer slots, `Slots<Self, N>`.
+    type Layout: oer_protocols_radio_port::SlotLayout<Kind = Self>;
     /// Return fresh memory through the terminal's exhaustive buffer enum.
     fn erase<'id, B: ModelComposition>(buffer: ModelBuffer<'id, B, Self>)
     -> ModelAnyBuffer<'id, B>;
@@ -3712,6 +3735,7 @@ pub trait ModelClass: TxBufferClass + Sized {
 
 impl ModelClass for ModelSmall {
     type Path<Id: SlotIdentity> = ModelPool<Id, 2>;
+    type Layout = oer_protocols_radio_port::Slots<Self, MODEL_SMALL_BUFFERS>;
     fn erase<'id, B: ModelComposition>(
         buffer: ModelBuffer<'id, B, Self>,
     ) -> ModelAnyBuffer<'id, B> {
@@ -3751,6 +3775,7 @@ impl ModelClass for ModelSmall {
 }
 impl ModelClass for ModelLarge {
     type Path<Id: SlotIdentity> = ModelPool<Id, 3>;
+    type Layout = oer_protocols_radio_port::Slots<Self, MODEL_LARGE_BUFFERS>;
     fn erase<'id, B: ModelComposition>(
         buffer: ModelBuffer<'id, B, Self>,
     ) -> ModelAnyBuffer<'id, B> {

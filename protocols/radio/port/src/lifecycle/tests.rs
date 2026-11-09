@@ -31,11 +31,11 @@ struct Backend<Id: SlotIdentity> {
     identity: PhantomData<fn(Id) -> Id>,
 }
 struct Queues<Id: SlotIdentity> {
-    token: Option<Slot<'static, (), Root<Id>>>,
+    token: Option<Slot<'static, Slots<(), 1>, Root<Id>>>,
     model: Rc<Model>,
 }
 struct Raw<'s, Id: SlotIdentity> {
-    token: &'s mut Option<Slot<'static, (), Root<Id>>>,
+    token: &'s mut Option<Slot<'static, Slots<(), 1>, Root<Id>>>,
     model: Rc<Model>,
 }
 struct View<'p, Id: SlotIdentity> {
@@ -192,7 +192,7 @@ impl<Id: SlotIdentity> PortBackend<Id> for Backend<Id> {
         Self: 'p,
         Id: 'p;
     type Resources<'p>
-        = Slot<'p, (), Root<Id>>
+        = Slot<'p, Slots<(), 1>, Root<Id>>
     where
         Self: 'p,
         Id: 'p;
@@ -329,7 +329,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
     async fn run<'a, 'p>(
         self,
         owner: Owner<'a, 'p, Id, Backend<Id>, Disabled>,
-        resource: Slot<'p, (), Root<Id>>,
+        resource: Slot<'p, Slots<(), 1>, Root<Id>>,
     ) -> Ended<Id, Backend<Id>, u8>
     where
         Backend<Id>: 'p,

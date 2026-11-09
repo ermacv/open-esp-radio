@@ -2,10 +2,32 @@ use super::*;
 use oer_protocols_ieee80211_contracts_port::association::{self as association, *};
 use oer_protocols_ieee80211_wire::security::Spp;
 
+/// The place of a key's slot in its own pool, bounded by that pool's size
+/// in its type: the place the port keeps a refused terminal of the key in.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SlotPlace {
+    StationPairwise(radio::Place<{ core_mac::association::STATION_PAIRWISE_SLOTS }>),
+    AccessPointPairwise(radio::Place<{ core_mac::association::ACCESS_POINT_PAIRWISE_SLOTS }>),
+    StationGroup(radio::Place<{ core_mac::association::STATION_GROUP_SLOTS }>),
+    AccessPointGroup(radio::Place<{ core_mac::association::ACCESS_POINT_GROUP_SLOTS }>),
+}
+
+impl SlotPlace {
+    /// The slot's index in its pool.
+    pub(super) const fn index(self) -> u8 {
+        match self {
+            Self::StationPairwise(place) => place.index(),
+            Self::AccessPointPairwise(place) => place.index(),
+            Self::StationGroup(place) => place.index(),
+            Self::AccessPointGroup(place) => place.index(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct RawKeyIdentity {
     pub(super) role: VifRole,
-    pub(super) slot: u8,
+    pub(super) slot: SlotPlace,
     pub(super) serial: u64,
     pub(super) key_id: GroupKeyId,
     pub(super) activity: &'static KeyActivity,
@@ -82,9 +104,9 @@ pub struct PortKeys<Id: SlotIdentity, R>(PhantomData<fn(Id) -> (Id, R)>);
 pub(super) type StaPath<Id: SlotIdentity> = Child<CorePath<Id>, 2>;
 pub(super) type ApPath<Id: SlotIdentity> = Child<CorePath<Id>, 3>;
 pub(super) type StaPermission<'id, Id: SlotIdentity> =
-    IssuedSlot<'id, GroupPermission<Station>, Part<Id, 5>>;
+    IssuedSlot<'id, radio::Slots<GroupPermission<Station>, 1>, Part<Id, 5>>;
 pub(super) type ApPermission<'id, Id: SlotIdentity> =
-    IssuedSlot<'id, GroupPermission<AccessPoint>, Part<Id, 6>>;
+    IssuedSlot<'id, radio::Slots<GroupPermission<AccessPoint>, 1>, Part<Id, 6>>;
 
 macro_rules! keys {
     ($role:ty, $p:literal, $g:literal, $path:ty, $permission:ty) => {
@@ -154,7 +176,7 @@ macro_rules! keys {
                 }
             }
             fn group_slot_identity(key: &Self::GroupKey) -> u8 {
-                key.identity.slot
+                key.identity.slot.index()
             }
             fn vacant_group_slot_identity(slot: &Self::GroupSlot) -> u8 {
                 slot.index()
@@ -372,7 +394,7 @@ macro_rules! role {
             ) -> RawKeyIdentity {
                 RawKeyIdentity {
                     role: Self::ROLE,
-                    slot: slot.index(),
+                    slot: SlotPlace::$install(slot.place()),
                     serial,
                     key_id: const { GroupKeyId::new(0).expect("wire KeyID zero") },
                     activity: &activity[if Self::ROLE == VifRole::Station {

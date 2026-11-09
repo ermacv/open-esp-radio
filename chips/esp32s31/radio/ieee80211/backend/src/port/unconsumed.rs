@@ -1,42 +1,33 @@
 //! What a sink refused, which the port keeps whole until it is offered
 //! again ([`PortSink`]).
 //!
-//! A terminal waits in the place of its token: its ticket, the gate, its
-//! interface's configure permission, its pairwise key slot or its group
-//! permission. Each token exists once in an installation and a terminal
-//! carries it until its sink takes it, so no two kept terminals name one
-//! place and the places never run out. A refused receive unit waits in a
-//! place of its own, counted among the caller's held units, of which there
-//! are at most [`RX_HELD`]. One sequence orders both: a relative number,
-//! below the count of what the store keeps, which leaving renumbers.
+//! A terminal waits in the place of its token, in that token's own pool:
+//! its ticket's, the gate's, its interface's configure permission's, its
+//! pairwise key slot's or its group permission's. Each pool's places are
+//! [`radio::Places`] of the pool's size, indexed by the token's
+//! [`radio::Place`], which is below that size by its type. A bounded place
+//! does not prove that the place is free: each token exists once in an
+//! installation and a terminal carries it until its sink takes it, so no
+//! two kept terminals name one place, but a put into a taken place returns
+//! the item whole. A refused receive unit waits in a place of its own,
+//! counted among the caller's held units, of which there are at most
+//! [`RX_HELD`]. One sequence orders both: a relative number, below the
+//! count of what the store keeps, which leaving renumbers. A re-offer the
+//! sink refuses goes back to the place it was taken from.
 
 use super::*;
 use oer_protocols_ieee80211_contracts_port::{
     Configured, InstalledGroup, InstalledPairwise, Removed, RemovedKey, TxCompleted,
 };
 
-/// Places of single-MPDU terminals, one per ticket.
-const TICKET_PLACES: usize = TX_TICKETS;
-/// The gate's place.
-const GATE_PLACE: usize = TICKET_PLACES;
-/// The configure permissions' places: the station's, then the access
-/// point's.
-const CONFIGURE_PLACES: usize = GATE_PLACE + 1;
-/// The station's pairwise key slots' places.
-const STATION_PAIRWISE_PLACES: usize = CONFIGURE_PLACES + 2;
-/// The access point's pairwise key slots' places.
-const ACCESS_POINT_PAIRWISE_PLACES: usize =
-    STATION_PAIRWISE_PLACES + crate::lower_mac::association::STATION_PAIRWISE_SLOTS;
-/// The station's group permissions' places.
-const STATION_GROUP_PLACES: usize =
-    ACCESS_POINT_PAIRWISE_PLACES + crate::lower_mac::association::ACCESS_POINT_PAIRWISE_SLOTS;
-/// The access point's group permissions' places.
-const ACCESS_POINT_GROUP_PLACES: usize = STATION_GROUP_PLACES + 1;
-/// Every terminal place.
-const TERMINAL_PLACES: usize = ACCESS_POINT_GROUP_PLACES + 1;
+use crate::lower_mac::association::{ACCESS_POINT_PAIRWISE_SLOTS, STATION_PAIRWISE_SLOTS};
+
+/// Every place of the store: the terminal pools' and the units'.
+const PLACES: usize =
+    TX_TICKETS + 1 + 2 + STATION_PAIRWISE_SLOTS + ACCESS_POINT_PAIRWISE_SLOTS + 1 + 1 + RX_HELD;
 
 const _: () = {
-    if TERMINAL_PLACES + RX_HELD > u8::MAX as usize {
+    if PLACES > u8::MAX as usize {
         panic!("a kept item's sequence fits its byte");
     }
 };
@@ -56,10 +47,26 @@ type KeptUnit<'id, Id, D, const B: usize> = (
     Esp32s31RxMeta,
 );
 
-/// The port's store of what its sink refused.
+/// The place a kept item is in, for writing: a refused re-offer goes back
+/// there.
+enum Cell<'a, 'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> {
+    Terminal(&'a mut Option<KeptTerminal<'id, Id, D, B, O>>),
+    Unit(&'a mut Option<KeptUnit<'id, Id, D, B>>),
+}
+
+/// The port's store of what its sink refused: one array of places per
+/// token pool, as long as that pool.
 pub(super) struct Store<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 {
-    terminals: [Option<KeptTerminal<'id, Id, D, B, O>>; TERMINAL_PLACES],
+    tickets: radio::Places<KeptTerminal<'id, Id, D, B, O>, TX_TICKETS>,
+    gate: Option<KeptTerminal<'id, Id, D, B, O>>,
+    station_configure: Option<KeptTerminal<'id, Id, D, B, O>>,
+    access_point_configure: Option<KeptTerminal<'id, Id, D, B, O>>,
+    station_pairwise: radio::Places<KeptTerminal<'id, Id, D, B, O>, STATION_PAIRWISE_SLOTS>,
+    access_point_pairwise:
+        radio::Places<KeptTerminal<'id, Id, D, B, O>, ACCESS_POINT_PAIRWISE_SLOTS>,
+    station_group: radio::Places<KeptTerminal<'id, Id, D, B, O>, 1>,
+    access_point_group: radio::Places<KeptTerminal<'id, Id, D, B, O>, 1>,
     units: [Option<KeptUnit<'id, Id, D, B>>; RX_HELD],
     /// How many items the store keeps: every kept item's sequence is below.
     count: u8,
@@ -74,7 +81,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 {
     pub(super) const fn new() -> Self {
         Self {
-            terminals: [const { None }; TERMINAL_PLACES],
+            tickets: radio::Places::new(),
+            gate: None,
+            station_configure: None,
+            access_point_configure: None,
+            station_pairwise: radio::Places::new(),
+            access_point_pairwise: radio::Places::new(),
+            station_group: radio::Places::new(),
+            access_point_group: radio::Places::new(),
             units: [const { None }; RX_HELD],
             count: 0,
             broken: false,
@@ -94,92 +108,178 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// Keep `item` behind everything kept.
     pub(super) fn keep(&mut self, item: Item<'id, Id, D, B, O>) {
         let sequence = self.count;
-        if self.put(sequence, item) {
-            self.count = self.count.saturating_add(1);
+        match self.put(sequence, item) {
+            Ok(()) => self.count = self.count.saturating_add(1),
+            // Excluded by the token's uniqueness and the caller's held
+            // count: only the fault remains of the item.
+            Err(_item) => self.broken = true,
         }
     }
 
-    /// Keep `item` ahead of everything kept: a refused re-offer.
-    fn keep_first(&mut self, item: Item<'id, Id, D, B, O>) {
-        for (sequence, _) in self.terminals.iter_mut().flatten() {
-            *sequence = sequence.saturating_add(1);
-        }
-        for (sequence, _, _) in self.units.iter_mut().flatten() {
-            *sequence = sequence.saturating_add(1);
-        }
-        if self.put(0, item) {
-            self.count = self.count.saturating_add(1);
-        } else {
-            // Undo the renumbering: nothing was put first.
-            self.renumber_after_take();
-        }
-    }
-
-    /// Put `item` at its place with `sequence`; whether it was kept.
-    fn put(&mut self, sequence: u8, item: Item<'id, Id, D, B, O>) -> bool {
+    /// Put `item` at its own place with `sequence`.
+    ///
+    /// # Errors
+    ///
+    /// Its place holds an item, or every unit place does: `item`, whole.
+    fn put(
+        &mut self,
+        sequence: u8,
+        item: Item<'id, Id, D, B, O>,
+    ) -> Result<(), Item<'id, Id, D, B, O>> {
         match item {
-            Item::Terminal(terminal) => {
-                let place = place(&terminal).and_then(|place| self.terminals.get_mut(place));
-                match place {
-                    Some(place @ None) => {
-                        *place = Some((sequence, terminal));
-                        true
-                    }
-                    // Excluded by the token's uniqueness: the terminal has
-                    // no place, and only the fault remains of it.
-                    _ => {
-                        self.broken = true;
-                        false
-                    }
-                }
-            }
+            Item::Terminal(terminal) => self
+                .put_terminal((sequence, terminal))
+                .map_err(|(_, terminal)| Item::Terminal(terminal)),
             Item::Received(frame, meta) => {
                 match self.units.iter_mut().find(|unit| unit.is_none()) {
                     Some(place) => {
                         *place = Some((sequence, frame, meta));
-                        true
+                        Ok(())
                     }
-                    // Excluded by the caller's held count, which counts every
-                    // kept unit and is at most `RX_HELD`.
-                    None => {
-                        self.broken = true;
-                        false
-                    }
+                    None => Err(Item::Received(frame, meta)),
                 }
             }
         }
     }
 
-    /// Take the oldest kept item, renumbering the rest.
-    fn take_first(&mut self) -> Option<Item<'id, Id, D, B, O>> {
-        let item = if let Some(place) = self
-            .terminals
-            .iter_mut()
-            .find(|place| matches!(place, Some((0, _))))
-        {
-            place.take().map(|(_, terminal)| Item::Terminal(terminal))
-        } else if let Some(place) = self
-            .units
-            .iter_mut()
-            .find(|place| matches!(place, Some((0, _, _))))
-        {
-            place
-                .take()
-                .map(|(_, frame, meta)| Item::Received(frame, meta))
-        } else {
-            None
-        }?;
-        self.count = self.count.saturating_sub(1);
-        self.renumber_after_take();
-        Some(item)
+    /// Put `kept` in the place of its terminal's token.
+    fn put_terminal(
+        &mut self,
+        kept: KeptTerminal<'id, Id, D, B, O>,
+    ) -> Result<(), KeptTerminal<'id, Id, D, B, O>> {
+        let single = |place: &mut Option<KeptTerminal<'id, Id, D, B, O>>, kept| match place {
+            None => {
+                *place = Some(kept);
+                Ok(())
+            }
+            Some(_) => Err(kept),
+        };
+        match &kept.1 {
+            LowerMacTerminal::TxCompleted(
+                TxCompleted::Single(completed) | TxCompleted::Beacon { completed, .. },
+            ) => {
+                let place = completed.ticket_place();
+                self.tickets.put(place, kept)
+            }
+            LowerMacTerminal::GateClosed(_) => single(&mut self.gate, kept),
+            LowerMacTerminal::Configured(Configured::Station(_)) => {
+                single(&mut self.station_configure, kept)
+            }
+            LowerMacTerminal::Configured(Configured::AccessPoint(_)) => {
+                single(&mut self.access_point_configure, kept)
+            }
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key)) => {
+                match key.identity.slot {
+                    keys::SlotPlace::StationPairwise(place) => {
+                        self.station_pairwise.put(place, kept)
+                    }
+                    // A station key names a station pairwise slot.
+                    _ => Err(kept),
+                }
+            }
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key)) => {
+                match key.identity.slot {
+                    keys::SlotPlace::AccessPointPairwise(place) => {
+                        self.access_point_pairwise.put(place, kept)
+                    }
+                    // An access point key names its pairwise slot.
+                    _ => Err(kept),
+                }
+            }
+            LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise {
+                slot, ..
+            })) => {
+                let place = slot.place();
+                self.station_pairwise.put(place, kept)
+            }
+            LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Pairwise {
+                slot,
+                ..
+            })) => {
+                let place = slot.place();
+                self.access_point_pairwise.put(place, kept)
+            }
+            LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Group {
+                permission,
+                ..
+            }))
+            | LowerMacTerminal::GroupKeyReplaced { permission, .. }
+            | LowerMacTerminal::GroupKeySelected { permission, .. }
+            | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { permission, .. }) => {
+                let place = permission.place();
+                self.station_group.put(place, kept)
+            }
+            LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Group {
+                permission,
+                ..
+            }))
+            | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint {
+                permission, ..
+            }) => {
+                let place = permission.place();
+                self.access_point_group.put(place, kept)
+            }
+        }
     }
 
-    /// One place less in front: every sequence moves down by one.
-    fn renumber_after_take(&mut self) {
-        for (sequence, _) in self.terminals.iter_mut().flatten() {
-            *sequence = sequence.saturating_sub(1);
+    /// The place of the oldest kept item.
+    fn first(&mut self) -> Option<Cell<'_, 'id, Id, D, B, O>> {
+        let oldest = |kept: &KeptTerminal<'id, Id, D, B, O>| kept.0 == 0;
+        let single =
+            |place: &mut Option<KeptTerminal<'id, Id, D, B, O>>| place.as_ref().is_some_and(oldest);
+        if let Some(cell) = self.tickets.find_mut(oldest) {
+            return Some(Cell::Terminal(cell));
         }
-        for (sequence, _, _) in self.units.iter_mut().flatten() {
+        if single(&mut self.gate) {
+            return Some(Cell::Terminal(&mut self.gate));
+        }
+        if single(&mut self.station_configure) {
+            return Some(Cell::Terminal(&mut self.station_configure));
+        }
+        if single(&mut self.access_point_configure) {
+            return Some(Cell::Terminal(&mut self.access_point_configure));
+        }
+        let pool = [
+            &mut self.station_pairwise as &mut dyn FindOldest<'id, Id, D, B, O>,
+            &mut self.access_point_pairwise,
+            &mut self.station_group,
+            &mut self.access_point_group,
+        ]
+        .into_iter()
+        .find_map(|places| places.oldest());
+        if let Some(cell) = pool {
+            return Some(Cell::Terminal(cell));
+        }
+        self.units
+            .iter_mut()
+            .find(|unit| matches!(unit, Some((0, _, _))))
+            .map(Cell::Unit)
+    }
+
+    /// Every kept item's sequence, for writing.
+    fn sequences(&mut self) -> impl Iterator<Item = &mut u8> {
+        self.tickets
+            .iter_mut()
+            .chain(self.gate.iter_mut())
+            .chain(self.station_configure.iter_mut())
+            .chain(self.access_point_configure.iter_mut())
+            .chain(self.station_pairwise.iter_mut())
+            .chain(self.access_point_pairwise.iter_mut())
+            .chain(self.station_group.iter_mut())
+            .chain(self.access_point_group.iter_mut())
+            .map(|(sequence, _)| sequence)
+            .chain(
+                self.units
+                    .iter_mut()
+                    .flatten()
+                    .map(|(sequence, _, _)| sequence),
+            )
+    }
+
+    /// The oldest item left: every sequence moves down by one.
+    fn left_first(&mut self) {
+        self.count = self.count.saturating_sub(1);
+        for sequence in self.sequences() {
             *sequence = sequence.saturating_sub(1);
         }
     }
@@ -199,18 +299,53 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     /// Offer what the store keeps to `sink`, oldest first, until the sink
-    /// refuses one, which stays first.
+    /// refuses one, which goes back to its own place and stays first.
     pub(super) fn offer(
         &mut self,
         sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
     ) -> Unconsumed {
-        while let Some(item) = self.take_first() {
-            if let Err(item) = offer_one(sink, item) {
-                self.keep_first(item);
+        loop {
+            let refused = match self.first() {
+                None => return Unconsumed::None,
+                Some(Cell::Terminal(cell)) => match cell.take() {
+                    Some((sequence, terminal)) => match sink.terminal(terminal) {
+                        Ok(()) => false,
+                        Err(terminal) => {
+                            *cell = Some((sequence, terminal));
+                            true
+                        }
+                    },
+                    None => return Unconsumed::None,
+                },
+                Some(Cell::Unit(cell)) => match cell.take() {
+                    Some((sequence, frame, meta)) => match sink.received(frame, meta) {
+                        Ok(()) => false,
+                        Err((frame, meta)) => {
+                            *cell = Some((sequence, frame, meta));
+                            true
+                        }
+                    },
+                    None => return Unconsumed::None,
+                },
+            };
+            if refused {
                 return Unconsumed::Kept;
             }
+            self.left_first();
         }
-        Unconsumed::None
+    }
+}
+
+/// A pool's places, searched for the oldest kept terminal.
+trait FindOldest<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> {
+    fn oldest(&mut self) -> Option<&mut Option<KeptTerminal<'id, Id, D, B, O>>>;
+}
+
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, const N: usize>
+    FindOldest<'id, Id, D, B, O> for radio::Places<KeptTerminal<'id, Id, D, B, O>, N>
+{
+    fn oldest(&mut self) -> Option<&mut Option<KeptTerminal<'id, Id, D, B, O>>> {
+        self.find_mut(|kept| kept.0 == 0)
     }
 }
 
@@ -231,57 +366,4 @@ pub(super) fn offer_one<
             .received(frame, meta)
             .map_err(|(frame, meta)| Item::Received(frame, meta)),
     }
-}
-
-/// The place of `terminal`'s token.
-fn place<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>(
-    terminal: &Terminal<'id, Id, D, B, O>,
-) -> Option<usize> {
-    let (base, index) = match terminal {
-        LowerMacTerminal::TxCompleted(
-            TxCompleted::Single(completed) | TxCompleted::Beacon { completed, .. },
-        ) => (0, completed.ticket_index()),
-        LowerMacTerminal::GateClosed(_) => (GATE_PLACE, 0),
-        LowerMacTerminal::Configured(Configured::Station(_)) => (CONFIGURE_PLACES, 0),
-        LowerMacTerminal::Configured(Configured::AccessPoint(_)) => (CONFIGURE_PLACES, 1),
-        LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key)) => {
-            (STATION_PAIRWISE_PLACES, key.identity.slot)
-        }
-        LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key)) => {
-            (ACCESS_POINT_PAIRWISE_PLACES, key.identity.slot)
-        }
-        LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise { slot, .. })) => {
-            (STATION_PAIRWISE_PLACES, slot.index())
-        }
-        LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Pairwise {
-            slot, ..
-        })) => (ACCESS_POINT_PAIRWISE_PLACES, slot.index()),
-        LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Group {
-            permission, ..
-        }))
-        | LowerMacTerminal::GroupKeyReplaced { permission, .. }
-        | LowerMacTerminal::GroupKeySelected { permission, .. }
-        | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station { permission, .. }) => {
-            (STATION_GROUP_PLACES, permission.index())
-        }
-        LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Group {
-            permission,
-            ..
-        }))
-        | LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint { permission, .. }) => {
-            (ACCESS_POINT_GROUP_PLACES, permission.index())
-        }
-    };
-    let place = base.checked_add(usize::from(index))?;
-    // A place of the next pool is not this token's.
-    let end = match base {
-        0 => TICKET_PLACES,
-        GATE_PLACE => CONFIGURE_PLACES,
-        CONFIGURE_PLACES => STATION_PAIRWISE_PLACES,
-        STATION_PAIRWISE_PLACES => ACCESS_POINT_PAIRWISE_PLACES,
-        ACCESS_POINT_PAIRWISE_PLACES => STATION_GROUP_PLACES,
-        STATION_GROUP_PLACES => ACCESS_POINT_GROUP_PLACES,
-        _ => TERMINAL_PLACES,
-    };
-    (place < end).then_some(place)
 }

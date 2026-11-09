@@ -243,7 +243,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         association: &ModelAssociation<'id, Backend<Id, C, X>, AccessPoint>,
         permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'id,
-            ModelGroupPermission<AccessPoint>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
             <AccessPoint as ModelRole>::GroupPermissionPath<Id>,
         >,
         slot: GroupKeySlot<
@@ -393,7 +393,7 @@ type ModelAccessPointProgress<'id, Id, C, X> =
 /// A station attempt the model port accepted: the backend's own owners.
 pub type ModelAdmitted<Id, C, X> = AdmittedTxParts<
     ModelContextOf<Backend<Id, C, X>>,
-    Slot<'static, ModelTickets, ModelPool<Id, 1>>,
+    Slot<'static, oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>, ModelPool<Id, 1>>,
     ModelMpdu<'static, Backend<Id, C, X>>,
     ModelTxExecution<Backend<Id, C, X>>,
     C,

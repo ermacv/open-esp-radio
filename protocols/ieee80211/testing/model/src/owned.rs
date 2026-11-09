@@ -41,7 +41,7 @@ pub(super) enum OwnedRemovedKey<'o, B: ModelComposition, R: ModelRole> {
             GroupKeySlot<'o, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
         permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
-            ModelGroupPermission<R>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<R>, 1>,
             R::GroupPermissionPath<B::Identity>,
         >,
     },
@@ -78,7 +78,7 @@ pub(super) enum OwnedInstalledGroup<'o, B: ModelComposition> {
         key: ModelGroupKey<'o, B, AccessPoint>,
         permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
-            ModelGroupPermission<AccessPoint>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
             oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
         >,
     },
@@ -86,7 +86,11 @@ pub(super) enum OwnedInstalledGroup<'o, B: ModelComposition> {
 
 type SingleTerminal<'o, B> = oer_protocols_ieee80211_contracts_port::Completed<
     ModelContextOf<B>,
-    Slot<'o, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>,
+    Slot<
+        'o,
+        oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+        ModelPool<<B as ModelComposition>::Identity, 1>,
+    >,
     ModelMpdu<'o, B>,
     ModelSingleOutcome,
 >;

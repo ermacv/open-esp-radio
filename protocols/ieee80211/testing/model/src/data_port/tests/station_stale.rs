@@ -13,7 +13,7 @@ type Command<'s> = PortCommand<'s, Types<'s>, ModelCaps>;
 type StaGroup<'s> = ModelGroupKey<'s, B<'s>, Station>;
 type StaGroupPermission<'s> = oer_protocols_ieee80211_contracts_port::IssuedSlot<
     's,
-    ModelGroupPermission<Station>,
+    oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
     ModelPool<LocalId<'s>, 8>,
 >;
 

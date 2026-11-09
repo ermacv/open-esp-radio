@@ -340,8 +340,8 @@ impl<const TICKETS: usize> KeyUseCount<TICKETS> {
     pub(super) fn admit<'core, Path: PoolPath>(
         &mut self,
         key: &KeyHandle<'core, Path>,
-        ticket: TxTicket<'core, Path>,
-    ) -> KeyUse<'core, Path> {
+        ticket: TxTicket<'core, Path, TICKETS>,
+    ) -> KeyUse<'core, Path, TICKETS> {
         self.0 += 1;
         KeyUse {
             ticket,
@@ -353,8 +353,8 @@ impl<const TICKETS: usize> KeyUseCount<TICKETS> {
 
     pub(super) fn release<'core, Path: PoolPath>(
         &mut self,
-        key: KeyUse<'core, Path>,
-    ) -> TxTicket<'core, Path> {
+        key: KeyUse<'core, Path, TICKETS>,
+    ) -> TxTicket<'core, Path, TICKETS> {
         self.0 -= 1;
         key.ticket
     }
@@ -378,8 +378,12 @@ impl<const TICKETS: usize> KeyUseCount<TICKETS> {
 /// terminal returns it exactly once. Poisoned keeps it in quarantine: neither
 /// clearing the slot nor reporting `KeyRemoved` is permitted there.
 #[must_use = "return the right only with its attempt's terminal or refusal"]
-pub struct KeyUse<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
-    pub(super) ticket: TxTicket<'core, Path>,
+pub struct KeyUse<
+    'core,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
+> {
+    pub(super) ticket: TxTicket<'core, Path, TICKETS>,
     pub(super) index: usize,
     pub(super) selector: u8,
     pub(super) role: oer_protocols_ieee80211_contracts_port::VifRole,
@@ -388,16 +392,20 @@ pub struct KeyUse<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId
 /// The encryption authority of an admitted attempt. The protected variant
 /// cannot be constructed from an index, a handle or a bare ticket.
 #[must_use = "carry the admission to its terminal"]
-pub enum TxAdmission<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
+pub enum TxAdmission<
+    'core,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
+> {
     /// An unencrypted attempt still consumes one admission ticket.
-    Open(TxTicket<'core, Path>),
+    Open(TxTicket<'core, Path, TICKETS>),
     /// The right to use an installed key for this attempt alone.
-    Protected(KeyUse<'core, Path>),
+    Protected(KeyUse<'core, Path, TICKETS>),
 }
 
-impl<'core, Path: PoolPath> TxAdmission<'core, Path> {
+impl<'core, Path: PoolPath, const TICKETS: usize> TxAdmission<'core, Path, TICKETS> {
     /// The ticket of an admission whose core holds no key counts.
-    pub(in crate::lower_mac) fn into_ticket(self) -> TxTicket<'core, Path> {
+    pub(in crate::lower_mac) fn into_ticket(self) -> TxTicket<'core, Path, TICKETS> {
         match self {
             Self::Open(ticket) => ticket,
             Self::Protected(key) => key.ticket,
@@ -405,7 +413,7 @@ impl<'core, Path: PoolPath> TxAdmission<'core, Path> {
     }
 }
 
-impl<Path: PoolPath> TxAdmission<'_, Path> {
+impl<Path: PoolPath, const TICKETS: usize> TxAdmission<'_, Path, TICKETS> {
     pub(super) fn matches_frame(
         &self,
         role: oer_protocols_ieee80211_contracts_port::VifRole,
@@ -476,8 +484,9 @@ impl<'core, Path: PoolPath, S: RemovableSlot<'core, Path>> KeyRemoved<'core, Pat
 pub struct KeyAdmissionRefused<
     'core,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
 > {
-    pub ticket: TxTicket<'core, Path>,
+    pub ticket: TxTicket<'core, Path, TICKETS>,
     pub reason: KeyAdmissionError,
 }
 

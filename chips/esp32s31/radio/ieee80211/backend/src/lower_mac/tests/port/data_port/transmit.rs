@@ -8,7 +8,8 @@ use oer_protocols_ieee80211_wire::{
     qos::WmmAccessCategory,
 };
 
-type Access<'id, Id> = TerminalAccess<'id, Tickets, radio::Child<radio::Root<Id>, 2>>;
+type Access<'id, Id> =
+    TerminalAccess<'id, radio::Slots<Tickets, TX_TICKETS>, radio::Child<radio::Root<Id>, 2>>;
 type Closed<'id, Id> = GateClosed<'id, radio::Child<radio::Root<Id>, 1>>;
 type Outcome = SingleOutcome<Ack, Infallible>;
 type TestSent<'id, Id> = Sent<'id, Id, TestDevice, 512, Draws>;

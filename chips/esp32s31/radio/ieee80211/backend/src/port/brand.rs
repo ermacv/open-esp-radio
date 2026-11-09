@@ -240,7 +240,7 @@ pub(super) enum OwnedTxCompleted<
 /// A single MPDU's end with its owners, as the driver builds it.
 pub(super) type OwnedSingle<'o, Id, D, const B: usize, O> = Completed<
     <D as Device<B>>::OwnedContext<Id>,
-    Slot<'o, Tickets, Part<Id, 2>>,
+    Slot<'o, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
     Mpdu<'o, Id, D, B, O>,
     SingleOutcome<Ack, Infallible>,
 >;

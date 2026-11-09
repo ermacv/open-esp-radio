@@ -84,7 +84,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
 }
 /// One ended attempt the core handed to the port's sink.
 pub(super) type Completion<'id, Id, const B: usize> =
-    crate::lower_mac::TxCompletion<'id, 'static, B, CorePath<Id>>;
+    crate::lower_mac::TxCompletion<'id, 'static, B, CorePath<Id>, TX_TICKETS>;
 /// What one core call hands the port. Completions it has no room for, and
 /// every removal receipt, the sink refuses: the core keeps them whole in
 /// their own places, a completion offered again and a receipt taken by its
@@ -115,7 +115,7 @@ impl<Id: SlotIdentity, const B: usize> Default for Sink<'_, Id, B> {
         }
     }
 }
-impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePath<Id>>
+impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePath<Id>, TX_TICKETS>
     for Sink<'id, Id, B>
 {
     fn tx_completed(
@@ -324,7 +324,7 @@ pub(super) enum GroupClear {
 pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) core: PortCoreOwner<'id, Id, D, B>,
     /// The tickets at home, each at its own place.
-    pub(super) tickets: crate::lower_mac::TicketBank<'id, CorePath<Id>>,
+    pub(super) tickets: crate::lower_mac::TicketBank<'id, CorePath<Id>, TX_TICKETS>,
     /// Refuse the next publication's values, past its buffer's attachment.
     #[cfg(test)]
     pub(super) refuse_values_for_test: bool,
@@ -435,7 +435,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn prepare(
         &mut self,
         core: PortCoreOwner<'id, Id, D, B>,
-        tickets: [TxTicket<'id, CorePath<Id>>; TX_TICKETS],
+        tickets: [TxTicket<'id, CorePath<Id>, TX_TICKETS>; TX_TICKETS],
         queues: [FreeQueue<'id, CorePath<Id>>; 4],
         descriptors: TxDescriptors<B>,
         observations: O,
@@ -1289,7 +1289,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         hardware: &mut D::Hardware,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
-        (pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
+        (pending, admission): (
+            Pending<'id, Id, D, B, O>,
+            TxAdmission<'id, CorePath<Id>, TX_TICKETS>,
+        ),
         home: Option<(
             FreeQueue<'id, CorePath<Id>>,
             Option<Pin<&'static mut TxSlot<B>>>,
@@ -1314,7 +1317,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         hardware: &mut D::Hardware,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
-        (mut pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
+        (mut pending, admission): (
+            Pending<'id, Id, D, B, O>,
+            TxAdmission<'id, CorePath<Id>, TX_TICKETS>,
+        ),
         (queue, mut slot): (FreeQueue<'id, CorePath<Id>>, Pin<&'static mut TxSlot<B>>),
         fault: Fault,
     ) -> Fault {
@@ -1370,7 +1376,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         hardware: &mut D::Hardware,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
-        (mut pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
+        (mut pending, admission): (
+            Pending<'id, Id, D, B, O>,
+            TxAdmission<'id, CorePath<Id>, TX_TICKETS>,
+        ),
         (queue, mut slot): (FreeQueue<'id, CorePath<Id>>, Pin<&'static mut TxSlot<B>>),
         step: PublishStep,
     ) -> Result<(), Fault> {
@@ -1414,7 +1423,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     fn returned_ticket(
         &mut self,
         hardware: &mut D::Hardware,
-        admission: TxAdmission<'id, CorePath<Id>>,
+        admission: TxAdmission<'id, CorePath<Id>, TX_TICKETS>,
     ) {
         let mut sink = Sink::refusing();
         let ticket = self
@@ -1611,7 +1620,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// Admit one use of the first installed transmit key outside any
     /// publication: its last use then returns after a removal.
     #[cfg(test)]
-    pub(super) fn hold_key_use_for_test(&mut self) -> Option<TxAdmission<'id, CorePath<Id>>> {
+    pub(super) fn hold_key_use_for_test(
+        &mut self,
+    ) -> Option<TxAdmission<'id, CorePath<Id>, TX_TICKETS>> {
         let ticket = self.tickets.take()?;
         let key = self
             .keys
@@ -1640,7 +1651,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn return_key_use_for_test(
         &mut self,
         hardware: &mut D::Hardware,
-        admission: TxAdmission<'id, CorePath<Id>>,
+        admission: TxAdmission<'id, CorePath<Id>, TX_TICKETS>,
     ) {
         self.returned_ticket(hardware, admission);
     }
@@ -1712,7 +1723,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }) => {
                 let identity = RawKeyIdentity {
                     role: VifRole::Station,
-                    slot: slot.index(),
+                    slot: keys::SlotPlace::StationGroup(slot.place()),
                     serial: env.serial(),
                     key_id,
                     activity: &env.shared().key_live[1],
@@ -1807,7 +1818,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     ));
                     #[cfg(all(oer_trace, oer_debug_control))]
                     oer_portable_trace_recorder::emit(&trace::GroupRollback {
-                        owners: [key.identity.slot, permission.index()],
+                        owners: [key.identity.slot.index(), permission.index()],
                         previous_key_id: key.identity.key_id.get(),
                         attempted_key_id: key_id.get(),
                         restored: matches!(error, ReplaceError::ReplacementRolledBack(_)),
@@ -1825,7 +1836,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                             let _first = env
                                 .shared()
                                 .retained_group
-                                .set((key.identity.slot, permission.index()));
+                                .set((key.identity.slot.index(), permission.index()));
                             // The replacement's material has no use left:
                             // it zeroizes as it drops here.
                             drop(material);
@@ -1996,7 +2007,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 };
                 let identity = RawKeyIdentity {
                     role: VifRole::AccessPoint,
-                    slot: slot.index(),
+                    slot: keys::SlotPlace::AccessPointGroup(slot.place()),
                     serial: env.serial(),
                     key_id,
                     activity,

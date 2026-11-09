@@ -198,10 +198,13 @@ pub use bank::SlotBank;
 pub use fifo::FifoPermitPool;
 pub use loan::BodyLoan;
 mod path;
+mod place;
 pub use mint::{
-    Mint, PermitSupply, PermitTokens, Permits, PoolBuilder, PoolSet, Pools, Slots, branded,
+    Mint, PermitSupply, PermitTokens, Permits, PoolBuilder, PoolSet, Pools, SlotLayout, Slots,
+    branded,
 };
 pub use path::{Child, PoolPath, Root};
+pub use place::{Place, Places};
 
 /// The index of a token of a pool of at most 256, which `Mint` asserts at
 /// compile time.
@@ -215,7 +218,9 @@ const fn index_of(index: usize) -> u8 {
 
 /// One slot of component `Path` of an install, of kind `Kind`: the capacity of one
 /// installed resource. Installing a resource moves it in; removing the
-/// resource gives it back.
+/// resource gives it back. A slot [`Slots<K, N>`](Slots) minted has that
+/// layout as its kind, and its [`place`](Self::place) is below `N` by its
+/// type ([`Place`]).
 #[must_use = "a slot is capacity; dropping it loses it until the next install"]
 pub struct Slot<'id, Kind, Path: PoolPath = Root<crate::LocalId<'id>>> {
     index: u8,

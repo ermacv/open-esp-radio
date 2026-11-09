@@ -842,9 +842,15 @@ impl core::ops::DerefMut for Request {
 }
 
 #[derive(Default)]
-struct Events<'core> {
+struct Events<'core, const TICKETS: usize = 4> {
     returned: Vec<FreeQueue<'core>>,
-    returned_tickets: Vec<TxTicket<'core>>,
+    returned_tickets: Vec<
+        TxTicket<
+            'core,
+            oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'core>>,
+            TICKETS,
+        >,
+    >,
     removed: Vec<KeyRemoved<'core>>,
     order: Vec<&'static str>,
     completions: Vec<PublicationEnd>,
@@ -862,11 +868,34 @@ struct Events<'core> {
     refuse_removals: usize,
 }
 
-impl<'core> LowerMacSink<'core, 'static, 512> for Events<'core> {
+impl<'core, const TICKETS: usize>
+    LowerMacSink<
+        'core,
+        'static,
+        512,
+        oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'core>>,
+        TICKETS,
+    > for Events<'core, TICKETS>
+{
     fn tx_completed(
         &mut self,
-        completion: TxCompletion<'core, 'static, 512>,
-    ) -> Result<(), TxCompletion<'core, 'static, 512>> {
+        completion: TxCompletion<
+            'core,
+            'static,
+            512,
+            oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'core>>,
+            TICKETS,
+        >,
+    ) -> Result<
+        (),
+        TxCompletion<
+            'core,
+            'static,
+            512,
+            oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'core>>,
+            TICKETS,
+        >,
+    > {
         if let Some(left) = self.refuse_completions.checked_sub(1) {
             self.refuse_completions = left;
             self.order.push("tx refused");

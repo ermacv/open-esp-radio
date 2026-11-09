@@ -324,9 +324,9 @@ impl<
         &mut self,
         hardware: &mut H,
         queue: FreeQueue<'core, Path>,
-        admission: TxAdmission<'core, Path>,
+        admission: TxAdmission<'core, Path, TICKETS>,
         values: MpduValues<'slot, BUFFER_SIZE>,
-    ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path>> {
+    ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path, TICKETS>> {
         self.deref_mut()
             .submit_checked(hardware, queue, admission, values, G::PUBLISH)
     }
@@ -341,7 +341,10 @@ impl<
     }
     /// Withdraw held attempts, retaining published attempts until their terminals.
     #[inline]
-    pub fn disable_checked<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub fn disable_checked<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         self,
         hardware: &mut H,
         sink: &mut K,
@@ -390,7 +393,7 @@ impl<
 
     /// Emit one Disabled terminal once the entire prefix is retired.
     #[inline]
-    pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>(
         self,
         sink: &mut K,
     ) -> Result<
@@ -496,7 +499,10 @@ impl<
 {
     /// Publish the held prefix, retaining published predecessors on failure.
     #[inline]
-    pub fn open_gate<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub fn open_gate<
+        H: LowerMacHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         mut self,
         hardware: &mut H,
         sink: &mut K,
@@ -551,7 +557,7 @@ impl<
     #[inline]
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -562,7 +568,10 @@ impl<
     }
     /// Apply the receive policy after the requested role's prefix ends.
     #[inline]
-    pub fn advance<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub fn advance<
+        H: LowerMacHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         self,
         hardware: &mut H,
         sink: &mut K,
@@ -615,7 +624,7 @@ impl<
     #[inline]
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -626,7 +635,10 @@ impl<
     }
     /// Apply the receive policy after the requested role's prefix ends.
     #[inline]
-    pub fn advance<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub fn advance<
+        H: LowerMacHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         self,
         hardware: &mut H,
         sink: &mut K,
@@ -704,7 +716,7 @@ impl<
     #[inline]
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -715,7 +727,7 @@ impl<
     }
     /// Recover disabled ownership only after every predecessor ended.
     #[inline]
-    pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub fn finish<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>(
         self,
         sink: &mut K,
     ) -> Result<
@@ -748,7 +760,10 @@ impl<
 {
     // Every view transition uses these in-place hardware steps.
     #[inline(never)]
-    fn open_held_gate<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    fn open_held_gate<
+        H: LowerMacHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &mut self,
         hardware: &mut H,
         sink: &mut K,
@@ -825,7 +840,10 @@ impl<
         Ok(())
     }
     #[inline(never)]
-    fn advance_vif<H: LowerMacHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    fn advance_vif<
+        H: LowerMacHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &mut self,
         hardware: &mut H,
         sink: &mut K,

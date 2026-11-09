@@ -430,7 +430,7 @@ type ApGroupSlot<'s> =
     GroupKeySlot<'s, AccessPoint, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<LocalId<'s>, 6>>;
 type ApGroupPermission<'s> = oer_protocols_ieee80211_contracts_port::IssuedSlot<
     's,
-    ModelGroupPermission<AccessPoint>,
+    oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
     oer_protocols_radio_port::Child<ModelPool<LocalId<'s>, 9>, 0>,
 >;
 type ApGroupKey<'s> = ModelGroupKey<'s, B<'s>, AccessPoint>;

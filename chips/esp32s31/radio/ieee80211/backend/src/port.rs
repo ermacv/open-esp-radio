@@ -701,7 +701,7 @@ pub struct Types<Id: SlotIdentity, D, const B: usize, O: Observations>(
 
 type Single<'id, Id: SlotIdentity, D, const B: usize, O: Observations> = InFlight<
     <D as Device<B>>::OwnedContext<Id>,
-    Slot<'id, Tickets, Part<Id, 2>>,
+    Slot<'id, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
     Mpdu<'id, Id, D, B, O>,
 >;
 type Terminal<'id, Id: SlotIdentity, D, const B: usize, O: Observations> =

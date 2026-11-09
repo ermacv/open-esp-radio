@@ -21,7 +21,7 @@ pub struct CoreResources<
 > {
     pub authority: CoreAuthority<'core, Path, TICKETS>,
     /// One admission credit for each TX ticket in the backend layout.
-    pub tickets: [TxTicket<'core, Path>; TICKETS],
+    pub tickets: [TxTicket<'core, Path, TICKETS>; TICKETS],
     /// The association domains, which the installation issues with its
     /// generation.
     pub station_association: super::association::StationAssociationGrant<'core, Path>,
@@ -35,7 +35,7 @@ pub struct CoreAuthority<
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
 > {
-    _place: Slot<'core, CorePlace, Child<Path, 0>>,
+    _place: Slot<'core, Slots<CorePlace, 5>, Child<Path, 0>>,
 }
 
 /// Permission for one attempt on one EDCA queue of one core.
@@ -45,7 +45,7 @@ pub struct CoreAuthority<
 /// Forgetting a place only removes capacity; it cannot permit an overwrite.
 #[must_use = "retain the queue place until its next submission"]
 pub struct FreeQueue<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
-    _place: Slot<'core, CorePlace, Child<Path, 0>>,
+    _place: Slot<'core, Slots<CorePlace, 5>, Child<Path, 0>>,
     queue: LegacyTxQueue,
 }
 
@@ -105,11 +105,15 @@ impl<const TICKETS: usize> PoolSet for CorePools<TICKETS> {
 /// open and protected attempts consume one; a `KeyUse` contains its ticket,
 /// so the number of key uses cannot exceed that same compile-time bound.
 #[must_use = "the ticket is the capacity for one attempt"]
-pub struct TxTicket<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
-    place: Slot<'core, TicketPlace, Child<Path, 1>>,
+pub struct TxTicket<
+    'core,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
+> {
+    place: Slot<'core, Slots<TicketPlace, TICKETS>, Child<Path, 1>>,
 }
 
-impl<Path: PoolPath> TxTicket<'_, Path> {
+impl<Path: PoolPath, const TICKETS: usize> TxTicket<'_, Path, TICKETS> {
     /// This ticket's installation-local position, for its owner's return bank.
     pub const fn index(&self) -> usize {
         self.place.index() as usize
@@ -118,11 +122,15 @@ impl<Path: PoolPath> TxTicket<'_, Path> {
 
 /// The installation's tickets at home: a ticket returns to its own place
 /// ([`SlotBank`]), at its terminal or at its refusal, never elsewhere.
-pub struct TicketBank<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
-    places: SlotBank<'core, TicketPlace, Child<Path, 1>>,
+pub struct TicketBank<
+    'core,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
+> {
+    places: SlotBank<'core, Slots<TicketPlace, TICKETS>, Child<Path, 1>>,
 }
 
-impl<'core, Path: PoolPath> TicketBank<'core, Path> {
+impl<'core, Path: PoolPath, const TICKETS: usize> TicketBank<'core, Path, TICKETS> {
     /// A bank of no tickets.
     pub const fn empty() -> Self {
         Self {
@@ -131,19 +139,19 @@ impl<'core, Path: PoolPath> TicketBank<'core, Path> {
     }
 
     /// A bank holding `tickets` at their own places.
-    pub fn new<const N: usize>(tickets: [TxTicket<'core, Path>; N]) -> Self {
+    pub fn new<const N: usize>(tickets: [TxTicket<'core, Path, TICKETS>; N]) -> Self {
         Self {
             places: SlotBank::new(tickets.map(|ticket| ticket.place)),
         }
     }
 
     /// Return a ticket to its own place.
-    pub fn put(&mut self, ticket: TxTicket<'core, Path>) {
+    pub fn put(&mut self, ticket: TxTicket<'core, Path, TICKETS>) {
         self.places.put(ticket.place);
     }
 
     /// The ticket of the lowest index at home.
-    pub fn take(&mut self) -> Option<TxTicket<'core, Path>> {
+    pub fn take(&mut self) -> Option<TxTicket<'core, Path, TICKETS>> {
         self.places.take_first().map(|place| TxTicket { place })
     }
 
@@ -161,7 +169,7 @@ impl<'core, Path: PoolPath> TicketBank<'core, Path> {
 /// The four EDCA queue places at home: a place returns to its own queue's
 /// place at its completion or its refusal ([`SlotBank`]).
 pub struct QueueBank<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
-    places: SlotBank<'core, CorePlace, Child<Path, 0>>,
+    places: SlotBank<'core, Slots<CorePlace, 5>, Child<Path, 0>>,
 }
 
 /// The index the core's pools issue a queue's place at, after the

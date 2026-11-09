@@ -253,13 +253,13 @@ impl<
     /// comes out alone.
     pub fn return_admission<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         self,
         hardware: &mut H,
-        admission: TxAdmission<'core, Path>,
+        admission: TxAdmission<'core, Path, TICKETS>,
         sink: &mut K,
-    ) -> TxTicket<'core, Path> {
+    ) -> TxTicket<'core, Path, TICKETS> {
         match self.arena_core() {
             Some(core) => core.core.return_admission(hardware, admission, sink),
             None => admission.into_ticket(),
@@ -430,7 +430,7 @@ impl<
     #[inline(never)]
     pub(super) fn disable_in_place<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -450,7 +450,7 @@ impl<
     #[inline(never)]
     pub(super) fn advance_configuration_in_place<
         H: LowerMacHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -466,7 +466,9 @@ impl<
         true
     }
     #[inline(never)]
-    pub(super) fn finish_disable_in_place<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub(super) fn finish_disable_in_place<
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &mut self,
         sink: &mut K,
         gate: GateMode,

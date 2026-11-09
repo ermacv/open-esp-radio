@@ -820,7 +820,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     #[cfg(test)]
     pub(crate) fn hold_key_use_for_test(
         &mut self,
-    ) -> Option<crate::lower_mac::TxAdmission<'static, CorePath<Id>>> {
+    ) -> Option<crate::lower_mac::TxAdmission<'static, CorePath<Id>, TX_TICKETS>> {
         self.driver.hold_key_use_for_test()
     }
 
@@ -829,7 +829,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     #[cfg(test)]
     pub(crate) fn return_key_use_for_test(
         &mut self,
-        admission: crate::lower_mac::TxAdmission<'static, CorePath<Id>>,
+        admission: crate::lower_mac::TxAdmission<'static, CorePath<Id>, TX_TICKETS>,
     ) {
         let hardware = self.device.hardware().expect("registers");
         self.driver.return_key_use_for_test(hardware, admission);
@@ -2106,7 +2106,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     type Fault = Fault;
     type Admitted = AdmittedTxParts<
         D::OwnedContext<Id>,
-        Slot<'static, Tickets, Part<Id, 2>>,
+        Slot<'static, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
         Mpdu<'static, Id, D, B, O>,
         buffer::Execution<Id>,
         Esp32s31Caps<B>,

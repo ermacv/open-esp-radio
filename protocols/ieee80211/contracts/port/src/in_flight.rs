@@ -59,10 +59,15 @@ pub trait BodyPayload<'p, Id: SlotIdentity, S> {
 
 /// Tickets and the unique consumer authority for their terminals. The install
 /// gives the authority to the event consumer, never to the execution backend.
+/// The tickets' kind is the layout `Slots<Kind, N>`, so each ticket's place is
+/// below `N` by its type.
 pub struct TransmitPool<Kind, const N: usize>(PhantomData<fn() -> Kind>);
 
 impl<Kind, const N: usize> PoolSet for TransmitPool<Kind, N> {
-    type Pools<'id, Path: PoolPath> = ([Slot<'id, Kind, Path>; N], TerminalAccess<'id, Kind, Path>);
+    type Pools<'id, Path: PoolPath> = (
+        [Slot<'id, Slots<Kind, N>, Path>; N],
+        TerminalAccess<'id, Slots<Kind, N>, Path>,
+    );
 
     fn build<'id, Path: PoolPath>(builder: PoolBuilder<'id, Path>) -> Self::Pools<'id, Path> {
         (
@@ -258,6 +263,17 @@ impl<'id, C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'id, Kind, Path>, M, 
             payload,
             outcome: self.outcome,
         }
+    }
+}
+
+impl<C, Kind, const N: usize, Path: PoolPath, M, O>
+    Completed<C, Slot<'_, Slots<Kind, N>, Path>, M, O>
+{
+    /// The place of the terminal's ticket in its pool of `N`, without
+    /// releasing any owner: the place a port keeps a terminal its sink
+    /// refused.
+    pub const fn ticket_place(&self) -> oer_protocols_radio_port::Place<N> {
+        self.operation.ticket.place()
     }
 }
 
