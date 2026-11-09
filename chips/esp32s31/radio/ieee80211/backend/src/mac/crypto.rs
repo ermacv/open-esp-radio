@@ -470,6 +470,17 @@ pub fn install_sta_group_ccmp<H: CcmpKeyHardware>(
     })
 }
 
+/// The hardware key entry of an AP association id: AID one owns entry
+/// `AP_PAIRWISE_HARDWARE_INDEX_BASE`, AID `AP_PAIRWISE_SLOT_COUNT` the last
+/// pairwise entry; any other id has none.
+fn ap_pairwise_hardware_index(association_id: u16) -> Option<u8> {
+    let offset = u8::try_from(association_id.checked_sub(1)?).ok()?;
+    if offset >= AP_PAIRWISE_SLOT_COUNT {
+        return None;
+    }
+    AP_PAIRWISE_HARDWARE_INDEX_BASE.checked_add(offset)
+}
+
 /// Install one AP client's pairwise CCMP key into the AID-derived slot.
 ///
 /// The slot and direction encoding are evidenced by a retained vendor AP
@@ -486,11 +497,8 @@ pub fn install_ap_pairwise_ccmp<H: CcmpKeyHardware>(
     association_id: u16,
     temporal_key: &[u8; CCMP_KEY_BYTES],
 ) -> Result<ApPairwiseCcmpSlot, CryptoKeyError> {
-    if association_id == 0 || association_id > u16::from(AP_PAIRWISE_SLOT_COUNT) {
-        return Err(CryptoKeyError::InvalidAccessPointAssociationId);
-    }
-    let hardware_index = AP_PAIRWISE_HARDWARE_INDEX_BASE
-        + u8::try_from(association_id - 1).expect("validated AP association id fits u8");
+    let hardware_index = ap_pairwise_hardware_index(association_id)
+        .ok_or(CryptoKeyError::InvalidAccessPointAssociationId)?;
     match hardware.install_ap_ccmp_entry(
         hardware_index,
         MacCcmpKeyIdentity::Pairwise { peer },

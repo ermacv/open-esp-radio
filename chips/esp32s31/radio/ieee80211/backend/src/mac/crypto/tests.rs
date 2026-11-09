@@ -61,6 +61,26 @@ fn first_ap_peer_and_gtk_own_the_evidenced_disjoint_slots() {
 }
 
 #[test]
+fn ap_association_ids_outside_the_pairwise_entries_are_refused_without_a_hardware_write() {
+    let mut hardware = Hardware::default();
+    for association_id in [0, u16::from(AP_PAIRWISE_SLOT_COUNT) + 1, 256, u16::MAX] {
+        assert_eq!(
+            install_ap_pairwise_ccmp(&mut hardware, [1; 6], association_id, &[7; 16]).err(),
+            Some(CryptoKeyError::InvalidAccessPointAssociationId)
+        );
+    }
+    assert_eq!((hardware.installs, hardware.last_index), (0, None));
+    let last = install_ap_pairwise_ccmp(
+        &mut hardware,
+        [1; 6],
+        u16::from(AP_PAIRWISE_SLOT_COUNT),
+        &[7; 16],
+    )
+    .unwrap();
+    assert_eq!(last.hardware_index(), 22);
+}
+
+#[test]
 fn an_ap_group_key_id_zero_is_refused_before_it_touches_the_station_group_entry() {
     let hardware = Hardware::default();
     assert!(ApGroupKeyId::new(0).is_none());

@@ -429,7 +429,7 @@ pub fn start<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Vio
 }
 
 /// Serve the transmit path once at the fixture's time.
-fn service<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+pub fn service<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     harness.settle();
     let waker = harness.waker();
     let now = harness.now();
@@ -441,7 +441,7 @@ fn service<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Viola
 }
 
 /// Submit an admitted attempt the port must accept; its ticket.
-fn submit<'id, H: AccessPointHarness<'id>>(
+pub fn submit<'id, H: AccessPointHarness<'id>>(
     harness: &mut H,
     attempt: Option<<H::Port as DataPort<'id>>::Admitted>,
 ) -> Result<u8, Violation> {
@@ -455,7 +455,7 @@ fn submit<'id, H: AccessPointHarness<'id>>(
 }
 
 /// Run an access-point command once.
-fn run<'id, H: AccessPointHarness<'id>>(
+pub fn run<'id, H: AccessPointHarness<'id>>(
     harness: &mut H,
     command: Option<AccessPointCommandOf<'id, H::Port>>,
 ) -> Result<AccessPointProgressOf<'id, H::Port>, Violation> {
@@ -469,7 +469,7 @@ fn run<'id, H: AccessPointHarness<'id>>(
 /// Run an access-point command the port must finish with nothing of the
 /// access point on the air: a hold at a barrier the port itself passes (a
 /// receive cut) runs again after the port's next service.
-fn done<'id, H: AccessPointHarness<'id>>(
+pub fn done<'id, H: AccessPointHarness<'id>>(
     harness: &mut H,
     command: Option<AccessPointCommandOf<'id, H::Port>>,
 ) -> Result<(), Violation> {
@@ -540,7 +540,7 @@ fn refused_stale<'id, H: AccessPointHarness<'id>>(
 }
 
 /// Run a station command the port must finish at once.
-fn station_command<'id, H: AccessPointHarness<'id>>(
+pub fn station_command<'id, H: AccessPointHarness<'id>>(
     harness: &mut H,
     command: Option<PortCommandOf<'id, H::Port>>,
 ) -> Result<Option<PortCommandOf<'id, H::Port>>, Violation> {
@@ -1356,7 +1356,7 @@ fn expired_removal<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
 
 /// Stop the port and confirm the stop within the case's steps, moving
 /// time to the port's deadline while it waits.
-fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+pub fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();

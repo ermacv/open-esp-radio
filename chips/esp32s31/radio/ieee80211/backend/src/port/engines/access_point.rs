@@ -129,6 +129,26 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 }
 
+/// The group key id of an access-point group installation that the S31
+/// AP key layout has no entry for ([`crate::mac::crypto::ApGroupKeyId`]).
+fn unsupported_group_key_id<
+    'id,
+    Id: SlotIdentity + 'id,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+>(
+    command: &ApCmd<'id, Id, D, B, O>,
+) -> bool {
+    matches!(
+        command,
+        AccessPointCommand::InstallGroup(AccessPointGroupInstall(GroupInstall {
+            command: GroupCommand::InstallAccessPoint { key_id, .. },
+            ..
+        })) if crate::mac::crypto::ApGroupKeyId::new(key_id.get()).is_none()
+    )
+}
+
 /// The generations of the installation tokens an access-point command
 /// names: its permission, association, key slot or installed key.
 fn access_point_generations<
@@ -510,6 +530,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     issued,
                     installation,
                 },
+            ));
+        }
+        // A group key id the AP's key layout has no entry for refuses for
+        // good, before the radio's own state is asked: the receive cut has
+        // not begun.
+        if unsupported_group_key_id::<Id, D, B, O>(&command) {
+            return Ok(AccessPointProgress::Refused(
+                command,
+                AccessPointRefusal::UnsupportedGroupKeyId,
             ));
         }
         if !self.running() {

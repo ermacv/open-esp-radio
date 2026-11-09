@@ -775,6 +775,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn publish(
         &mut self,
         device: &mut D,
+        env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
         mut pending: Pending<'id, Id, D, B, O>,
     ) -> Result<(), Fault> {
@@ -884,25 +885,27 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     Err(_) => Some(PublishStep::HeaderBuffer),
                 };
                 if let Some(step) = refusal {
-                    return Err(self.unwind(
+                    return self.unwind(
                         device,
+                        env,
                         index,
                         (pending, admission),
                         memory.into_slot(),
                         step,
-                    ));
+                    );
                 }
             }
         }
         #[cfg(test)]
         if core::mem::take(&mut self.refuse_values_for_test) {
-            return Err(self.unwind(
+            return self.unwind(
                 device,
+                env,
                 index,
                 (pending, admission),
                 memory.into_slot(),
                 PublishStep::Values,
-            ));
+            );
         }
         let values = MpduValues::checked(
             memory,
@@ -930,13 +933,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             Ok(values) => values,
             Err(refused) => {
                 let slot = refused.slot.into_slot();
-                return Err(self.unwind(
+                return self.unwind(
                     device,
+                    env,
                     index,
                     (pending, admission),
                     slot,
                     PublishStep::Values,
-                ));
+                );
             }
         };
         mpdu.published = true;
@@ -982,17 +986,22 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     }
     /// A publication refused after its buffer joined the descriptor, which
     /// the hardware has not seen: the memory rejoins the buffer as at a
-    /// completion, the admission gives back its key use and ticket, the
-    /// descriptor takes its place and the MPDU its queue. An owner that
-    /// cannot go back keeps all of them with the quarantine.
+    /// completion, the admission gives back its key use and ticket and the
+    /// descriptor takes its place. The refusal is the attempt's own (its
+    /// values or its header do not fit the transmit path), so it would
+    /// refuse again: the attempt ends
+    /// [`WithdrawCause::Unpublishable`] with every owner, and the port runs
+    /// on. An owner that cannot go back keeps all of them with the
+    /// quarantine.
     fn unwind(
         &mut self,
         device: &mut D,
+        env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
         (mut pending, admission): (Pending<'id, Id, D, B, O>, TxAdmission<'id, CorePath<Id>>),
         mut slot: Pin<&'static mut TxSlot<B>>,
         step: PublishStep,
-    ) -> Fault {
+    ) -> Result<(), Fault> {
         let terminal = Fault::Publish {
             queue: index as u8,
             step,
@@ -1003,35 +1012,48 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         });
         if memory.is_none() {
             core::mem::forget((pending, admission));
-            return terminal;
+            return Err(terminal);
         }
-        let ticket = match self.returned_ticket(device, admission, terminal) {
+        let ticket = match self.returned_ticket(device, pending.role(), admission, terminal) {
             Ok(ticket) => ticket,
             Err(fault) => {
                 core::mem::forget(pending);
-                return fault;
+                return Err(fault);
             }
         };
         let descriptor = self.descriptors.get_mut(index);
         let free = self.tickets.iter_mut().find(|place| place.is_none());
         let (Some(descriptor), Some(free)) = (descriptor, free) else {
             core::mem::forget((pending, ticket));
-            return terminal;
+            return Err(terminal);
         };
         *descriptor = Some(slot);
         *free = Some(ticket);
-        self.back_to_queue(index, pending, Unpublished::Step(step))
+        self.finish(
+            env,
+            pending,
+            TxOutcome::Withdrawn(WithdrawCause::Unpublishable),
+        );
+        Ok(())
     }
-    /// The ticket of an admission never published, its key use returned. A
-    /// removal takes its key out of `keys` first, so a publication's key has
-    /// none waiting and the sink stays empty.
+    /// The ticket of an admission never published, its key use returned,
+    /// through the view the publication of `role` took (an open core, or
+    /// the other interface's configuration barrier). A removal takes its
+    /// key out of `keys` first, so a publication's key has none waiting
+    /// and the sink stays empty.
     fn returned_ticket(
         &mut self,
         device: &mut D,
+        role: VifRole,
         admission: TxAdmission<'id, CorePath<Id>>,
         terminal: Fault,
     ) -> Result<TxTicket<'id, CorePath<Id>>, Fault> {
-        let CoreView::Open(mut core) = self.core.view() else {
+        let core = match self.core.view() {
+            CoreView::Open(core) => Some(core),
+            CoreView::ConfigureOpen(view) => view.other_interface(role).ok(),
+            _ => None,
+        };
+        let Some(mut core) = core else {
             core::mem::forget(admission);
             return Err(terminal);
         };

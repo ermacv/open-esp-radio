@@ -1072,7 +1072,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 .get_mut(index)
                 .and_then(heapless::Deque::pop_front)
             {
-                driver.publish(device, index, pending)?;
+                driver.publish(device, &mut env, index, pending)?;
             }
         }
         Ok(())
@@ -1983,15 +1983,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             && !self.driver.closed
             && self.driver.closing.is_none()
             && core_views::configuring_role::<Id, D, B>(self.driver.core.view()) != Some(role);
-        if publishable
-            && let Some(pending) = self
-                .driver
+        if publishable {
+            let (driver, device, mut env) = self.parts(sink);
+            let published = driver
                 .queues
                 .get_mut(index)
                 .and_then(heapless::Deque::pop_front)
-            && let Err(fault) = self.driver.publish(self.device, index, pending)
-        {
-            self.record(fault);
+                .map(|pending| driver.publish(device, &mut env, index, pending));
+            if let Some(Err(fault)) = published {
+                self.record(fault);
+            }
         }
         self.recompute_deadline();
         Ok(())

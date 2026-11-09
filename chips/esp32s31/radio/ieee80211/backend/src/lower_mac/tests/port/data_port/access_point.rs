@@ -99,6 +99,8 @@ struct ApFixture<'a, 'id, Id: radio::SlotIdentity + 'id> {
     interface: Rc<RefCell<AccessPointObserved>>,
     /// Every legacy publication's program, in order.
     published: Rc<RefCell<Vec<MacLegacyTxProgram>>>,
+    /// The key id the next group installation names.
+    group_key_id: u8,
 }
 
 /// The header of a data MPDU from `transmitter` to `receiver` in the BSS
@@ -570,7 +572,7 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> AccessPointHarness<'id> for ApFixtu
             association,
             permission,
             slot,
-            key_id(1),
+            key_id(self.group_key_id),
             group_key(9),
         ))
     }
@@ -704,6 +706,8 @@ enum Check {
     Case(ap_cases::Case),
     ExpiredConfigure,
     ExpiredPairwiseRemoval,
+    UnsupportedGroupKeyId,
+    UnpublishableDuringStationConfigure,
 }
 
 fn run_check(check: Check) -> Result<(), CaseViolation> {
@@ -731,11 +735,16 @@ fn run_check(check: Check) -> Result<(), CaseViolation> {
             station_number: 0,
             interface,
             published,
+            group_key_id: 1,
         };
         match check {
             Check::Case(case) => ap_cases::check(&mut harness, case),
             Check::ExpiredConfigure => ap_cases::expired_configure(&mut harness),
             Check::ExpiredPairwiseRemoval => ap_cases::expired_pairwise_removal(&mut harness),
+            Check::UnsupportedGroupKeyId => unsupported_group_key_id(&mut harness),
+            Check::UnpublishableDuringStationConfigure => {
+                unpublishable_during_station_configure(&mut harness)
+            }
         }
     }))
 }
@@ -755,4 +764,123 @@ fn every_access_point_case_passes_on_the_s31_port() {
         .filter(|(_, result)| result.is_err())
         .collect();
     assert!(failed.is_empty(), "{failed:?}");
+}
+
+/// The AP's group installation under key id 0, which the S31 AP key layout
+/// has no entry for: refused with the command whole (its slot and
+/// permission in it), before any key write or receive cut; the port runs
+/// on and stops.
+fn unsupported_group_key_id<Id: radio::SlotIdentity>(
+    harness: &mut ApFixture<'_, '_, Id>,
+) -> Result<(), CaseViolation> {
+    ap_cases::start(harness)?;
+    let writes = harness.key_writes();
+    harness.group_key_id = 0;
+    let install = harness.install_group(Issued::Current, Issued::Current, Issued::Current);
+    let refused = match ap_cases::run(harness, install)? {
+        AccessPointProgress::Refused(command, AccessPointRefusal::UnsupportedGroupKeyId) => command,
+        _ => return Err(CaseViolation::Refusal),
+    };
+    // The command comes back whole, its slot and permission in it.
+    if !matches!(refused, AccessPointCommand::InstallGroup(_)) {
+        return Err(CaseViolation::Owners);
+    }
+    if harness.key_writes() != writes || harness.fr().port.fault().is_some() {
+        return Err(CaseViolation::Fault);
+    }
+    // No receive cut began: an access-point frame goes out at once.
+    let frame = harness.access_point_frame(None, ap_cases::ACCESS_POINT_QUEUE);
+    let frame = ap_cases::submit(harness, frame)?;
+    ap_cases::service(harness)?;
+    if harness.take_ends() != [CaseEnded::Frame(frame, CaseEnd::Delivered)] {
+        return Err(CaseViolation::Ends);
+    }
+    drop(refused);
+    ap_cases::stop(harness)
+}
+
+/// An access-point frame whose values the transmit path refuses while the
+/// station's configuration waits at its barrier: the frame ends withdrawn
+/// `Unpublishable` with its ticket and buffer, the port records no fault,
+/// the configuration completes and the stop returns every owner.
+fn unpublishable_during_station_configure<Id: radio::SlotIdentity>(
+    harness: &mut ApFixture<'_, '_, Id>,
+) -> Result<(), CaseViolation> {
+    ap_cases::start(harness)?;
+    // A station frame on the air holds the station's configuration.
+    harness.hold(ap_cases::STATION_QUEUE, true);
+    let first = harness.station_frame(ap_cases::STATION_QUEUE, false);
+    let first = ap_cases::submit(harness, first)?;
+    ap_cases::service(harness)?;
+    let configure = harness.station_configure();
+    let mut held = ap_cases::station_command(harness, configure)?;
+    if harness.take_station_configured() {
+        return Err(CaseViolation::Barrier);
+    }
+    let admissions = harness.f().port.admissions_for_test();
+    harness.f().port.refuse_values_for_test();
+    let frame = harness.access_point_frame(None, ap_cases::ACCESS_POINT_QUEUE);
+    let frame = ap_cases::submit(harness, frame)?;
+    if harness.take_ends()
+        != [CaseEnded::Frame(
+            frame,
+            CaseEnd::Withdrawn(WithdrawCause::Unpublishable),
+        )]
+    {
+        return Err(CaseViolation::Ends);
+    }
+    if harness.fr().port.fault().is_some() {
+        return Err(CaseViolation::Fault);
+    }
+    if harness.f().port.admissions_for_test() != admissions {
+        return Err(CaseViolation::Owners);
+    }
+    // The next access-point frame publishes beside the barrier.
+    let next = harness.access_point_frame(None, ap_cases::ACCESS_POINT_QUEUE);
+    let next = ap_cases::submit(harness, next)?;
+    ap_cases::service(harness)?;
+    if harness.take_ends() != [CaseEnded::Frame(next, CaseEnd::Delivered)] {
+        return Err(CaseViolation::Ends);
+    }
+    harness.hold(ap_cases::STATION_QUEUE, false);
+    let (mut first_ended, mut configured) = (false, false);
+    for _ in 0..16 {
+        ap_cases::service(harness)?;
+        if held.is_some() {
+            held = ap_cases::station_command(harness, held)?;
+        }
+        for end in harness.take_ends() {
+            match end {
+                CaseEnded::Frame(ticket, CaseEnd::Delivered) if ticket == first => {
+                    first_ended = true;
+                }
+                _ => return Err(CaseViolation::Ends),
+            }
+        }
+        configured |= held.is_none() && harness.take_station_configured();
+        if first_ended && configured {
+            break;
+        }
+    }
+    if !(first_ended && configured) {
+        return Err(CaseViolation::Barrier);
+    }
+    ap_cases::stop(harness)?;
+    if !harness.idle() {
+        return Err(CaseViolation::Owners);
+    }
+    Ok(())
+}
+
+#[test]
+fn an_ap_group_key_id_without_a_hardware_entry_is_refused_with_its_owners_and_no_fault() {
+    assert_eq!(run_check(Check::UnsupportedGroupKeyId), Ok(()));
+}
+
+#[test]
+fn an_unpublishable_ap_frame_during_a_station_configuration_ends_withdrawn_with_its_owners() {
+    assert_eq!(
+        run_check(Check::UnpublishableDuringStationConfigure),
+        Ok(())
+    );
 }

@@ -148,6 +148,11 @@ pub enum WithdrawCause {
     /// The port refused the submission: a token of it was issued by an
     /// earlier installation ([`SubmitRefusal::StalePermission`](crate::SubmitRefusal::StalePermission)).
     StalePermission,
+    /// The port could not publish the accepted attempt: a value of it (its
+    /// length, rate, power, header) does not fit the backend's transmit
+    /// path, so every later publication would refuse it too. Nothing of
+    /// it reached the hardware; final for this attempt.
+    Unpublishable,
 }
 
 /// Why a published MPDU's outcome cannot be established.

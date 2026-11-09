@@ -747,7 +747,7 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
 }
 
 #[test]
-fn a_publication_refused_past_its_attachment_gives_every_owner_back_to_the_restart() {
+fn a_publication_refused_past_its_attachment_ends_withdrawn_with_every_owner_and_no_fault() {
     with_installations(|mut fixture, installations| {
         fixture.start();
         let (association, _, slot) = fixture.association();
@@ -768,22 +768,28 @@ fn a_publication_refused_past_its_attachment_gives_every_owner_back_to_the_resta
         assert_eq!(before.1, Some(0));
         fixture.port.refuse_values_for_test();
         let now = fixture.now();
-        let _ = fixture.port.submit(attempt, now, &mut fixture.outbox);
-        assert_eq!(
-            fixture.port.fault(),
-            Some(Fault::Unpublished(crate::port::Unpublished::Step(
-                crate::port::PublishStep::Values
-            )))
+        assert!(
+            fixture
+                .port
+                .submit(attempt, now, &mut fixture.outbox)
+                .is_ok()
         );
+        assert_eq!(fixture.port.fault(), None, "an own refusal is no fault");
         assert_eq!(
             fixture.port.admissions_for_test(),
             before,
             "the ticket and the key's use came back"
         );
-
-        assert!(fixture.port.recover_for_stop());
-        fixture.stop();
+        assert!(matches!(
+            fixture.outbox.terminals.last(),
+            Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)))
+                if matches!(
+                    completed.outcome(),
+                    TxOutcome::Withdrawn(WithdrawCause::Unpublishable)
+                )
+        ));
         assert_eq!(fixture.take_completed(), 1, "the MPDU came back withdrawn");
+        fixture.stop();
 
         // The retire refuses a descriptor that is missing or still holds
         // its buffer.

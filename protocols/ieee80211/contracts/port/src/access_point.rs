@@ -382,6 +382,11 @@ pub enum AccessPointRefusal {
     /// comes back with every owner, as
     /// [`CommandRefusal::Expired`](crate::CommandRefusal::Expired).
     Expired,
+    /// The backend's access point has no hardware key entry for the group
+    /// key id the installation names: final for the command, which comes
+    /// back with every owner; the caller issues the installation under
+    /// another id.
+    UnsupportedGroupKeyId,
 }
 
 /// One beacon awaiting admission: an access-point attempt of the frame the
