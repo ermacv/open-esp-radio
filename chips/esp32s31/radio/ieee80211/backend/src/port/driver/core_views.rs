@@ -356,6 +356,19 @@ pub(in crate::port) fn disable<'id, Id: SlotIdentity, D: Device<B>, const B: usi
 }
 
 #[inline]
+/// Whether the core is disabled: a start that failed after it enabled
+/// the core cannot be undone without a disable of its own.
+#[inline]
+pub(in crate::port) fn disabled<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
+    view: CoreView<'_, Core<'id, Id, D, B>>,
+) -> bool {
+    matches!(
+        view,
+        CoreView::Disabled(_) | CoreView::DisabledClosing(_) | CoreView::DisabledClosed(_)
+    )
+}
+
+#[inline]
 pub(in crate::port) fn finish_disable<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
     sink: &mut Sink<'id, Id, B>,

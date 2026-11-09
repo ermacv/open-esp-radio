@@ -235,6 +235,12 @@ enum PortState {
     Stopping {
         since: Instant,
     },
+    /// A start the device began failed: its receive path stops before the
+    /// refusal is answered, within the command bound from `since`.
+    RollingBack {
+        since: Instant,
+        refused: StartRefused<Fault>,
+    },
 }
 
 /// The station's settings, owned by the port and applied in its turn.
@@ -713,7 +719,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.stop_served = false;
         self.core_disabled = false;
         self.fault = prepared.err();
-        self.retained = None;
         Ok((commands, resources))
     }
 
@@ -782,6 +787,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         self.state == PortState::Stopped
             && self.fault.is_none()
+            && self.retained.is_none()
+            && self.retained_access_point.is_none()
             && self.rx_out.get() == 0
             && self.shared.returned.none_out()
             && self.driver.queues.iter().all(|queue| queue.is_empty())
@@ -895,7 +902,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         add(self.device.next_deadline());
         add(self.rx_later);
         match self.state {
-            PortState::Starting { since } | PortState::Stopping { since } => {
+            PortState::Starting { since }
+            | PortState::Stopping { since }
+            | PortState::RollingBack { since, .. } => {
                 add(Some(since.saturating_add(COMMAND_BOUND)));
             }
             PortState::Stopped | PortState::Running | PortState::Recovering => {}
@@ -903,7 +912,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // Settings wait for a port that runs: the start applies them, so `now`
         // here would hide what the start itself waits for.
         let settings_due = self.settings.dirty()
-            && !matches!(self.state, PortState::Stopped | PortState::Starting { .. });
+            && !matches!(
+                self.state,
+                PortState::Stopped | PortState::Starting { .. } | PortState::RollingBack { .. }
+            );
         // Work a turn owes at once: a stop's withdrawals, an opened gate,
         // settings to apply.
         if (self.stopping() && !self.stop_served) || self.reopen || self.cut_due || settings_due {
@@ -1394,7 +1406,25 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 };
                 let terminal = {
                     let (driver, device, mut env) = self.parts(sink);
-                    driver.group(&mut env, device, owned)?
+                    driver.group(&mut env, device, owned)
+                };
+                let terminal = match terminal {
+                    Ok(terminal) => terminal,
+                    Err(fault) => {
+                        // The mutation failed with its fault; the receive
+                        // path it froze resumes, so a failed command leaves
+                        // no frozen receive behind. The first fault stays
+                        // the port's.
+                        let fault = self.record(fault);
+                        if let Err(cause) = self.device.finish_rx_cut() {
+                            self.record(cause);
+                        }
+                        self.group_since = None;
+                        self.group_mutator = None;
+                        self.cut_retry = false;
+                        self.cut_due = false;
+                        return Err(fault);
+                    }
                 };
                 if let Err(cause) = self.device.finish_rx_cut() {
                     // The terminal stays with the quarantine.
@@ -2179,15 +2209,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 now
             }
             PortState::Starting { since } => since,
+            PortState::RollingBack { since, refused } => {
+                return self.poll_roll_back(cx, since, refused, now);
+            }
         };
         if self.check().is_err() {
             self.state = PortState::Stopped;
             return Poll::Ready(Err(StartRefused::Device));
         }
         if now.saturating_duration_since(since) >= COMMAND_BOUND {
-            self.state = PortState::Stopped;
-            self.recompute_deadline();
-            return Poll::Ready(Err(StartRefused::Deadline));
+            // What the device began of the start stops first.
+            return self.roll_back_start(cx, StartRefused::Deadline, now);
         }
         let Some(wifi) = channel.channel().wifi_channel() else {
             self.state = PortState::Stopped;
@@ -2200,6 +2232,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             Poll::Ready(started) => started,
         };
+        // A device that refused its start and one that started before a
+        // later step failed both stop what they began before the refusal
+        // is answered: the device is never left started.
         let tuned = started.and_then(|()| {
             core_views::tune::<Id, D, B>(
                 self.driver.core.view(),
@@ -2210,25 +2245,21 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // The started core takes the station's settings before its first
         // publication.
         let tuned = tuned.and_then(|()| self.apply_settings());
-        let result = match tuned {
+        let refused = match tuned {
             Ok(()) => {
                 self.state = PortState::Running;
                 self.channel = channel.channel();
                 self.stop_served = false;
                 self.core_disabled = false;
-                Ok(())
+                self.recompute_deadline();
+                return Poll::Ready(Ok(()));
             }
             Err(cause @ (Fault::Retune(_) | Fault::ChannelNotPermitted)) => {
-                self.state = PortState::Stopped;
-                Err(StartRefused::Retune(cause))
+                StartRefused::Retune(cause)
             }
-            Err(_) => {
-                self.state = PortState::Stopped;
-                Err(StartRefused::Device)
-            }
+            Err(_) => StartRefused::Device,
         };
-        self.recompute_deadline();
-        Poll::Ready(result)
+        self.roll_back_start(cx, refused, now)
     }
 
     fn poll_stop(
@@ -2239,7 +2270,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.now = now;
         let since = match self.state {
             PortState::Stopped => return Poll::Ready(Ok(())),
-            PortState::Starting { .. } | PortState::Running => {
+            PortState::Starting { .. } | PortState::RollingBack { .. } | PortState::Running => {
                 self.state = PortState::Stopping { since: now };
                 self.stop_served = false;
                 // A stopping port refuses the held command back to its
@@ -2289,7 +2320,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     fn recover_for_stop(&mut self) -> bool {
+        // A command kept with the fault is an owner no stop returns, the
+        // station's or the access point's.
         let recoverable = self.retained.is_none()
+            && self.retained_access_point.is_none()
             && !self.shared.lost()
             && self.fault.is_some_and(|fault| fault.leaves_owners_whole());
         if recoverable {
@@ -2312,6 +2346,68 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     Esp32s31Port<'id, Id, D, B, O>
 {
+    /// Begin to undo a failed start: the device stops its receive path
+    /// before `refused` is answered. A start that enabled the core is not
+    /// undone here: the port is stopping, as after
+    /// [`DataPort::poll_stop`]'s first call.
+    fn roll_back_start(
+        &mut self,
+        cx: &mut Context<'_>,
+        refused: StartRefused<Fault>,
+        now: Instant,
+    ) -> Poll<Result<(), StartRefused<Fault>>> {
+        if !core_views::disabled::<Id, D, B>(self.driver.core.view()) {
+            // The start enabled the core before it failed: the stop's own
+            // service disables it, and the refusal names the device.
+            self.state = PortState::Stopping { since: now };
+            self.stop_served = false;
+            self.core_disabled = false;
+            self.recompute_deadline();
+            return Poll::Ready(Err(StartRefused::Device));
+        }
+        self.state = PortState::RollingBack {
+            since: now,
+            refused,
+        };
+        self.poll_roll_back(cx, now, refused, now)
+    }
+
+    /// Undo a failed start: once the device confirms its receive path
+    /// paused (at once for one that never started it) the port is stopped
+    /// and the start's refusal is answered. A device that refuses that
+    /// pause, or does not confirm it within the command bound, leaves the
+    /// radio not stopped: the refusal names the device and the port is
+    /// stopping, so [`DataPort::poll_stop`] goes on with it and a release
+    /// refuses until it confirms.
+    fn poll_roll_back(
+        &mut self,
+        cx: &mut Context<'_>,
+        since: Instant,
+        refused: StartRefused<Fault>,
+        now: Instant,
+    ) -> Poll<Result<(), StartRefused<Fault>>> {
+        let result = match self.device.poll_stop(cx) {
+            Poll::Ready(Ok(())) => {
+                self.state = PortState::Stopped;
+                Err(refused)
+            }
+            Poll::Ready(Err(_)) => {
+                self.state = PortState::Stopping { since };
+                Err(StartRefused::Device)
+            }
+            Poll::Pending if now.saturating_duration_since(since) >= COMMAND_BOUND => {
+                self.state = PortState::Stopping { since };
+                Err(StartRefused::Device)
+            }
+            Poll::Pending => {
+                self.recompute_deadline();
+                return Poll::Pending;
+            }
+        };
+        self.recompute_deadline();
+        Poll::Ready(result)
+    }
+
     /// What the port held when its stop gave up.
     fn stop_observations(&mut self) -> StopObservations {
         let count = |count: usize| u8::try_from(count).unwrap_or(u8::MAX);

@@ -680,8 +680,8 @@ fn a_rejected_gtk_replacement_is_a_named_key_fault_without_a_success_terminal() 
             fixture.group_terminals().is_empty(),
             "no terminal returns the replacement's owners"
         );
-        // The cut stays closed with the quarantine.
-        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts);
+        // The failed mutation's receive cut resumes; the fault stays.
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
         let now = fixture.now();
         assert!(matches!(fixture.port.receive(4, now), Err(found) if found == KEY_REJECTED));
         let color = BssColor::new(5).expect("color");

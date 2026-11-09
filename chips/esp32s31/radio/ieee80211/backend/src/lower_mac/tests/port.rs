@@ -73,6 +73,9 @@ struct Observed {
     /// Times the driver rearmed units the network returned.
     returned: usize,
     hold_start: bool,
+    /// The device's start begins (its receive path runs) before it holds
+    /// or fails.
+    begin_start: bool,
     /// The next start fails with this fault, as a refused retune does.
     fail_start: Option<Fault>,
     hold_completion: bool,
@@ -335,6 +338,9 @@ impl Device<512> for TestDevice {
         channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>> {
         self.assert_task_context();
+        if self.observed.borrow().begin_start {
+            self.stopped = false;
+        }
         if self.observed.borrow().hold_start {
             return Poll::Pending;
         }

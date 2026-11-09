@@ -534,7 +534,10 @@ pub trait DataPort<'id> {
     ) -> Result<CommandProgress<'id, Self::Types, Self::Caps>, Self::Fault>;
 
     /// Start the stopped radio on `channel`, within the backend's command
-    /// bound from the first call.
+    /// bound from the first call. A start that fails after the device began
+    /// it stops what it began before it answers the refusal; a device that
+    /// does not confirm that stop leaves the port stopping, and
+    /// [`Self::poll_stop`] goes on with it.
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,

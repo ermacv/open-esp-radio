@@ -1382,6 +1382,100 @@ fn a_refused_retune_refuses_the_start_with_its_cause_and_leaves_the_port_stopped
 }
 
 #[test]
+fn a_start_the_device_began_and_refused_stops_its_receive_path_before_the_refusal() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.stop();
+        let stops = fixture.observed.borrow().stops;
+        // A device that refuses its start before it began anything stops
+        // nothing.
+        let cause = Fault::Receive(crate::rx::control::WifiRxCause::LineRefused);
+        fixture.observed.borrow_mut().fail_start = Some(cause);
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Device))
+        );
+        assert_eq!(fixture.observed.borrow().stops, stops, "nothing began");
+        // One whose receive path began stops it first.
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.begin_start = true;
+            observed.fail_start = Some(cause);
+        }
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Device))
+        );
+        assert_eq!(fixture.observed.borrow().stops, stops + 1, "rolled back");
+        assert_eq!(fixture.port.fault(), None);
+        // A rollback the device holds answers once it stopped.
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.fail_start = Some(cause);
+            observed.hold_stop = true;
+        }
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.observed.borrow_mut().hold_stop = false;
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Device))
+        );
+        assert_eq!(fixture.observed.borrow().stops, stops + 2);
+        fixture.observed.borrow_mut().begin_start = false;
+        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+    });
+}
+
+#[test]
+fn a_started_device_whose_start_expires_stops_before_the_deadline_refusal() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.stop();
+        let stops = fixture.observed.borrow().stops;
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.begin_start = true;
+            observed.hold_start = true;
+        }
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.advance(COMMAND_BOUND);
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Deadline))
+        );
+        assert_eq!(fixture.observed.borrow().stops, stops + 1);
+        // A rollback the device never confirms leaves the port stopping: the
+        // refusal names the device and the stop goes on with it.
+        fixture.observed.borrow_mut().hold_stop = true;
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.advance(COMMAND_BOUND);
+        // The rollback has its own bound from the start's.
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.advance(COMMAND_BOUND);
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Device))
+        );
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Running)),
+            "the port is not stopped"
+        );
+        assert_eq!(fixture.port.fault(), None);
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.hold_stop = false;
+            observed.hold_start = false;
+            observed.begin_start = false;
+        }
+        fixture.stop();
+        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+    });
+}
+
+#[test]
 fn a_held_retune_starts_once_the_radio_answers_within_its_bound_and_is_refused_past_it() {
     with_fixture(|fixture| {
         fixture.start();

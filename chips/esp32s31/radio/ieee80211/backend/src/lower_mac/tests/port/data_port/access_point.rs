@@ -708,6 +708,7 @@ enum Check {
     ExpiredPairwiseRemoval,
     UnsupportedGroupKeyId,
     UnpublishableDuringStationConfigure,
+    RetainedAccessPointCommand,
 }
 
 fn run_check(check: Check) -> Result<(), CaseViolation> {
@@ -745,6 +746,7 @@ fn run_check(check: Check) -> Result<(), CaseViolation> {
             Check::UnpublishableDuringStationConfigure => {
                 unpublishable_during_station_configure(&mut harness)
             }
+            Check::RetainedAccessPointCommand => retained_access_point_command(&mut harness),
         }
     }))
 }
@@ -883,4 +885,29 @@ fn an_unpublishable_ap_frame_during_a_station_configuration_ends_withdrawn_with_
         run_check(Check::UnpublishableDuringStationConfigure),
         Ok(())
     );
+}
+
+/// An access-point command offered to a port whose fault leaves every
+/// owner whole stays with the fault: the port no longer recovers for a
+/// stop, since no stop returns that command.
+fn retained_access_point_command<Id: radio::SlotIdentity>(
+    harness: &mut ApFixture<'_, '_, Id>,
+) -> Result<(), CaseViolation> {
+    ap_cases::start(harness)?;
+    let fault = Fault::Unpublished(crate::port::Unpublished::Key);
+    harness.f().port.fault_for_test(fault);
+    let configure = harness.configure(Issued::Current, Receive::Bss, None);
+    if ap_cases::run(harness, configure).err() != Some(CaseViolation::Fault) {
+        return Err(CaseViolation::Fault);
+    }
+    let port = &mut harness.f().port;
+    if port.recover_for_stop() || port.fault() != Some(fault) {
+        return Err(CaseViolation::Owners);
+    }
+    Ok(())
+}
+
+#[test]
+fn a_retained_access_point_command_keeps_the_fault_from_recovering() {
+    assert_eq!(run_check(Check::RetainedAccessPointCommand), Ok(()));
 }
