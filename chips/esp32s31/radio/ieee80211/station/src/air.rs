@@ -12,8 +12,6 @@ use oer_portable_trace::{Noop, Observer, observe};
 use oer_protocols_ieee80211_runtime::station::FrameCost;
 use oer_protocols_ieee80211_wire::phy::PhyRate;
 
-use crate::observation::{AirCost, AirCostComputed};
-
 /// Aggregates on the air a missing member may miss before the data plane
 /// drops it, which the station's transmit Block Ack policy passes on.
 ///
@@ -38,7 +36,7 @@ const MPDU_GROWTH: u32 = 26 + 8 + 8 + 8 + 4 - 14;
 /// grant with the full rate (mode, MCS, streams, width, guard interval and
 /// LTF) and the frame length, the ceiling with the length, whose bounds are
 /// this composition's constants. Another input computes it again, which a
-/// trace build tells `O` ([`AirCostComputed`]); `Noop` hears nothing.
+/// trace build tells `O` ([`crate::observation::AirCostComputed`]); `Noop` hears nothing.
 #[derive(Debug, Default)]
 pub struct S31Ceiling<O = Noop> {
     least: Cell<Option<(PhyRate, usize, NonZeroU32)>>,
@@ -121,8 +119,8 @@ impl<O: Observer> FrameCost for S31Ceiling<O> {
         if computed {
             observe!(
                 self.observer,
-                AirCostComputed {
-                    cost: AirCost::Least
+                crate::observation::AirCostComputed {
+                    cost: crate::observation::AirCost::Least
                 }
             );
         }
@@ -134,8 +132,8 @@ impl<O: Observer> FrameCost for S31Ceiling<O> {
         if computed {
             observe!(
                 self.observer,
-                AirCostComputed {
-                    cost: AirCost::Ceiling
+                crate::observation::AirCostComputed {
+                    cost: crate::observation::AirCost::Ceiling
                 }
             );
         }

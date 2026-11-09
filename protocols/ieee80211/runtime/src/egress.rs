@@ -252,8 +252,7 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
 
     /// Choose over `ready` read twice, the whole list given to the scheduler:
     /// for more accounts than one pass keeps, whose answer the scheduler
-    /// gives.
-    /// `events` hears the candidates of the first pass and of these two
+    /// gives. `events` hears the candidates of the first pass and of these two
     /// passes ([`EgressEvent::Weighed`]), and why nothing was reserved.
     #[cold]
     fn choose_over<C: Candidate, S: EventSink<EgressEvent>>(
