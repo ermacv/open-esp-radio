@@ -10,8 +10,8 @@
 //! established apart (the note's mt76 trace), and the decision's own
 //! checks still apply to the measured run. No refusal is retried.
 
-use crate::capture;
 use crate::sniffer::{Result, Sniffer};
+use crate::{capture, latch};
 use std::time::{Duration, Instant};
 
 /// How long the probe's first boot may take to show its frames: boot, RF
@@ -61,12 +61,34 @@ pub fn look(bytes: &[u8]) -> Look {
     }
 }
 
-/// Look at the capture until it is accepted or refused, within `WINDOW`.
-pub fn wait<C, S: Sniffer<C>>(sniffer: &mut S) -> Result<usize> {
+/// What the preflight accepted: the probe frames it saw, and the latch
+/// calibration of the first boot. The latch is recorded, not a condition
+/// of the run: the decision compares intervals of equal frames, in which a
+/// constant latch point cancels.
+#[derive(Debug)]
+pub struct Preflight {
+    pub frames: usize,
+    pub pairs: usize,
+    pub unanswered: usize,
+    pub latch: latch::Outcome,
+    pub evidence: latch::Evidence,
+}
+
+/// Whether the capture holds every calibration frame of the first boot.
+fn calibrated(bytes: &[u8]) -> Option<(Vec<latch::Pair>, usize)> {
+    let capture = capture::parse_prefix(bytes).ok()?;
+    let (pairs, unanswered) = latch::pairs(&capture, None);
+    (pairs.len() + unanswered >= latch::FRAMES).then_some((pairs, unanswered))
+}
+
+/// Look at the capture until it is accepted or refused, within `WINDOW`;
+/// then until the first boot's calibration frames are in, within the same
+/// window, and decide the latch on what came.
+pub fn wait<C, S: Sniffer<C>>(sniffer: &mut S) -> Result<Preflight> {
     let deadline = Instant::now() + WINDOW;
-    loop {
+    let frames = loop {
         match look(&sniffer.captured()?) {
-            Look::Accepted { frames } => return Ok(frames),
+            Look::Accepted { frames } => break frames,
             Look::Refused(reason) => return Err(format!("the preflight refused: {reason}")),
             Look::Wait if Instant::now() >= deadline => {
                 return Err(format!(
@@ -76,7 +98,26 @@ pub fn wait<C, S: Sniffer<C>>(sniffer: &mut S) -> Result<usize> {
             }
             Look::Wait => std::thread::sleep(POLL),
         }
-    }
+    };
+    let (pairs, unanswered) = loop {
+        let bytes = sniffer.captured()?;
+        if let Some(found) = calibrated(&bytes) {
+            break found;
+        }
+        if Instant::now() >= deadline {
+            let capture = capture::parse_prefix(&bytes)?;
+            break latch::pairs(&capture, None);
+        }
+        std::thread::sleep(POLL);
+    };
+    let (latch, evidence) = latch::decide(&pairs);
+    Ok(Preflight {
+        frames,
+        pairs: pairs.len(),
+        unanswered,
+        latch,
+        evidence,
+    })
 }
 
 #[cfg(test)]

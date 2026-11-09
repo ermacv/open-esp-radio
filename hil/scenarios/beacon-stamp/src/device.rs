@@ -90,6 +90,9 @@ pub struct Run {
     pub error: Option<String>,
     pub rx_full: u32,
     pub stops: Stops,
+    /// The latch calibration's frames: published, and acknowledged as the
+    /// probe saw it.
+    pub calibration: Option<(usize, usize)>,
 }
 
 /// How the probe's shared cleanup ended.
@@ -238,6 +241,7 @@ pub fn parse(log: &str) -> Result<Run, String> {
                 reported: 0,
                 error: None,
                 rx_full: 0,
+                calibration: None,
                 stops: Stops {
                     mac: String::new(),
                     dma: String::new(),
@@ -252,7 +256,14 @@ pub fn parse(log: &str) -> Result<Run, String> {
         if ended {
             return Err(format!("`{line}` after the end line"));
         }
-        if line.starts_with("STAMP clock ") {
+        if line.starts_with("STAMP calibration ") {
+            let count = |name| -> Result<usize, String> {
+                field(line, name)?
+                    .parse()
+                    .map_err(|_| format!("{name} in `{line}`"))
+            };
+            current.calibration = Some((count("sent")?, count("acked")?));
+        } else if line.starts_with("STAMP clock ") {
             let value = sample(field(line, "s")?)?;
             match field(line, "at")? {
                 "start" => current.start = Some(value),
@@ -302,6 +313,7 @@ mod tests {
 
     const LOG: &str = "STAMP boot\n\
         STAMP v1 begin run=0badc0de channel=13 rounds=96 ap=6055f9010203 absent=024f45000001 blocker=1500 rate=dsss1\n\
+        STAMP calibration sent=24 acked=0\n\
         STAMP clock at=start s=001e8480,0000000000000005,001e8482\n\
         STAMP rec n=0 kind=b arm=u k=1122334455667788 bpub=- bdone=- bq=- pub=001e9000,0000000000000b85,001e9002 hand=001e9004,0000000000000b89,001e9006 done=001e9100,0000000000000c85,001e9102,00,00 rb=8877665544332211\n\
         STAMP rec n=1 kind=b arm=d k=2233445566778899 bpub=001f0000,0000000000016b85,001f0002 bdone=001f3080,0000000000019c05,001f3082,00,00 bq=03 pub=001f0400,0000000000016f85,001f0402 hand=001f0404,0000000000016f89,001f0406 done=001f3100,0000000000019c85,001f3102,00,00 rb=-\n\
@@ -316,6 +328,7 @@ mod tests {
         assert_eq!(run.ap, [0x60, 0x55, 0xf9, 1, 2, 3]);
         assert_eq!(run.start.unwrap().local_before, 0x001e_8480);
         assert_eq!(run.rx_full, 0);
+        assert_eq!(run.calibration, Some((24, 0)));
         assert!(run.stops.confirmed());
         assert_eq!(run.end.unwrap().tsf, 0xf4_2405);
         assert_eq!(run.records.len(), 2);

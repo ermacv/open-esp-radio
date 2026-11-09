@@ -1,5 +1,4 @@
-//! The identity of the bundle the standard `cargo fw build esp32s31-beacon-stamp`
-//! produced, from that build's own records in the bundle directory:
+//! The identity of a bundle the standard `cargo fw build <image>` produced, from that build's own records in the bundle directory:
 //! `sizes.json`'s provenance (package, commit, dirty) and `bundle.json`'s
 //! flash files. Nothing is taken from the launching directory, and a bundle
 //! of another image, or one whose application differs from its records, is
@@ -8,8 +7,10 @@
 use serde_json::Value;
 use std::path::Path;
 
-/// The probe package the bundle must have been built from.
+/// The probe's package.
 pub const PACKAGE: &str = "oer-hil-probes-esp32s31-beacon-stamp";
+/// The responder's package.
+pub const RESPONDER_PACKAGE: &str = "oer-hil-probes-esp32s31-ack-responder";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Identity {
@@ -26,7 +27,8 @@ fn read_json(path: &Path) -> Result<Value, String> {
 
 /// The identity the records in `bundle` state, checked against each other
 /// and against `application.bin` itself.
-pub fn identity(bundle: &Path) -> Result<Identity, String> {
+/// The identity of `bundle`, built from `package`.
+pub fn identity(bundle: &Path, package_wanted: &str) -> Result<Identity, String> {
     let sizes = read_json(&bundle.join("sizes.json"))?;
     let manifest = read_json(&bundle.join("bundle.json"))?;
     let provenance = sizes
@@ -40,9 +42,9 @@ pub fn identity(bundle: &Path) -> Result<Identity, String> {
             .ok_or_else(|| format!("sizes.json provenance has no {name}"))
     };
     let package = text("package")?;
-    if package != PACKAGE {
+    if package != package_wanted {
         return Err(format!(
-            "the bundle was built from `{package}`, not `{PACKAGE}`"
+            "the bundle was built from `{package}`, not `{package_wanted}`"
         ));
     }
     let commit = text("commit")?;
@@ -115,7 +117,7 @@ mod tests {
     fn the_identity_is_the_builds_own_record() {
         let directory = tempfile::tempdir().unwrap();
         bundle(directory.path(), PACKAGE, b"probe", None);
-        let identity = identity(directory.path()).unwrap();
+        let identity = identity(directory.path(), PACKAGE).unwrap();
         assert_eq!(identity.commit, "834fd061621c");
         assert!(!identity.dirty);
         assert_eq!(
@@ -133,14 +135,14 @@ mod tests {
             b"probe",
             None,
         );
-        assert!(identity(directory.path()).is_err());
+        assert!(identity(directory.path(), PACKAGE).is_err());
     }
 
     #[test]
     fn an_application_that_differs_from_its_manifest_is_refused() {
         let directory = tempfile::tempdir().unwrap();
         bundle(directory.path(), PACKAGE, b"probe", Some("00"));
-        assert!(identity(directory.path()).is_err());
+        assert!(identity(directory.path(), PACKAGE).is_err());
     }
 
     #[test]
@@ -153,12 +155,12 @@ mod tests {
             "image_files": {"application.bin": 99},
         });
         std::fs::write(directory.path().join("sizes.json"), sizes.to_string()).unwrap();
-        assert!(identity(directory.path()).is_err());
+        assert!(identity(directory.path(), PACKAGE).is_err());
     }
 
     #[test]
     fn a_directory_without_records_is_refused() {
         let directory = tempfile::tempdir().unwrap();
-        assert!(identity(directory.path()).is_err());
+        assert!(identity(directory.path(), PACKAGE).is_err());
     }
 }

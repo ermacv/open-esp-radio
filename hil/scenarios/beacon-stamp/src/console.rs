@@ -1,5 +1,5 @@
-//! The probe console's owner: it reads lines from the board's reset until
-//! the beacon-stamp result line, keeps every line it read, and on every exit
+//! An image console's owner: it reads lines from the board's reset until
+//! the image's result line, keeps every line it read, and on every exit
 //! (a result, a timeout, a failed log write, an early return) cancels the
 //! console operation and joins its reader.
 
@@ -12,6 +12,8 @@ use std::{
 };
 
 pub struct ConsoleSession {
+    /// The image whose result line ends the read.
+    image: &'static str,
     lines: mpsc::Receiver<String>,
     cancel: Option<Box<dyn FnOnce() + Send>>,
     reader: Option<JoinHandle<()>>,
@@ -20,7 +22,11 @@ pub struct ConsoleSession {
 impl ConsoleSession {
     /// Own `stream`; `cancel` asks its source to end it, which ends the
     /// stream and with it the reader.
-    pub fn new(stream: impl Read + Send + 'static, cancel: impl FnOnce() + Send + 'static) -> Self {
+    pub fn new(
+        image: &'static str,
+        stream: impl Read + Send + 'static,
+        cancel: impl FnOnce() + Send + 'static,
+    ) -> Self {
         let (send, lines) = mpsc::channel();
         let reader = std::thread::spawn(move || {
             for line in BufReader::new(stream).split(b'\n') {
@@ -32,6 +38,7 @@ impl ConsoleSession {
             }
         });
         Self {
+            image,
             lines,
             cancel: Some(Box::new(cancel)),
             reader: Some(reader),
@@ -55,8 +62,38 @@ impl ConsoleSession {
                 }
             };
             writeln!(log, "{line}").map_err(|error| format!("console log: {error}"))?;
-            if let Some(result) = parse(&line)? {
+            if let Some(result) = parse(&line, self.image)? {
                 return Ok(result);
+            }
+        }
+    }
+
+    /// Copy lines to `log` until one holds `marker`, within `timeout`; a
+    /// result line before it is an error naming that result.
+    pub fn wait_for(
+        &self,
+        log: &mut dyn Write,
+        marker: &str,
+        timeout: Duration,
+    ) -> Result<(), String> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let left = deadline
+                .checked_duration_since(Instant::now())
+                .ok_or_else(|| format!("no `{marker}` line within the console timeout"))?;
+            let line = self
+                .lines
+                .recv_timeout(left)
+                .map_err(|_| format!("no `{marker}` line before the console ended or timed out"))?;
+            writeln!(log, "{line}").map_err(|error| format!("console log: {error}"))?;
+            if line.contains(marker) {
+                return Ok(());
+            }
+            if let Some(result) = parse(&line, self.image)? {
+                return Err(format!(
+                    "{} ended before `{marker}`: {result:?}",
+                    self.image
+                ));
             }
         }
     }
@@ -129,7 +166,7 @@ mod tests {
             ended,
         };
         (
-            ConsoleSession::new(console, move || drop(cancel)),
+            ConsoleSession::new("beacon-stamp", console, move || drop(cancel)),
             reader_ended,
         )
     }
@@ -183,6 +220,29 @@ mod tests {
         );
         session.finish();
         assert_eq!(reader_ended.try_recv(), Ok(()));
+    }
+
+    #[test]
+    fn a_marker_line_is_waited_for_and_an_early_result_refuses_it() {
+        let (session, reader_ended) =
+            open("STAMP boot\nACKRESP listening\nOER-RESULT: pass beacon-stamp\n");
+        let mut log = Vec::new();
+        assert_eq!(
+            session.wait_for(&mut log, "ACKRESP listening", Duration::from_secs(3600)),
+            Ok(())
+        );
+        assert_eq!(
+            session.result(&mut log, Duration::from_secs(3600)),
+            Ok(ProbeResult::Pass)
+        );
+        session.finish();
+        assert_eq!(reader_ended.try_recv(), Ok(()));
+        let (session, _) = open("OER-RESULT: fail beacon-stamp error=x\n");
+        assert!(
+            session
+                .wait_for(&mut Vec::new(), "listening", Duration::from_secs(3600))
+                .is_err()
+        );
     }
 
     #[test]

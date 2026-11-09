@@ -136,7 +136,9 @@ fn simulate(model: Model) -> (Run, Capture) {
                 frames.push(AirFrame {
                     tsft: sniffer(blocker_air),
                     frame_control: 0x08,
-                    transmitter: AP,
+                    receiver: [0xff; 6],
+                    transmitter: Some(AP),
+                    psdu: 100,
                     stamp: Some([0xa5; 8]),
                     tag: Some(Tag {
                         kind: b'x',
@@ -178,7 +180,9 @@ fn simulate(model: Model) -> (Run, Capture) {
             frames.push(AirFrame {
                 tsft: sniffer(air),
                 frame_control: kind.frame_control(),
-                transmitter: AP,
+                receiver: [0xff; 6],
+                transmitter: Some(AP),
+                psdu: 100,
                 stamp: Some(value.to_le_bytes()),
                 tag: Some(Tag {
                     kind: kind.code(),
@@ -215,7 +219,9 @@ fn simulate(model: Model) -> (Run, Capture) {
     frames.push(AirFrame {
         tsft: sniffer(start),
         frame_control: 0x80,
-        transmitter: [2, 0, 0, 0, 0, 9],
+        receiver: [0xff; 6],
+        transmitter: Some([2, 0, 0, 0, 0, 9]),
+        psdu: 100,
         stamp: Some([1; 8]),
         tag: None,
     });
@@ -232,6 +238,7 @@ fn simulate(model: Model) -> (Run, Capture) {
         records,
         error: None,
         rx_full: model.rx_full,
+        calibration: None,
         stops: Stops {
             mac: model.stops[0].to_owned(),
             dma: model.stops[1].to_owned(),

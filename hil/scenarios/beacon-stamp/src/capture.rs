@@ -30,7 +30,12 @@ pub struct AirFrame {
     pub tsft: u64,
     /// Frame Control's first octet: type and subtype.
     pub frame_control: u8,
-    pub transmitter: [u8; 6],
+    /// Address 1.
+    pub receiver: [u8; 6],
+    /// Address 2; a control frame such as an ACK has none.
+    pub transmitter: Option<[u8; 6]>,
+    /// The PSDU: the MPDU and its FCS, octets.
+    pub psdu: u32,
     /// MPDU octets 24..32.
     pub stamp: Option<[u8; 8]>,
     pub tag: Option<Tag>,
@@ -123,14 +128,18 @@ fn tag(mpdu: &[u8], from: usize) -> Option<Tag> {
 /// an 802.11 header.
 fn frame(tsft: u64, mpdu: &[u8]) -> Option<AirFrame> {
     let frame_control = *mpdu.first()?;
-    let transmitter: [u8; 6] = mpdu.get(10..16)?.try_into().ok()?;
+    let receiver: [u8; 6] = mpdu.get(4..10)?.try_into().ok()?;
+    let transmitter = mpdu.get(10..16).and_then(|octets| octets.try_into().ok());
+    let psdu = u32::try_from(mpdu.len()).ok()?.checked_add(4)?;
     let stamp = mpdu.get(24..32).and_then(|octets| octets.try_into().ok());
     // A data frame's tag starts its body; a management frame's follows K.
     let from = if frame_control & 0x0c == 0x08 { 24 } else { 32 };
     Some(AirFrame {
         tsft,
         frame_control,
+        receiver,
         transmitter,
+        psdu,
         stamp,
         tag: tag(mpdu, from),
     })
@@ -283,7 +292,7 @@ mod tests {
         let frame = &capture.frames[0];
         assert_eq!(frame.tsft, 123_456);
         assert_eq!(frame.frame_control, 0x80);
-        assert_eq!(frame.transmitter, TA);
+        assert_eq!(frame.transmitter, Some(TA));
         assert_eq!(frame.stamp, Some(0x1122_3344_5566_7788u64.to_le_bytes()));
         assert_eq!(frame.tag, Some(TAG));
     }

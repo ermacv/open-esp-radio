@@ -290,7 +290,7 @@ fn ours(run: &Run, capture: &Capture) -> Vec<AirFrame> {
         .frames
         .iter()
         .filter(|frame| {
-            frame.transmitter == run.ap && frame.tag.is_some_and(|tag| tag.run == run.run)
+            frame.transmitter == Some(run.ap) && frame.tag.is_some_and(|tag| tag.run == run.run)
         })
         .cloned()
         .collect();

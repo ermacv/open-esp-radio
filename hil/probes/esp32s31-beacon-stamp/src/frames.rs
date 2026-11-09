@@ -281,6 +281,86 @@ pub(crate) fn blocker(
     Ok(writer.at)
 }
 
+/// The responder board's station address (`hil/probes/esp32s31-ack-responder`).
+pub(crate) const RESPONDER: [u8; 6] = [0x02, 0x4f, 0x45, 0x00, 0x00, 0x02];
+/// The BSSID and transmitter address of the calibration frames: the
+/// responder admits this BSS alone, so nothing else fills its ring.
+pub(crate) const CALIBRATION_BSSID: [u8; 6] = [0x02, 0x4f, 0x45, 0x00, 0x00, 0x03];
+/// The tag's kind code of a calibration frame.
+pub(crate) const CALIBRATION_CODE: u8 = b'c';
+
+/// A calibration frame's PHY, its tag's arm code.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) enum CalibrationPhy {
+    /// DSSS 1 Mb/s, long preamble; its ACK is the same.
+    Dsss1,
+    /// HT-mixed MCS 0, 20 MHz, long GI; its ACK is 6-Mb/s OFDM.
+    HtMcs0,
+}
+
+impl CalibrationPhy {
+    pub(crate) const fn code(self) -> u8 {
+        match self {
+            Self::Dsss1 => b'l',
+            Self::HtMcs0 => b'h',
+        }
+    }
+
+    /// SIFS plus the ACK's PPDU (10.3.2.3, 15.3.3, 18.5.2): 10 + 304 us at
+    /// 1 Mb/s DSSS, 10 + 50 us at 6 Mb/s ERP-OFDM.
+    const fn ack_duration_us(self) -> u16 {
+        match self {
+            Self::Dsss1 => 314,
+            Self::HtMcs0 => 60,
+        }
+    }
+}
+
+/// The calibration's frames: each PHY, each PSDU length, `CALIBRATION_REPEATS`
+/// times, so the responder's ring never fills in two boots.
+pub(crate) const CALIBRATION_PSDUS: [usize; 3] = [100, 500, 1000];
+pub(crate) const CALIBRATION_REPEATS: usize = 4;
+pub(crate) const CALIBRATION_FRAMES: usize = 2 * CALIBRATION_PSDUS.len() * CALIBRATION_REPEATS;
+
+/// The PHY and PSDU of calibration frame `index`.
+pub(crate) fn calibration_round(index: usize) -> Option<(CalibrationPhy, usize)> {
+    const PER_PHY: usize = CALIBRATION_PSDUS.len() * CALIBRATION_REPEATS;
+    let phy = match index.checked_div(PER_PHY)? {
+        0 => CalibrationPhy::Dsss1,
+        1 => CalibrationPhy::HtMcs0,
+        _ => return None,
+    };
+    let length = index
+        .checked_div(CALIBRATION_REPEATS)?
+        .checked_rem(CALIBRATION_PSDUS.len())?;
+    Some((phy, *CALIBRATION_PSDUS.get(length)?))
+}
+
+/// Write calibration frame `n` into `buffer`; its MPDU length. A data
+/// frame from the DS to the responder (FromDS), whose PSDU is `psdu`
+/// octets: the tag, then filler.
+pub(crate) fn calibration(
+    buffer: &mut [u8],
+    n: u16,
+    run: u32,
+    phy: CalibrationPhy,
+    psdu: usize,
+) -> Result<usize, FrameTooLong> {
+    let mpdu = psdu.checked_sub(FCS).ok_or(FrameTooLong)?;
+    let body = mpdu.checked_sub(HEADER).ok_or(FrameTooLong)?;
+    let filler = body.checked_sub(TAG_LENGTH).ok_or(FrameTooLong)?;
+    let mut writer = Writer::new(buffer);
+    writer.header(
+        [0x08, 0x02],
+        phy.ack_duration_us(),
+        [RESPONDER, CALIBRATION_BSSID, CALIBRATION_BSSID],
+        n,
+    )?;
+    writer.tag(CALIBRATION_CODE, phy.code(), n, run, 0)?;
+    writer.fill(filler, 0x3c)?;
+    Ok(writer.at)
+}
+
 /// The MPDU's first octet in the transmit buffer: the buffer starts with
 /// the backend's metadata (`TX_METADATA_SIZE`).
 pub(crate) const MPDU_OFFSET: usize = 8;
@@ -436,6 +516,31 @@ mod tests {
         assert_eq!(transfer.length, 1536);
         assert_eq!(transfer.capacity, 1536);
         assert_eq!(buffer[..8], [0xf8, 0x05, 0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn calibration_frames_sweep_each_phy_and_length_and_reach_the_responder() {
+        let mut seen = std::collections::HashMap::new();
+        for index in 0..CALIBRATION_FRAMES {
+            let (phy, psdu) = calibration_round(index).unwrap();
+            *seen.entry((phy, psdu)).or_insert(0) += 1;
+            let mut buffer = [0u8; 1536];
+            let length = calibration(&mut buffer, index as u16, 9, phy, psdu).unwrap();
+            assert_eq!(length + FCS, psdu);
+            let frame = &buffer[..length];
+            assert_eq!(frame[..2], [0x08, 0x02]);
+            assert_eq!(frame[4..10], RESPONDER);
+            assert_eq!(frame[10..16], CALIBRATION_BSSID);
+            assert_eq!(frame[24..33], TAG_HEAD);
+            assert_eq!(frame[34..36], [CALIBRATION_CODE, phy.code()]);
+        }
+        assert_eq!(seen.len(), 6);
+        assert!(seen.values().all(|count| *count == CALIBRATION_REPEATS));
+        assert_eq!(calibration_round(CALIBRATION_FRAMES), None);
+        assert_eq!(
+            calibration(&mut [0u8; 64], 0, 0, CalibrationPhy::Dsss1, 40),
+            Err(FrameTooLong)
+        );
     }
 
     #[test]

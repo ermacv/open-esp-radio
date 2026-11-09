@@ -28,8 +28,9 @@ use oer_chips_esp32s31_hal::{
 };
 use oer_chips_esp32s31_radio_ieee80211_backend::{
     mac::tx::{
-        CompletionObservation, LegacyTxConfig, LegacyTxQueue, MacLegacyTxResponse, TxControlFrame,
-        TxCookie, TxPhyRate, TxSlot, TxSlotAccess, protection::TxProtection,
+        CompletionObservation, HtChannelWidth, HtGuardInterval, HtMcs, HtRate, HtTxConfig,
+        LegacyTxConfig, LegacyTxQueue, MacLegacyTxResponse, TxControlFrame, TxCookie, TxPhyRate,
+        TxSlot, TxSlotAccess, protection::TxProtection,
     },
     tx::{CappedTxPowerProfile, WifiTxPowerProfile},
 };
@@ -287,6 +288,97 @@ pub(super) struct Ran {
     count: usize,
     start: Option<Sample>,
     end: Option<Sample>,
+    /// Calibration frames published, and those whose completion said an
+    /// ACK came.
+    calibration_sent: usize,
+    calibration_acked: usize,
+}
+
+/// One calibration frame's spacing: far apart from the next.
+const CALIBRATION_PERIOD: Duration = Duration::from_millis(20);
+const HT_MCS0: HtRate = HtRate::new(
+    HtMcs::Mcs0,
+    HtGuardInterval::Long800Ns,
+    HtChannelWidth::Mhz20,
+);
+
+/// Send the latch calibration's frames to the responder, one at a time,
+/// each with one attempt: the capture pairs each with its ACK. Whether the
+/// probe saw the ACK is counted, not decisive: the sniffer decides.
+async fn calibrate(
+    resources: &mut Resources<'_>,
+    calibrated: PhyTxTargetPowerProfile,
+    ceiling: TxCeiling,
+    power: Power,
+    ran: &mut Ran,
+) -> Result<(), Name<32>> {
+    let capped = CappedTxPowerProfile::new(calibrated, ceiling);
+    let ht_power = capped.power_pair(HT_MCS0.power_lookup_code());
+    let ht_primary = u8::try_from(ht_power.primary).map_err(|_| name!("tx-power-negative"; 32))?;
+    let ht_alternate =
+        u8::try_from(ht_power.alternate).map_err(|_| name!("tx-power-negative"; 32))?;
+    for index in 0..frames::CALIBRATION_FRAMES {
+        let (phy, psdu) = frames::calibration_round(index).ok_or(name!("calibration-round"; 32))?;
+        let n = u16::try_from(index).map_err(|_| name!("calibration-round"; 32))?;
+        let run = resources.run;
+        let subject = resources.subject.as_mut();
+        let (cookie, length) = prepare(subject, |buffer| {
+            frames::calibration(buffer, n, run, phy, psdu)
+        })?;
+        let access = &mut *resources.access;
+        match phy {
+            frames::CalibrationPhy::Dsss1 => resources
+                .subject
+                .as_mut()
+                .submit_legacy(
+                    access,
+                    cookie,
+                    LegacyTxQueue::Voice,
+                    config(length, power, MacLegacyTxResponse::Ack),
+                )
+                .map_err(|_| name!("calibration-submit"; 32))?,
+            frames::CalibrationPhy::HtMcs0 => {
+                let mpdu = length
+                    .checked_sub(frames::FCS as u16)
+                    .ok_or(name!("calibration-length"; 32))?;
+                let mut ht = HtTxConfig::single_mpdu(HT_MCS0, mpdu, 0)
+                    .ok_or(name!("calibration-length"; 32))?;
+                ht.control = power.control;
+                ht.data_power_primary = ht_primary;
+                ht.data_power_alternate = ht_alternate;
+                ht.interface = MacInterface::AccessPoint;
+                resources
+                    .subject
+                    .as_mut()
+                    .submit_ht(access, cookie, LegacyTxQueue::Voice, ht)
+                    .map_err(|_| name!("calibration-submit"; 32))?;
+            }
+        }
+        ran.calibration_sent = ran.calibration_sent.saturating_add(1);
+        let deadline = EmbassyClock
+            .now()
+            .checked_add(COMPLETION_BOUND)
+            .ok_or(name!("completion-deadline"; 32))?;
+        let done = loop {
+            if let Some(done) = completion(resources.subject.as_mut(), resources.access)? {
+                break done;
+            }
+            if EmbassyClock.now() >= deadline {
+                return Err(name!("calibration-timeout"; 32));
+            }
+            wait(POLL).await?;
+        };
+        if done.status == 0 {
+            ran.calibration_acked = ran.calibration_acked.saturating_add(1);
+        }
+        resources
+            .subject
+            .as_mut()
+            .detach_completed(&mut *resources.access, cookie)
+            .map_err(|_| name!("calibration-detach"; 32))?;
+        wait(CALIBRATION_PERIOD).await?;
+    }
+    Ok(())
 }
 
 /// The run's records, claimed before the walker starts.
@@ -311,6 +403,11 @@ pub(super) async fn measure(
         hal.program_interface_bssid(MacInterface::AccessPoint, resources.ap);
         hal.configure_access_point_receive_policy(resources.ap);
     }
+    // The latch calibration's frames go first, within the clock
+    // separation's wait: the preflight reads them from the first boot.
+    let calibrated = resources.tx_power;
+    let ceiling = resources.tx_ceiling;
+    calibrate(resources, calibrated, ceiling, power, ran).await?;
     wait(CLOCK_SEPARATION).await?;
     resources
         .access
@@ -346,6 +443,8 @@ impl Ran {
             count: 0,
             start: None,
             end: None,
+            calibration_sent: 0,
+            calibration_acked: 0,
         }
     }
 }
@@ -414,6 +513,15 @@ pub(super) async fn dump(
     records: &[Record],
     end: End<'_>,
 ) -> Result<(), Name<32>> {
+    let mut calibration = crate::line::Line::<96>::new();
+    calibration
+        .text(b"STAMP calibration sent=")
+        .and_then(|l| l.decimal(ran.calibration_sent as u64))
+        .and_then(|l| l.text(b" acked="))
+        .and_then(|l| l.decimal(ran.calibration_acked as u64))
+        .and_then(|l| l.text(b"\n"))
+        .map_err(|_| name!("line-full"; 32))?;
+    line(console, calibration.as_bytes()).await?;
     if let Some(start) = ran.start {
         let start = record::clock_line(b"start", start).map_err(|_| name!("line-full"; 32))?;
         line(console, start.as_bytes()).await?;

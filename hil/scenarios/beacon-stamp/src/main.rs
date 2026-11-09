@@ -1,31 +1,42 @@
 //! TEMPORARY experiment host program (branch `probe/beacon-timestamp`,
 //! never merged): who writes the Timestamp of a transmitted beacon.
 //!
-//! `run <board> <bundle-directory> <console-log> <capture.pcap>` builds
-//! nothing: the probe's bundle is built first by the standard
-//! `cargo fw build esp32s31-beacon-stamp`, outside any lease, and its
-//! identity comes from that build's own records (`bundle.rs`). Under one
-//! lease on the board, the router and the air it starts the router's
-//! monitor capture of the probe's channel (`sniffer.rs`), writes the
-//! bundle, lets the preflight (`preflight.rs`) accept the capture of the
-//! probe's first boot, reads the probe's console from its reset to its
-//! `OER-RESULT:` line into the log, stops the capture and releases the
-//! lease; the three ends are kept and recorded apart, in
-//! `<console-log>.outcome.json`. Every path is absolute and the bundle's
-//! identity is read before the lease. The probe needs no network, peer or secret:
-//! its frames go out open, to the broadcast address or to an absent
-//! receiver.
+//! `run <board> <responder-board> <bundle> <responder-bundle> <console-log>
+//! <capture.pcap>` builds nothing: both bundles are built first by the
+//! standard `cargo fw build esp32s31-beacon-stamp` and `cargo fw build
+//! esp32s31-ack-responder`, outside any lease, and their identities come
+//! from those builds' own records (`bundle.rs`). Every path is made absolute
+//! and both bundles are identified before the lease. Under one lease on both
+//! boards, the router and the air:
+//!
+//! 1. the router's monitor capture of the probe's channel starts
+//!    (`sniffer.rs`);
+//! 2. the responder is written and read from its reset until it listens;
+//! 3. the probe is written; the preflight (`preflight.rs`) accepts the
+//!    capture of its first boot and decides the latch calibration
+//!    (`latch.rs`) from that boot's calibration frames and the responder's
+//!    ACKs;
+//! 4. the probe is reset and read to its `OER-RESULT:` line;
+//! 5. the responder is read to its own result line;
+//! 6. the capture stops, and the lease is released.
+//!
+//! The probe's, the responder's, the preflight's, the capture's and the
+//! lease's ends are kept and recorded apart, in `<console-log>.outcome.json`;
+//! the responder's console goes to `<console-log>.responder.log`. The run
+//! needs no network, peer or secret: the frames go out open.
 //!
 //! `decide <console-log> <capture.pcap>` reads both and applies the rule
 //! of `decide.rs` to each kind of subject frame. It exits 0 when every
 //! kind is decided, 2 when one is not or an input is refused.
 #![forbid(unsafe_code)]
 
+mod airtime;
 mod bundle;
 mod capture;
 mod console;
 mod decide;
 mod device;
+mod latch;
 mod preflight;
 mod result;
 mod sniffer;
@@ -45,6 +56,12 @@ use oer_tools_lab_client::{
 use crate::{bundle::Identity, console::ConsoleSession, result::ProbeResult};
 
 const IMAGE: &str = "esp32s31-beacon-stamp";
+const RESPONDER_IMAGE: &str = "esp32s31-ack-responder";
+/// From the responder's reset to its listening line: boot and RF start.
+const LISTEN_TIMEOUT: Duration = Duration::from_secs(30);
+/// From the probe's result line to the responder's: its 120-s window from
+/// its listening line, with margin.
+const RESPONDER_TIMEOUT: Duration = Duration::from_secs(150);
 /// The probe's channel (`hil/probes/esp32s31-beacon-stamp/src/image.rs`).
 const CHANNEL: u8 = 13;
 /// From the probe's reset to its result line: boot, RF start, the clock
@@ -57,10 +74,19 @@ fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     match words.as_slice() {
-        ["run", board, bundle, console, capture] => {
+        [
+            "run",
+            board,
+            responder,
+            bundle,
+            responder_bundle,
+            console,
+            capture,
+        ] => {
             match run(
-                board,
+                Boards { board, responder },
                 Path::new(bundle),
+                Path::new(responder_bundle),
                 Path::new(console),
                 Path::new(capture),
             ) {
@@ -82,35 +108,50 @@ fn main() -> ExitCode {
         },
         _ => {
             eprintln!(
-                "usage: oer-hil-scenarios-beacon-stamp run <board> <bundle-directory> <console-log> <capture.pcap>\n       oer-hil-scenarios-beacon-stamp decide <console-log> <capture.pcap>"
+                "usage: oer-hil-scenarios-beacon-stamp run <board> <responder-board> <bundle-directory> <responder-bundle-directory> <console-log> <capture.pcap>\n       oer-hil-scenarios-beacon-stamp decide <console-log> <capture.pcap>"
             );
             ExitCode::from(2)
         }
     }
 }
 
-/// `Ok(true)` when the probe printed its pass line, the capture stopped
-/// and the lease was released.
-fn run(board_id: &str, bundle: &Path, console: &Path, capture: &Path) -> Result<bool> {
-    let Paths {
-        bundle,
-        console,
-        capture,
-        identity,
-    } = paths(bundle, console, capture)?;
-    eprintln!(
-        "beacon-stamp: bundle of {} at {} (dirty {}), application {}",
-        bundle::PACKAGE,
-        identity.commit,
-        identity.dirty,
-        identity.application_sha256
-    );
+/// The two boards by their stand names.
+struct Boards<'a> {
+    board: &'a str,
+    responder: &'a str,
+}
+
+/// `Ok(true)` when the probe printed its pass line, the responder its own,
+/// the capture stopped and the lease was released.
+fn run(
+    boards: Boards<'_>,
+    bundle: &Path,
+    responder_bundle: &Path,
+    console: &Path,
+    capture: &Path,
+) -> Result<bool> {
+    let paths = paths(bundle, responder_bundle, console, capture)?;
+    for (package, identity) in [
+        (bundle::PACKAGE, &paths.identity),
+        (bundle::RESPONDER_PACKAGE, &paths.responder_identity),
+    ] {
+        eprintln!(
+            "beacon-stamp: bundle of {package} at {} (dirty {}), application {}",
+            identity.commit, identity.dirty, identity.application_sha256
+        );
+    }
     let stand = oer_tools_lab_model::path()
         .and_then(|path| oer_tools_lab_model::Stand::load(&path))
         .map_err(|error| format!("the stand file: {error}"))?;
     let board = stand
-        .board(board_id)
-        .ok_or_else(|| format!("the stand file has no board `{board_id}`"))?;
+        .board(boards.board)
+        .ok_or_else(|| format!("the stand file has no board `{}`", boards.board))?;
+    let responder = stand
+        .board(boards.responder)
+        .ok_or_else(|| format!("the stand file has no board `{}`", boards.responder))?;
+    if board.mac == responder.mac {
+        return Err("the probe and the responder need two boards".into());
+    }
     let owner = oer_tools_lab_arbiter::owner::from_environment()
         .map_err(|error| error.to_string())?
         .to_string();
@@ -118,11 +159,15 @@ fn run(board_id: &str, bundle: &Path, console: &Path, capture: &Path) -> Result<
     let granted = client.acquire(
         LeaseRequest {
             owner: owner.clone(),
-            work: format!("beacon-stamp probe on {board_id}"),
+            work: format!(
+                "beacon-stamp probe on {} with its responder on {}",
+                boards.board, boards.responder
+            ),
             scenarios: Vec::new(),
             run: None,
             claims: vec![
                 Claim::board(&board.mac),
+                Claim::board(&responder.mac),
                 Claim::exclusive(ROUTER),
                 Claim::exclusive(AIR),
             ],
@@ -133,22 +178,22 @@ fn run(board_id: &str, bundle: &Path, console: &Path, capture: &Path) -> Result<
     )?;
     eprintln!("beacon-stamp: lease {} granted", granted.lease);
     let mut monitor = sniffer::RouterMonitor::new();
+    let macs = Macs {
+        probe: &board.mac,
+        responder: &responder.mac,
+    };
     let captured = sniffer::with_capture(
         &mut client,
         &mut monitor,
         CHANNEL,
-        &capture,
-        |client, monitor| {
-            leased(
-                client, monitor, &board.mac, &owner, &bundle, &identity, &console,
-            )
-        },
+        &paths.capture,
+        |client, monitor| leased(client, monitor, &macs, &owner, &paths),
     );
     let released = client.release();
     eprintln!("beacon-stamp: lease {} released", granted.lease);
     let (result, record) = ended(captured, released);
-    // Recorded apart: the run's, the capture's and the lease's ends.
-    let mut file = console.into_os_string();
+    // Recorded apart: every end of the run.
+    let mut file = paths.console.clone().into_os_string();
     file.push(".outcome.json");
     let written = std::fs::write(&file, record.to_string())
         .map_err(|error| format!("{}: {error}", Path::new(&file).display()));
@@ -159,57 +204,89 @@ fn run(board_id: &str, bundle: &Path, console: &Path, capture: &Path) -> Result<
     }
 }
 
-/// The run's files, every path absolute, and the bundle's identity.
+/// The run's files, every path absolute, and both bundles' identities.
 struct Paths {
     bundle: std::path::PathBuf,
+    responder: std::path::PathBuf,
     console: std::path::PathBuf,
     capture: std::path::PathBuf,
     identity: Identity,
+    responder_identity: Identity,
+}
+
+/// A bundle path made absolute, checked to be a directory and identified
+/// as `package`'s.
+fn bundle_of(path: &Path, package: &str) -> Result<(std::path::PathBuf, Identity)> {
+    let path = std::fs::canonicalize(path)
+        .map_err(|error| format!("the bundle {}: {error}", path.display()))?;
+    if !path.is_dir() {
+        return Err(format!("the bundle {} is not a directory", path.display()));
+    }
+    let identity = bundle::identity(&path, package)?;
+    Ok((path, identity))
 }
 
 /// Resolve and check the run's files before the lease: the LAB service
-/// resolves a relative path from its own directory, not this one, so the
+/// resolves a relative path from its own directory, not this one, so each
 /// bundle goes to it absolute, existing, a directory whose records give
 /// its identity.
-fn paths(bundle: &Path, console: &Path, capture: &Path) -> Result<Paths> {
-    let bundle = std::fs::canonicalize(bundle)
-        .map_err(|error| format!("the bundle {}: {error}", bundle.display()))?;
-    if !bundle.is_dir() {
-        return Err(format!(
-            "the bundle {} is not a directory",
-            bundle.display()
-        ));
-    }
-    let identity = bundle::identity(&bundle)?;
+fn paths(bundle: &Path, responder: &Path, console: &Path, capture: &Path) -> Result<Paths> {
+    let (bundle, identity) = bundle_of(bundle, bundle::PACKAGE)?;
+    let (responder, responder_identity) = bundle_of(responder, bundle::RESPONDER_PACKAGE)?;
     let console = std::path::absolute(console)
         .map_err(|error| format!("the console log {}: {error}", console.display()))?;
     let capture = std::path::absolute(capture)
         .map_err(|error| format!("the capture {}: {error}", capture.display()))?;
     Ok(Paths {
         bundle,
+        responder,
         console,
         capture,
         identity,
+        responder_identity,
     })
 }
 
-/// The run's result only when the probe ran, the capture stopped and the
-/// lease was released; otherwise every failure, together. Beside it the
-/// record of the three ends, each its own.
+/// What the lease's body left: the probe's result, the responder's, and
+/// the preflight's latch calibration.
+#[derive(Debug, Eq, PartialEq)]
+struct Leased {
+    probe: bool,
+    responder: Result<bool>,
+    latch: String,
+}
+
+/// The run's result only when the probe ran, the responder ended, the
+/// capture stopped and the lease was released; otherwise every failure,
+/// together. Beside it the record of each end, each its own.
 fn ended(
-    captured: sniffer::Captured<bool>,
+    captured: sniffer::Captured<Leased>,
     released: Result<()>,
 ) -> (Result<bool>, serde_json::Value) {
-    let probe = match captured.body {
+    let body = match captured.body {
         None => Err("the probe was not run".to_owned()),
         Some(result) => result,
     };
     let end = |ok: bool, detail: String| serde_json::json!({ "ok": ok, "detail": detail });
+    let (probe, responder, latch) = match &body {
+        Ok(leased) => (
+            end(true, format!("ran, pass {}", leased.probe)),
+            match &leased.responder {
+                Ok(passed) => end(true, format!("ran, pass {passed}")),
+                Err(error) => end(false, error.clone()),
+            },
+            end(true, leased.latch.clone()),
+        ),
+        Err(error) => (
+            end(false, error.clone()),
+            end(false, "not read".to_owned()),
+            end(false, "not decided".to_owned()),
+        ),
+    };
     let record = serde_json::json!({
-        "probe": match &probe {
-            Ok(passed) => end(true, format!("ran, pass {passed}")),
-            Err(error) => end(false, error.clone()),
-        },
+        "probe": probe,
+        "responder": responder,
+        "latch": latch,
         "capture": match &captured.capture {
             Ok(file) => end(true, file.display().to_string()),
             Err(error) => end(false, error.clone()),
@@ -219,14 +296,28 @@ fn ended(
             Err(error) => end(false, error.clone()),
         },
     });
-    let result = match (probe, captured.capture, released) {
-        (Ok(passed), Ok(file), Ok(())) => {
+    let result = match (body, captured.capture, released) {
+        (
+            Ok(Leased {
+                probe,
+                responder: Ok(responder),
+                ..
+            }),
+            Ok(file),
+            Ok(()),
+        ) => {
             eprintln!("beacon-stamp: capture {}", file.display());
-            Ok(passed)
+            Ok(probe && responder)
         }
-        (probe, capture, released) => Err(format!(
+        (body, capture, released) => Err(format!(
             "probe: {}; capture: {}; release: {}",
-            probe.map_or_else(|e| e, |passed| format!("ran, pass {passed}")),
+            body.map_or_else(
+                |e| e,
+                |leased| format!(
+                    "ran, pass {}, responder {:?}",
+                    leased.probe, leased.responder
+                )
+            ),
             capture.map_or_else(|e| e, |file| format!("stopped, {}", file.display())),
             released.map_or_else(|e| e, |()| "released".to_owned()),
         )),
@@ -234,21 +325,25 @@ fn ended(
     (result, record)
 }
 
-fn leased(
+struct Macs<'a> {
+    probe: &'a str,
+    responder: &'a str,
+}
+
+fn flash(
     client: &mut Client,
-    monitor: &mut sniffer::RouterMonitor,
     mac: &str,
     owner: &str,
+    image: &str,
     bundle: &Path,
     identity: &Identity,
-    console: &Path,
-) -> Result<bool> {
+) -> Result<()> {
     client.run(
         Operation::Flash {
             board: mac.to_owned(),
             bundle: bundle.display().to_string(),
             image: ImageIdentity {
-                name: IMAGE.to_owned(),
+                name: image.to_owned(),
                 sha256: identity.application_sha256.clone(),
                 commit: Some(identity.commit.clone()),
                 dirty: Some(identity.dirty),
@@ -261,33 +356,87 @@ fn leased(
         &mut std::io::sink(),
         None,
     )?;
-    eprintln!(
-        "beacon-stamp: wrote the probe bundle, application {}; preflight on its first boot",
-        identity.application_sha256
-    );
-    let frames = preflight::wait::<Client, _>(monitor)?;
-    eprintln!(
-        "beacon-stamp: preflight accepted {frames} probe frames with TSFT; reading the probe from its reset"
-    );
-    let mut log = std::fs::File::create(console)
-        .map_err(|error| format!("{}: {error}", console.display()))?;
+    Ok(())
+}
+
+/// A console session of `image` on board `mac` from its reset.
+fn console_of(client: &mut Client, image: &'static str, mac: &str) -> Result<ConsoleSession> {
     let running = client.start(Operation::Console {
         board: mac.to_owned(),
         reset: true,
     })?;
     let cancel = running.input();
-    let session = ConsoleSession::new(running, move || {
+    Ok(ConsoleSession::new(image, running, move || {
         let _ = cancel.cancel();
-    });
-    let verdict = session.result(&mut log, CONSOLE_TIMEOUT);
-    session.finish();
-    match verdict? {
-        ProbeResult::Pass => Ok(true),
+    }))
+}
+
+fn passed(result: ProbeResult, image: &str) -> bool {
+    match result {
+        ProbeResult::Pass => true,
         ProbeResult::Fail(reason) => {
-            eprintln!("beacon-stamp: probe result: fail {reason}");
-            Ok(false)
+            eprintln!("beacon-stamp: {image} result: fail {reason}");
+            false
         }
     }
+}
+
+fn leased(
+    client: &mut Client,
+    monitor: &mut sniffer::RouterMonitor,
+    macs: &Macs<'_>,
+    owner: &str,
+    paths: &Paths,
+) -> Result<Leased> {
+    flash(
+        client,
+        macs.responder,
+        owner,
+        RESPONDER_IMAGE,
+        &paths.responder,
+        &paths.responder_identity,
+    )?;
+    let mut responder_file = paths.console.clone().into_os_string();
+    responder_file.push(".responder.log");
+    let mut responder_log = std::fs::File::create(&responder_file)
+        .map_err(|error| format!("{}: {error}", Path::new(&responder_file).display()))?;
+    // Ends with this function on every path: cancelled and joined.
+    let responder = console_of(client, "ack-responder", macs.responder)?;
+    responder.wait_for(&mut responder_log, "ACKRESP listening", LISTEN_TIMEOUT)?;
+    eprintln!("beacon-stamp: the responder listens; writing the probe");
+    flash(
+        client,
+        macs.probe,
+        owner,
+        IMAGE,
+        &paths.bundle,
+        &paths.identity,
+    )?;
+    let preflight = preflight::wait::<Client, _>(monitor)?;
+    let latch = format!(
+        "{:?} ({} pairs, {} unanswered, {:?})",
+        preflight.latch, preflight.pairs, preflight.unanswered, preflight.evidence
+    );
+    eprintln!(
+        "beacon-stamp: preflight accepted {} probe frames with TSFT; latch calibration: {latch}; \
+         reading the probe from its reset",
+        preflight.frames
+    );
+    let mut log = std::fs::File::create(&paths.console)
+        .map_err(|error| format!("{}: {error}", paths.console.display()))?;
+    let session = console_of(client, "beacon-stamp", macs.probe)?;
+    let verdict = session.result(&mut log, CONSOLE_TIMEOUT);
+    session.finish();
+    let probe = passed(verdict?, "beacon-stamp");
+    let responded = responder
+        .result(&mut responder_log, RESPONDER_TIMEOUT)
+        .map(|result| passed(result, "ack-responder"));
+    responder.finish();
+    Ok(Leased {
+        probe,
+        responder: responded,
+        latch,
+    })
 }
 
 /// `Ok(true)` when every kind is decided.
@@ -365,65 +514,95 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    fn leased(responder: Result<bool>) -> Leased {
+        Leased {
+            probe: true,
+            responder,
+            latch: "Latch(MpduStart)".into(),
+        }
+    }
+
     #[test]
-    fn only_a_run_whose_capture_stopped_and_lease_ended_has_a_result() {
+    fn only_a_run_whose_responder_capture_and_lease_ended_has_a_result() {
         let captured = sniffer::Captured {
-            body: Some(Ok(true)),
+            body: Some(Ok(leased(Ok(true)))),
             capture: Ok(PathBuf::from("run.pcap")),
         };
         let (result, record) = ended(captured, Ok(()));
         assert_eq!(result, Ok(true));
-        assert_eq!(record["probe"]["ok"], true);
-        assert_eq!(record["capture"]["ok"], true);
-        assert_eq!(record["release"]["ok"], true);
+        for end in ["probe", "responder", "latch", "capture", "release"] {
+            assert_eq!(record[end]["ok"], true, "{end}");
+        }
         let captured = sniffer::Captured {
-            body: Some(Ok(true)),
+            body: Some(Ok(leased(Ok(true)))),
             capture: Ok(PathBuf::from("run.pcap")),
         };
         let (result, record) = ended(captured, Err("lab gone".into()));
         assert!(result.unwrap_err().contains("lab gone"));
         assert_eq!(record["probe"]["ok"], true);
         assert_eq!(record["release"]["detail"], "lab gone");
+        let captured = sniffer::Captured {
+            body: Some(Ok(leased(Err("no responder result".into())))),
+            capture: Ok(PathBuf::from("run.pcap")),
+        };
+        let (result, record) = ended(captured, Ok(()));
+        assert!(result.unwrap_err().contains("no responder result"));
+        assert_eq!(record["probe"]["ok"], true);
+        assert_eq!(record["responder"]["detail"], "no responder result");
     }
 
-    #[test]
-    fn the_bundle_is_absolute_existing_and_identified_before_the_lease() {
-        let directory = tempfile::tempdir().unwrap();
-        let bundle = directory.path().join("bundle");
-        assert!(paths(&bundle, Path::new("c.log"), Path::new("c.pcap")).is_err());
-        std::fs::write(&bundle, b"not a directory").unwrap();
-        assert!(paths(&bundle, Path::new("c.log"), Path::new("c.pcap")).is_err());
-        std::fs::remove_file(&bundle).unwrap();
+    /// A bundle directory whose records name `package`.
+    fn bundle_dir(root: &Path, name: &str, package: &str) -> PathBuf {
+        let bundle = root.join(name);
         std::fs::create_dir(&bundle).unwrap();
-        // A directory without the build's records has no identity.
-        assert!(paths(&bundle, Path::new("c.log"), Path::new("c.pcap")).is_err());
-        let application = b"probe";
+        let application = name.as_bytes();
         std::fs::write(bundle.join("application.bin"), application).unwrap();
         let sha256 = oer_tools_os_durable::sha256_bytes(application);
         std::fs::write(
             bundle.join("bundle.json"),
-            serde_json::json!({"flash_files": [{"file": "application.bin", "sha256": sha256, "bytes": 5}]})
+            serde_json::json!({"flash_files": [{"file": "application.bin", "sha256": sha256, "bytes": application.len()}]})
                 .to_string(),
         )
         .unwrap();
         std::fs::write(
             bundle.join("sizes.json"),
             serde_json::json!({
-                "provenance": {"commit": "eae701e4f", "dirty": false, "package": bundle::PACKAGE},
-                "image_files": {"application.bin": 5},
+                "provenance": {"commit": "61564b55f", "dirty": false, "package": package},
+                "image_files": {"application.bin": application.len()},
             })
             .to_string(),
         )
         .unwrap();
-        let resolved = paths(&bundle, Path::new("c.log"), Path::new("c.pcap")).unwrap();
-        assert!(resolved.bundle.is_absolute() && resolved.console.is_absolute());
-        assert!(resolved.capture.is_absolute());
-        assert_eq!(resolved.identity.commit, "eae701e4f");
+        bundle
+    }
+
+    #[test]
+    fn both_bundles_are_absolute_existing_and_identified_before_the_lease() {
+        let directory = tempfile::tempdir().unwrap();
+        let (log, pcap) = (Path::new("c.log"), Path::new("c.pcap"));
+        let missing = directory.path().join("missing");
+        let probe = bundle_dir(directory.path(), "probe", bundle::PACKAGE);
+        let responder = bundle_dir(directory.path(), "responder", bundle::RESPONDER_PACKAGE);
+        assert!(paths(&missing, &responder, log, pcap).is_err());
+        assert!(paths(&probe, &missing, log, pcap).is_err());
+        let file = directory.path().join("file");
+        std::fs::write(&file, b"not a directory").unwrap();
+        assert!(paths(&file, &responder, log, pcap).is_err());
+        // Each bundle must be its own image's.
+        assert!(paths(&responder, &probe, log, pcap).is_err());
+        let empty = directory.path().join("empty");
+        std::fs::create_dir(&empty).unwrap();
+        assert!(paths(&probe, &empty, log, pcap).is_err());
+        let resolved = paths(&probe, &responder, log, pcap).unwrap();
+        assert!(resolved.bundle.is_absolute() && resolved.responder.is_absolute());
+        assert!(resolved.console.is_absolute() && resolved.capture.is_absolute());
+        assert_eq!(resolved.identity.commit, "61564b55f");
+        assert_eq!(resolved.responder_identity.commit, "61564b55f");
     }
 
     #[test]
     fn every_failure_is_kept_together() {
-        let captured = sniffer::Captured::<bool> {
+        let captured = sniffer::Captured::<Leased> {
             body: Some(Err("console timeout".into())),
             capture: Err("tcpdump lost".into()),
         };
@@ -433,9 +612,10 @@ mod tests {
             assert!(error.contains(cause), "{error}");
         }
         assert_eq!(record["probe"]["detail"], "console timeout");
+        assert_eq!(record["responder"]["ok"], false);
         assert_eq!(record["capture"]["detail"], "tcpdump lost");
         assert_eq!(record["release"]["detail"], "release refused");
-        let captured = sniffer::Captured::<bool> {
+        let captured = sniffer::Captured::<Leased> {
             body: None,
             capture: Err("the capture did not start".into()),
         };
