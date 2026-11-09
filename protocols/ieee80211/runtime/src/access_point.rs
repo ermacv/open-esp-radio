@@ -42,19 +42,30 @@
 //! runner's waker, stay held for the next turn (never dropped) until a wake
 //! of any source comes.
 //!
+//! # Owners
+//!
+//! Every owner the runner lends the port has a fixed home it comes back
+//! to: the runner is the port's sink, and a terminal puts its owners home
+//! during the port's call. What a terminal asks of the port (a Message 1
+//! or a Message 3 to send) waits as plain data until the call returned; a
+//! command is built from the homes' owners only when it is issued, and the
+//! one the port holds at its barrier waits in its own place. A unit a
+//! receive cut hands over is read and recycled once the call returned. An
+//! owner the port returns without the runner having lent it has no home:
+//! the run ends on that break, the owner among the runner's ([`Kept`]).
+//!
 //! # Ends
 //!
 //! Every end returns the runner with the port and every owner
-//! ([`ApEnd`]): a stop, a refused start, an unconfirmed stop (whose owners
-//! the composition keeps from the hardware's use), a port fault with its
-//! cause, a refused command (the command among the owners,
-//! [`ApRunner::take_refused`]) and a broken contract of the runner's own,
-//! the owners it had no place for among them ([`ApRunner::take_kept`]).
-//! The sink holds the port's every unconsumed terminal
-//! (`PortTypes::TERMINAL_CAPACITY`, checked where a runner is made). A
-//! frame of the air the engine refuses changes nothing; a frame the runner
-//! has no ticket or buffer for does not go, which its peer's own retry
-//! covers.
+//! ([`ApEnd`]): a stop, a refused start, an unconfirmed stop, a port fault
+//! with its cause, a refused command (the command among the owners,
+//! [`ApRunner::take_refused`]) and a broken contract of the runner's own.
+//! A run that ended before its stop was confirmed goes on with
+//! [`ApRunner::finish_stop`], which watches the stop on the port's facts and
+//! deadline, never asking for it again, and returns once the port
+//! confirmed it: only then are the owners free of the hardware. A frame of
+//! the air the engine refuses changes nothing; a frame the runner has no
+//! ticket or buffer for does not go, which its peer's own retry covers.
 
 pub mod network;
 
@@ -266,7 +277,7 @@ enum Halt<F> {
 /// access point never sends. Every owner the runner lends has its home
 /// held for it, so a port that keeps its contract brings none; the run
 /// ends on the break ([`ApEnd::Contract`]) and the owner comes back with
-/// the runner ([`ApRunner::take_kept`]), [`KEPT`] of them at most.
+/// the runner ([`ApRunner::take_kept`]), `KEPT` of them at most.
 pub enum Kept<'id, P, C>
 where
     P: AccessPointPort<'id>,
@@ -1460,6 +1471,20 @@ where
     ) {
         if self.homes.faulted {
             self.homes.faulted = !self.port.recover_for_stop();
+        }
+        // A unit a cut handed over beyond the runner's reading goes back to
+        // its ring: the port counts it out until then.
+        for _ in 0..self.homes.kept.len() {
+            match self.homes.kept.pop_front() {
+                Some(Kept::Unit(frame)) => self.port.recycle(frame),
+                Some(other) => {
+                    // Its own place, which the pop freed.
+                    if let Err(other) = self.homes.kept.push_back(other) {
+                        self.homes.keep(other, ApContract::CutUnits);
+                    }
+                }
+                None => break,
+            }
         }
         self.homes.stop = true;
         self.homes.phase = Phase::StoppingRadio;
