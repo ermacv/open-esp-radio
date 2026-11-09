@@ -74,6 +74,17 @@ impl From<AirtimeError> for AirtimeFault {
     }
 }
 
+/// What one pass over the ready work keeps of one account.
+struct Best<K, C> {
+    key: K,
+    /// The largest least grant among its works.
+    minimum: NonZeroU32,
+    /// Its last served flow, and its work next in turn after it.
+    last: Option<u8>,
+    order: (bool, u8),
+    work: C,
+}
+
 /// A choice until the port answers it.
 #[derive(Debug)]
 pub struct Held<'o, K> {
@@ -221,6 +232,51 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
             .min_by_key(|work| turn(work.ready(), last))
     }
 
+    /// Choose over `ready` read twice, the whole list given to the scheduler:
+    /// for more accounts than one pass keeps, whose answer the scheduler
+    /// gives.
+    #[cold]
+    fn choose_over<C: Candidate>(
+        &mut self,
+        ready: impl Iterator<Item = C> + Clone,
+    ) -> Result<Option<(C, Held<'o, A::Key>)>, AirtimeFault> {
+        let air = &self.air;
+        let candidates = ready.clone().filter_map(|work| air.candidate(work.ready()));
+        let reservation = match self.scheduler.reserve(candidates, &mut ()) {
+            Ok(reservation) => reservation,
+            Err(AirtimeError::ReservationCapacity) => None,
+            Err(error) => return Err(error.into()),
+        };
+        let Some(reservation) = reservation else {
+            return Ok(None);
+        };
+        match self.pick(ready, reservation.key()) {
+            Some(work) => Ok(Some(self.hold(work, reservation))),
+            None => match self.scheduler.cancel(reservation, &mut ()) {
+                Ok(()) => Ok(None),
+                Err((error, _)) => Err(error.into()),
+            },
+        }
+    }
+
+    /// `work` under `reservation`, with its ceiling.
+    fn hold<C: Candidate>(
+        &self,
+        work: C,
+        reservation: AirtimeReservation<'o, A::Key>,
+    ) -> (C, Held<'o, A::Key>) {
+        let flow = work.ready().flow;
+        let ceiling = self.air.ceiling(work.ready());
+        (
+            work,
+            Held {
+                reservation,
+                flow,
+                ceiling,
+            },
+        )
+    }
+
     /// Hold `flight` for its completion.
     fn fly(&mut self, flight: Flight<'o, T, A::Key>) -> Result<(), AirtimeFault> {
         let slot = self
@@ -258,12 +314,49 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
     type Reservation = Held<'o, A::Key>;
     type Fault = AirtimeFault;
 
+    /// One pass over `ready`: each work's candidate once, kept per account
+    /// as its largest least grant and its work next in turn, which is what
+    /// the scheduler and the pick read of all of them. More accounts than
+    /// `PEERS` cannot all be served; the scheduler names that from the whole
+    /// list, read once more.
     fn choose<C: Candidate>(
         &mut self,
         ready: impl Iterator<Item = C> + Clone,
     ) -> Result<Option<(C, Self::Reservation)>, AirtimeFault> {
-        let air = &self.air;
-        let candidates = ready.clone().filter_map(|work| air.candidate(work.ready()));
+        let mut best: heapless::Vec<Best<A::Key, C>, PEERS> = heapless::Vec::new();
+        for work in ready.clone() {
+            let Some(candidate) = self.air.candidate(work.ready()) else {
+                continue;
+            };
+            match best.iter_mut().find(|best| best.key == candidate.key) {
+                Some(best) => {
+                    best.minimum = best.minimum.max(candidate.minimum_micros);
+                    let order = turn(work.ready(), best.last);
+                    // The first of equal turns, as the list gave them.
+                    if order < best.order {
+                        best.order = order;
+                        best.work = work;
+                    }
+                }
+                None => {
+                    let last = self.last_flow(candidate.key);
+                    let entry = Best {
+                        key: candidate.key,
+                        minimum: candidate.minimum_micros,
+                        last,
+                        order: turn(work.ready(), last),
+                        work,
+                    };
+                    if best.push(entry).is_err() {
+                        return self.choose_over(ready);
+                    }
+                }
+            }
+        }
+        let candidates = best.iter().map(|best| AirtimeCandidate {
+            key: best.key,
+            minimum_micros: best.minimum,
+        });
         let reservation = match self.scheduler.reserve(candidates, &mut ()) {
             Ok(reservation) => reservation,
             // A frame's completion makes room, and it wakes the service.
@@ -273,18 +366,10 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
         let Some(reservation) = reservation else {
             return Ok(None);
         };
-        match self.pick(ready, reservation.key()) {
-            Some(work) => {
-                let flow = work.ready().flow;
-                let ceiling = self.air.ceiling(work.ready());
-                let held = Held {
-                    reservation,
-                    flow,
-                    ceiling,
-                };
-                Ok(Some((work, held)))
-            }
-            // The candidates were this work, so one of them holds the key.
+        let key = reservation.key();
+        match best.into_iter().find(|best| best.key == key) {
+            Some(Best { work, .. }) => Ok(Some(self.hold(work, reservation))),
+            // The candidates were these accounts, so one of them holds the key.
             None => match self.scheduler.cancel(reservation, &mut ()) {
                 Ok(()) => Ok(None),
                 Err((error, _)) => Err(error.into()),

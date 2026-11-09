@@ -170,3 +170,47 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
         "the current one never charged"
     );
 }
+
+/// A [`FrameCost`] that counts what it computes.
+#[derive(Default)]
+struct Counted {
+    least: core::cell::Cell<usize>,
+    ceiling: core::cell::Cell<usize>,
+}
+
+impl FrameCost for &Counted {
+    fn least(&self, frame_octets: usize) -> NonZeroU32 {
+        self.least.set(self.least.get() + 1);
+        NonZeroU32::new(u32::try_from(frame_octets).unwrap()).unwrap()
+    }
+    fn ceiling(&self, frame_octets: usize) -> NonZeroU32 {
+        self.ceiling.set(self.ceiling.get() + 1);
+        NonZeroU32::new(10 * u32::try_from(frame_octets).unwrap()).unwrap()
+    }
+}
+
+/// A backlog of frames of one length costs one computation of each charge:
+/// the egress asks each ready frame's least grant at every choice, and the
+/// chosen one's ceiling.
+#[test]
+fn frames_of_one_length_compute_each_charge_once() {
+    let link = NetworkLink::new();
+    link.publish(up(1));
+    let costs = Counted::default();
+    let air = StationAir::new(&link, &costs);
+    for _ in 0..32 {
+        assert_eq!(
+            air.candidate(&ready(1514)).unwrap().minimum_micros.get(),
+            1514
+        );
+        assert_eq!(air.ceiling(&ready(1514)).get(), 15_140);
+    }
+    assert_eq!((costs.least.get(), costs.ceiling.get()), (1, 1));
+    // Another length is its own charge, and the first comes back as it was.
+    assert_eq!(air.candidate(&ready(64)).unwrap().minimum_micros.get(), 64);
+    assert_eq!(
+        air.candidate(&ready(1514)).unwrap().minimum_micros.get(),
+        1514
+    );
+    assert_eq!(air.ceiling(&ready(64)).get(), 640);
+}

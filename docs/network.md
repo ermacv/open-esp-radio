@@ -146,6 +146,12 @@ only after the policy chose it and the port gave the room.
   broadcast included, goes to its access point, so one account per
   association. Control work goes first; flows take turns within the
   account. Service classes are not separated yet.
+- **Choice.** A choice reads the ready work, the network's whole backlog,
+  once: each work's least grant once, kept per account as the largest and
+  with the work next in turn, which is all the scheduler and the pick read
+  of it. `StationAir` keeps the last frame length's least grant and
+  ceiling, as a backlog is mostly of one length. The scan stays one pass
+  over the backlog per frame sent.
 - **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
   publications that reached the air by the backend's declared model: the
   modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck

@@ -14,6 +14,7 @@
 //! end is handed on, and the buffer goes back to its owner only then: so no
 //! more frames are unsettled than there are buffers.
 
+use core::cell::Cell;
 use core::num::NonZeroU32;
 
 use oer_portable_memory::QueueNotify;
@@ -37,15 +38,42 @@ pub trait FrameCost {
 }
 
 /// The station's air over `link`, the network side's view of its link,
-/// with `C` charging a frame of unknown cost.
+/// with `C` charging a frame of unknown cost. Each charge depends on the
+/// frame's length alone, and the last length's charges are kept: the egress
+/// asks every ready frame's least grant at each choice, and a backlog is
+/// mostly of one length.
 pub struct StationAir<'a, N, C> {
     link: &'a NetworkLink<N>,
     ceiling: C,
+    least_of: Cell<Option<(usize, NonZeroU32)>>,
+    ceiling_of: Cell<Option<(usize, NonZeroU32)>>,
 }
 
 impl<'a, N, C> StationAir<'a, N, C> {
     pub const fn new(link: &'a NetworkLink<N>, ceiling: C) -> Self {
-        Self { link, ceiling }
+        Self {
+            link,
+            ceiling,
+            least_of: Cell::new(None),
+            ceiling_of: Cell::new(None),
+        }
+    }
+}
+
+/// `charge` of `length`, from `kept` when it holds that length's, which it
+/// holds from then on.
+fn kept_charge(
+    kept: &Cell<Option<(usize, NonZeroU32)>>,
+    length: usize,
+    charge: impl FnOnce(usize) -> NonZeroU32,
+) -> NonZeroU32 {
+    match kept.get() {
+        Some((at, micros)) if at == length => micros,
+        _ => {
+            let micros = charge(length);
+            kept.set(Some((length, micros)));
+            micros
+        }
     }
 }
 
@@ -61,12 +89,16 @@ impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
         }
         Some(AirtimeCandidate {
             key: link.epoch,
-            minimum_micros: self.ceiling.least(ready.length),
+            minimum_micros: kept_charge(&self.least_of, ready.length, |length| {
+                self.ceiling.least(length)
+            }),
         })
     }
 
     fn ceiling(&self, ready: &Ready) -> NonZeroU32 {
-        self.ceiling.ceiling(ready.length)
+        kept_charge(&self.ceiling_of, ready.length, |length| {
+            self.ceiling.ceiling(length)
+        })
     }
 }
 
