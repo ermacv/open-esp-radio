@@ -130,11 +130,16 @@ reinstalls the port in place on the next installation (the network's lent
 units stay counted and rejoin the new ring), and the station's task builds
 the station and its arbiter again on the new tokens, with the configuration
 and callbacks the retired station gives back; no reset follows. A refused
-reinstall is `Failed(Reinstall)`. After an ordinary stop the actor's task
-takes the stopped device's Wi-Fi frontier and membership cell and releases
-the radio. The station's exit is published only after that release, or once
-the stop's drain passed first: a still-active MAC, an unanswered leave, a
-poisoned domain or the passed drain is `ReleaseFailed`, never `Stopped`.
+reinstall is `Failed(Reinstall)`. Before a reinstall or a release the
+actor's task runs the stopped port's cleanup once (`DataPort::clean_stopped`);
+one that did not finish, a group key entry the hardware still holds among
+them, keeps the port stopped with its owners and is `Reinstall(Cleanup)` or
+`ReleaseFailed(Cleanup)`, and nothing runs it again. After an ordinary stop
+the actor's task takes the stopped device's Wi-Fi frontier and membership
+cell and releases the radio. The station's exit is published only after that
+release, or once the stop's drain passed first: a cleanup that did not
+finish, a still-active MAC, an unanswered leave, a poisoned domain or the
+passed drain is `ReleaseFailed`, never `Stopped`.
 Owners a failed step does not return stay quarantined in their static
 backing.
 `StationExit` retains the facade's original typed failure. Its public failure

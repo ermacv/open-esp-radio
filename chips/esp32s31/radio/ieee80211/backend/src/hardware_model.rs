@@ -55,10 +55,10 @@ use oer_chips_esp32s31_hal::{
         MacCcmpKeyIdentity, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
         MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation,
         MacHtTxProgram, MacInterface, MacInterruptEvents, MacInterruptObservation,
-        MacKeyInstallOutcome, MacLegacyTxProgram, MacPti, MacSppMode, MacStaApReceivePlan,
-        MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
-        MacTxPrepareFault, MacTxPrepareRefused, MacTxQueueDetached, MacTxQueueIndex,
-        StaTbttSchedule,
+        MacKeyEntryIndex, MacKeyInstallOutcome, MacLegacyTxProgram, MacPti, MacSppMode,
+        MacStaApReceivePlan, MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome,
+        MacTxDetachReason, MacTxPrepareFault, MacTxPrepareRefused, MacTxQueueDetached,
+        MacTxQueueIndex, StaTbttSchedule,
     },
 };
 use oer_chips_family_platform_interrupt_table::{
@@ -671,11 +671,13 @@ impl CcmpKeyHardware for ModelRegisters {
         self.atoms
             .with(|state| state.keys.retain(|(slot, _)| *slot != index));
     }
-    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
-        Some(
-            self.atoms
-                .with(|state| state.keys.iter().any(|(slot, _)| *slot == index)),
-        )
+    fn ccmp_entry_is_valid(&mut self, index: MacKeyEntryIndex) -> bool {
+        self.atoms.with(|state| {
+            state
+                .keys
+                .iter()
+                .any(|(slot, _)| u32::from(*slot) == index.get())
+        })
     }
 }
 

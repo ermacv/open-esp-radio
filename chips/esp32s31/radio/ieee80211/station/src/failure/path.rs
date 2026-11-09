@@ -127,7 +127,6 @@ impl DiagnosticPath for BackendFault {
                 }
             }
             Self::GroupEntryHeld => path.name("GroupEntryHeld"),
-            Self::GroupEntryUnobservable => path.name("GroupEntryUnobservable"),
         }
     }
 }

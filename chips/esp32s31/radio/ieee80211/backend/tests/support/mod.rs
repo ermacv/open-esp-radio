@@ -1,5 +1,5 @@
 use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
-use oer_chips_esp32s31_hal::types::MacTxPrepareRefused;
+use oer_chips_esp32s31_hal::types::{MacKeyEntryIndex, MacTxPrepareRefused};
 use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::CommitTxDma;
 
 use crate::*;
@@ -320,8 +320,11 @@ impl CcmpKeyHardware for MockMmio {
         }
     }
 
-    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
-        self.ccmp_valid.get(usize::from(index)).copied()
+    fn ccmp_entry_is_valid(&mut self, index: MacKeyEntryIndex) -> bool {
+        usize::try_from(index.get())
+            .ok()
+            .and_then(|index| self.ccmp_valid.get(index))
+            .is_some_and(|valid| *valid)
     }
 }
 

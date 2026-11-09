@@ -56,7 +56,6 @@ pub(crate) fn backend_fault(
         Source::HeAssociationRange => BackendFault::HeAssociationRange,
         Source::GroupReplacement(ended) => BackendFault::GroupReplacement(group_replacement(ended)),
         Source::GroupEntryHeld => BackendFault::GroupEntryHeld,
-        Source::GroupEntryUnobservable => BackendFault::GroupEntryUnobservable,
     }
 }
 

@@ -41,6 +41,13 @@ impl CcmpKeyHardware for Hardware {
         self.occupied = false;
         self.clears += 1;
     }
+
+    fn ccmp_entry_is_valid(
+        &mut self,
+        _index: oer_chips_esp32s31_hal::types::MacKeyEntryIndex,
+    ) -> bool {
+        self.occupied
+    }
 }
 
 #[test]

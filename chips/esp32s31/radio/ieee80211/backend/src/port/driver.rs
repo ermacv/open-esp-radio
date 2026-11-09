@@ -1916,8 +1916,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// registers, the core's command view, the key's place, or after a
     /// cleared read the removal) and wrote nothing.
     /// [`CleanupRefused::Held`]: the clear was issued and the table reads
-    /// the entry valid ([`Fault::GroupEntryHeld`]) or does not say
-    /// ([`Fault::GroupEntryUnobservable`]).
+    /// the entry valid ([`Fault::GroupEntryHeld`]). The read always answers:
+    /// the entry's index lies in the table by its type.
     pub(super) fn clean_retained_group(
         &mut self,
         device: &mut D,
@@ -1955,9 +1955,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 crate::mac::crypto::EntryRead::Cleared => Ok(()),
                 crate::mac::crypto::EntryRead::Held => {
                     Err(CleanupRefused::Held(Fault::GroupEntryHeld))
-                }
-                crate::mac::crypto::EntryRead::Unobservable => {
-                    Err(CleanupRefused::Held(Fault::GroupEntryUnobservable))
                 }
             }
         })();

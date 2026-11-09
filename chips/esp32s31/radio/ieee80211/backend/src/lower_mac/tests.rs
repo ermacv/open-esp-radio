@@ -281,8 +281,15 @@ impl CcmpKeyHardware for Hardware {
         self.cleared_keys.push(index);
     }
 
-    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
-        Some(self.key_entries_stuck || self.installed_keys.iter().any(|(slot, _)| *slot == index))
+    fn ccmp_entry_is_valid(
+        &mut self,
+        index: oer_chips_esp32s31_hal::types::MacKeyEntryIndex,
+    ) -> bool {
+        self.key_entries_stuck
+            || self
+                .installed_keys
+                .iter()
+                .any(|(slot, _)| u32::from(*slot) == index.get())
     }
 }
 

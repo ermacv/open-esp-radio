@@ -420,16 +420,13 @@ pub enum Fault {
     /// A station group key replacement the hardware did not take, by how
     /// it ended.
     GroupReplacement(GroupReplacement),
-    /// The stopped port cleared the station group key entry a failed
-    /// rollback left, once, and the key table still reads the entry valid:
-    /// the replacement's owners stay with the port, its slot not free.
-    /// Each later stopped service reads the table again and writes nothing
-    /// (not recorded: this call's result).
+    /// The stopped port's cleanup cleared the station group key entry a
+    /// failed rollback left, once, and the key table still reads the entry
+    /// valid: the replacement's owners stay with the port, its slot not
+    /// free, the previous key inactive, and the port does not retire. Each
+    /// later cleanup reads the table again and writes nothing (not
+    /// recorded: the cleanup's result, [`CleanupRefused::Held`]).
     GroupEntryHeld,
-    /// The key table does not say whether the station group key entry a
-    /// failed rollback left is cleared: the owners stay as for
-    /// [`Self::GroupEntryHeld`] (not recorded: this call's result).
-    GroupEntryUnobservable,
 }
 
 /// How a station group key replacement the hardware did not take ended.

@@ -8,7 +8,7 @@
 use oer_chips_esp32s31_hal::{
     radio::ieee80211::mac::WifiMacHal,
     system::owner::RadioAccess,
-    types::{MacCcmpKeyIdentity, MacKeyInstallOutcome},
+    types::{MacCcmpKeyIdentity, MacKeyEntryIndex, MacKeyInstallOutcome},
 };
 
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
@@ -19,6 +19,13 @@ use zeroize::Zeroize;
 
 const STA_PAIRWISE_HARDWARE_INDEX: u8 = 4;
 const STA_GROUP_HARDWARE_INDEX: u8 = 1;
+/// The station group key's table entry, which lies in the table by its
+/// type: its read always answers.
+const STA_GROUP_ENTRY: MacKeyEntryIndex =
+    match MacKeyEntryIndex::new(STA_GROUP_HARDWARE_INDEX as u32) {
+        Some(index) => index,
+        None => panic!("the station group key's entry lies in the key table"),
+    };
 // The vendor AP pairwise pool begins at slot 8. Public AP AIDs 1..=15 map to
 // slots 8..=22; the remaining physical entries are not claimed by this API.
 // AP GTK key id one maps to `1 + key_id`, therefore slot 2.
@@ -51,10 +58,9 @@ pub trait CcmpKeyHardware {
     }
     fn clear_ccmp_entry(&mut self, index: u8);
 
-    /// Query one hardware entry when the implementation exposes validity.
-    fn ccmp_entry_is_valid(&mut self, _index: u8) -> Option<bool> {
-        None
-    }
+    /// Whether one hardware entry holds a key. The entry lies in the
+    /// table by its index's type, so every implementation answers.
+    fn ccmp_entry_is_valid(&mut self, index: MacKeyEntryIndex) -> bool;
 }
 
 /// Erase the physical key entries this lower MAC can program. This is the
@@ -100,7 +106,7 @@ impl CcmpKeyHardware for WifiMacHal<'_> {
         WifiMacHal::clear_ccmp_entry(self, index);
     }
 
-    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
+    fn ccmp_entry_is_valid(&mut self, index: MacKeyEntryIndex) -> bool {
         WifiMacHal::ccmp_entry_is_valid(self, index)
     }
 }
@@ -146,7 +152,7 @@ impl CcmpKeyHardware for RadioAccess {
         CcmpKeyHardware::clear_ccmp_entry(&mut self.wifi_mac_hal(), index);
     }
 
-    fn ccmp_entry_is_valid(&mut self, index: u8) -> Option<bool> {
+    fn ccmp_entry_is_valid(&mut self, index: MacKeyEntryIndex) -> bool {
         self.wifi_mac_hal().ccmp_entry_is_valid(index)
     }
 }
@@ -158,8 +164,6 @@ pub enum EntryRead {
     Cleared,
     /// The entry is valid: the table holds a key there.
     Held,
-    /// The table does not say: the entry lies outside it.
-    Unobservable,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -331,10 +335,10 @@ impl StaGroupCcmpSlot {
 
     /// Read, writing nothing, what the key table holds at the slot's entry.
     pub fn read_entry<H: CcmpKeyHardware>(&self, hardware: &mut H) -> EntryRead {
-        match hardware.ccmp_entry_is_valid(STA_GROUP_HARDWARE_INDEX) {
-            Some(false) => EntryRead::Cleared,
-            Some(true) => EntryRead::Held,
-            None => EntryRead::Unobservable,
+        if hardware.ccmp_entry_is_valid(STA_GROUP_ENTRY) {
+            EntryRead::Held
+        } else {
+            EntryRead::Cleared
         }
     }
 }

@@ -75,15 +75,24 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   `RolledBack`): the previous key stands with its identity, and the core
   runs on. A replacement whose rollback fails keeps the command's owners in
   the port with both causes (`RollbackFailed`); the previous key is not
-  live, and the port does not retire. The stopped port's service clears the
-  entry once, ever, and reads it back: cleared, the key's removal (which
-  writes the entry no more) returns the slot and the permission
-  (`KeyRemoved`). Read valid (`GroupEntryHeld`) or not readable
-  (`GroupEntryUnobservable`), or the registers missing, nothing is freed;
-  that is the call's result, not the port's fault, and each later stopped
-  service only reads the table again. Registers missing before the clear
-  write nothing, and the clear waits for the next service. The receive handle retains zeroizing
-  rollback material until removal or reset.
+  live, and the port does not retire. After the confirmed stop the
+  lifecycle owner's cleanup (`DataPort::clean_stopped`) clears the entry
+  once, ever, and reads it back; the stopped port's `service_tx` does not
+  run it. Read cleared: the key's removal (which writes the entry no more)
+  returns the slot and the permission, once (`KeyRemoved`). Read valid:
+  `CleanupRefused::Held(GroupEntryHeld)`, a hold: the slot and the
+  permission stay with the port, the previous key stays inactive, the port
+  does not retire, and each later call of the owner only reads the table
+  again. The read always answers: the entry's index lies in the key table
+  by its type (`MacKeyEntryIndex`). Registers missing before the clear:
+  `CleanupRefused::Unavailable`, nothing written, and the clear waits for
+  the owner's next call. None of these is the port's recorded fault.
+  Nothing repeats the clear, releases the owners on a timeout or resets: a
+  hold that never clears leaves the owner a stopped port with the hold's
+  cause. Running the station on without that slot is not a transition the
+  port offers.
+  The receive handle retains zeroizing rollback material until removal or
+  reset.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole.
 - **HE service.** The lower-MAC port accepts caller-selected HE SU attempts,
