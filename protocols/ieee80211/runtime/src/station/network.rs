@@ -4,9 +4,11 @@
 //! receive buffer to the network ([`DataPort::lend`]) and the frame names
 //! its payload in that buffer. The actor copies an MSDU instead when its
 //! MPDU delivered several (an A-MSDU) or also carried the station's EAPOL,
-//! a copy by the frame's form, or when the port kept the buffer, a copy by
-//! pressure; each copy's mark names which ([`CopyReason`]), and
-//! [`RxMsdusCopied`] counts them.
+//! a copy by the frame's form, or when the port lends nothing (it stops),
+//! a copy by pressure; each copy's mark names which ([`CopyReason`]), and
+//! [`RxMsdusCopied`] counts them. A port at its lend limit makes no copy:
+//! the actor holds the ring back or, past its pressure bound, refuses the
+//! MSDU ([`RxMsdusRefused`](super::RxMsdusRefused)).
 //!
 //! [`DataPort::lend`]: oer_protocols_ieee80211_contracts_port::DataPort::lend
 
@@ -91,9 +93,9 @@ pub struct RxMsdusCopied {
     /// MSDUs of a frame that also carried the station's EAPOL, which the
     /// station takes: copies by form.
     pub shared: u16,
-    /// MSDUs whose buffer the backend kept
-    /// ([`LendRefusal`](oer_protocols_ieee80211_contracts_port::LendRefusal)):
-    /// copies by pressure.
+    /// MSDUs whose buffer a backend that lends nothing kept
+    /// ([`LendRefusal`](oer_protocols_ieee80211_contracts_port::LendRefusal)
+    /// `Unsupported` or `Stopping`): copies by pressure.
     pub kept: u16,
 }
 

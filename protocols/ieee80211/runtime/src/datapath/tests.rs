@@ -725,27 +725,63 @@ fn a_unit_landing_behind_the_queued_handover_is_routed_under_the_link() {
 }
 
 #[test]
-fn the_networks_lend_limit_holds_frames_until_it_returns_one() {
+fn the_networks_lend_limit_holds_frames_until_its_bound_then_the_ring_is_walked() {
     bench(|bench| {
         bench.start();
         bench.connect(link(true, None));
-        for sequence in 0..6 {
+        for sequence in 0..12 {
+            bench
+                .air
+                .receive(&data_from_ap(sequence, &[sequence as u8; 4]), meta());
+        }
+        bench.air.receive(&management(12), meta());
+        bench.settle();
+        // The model lends four units: the fifth waits in order and the rest
+        // in the ring, the station's frame behind them.
+        assert_eq!(bench.air.pending_rx(), 13 - 5);
+        assert!(bench.next().is_none());
+        // The episode reaches its bound: the actor's alarm walks the ring.
+        // The frames the port cannot lend go back to it at once, none
+        // copied, and the station's frame reaches the lifecycle.
+        bench.advance(NETWORK_LATE.as_micros());
+        bench.settle();
+        assert_eq!(bench.air.pending_rx(), 0, "the ring is walked to its end");
+        let Some(FromActor::Received { frame, .. }) = bench.next() else {
+            panic!("the station's frame reaches the lifecycle");
+        };
+        bench.send(ToActor::Recycle(frame));
+        let mut queued = Vec::new();
+        while let Some(frame) = bench.receive.try_receive() {
+            queued.push(frame);
+        }
+        assert_eq!(
+            queued.len(),
+            oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS
+        );
+        assert!(
+            queued
+                .iter()
+                .all(|frame| matches!(frame, Received::Lent(_)))
+        );
+        assert!(
+            bench.events.0.borrow().is_empty(),
+            "no reorder or lane drop"
+        );
+        // The network drops what it took: the loans come back and the next
+        // frames are lent again.
+        drop(queued);
+        for sequence in 13..17 {
             bench
                 .air
                 .receive(&data_from_ap(sequence, &[sequence as u8; 4]), meta());
         }
         bench.settle();
-        // The model lends four units: the others wait in order.
-        let mut lent = Vec::new();
+        let mut again = 0;
         while let Some(frame) = bench.receive.try_receive() {
-            lent.push(frame);
+            assert!(matches!(frame, Received::Lent(_)));
+            again += 1;
         }
-        assert_eq!(lent.len(), 4);
-        // The network returns one: the next frame follows.
-        drop(lent.pop());
-        bench.settle();
-        assert!(bench.receive.try_receive().is_some());
-        assert!(bench.events.0.borrow().is_empty(), "nothing dropped");
+        assert_eq!(again, 4);
     });
 }
 

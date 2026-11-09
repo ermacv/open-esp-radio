@@ -496,6 +496,7 @@ fn full_rx() -> RxCounts {
             dropped_draining: all,
             refused_too_long: all,
             refused_queue_full: all,
+            refused_pressure: all,
             refused_no_network: all,
             copied_aggregated: all,
             copied_kept: all,

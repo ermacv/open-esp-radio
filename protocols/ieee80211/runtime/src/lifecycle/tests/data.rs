@@ -473,9 +473,8 @@ fn without_a_network_a_received_msdu_returns_its_buffer_and_the_stop_ends_normal
                         _ => None,
                     }),
                     [RxMsdusRefused {
-                        too_long: 0,
-                        queue_full: 0,
                         no_network: 1,
+                        ..RxMsdusRefused::default()
                     }]
                 );
                 world.stop().await;

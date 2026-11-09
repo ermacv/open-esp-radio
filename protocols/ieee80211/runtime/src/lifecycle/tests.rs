@@ -71,6 +71,7 @@ mod control;
 mod data;
 mod ends;
 mod keys;
+mod pressure;
 
 const TO: usize = 24;
 const FROM: usize = 64;

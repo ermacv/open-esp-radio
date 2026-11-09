@@ -1079,10 +1079,15 @@ fn a_network_that_feeds_slowly_sends_smaller_aggregates() {
     }
 }
 
+/// A network slower than the access point sets the rate it takes. Its
+/// excess fits the ring, the units held and the lent ones for longer than
+/// the station's pressure bound (`NETWORK_LATE`), so every subframe lands
+/// and is acknowledged, and each bounded episode's walk refuses the excess
+/// at the station, counted as pressure, instead of the ring dropping it
+/// unacknowledged for the access point to send again.
 #[test]
-fn a_network_that_takes_slowly_is_what_binds_and_what_lands_shrinks() {
+fn a_network_that_takes_slowly_is_what_binds_and_the_bound_refuses_the_rest() {
     let full = receive(agreed());
-    let mut last = 0.0;
     for frames in [2, 4, 6, 8] {
         let outcome = run::<16>(Inputs {
             rx_pace: Pace::PerMillisecond(frames),
@@ -1093,17 +1098,14 @@ fn a_network_that_takes_slowly_is_what_binds_and_what_lands_shrinks() {
             near(outcome.rx_mbps(), taken, 0.02),
             "{frames}: {outcome:?}"
         );
-        assert!(outcome.air.ring_drops > 0, "{frames}: {outcome:?}");
-        assert!(outcome.rx_landed() > last, "{frames}: {outcome:?}");
+        assert_eq!(outcome.air.ring_drops, 0, "{frames}: {outcome:?}");
         assert!(
-            outcome.rx_landed() < full.rx_landed(),
+            near(outcome.rx_landed(), full.rx_landed(), 0.001),
             "{frames}: {outcome:?}"
         );
-        // The access point fills its window with what went missing, and the
-        // air stays as busy as ever for less.
-        assert!(outcome.rx_aggregate() > outcome.rx_landed(), "{outcome:?}");
+        assert!(outcome.air.landed > outcome.taken, "{frames}: {outcome:?}");
+        // The air stays as busy as ever for less.
         assert!(outcome.occupancy() > 0.85, "{outcome:?}");
-        last = outcome.rx_landed();
     }
 }
 
@@ -1134,9 +1136,12 @@ fn the_window_binds_a_fast_network_and_the_network_binds_a_window_it_cannot_keep
         near(narrow.rx_mbps(), wide.rx_mbps(), 0.01),
         "{narrow:?} {wide:?}"
     );
-    assert!(
-        wide.air.ring_drops > narrow.air.ring_drops,
-        "a wider window loses more"
+    // Within the pressure bound the ring absorbs either window's excess,
+    // and the bound's walk refuses it at the station.
+    assert_eq!(
+        (narrow.air.ring_drops, wide.air.ring_drops),
+        (0, 0),
+        "{narrow:?} {wide:?}"
     );
     // More ring and more credit only move where the frames wait.
     let deep = run::<16>(Inputs {

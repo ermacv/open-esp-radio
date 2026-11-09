@@ -233,7 +233,18 @@ the settle interval.
   const check holding `CREDIT` to that count. The station marks each copy
   with its reason: by form (an A-MSDU, or an MSDU sharing its frame with the
   EAPOL), which a lending socket takes in a block of its group, or by
-  pressure (no lend room), which it drops. A buffer's loan frees when its
+  pressure (a backend that lends nothing, as when it stops), which it
+  drops. With every lendable buffer out
+  the station stops its pull and the frames wait in the ring, so a slow
+  network paces the peer through unacknowledged ring slots. Such a
+  pressure episode lasts at most the runtime's `NETWORK_LATE` from its
+  first stop, whatever the network returns meanwhile; then the station
+  walks the ring to its end, management, EAPOL and Block Ack frames are
+  served, and an MSDU the port cannot lend is refused, counted as handoff
+  pressure (`RxMsdusRefused::pressure`), its buffer back at once. This
+  removes the software barrier only: a buffer the network holds keeps its
+  descriptor, and the ring rearms in order behind it, so a loan held while
+  the ring comes round still stops reception until it returns. A buffer's loan frees when its
   memory returns, never at a stop; the station's stop confirms once the
   network stopped, without waiting for lent buffers, which rejoin whichever
   ring runs when they drop.

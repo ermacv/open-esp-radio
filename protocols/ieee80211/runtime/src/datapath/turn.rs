@@ -173,6 +173,8 @@ where
             arena,
             self.receive.deadline(),
             self.rx_later,
+            self.held_back
+                .map(|since| since.saturating_add(NETWORK_LATE)),
             stop,
         ]
         .into_iter()
@@ -323,7 +325,9 @@ where
             ready = true;
         }
         if self.receive.has_ready()
-            && (!network.network.takes_frames() || self.port.poll_lend_room(cx).is_ready())
+            && (!network.network.takes_frames()
+                || self.network_late()
+                || self.port.poll_lend_room(cx).is_ready())
         {
             ready = true;
         }

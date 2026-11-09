@@ -565,6 +565,7 @@ mod chip {
             dropped_draining: at(Kind::DroppedDraining),
             refused_too_long: at(Kind::RefusedTooLong),
             refused_queue_full: at(Kind::RefusedQueueFull),
+            refused_pressure: at(Kind::RefusedPressure),
             refused_no_network: at(Kind::RefusedNoNetwork),
             copied_aggregated: at(Kind::CopiedAggregated),
             copied_kept: at(Kind::CopiedKept),

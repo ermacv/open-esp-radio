@@ -434,9 +434,11 @@ pub struct StationRx {
     pub dropped_security: u32,
     pub dropped_draining: u32,
     /// MSDUs not delivered: too long, the full queue to the application,
+    /// pressure on the station's handoff (no lend past the pressure bound),
     /// no network.
     pub refused_too_long: u32,
     pub refused_queue_full: u32,
+    pub refused_pressure: u32,
     pub refused_no_network: u32,
     /// MSDUs copied instead of lent: of a frame with several, or whose
     /// buffer the backend kept.
@@ -531,6 +533,7 @@ impl StationRx {
             refused_queue_full: end
                 .refused_queue_full
                 .wrapping_sub(start.refused_queue_full),
+            refused_pressure: end.refused_pressure.wrapping_sub(start.refused_pressure),
             refused_no_network: end
                 .refused_no_network
                 .wrapping_sub(start.refused_no_network),

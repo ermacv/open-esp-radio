@@ -608,10 +608,13 @@ pub enum StationRxKind {
     AgreementStopped,
     /// A connected RSN input the station dropped.
     RsnInputDropped,
+    /// MSDUs not delivered for pressure on the station's handoff: the
+    /// network held all the port may lend past the pressure bound.
+    RefusedPressure,
 }
 
 impl StationRxKind {
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 32] = [
         Self::DroppedHeader,
         Self::DroppedFrameKind,
         Self::DroppedAddress,
@@ -643,6 +646,7 @@ impl StationRxKind {
         Self::AgreementStarted,
         Self::AgreementStopped,
         Self::RsnInputDropped,
+        Self::RefusedPressure,
     ];
 
     fn from_raw(raw: u32) -> Option<Self> {
@@ -933,6 +937,7 @@ fn service_rx(
         ServiceEvent::RxMsdusRefused(refused) => {
             emit(StationRxKind::RefusedTooLong, refused.too_long.into());
             emit(StationRxKind::RefusedQueueFull, refused.queue_full.into());
+            emit(StationRxKind::RefusedPressure, refused.pressure.into());
             emit(StationRxKind::RefusedNoNetwork, refused.no_network.into());
         }
         ServiceEvent::RxMsdusCopied(copied) => {
@@ -1256,6 +1261,7 @@ mod tests {
         service_rx(
             ServiceEvent::RxMsdusRefused(RxMsdusRefused {
                 queue_full: 3,
+                pressure: 2,
                 ..RxMsdusRefused::default()
             }),
             &mut emit,
@@ -1321,6 +1327,7 @@ mod tests {
                 (DroppedReplay, 1),
                 (RefusedTooLong, 0),
                 (RefusedQueueFull, 3),
+                (RefusedPressure, 2),
                 (RefusedNoNetwork, 0),
                 (CopiedAggregated, 2),
                 (CopiedKept, 1),
