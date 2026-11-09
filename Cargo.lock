@@ -2252,6 +2252,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-scenarios-rx-rebind-load"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-lab-arbiter",
+ "oer-tools-lab-client",
+ "oer-tools-lab-model",
+ "serde_json",
+]
+
+[[package]]
 name = "oer-hil-scenarios-sdk-station"
 version = "0.1.0"
 dependencies = [

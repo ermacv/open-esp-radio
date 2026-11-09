@@ -999,6 +999,8 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/scenarios/sdk-station", Role::Tool),
     ("hil/scenarios/wifi-station", Role::Tool),
     ("hil/scenarios/wifi-load", Role::Tool),
+    // TEMPORARY experiment host program (branch `probe/rx-descriptor-rebind`).
+    ("hil/scenarios/rx-rebind-load", Role::Tool),
 ];
 
 /// Roles fixed before their package exists, with what creates it. When the

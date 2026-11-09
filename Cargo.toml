@@ -10,6 +10,7 @@ members = [
     "hil/probes/esp32s31-facts",
     "hil/probes/esp32s31-rx-chain",
     "hil/probes/esp32s31-rx-rebind",
+    "hil/scenarios/rx-rebind-load",
     "hil/probes/esp32s31-radio",
     "hil/probes/esp32s31-peer-overdue",
     "hil/probes/esp32s31-aes-timing",

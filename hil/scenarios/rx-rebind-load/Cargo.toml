@@ -1,0 +1,18 @@
+[package]
+name = "oer-hil-scenarios-rx-rebind-load"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "TEMPORARY experiment host program: one lease on a board, the router and the air; the router's WPA2 network on channel 13, the laptop's station on it, UDP load over the air while the rx-rebind probe runs"
+
+[dependencies]
+oer-tools-lab-arbiter = { path = "../../../tools/lab/arbiter" }
+oer-tools-lab-client = { path = "../../../tools/lab/client" }
+oer-tools-lab-model = { path = "../../../tools/lab/model" }
+serde_json = "1.0"
+
+[lints]
+workspace = true
