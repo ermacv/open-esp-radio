@@ -144,7 +144,11 @@ the air, shared at least.
   intent under the lease's owner before anything is written, then the
   confirmed or unconfirmed result; an intent the journal refuses writes
   nothing, and an unconfirmed change is never retried. A station's own
-  limits end with the station. The service
+  limits end with the station. A monitor capture needs the router held
+  exclusively: it streams one channel's pcap as the operation's output
+  alone, until the operation stops (`oer-tools-lab-router::monitor`); an
+  output its client does not take ends it, and the bytes refused are
+  reported lost. The service
   probes the equipment it reaches over SSH (the router, the air observer)
   under a lease that holds the router; the host's own radios are probed by
   `cargo stand fixtures` itself and run by their fixture launchers.

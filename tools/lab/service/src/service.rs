@@ -157,6 +157,26 @@ impl Output {
     }
 }
 
+impl Output {
+    /// Queue all of `bytes` for the client, or refuse: a client that is
+    /// gone or reads too slowly takes none of the rest. For a stream a gap
+    /// would corrupt; the refused bytes are counted as lost too.
+    pub fn try_write(&self, bytes: &[u8]) -> Result<(), String> {
+        for chunk in bytes.chunks(oer_tools_lab_client::protocol::MAX_FRAME / 2) {
+            let frame = Frame::Data {
+                operation: self.operation,
+                bytes: chunk.to_vec(),
+            };
+            if let Err(error) = self.outbox.push_data_whole(frame, chunk.len()) {
+                let mut lost = lock(&self.lost);
+                *lost = lost.saturating_add(chunk.len() as u64);
+                return Err(error.to_owned());
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The frames waiting for one connection's writer.
 struct Outbox {
     queue: Mutex<Queue>,
@@ -205,6 +225,22 @@ impl Outbox {
         queue.frames.push_back(frame);
         self.ready.notify_all();
         true
+    }
+
+    /// Queue output within the budget, or say why not: a closed outbox
+    /// has no reader, a full one a slow reader.
+    fn push_data_whole(&self, frame: Frame, length: usize) -> Result<(), &'static str> {
+        let mut queue = lock(&self.queue);
+        if queue.closed {
+            return Err("the client is gone");
+        }
+        if queue.data_bytes.saturating_add(length) > OUTPUT_BUDGET {
+            return Err("the client reads the output too slowly");
+        }
+        queue.data_bytes += length;
+        queue.frames.push_back(frame);
+        self.ready.notify_all();
+        Ok(())
     }
 
     fn close(&self) {

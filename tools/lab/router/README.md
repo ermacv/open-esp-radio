@@ -438,6 +438,18 @@ and one station's own limits and pending airtime from its `aql` file; it
 writes one category's limits into `aql_txq_limit` and confirms them by
 reading back, and restores every category to mac80211's defaults. AQL holds
 frames in mac80211's queue and never drops one.
+`monitor::capture` creates the monitor interface `oercap0` on the AP
+radio's PHY, on one channel, and streams `tcpdump -y IEEE802_11_RADIO -w -`
+into a sink until it cancels. It refuses before any change when an
+interface of that name exists anywhere on the router or the radio's PHY
+has any interface: it takes over nothing it did not create. From the
+creation on, every ending (a failed creation, start or readiness, a
+cancellation, a refused write, the process's own end) stops the process
+by its PID, waits for its exit within 10 s, confirms it gone on the
+router, removes the interface and confirms that on the router; each step
+runs whatever the one before returned and keeps its own result. The pcap
+bytes go to the sink alone; `tcpdump`'s stderr goes into the report or
+the error.
 `station::lease` reads its DHCP address and lifetime from the isolated lease
 file. `station::stream::Capture::start_peer` observes peer-originated ICMP
 requests and DUT replies; a complete capture requires every pair and clean

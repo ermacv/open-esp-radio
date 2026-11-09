@@ -13,6 +13,7 @@ pub mod boards;
 pub mod credentials;
 pub mod hub;
 pub mod mac;
+pub mod monitor;
 pub mod router;
 pub mod ssh;
 pub mod station;

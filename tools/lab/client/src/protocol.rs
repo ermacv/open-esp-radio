@@ -490,6 +490,14 @@ pub enum RouterOperation {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mac: Option<String>,
     },
+    /// Capture `channel`, one the stand file's `[router]` allows, on a
+    /// monitor interface the operation creates on the idle AP radio, until
+    /// the operation stops. The output is the pcap stream alone (radiotap
+    /// headers, link type 127); an output the client does not take ends
+    /// the capture. Every ending stops `tcpdump`, waits for its exit and
+    /// removes the interface. Needs the router held exclusively. Result:
+    /// the router's `monitor::Report`.
+    MonitorCapture { channel: u8 },
 }
 
 #[cfg(test)]
