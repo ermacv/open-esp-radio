@@ -225,7 +225,7 @@ const HT20: [u8; 28] = ht_capability_ie(
     HtLocalCapabilities::new(0, 0, 0xff, 1),
     match Channel::ghz2_4(
         1,
-        oer_protocols_ieee80211_wire::channel::WifiChannelWidth::Mhz20,
+        oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
     ) {
         Ok(channel) => channel,
         Err(_) => panic!("HT20 advertisement geometry"),
@@ -263,7 +263,7 @@ const HT40: [u8; 28] = ht_capability_ie(
     ),
     match Channel::ghz2_4(
         13,
-        oer_protocols_ieee80211_wire::channel::WifiChannelWidth::Mhz40Below,
+        oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Below,
     ) {
         Ok(channel) => channel,
         Err(_) => panic!("HT40 advertisement geometry"),

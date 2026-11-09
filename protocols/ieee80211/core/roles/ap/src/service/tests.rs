@@ -68,7 +68,7 @@ use oer_protocols_ieee80211_core_security_rsn::{
 };
 use oer_protocols_ieee80211_wire::status::status_code;
 use oer_protocols_ieee80211_wire::{
-    channel::WifiChannel,
+    channel::Ghz2_4Channel,
     ht::{ht_capability_ie, ht_peer_capabilities},
 };
 
@@ -155,8 +155,8 @@ fn ht_capabilities() -> ApAssociationCapabilities {
         short_preamble: true,
         ht: ht_peer_capabilities(&ht_capability_ie(
             TEST_HT_CAPABILITIES,
-            oer_protocols_ieee80211_wire::channel::Channel::from_wifi_channel(
-                WifiChannel::mhz20(6).unwrap(),
+            oer_protocols_ieee80211_wire::channel::Channel::from_ghz2_4_channel(
+                Ghz2_4Channel::mhz20(6).unwrap(),
             ),
         )),
         qos_supported: true,

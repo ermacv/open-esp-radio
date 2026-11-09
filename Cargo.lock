@@ -3503,6 +3503,7 @@ name = "oer-tools-lab-router"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "oer-tools-lab-client",
  "oer-tools-lab-model",
  "oer-tools-os-durable",
  "oer-tools-os-process",

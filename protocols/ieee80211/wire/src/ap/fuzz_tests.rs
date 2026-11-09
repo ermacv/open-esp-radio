@@ -108,7 +108,7 @@ fn management_seeds() -> Vec<Vec<u8>> {
     wmm.extend_from_slice(&[221, 6, 0x00, 0x50, 0xf2, 0x01, 1, 0]);
     seeds.push(wmm);
     let channel =
-        crate::channel::Channel::ghz2_4(6, crate::channel::WifiChannelWidth::Mhz40Above).unwrap();
+        crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz40Above).unwrap();
     let mut ht = to_access_point(0x0000, &[0x01, 0, 10, 0]);
     ht.extend_from_slice(&[1, 4, 0x82, 0x84, 0x0c, 0x6c]);
     ht.extend_from_slice(&crate::ht::ht_capability_ie(

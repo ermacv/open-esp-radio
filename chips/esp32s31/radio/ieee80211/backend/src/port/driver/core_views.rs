@@ -160,7 +160,7 @@ pub(in crate::port) fn received<'frame, 'id, Id: SlotIdentity, D: Device<B>, con
 #[inline]
 pub(in crate::port) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
-    channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
+    channel: oer_protocols_ieee80211_wire::channel::Ghz2_4Channel,
     power: Option<D::Power>,
 ) -> Result<(), Fault> {
     match view {

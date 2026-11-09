@@ -826,8 +826,8 @@ impl StackBound {
             for (reason, site, function) in &self.unresolved {
                 let _ = writeln!(
                     out,
-                    "    {reason} at {site:#010x} in {function} (closed by {})",
-                    reason.closed_by()
+                    "    {reason} at {site:#010x} in {function} (needs: {})",
+                    reason.needs()
                 );
             }
         }

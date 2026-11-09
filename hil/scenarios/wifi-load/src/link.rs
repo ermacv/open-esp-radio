@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use oer_hil_services_load::{Link, Rates};
 use oer_tools_hil_harness::{Cx, RouterOperation};
+use oer_tools_lab_client::protocol::station_link::{StationLink, queue};
 use serde_json::{Value, json};
 
 /// One reading of the access point's view of the station; why there is
@@ -58,14 +59,54 @@ fn radio(start: &Value, end: &Value) -> Value {
         .collect()
 }
 
+/// Each reading as the router answered it, whole, or why that read gave
+/// none.
+fn answers(start: &Reading, end: &Reading) -> Value {
+    let answer = |reading: &Reading| match reading {
+        Ok(answer) => json!({ "answer": answer }),
+        Err(error) => json!({ "error": error }),
+    };
+    json!({ "start": answer(start), "end": answer(end) })
+}
+
+/// The access point's queues between readings `start` and `end`
+/// ([`queue::window`]: each change, or why it is invalid, and the
+/// balance); why not, with every reason: a read gave no answer, or its
+/// answer is not this client's station link (an older LAB service's).
+fn queues(start: &Reading, end: &Reading) -> Value {
+    let typed = |name: &str, reading: &Reading| -> Result<StationLink, String> {
+        let answer = reading
+            .as_ref()
+            .map_err(|error| format!("the {name} read gave no answer: {error}"))?;
+        serde_json::from_value(answer.clone())
+            .map_err(|error| format!("the {name} answer is not a station link: {error}"))
+    };
+    match (typed("start", start), typed("end", end)) {
+        (Ok(start), Ok(end)) => serde_json::to_value(queue::window(&start, &end))
+            .unwrap_or_else(|error| json!({ "unavailable": [format!("the window: {error}")] })),
+        (start, end) => {
+            let reasons = [start.err(), end.err()]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
+            json!({ "unavailable": reasons })
+        }
+    }
+}
+
 /// The access point's view between readings `start` and `end`, `span`
 /// apart: its counters' differences, the rates of the last frames each
-/// way, its channel width and the in-use channel's survey; why not, when a
-/// reading is missing.
+/// way, its channel width and the in-use channel's survey, or why not when
+/// a reading is missing; and always both readings whole (`answers`) and
+/// its queues' window (`queues`).
 pub fn router_window(start: &Reading, end: &Reading, span: Duration) -> Value {
+    let answers = answers(start, end);
+    let queues = queues(start, end);
     let (start_view, end_view) = match (start, end) {
         (Ok(start), Ok(end)) => (start, end),
-        (Err(error), _) | (_, Err(error)) => return json!({ "unavailable": error }),
+        (Err(error), _) | (_, Err(error)) => {
+            return json!({ "unavailable": error, "queues": queues, "answers": answers });
+        }
     };
     let d = |path: &[&str]| delta(start_view, end_view, path);
     let busy = d(&["survey", "busy_ms"]).as_u64();
@@ -102,6 +143,8 @@ pub fn router_window(start: &Reading, end: &Reading, span: Duration) -> Value {
             "noise_dbm": at(end_view, &["survey", "noise_dbm"]),
         },
         "radio": radio(start_view, end_view),
+        "queues": queues,
+        "answers": answers,
     })
 }
 
@@ -332,6 +375,115 @@ mod tests {
             SPAN,
         );
         assert_eq!(missing["unavailable"], "the lab router: no station");
+    }
+
+    /// A reading in the client's station link shape: its `tx packets` at
+    /// `at_ms` of the router's clock, in the association of `associated`.
+    fn typed(at_ms: u64, associated: u64, tx_packets: u64) -> Value {
+        serde_json::to_value(StationLink {
+            observed_at_ms: at_ms,
+            associated_at_boottime_ms: Some(associated),
+            rx_bytes: 1,
+            rx_packets: 1,
+            tx_bytes: tx_packets * 1500,
+            tx_packets,
+            tx_retries: 0,
+            tx_failed: 0,
+            rx_drop_misc: None,
+            rx_duration_us: None,
+            tx_duration_us: None,
+            signal_avg_dbm: None,
+            rx_bitrate: None,
+            tx_bitrate: None,
+            channel: Some(13),
+            frequency_mhz: Some(2472),
+            width_mhz: Some(40),
+            survey: None,
+            tid0_aqm_drops: None,
+            station_queues: None,
+            radio_queues: None,
+            radio: std::collections::BTreeMap::new(),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn the_window_keeps_both_answers_whole_and_the_queues_window() {
+        let (start, end) = (typed(10_000, 500, 100), typed(16_000, 500, 4100));
+        let window = router_window(&Ok(start.clone()), &Ok(end.clone()), SPAN);
+        assert_eq!(window["answers"]["start"]["answer"], start);
+        assert_eq!(window["answers"]["end"]["answer"], end);
+        assert_eq!(window["queues"]["association"], "same");
+        assert_eq!(
+            window["queues"]["balance"]["entry"]["valid"]["change"],
+            4000
+        );
+        assert_eq!(
+            window["queues"]["balance"]["entry"]["valid"]["unit"],
+            "packet"
+        );
+        assert!(
+            window["queues"]["balance"]["remainder"]["open"].is_string(),
+            "no queue file: the balance stays open"
+        );
+        assert_eq!(window["to_device"]["packets"], 4000);
+        // Across a router restart the change is invalid with its reason.
+        let restarted = router_window(&Ok(start), &Ok(typed(5000, 500, 4100)), SPAN);
+        assert_eq!(
+            restarted["queues"]["balance"]["entry"]["invalid"],
+            "clock-went-back"
+        );
+    }
+
+    #[test]
+    fn an_older_answer_or_a_failed_read_leaves_the_queues_unavailable_with_its_reason() {
+        // An older LAB service's answer: no clock, no association, no
+        // queues. Nothing is made up for them; the answers stay whole.
+        let old = view(100, 10, 0);
+        let window = router_window(&Ok(old.clone()), &Ok(view(4100, 210, 250)), SPAN);
+        let reasons = window["queues"]["unavailable"].as_array().unwrap();
+        assert_eq!(reasons.len(), 2);
+        assert!(
+            reasons[0]
+                .as_str()
+                .unwrap()
+                .starts_with("the start answer is not a station link"),
+            "{reasons:?}"
+        );
+        assert!(window["queues"].get("balance").is_none());
+        assert_eq!(window["answers"]["start"]["answer"], old);
+        assert_eq!(window["to_device"]["packets"], 4000, "the counters stay");
+        // Each failed read keeps its own error, and the other its answer.
+        let failed = router_window(
+            &Err("the lab router: no station".to_owned()),
+            &Ok(typed(16_000, 500, 4100)),
+            SPAN,
+        );
+        assert_eq!(failed["unavailable"], "the lab router: no station");
+        assert_eq!(
+            failed["answers"]["start"]["error"],
+            "the lab router: no station"
+        );
+        assert_eq!(failed["answers"]["end"]["answer"]["tx_packets"], 4100);
+        assert_eq!(
+            failed["queues"]["unavailable"],
+            json!(["the start read gave no answer: the lab router: no station"])
+        );
+        let both = router_window(&Err("a".to_owned()), &Err("b".to_owned()), SPAN);
+        assert_eq!(
+            both["queues"]["unavailable"],
+            json!([
+                "the start read gave no answer: a",
+                "the end read gave no answer: b"
+            ])
+        );
+        assert_eq!(
+            (
+                &both["answers"]["start"]["error"],
+                &both["answers"]["end"]["error"]
+            ),
+            (&json!("a"), &json!("b"))
+        );
     }
 
     #[test]

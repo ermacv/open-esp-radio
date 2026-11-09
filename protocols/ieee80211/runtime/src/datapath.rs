@@ -200,6 +200,26 @@ pub trait DatapathPort<'id>: Sized + 'id {
     /// Observe a terminal the port gave, before the lifecycle takes it; by
     /// default nothing observes it.
     fn terminal(_terminal: &LowerMacTerminal<'id, Self::Types>) {}
+
+    /// Whether [`Self::returned`] observes the bursts of returned memory:
+    /// without it the actor reads nothing for them.
+    const OBSERVES_RETURNS: bool = false;
+
+    /// Observe one burst of the network's memory the actor gave back
+    /// ([`ReturnBurst`]); called only when [`Self::OBSERVES_RETURNS`].
+    fn returned(_burst: ReturnBurst) {}
+}
+
+/// One burst of the network's memory the actor gave back through the
+/// return queue, ended by one flush: how many it queued, how many the queue
+/// held before and after it, and how many stayed with the actor for want of
+/// room.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReturnBurst {
+    pub queued: usize,
+    pub before: usize,
+    pub after: usize,
+    pub held: usize,
 }
 
 /// A stretch of the actor's work, which it reports at both ends

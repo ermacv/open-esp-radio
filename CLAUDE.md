@@ -188,6 +188,8 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   `oer` with the capabilities it needs (`wifi`, `console`, `group`, …), and
   the pipeline selects the board's chip and links the image for it. Every
   package builds.
+- **Names** of standard mechanisms follow the standard that defines them
+  ([Names of standard mechanisms](docs/architecture.md#names-of-standard-mechanisms)).
 - **HIL.** The HIL core (`protocols/hil`, `tools/hil/link`) only carries
   data and commands between the host and the device under test; it stores
   nothing and knows no scenario, service or stand equipment. A scenario's
@@ -210,6 +212,7 @@ A page never relaxes a rule above: where they differ, the rule above holds.
 | IEEE 802.15.4 pre-bind discard, runtime acknowledgements, secured ACK | [docs/unsafe.md](docs/unsafe.md), [engine](chips/family/radio/ieee802154/engine/README.md) |
 | BLE terminal output release, owned PHY transactions and their quarantine | [docs/unsafe.md](docs/unsafe.md), [HAL](chips/esp32s31/hal/README.md), [PHY](chips/family/radio/phy/README.md) |
 | WT/WTC triggers, `read-observed` and `zero-register-writes` words | [register model](tools/registers/model/README.md) |
+| Runtime-switchable network-core diagnostics, the one exception to zero-cost instrumentation | [Switchable network-core diagnostics](docs/architecture.md#switchable-network-core-diagnostics) |
 
 ## Work
 

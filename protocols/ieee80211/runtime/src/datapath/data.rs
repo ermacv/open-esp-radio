@@ -472,6 +472,13 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) {
         let mut burst = false;
+        // Only an observing port reads the queue for its burst.
+        let before = if D::OBSERVES_RETURNS {
+            TX_DEPTH.saturating_sub(network.returned.free_capacity())
+        } else {
+            0
+        };
+        let mut queued = 0_usize;
         while network.returned.free_capacity() != 0 {
             let Some(memory) = self.data.freed.pop_front() else {
                 break;
@@ -482,6 +489,9 @@ where
                 Ok::<_, core::convert::Infallible>(())
             });
             burst = true;
+            if D::OBSERVES_RETURNS {
+                queued = queued.saturating_add(1);
+            }
             if let Some(memory) = memory {
                 // The room was checked: the queue only keeps it when broken.
                 let _quarantined = core::mem::ManuallyDrop::new(memory);
@@ -489,6 +499,14 @@ where
         }
         if burst {
             network.returned.flush();
+            if D::OBSERVES_RETURNS {
+                D::returned(super::ReturnBurst {
+                    queued,
+                    before,
+                    after: TX_DEPTH.saturating_sub(network.returned.free_capacity()),
+                    held: self.data.freed.len(),
+                });
+            }
         }
     }
 }

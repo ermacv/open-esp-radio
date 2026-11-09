@@ -4,7 +4,7 @@
 use std::sync::atomic::AtomicU64;
 
 use super::*;
-use oer_tools_lab_client::client::{Client, Event};
+use oer_tools_lab_client::client::{Client, Event, ROUTE_BUDGET};
 
 const A: &str = "02:00:00:00:00:0a";
 
@@ -46,21 +46,75 @@ impl Gate {
     }
 }
 
+/// A count of steps one side posts and the other takes, in order; once
+/// released every take returns at once, so a failing test never leaves a
+/// fake waiting.
+#[derive(Default)]
+struct Steps {
+    state: Mutex<(usize, bool)>,
+    changed: Condvar,
+}
+
+impl Steps {
+    fn post(&self) {
+        let mut state = lock(&self.state);
+        state.0 = state.0.saturating_add(1);
+        self.changed.notify_all();
+    }
+
+    fn release(&self) {
+        lock(&self.state).1 = true;
+        self.changed.notify_all();
+    }
+
+    fn take(&self) {
+        let mut state = lock(&self.state);
+        loop {
+            if state.1 {
+                return;
+            }
+            if let Some(rest) = state.0.checked_sub(1) {
+                state.0 = rest;
+                return;
+            }
+            state = self
+                .changed
+                .wait(state)
+                .unwrap_or_else(PoisonError::into_inner);
+        }
+    }
+}
+
+/// Releases its steps however the test leaves.
+struct ReleaseOnDrop<'a>(&'a Steps);
+
+impl Drop for ReleaseOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.release();
+    }
+}
+
 /// Recoveries pass `recovery` and confirm `confirmation`; a `hold`
 /// operation keeps its hardware busy until `hardware` opens, whether or not
 /// it was asked to stop; `wait` runs until it is asked to stop; `echo`
-/// returns its input; `flood` writes `flood` bytes at once. `claims` lists the claims each
-/// operation ran with.
+/// returns its input; `flood` writes `flood` bytes at once; `episodes`
+/// writes [`BURST`] bytes, posts `written` and waits for `go`, [`FLOOD`] in
+/// all. `claims` lists the claims each operation ran with.
 struct Fake {
     recovery: Gate,
     confirmation: Mutex<Confirmation>,
     hardware: Gate,
     recoveries: AtomicU64,
     claims: Mutex<Vec<Vec<Claim>>>,
-    /// What preparing a granted resource returns.
+    /// What preparing a granted resource returns, once `preparation` opens.
     prepared: Mutex<Result<(), String>>,
+    preparation: Gate,
     /// Resources whose recovery leaves them unavailable, emission unknown.
     unavailable: Mutex<Vec<String>>,
+    /// The `episodes` operation posts one after each burst it wrote.
+    written: Steps,
+    /// The `episodes` operation waits for one after each burst.
+    go: Steps,
 }
 
 impl Fake {
@@ -72,12 +126,23 @@ impl Fake {
             recoveries: AtomicU64::new(0),
             claims: Mutex::new(Vec::new()),
             prepared: Mutex::new(Ok(())),
+            preparation: Gate::opened(),
             unavailable: Mutex::new(Vec::new()),
+            written: Steps::default(),
+            go: Steps::default(),
         })
     }
 }
 
 const FLOOD: usize = 4 * OUTPUT_BUDGET;
+/// What the `episodes` operation writes between two steps: exactly what the
+/// service queues and what a client holds for its reader.
+const BURST: usize = OUTPUT_BUDGET;
+const _: () = {
+    if ROUTE_BUDGET != BURST || BURST % 1024 != 0 || FLOOD % BURST != 0 {
+        panic!("a burst must equal both budgets and be written in whole 1024-byte chunks");
+    }
+};
 
 impl Drivers for Fake {
     fn recover(&self, recovery: &Recovery) -> Confirmation {
@@ -109,6 +174,7 @@ impl Drivers for Fake {
     }
 
     fn prepare(&self, _: &str, _: &[Claim]) -> Result<(), String> {
+        self.preparation.pass();
         lock(&self.prepared).clone()
     }
 
@@ -139,6 +205,16 @@ impl Drivers for Fake {
                     io.output.write(&[b'x'; 1024]);
                 }
                 Ok(serde_json::json!("flooded"))
+            }
+            "episodes" => {
+                for _ in 0..FLOOD / BURST {
+                    for _ in 0..BURST / 1024 {
+                        io.output.write(&[b'x'; 1024]);
+                    }
+                    self.written.post();
+                    self.go.take();
+                }
+                Ok(serde_json::json!("episodes"))
             }
             "echo" => {
                 while let Ok(chunk) = io.input.recv() {
@@ -364,26 +440,75 @@ fn a_restart_with_a_lease_held_recovers_its_board_before_the_next_grant() {
 fn a_slow_reader_loses_output_visibly_and_never_holds_the_operation() {
     let directory = tempfile::tempdir().unwrap();
     let fake = Fake::new();
+    let _released = (ReleaseOnDrop(&fake.written), ReleaseOnDrop(&fake.go));
     let service = open(directory.path(), &fake);
     service.wait_until(ready);
     let mut slow = client(&service);
     slow.acquire(request("ann"), &mut |_| {}).unwrap();
-    let mut flood = slow.start(command("flood")).unwrap();
-    // The operation ends before the client read a byte of its output.
-    service.wait_until(|status| status.holders.iter().any(|h| h.operations == 1));
-    service.wait_until(|status| status.holders.iter().all(|h| h.operations == 0));
+    let mut flood = slow.start(command("episodes")).unwrap();
 
-    let (mut received, mut lost, mut finished) = (0usize, 0u64, None);
+    // The operation writes four bursts, each held back until the test lets
+    // the next one go. A burst is a full budget, so the client holds the
+    // first and drops the second while the test reads nothing. A round trip
+    // through the service ends each step: its reply follows the burst on
+    // the one connection, so the client took every frame of the burst
+    // before the reply returned.
+    let (mut received, mut lost, mut reports) = (0usize, 0u64, 0u32);
+    for burst in 0..FLOOD / BURST {
+        fake.written.take();
+        slow.status().unwrap();
+        if burst == 1 {
+            // The loss of the first episode is reported alone: the third
+            // burst is not written until the test read it.
+            loop {
+                match flood.event() {
+                    Event::Output(bytes) => received += bytes.len(),
+                    Event::Lost(bytes) => {
+                        assert_eq!(bytes, BURST as u64);
+                        lost += bytes;
+                        reports += 1;
+                        break;
+                    }
+                    Event::Finished(result) => panic!("finished before a loss: {result:?}"),
+                }
+            }
+            assert_eq!(received, BURST);
+        }
+        fake.go.post();
+    }
+
+    let mut finished = None;
     while finished.is_none() {
         match flood.event() {
             Event::Output(bytes) => received += bytes.len(),
-            Event::Lost(bytes) => lost = bytes,
+            // Every report is a part of the loss, never all of it.
+            Event::Lost(bytes) => {
+                lost += bytes;
+                reports += 1;
+            }
             Event::Finished(result) => finished = Some(result),
         }
     }
-    assert_eq!(finished, Some(Ok(serde_json::json!("flooded"))));
-    assert!(lost > 0);
+    assert_eq!(finished, Some(Ok(serde_json::json!("episodes"))));
+    assert_eq!(reports, 2);
     assert_eq!(received as u64 + lost, FLOOD as u64);
+}
+
+#[test]
+fn output_beyond_the_budget_is_counted_as_lost_and_never_waited_for() {
+    // No writer drains this outbox: the queue holds a budget and the rest
+    // is lost.
+    let outbox = Outbox::new();
+    let output = Output {
+        outbox: outbox.clone(),
+        operation: 1,
+        lost: Arc::new(Mutex::new(0)),
+    };
+    for _ in 0..FLOOD / 1024 {
+        output.write(&[b'x'; 1024]);
+    }
+    assert_eq!(*lock(&output.lost), (FLOOD - OUTPUT_BUDGET) as u64);
+    assert_eq!(lock(&outbox.queue).data_bytes, OUTPUT_BUDGET);
 }
 
 #[test]
@@ -826,14 +951,79 @@ fn the_first_operation_after_a_grant_is_never_refused_as_early() {
     let fake = Fake::new();
     let service = open(directory.path(), &fake);
     service.wait_until(ready);
-    for _ in 0..50 {
-        let mut holder = client(&service);
-        holder.acquire(request("ann"), &mut |_| {}).unwrap();
-        holder
-            .run(command("hold"), &mut std::io::sink(), None)
-            .unwrap();
-        holder.release().unwrap();
+    fake.preparation.close();
+    let opener = OpenOnDrop(&fake.preparation);
+    let granted = service.clone();
+    let holder = std::thread::spawn(move || {
+        let mut holder = client(&granted);
+        holder.acquire(request("ann"), &mut |_| {})?;
+        // The first operation goes out the moment the grant arrives.
+        let result = holder.run(command("hold"), &mut std::io::sink(), None)?;
+        holder.release()?;
+        Ok::<_, String>(result)
+    });
+    // Granted in the scheduler, its client still waits for the preparation.
+    service.wait_until(|status| status.holders.len() == 1);
+    assert!(
+        !holder.is_finished(),
+        "the grant arrived before its preparation"
+    );
+    drop(opener);
+    assert_eq!(holder.join().unwrap(), Ok(serde_json::json!("released")));
+}
+
+/// Opens its gate however the test leaves, so no fake waits for it.
+struct OpenOnDrop<'a>(&'a Gate);
+
+impl Drop for OpenOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.open();
     }
+}
+
+#[test]
+fn a_recovery_releases_its_board_before_the_board_is_offered_again() {
+    use oer_tools_lab_arbiter::readiness::Readiness;
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    let Readiness::Ready { generation } = readiness(&service) else {
+        panic!("the board is not ready");
+    };
+    // The board's first recovery after this one, the first lease's, stops
+    // right after it published its confirmation, until the test lets it
+    // return.
+    let resume = Arc::new(Gate::default());
+    let (stepped, step) = mpsc::channel();
+    let held = resume.clone();
+    let armed = AtomicBool::new(true);
+    *lock(&service.shared.published) = Some(Arc::new(move |recovery: &Recovery| {
+        if recovery.resource == board(A)
+            && recovery.generation > generation
+            && armed.swap(false, Ordering::SeqCst)
+        {
+            let _ = stepped.send(());
+            held.pass();
+        }
+    }));
+    let resumed = OpenOnDrop(&resume);
+
+    let mut first = client(&service);
+    first.acquire(request("ann"), &mut |_| {}).unwrap();
+    first.release().unwrap();
+    // 1. Its confirmation is out and its worker has not returned.
+    step.recv().unwrap();
+    // 2. The confirmation ended the lease and the board is granted again.
+    let mut second = client(&service);
+    second.acquire(request("bob"), &mut |_| {}).unwrap();
+    // 3, 4. The next release finds no earlier recovery holding the board.
+    let released = second.release();
+    drop(resumed);
+    service.wait_until(|status| status.recovering.is_empty());
+    assert_eq!(released, Ok(()));
+    // The end the release heard came with the board's confirmation.
+    assert!(ready(&service.status()));
 }
 
 #[test]
@@ -921,11 +1111,15 @@ fn a_whole_write_is_refused_for_a_gone_or_slow_client_and_counted_lost() {
         lost: lost.clone(),
     };
     assert_eq!(output.try_write(b"pcap"), Ok(()));
-    let chunk = vec![0u8; OUTPUT_BUDGET];
-    let slow = output.try_write(&chunk).unwrap_err();
+    // Three chunks: the first fits beside "pcap", the second is refused
+    // and the third is never offered; both count as lost.
+    let stream = vec![0u8; OUTPUT_BUDGET + OUTPUT_BUDGET / 4];
+    let slow = output.try_write(&stream).unwrap_err();
     assert!(slow.contains("too slowly"), "{slow}");
-    assert_eq!(*lock(&lost), OUTPUT_BUDGET as u64 / 2);
+    assert_eq!(*lock(&lost), (OUTPUT_BUDGET - OUTPUT_BUDGET / 4) as u64);
     outbox.close();
     let gone = output.try_write(b"x").unwrap_err();
     assert!(gone.contains("gone"), "{gone}");
+    // Nobody reads any more: nothing more is lost to a reader.
+    assert_eq!(*lock(&lost), (OUTPUT_BUDGET - OUTPUT_BUDGET / 4) as u64);
 }

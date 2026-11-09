@@ -1,6 +1,6 @@
 //! ESP32-S31 lowering of portable Wi-Fi channel definitions.
 
-use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
+use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 
 /// Exact arguments accepted by the recovered ESP32-S31 PHY channel root.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -9,17 +9,17 @@ pub(crate) struct PhyChannel {
     pub(crate) cbw: u8,
 }
 
-pub(crate) const fn lower_wifi_channel(channel: WifiChannel) -> PhyChannel {
+pub(crate) const fn lower_ghz2_4_channel(channel: Ghz2_4Channel) -> PhyChannel {
     match channel.width() {
-        WifiChannelWidth::Mhz20 => PhyChannel {
+        ChannelWidth::Mhz20 => PhyChannel {
             channel_or_frequency: channel.primary() as u16,
             cbw: 0,
         },
-        WifiChannelWidth::Mhz40Above => PhyChannel {
+        ChannelWidth::Mhz40Above => PhyChannel {
             channel_or_frequency: channel.center_frequency_mhz(),
             cbw: 2,
         },
-        WifiChannelWidth::Mhz40Below => PhyChannel {
+        ChannelWidth::Mhz40Below => PhyChannel {
             channel_or_frequency: channel.center_frequency_mhz(),
             cbw: 3,
         },

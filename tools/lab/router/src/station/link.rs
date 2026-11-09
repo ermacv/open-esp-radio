@@ -1,21 +1,25 @@
-//! The AP's view of one station's link, as its Linux wireless stack reports
-//! it: the station's counters and the rates of its last frames each way
+//! How the router reads the AP's view of one station's link
+//! (`oer_tools_lab_client::protocol::station_link::StationLink`), as its
+//! Linux wireless stack reports it: the station's counters and the rates of its last frames each way
 //! (`iw dev <ap> station get`), the AP's channel and width (`iw dev <ap>
 //! info`), the survey of the channel in use (`iw dev <ap> survey dump`) and
-//! the station's TID 0 queue drops (mac80211's per-station `aqm` debugfs
-//! file) and the radio's own counters (mac80211's `statistics` debugfs
-//! files and mt76's BlockAck misses, when the router has them). Directions
-//! are the AP's: `tx` is what the AP sent the station.
+//! the station's transmit queues per TID (mac80211's per-station `aqm`
+//! debugfs file) and the radio's own queue (the phy's `aqm` file), both
+//! verbatim and typed, and the radio's own counters
+//! (mac80211's `statistics` debugfs files and mt76's BlockAck misses, when
+//! the router has them). Directions are the AP's: `tx` is what the AP sent
+//! the station. Each read carries the router's boot clock just before it.
 //!
 //! The router filters before anything leaves it: the station line that
 //! names the peer, every `info` line but the channel's and every survey
 //! block but the one in use stay there. The host parses the rest; an `iw`
 //! line this parser does not know is ignored, a known one it cannot read
 //! refuses the observation.
+pub mod queue;
 
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use oer_tools_lab_client::protocol::station_link::{Bitrate, RateFormat, StationLink, Survey};
 
 use super::mac_text;
 use crate::{
@@ -24,119 +28,37 @@ use crate::{
     ssh::{Remote, Result},
 };
 
-/// What the AP reports of one station's link at one moment. Counters are
-/// the station's since its association (the survey's since the radio
-/// started); a counter or a value the driver does not report is absent.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct StationLink {
-    /// The station's frames and bytes the AP received and sent.
-    pub rx_bytes: u64,
-    pub rx_packets: u64,
-    pub tx_bytes: u64,
-    pub tx_packets: u64,
-    /// The AP's retransmissions to the station and the frames it gave up.
-    pub tx_retries: u64,
-    pub tx_failed: u64,
-    /// The station's frames the AP dropped after receiving them.
-    pub rx_drop_misc: Option<u64>,
-    /// Air time of the station's frames each way, in microseconds.
-    pub rx_duration_us: Option<u64>,
-    pub tx_duration_us: Option<u64>,
-    /// The averaged signal of the station's frames, in dBm.
-    pub signal_avg_dbm: Option<i32>,
-    /// The rate of the last frame from the station and of the last one to it.
-    pub rx_bitrate: Option<Bitrate>,
-    pub tx_bitrate: Option<Bitrate>,
-    /// The AP's channel, its frequency and its width.
-    pub channel: Option<u8>,
-    pub frequency_mhz: Option<u32>,
-    pub width_mhz: Option<u32>,
-    /// The channel in use's survey.
-    pub survey: Option<Survey>,
-    /// The packets the AP's queue for the station's TID 0 dropped; absent
-    /// without a readable debugfs file.
-    pub tid0_aqm_drops: Option<u64>,
-    /// The radio's counters by the name its driver gives them, not the
-    /// station's: FCS errors, A-MPDUs and the like. Empty on a router
-    /// without them.
-    pub radio: BTreeMap<String, u64>,
-}
-
-/// The survey of the channel in use: the radio's time on it, busy, receiving
-/// (and receiving its own BSS) and transmitting, in milliseconds, and its
-/// noise floor.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Survey {
-    pub frequency_mhz: u32,
-    pub noise_dbm: Option<i32>,
-    pub active_ms: Option<u64>,
-    pub busy_ms: Option<u64>,
-    pub receive_ms: Option<u64>,
-    pub bss_receive_ms: Option<u64>,
-    pub transmit_ms: Option<u64>,
-}
-
-/// The PHY format of a reported rate.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum RateFormat {
-    /// DSSS, CCK or OFDM: no MCS.
-    Legacy,
-    Ht,
-    Vht,
-    He,
-    Eht,
-}
-
-/// One rate as `iw` prints it, and what it names.
-///
-/// SOURCE: iw 6.9 `station.c::parse_bitrate`: the rate in units of
-/// 100 kbit/s as `"%d.%d MBit/s"` (`"(unknown)"` without one), then
-/// ` MCS %d` (HT), ` VHT-MCS %d`, ` HE-MCS %d` or ` EHT-MCS %d`, a width
-/// token other than 20 MHz (` 40MHz`, ` 80MHz`, ` 80P80MHz`, ` 160MHz`,
-/// ` 320MHz`), ` short GI`, and the stream count (` VHT-NSS %d`,
-/// ` HE-NSS %d`, ` EHT-NSS %d`).
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Bitrate {
-    /// The line as `iw` printed it.
-    pub text: String,
-    pub kbit_per_s: Option<u64>,
-    pub format: RateFormat,
-    pub mcs: Option<u8>,
-    /// The spatial streams a VHT, HE or EHT rate names; an HT MCS implies
-    /// its own.
-    pub streams: Option<u8>,
-    pub width_mhz: u32,
-    pub short_gi: bool,
-}
-
 /// Station `target`'s link on the AP `interface`.
 pub fn link(remote: &mut dyn Remote, interface: &str, target: Mac) -> Result<StationLink> {
     parse_link(&remote.run(&script(interface, target)?)?)
 }
 
-/// The router's script: four sections, each after its `[name]` line.
+/// The router's script: its sections, each after its `[name]` line. A
+/// debugfs file is printed whole after a `clock:` line, the boot clock
+/// just before its read.
 fn script(interface: &str, target: Mac) -> Result<String> {
     Ok(format!(
         "set -e\niface={}\nmac={}\n\
+         clock() {{ cut -d ' ' -f 1 /proc/uptime; }}\n\
+         station_clock=$(clock)\n\
          stats=$(iw dev \"$iface\" station get \"$mac\")\n\
          info=$(iw dev \"$iface\" info)\n\
          survey=$(iw dev \"$iface\" survey dump)\n\
          echo '[station]'\n\
          printf '%s\\n' \"$stats\" | grep -v '^Station ' || true\n\
+         echo '[station-clock]'\n\
+         printf '%s\\n' \"$station_clock\"\n\
          echo '[channel]'\n\
          printf '%s\\n' \"$info\" | grep '^[[:space:]]*channel ' || true\n\
          echo '[survey]'\n\
          printf '%s\\n' \"$survey\" | awk '/frequency:/ {{ used = /in use/ }} used'\n\
-         echo '[aqm]'\n\
-         for aqm in /sys/kernel/debug/ieee80211/*/netdev:\"$iface\"/stations/\"$mac\"/aqm; do\n\
-         if test -r \"$aqm\"; then awk '$1 == \"0\" {{ print \"tid0 drops:\", $6 }}' \"$aqm\"; fi\n\
-         done\n\
-         echo '[radio]'\n\
          phy=/sys/kernel/debug/ieee80211/phy$(printf '%s\\n' \"$info\" | awk '$1 == \"wiphy\" {{ print $2 }}')\n\
+         echo '[station-aqm]'\n\
+         aqm=\"$phy/netdev:$iface/stations/$mac/aqm\"\n\
+         if test -r \"$aqm\"; then echo \"clock: $(clock)\"; cat \"$aqm\"; fi\n\
+         echo '[radio-aqm]'\n\
+         if test -r \"$phy/aqm\"; then echo \"clock: $(clock)\"; cat \"$phy/aqm\"; fi\n\
+         echo '[radio]'\n\
          for counter in \"$phy\"/statistics/*; do\n\
          if test -r \"$counter\"; then echo \"${{counter##*/}}: $(cat \"$counter\")\"; fi\n\
          done\n\
@@ -151,8 +73,10 @@ fn script(interface: &str, target: Mac) -> Result<String> {
 struct Sections<'a> {
     station: Vec<&'a str>,
     channel: Vec<&'a str>,
+    station_clock: Vec<&'a str>,
     survey: Vec<&'a str>,
-    aqm: Vec<&'a str>,
+    station_aqm: Vec<&'a str>,
+    radio_aqm: Vec<&'a str>,
     radio: Vec<&'a str>,
 }
 
@@ -163,8 +87,10 @@ fn sections(text: &str) -> Result<Sections<'_>> {
         match line.trim() {
             "[station]" => current = Some(&mut sections.station),
             "[channel]" => current = Some(&mut sections.channel),
+            "[station-clock]" => current = Some(&mut sections.station_clock),
             "[survey]" => current = Some(&mut sections.survey),
-            "[aqm]" => current = Some(&mut sections.aqm),
+            "[station-aqm]" => current = Some(&mut sections.station_aqm),
+            "[radio-aqm]" => current = Some(&mut sections.radio_aqm),
             "[radio]" => current = Some(&mut sections.radio),
             _ => match current.as_mut() {
                 Some(section) => section.push(line),
@@ -202,7 +128,13 @@ fn with_unit<T: std::str::FromStr>(key: &str, value: &str, unit: &str) -> Result
 /// Parse the script's output.
 pub fn parse_link(text: &str) -> Result<StationLink> {
     let sections = sections(text)?;
+    let observed_at_ms = match sections.station_clock.as_slice() {
+        [clock] => queue::parse_clock(clock)?,
+        _ => return Err("the router's link observation has no clock".to_owned()),
+    };
     let mut link = StationLink {
+        observed_at_ms,
+        associated_at_boottime_ms: None,
         rx_bytes: 0,
         rx_packets: 0,
         tx_bytes: 0,
@@ -220,6 +152,8 @@ pub fn parse_link(text: &str) -> Result<StationLink> {
         width_mhz: None,
         survey: None,
         tid0_aqm_drops: None,
+        station_queues: None,
+        radio_queues: None,
         radio: BTreeMap::new(),
     };
     let mut required = [false; 6];
@@ -250,6 +184,9 @@ pub fn parse_link(text: &str) -> Result<StationLink> {
             }
             "rx bitrate" => link.rx_bitrate = Some(parse_bitrate(value)?),
             "tx bitrate" => link.tx_bitrate = Some(parse_bitrate(value)?),
+            "associated at [boottime]" => {
+                link.associated_at_boottime_ms = Some(parse_boottime(value)?);
+            }
             _ => {}
         }
     }
@@ -268,16 +205,41 @@ pub fn parse_link(text: &str) -> Result<StationLink> {
     if !sections.survey.is_empty() {
         link.survey = Some(parse_survey(&sections.survey)?);
     }
-    for (key, value) in pairs(&sections.aqm) {
-        if key == "tid0 drops" {
-            link.tid0_aqm_drops = Some(number(key, value)?);
-        }
-    }
+    link.station_queues = queue::parse_station(&sections.station_aqm)?;
+    link.radio_queues = queue::parse_radio(&sections.radio_aqm)?;
+    link.tid0_aqm_drops = link
+        .station_queues
+        .as_ref()
+        .and_then(|queues| queues.tids.iter().find(|queue| queue.tid == 0))
+        .and_then(|queue| queue.drops)
+        .map(|drops| drops.value);
     // A driver's counters are its own: one that reads no number is not one.
     link.radio = pairs(&sections.radio)
         .filter_map(|(key, value)| Some((key.to_owned(), value.parse().ok()?)))
         .collect();
     Ok(link)
+}
+
+/// `associated at [boottime]`'s seconds with three decimals (`1934.180s`),
+/// in milliseconds.
+///
+/// SOURCE: iw 6.9 `station.c::print_sta_handler`, `"%llu.%.3llus"` of
+/// `NL80211_STA_INFO_ASSOC_AT_BOOTTIME` in seconds and milliseconds.
+fn parse_boottime(value: &str) -> Result<u64> {
+    let invalid = || format!("the router's association time is unreadable: `{value}`");
+    let (seconds, thousandths) = value
+        .strip_suffix('s')
+        .and_then(|value| value.split_once('.'))
+        .ok_or_else(invalid)?;
+    if thousandths.len() != 3 || !thousandths.bytes().all(|digit| digit.is_ascii_digit()) {
+        return Err(invalid());
+    }
+    let seconds = seconds.parse::<u64>().map_err(|_| invalid())?;
+    let thousandths = thousandths.parse::<u64>().map_err(|_| invalid())?;
+    seconds
+        .checked_mul(1000)
+        .and_then(|ms| ms.checked_add(thousandths))
+        .ok_or_else(invalid)
 }
 
 /// `iw dev <ap> info`'s channel line: `channel 13 (2472 MHz), width: 40

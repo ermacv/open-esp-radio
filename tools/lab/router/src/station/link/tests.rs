@@ -46,7 +46,20 @@ fn an_ht40_link_reads_every_counter_both_rates_the_width_and_the_survey() {
             transmit_ms: Some(21_843),
         })
     );
+    assert_eq!(link.observed_at_ms, 1_976_190);
+    assert_eq!(link.associated_at_boottime_ms, Some(1_934_180));
     assert_eq!(link.tid0_aqm_drops, Some(4));
+    let queues = link.station_queues.as_ref().unwrap();
+    assert_eq!(
+        (queues.tids.len(), queues.raw.observed_at_ms),
+        (16, 1_976_210)
+    );
+    assert_eq!(
+        queues.tids[0].tx_packets.map(|packets| packets.value),
+        Some(27_901)
+    );
+    let radio = link.radio_queues.as_ref().unwrap();
+    assert_eq!(radio.values.len(), 9);
     assert_eq!(
         link.radio
             .iter()
@@ -62,15 +75,23 @@ fn an_ht40_link_reads_every_counter_both_rates_the_width_and_the_survey() {
 fn what_the_driver_does_not_report_stays_absent() {
     let text = "[station]\n\trx bytes:\t1\n\trx packets:\t2\n\ttx bytes:\t3\n\
                 \ttx packets:\t4\n\ttx retries:\t0\n\ttx failed:\t0\n\
-                \ttx bitrate:\t(unknown)\n[channel]\n\
+                \ttx bitrate:\t(unknown)\n[station-clock]\n12.00\n[channel]\n\
                 \tchannel 6 (2437 MHz), width: 20 MHz (no HT), center1: 2437 MHz\n\
-                [survey]\n[aqm]\n";
+                [survey]\n[station-aqm]\n[radio-aqm]\n";
     let link = parse_link(text).unwrap();
     assert_eq!(link.tx_bitrate.unwrap().kbit_per_s, None);
     assert_eq!(link.rx_bitrate, None);
     assert_eq!((link.channel, link.width_mhz), (Some(6), Some(20)));
     assert_eq!(
         (link.survey, link.tid0_aqm_drops, link.rx_duration_us),
+        (None, None, None)
+    );
+    assert_eq!(
+        (
+            link.station_queues,
+            link.radio_queues,
+            link.associated_at_boottime_ms
+        ),
         (None, None, None)
     );
 }
@@ -87,7 +108,10 @@ fn a_missing_counter_or_an_unreadable_known_line_refuses_the_observation() {
         complete.replace("2472 MHz [in use]", "2472 MHz"),
         complete.replace("channel 13 (2472 MHz)", "channel x (2472 MHz)"),
         complete.replace("[station]\n", ""),
-        complete.replace("tid0 drops: 4", "tid0 drops: x"),
+        complete.replace("0 2 30280 20 412 4 ", "0 2 30280 20 412 x "),
+        complete.replace("[station-clock]\n1976.19\n", ""),
+        complete.replace("1976.19", "1976.190"),
+        complete.replace("1934.180s", "1934.18s"),
     ] {
         assert!(parse_link(&refused).is_err(), "{refused}");
     }
@@ -163,4 +187,8 @@ fn the_router_reads_only_the_target_station_and_filters_its_identity() {
     assert!(script.contains("iw dev \"$iface\" station get \"$mac\""));
     assert!(script.contains("grep -v '^Station '"));
     assert!(!script.contains("station dump"), "never another peer");
+    assert!(
+        script.contains("stations/$mac/aqm\"\n"),
+        "only the target's queues: {script}"
+    );
 }

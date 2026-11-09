@@ -50,8 +50,8 @@ fn ht20_records_are_complete_and_bounded() {
 
 #[test]
 fn ht40_records_keep_width_geometry_and_peer_facts_coherent() {
-    let above = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz40Above).unwrap();
-    let below = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz40Below).unwrap();
+    let above = crate::channel::Channel::ghz2_4(6, ChannelWidth::Mhz40Above).unwrap();
+    let below = crate::channel::Channel::ghz2_4(6, ChannelWidth::Mhz40Below).unwrap();
     let capability = ht_capability_ie(TEST_HT_CAPABILITIES, above);
     assert_eq!(u16::from_le_bytes([capability[2], capability[3]]), 0x106e);
     assert_eq!(
@@ -64,7 +64,7 @@ fn ht40_records_keep_width_geometry_and_peer_facts_coherent() {
     );
     let peer = ht_peer_capabilities(&capability).unwrap();
     assert!(peer.supports_40_mhz());
-    assert!(peer.supports_short_guard_interval(WifiChannelWidth::Mhz40Above));
+    assert!(peer.supports_short_guard_interval(ChannelWidth::Mhz40Above));
     assert_eq!(peer.highest_rx_mcs(), 7);
     assert!(!peer.supports_ht_duplicate_mcs32());
     assert_eq!(capability[HtDuplicateMcs32::CAPABILITY_IE_BYTE], 0);
@@ -80,7 +80,7 @@ fn named_codes_build_a_disabled_sm_power_save_and_the_longest_aggregate() {
         .with_exponent(HtAmpduParameters::EXPONENT_65535_OCTETS)
         .with_spacing(HtAmpduParameters::SPACING_4_US)
         .to_bytes();
-    let below = crate::channel::Channel::ghz2_4(13, WifiChannelWidth::Mhz40Below).unwrap();
+    let below = crate::channel::Channel::ghz2_4(13, ChannelWidth::Mhz40Below).unwrap();
     let capability = ht_capability_ie(
         HtLocalCapabilities::new(u16::from_le_bytes(info), ampdu, 0xff, 1),
         below,
@@ -98,12 +98,12 @@ fn named_codes_build_a_disabled_sm_power_save_and_the_longest_aggregate() {
             .get(),
         5
     );
-    assert!(peer.supports_short_guard_interval(WifiChannelWidth::Mhz40Below));
+    assert!(peer.supports_short_guard_interval(ChannelWidth::Mhz40Below));
 }
 
 #[test]
 fn peer_mcs32_is_still_parsed_without_local_advertisement() {
-    let channel = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz40Above).unwrap();
+    let channel = crate::channel::Channel::ghz2_4(6, ChannelWidth::Mhz40Above).unwrap();
     let local = ht_capability_ie(TEST_HT_CAPABILITIES, channel);
     let mut peer_record = local;
     HtDuplicateMcs32::new().advertise_receive_only(&mut peer_record);
@@ -148,9 +148,9 @@ fn peer_specific_capability_uses_vendor_ampdu_negotiation() {
 #[test]
 fn local_profile_cannot_override_channel_geometry() {
     for width in [
-        WifiChannelWidth::Mhz20,
-        WifiChannelWidth::Mhz40Above,
-        WifiChannelWidth::Mhz40Below,
+        ChannelWidth::Mhz20,
+        ChannelWidth::Mhz40Above,
+        ChannelWidth::Mhz40Below,
     ] {
         let channel = crate::channel::Channel::ghz2_4(6, width).unwrap();
         let expected = ht_capability_ie(TEST_HT_CAPABILITIES, channel);
@@ -165,8 +165,8 @@ fn local_profile_cannot_override_channel_geometry() {
 }
 
 fn ht_peer_capabilities_never_panics(count: usize) {
-    let above = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz40Above).unwrap();
-    let twenty = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz20).unwrap();
+    let above = crate::channel::Channel::ghz2_4(6, ChannelWidth::Mhz40Above).unwrap();
+    let twenty = crate::channel::Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap();
     let mut mcs32 = ht_capability_ie(TEST_HT_CAPABILITIES, above);
     HtDuplicateMcs32::new().advertise_receive_only(&mut mcs32);
     let mut stream = std::vec![0, 2, b'a', b'p', 1, 1, 0x82];
@@ -181,8 +181,8 @@ fn ht_peer_capabilities_never_panics(count: usize) {
         if let Some(peer) = ht_peer_capabilities(bytes) {
             let _ = peer.supports_40_mhz();
             let _ = peer.supports_greenfield();
-            let _ = peer.supports_short_guard_interval(WifiChannelWidth::Mhz20);
-            let _ = peer.supports_short_guard_interval(WifiChannelWidth::Mhz40Below);
+            let _ = peer.supports_short_guard_interval(ChannelWidth::Mhz20);
+            let _ = peer.supports_short_guard_interval(ChannelWidth::Mhz40Below);
             let _ = peer.ampdu_parameters();
             let _ = peer.ht_duplicate_mcs32();
             let _ = peer.highest_rx_mcs();
@@ -206,7 +206,7 @@ fn ht_peer_capabilities_never_panics_on_received_bytes_full() {
 fn a_zero_receive_mcs_bitmap_is_refused() {
     // `highest_rx_mcs` expects a nonzero MCS bitmap: the parser, its only
     // constructor, refuses a zero one.
-    let channel = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz20).unwrap();
+    let channel = crate::channel::Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap();
     let mut record = ht_capability_ie(TEST_HT_CAPABILITIES, channel);
     assert!(ht_peer_capabilities(&record).is_some());
     record[5] = 0;
@@ -215,7 +215,7 @@ fn a_zero_receive_mcs_bitmap_is_refused() {
 
 #[test]
 fn the_highest_receive_mcs_is_the_top_bit_of_the_bitmap() {
-    let channel = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz20).unwrap();
+    let channel = crate::channel::Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap();
     let mut record = ht_capability_ie(TEST_HT_CAPABILITIES, channel);
     for (bitmap, highest) in [(0x01, 0), (0x0f, 3), (0x10, 4), (0x80, 7)] {
         record[5] = bitmap;

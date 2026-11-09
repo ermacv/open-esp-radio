@@ -2,8 +2,8 @@
 
 use oer_hil_services_load::{
     Collect, CollectAddba, CollectCounters, CollectHart1, CollectLink, CollectMac, CollectNetwork,
-    CollectParts, CollectPositions, CollectSamples, CollectStall, CollectStallMac, CollectTracking,
-    LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US,
+    CollectParts, CollectPositions, CollectProfile, CollectSamples, CollectStall, CollectStallMac,
+    CollectTracking, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US,
     MIN_SAMPLE_PERIOD_US, Request, Start, Started, header,
 };
 
@@ -55,6 +55,10 @@ pub(crate) enum Kept {
     StallMac,
     Network,
     Addba,
+    /// Page `page` of the turn profile.
+    Profile {
+        page: u8,
+    },
     /// Hart `hart`'s samples from the one numbered `from`.
     Samples {
         from: u16,
@@ -110,6 +114,9 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
             collect(phase, run, Kept::Network)
         }
         (phase, Request::CollectAddba(CollectAddba { run })) => collect(phase, run, Kept::Addba),
+        (phase, Request::CollectProfile(CollectProfile { run, page })) => {
+            collect(phase, run, Kept::Profile { page })
+        }
     }
 }
 
@@ -281,7 +288,7 @@ mod tests {
     #[test]
     fn a_collect_answers_running_then_what_its_own_run_kept_only() {
         type Asks = fn(u32) -> Request;
-        let requests: [(Kept, Asks); 13] = [
+        let requests: [(Kept, Asks); 14] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
             (Kept::Parts { from: 12 }, |run| {
                 Request::CollectParts(CollectParts { run, from: 12 })
@@ -318,6 +325,9 @@ mod tests {
             }),
             (Kept::Addba, |run| {
                 Request::CollectAddba(CollectAddba { run })
+            }),
+            (Kept::Profile { page: 2 }, |run| {
+                Request::CollectProfile(CollectProfile { run, page: 2 })
             }),
         ];
         for (kind, collect) in requests {

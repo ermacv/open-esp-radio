@@ -99,7 +99,7 @@ use oer_protocols_ieee80211_runtime::{
 };
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, IndividualAddress, OwnAddress},
-    channel::{WifiChannel, WifiChannelWidth},
+    channel::Ghz2_4Channel,
     security::LinkProtection,
     station::StaDataHeaderTemplate,
 };
@@ -768,8 +768,8 @@ struct Bench<'b, 's, T: 'static> {
     start_took: Duration,
 }
 
-fn channel() -> WifiChannel {
-    WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap()
+fn channel() -> Ghz2_4Channel {
+    Ghz2_4Channel::new(6, ChannelWidth::Mhz20).unwrap()
 }
 
 fn domain() -> RegulatoryDomain {

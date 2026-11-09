@@ -15,6 +15,7 @@ use oer_portable_memory::{ExternalRxBuffer, ExternalRxReturnState};
 
 use crate::radio::ieee80211::dma::{
     descriptor::RxDescriptor,
+    ring_index::RingIndex,
     rx_dma::{RxDescriptorAddresses, RxDma},
     rx_ring::{
         RecycleGrant, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
@@ -63,18 +64,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         self.descriptor.index()
     }
 
-    #[allow(
-        unsafe_code,
-        reason = "completed descriptor token retains the live ring"
-    )]
     pub fn segment(&self) -> RxSegment<'_> {
-        // SAFETY: the unforgeable descriptor token retains the live ring's
-        // mutable borrow, and `validate_live_ring` matched this buffer arena
-        // to that ring before transferring completion ownership.
-        let binding = unsafe { BoundBuffers::completed(self.buffer, self.index(), self) };
-        let buffer = with_bound_buffers(binding, |ring, buffers| {
-            buffers.completed_bytes(ring.read_grant())
-        });
+        // The token holds its one descriptor, bound to `buffer` at its take.
+        let buffer = lend_held(self, self.buffer, self.index());
         RxSegment {
             descriptor_address: self.descriptor.descriptor_address(),
             descriptor_word0: self.descriptor.word0(),
@@ -84,10 +76,94 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
     }
 }
 
+/// An owner of completed descriptors in this module: it took them from a
+/// live ring and retains that ring's mutable borrow for as long as it can be
+/// borrowed, so none of them is recycled, rearmed or released to the walker
+/// meanwhile (a unit moves its loan out only in the consuming
+/// [`RxDmaCompletedUnit::retain_discard`]). Private: only the two completion
+/// owners implement it.
+trait CompletionOwner {}
+
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> CompletionOwner
+    for RxDmaCompletedDescriptor<'_, '_, COUNT, BUFFER_SIZE, STORAGE_SIZE>
+{
+}
+
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
+    CompletionOwner for RxDmaCompletedUnit<'_, '_, '_, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
+{
+}
+
+/// The completed-read projection of descriptor `index`, lent by `owner` for
+/// the borrow `'a`.
+///
+/// Its only callers are the owners' own read methods, each passing a
+/// descriptor it holds and that descriptor's bound `buffer`.
+#[allow(
+    unsafe_code,
+    reason = "a retained completion owner lends a descriptor it holds"
+)]
+fn lend_held<'a, O: CompletionOwner, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
+    owner: &'a O,
+    buffer: &'a RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
+    index: usize,
+) -> &'a [u8; BUFFER_SIZE] {
+    // SAFETY: `owner` is a completion owner (`CompletionOwner`), borrowed
+    // for `'a`: it retains the live ring's mutable borrow, so DMA has
+    // released descriptor `index` and nothing rearms it while the bytes
+    // live. Its caller passes a descriptor that owner holds, with the
+    // descriptor's bound allocation, which `validate_live_ring` matched to
+    // that ring before the take transferred completion ownership.
+    let binding = unsafe { BoundBuffers::completed(buffer, index, owner) };
+    with_bound_buffers(binding, |ring, buffers| {
+        buffers.completed_bytes(ring.read_grant())
+    })
+}
+
+/// One step of a completed unit, lent by [`RxDmaCompletedUnit::step`]: the
+/// bytes of one of its descriptors, bounded by that descriptor's length.
+#[derive(Clone, Copy, Debug)]
+pub struct RxUnitStep<'a> {
+    bytes: &'a [u8],
+    descriptor_index: usize,
+    descriptor_word0: WifiRxDmaDescriptorControl,
+}
+
+impl<'a> RxUnitStep<'a> {
+    /// The step's received bytes, as many as its descriptor's length.
+    pub const fn bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+
+    /// The ring index of the step's descriptor.
+    pub const fn descriptor_index(&self) -> usize {
+        self.descriptor_index
+    }
+
+    /// The step descriptor's own word, as the walker completed it.
+    pub const fn descriptor_word0(&self) -> WifiRxDmaDescriptorControl {
+        self.descriptor_word0
+    }
+}
+
+/// Why a completed unit lends no view of one step. The unit keeps every
+/// descriptor it holds on each refusal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RxUnitStepError {
+    /// The step is not below the unit's descriptor count.
+    Step,
+    /// The step descriptor's length exceeds its buffer.
+    Length,
+    /// The step descriptor's `RX_DONE` contradicts its place in the unit:
+    /// set before the last step, or clear on it.
+    Terminal,
+}
+
 /// Read and recycle authority for one complete, possibly chained RX unit.
 ///
 /// The token retains the unique live-ring borrow until the complete copy is
-/// finished and [`recycle`](Self::recycle) consumes it.
+/// finished and [`recycle`](Self::recycle) consumes it. Each step's bytes are
+/// lent by [`step`](Self::step), borrowed from the token.
 pub struct RxDmaCompletedUnit<
     'storage,
     'owner,
@@ -229,6 +305,67 @@ impl<
 
     pub const fn metadata(&self) -> &RxCompletedUnit {
         &self.unit
+    }
+
+    /// A view of step `step` of this unit: the bytes of the descriptor
+    /// `step` places after its head, wrapping past the ring's end, bounded by
+    /// the length in that descriptor's own completed word, which is read now
+    /// and checked before the bytes are sliced.
+    ///
+    /// The view borrows this unit, so the unit cannot be recycled, detached
+    /// or retained for a later recycle while it lives:
+    ///
+    /// ```compile_fail,E0505
+    /// use oer_chips_esp32s31_hal::radio::ieee80211::dma::{
+    ///     rx_dma::RxDma, rx_storage::RxDmaCompletedUnit,
+    /// };
+    /// fn recycle_under_a_view(unit: RxDmaCompletedUnit<'_, '_, '_, 4, 16, 16>, mmio: &mut impl RxDma) {
+    ///     let Ok(view) = unit.step(0) else { return };
+    ///     let _ = unit.recycle(mmio);
+    ///     let _ = view.bytes();
+    /// }
+    /// ```
+    ///
+    /// A view takes nothing: the ring's observed descriptors and this unit's
+    /// ownership stay as they are, and a step reads again as often as asked.
+    ///
+    /// # Errors
+    ///
+    /// `step` is not a step of this unit, or its descriptor's word
+    /// contradicts the unit ([`RxUnitStepError`]); the unit keeps its
+    /// descriptors.
+    pub fn step(&self, step: usize) -> Result<RxUnitStep<'_>, RxUnitStepError> {
+        let count = self.unit.descriptor_count();
+        if step >= count {
+            return Err(RxUnitStepError::Step);
+        }
+        let index = RingIndex::<COUNT>::checked(self.unit.head_index())
+            .ok_or(RxUnitStepError::Step)?
+            .advance(step)
+            .get();
+        let word0 = self
+            .storage
+            .descriptors()
+            .get(index)
+            .ok_or(RxUnitStepError::Step)?
+            .word0();
+        // The take ended the unit at its first terminal.
+        if word0.rx_done() != (count.checked_sub(1) == Some(step)) {
+            return Err(RxUnitStepError::Terminal);
+        }
+        let buffer = self
+            .storage
+            .buffer_for_descriptor(index)
+            .ok_or(RxUnitStepError::Step)?;
+        // The unit holds every descriptor from its head through its count.
+        let bytes = lend_held(self, buffer, index)
+            .get(..usize::from(word0.length()))
+            .ok_or(RxUnitStepError::Length)?;
+        Ok(RxUnitStep {
+            bytes,
+            descriptor_index: index,
+            descriptor_word0: word0,
+        })
     }
 
     pub fn recycle<M: RxDma>(

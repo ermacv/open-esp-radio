@@ -20,7 +20,7 @@
 //!
 //! Bounds fail closed: a root has a number only when nothing it reaches is
 //! unresolved. Otherwise [`Bound::reasons`] counts what is, by reason, and
-//! [`Reason`] names the stage that closes it.
+//! [`Reason::needs`] names the proof that would close it.
 
 #![forbid(unsafe_code)]
 
@@ -241,17 +241,40 @@ pub enum Reason {
 }
 
 impl Reason {
-    /// The stage of the stack analysis that resolves this reason.
-    pub fn closed_by(self) -> &'static str {
+    /// The proof that would resolve a site or function of this reason under
+    /// the analysis's rules. It is a hint for the reader, not a status: the
+    /// site stays unresolved, and the hint names no stage that will close it.
+    pub fn needs(self) -> &'static str {
         match self {
-            Reason::StackSlotCall => "2: MIR call facts",
-            Reason::LoadedCall | Reason::RegisterCall => "2: MIR call facts",
-            Reason::IndirectJump => "2: MIR call facts",
-            Reason::OutsideImage => "1c: ROM companion",
-            Reason::IntoFunction => "review",
-            Reason::Unframed => "1c: assembly frames",
-            Reason::Recursion => "a reviewed recursion bound",
-            Reason::NoCandidate => "2: MIR call facts",
+            Reason::StackSlotCall => {
+                "known targets in the frame slot on every path, kept across the calls between \
+                 its store and the call"
+            }
+            Reason::LoadedCall => {
+                "a read-only table with a constant base and an exact length, known values of \
+                 the loaded word on every path, the waker vtable census, or a static field's \
+                 function type"
+            }
+            Reason::RegisterCall => "known values in the target register on every path",
+            Reason::IndirectJump => {
+                "a table of exact length (a bounds check, a mask or a read-only object), or \
+                 known targets on every path"
+            }
+            Reason::OutsideImage => "the target's code analysed as a companion executable (ROM)",
+            Reason::IntoFunction => {
+                "a function entry at the target address; no rule bounds a transfer into a \
+                 function's middle"
+            }
+            Reason::Unframed => {
+                "a `.stack_sizes` record, or a complete control-flow graph for an observed frame"
+            }
+            Reason::Recursion => {
+                "a proof that each direct self-call reaches no further self-call; indirect and \
+                 mutual recursion have no rule"
+            }
+            Reason::NoCandidate => {
+                "a fact that names at least one target, or a proof that the site reaches none"
+            }
         }
     }
 }

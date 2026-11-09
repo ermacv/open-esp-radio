@@ -182,8 +182,9 @@ only from another hart, and is refused for it, never handed an old value as
 new.
 
 The sink lent to `run` hears the core's drops and the service's `ServiceEvent`s:
-each request a turn takes by kind, each socket whose lane still holds requests once
-the turn took its budget of them, a full intake, each frame the port accepts, how
+each turn's beginning, each request it takes by kind, each received frame it takes
+in, each socket whose lane still holds requests once the turn took its budget of
+them, a full intake, each notice it hands the policy, each frame the port accepts, how
 publishing ended, what was free when the turn ended, and whether the pass after it
 yielded or waited. The sink counts; the service keeps nothing and reads no clock for
 it. A disabled sink, `()` among them, hears nothing and builds no event.

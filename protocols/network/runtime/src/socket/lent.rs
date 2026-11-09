@@ -35,6 +35,12 @@ impl Returns {
         }
     }
 
+    /// Out of line, so its wake keeps its own `Waker::wake` debug scope and
+    /// the image's stack proof resolves it, as the service's `closed` and the
+    /// station's same-hart return do: a caller that drops a [`Lent`] on
+    /// several paths (each `or_else` of [`LendingSocket::take`]) can
+    /// otherwise merge their inlined wakes into one block without that scope.
+    #[inline(never)]
     fn give(&self) {
         // At most a socket's credit is out, far below the word's range.
         self.back.fetch_add(1, Ordering::AcqRel);

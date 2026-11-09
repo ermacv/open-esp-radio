@@ -1374,6 +1374,26 @@ its model and conformance case.
   network-time calculations stay in the core; wire codecs write ready IE
   values. Configuration is admitted in any radio state.
 
+### Names of standard mechanisms
+
+- A mechanism or format defined by a standard is named after that
+  standard's term. Inside a protocol crate the crate already names the
+  standard: `protocols/ieee80211` says `Ssid`, `AccessCategory`,
+  `UserPriority`, not `Ieee80211Ssid`.
+- A Wi-Fi Alliance name stays where the code implements exactly a WFA
+  format, profile or policy (a WMM element, WPA2 and WPA3 profiles), also
+  inside sans-IO crates. A WFA profile name never stands for a general
+  mechanism, and a rename never suggests wider support than is implemented.
+- A mapping taken from another standard is named after that one: the DSCP
+  classification follows RFC 8325, not IEEE 802.11.
+- `wifi` stays in the product API (`oer::wifi`) and in the exact names of
+  vendor hardware blocks. Symbols quoted in a `SOURCE:` stay verbatim.
+- Generations in protocol code are named by their PHY mechanism: HT, VHT,
+  HE, EHT.
+- A rename keeps the type's guarantees (a closed value set stays closed),
+  numeric codes and record formats, and migrates every consumer of the name
+  in the same change.
+
 ## Instrumentation and probes
 
 A protocol owner reports what it decided to the sink its caller lends one
@@ -1436,6 +1456,25 @@ A comparison probe's observation needs do not justify generalizing driver
 attachment, lifecycle or retirement APIs. Bluetooth retains the concrete
 `ChipGate` for these paths; the additional typed register access stays on
 the existing HAL owner.
+
+### Switchable network-core diagnostics
+
+One narrow exception to zero-cost instrumentation exists: the network core's
+diagnostics in the product image (Queued egress with Lending reception), which
+are switched on, off and reset at runtime without a rebuild. It covers the
+agreed counters only: work done through readiness indices and full candidate
+collections; transmit-plan continuations and stop reasons; returns processed
+and credits restored; loans out and published but unprocessed returns at a
+`no_credit` refusal; and the time split of the core's main stages.
+
+- Diagnostics are off by default.
+- Off, the core reads no clock and updates no diagnostic counter; the cost
+  that remains (the enable check and any call it guards) is stated beside the
+  counters.
+- On, the work is bounded and never changes a decision of the core.
+- Shared code instantiated with the `()` sink or the `Noop` observer still
+  leaves no instrumentation code; the exception does not extend to it or to
+  any other subsystem.
 
 ## Tools
 

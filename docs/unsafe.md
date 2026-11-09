@@ -581,6 +581,10 @@ no per-frame branch. Grants and scoped receivers add no persistent state.
 The retained single-descriptor read keeps its already validated buffer pointer;
 other reads use the descriptor binding. Read grants cannot authorize rearm.
 One unsafe read-binding constructor retains the completion owner's loan.
+A completed descriptor and a completed unit lend bytes through one private
+projection; a unit's step view borrows the unit, selects the buffer by the
+descriptor binding, takes its length from that descriptor's own word and
+neither takes nor observes a descriptor.
 Detachment consumes the completed owner inside the byte core.
 The completed byte-cell view, detached-buffer handoff and two sharing
 implementations form the memory boundary. Completion observations precede

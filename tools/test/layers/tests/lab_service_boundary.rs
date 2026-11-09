@@ -1,5 +1,6 @@
 //! The stand's clients reach its hardware only through the LAB service:
-//! `cargo fw`, `cargo hil`, `cargo stand` and the HIL harness build against
+//! `cargo fw`, `cargo hil`, `cargo stand`, the HIL harness and the HIL
+//! scenarios that read the service's answers build against
 //! its protocol and client (`oer-tools-lab-client`), never against the service,
 //! the board drivers or the router's SSH, directly or through another crate.
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,12 +12,13 @@ const IMPLEMENTATION: [&str; 3] = [
     "oer-tools-lab-router",
 ];
 /// The service's clients.
-const CLIENTS: [&str; 5] = [
+const CLIENTS: [&str; 6] = [
     "oer-tools-lab-client",
     "oer-tools-hil-harness",
     "oer-tools-hil-cli",
     "oer-tools-image-cli",
     "oer-tools-lab-cli",
+    "oer-hil-scenarios-wifi-load",
 ];
 
 /// Every package of `Cargo.lock` with the names of its dependencies.

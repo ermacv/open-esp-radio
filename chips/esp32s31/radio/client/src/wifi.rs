@@ -16,7 +16,7 @@ use oer_chips_esp32s31_hal::radio::ieee80211::init::{
     MacCoexPti, MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
 use oer_chips_esp32s31_radio_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
-use oer_protocols_ieee80211_wire::channel::WifiChannel;
+use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
 
 use crate::{Client, PhyPreparation, sealed};
@@ -83,7 +83,7 @@ pub struct WifiJoined {
 /// `track`: the clocked client and the MAC bring-up inputs.
 pub struct WifiTrack {
     pub wifi: WifiClocked,
-    pub channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+    pub channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>>,
     pub tx_ceiling: TxCeiling,
     pub mac: MacColdStartConfig,
     pub slow_clock: MacSlowClockCalibration,
@@ -123,7 +123,7 @@ pub struct WifiLeft {
 /// A channel transaction with the Wi-Fi runtime completely stopped.
 pub struct WifiRetune {
     pub wifi: WifiClocked,
-    pub channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+    pub channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>>,
     pub tx_ceiling: TxCeiling,
 }
 

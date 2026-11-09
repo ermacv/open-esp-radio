@@ -6,8 +6,8 @@ use oer_protocols_ieee80211_core_arbiter::interface::{VifId, VirtualInterface};
 use oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
 use oer_protocols_ieee80211_wire::channel::ChannelWidth;
 
-fn channel() -> WifiChannel {
-    WifiChannel::new_2_4_ghz(1, ChannelWidth::Mhz20).unwrap()
+fn channel() -> Ghz2_4Channel {
+    Ghz2_4Channel::new(1, ChannelWidth::Mhz20).unwrap()
 }
 
 fn peer(last: u8, key: u8) -> EspNowEncryptedPeerConfig {

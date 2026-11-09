@@ -531,6 +531,11 @@ const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::N
 pub(crate) struct Turns {
     start: oer_hil_services_load::NetworkTurns,
     window: oer_hil_services_load::NetworkTurns,
+    /// The turn profile and the station's return bursts, likewise.
+    profile_start: oer::observe::profile::TurnProfile,
+    profile_window: oer::observe::profile::TurnProfile,
+    returns_start: oer::observe::profile::Returns,
+    returns_window: oer::observe::profile::Returns,
 }
 
 /// The one place of the turns.
@@ -539,7 +544,111 @@ pub(crate) static TURNS: static_cell::ConstStaticCell<Turns> =
     static_cell::ConstStaticCell::new(Turns {
         start: TURNS_NONE,
         window: TURNS_NONE,
+        profile_start: PROFILE_NONE,
+        profile_window: PROFILE_NONE,
+        returns_start: RETURNS_NONE,
+        returns_window: RETURNS_NONE,
     });
+
+#[cfg(target_arch = "riscv32")]
+const PROFILE_NONE: oer::observe::profile::TurnProfile = {
+    use oer::observe::profile::*;
+    TurnProfile {
+        moments: [0; MOMENTS],
+        empty: [0; 3],
+        idle: [0; 2],
+        gaps: [[0; 2]; GAPS],
+        cycles_by_log2: [0; CYCLE_BINS],
+        receive_only: [[0; 3]; ITEM_CELLS],
+        transmit_only: [[0; 3]; ITEM_CELLS],
+        notice_only: [[0; 3]; NOTICE_CELLS],
+        notices_by_turn: [0; NOTICE_BINS],
+        frames_by_turn: [0; FRAME_BINS],
+        settling: [0; 3],
+    }
+};
+
+#[cfg(target_arch = "riscv32")]
+const RETURNS_NONE: oer::observe::profile::Returns = {
+    use oer::observe::profile::*;
+    Returns {
+        bursts: 0,
+        queued: 0,
+        queued_by_burst: [0; BURST_BINS],
+        before_by_burst: [0; OCCUPANCY_BINS],
+        after_by_burst: [0; OCCUPANCY_BINS],
+        held_bursts: 0,
+        held: 0,
+    }
+};
+
+// The load service carries the library's profile as the library counts it.
+#[cfg(target_arch = "riscv32")]
+const _: () = {
+    use oer::observe::profile as library;
+    use oer_hil_services_load as service;
+    if library::VARIABLES != service::PROFILE_VARIABLES
+        || library::MOMENTS != service::PROFILE_MOMENTS
+        || library::GAPS != service::PROFILE_GAPS
+        || library::CYCLE_BINS != service::PROFILE_CYCLE_BINS
+        || library::ITEM_CELLS != service::PROFILE_ITEM_CELLS
+        || library::NOTICE_CELLS != service::PROFILE_NOTICE_CELLS
+        || library::NOTICE_BINS != service::PROFILE_NOTICE_BINS
+        || library::FRAME_BINS != service::PROFILE_FRAME_BINS
+        || library::BURST_BINS != service::RETURN_BURST_BINS
+        || library::OCCUPANCY_BINS != service::RETURN_OCCUPANCY_BINS
+    {
+        panic!("the load service's profile has the library's geometry");
+    }
+};
+
+/// Page `page` of the last closed window's profile: none before one closed.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn profile_page(net: &Network, page: u8) -> oer_hil_services_load::ProfileCollected {
+    use oer_hil_services_load::{
+        LoadError, ProfileCollected, ReturnBursts, TurnCell, TurnCells, TurnMoments, TurnSpread,
+    };
+    let count = |value: u64| u32::try_from(value).unwrap_or(u32::MAX);
+    let cell = |[turns, cycles, items]: [u64; 3]| TurnCell {
+        turns: count(turns),
+        cycles,
+        items: count(items),
+    };
+    let window = net.turns(|turns| Some((turns.profile_window, turns.returns_window)));
+    let Some((profile, returns)) = window else {
+        return ProfileCollected::Refused(LoadError::UnknownRun);
+    };
+    match page {
+        0 => ProfileCollected::Moments(TurnMoments {
+            available: cfg!(oer_trace),
+            moments: profile.moments,
+            empty: profile.empty,
+            idle: profile.idle,
+            gaps: profile.gaps,
+        }),
+        1 => ProfileCollected::Cells(TurnCells {
+            receive_only: profile.receive_only.map(cell),
+            transmit_only: profile.transmit_only.map(cell),
+            notice_only: profile.notice_only.map(cell),
+        }),
+        2 => ProfileCollected::Spread(TurnSpread {
+            cycles_by_log2: profile.cycles_by_log2.map(count),
+            notices_by_turn: profile.notices_by_turn.map(count),
+            frames_by_turn: profile.frames_by_turn.map(count),
+            settling: profile.settling.map(count),
+            returns: ReturnBursts {
+                bursts: returns.bursts,
+                queued: returns.queued,
+                queued_by_burst: returns.queued_by_burst,
+                before_by_burst: returns.before_by_burst,
+                after_by_burst: returns.after_by_burst,
+                held_bursts: returns.held_bursts,
+                held: returns.held,
+            },
+        }),
+        _ => ProfileCollected::Refused(LoadError::InvalidParameters),
+    }
+}
 
 #[cfg(target_arch = "riscv32")]
 impl Network {
@@ -562,7 +671,11 @@ impl Network {
 /// Open a window of the network core's turns.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn open_turns(net: &Network) {
-    net.turns(|turns| turns.start = network_turns(net.source));
+    net.turns(|turns| {
+        turns.start = network_turns(net.source);
+        turns.profile_start = oer::observe::turn_profile();
+        turns.returns_start = oer::observe::return_bursts();
+    });
 }
 
 /// Close the open window of the network core's turns, which
@@ -572,6 +685,14 @@ pub(crate) fn close_turns(net: &Network) {
     net.turns(|turns| {
         turns.window =
             oer_hil_services_load::NetworkTurns::window(&turns.start, &network_turns(net.source));
+        turns.profile_window = oer::observe::profile::TurnProfile::window(
+            &turns.profile_start,
+            &oer::observe::turn_profile(),
+        );
+        turns.returns_window = oer::observe::profile::Returns::window(
+            &turns.returns_start,
+            &oer::observe::return_bursts(),
+        );
     });
 }
 

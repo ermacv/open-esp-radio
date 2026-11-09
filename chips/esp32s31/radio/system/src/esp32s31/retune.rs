@@ -10,14 +10,14 @@ use oer_chips_esp32s31_radio_phy::{
     ConcurrentWifiChannelError, PhyTargetObserver, RomShortDelay, concurrent::ConcurrentPhy,
     select_concurrent_wifi_channel,
 };
-use oer_protocols_ieee80211_wire::channel::WifiChannel;
+use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 use oer_protocols_radio_regulatory::Permitted;
 
 pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>(
     timer: &impl oer_portable_cooperate::CooperativeTimer,
     domain: RadioDomain<B, ConcurrentPhy>,
     wifi: &mut WifiClocked,
-    channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+    channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>>,
     observer: &mut O,
 ) -> impl core::future::Future<
     Output = (
@@ -28,7 +28,7 @@ pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>
     let transaction =
         domain.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Retune);
     async move {
-        let channel = crate::channel::lower_wifi_channel(channel.channel().channel());
+        let channel = crate::channel::lower_ghz2_4_channel(channel.channel().channel());
         let mut platform = ();
         let hardware = wifi.channel_transaction(&mut platform, transaction);
         core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(

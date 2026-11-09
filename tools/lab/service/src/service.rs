@@ -160,21 +160,38 @@ impl Output {
 impl Output {
     /// Queue all of `bytes` for the client, or refuse: a client that is
     /// gone or reads too slowly takes none of the rest. For a stream a gap
-    /// would corrupt; the refused bytes are counted as lost too.
+    /// would corrupt. A slow reader's refused bytes, from the refused chunk
+    /// to the end, are counted as lost; a gone client loses nothing to a
+    /// reader, as in `write`.
     pub fn try_write(&self, bytes: &[u8]) -> Result<(), String> {
+        let mut sent = 0usize;
         for chunk in bytes.chunks(oer_tools_lab_client::protocol::MAX_FRAME / 2) {
             let frame = Frame::Data {
                 operation: self.operation,
                 bytes: chunk.to_vec(),
             };
-            if let Err(error) = self.outbox.push_data_whole(frame, chunk.len()) {
-                let mut lost = lock(&self.lost);
-                *lost = lost.saturating_add(chunk.len() as u64);
-                return Err(error.to_owned());
+            match self.outbox.push_data_whole(frame, chunk.len()) {
+                Ok(()) => sent = sent.saturating_add(chunk.len()),
+                Err(Refusal::Gone) => return Err("the client is gone".to_owned()),
+                Err(Refusal::Slow) => {
+                    let refused = bytes.len().saturating_sub(sent) as u64;
+                    let mut lost = lock(&self.lost);
+                    *lost = lost.saturating_add(refused);
+                    return Err("the client reads the output too slowly".to_owned());
+                }
             }
         }
         Ok(())
     }
+}
+
+/// Why the outbox refused output a stream needs whole.
+#[derive(Debug, PartialEq)]
+enum Refusal {
+    /// The outbox is closed: nobody reads any more.
+    Gone,
+    /// The output budget is full: the reader is slow.
+    Slow,
 }
 
 /// The frames waiting for one connection's writer.
@@ -229,13 +246,13 @@ impl Outbox {
 
     /// Queue output within the budget, or say why not: a closed outbox
     /// has no reader, a full one a slow reader.
-    fn push_data_whole(&self, frame: Frame, length: usize) -> Result<(), &'static str> {
+    fn push_data_whole(&self, frame: Frame, length: usize) -> Result<(), Refusal> {
         let mut queue = lock(&self.queue);
         if queue.closed {
-            return Err("the client is gone");
+            return Err(Refusal::Gone);
         }
         if queue.data_bytes.saturating_add(length) > OUTPUT_BUDGET {
-            return Err("the client reads the output too slowly");
+            return Err(Refusal::Slow);
         }
         queue.data_bytes += length;
         queue.frames.push_back(frame);
@@ -308,7 +325,14 @@ struct Shared {
     /// The directory of the stand's records, and its stand file.
     arbiter: oer_tools_lab_arbiter::Arbiter,
     recovery_deadline: std::time::Duration,
+    /// A step a recovery worker takes once it published its confirmation,
+    /// before it returns: the tests order other threads against it.
+    #[cfg(test)]
+    published: Mutex<Option<Step>>,
 }
+
+#[cfg(test)]
+type Step = Arc<dyn Fn(&Recovery) + Send + Sync>;
 
 struct Inner {
     scheduler: Scheduler,
@@ -322,7 +346,8 @@ struct Inner {
     connections: BTreeMap<u64, Arc<Outbox>>,
     clients: BTreeMap<u64, ProcessIdentity>,
     /// Resources whose driver still runs a recovery, also one past its
-    /// deadline: nothing else touches them until it returns.
+    /// deadline: nothing else touches them until it returns. A mark leaves
+    /// before its recovery's confirmation can make the resource ready.
     recovering: std::collections::BTreeSet<String>,
     /// Released leases whose client waits for their resources' recoveries.
     closing: BTreeMap<u64, Closing>,
@@ -418,6 +443,8 @@ impl Service {
                 history_path,
                 arbiter,
                 recovery_deadline,
+                #[cfg(test)]
+                published: Mutex::new(None),
             }),
         };
         {
@@ -1101,7 +1128,8 @@ impl Service {
 
     /// Run `recovery` by its driver, for the lease `lease` that left it. A
     /// driver past the deadline leaves the resource unavailable, and its
-    /// resource stays untouched until the driver returns.
+    /// resource stays untouched until the driver returns. The driver's
+    /// confirmation is applied only after its mark in `recovering` left.
     fn spawn_recovery(&self, inner: &mut Inner, recovery: Recovery, lease: Option<u64>) {
         if !inner.recovering.insert(recovery.resource.clone()) {
             // The running recovery's result is stale; a person returns the
@@ -1123,11 +1151,16 @@ impl Service {
         let running = recovery.clone();
         std::thread::spawn(move || {
             let confirmation = driver.shared.drivers.recover(&running);
-            let _ = done.send(confirmation);
+            // The driver returned: its mark goes before its confirmation, so
+            // the resource is never ready, and so granted and released
+            // again, while this recovery still holds it.
             lock(&driver.shared.inner)
                 .recovering
                 .remove(&running.resource);
             driver.shared.changed.notify_all();
+            let _ = done.send(confirmation);
+            #[cfg(test)]
+            driver.published(&running);
         });
         let service = self.clone();
         std::thread::spawn(move || {
@@ -1153,6 +1186,15 @@ impl Service {
             }
             service.pump(&mut inner);
         });
+    }
+
+    /// The test's step after a recovery worker published its confirmation.
+    #[cfg(test)]
+    fn published(&self, recovery: &Recovery) {
+        let step = lock(&self.shared.published).clone();
+        if let Some(step) = step {
+            step(recovery);
+        }
     }
 
     /// Grant what can be granted and tell the waiting clients.

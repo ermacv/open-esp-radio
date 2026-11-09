@@ -820,10 +820,13 @@ fn a_partial_boot_hart_bound_warns_with_its_unresolved_sites_reported() {
     let site = TEXT + 4 * (6 + 3 + 3);
     assert!(
         report.contains(&format!(
-            "indirect call through a stack slot at {site:#010x} in indirect+0xc"
+            "indirect call through a stack slot at {site:#010x} in indirect+0xc (needs: {})",
+            Reason::StackSlotCall.needs()
         )),
         "{report}"
     );
+    // The hint names the missing proof, never a stage that closes the site.
+    assert!(!report.contains("closed by"), "{report}");
     // The part a partial bound proves must still fit.
     let over = image_with_stack(512 + 15);
     let error = audit_of(&policy, &over).check().unwrap_err().to_string();

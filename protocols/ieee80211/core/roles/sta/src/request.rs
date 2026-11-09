@@ -8,8 +8,8 @@
 use core::{fmt, num::NonZeroU16};
 
 use crate::association::Preference;
-use oer_protocols_ieee80211_wire::channel::WifiChannel;
-pub use oer_protocols_ieee80211_wire::ssid::{WifiSsid, WifiSsidError};
+use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
+pub use oer_protocols_ieee80211_wire::ssid::{Ssid, SsidError};
 use oer_protocols_radio_regulatory::{Initiate, RegulatoryDomain};
 
 const CHANNEL_ONE_BIT: u16 = 1;
@@ -98,7 +98,7 @@ impl StationScanChannels {
             if !(1..=14).contains(&channel) {
                 return Err(StationScanChannelsError::InvalidPrimary(channel));
             }
-            let permitted = WifiChannel::mhz20(channel).ok().and_then(|wifi| {
+            let permitted = Ghz2_4Channel::mhz20(channel).ok().and_then(|wifi| {
                 domain
                     .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(wifi))
                     .ok()
@@ -118,7 +118,7 @@ impl StationScanChannels {
             passive: 0,
         };
         for channel in 1..=14_u8 {
-            if let Some(permitted) = WifiChannel::mhz20(channel).ok().and_then(|wifi| {
+            if let Some(permitted) = Ghz2_4Channel::mhz20(channel).ok().and_then(|wifi| {
                 domain
                     .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(wifi))
                     .ok()
@@ -321,16 +321,16 @@ impl StationScanPolicy {
 /// Complete chip- and executor-independent candidate-discovery request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StationDiscovery {
-    ssid: WifiSsid,
+    ssid: Ssid,
     scan: StationScanPolicy,
 }
 
 impl StationDiscovery {
-    pub const fn new(ssid: WifiSsid, scan: StationScanPolicy) -> Self {
+    pub const fn new(ssid: Ssid, scan: StationScanPolicy) -> Self {
         Self { ssid, scan }
     }
 
-    pub const fn ssid(self) -> WifiSsid {
+    pub const fn ssid(self) -> Ssid {
         self.ssid
     }
 
