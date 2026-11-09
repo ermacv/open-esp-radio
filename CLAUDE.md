@@ -188,6 +188,8 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   `oer` with the capabilities it needs (`wifi`, `console`, `group`, …), and
   the pipeline selects the board's chip and links the image for it. Every
   package builds.
+- **Names** of standard mechanisms follow the standard that defines them
+  ([Names of standard mechanisms](docs/architecture.md#names-of-standard-mechanisms)).
 - **HIL.** The HIL core (`protocols/hil`, `tools/hil/link`) only carries
   data and commands between the host and the device under test; it stores
   nothing and knows no scenario, service or stand equipment. A scenario's
