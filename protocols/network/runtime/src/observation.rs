@@ -61,6 +61,9 @@ pub struct TurnEnd {
     pub blocks_free: bool,
     /// Every open socket had a free credit.
     pub credits_free: bool,
+    /// Receive loans out of the pool's account, old installations'
+    /// included.
+    pub loans: usize,
 }
 
 /// What a service did, for a sink that counts. A turn reports its requests

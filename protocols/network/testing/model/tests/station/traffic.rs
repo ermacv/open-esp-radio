@@ -7,7 +7,7 @@ use oer_protocols_network_core::{Outcome, Remote};
 use oer_protocols_network_runtime::Sent;
 
 use crate::simulation::wired::{LEASED_IP, PEER_IP};
-use crate::simulation::{PORT, Setup, simulate};
+use crate::simulation::{PORT, Setup, data_of, remote_of, simulate};
 
 /// The peer's port.
 const PEER_PORT: u16 = 7000;
@@ -39,15 +39,15 @@ fn a_burst_from_the_peer_reaches_the_socket_whole_and_in_order() {
                         .send_udp(PEER_PORT, PORT, &datagram(n, 1000));
                 }
                 for _ in 0..BURST {
-                    let received = world.receive().await;
+                    let mut received = world.receive().await;
                     assert_eq!(
-                        received.remote,
+                        remote_of(&received),
                         Remote {
                             address: PEER_IP,
                             port: PEER_PORT,
                         }
                     );
-                    assert_eq!(received.block.octets(), datagram(next, 1000));
+                    assert_eq!(data_of(&mut received), datagram(next, 1000));
                     next += 1;
                     world.release(received);
                 }

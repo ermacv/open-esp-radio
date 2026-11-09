@@ -3,6 +3,10 @@
 //! Both are bound at the group's start, on [`PORT`] and the one after it; the
 //! network leases its address by DHCP, and a run starts once it holds one.
 //!
+//! The channel socket lends ([`Receive`]): a datagram stays in the station's
+//! receive buffer, [`CREDIT`] of them at once, and an echo copies its reply
+//! into a block the socket reserves, as the buffer is the station's.
+//!
 //! The sender hands each datagram's header to the producer's [`Source`]; the
 //! network's task asks the producer for it in its own turn and the producer
 //! writes the whole payload, header and filler, straight into the transmit
@@ -18,9 +22,9 @@ use core::task::{Context, Poll};
 use embassy_futures::select::{Either, select};
 use heapless::Vec;
 use oer::wifi::{
-    self, AtomicWaker, ClaimCell, Declined, Interest, Ipv4, LocalEnd, NetworkBlock, NetworkInstant,
-    Next, Offer, Outcome, Produce, Received, Refusal, Refused, Remote, SendRefusal, Socket,
-    WatchRefused, Work,
+    self, AtomicWaker, ClaimCell, Declined, Delivered, FrameLengthError, Interest, Ipv4,
+    LendingSocket as Socket, LocalEnd, NetworkBlock, NetworkInstant, Next, Offer, Outcome, Produce,
+    Refusal, Refused, Remote, SendRefusal, WatchRefused, Work,
 };
 use oer_hil_services_load::header::{self, Header};
 use oer_hil_services_load::{LoadError, Start};
@@ -29,6 +33,15 @@ use oer_hil_services_load::{LoadError, Start};
 /// after it. The image binds them at the group's start, before any run, so a
 /// run names this one.
 pub(crate) const PORT: u16 = 5001;
+
+/// Datagrams the channel socket holds in the station's buffers at once, of
+/// the station's 15: an experiment's setting. The core takes up to eight
+/// frames a turn and a returned loan counts at the next, so a credit of four
+/// runs out within one batch however fast the run reads.
+pub(crate) const CREDIT: usize = 12;
+
+/// How the channel socket receives.
+pub(crate) type Receive = wifi::Lending<CREDIT>;
 
 /// The ports of the network's sockets.
 pub(crate) const PORTS: wifi::Ports = wifi::Ports {
@@ -69,7 +82,7 @@ type Parked = RefCell<Vec<NetworkBlock, { wifi::BLOCKS }>>;
 /// Give `block` back, or park it for the next run: a full lane or a stop
 /// refuses it, and a run's end has no time to wait.
 fn home(socket: &mut Socket, parked: &Parked, block: NetworkBlock) {
-    if let Err(Refused { block, .. }) = socket.release(block)
+    if let Err(Refused { block, .. }) = socket.socket().release(block)
         && let Ok(mut parked) = parked.try_borrow_mut()
     {
         // Room for every block there is.
@@ -329,7 +342,7 @@ impl Produce for LoadProducer {
 
 /// The network the load server opens its runs on.
 pub(crate) struct Network {
-    network: wifi::Network<LoadProducer, wifi::Queued>,
+    network: wifi::Network<LoadProducer, wifi::Queued, Receive>,
     /// The channel socket, which receives and echoes.
     socket: RefCell<Socket>,
     source: &'static Source,
@@ -349,7 +362,7 @@ pub(crate) struct Network {
 impl Network {
     /// The network, its channel socket, and the source its producer reads.
     pub(crate) fn new(
-        network: wifi::Network<LoadProducer, wifi::Queued>,
+        network: wifi::Network<LoadProducer, wifi::Queued, Receive>,
         socket: Socket,
         source: &'static Source,
     ) -> Self {
@@ -384,7 +397,9 @@ pub(crate) fn address(net: &Network) -> Result<Option<Ipv4>, WatchRefused> {
 /// The network's publications, which the station services' waits read
 /// (`crate::waits`).
 #[cfg(target_arch = "riscv32")]
-pub(crate) const fn published(net: &Network) -> &wifi::Network<LoadProducer, wifi::Queued> {
+pub(crate) const fn published(
+    net: &Network,
+) -> &wifi::Network<LoadProducer, wifi::Queued, Receive> {
     &net.network
 }
 
@@ -448,6 +463,8 @@ const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::N
     local_waits_changes: 0,
     producer_wakes: 0,
     producer_unknown: 0,
+    drops: [0; oer_hil_services_load::DROP_KINDS],
+    loans_at_turn_end: [0; oer_hil_services_load::LOAN_BINS],
 };
 
 /// The network core's turns at the open window's start, and the last closed
@@ -548,6 +565,8 @@ fn network_turns(source: &Source) -> oer_hil_services_load::NetworkTurns {
         local_waits_changes: turns.local_waits_changes,
         producer_wakes: source.wakes(),
         producer_unknown: source.unknown(),
+        drops: turns.drops,
+        loans_at_turn_end: turns.loans_at_turn_end,
     }
 }
 
@@ -600,7 +619,7 @@ pub(crate) struct Receiving<'a> {
     delivered: &'a Cell<u32>,
     parked: &'a Parked,
     /// A datagram [`Self::ready`] found.
-    next: Option<Received>,
+    next: Option<Delivered>,
     /// A block that found the socket's lane full.
     returning: Option<NetworkBlock>,
     closed: bool,
@@ -608,7 +627,8 @@ pub(crate) struct Receiving<'a> {
 
 impl Drop for Receiving<'_> {
     fn drop(&mut self) {
-        if let Some(datagram) = self.next.take() {
+        // A lent datagram goes back to the station as it drops.
+        if let Some(Delivered::Copied(datagram)) = self.next.take() {
             home(self.socket, self.parked, datagram.block);
         }
         if let Some(block) = self.returning.take() {
@@ -625,7 +645,7 @@ impl<'a> Receiving<'a> {
             core::future::pending::<()>().await;
         }
         if self.returning.is_some() {
-            if self.socket.room().await.is_err() {
+            if self.socket.socket().room().await.is_err() {
                 self.closed = true;
                 return;
             }
@@ -640,7 +660,7 @@ impl<'a> Receiving<'a> {
     /// Give the block back, or keep it for [`Self::ready`].
     fn release(&mut self) {
         if let Some(block) = self.returning.take()
-            && let Err(Refused { reason, block }) = self.socket.release(block)
+            && let Err(Refused { reason, block }) = self.socket.socket().release(block)
         {
             // After a stop the pool's holder has what is left.
             self.closed = reason == Refusal::Closed;
@@ -666,16 +686,17 @@ impl<'a> Receiving<'a> {
     }
 }
 
-/// A received datagram; its block goes back when this ends.
+/// A received datagram; its block goes back, or its lent buffer to the
+/// station, when this ends.
 pub(crate) struct Packet<'r, 'a> {
     receiving: &'r mut Receiving<'a>,
     /// `None` only once it went.
-    datagram: Option<Received>,
+    datagram: Option<Delivered>,
 }
 
 impl Drop for Packet<'_, '_> {
     fn drop(&mut self) {
-        if let Some(datagram) = self.datagram.take() {
+        if let Some(Delivered::Copied(datagram)) = self.datagram.take() {
             self.receiving.returning = Some(datagram.block);
             self.receiving.release();
         }
@@ -683,26 +704,58 @@ impl Drop for Packet<'_, '_> {
 }
 
 impl Packet<'_, '_> {
-    pub(crate) fn payload(&self) -> &[u8] {
-        self.datagram
-            .as_ref()
-            .map_or(&[], |datagram| datagram.block.octets())
+    /// The datagram's data.
+    ///
+    /// # Errors
+    /// [`FrameLengthError`]: a lent buffer no longer holds what the station
+    /// showed, which breaks its contract. The buffer still goes back as this
+    /// ends.
+    pub(crate) fn payload(&mut self) -> Result<&[u8], FrameLengthError> {
+        match self.datagram.as_mut() {
+            Some(Delivered::Copied(datagram)) => Ok(datagram.block.octets()),
+            Some(Delivered::Lent(lent)) => lent.data(),
+            None => Ok(&[]),
+        }
     }
 
-    pub(crate) fn payload_mut(&mut self) -> &mut [u8] {
-        let Some(datagram) = self.datagram.as_mut() else {
-            return &mut [];
-        };
-        let length = datagram.block.octets().len();
-        datagram.block.space().get_mut(..length).unwrap_or_default()
-    }
-
-    /// Send the payload back where it came from; whether the socket took it.
-    pub(crate) fn reply(mut self) -> bool {
+    /// Send the datagram back where it came from, with `header` written over
+    /// its own; whether the socket took it. A copied datagram's block carries
+    /// the reply; a lent one's data is copied into a block the socket
+    /// reserves, and its buffer goes back to the station.
+    pub(crate) async fn echo(mut self, header: Header) -> bool {
         let Some(datagram) = self.datagram.take() else {
             return false;
         };
-        match self.receiving.socket.send(datagram.remote, datagram.block) {
+        let (remote, mut block) = match datagram {
+            Delivered::Copied(datagram) => (datagram.remote, datagram.block),
+            Delivered::Lent(mut lent) => {
+                let Ok(mut block) = self.receiving.socket.socket().reserve().await else {
+                    self.receiving.closed = true;
+                    return false;
+                };
+                let copied = lent.data().map(|data| block.fill(data));
+                let remote = lent.remote();
+                drop(lent);
+                if !matches!(copied, Ok(Ok(()))) {
+                    self.receiving.returning = Some(block);
+                    self.receiving.release();
+                    return false;
+                }
+                (remote, block)
+            }
+        };
+        let length = block.octets().len();
+        let written = block
+            .space()
+            .get_mut(..length)
+            .and_then(|payload| header.write(payload))
+            .is_some();
+        if !written {
+            self.receiving.returning = Some(block);
+            self.receiving.release();
+            return false;
+        }
+        match self.receiving.socket.socket().send(remote, block) {
             Ok(_result_given_up) => true,
             Err(Refused { block, .. }) => {
                 self.receiving.returning = Some(block);

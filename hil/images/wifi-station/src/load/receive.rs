@@ -81,6 +81,7 @@ pub(crate) struct Receiving {
     window_datagrams: u64,
     window_bytes: u64,
     foreign: u64,
+    unreadable: u64,
     echoed: u64,
     echo_refused: u64,
     first_us: Option<u64>,
@@ -118,6 +119,13 @@ impl Receiving {
         self.foreign = self.foreign.saturating_add(1);
     }
 
+    /// A lent datagram whose buffer no longer held what the station showed
+    /// (`FrameLengthError`): no datagram of the run, and no foreign one
+    /// either.
+    pub(crate) fn unreadable(&mut self) {
+        self.unreadable = self.unreadable.saturating_add(1);
+    }
+
     /// An echo the socket took, or refused.
     pub(crate) fn echo(&mut self, taken: bool) {
         let counter = if taken {
@@ -141,6 +149,7 @@ impl Receiving {
             untracked: tally.untracked,
             highest: tally.highest,
             foreign: self.foreign,
+            unreadable: self.unreadable,
             echoed: self.echoed,
             echo_refused: self.echo_refused,
             first_us: self.first_us,
@@ -261,6 +270,19 @@ mod tests {
         assert_eq!(
             (counts.datagrams, counts.highest, counts.lost),
             (0, None, 0)
+        );
+    }
+
+    #[test]
+    fn an_unreadable_lent_datagram_counts_apart_from_foreign_and_load() {
+        let tally = Tally::<4>::new();
+        let mut receiving = Receiving::default();
+        receiving.unreadable();
+        receiving.unreadable();
+        let counts = receiving.received(&tally);
+        assert_eq!(
+            (counts.unreadable, counts.foreign, counts.datagrams),
+            (2, 0, 0)
         );
     }
 }

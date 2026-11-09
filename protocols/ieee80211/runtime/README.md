@@ -165,21 +165,24 @@ data left behind) go back through the return queue, as its room allows, and
 only then does the actor ask the network to stop. The network takes that
 memory back before its port ends, so a confirmed stop leaves none of it with
 the station. The radio's stop and the network's return are separate: a
-network that has not returned its memory, its stop or its lent units by the
-deadline ends the stop's wait there as `StopOutcome::Returning` (the
+network that has not returned its memory or its stop by the deadline ends
+the stop's wait there as `StopOutcome::Returning` (the
 lifecycle's `LifecycleEnd::StoppedReturning`), never as an unconfirmed stop.
+A network that stopped holding lent receive units does not hold the stop:
+the lend count outlives the installation, and each unit rejoins whichever
+ring runs when its holder drops it.
 The return goes on without a deadline, the memory stays the station's until
 the network took it, and a retirement ends the actor only once the return
 came. A lost network participant (its stop never reported) is a software
 error, not a fault of the radio: the station still returns its share of the
-network through the return queue and waits for its lent units, and once
-they are home, looked at after every arena's end settled, the stop ends
-with `StopOutcome::NetworkLost`
+network through the return queue, and once it is home, looked at after every
+arena's end settled, the stop ends with `StopOutcome::NetworkLost`
 (`LifecycleEnd::StoppedNetworkLost`) before the deadline, or the late return
 completes after it; `Actor::network_lost` tells the composition, which
-records it. Neither end is terminal. That share comes home only while an
-owner of the network's side still takes the return queue and gives back the
-lent units; without one the stop stays returning. The deadline ends the
+records it. Units the network holds lent do not hold it, as for a reported
+stop, and the outcome counts them. Neither end is terminal. That share comes
+home only while an owner of the network's side still takes the return queue;
+without one the stop stays returning. The deadline ends the
 lifecycle's wait; the facade's public stop waits for the actual return and
 the radio's release.
 A stop for the next installation keeps the network and its MSDUs. An actor

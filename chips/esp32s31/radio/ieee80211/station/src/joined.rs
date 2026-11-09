@@ -105,8 +105,9 @@ use oer_protocols_ieee80211_wire::{
 };
 use oer_protocols_network_core::{Datagram, Group, Interface, NetworkOwner, Outcome, Remote};
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource, LinkSnapshot,
-    LinkState, NetTransmit, TransmitError, TransmitRefused, TxStorage, Unpublished,
+    EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource, Holding, Keep,
+    LinkSnapshot, LinkState, NetTransmit, Taken, TransmitError, TransmitRefused, TxStorage,
+    Unpublished,
 };
 use oer_protocols_network_runtime::{
     DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, PortRefusal, Sent, Service,
@@ -567,15 +568,19 @@ impl FramePort for Counted {
 
 impl FrameSource for Counted {
     type Notice = ();
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
+    type Held = <Inner as FrameSource>::Held;
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
+    ) -> Taken<Self::Held> {
         let moved = &self.moved;
-        self.inner.as_mut().is_some_and(|inner| {
-            inner.take_frame(|view| {
+        self.inner.as_mut().map_or(Taken::Empty, |inner| {
+            inner.take_frame(|view, holding| {
                 let mut count = moved.get();
                 count.rx_frames += 1;
                 count.rx_bytes += u32::try_from(view.payload.len()).unwrap();
                 moved.set(count);
-                read(view);
+                read(view, holding)
             })
         })
     }

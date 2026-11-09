@@ -106,6 +106,38 @@ fn a_stop_under_load_ends_every_command_and_brings_every_block_home() {
     left_the_network(&report);
 }
 
+/// As above, with a lending socket that holds the station's receive buffer
+/// across the stop: the station's stop confirms without waiting for it, as
+/// the lend count outlives the installation, and once the application drops
+/// it after the stop, its loan comes home to the pool's holder.
+#[test]
+fn a_stop_with_a_lent_buffer_held_confirms_and_its_late_return_frees_the_loan() {
+    struct Net;
+    const BURST: u16 = 32;
+    let setup = Setup {
+        lending: true,
+        ..Setup::default()
+    };
+    let report = simulate::<Net>(setup, |world| {
+        Box::pin(async move {
+            joined_and_resolved(world).await;
+            let observers = held_burst(world, 24).await;
+            for n in 0..BURST {
+                world.ap().wired.send_udp(7000, PORT, &[n as u8; 800]);
+            }
+            let held = world.receive().await;
+            assert!(
+                matches!(held, oer_protocols_network_runtime::Received::Lent(_)),
+                "a single MSDU stays in the station's buffer"
+            );
+            world.hold(held);
+            stop_and_read(world, observers).await;
+        })
+    });
+    report.assert_stopped_with_every_owner();
+    left_the_network(&report);
+}
+
 /// MSDUs the network handed to the station's transmit queue and the actor
 /// never took go back with the stop: the actor hands their memory back
 /// before it asks the network to stop, and the network takes it back at its

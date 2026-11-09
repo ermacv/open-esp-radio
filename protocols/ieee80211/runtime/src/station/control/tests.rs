@@ -310,7 +310,9 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     assert!(copy.try_send(frame).is_ok());
     assert!(
         received
-            .try_send(Received::Copied(CopiedMark::new()))
+            .try_send(Received::Copied(CopiedMark::new(
+                oer_protocols_network_port::CopyReason::Format
+            )))
             .is_ok()
     );
     assert!(device.poll_receive_ready(&mut cx).is_ready());
@@ -323,7 +325,10 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         Ok(std::vec![3; 4])
     );
     assert_eq!(
-        device.read_copied(CopiedMark::new(), |_| ()),
+        device.read_copied(
+            CopiedMark::new(oer_protocols_network_port::CopyReason::Format),
+            |_| ()
+        ),
         Err(FrameLengthError::MissingCopy)
     );
     assert!(device.try_receive().is_none());

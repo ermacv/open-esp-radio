@@ -147,6 +147,14 @@ impl<B, const SOCKETS: usize> Loans<B, SOCKETS> {
         Ok(())
     }
 
+    /// Take `socket`'s credit back, at its close: what it holds still counts
+    /// until it returns.
+    pub fn revoke(&mut self, socket: usize) {
+        if let Some(credit) = self.credits.get_mut(socket) {
+            *credit = 0;
+        }
+    }
+
     /// A frame for `socket` arrived: lend it, or say why not, before any more
     /// work goes into it.
     ///

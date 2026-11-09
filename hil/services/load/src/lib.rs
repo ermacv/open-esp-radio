@@ -207,6 +207,9 @@ pub struct Received {
     /// Datagrams on the port that are not the run's load: another run, no
     /// header, or too short.
     pub foreign: u64,
+    /// Lent datagrams whose buffer no longer held what the station showed:
+    /// a broken device contract, counted apart from `foreign`.
+    pub unreadable: u64,
     /// Echo replies the image sent, and those its socket refused.
     pub echoed: u64,
     pub echo_refused: u64,
@@ -1006,6 +1009,35 @@ pub const ACCEPTED_BINS: usize = 7;
 /// 1, 2, 3 to 4, 5 to 8, and 9 to 16 blocks.
 pub const RESERVE_BINS: usize = 5;
 
+/// The network core's drop reasons, in the order of
+/// [`NetworkTurns::drops`].
+pub const DROP_NAMES: [&str; 18] = [
+    "malformed",
+    "checksum",
+    "no_socket",
+    "receive_full",
+    "no_block",
+    "group_limit",
+    "too_long",
+    "fragment",
+    "bad_source",
+    "reply_dropped",
+    "send_only",
+    "no_credit",
+    "not_lent_stopping",
+    "not_lent_socket",
+    "pressure_copy",
+    "lent_lane_full",
+    "dhcp",
+    "icmp",
+];
+/// The words of [`NetworkTurns::drops`].
+pub const DROP_KINDS: usize = DROP_NAMES.len();
+
+/// The bins of [`NetworkTurns::loans_at_turn_end`]: turns that ended with
+/// 0, 1, 2, 3, 4, and 5 or more receive loans out.
+pub const LOAN_BINS: usize = 6;
+
 /// The network core's turns within one window: the requests they took from
 /// the sockets' lanes, the sockets they left with requests when their
 /// budget ran out, the frames the port accepted, how each turn's publishing
@@ -1073,6 +1105,12 @@ pub struct NetworkTurns {
     /// its datagrams whose end is not known.
     pub producer_wakes: u32,
     pub producer_unknown: u32,
+    /// The core's drops, by reason ([`DROP_NAMES`]).
+    pub drops: [u32; DROP_KINDS],
+    /// Turns by the receive loans out when they ended ([`LOAN_BINS`]), old
+    /// installations' included: with a lending socket, how near its credit
+    /// it was.
+    pub loans_at_turn_end: [u32; LOAN_BINS],
 }
 
 impl NetworkTurns {
@@ -1120,6 +1158,14 @@ impl NetworkTurns {
             local_waits_changes: count(|turns| turns.local_waits_changes),
             producer_wakes: count(|turns| turns.producer_wakes),
             producer_unknown: count(|turns| turns.producer_unknown),
+            drops: core::array::from_fn(|kind| {
+                let at = |turns: &Self| turns.drops.get(kind).copied().unwrap_or(0);
+                at(end).wrapping_sub(at(start))
+            }),
+            loans_at_turn_end: core::array::from_fn(|bin| {
+                let at = |turns: &Self| turns.loans_at_turn_end.get(bin).copied().unwrap_or(0);
+                at(end).wrapping_sub(at(start))
+            }),
         }
     }
 }

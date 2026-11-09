@@ -418,20 +418,32 @@ impl FramePort for Medium {
 
 impl FrameSource for Medium {
     type Notice = RadioNotice<u32, PeerKey>;
+    /// The medium lends no buffer: each frame is its copy.
+    type Held = oer_protocols_network_port::NeverHeld;
 
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
-        let frame = self.0.borrow_mut().received.pop_front();
-        frame.is_some_and(|frame| {
-            if let Ok((header, payload)) = EthernetHeader::parse(&frame) {
-                read(EthernetFrameView {
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(
+            EthernetFrameView<'_>,
+            oer_protocols_network_port::Holding,
+        ) -> oer_protocols_network_port::Keep,
+    ) -> oer_protocols_network_port::Taken<Self::Held> {
+        use oer_protocols_network_port::{CopyReason, Holding, Taken};
+        let Some(frame) = self.0.borrow_mut().received.pop_front() else {
+            return Taken::Empty;
+        };
+        if let Ok((header, payload)) = EthernetHeader::parse(&frame) {
+            let _copied = read(
+                EthernetFrameView {
                     destination: header.destination,
                     source: header.source,
                     ether_type: header.ether_type.value(),
                     payload,
-                });
-            }
-            true
-        })
+                },
+                Holding::Copied(CopyReason::Format),
+            );
+        }
+        Taken::Read
     }
 
     fn take_notice(&mut self) -> Option<Self::Notice> {

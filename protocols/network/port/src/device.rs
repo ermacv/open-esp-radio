@@ -178,6 +178,20 @@ pub trait ReceivedFrame: Sized {
     type Copied;
     /// The frame in its owner's storage, or what stands for its copy.
     fn into_lent(self) -> Result<LentFrame<Self::Storage>, Self::Copied>;
+    /// Why the device copied the frame `copied` stands for.
+    fn copy_reason(copied: &Self::Copied) -> CopyReason;
+}
+
+/// Why a device copied a received frame instead of lending its buffer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CopyReason {
+    /// The frame's form: its buffer carried more than this frame, such as
+    /// several MSDUs, or a frame the device also hands elsewhere, or a
+    /// device that lends no buffer at all.
+    Format,
+    /// The device would have lent the buffer and could not: it was out of
+    /// lending room or stopping.
+    Pressure,
 }
 
 /// A refusal before TX admission. The caller receives its unchanged frame.

@@ -303,15 +303,14 @@ enum NetworkStopping {
     Owed,
     /// Asked, and it has not reported.
     Asked,
-    /// It reported its stop; lent units are still out.
+    /// It reported its stop. Units it holds stay lent: they return to the
+    /// lend count, which outlives the installation, whenever they drop.
     Stopped,
-    /// It reported its stop and holds no unit.
-    Returned,
     /// Its participant was lost: its stop will not be confirmed. The
     /// station still returns what it holds of the network through the
-    /// existing ways (the return queue, the lent units' own return); the
-    /// stop settles once nothing of the network is left with the station,
-    /// looked at after the data's settlement.
+    /// return queue; the stop settles once nothing of the network is left
+    /// with the station, looked at after the data's settlement. Units the
+    /// network holds lent do not hold it: the outcome counts them.
     Lost,
 }
 
@@ -426,8 +425,6 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     /// The lifecycle retired the actor while the network's return went on:
     /// the actor ends once it came.
     retiring: bool,
-    /// Every unit lent to the network came back, at the last poll.
-    lent_home: bool,
     /// The reply offered to the lifecycle, until it answers.
     reply_out: Option<ReplyPlace>,
     owed: Owed<'id, D>,
@@ -515,7 +512,6 @@ where
             network_stopping: NetworkStopping::NotAsked,
             queued: 0,
             retiring: false,
-            lent_home: false,
             reply_out: None,
             owed: Owed::new(),
             facts: Facts::default(),
@@ -582,7 +578,6 @@ where
                 network_stopping: NetworkStopping::NotAsked,
                 queued: 0,
                 retiring: false,
-            lent_home: false,
                 reply_out: None,
                 owed: Owed::new(),
                 facts: Facts::default(),
@@ -693,7 +688,6 @@ where
         self.network_stopping = NetworkStopping::NotAsked;
         self.queued = 0;
         self.retiring = false;
-        self.lent_home = false;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract

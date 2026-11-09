@@ -3,13 +3,15 @@
 //! An MPDU that delivered exactly one MSDU is lent: the port moves its
 //! receive buffer to the network ([`DataPort::lend`]) and the frame names
 //! its payload in that buffer. The actor copies an MSDU instead when its
-//! MPDU delivered several (an A-MSDU) or the port kept the buffer;
-//! [`RxMsdusCopied`] counts both.
+//! MPDU delivered several (an A-MSDU) or also carried the station's EAPOL,
+//! a copy by the frame's form, or when the port kept the buffer, a copy by
+//! pressure; each copy's mark names which ([`CopyReason`]), and
+//! [`RxMsdusCopied`] counts them.
 //!
 //! [`DataPort::lend`]: oer_protocols_ieee80211_contracts_port::DataPort::lend
 
 use oer_protocols_ieee80211_contracts_port::LentRxBuffer;
-use oer_protocols_network_port::{FrameStorage, LentFrame, ReceivedFrame};
+use oer_protocols_network_port::{CopyReason, FrameStorage, LentFrame, ReceivedFrame};
 
 /// A lent receive buffer as network storage: the MPDU, then the rest of its
 /// allocation.
@@ -53,11 +55,16 @@ pub enum Received<L> {
 ///
 /// [`NetDevice::read_copied`]: oer_protocols_network_port::NetDevice::read_copied
 #[derive(Debug)]
-pub struct CopiedMark(());
+pub struct CopiedMark(CopyReason);
 
 impl CopiedMark {
-    pub(crate) const fn new() -> Self {
-        Self(())
+    pub(crate) const fn new(reason: CopyReason) -> Self {
+        Self(reason)
+    }
+
+    /// Why the actor copied the MSDU.
+    pub const fn reason(&self) -> CopyReason {
+        self.0
     }
 }
 
@@ -70,23 +77,31 @@ impl<L: LentRxBuffer> ReceivedFrame for Received<L> {
             Self::Copied(mark) => Err(mark),
         }
     }
+    fn copy_reason(copied: &CopiedMark) -> CopyReason {
+        copied.reason()
+    }
 }
 
 /// The MSDUs of one received frame the actor copied instead of lending,
 /// by reason. Each count saturates at `u16::MAX`; at least one is nonzero.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxMsdusCopied {
-    /// MSDUs of a frame that delivered more than one.
+    /// MSDUs of a frame that delivered more than one: copies by form.
     pub aggregated: u16,
+    /// MSDUs of a frame that also carried the station's EAPOL, which the
+    /// station takes: copies by form.
+    pub shared: u16,
     /// MSDUs whose buffer the backend kept
-    /// ([`LendRefusal`](oer_protocols_ieee80211_contracts_port::LendRefusal)).
+    /// ([`LendRefusal`](oer_protocols_ieee80211_contracts_port::LendRefusal)):
+    /// copies by pressure.
     pub kept: u16,
 }
 
 /// The network side that holds the station's lent receive buffers: the
 /// application's sockets and the IP service. A stop asks it to stop before
-/// the port retires, and the port retires only once the network returned
-/// every buffer.
+/// the port retires, and the port retires once it reported its stop, with
+/// buffers it still holds lent: each returns to the lend count, which
+/// outlives the installation, whenever its holder drops it.
 pub trait NetworkStop {
     /// Whether a network takes the station's frames at all. A composition
     /// without one makes the actor refuse every MSDU at once, returning

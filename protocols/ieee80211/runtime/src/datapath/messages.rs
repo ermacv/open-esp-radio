@@ -306,7 +306,8 @@ pub enum NetworkEnd {
     /// for the next installation.
     Stays,
     /// The radio retires: the stop asks the network to stop, and confirms
-    /// only once it stopped and returned every lent buffer.
+    /// once it stopped. Buffers it still holds lent stay lent, counted
+    /// against the lend credit, which outlives the installation.
     Stops,
 }
 

@@ -3,8 +3,8 @@
 use core::task::{Context, Poll};
 
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FramePort, FrameSource, LinkSnapshot, NetDevice, NetTransmit,
-    ReceivedFrame, TransmitError, Unpublished,
+    EthernetFrame, EthernetFrameView, FramePort, FrameSource, Holding, Keep, LentFrame,
+    LinkSnapshot, NetDevice, NetTransmit, ReceivedFrame, Taken, TransmitError, Unpublished,
 };
 
 /// The memory frames are written in, in the device's own transmit buffers, so a
@@ -112,7 +112,7 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
     /// so dropping the port returns none of them: a stop calls this before
     /// it tells the device it is over.
     pub fn give_back(&mut self) {
-        while self.take_frame(|_| {}) {}
+        while self.take_frame(|_, _| Keep::Drop).found() {}
         // Asking the transmit half takes back what the device returned.
         let _room = self.transmit.has_room();
         // The service whose policy those frames' ends settle has ended, its
@@ -211,18 +211,37 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
     /// The buffers' notice of a frame's end.
     type Notice = X::Notice;
 
-    fn take_frame(&mut self, read: impl FnOnce(EthernetFrameView<'_>)) -> bool {
+    /// A lent frame's own buffer, for a reader that keeps it.
+    type Held = LentFrame<<D::RxFrame as ReceivedFrame>::Storage>;
+
+    fn take_frame(
+        &mut self,
+        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
+    ) -> Taken<Self::Held> {
         let Some(frame) = self.device.try_receive() else {
-            return false;
+            return Taken::Empty;
         };
-        let shown = match frame.into_lent() {
-            Ok(lent) => lent.view().map(read),
-            Err(copied) => self.device.read_copied(copied, read),
-        };
-        if shown.is_err() {
-            self.unreadable = self.unreadable.saturating_add(1);
+        match frame.into_lent() {
+            Ok(lent) => match lent.view().map(|view| read(view, Holding::Lendable)) {
+                Ok(Keep::Keep) => Taken::Kept(lent),
+                Ok(Keep::Drop) => Taken::Read,
+                Err(_) => {
+                    self.unreadable = self.unreadable.saturating_add(1);
+                    Taken::Read
+                }
+            },
+            Err(copied) => {
+                let reason = <D::RxFrame as ReceivedFrame>::copy_reason(&copied);
+                // A copy stays the device's, whatever its reader answers.
+                let shown = self
+                    .device
+                    .read_copied(copied, |view| read(view, Holding::Copied(reason)));
+                if shown.is_err() {
+                    self.unreadable = self.unreadable.saturating_add(1);
+                }
+                Taken::Read
+            }
         }
-        true
     }
 
     fn take_notice(&mut self) -> Option<X::Notice> {
