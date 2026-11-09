@@ -176,33 +176,34 @@ impl AccessPoint {
 }
 
 /// The access point's task: the runner and the IP service together. An
-/// ordinary stop ends it; every other exit records its cause and resets.
+/// end the runner returned every owner from (`ApExit::Ended`: a stop, a
+/// refused start or command, a port fault, a broken contract) ends the
+/// access point without a reset, its cause in [`AccessPoint::exit`]; an
+/// IP service that ends stops the access point, its cause in the service's
+/// status. A reset stays only where the hardware may still hold the radio's
+/// memory.
 pub(crate) async fn serve_access_point(start: ApStart) {
     let ApStart {
         runner,
         mut service,
     } = start;
     let ip = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
-    let exit = match select(runner.run(), ip).await {
+    let stop = runner.stop_handle();
+    let mut run = core::pin::pin!(runner.run());
+    let exit = match select(run.as_mut(), ip).await {
         Either::First(exit) => exit,
-        // The service ends only with a refused context.
-        Either::Second(_) => crate::fail(oer_portable_diagnostics::name!("ap-net"; 32)),
+        Either::Second(_) => {
+            // The stack's end is in its status; the access point stops.
+            stop.request_stop();
+            run.await
+        }
     };
     match exit {
-        // A refused command returned its owners and released the radio:
-        // the access point ends without a reset, its cause in `exit`.
-        ApExit::Stopped | ApExit::Refused(_) => {}
-        ApExit::RefusedUnreleased(_) => {
-            crate::fail(oer_portable_diagnostics::name!("ap-refused-release"; 32))
+        ApExit::Ended(_) => {}
+        // HW_PANIC_SOURCE: ap-radio-unreleased
+        ApExit::Unreleased { .. } => {
+            crate::fail(oer_portable_diagnostics::name!("ap-unreleased"; 32))
         }
         ApExit::Unavailable(error) => failure(error),
-        ApExit::ReleaseFailed(_) => crate::fail(oer_portable_diagnostics::name!("ap-release"; 32)),
-        ApExit::StartRefused => crate::fail(oer_portable_diagnostics::name!("ap-start"; 32)),
-        ApExit::StopUnconfirmed => crate::fail(oer_portable_diagnostics::name!("ap-stop"; 32)),
-        ApExit::Faulted(fault) => crate::fail_path(
-            oer_portable_diagnostics::name!("ap-faulted"; 32),
-            &oer_portable_diagnostics::DiagPath::of(&fault),
-        ),
-        ApExit::Contract(_) => crate::fail(oer_portable_diagnostics::name!("ap-contract"; 32)),
     }
 }

@@ -373,10 +373,10 @@ async fn drive<R, F>(
 fn stopped<R, F: core::fmt::Debug>(end: ApEnd<R, F>) -> R {
     match end {
         ApEnd::Stopped(runner) => runner,
-        ApEnd::StartRefused => panic!("the radio starts"),
-        ApEnd::StopUnconfirmed(unconfirmed) => panic!("the stop is confirmed: {unconfirmed:?}"),
-        ApEnd::Faulted(fault) => panic!("the port faulted: {fault:?}"),
-        ApEnd::Contract(contract) => panic!("the runner's contract: {contract:?}"),
+        ApEnd::StartRefused(_, refused) => panic!("the radio starts: {refused:?}"),
+        ApEnd::StopUnconfirmed(_, unconfirmed) => panic!("the stop is confirmed: {unconfirmed:?}"),
+        ApEnd::Faulted(_, fault) => panic!("the port faulted: {fault:?}"),
+        ApEnd::Contract(_, contract) => panic!("the runner's contract: {contract:?}"),
         ApEnd::Refused(_, refusal) => panic!("the port takes every command: {refusal:?}"),
     }
 }

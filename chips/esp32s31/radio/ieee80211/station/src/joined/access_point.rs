@@ -226,10 +226,10 @@ fn on_the_s31_port(
             let end = runner.run(&shared, &airy).await;
             seen.borrow_mut().ended = Some(match end {
                 ApEnd::Stopped(_) => "stopped".into(),
-                ApEnd::StartRefused => "start refused".into(),
-                ApEnd::StopUnconfirmed(unconfirmed) => std::format!("{unconfirmed:?}"),
-                ApEnd::Faulted(fault) => std::format!("faulted: {fault:?}"),
-                ApEnd::Contract(contract) => std::format!("contract: {contract:?}"),
+                ApEnd::StartRefused(_, refused) => std::format!("start refused: {refused:?}"),
+                ApEnd::StopUnconfirmed(_, unconfirmed) => std::format!("{unconfirmed:?}"),
+                ApEnd::Faulted(_, fault) => std::format!("faulted: {fault:?}"),
+                ApEnd::Contract(_, contract) => std::format!("contract: {contract:?}"),
                 ApEnd::Refused(_, refusal) => std::format!("refused: {refusal:?}"),
             });
         });

@@ -233,6 +233,17 @@ impl AccessPointControl {
     }
 }
 
+/// Asks a running access point to stop.
+pub struct AccessPointStop(&'static ApShared);
+
+impl AccessPointStop {
+    /// Ask the access point to stop: its runner tears its peers down and
+    /// stops the radio.
+    pub fn request_stop(&self) {
+        self.0.request_stop();
+    }
+}
+
 /// The ANonces of the access point's handshakes.
 pub struct Nonces(&'static mut crate::NonceSource);
 
@@ -242,29 +253,41 @@ impl ApNonces for Nonces {
     }
 }
 
+/// Why the access point's run ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApEnded {
+    /// The application stopped it.
+    Stopped,
+    /// Its radio did not start.
+    StartRefused(
+        oer_protocols_ieee80211_contracts_port::StartRefused<crate::failure::BackendFault>,
+    ),
+    /// The port reported its named fault.
+    Faulted(crate::failure::BackendFault),
+    /// The runner's own contract broke.
+    Contract(oer_protocols_ieee80211_runtime::access_point::ApContract),
+    /// The port refused one of its commands.
+    Refused(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
+}
+
 /// How the access point ended.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApExit {
-    /// It stopped, and the radio was released.
-    Stopped,
-    /// It stopped, but the radio's release did not complete.
-    ReleaseFailed(crate::failure::ReleaseCause),
+    /// It ended for its cause; its radio stopped, every owner came back
+    /// and the radio was released. Nothing waits on the hardware: no reset
+    /// is needed.
+    Ended(ApEnded),
+    /// It ended for its cause, but the radio's stop was not confirmed or
+    /// its release did not complete: the hardware may still use the
+    /// runner's buffers and descriptors, which stay quarantined.
+    Unreleased {
+        /// Why it ended.
+        ended: ApEnded,
+        /// Why the release did not complete, when the stop was confirmed.
+        release: Option<crate::failure::ReleaseCause>,
+    },
     /// It never started.
     Unavailable(InitializationError),
-    /// Its radio did not start.
-    StartRefused,
-    /// Its radio's stop was not confirmed; the port keeps what it holds.
-    StopUnconfirmed,
-    /// The port faulted for its named cause; the runner keeps every owner.
-    Faulted(crate::failure::BackendFault),
-    /// The runner's own contract broke; it keeps every owner.
-    Contract(oer_protocols_ieee80211_runtime::access_point::ApContract),
-    /// The port refused one of the access point's commands: the runner
-    /// returned every owner, the radio stopped and was released.
-    Refused(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
-    /// The port refused a command and the radio's stop or release that
-    /// followed did not complete.
-    RefusedUnreleased(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
 }
 
 /// The access point's task: it owns the radio.
@@ -372,6 +395,12 @@ pub fn access_point<W: Binding, F>(
 }
 
 impl<W: Binding> AccessPointRunner<W> {
+    /// A handle that asks the running access point to stop, as its
+    /// control does.
+    pub fn stop_handle(&self) -> AccessPointStop {
+        AccessPointStop(self.shared)
+    }
+
     /// Wait for the start, run the access point until its stop, then
     /// release the radio. A stop before the start ends it at once, with no
     /// radio started.
@@ -393,7 +422,7 @@ impl<W: Binding> AccessPointRunner<W> {
             mut nonces,
         } = self;
         let Some((config, settings)) = start.take(shared).await else {
-            return ApExit::Stopped;
+            return ApExit::Ended(ApEnded::Stopped);
         };
         boot.config = config;
         let Some(mut installations) = W::take_installations() else {
@@ -527,44 +556,76 @@ impl<W: Binding> AccessPointRunner<W> {
             (),
             nonces,
         );
-        match runner.run(shared, &EmbassyClock).await {
-            ApEnd::Stopped(mut runner) => match radio::release::<W>(runner.port_mut()).await {
-                Ok(()) => ApExit::Stopped,
-                Err(cause) => {
-                    // The runner keeps every owner of the unreleased radio.
-                    let _kept = core::mem::ManuallyDrop::new(runner);
-                    ApExit::ReleaseFailed(cause)
+        let (runner, ended) = match runner.run(shared, &EmbassyClock).await {
+            ApEnd::Stopped(runner) => (runner, ApEnded::Stopped),
+            ApEnd::StopUnconfirmed(runner, _) => {
+                // The stop the runner asked for is not confirmed: its owners
+                // stay with the hardware's possible use.
+                let _quarantined = core::mem::ManuallyDrop::new(runner);
+                return ApExit::Unreleased {
+                    ended: ApEnded::Stopped,
+                    release: None,
+                };
+            }
+            ApEnd::StartRefused(runner, refused) => (
+                runner,
+                ApEnded::StartRefused(crate::failure::convert::start_refused(refused)),
+            ),
+            ApEnd::Faulted(runner, fault) => (
+                runner,
+                ApEnded::Faulted(crate::failure::convert::backend_fault(fault)),
+            ),
+            ApEnd::Contract(mut runner, contract) => {
+                // The owners without a place come back with the runner; the
+                // radio stops with them below.
+                while let Some(kept) = runner.take_kept() {
+                    drop(kept);
                 }
-            },
-            ApEnd::StartRefused => ApExit::StartRefused,
-            ApEnd::StopUnconfirmed(_) => ApExit::StopUnconfirmed,
-            ApEnd::Faulted(fault) => ApExit::Faulted(crate::failure::convert::backend_fault(fault)),
-            ApEnd::Contract(contract) => ApExit::Contract(contract),
+                (runner, ApEnded::Contract(contract))
+            }
             ApEnd::Refused(mut runner, refusal) => {
-                // The refused command's owners come back with the runner;
-                // the radio stops and is released with them, and the
-                // access point ends without a reset.
                 drop(runner.take_refused());
-                let stopped = core::future::poll_fn(|cx| {
-                    let now = oer_portable_time::Clock::now(&EmbassyClock);
-                    oer_protocols_ieee80211_contracts_port::DataPort::poll_stop(
-                        runner.port_mut(),
-                        cx,
-                        now,
-                    )
-                })
-                .await;
-                if stopped.is_err() {
-                    let _kept = core::mem::ManuallyDrop::new(runner);
-                    return ApExit::RefusedUnreleased(refusal);
-                }
-                match radio::release::<W>(runner.port_mut()).await {
-                    Ok(()) => ApExit::Refused(refusal),
-                    Err(_) => {
-                        let _kept = core::mem::ManuallyDrop::new(runner);
-                        ApExit::RefusedUnreleased(refusal)
-                    }
-                }
+                (runner, ApEnded::Refused(refusal))
+            }
+        };
+        retire::<W>(runner, ended).await
+    }
+}
+
+/// The access point's runner over the S31 port.
+type ApRunnerOf<W> = ApRunner<
+    'static,
+    'static,
+    'static,
+    Port<W>,
+    radio::Commands<W>,
+    BufferClass<{ crate::chip::TX }>,
+    Interface,
+    Nonces,
+>;
+
+/// Stop the radio of an ended run unless it stopped already, then release
+/// it: the access point ends without a reset once both are confirmed.
+async fn retire<W: Binding>(mut runner: ApRunnerOf<W>, ended: ApEnded) -> ApExit {
+    let stopped = core::future::poll_fn(|cx| {
+        let now = oer_portable_time::Clock::now(&EmbassyClock);
+        oer_protocols_ieee80211_contracts_port::DataPort::poll_stop(runner.port_mut(), cx, now)
+    })
+    .await;
+    if stopped.is_err() {
+        let _quarantined = core::mem::ManuallyDrop::new(runner);
+        return ApExit::Unreleased {
+            ended,
+            release: None,
+        };
+    }
+    match radio::release::<W>(runner.port_mut()).await {
+        Ok(()) => ApExit::Ended(ended),
+        Err(cause) => {
+            let _quarantined = core::mem::ManuallyDrop::new(runner);
+            ApExit::Unreleased {
+                ended,
+                release: Some(cause),
             }
         }
     }

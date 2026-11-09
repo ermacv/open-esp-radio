@@ -44,11 +44,17 @@
 //!
 //! # Ends
 //!
-//! A port fault ends the run with every owner kept ([`ApEnd::Faulted`]). A
-//! command the port refuses ends the run with the runner, the refused
-//! command and every other owner returned ([`ApEnd::Refused`]). A frame of
-//! the air the engine refuses changes nothing; a frame the runner has no
-//! ticket or buffer for does not go, which its peer's own retry covers.
+//! Every end returns the runner with the port and every owner
+//! ([`ApEnd`]): a stop, a refused start, an unconfirmed stop (whose owners
+//! the composition keeps from the hardware's use), a port fault with its
+//! cause, a refused command (the command among the owners,
+//! [`ApRunner::take_refused`]) and a broken contract of the runner's own,
+//! the owners it had no place for among them ([`ApRunner::take_kept`]).
+//! The sink holds the port's every unconsumed terminal
+//! (`PortTypes::TERMINAL_CAPACITY`, checked where a runner is made). A
+//! frame of the air the engine refuses changes nothing; a frame the runner
+//! has no ticket or buffer for does not go, which its peer's own retry
+//! covers.
 
 pub mod network;
 
@@ -97,6 +103,9 @@ pub const AP_KEYS: usize = oer_protocols_ieee80211_core_roles_ap::AP_MAX_CLIENTS
 /// The access-point commands that wait for their turn at most.
 const COMMANDS: usize = 8;
 
+/// The owners a halted run returns beside its places.
+const KEPT: usize = 4;
+
 /// The received units one turn takes at most: the turn's bound.
 const RECEIVE_BUDGET: usize = 16;
 
@@ -127,6 +136,8 @@ type Ticket<'id, P> = oer_protocols_radio_port::Slot<
 >;
 /// A transmit buffer of the class `C` of the port `P`.
 type Buffer<'id, P, C> = <Ty<'id, P> as TxBufferPool<'id, C>>::Buffer;
+/// A sent transmit buffer of the class `C` of the port `P`.
+type Sent<'id, P, C> = <Ty<'id, P> as TxBufferPool<'id, C>>::Sent;
 /// The named fault of the port `P`.
 pub type PortFault<'id, P> = <P as DataPort<'id>>::Fault;
 /// An access-point command of the port `P`.
@@ -222,15 +233,18 @@ pub trait ApNonces {
 pub enum ApEnd<R, F> {
     /// The access point stopped and the radio with it; every owner is back.
     Stopped(R),
-    /// The radio did not start.
-    StartRefused,
-    /// The radio's stop is not confirmed: the port keeps what it holds.
-    StopUnconfirmed(StopUnconfirmed),
-    /// The port reported its named fault; the runner keeps every owner.
-    Faulted(F),
+    /// The radio did not start, for the port's cause; every owner is back.
+    StartRefused(R, oer_protocols_ieee80211_contracts_port::StartRefused<F>),
+    /// The radio's stop is not confirmed: the port keeps what the hardware
+    /// may still use, and the runner returns with it.
+    StopUnconfirmed(R, StopUnconfirmed),
+    /// The port reported its named fault; the runner returns with every
+    /// owner.
+    Faulted(R, F),
     /// A terminal named an owner the runner did not send, or the engine
-    /// refused one of the runner's own steps; the runner keeps every owner.
-    Contract(ApContract),
+    /// refused one of the runner's own steps; the runner returns with every
+    /// owner, the ones without a place among them ([`ApRunner::take_kept`]).
+    Contract(R, ApContract),
     /// The port refused one of the access point's commands for its
     /// refusal: the runner stopped serving and returns with the port and
     /// every owner, the refused command among them
@@ -245,6 +259,34 @@ enum Halt<F> {
     /// The port refused a command, which the runner holds
     /// ([`ApRunner::take_refused`]).
     Refused(AccessPointRefusal),
+}
+
+/// An owner the runner had no place for when its run halted: it comes back
+/// with the runner ([`ApRunner::take_kept`]).
+pub enum Kept<'id, P, C>
+where
+    P: AccessPointPort<'id>,
+    C: TxBufferClass,
+    Ty<'id, P>: TxBufferPool<'id, C>,
+{
+    Terminal(LowerMacTerminal<'id, Ty<'id, P>>),
+    Command(Command<'id, P>),
+    GroupKey(<Keys<'id, P> as KeyTypes<'id>>::GroupKey),
+    ForeignGroup(
+        oer_protocols_ieee80211_core_upper_mac::ccmp::ForeignCcmpTxKey<
+            <Keys<'id, P> as KeyTypes<'id>>::GroupSlotIdentity,
+            <Keys<'id, P> as KeyTypes<'id>>::GroupKey,
+        >,
+    ),
+    PairwiseSlot(<Keys<'id, P> as KeyTypes<'id>>::PairwiseSlot),
+    Installing(Installing<'id, P>),
+    PairwiseKey(<Keys<'id, P> as KeyTypes<'id>>::PairwiseKey),
+    Installed(Installed<'id, P>),
+    Ticket(Ticket<'id, P>),
+    AnyBuffer(<Ty<'id, P> as PortTypes<'id>>::AnyTxBuffer),
+    Buffer(Buffer<'id, P, C>),
+    Sent(<Ty<'id, P> as TxBufferPool<'id, C>>::Sent),
+    Admitted(<P as DataPort<'id>>::Admitted),
 }
 
 /// What the runner found broken of its own contract.
@@ -428,7 +470,12 @@ enum Phase {
 
 /// Records every terminal of one port call in order.
 struct Sink<'id, T: PortTypes<'id>> {
-    terminals: heapless::Deque<LowerMacTerminal<'id, T>, 24>,
+    terminals: heapless::Deque<LowerMacTerminal<'id, T>, SINK>,
+    /// Terminals beyond the port's own bound: the run halts and returns
+    /// them.
+    spilled: heapless::Vec<LowerMacTerminal<'id, T>, SINK>,
+    /// Cut units beyond the sink's room, likewise.
+    spilled_units: heapless::Vec<(T::RxBuffer, T::RxMeta), CUT_UNITS>,
     overflow: bool,
     /// The units a receive cut handed over, read and recycled before the
     /// terminals of the same call.
@@ -440,13 +487,18 @@ struct Sink<'id, T: PortTypes<'id>> {
 /// The units of a receive cut one port call hands over at most.
 const CUT_UNITS: usize = 16;
 
+/// The terminals the sink holds: at least the port's own bound.
+const SINK: usize = 48;
+
 impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Sink<'id, T> {
     fn terminal(&mut self, terminal: LowerMacTerminal<'id, T>) {
+        // The deque holds the port's every unconsumed terminal
+        // (`PortTypes::TERMINAL_CAPACITY`, checked where the runner is
+        // made); one beyond it halts the run, which returns it. Beyond the
+        // spill too the port broke its bound twice over: it is dropped.
         if let Err(terminal) = self.terminals.push_back(terminal) {
-            // The deque holds every terminal the runner's owners can owe;
-            // one beyond it is kept from the drop with the overflow.
-            let _kept = core::mem::ManuallyDrop::new(terminal);
             self.overflow = true;
+            drop(self.spilled.push(terminal));
         }
     }
     fn tbtt(&mut self, _: TbttEvent) {}
@@ -455,9 +507,25 @@ impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Sink<'id, T> {
         // A receive cut's unit precedes the mutation's terminal: the runner
         // reads and recycles it before the call's terminals.
         if let Err(unit) = self.cut.push_back((frame, meta)) {
-            let _kept = core::mem::ManuallyDrop::new(unit);
             self.overflow = true;
+            drop(self.spilled_units.push(unit));
         }
+    }
+}
+
+/// The owner a refused source returns: the fresh buffer it was given, or
+/// the port's retransmission, which a fresh source never becomes.
+fn returned<'id, P, C, F, O, K, R>(
+    source: TxSource<Buffer<'id, P, C>, Sent<'id, P, C>, F, O, K, R>,
+) -> Kept<'id, P, C>
+where
+    P: AccessPointPort<'id>,
+    C: TxBufferClass,
+    Ty<'id, P>: TxBufferPool<'id, C>,
+{
+    match source {
+        TxSource::Fresh { buffer, .. } => Kept::Buffer(buffer),
+        TxSource::Retransmission { mpdu, .. } => Kept::Sent(mpdu),
     }
 }
 
@@ -531,6 +599,8 @@ where
     stop: bool,
     /// The command the port refused.
     refused: Option<Command<'id, P>>,
+    /// The owners a halt found no place for.
+    kept: heapless::Deque<Kept<'id, P, C>, KEPT>,
     /// Units, terminals and commands taken from the port, counted for the
     /// progress of a turn.
     taken: u32,
@@ -578,6 +648,11 @@ where
             group_permission,
             beacon,
         } = resources;
+        const {
+            if SINK < <Ty<'id, P> as PortTypes<'id>>::TERMINAL_CAPACITY {
+                panic!("the sink holds every terminal the port may owe");
+            }
+        }
         let association = <Keys<'id, P> as KeyTypes<'id>>::begin_association(
             association,
             oer_protocols_ieee80211_core_roles_ap::engine::ApSpp::NotNegotiated,
@@ -619,12 +694,15 @@ where
             scratch: [0; SCRATCH],
             sink: Sink {
                 terminals: heapless::Deque::new(),
+                spilled: heapless::Vec::new(),
+                spilled_units: heapless::Vec::new(),
                 overflow: false,
                 cut: heapless::Deque::new(),
                 cut_units: 0,
             },
             stop: false,
             refused: None,
+            kept: heapless::Deque::new(),
             taken: 0,
         }
     }
@@ -642,8 +720,8 @@ where
             self.port.poll_start(cx, self.channel, now)
         })
         .await;
-        if started.is_err() {
-            return ApEnd::StartRefused;
+        if let Err(refused) = started {
+            return ApEnd::StartRefused(self, refused);
         }
         if let Err(halt) = self.begin(clock.now()) {
             return self.halted(halt, shared);
@@ -761,7 +839,7 @@ where
         shared.publish(self.status);
         match stopped {
             Ok(()) => ApEnd::Stopped(self),
-            Err(unconfirmed) => ApEnd::StopUnconfirmed(unconfirmed),
+            Err(unconfirmed) => ApEnd::StopUnconfirmed(self, unconfirmed),
         }
     }
 
@@ -773,8 +851,18 @@ where
         shared: &ApShared,
     ) -> ApEnd<Self, PortFault<'id, P>> {
         match halt {
-            Halt::Faulted(fault) => ApEnd::Faulted(fault),
-            Halt::Contract(contract) => ApEnd::Contract(contract),
+            Halt::Faulted(fault) => {
+                self.status.running = false;
+                self.network.set_link(false);
+                shared.publish(self.status);
+                ApEnd::Faulted(self, fault)
+            }
+            Halt::Contract(contract) => {
+                self.status.running = false;
+                self.network.set_link(false);
+                shared.publish(self.status);
+                ApEnd::Contract(self, contract)
+            }
             Halt::Refused(refusal) => {
                 self.status.running = false;
                 self.network.set_link(false);
@@ -787,6 +875,30 @@ where
     /// The command the port refused, once.
     pub fn take_refused(&mut self) -> Option<Command<'id, P>> {
         self.refused.take()
+    }
+
+    /// The next owner a halt found no place for.
+    pub fn take_kept(&mut self) -> Option<Kept<'id, P, C>> {
+        self.kept.pop_front()
+    }
+
+    /// Keep a second `owner` of the same halt.
+    fn keep_also(
+        &mut self,
+        owner: Kept<'id, P, C>,
+        halt: Halt<PortFault<'id, P>>,
+    ) -> Halt<PortFault<'id, P>> {
+        drop(self.kept.push_back(owner));
+        halt
+    }
+
+    /// Keep `owner` for the result and halt on `contract`. A halt ends the
+    /// run at once and keeps two owners at most, within [`KEPT`].
+    fn keep(&mut self, owner: Kept<'id, P, C>, contract: ApContract) -> Halt<PortFault<'id, P>> {
+        // Beyond KEPT only if a halt did not end the run: the owner is then
+        // dropped, never retained out of reach.
+        drop(self.kept.push_back(owner));
+        Halt::Contract(contract)
     }
 
     /// What a turn can change: equal marks before and after a turn mean
@@ -835,7 +947,7 @@ where
             permission,
             receive: AccessPointReceive::Bss { filter },
             tsf: None,
-        });
+        })?;
         self.run_commands(now)
     }
 
@@ -845,13 +957,13 @@ where
         self.status.running = false;
         self.network.set_link(false);
         while let Some(teardown) = self.engine.stopping_peer() {
-            self.teardown(teardown);
+            self.teardown(teardown)?;
         }
         self.advance_stop(now)
     }
 
     /// Queue a teardown of `peer`.
-    fn teardown(&mut self, teardown: ApTeardown) {
+    fn teardown(&mut self, teardown: ApTeardown) -> Result<(), Halt<PortFault<'id, P>>> {
         let kind = if teardown.associated {
             ApPeerDisconnectKind::Disassociation
         } else {
@@ -860,8 +972,9 @@ where
         // A full queue keeps the earlier teardowns; this peer's key and
         // state end as the earlier ones do, without its frames.
         if self.teardowns.push_back((teardown, kind)).is_err() {
-            self.finish_teardown(teardown.peer);
+            self.finish_teardown(teardown.peer)?;
         }
+        Ok(())
     }
 
     /// One turn: the port's transmit service and terminals, the received
@@ -904,12 +1017,12 @@ where
     }
 
     /// Queue an access-point command behind the waiting ones.
-    fn queue(&mut self, command: Command<'id, P>) {
-        if let Err(command) = self.commands_waiting.push_back(command) {
-            // The queue holds every command the runner's owners make at
-            // once; one beyond it is kept from the drop.
-            let _kept = core::mem::ManuallyDrop::new(command);
-        }
+    fn queue(&mut self, command: Command<'id, P>) -> Result<(), Halt<PortFault<'id, P>>> {
+        // The queue holds every command the runner's owners make at once;
+        // one beyond it comes back with the runner.
+        self.commands_waiting
+            .push_back(command)
+            .map_err(|command| self.keep(Kept::Command(command), ApContract::CommandRefused))
     }
 
     /// Run the waiting commands in order: a held one waits for the next
@@ -924,7 +1037,7 @@ where
                 }
                 Ok(AccessPointProgress::Held(command)) => {
                     if let Err(command) = self.commands_waiting.push_front(command) {
-                        let _kept = core::mem::ManuallyDrop::new(command);
+                        return Err(self.keep(Kept::Command(command), ApContract::CommandRefused));
                     }
                     return Ok(());
                 }
@@ -955,7 +1068,7 @@ where
             let Some(slot) = self.pairwise.pop() else {
                 // No slot is vacant: the peer cannot be authorized.
                 if let Ok(teardown) = self.engine.fail_handshake(peer) {
-                    self.teardown(teardown);
+                    self.teardown(teardown)?;
                 }
                 continue;
             };
@@ -970,16 +1083,15 @@ where
                 ))
                 .is_err()
             {
-                let _kept = core::mem::ManuallyDrop::new(command);
-                return Err(Halt::Contract(ApContract::ForeignKey));
+                return Err(self.keep(Kept::Command(command), ApContract::ForeignKey));
             }
-            self.queue(command);
+            self.queue(command)?;
         }
         if self.association.is_some()
             && let Some(key) = self.removals.pop_front()
             && let Some(association) = self.association.take()
         {
-            self.queue(AccessPointCommand::RemovePairwise { association, key });
+            self.queue(AccessPointCommand::RemovePairwise { association, key })?;
         }
         Ok(())
     }
@@ -988,7 +1100,16 @@ where
     /// handling them left.
     fn terminals(&mut self, now: Instant) -> Result<(), Halt<PortFault<'id, P>>> {
         if self.sink.overflow {
-            return Err(Halt::Contract(ApContract::UnknownTicket(u8::MAX)));
+            // The spilled owners come back with the runner, the units
+            // recycled first.
+            while let Some((frame, _)) = self.sink.spilled_units.pop() {
+                self.port.recycle(frame);
+            }
+            let halt = Halt::Contract(ApContract::UnknownTicket(u8::MAX));
+            while let Some(terminal) = self.sink.spilled.pop() {
+                drop(self.kept.push_back(Kept::Terminal(terminal)));
+            }
+            return Err(halt);
         }
         while let Some((frame, meta)) = self.sink.cut.pop_front() {
             let result = self.received(
@@ -1033,12 +1154,10 @@ where
             }) => {
                 self.group_permission = Some(permission);
                 let Some(pending) = self.group_pending.take() else {
-                    let _kept = core::mem::ManuallyDrop::new(key);
-                    return Err(Halt::Contract(ApContract::ForeignKey));
+                    return Err(self.keep(Kept::GroupKey(key), ApContract::ForeignKey));
                 };
                 let Some(key_id) = GroupKeyId::new(GROUP_KEY_ID) else {
-                    let _kept = core::mem::ManuallyDrop::new(key);
-                    return Err(Halt::Contract(ApContract::ForeignKey));
+                    return Err(self.keep(Kept::GroupKey(key), ApContract::ForeignKey));
                 };
                 let installation = ApGroupKeyInstallation {
                     key_id,
@@ -1049,8 +1168,7 @@ where
                 {
                     Ok(installed) => installed,
                     Err(foreign) => {
-                        let _kept = core::mem::ManuallyDrop::new(foreign);
-                        return Err(Halt::Contract(ApContract::ForeignKey));
+                        return Err(self.keep(Kept::ForeignGroup(foreign), ApContract::ForeignKey));
                     }
                 };
                 self.group = Some(installed);
@@ -1073,7 +1191,7 @@ where
             })) => {
                 self.association = Some(association);
                 if let Err(slot) = self.pairwise.push(slot) {
-                    let _kept = core::mem::ManuallyDrop::new(slot);
+                    return Err(self.keep(Kept::PairwiseSlot(slot), ApContract::ForeignKey));
                 }
                 Ok(())
             }
@@ -1091,10 +1209,7 @@ where
             }
             // The station's terminals never come to the access point's
             // runner: no station command goes.
-            other => {
-                let _kept = core::mem::ManuallyDrop::new(other);
-                Err(Halt::Contract(ApContract::UnknownTicket(u8::MAX)))
-            }
+            other => Err(self.keep(Kept::Terminal(other), ApContract::UnknownTicket(u8::MAX))),
         }
     }
 
@@ -1115,10 +1230,12 @@ where
                     break;
                 }
                 Err(foreign) => {
-                    key = foreign.key;
+                    // The entry's own place, which its removal freed.
                     if let Err(back) = self.installing.push((peer, foreign.pending)) {
-                        let _kept = core::mem::ManuallyDrop::new(back);
+                        let halt = self.keep(Kept::Installing(back), ApContract::ForeignKey);
+                        return Err(self.keep_also(Kept::PairwiseKey(foreign.key), halt));
                     }
+                    key = foreign.key;
                     // The swapped-in entry now sits at `index`; the one put
                     // back went to the end.
                     index = index.saturating_add(1);
@@ -1139,13 +1256,12 @@ where
             // The peer left meanwhile: its key comes off, and its Message 3
             // does not go.
             if let Err(key) = self.removals.push_back(installed.into_key()) {
-                let _kept = core::mem::ManuallyDrop::new(key);
+                return Err(self.keep(Kept::PairwiseKey(key), ApContract::ForeignKey));
             }
             return Ok(());
         }
         if let Err(installed) = self.keys.push((peer, installed)) {
-            let _kept = core::mem::ManuallyDrop::new(installed);
-            return Err(Halt::Contract(ApContract::ForeignKey));
+            return Err(self.keep(Kept::Installed(installed), ApContract::ForeignKey));
         }
         // The key reads the station's Message 4 now, protected or not; the
         // controlled port stays closed until Message 4 is verified.
@@ -1184,7 +1300,7 @@ where
                     key_id,
                     oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&self.group_key),
                 );
-                self.queue(command);
+                self.queue(command)?;
                 Ok(())
             }
             Phase::StartingTsf => {
@@ -1202,7 +1318,7 @@ where
                         self.queue(AccessPointCommand::RemoveGroup {
                             permission,
                             key: group.into_key().key,
-                        });
+                        })?;
                         Ok(())
                     }
                     (group, permission) => {
@@ -1246,7 +1362,7 @@ where
             permission,
             receive,
             tsf,
-        });
+        })?;
         Ok(())
     }
 
@@ -1284,20 +1400,21 @@ where
         let parts = completed.into_parts(&mut self.access);
         let index = parts.ticket.index();
         let outcome = parts.outcome;
-        if let Err(ticket) = self.tickets.push(parts.ticket) {
-            let _kept = core::mem::ManuallyDrop::new(ticket);
-        }
         let (buffer, _) = parts.payload.into_parts();
         let buffer = match <Ty<'id, P> as TxBufferPool<'id, C>>::class(buffer) {
             Ok(buffer) => buffer,
             Err(buffer) => match <Ty<'id, P> as TxBufferPool<'id, C>>::sent(buffer) {
                 Ok(sent) => <Ty<'id, P> as TxBufferPool<'id, C>>::renew(sent).0,
                 Err(other) => {
-                    let _kept = core::mem::ManuallyDrop::new(other);
-                    return Err(Halt::Contract(ApContract::BufferClass));
+                    let halt = self.keep(Kept::AnyBuffer(other), ApContract::BufferClass);
+                    return Err(self.keep_also(Kept::Ticket(parts.ticket), halt));
                 }
             },
         };
+        if let Err(ticket) = self.tickets.push(parts.ticket) {
+            let halt = self.keep(Kept::Ticket(ticket), ApContract::UnknownTicket(index));
+            return Err(self.keep_also(Kept::Buffer(buffer), halt));
+        }
         self.give_buffer(buffer)?;
         let delivered = matches!(outcome, TxOutcome::Ended(SingleEnd::Delivered { .. }));
         let Some(purpose) = self
@@ -1330,11 +1447,11 @@ where
                     .push_front((teardown, ApPeerDisconnectKind::Deauthentication))
                     .is_err()
                 {
-                    self.finish_teardown(teardown.peer);
+                    self.finish_teardown(teardown.peer)?;
                 }
             }
             Purpose::Teardown(teardown, ApPeerDisconnectKind::Deauthentication) => {
-                self.finish_teardown(teardown.peer);
+                self.finish_teardown(teardown.peer)?;
             }
             Purpose::Beacon(context) => {
                 let beacon = match outcome {
@@ -1363,25 +1480,25 @@ where
         mut buffer: Buffer<'id, P, C>,
     ) -> Result<(), Halt<PortFault<'id, P>>> {
         if buffer.renew_msdu().is_err() {
-            let _kept = core::mem::ManuallyDrop::new(buffer);
-            return Err(Halt::Contract(ApContract::BufferClass));
+            return Err(self.keep(Kept::Buffer(buffer), ApContract::BufferClass));
         }
         if let Err(buffer) = self.buffers.push(buffer) {
-            let _kept = core::mem::ManuallyDrop::new(buffer);
+            return Err(self.keep(Kept::Buffer(buffer), ApContract::BufferClass));
         }
         Ok(())
     }
 
     /// The peer's teardown frames went: its key comes off and the engine
     /// forgets it.
-    fn finish_teardown(&mut self, peer: [u8; 6]) {
-        self.remove_key(peer);
+    fn finish_teardown(&mut self, peer: [u8; 6]) -> Result<(), Halt<PortFault<'id, P>>> {
+        self.remove_key(peer)?;
         self.installs.retain(|waiting| *waiting != peer);
         self.held_message3.retain(|(waiting, _)| *waiting != peer);
         // A peer that left by itself is gone already.
         if self.engine.forget(peer).is_err() {
             self.refuse();
         }
+        Ok(())
     }
 
     /// Count a step the engine refused.
@@ -1390,13 +1507,14 @@ where
     }
 
     /// Queue the removal of `peer`'s pairwise key, if it holds one.
-    fn remove_key(&mut self, peer: [u8; 6]) {
+    fn remove_key(&mut self, peer: [u8; 6]) -> Result<(), Halt<PortFault<'id, P>>> {
         if let Some(at) = self.keys.iter().position(|(owner, _)| *owner == peer) {
             let (_, installed) = self.keys.swap_remove(at);
             if let Err(key) = self.removals.push_back(installed.into_key()) {
-                let _kept = core::mem::ManuallyDrop::new(key);
+                return Err(self.keep(Kept::PairwiseKey(key), ApContract::ForeignKey));
             }
         }
+        Ok(())
     }
 
     /// Pull the received units of this turn and act on each.
@@ -1453,7 +1571,7 @@ where
                 self.send_scratch(frame, Purpose::Response(after), operation, now)
             }
             ApReceived::PeerLeft { peer } => {
-                self.remove_key(peer);
+                self.remove_key(peer)?;
                 self.installs.retain(|waiting| *waiting != peer);
                 self.held_message3.retain(|(waiting, _)| *waiting != peer);
                 Ok(())
@@ -1480,7 +1598,7 @@ where
                         if !held {
                             self.installs.retain(|waiting| *waiting != peer);
                             if let Ok(teardown) = self.engine.fail_handshake(peer) {
-                                self.teardown(teardown);
+                                self.teardown(teardown)?;
                             }
                         }
                         Ok(())
@@ -1491,13 +1609,13 @@ where
                         if (!keyed || self.engine.authorize(peer, now).is_err())
                             && let Ok(teardown) = self.engine.fail_handshake(peer)
                         {
-                            self.teardown(teardown);
+                            self.teardown(teardown)?;
                         }
                         Ok(())
                     }
                     Ok(ApEapol::Deauthenticate { peer }) => {
                         if let Ok(teardown) = self.engine.fail_handshake(peer) {
-                            self.teardown(teardown);
+                            self.teardown(teardown)?;
                         }
                         Ok(())
                     }
@@ -1526,12 +1644,12 @@ where
                     let (frame, context) = transmit.into_parts();
                     self.send_eapol(&frame, context, now)?;
                 }
-                Ok(Some(ApDue::Teardown(teardown))) => self.teardown(teardown),
+                Ok(Some(ApDue::Teardown(teardown))) => self.teardown(teardown)?,
                 Ok(None) | Err(_) => {}
             }
         }
         while let Some(teardown) = self.engine.due_inactive(now) {
-            self.teardown(teardown);
+            self.teardown(teardown)?;
         }
         Ok(())
     }
@@ -1559,8 +1677,7 @@ where
                     bytes,
                 ),
                 Err(_) => {
-                    let _kept = core::mem::ManuallyDrop::new(buffer);
-                    return Err(Halt::Contract(ApContract::BufferClass));
+                    return Err(self.keep(Kept::Buffer(buffer), ApContract::BufferClass));
                 }
             };
             match written {
@@ -1591,7 +1708,7 @@ where
                     TxOperation::Data,
                     now,
                 )?,
-                Err(_) => self.finish_teardown(teardown.peer),
+                Err(_) => self.finish_teardown(teardown.peer)?,
             }
         }
         Ok(())
@@ -1666,7 +1783,7 @@ where
             Purpose::Teardown(teardown, kind) => {
                 // It goes when a ticket and a buffer are back.
                 if self.teardowns.push_front((teardown, kind)).is_err() {
-                    self.finish_teardown(teardown.peer);
+                    self.finish_teardown(teardown.peer)?;
                 }
             }
             Purpose::Beacon(context) => {
@@ -1688,8 +1805,7 @@ where
         let written = match buffer.bytes_mut() {
             Ok(bytes) => self.engine.beacon(now, bytes),
             Err(_) => {
-                let _kept = core::mem::ManuallyDrop::new(buffer);
-                return Err(Halt::Contract(ApContract::BufferClass));
+                return Err(self.keep(Kept::Buffer(buffer), ApContract::BufferClass));
             }
         };
         match written {
@@ -1727,19 +1843,26 @@ where
         let index = ticket.index();
         let admitted = match self.admit(ticket, buffer, frame, operation, deadline) {
             Ok(admitted) => admitted,
-            Err((ticket, buffer)) => {
+            Err((ticket, owner)) => {
                 if let Err(ticket) = self.tickets.push(ticket) {
-                    let _kept = core::mem::ManuallyDrop::new(ticket);
+                    let halt = self.keep(Kept::Ticket(ticket), ApContract::UnknownTicket(index));
+                    if let Some(owner) = owner {
+                        return Err(self.keep_also(owner, halt));
+                    }
+                    return Err(halt);
                 }
-                if let Some(buffer) = buffer {
-                    self.give_buffer(buffer)?;
+                match owner {
+                    Some(Kept::Buffer(buffer)) => self.give_buffer(buffer)?,
+                    // A fresh source comes back fresh: another owner is the
+                    // port's break, kept for the result.
+                    Some(other) => return Err(self.keep(other, ApContract::BufferClass)),
+                    None => {}
                 }
                 return self.unsent(purpose, now);
             }
         };
         let Some(place) = self.purposes.get_mut(usize::from(index)) else {
-            let _kept = core::mem::ManuallyDrop::new(admitted);
-            return Err(Halt::Contract(ApContract::UnknownTicket(index)));
+            return Err(self.keep(Kept::Admitted(admitted), ApContract::UnknownTicket(index)));
         };
         *place = Some(purpose);
         // A refused submission ends at once, withdrawn: its terminal in the
@@ -1763,7 +1886,7 @@ where
         frame: ApFrame,
         operation: TxOperation,
         deadline: Option<Instant>,
-    ) -> Result<<P as DataPort<'id>>::Admitted, (Ticket<'id, P>, Option<Buffer<'id, P, C>>)> {
+    ) -> Result<<P as DataPort<'id>>::Admitted, (Ticket<'id, P>, Option<Kept<'id, P, C>>)> {
         let policy = self.policy;
         let (rate, transmissions, category) = match frame.kind {
             ApFrameKind::Pairwise { rate, .. } => (
@@ -1800,7 +1923,7 @@ where
             _ => None,
         };
         let Some(class_frame) = class_frame else {
-            return Err((ticket, Some(buffer)));
+            return Err((ticket, Some(Kept::Buffer(buffer))));
         };
         let protection = match frame.kind {
             ApFrameKind::Pairwise { peer, .. } => {
@@ -1814,7 +1937,7 @@ where
                         key: AttemptKey::Pairwise(numbered.key),
                         packet_number: numbered.packet_number,
                     }),
-                    None => return Err((ticket, Some(buffer))),
+                    None => return Err((ticket, Some(Kept::Buffer(buffer)))),
                 }
             }
             ApFrameKind::Group => match self.group.as_ref().and_then(InstalledCcmpTxKey::number) {
@@ -1822,9 +1945,26 @@ where
                     key: AttemptKey::Group(&numbered.key.key),
                     packet_number: numbered.packet_number,
                 }),
-                None => return Err((ticket, Some(buffer))),
+                None => return Err((ticket, Some(Kept::Buffer(buffer)))),
             },
             ApFrameKind::Management { .. } | ApFrameKind::Beacon => TxProtection::Open,
+        };
+        // What the attempt needs beside its MPDU is taken first: a refusal
+        // after the preparation would hold a prepared MPDU it cannot return.
+        let Some(power) = SupportedPower::new(TxPower::Calibrated) else {
+            return Err((ticket, Some(Kept::Buffer(buffer))));
+        };
+        let beacon = match (frame.kind, deadline) {
+            (ApFrameKind::Beacon, Some(deadline)) => {
+                let Some(stamp) = BeaconStamp::new(BeaconTimestamp::Caller) else {
+                    return Err((ticket, Some(Kept::Buffer(buffer))));
+                };
+                let Some(permission) = self.beacon.take() else {
+                    return Err((ticket, Some(Kept::Buffer(buffer))));
+                };
+                Some((permission, stamp, deadline))
+            }
+            _ => None,
         };
         let source = TxSource::Fresh {
             buffer,
@@ -1834,15 +1974,11 @@ where
         };
         let checked = match source.check() {
             Ok(checked) => checked,
-            Err(refused) => {
-                let buffer = match refused.operation {
-                    TxSource::Fresh { buffer, .. } => Some(buffer),
-                    TxSource::Retransmission { mpdu, .. } => {
-                        let _kept = core::mem::ManuallyDrop::new(mpdu);
-                        None
-                    }
-                };
-                return Err((ticket, buffer));
+            Err(refusal) => {
+                if let Some((permission, _, _)) = beacon {
+                    self.beacon = Some(permission);
+                }
+                return Err((ticket, Some(returned(refusal.operation))));
             }
         };
         let prepared =
@@ -1850,44 +1986,27 @@ where
                 checked,
             ) {
                 Ok(prepared) => prepared,
-                Err(refused) => {
-                    let buffer = match refused.operation {
-                        TxSource::Fresh { buffer, .. } => Some(buffer),
-                        TxSource::Retransmission { mpdu, .. } => {
-                            let _kept = core::mem::ManuallyDrop::new(mpdu);
-                            None
-                        }
-                    };
-                    return Err((ticket, buffer));
+                Err(refusal) => {
+                    if let Some((permission, _, _)) = beacon {
+                        self.beacon = Some(permission);
+                    }
+                    return Err((ticket, Some(returned(refusal.operation))));
                 }
             };
-        let Some(power) = SupportedPower::new(TxPower::Calibrated) else {
-            let _kept = core::mem::ManuallyDrop::new(prepared);
-            return Err((ticket, None));
-        };
-        match (frame.kind, deadline) {
-            (ApFrameKind::Beacon, Some(deadline)) => {
-                let (Some(permission), Some(stamp)) = (
-                    self.beacon.take(),
-                    BeaconStamp::new(BeaconTimestamp::Caller),
-                ) else {
-                    let _kept = core::mem::ManuallyDrop::new(prepared);
-                    return Err((ticket, None));
-                };
-                Ok(self.port.admit_beacon(
-                    BeaconAttempt {
-                        context: self.context.clone(),
-                        ticket,
-                        source: prepared,
-                        power,
-                        permission,
-                        stamp,
-                        deadline,
-                    }
-                    .admit(),
-                ))
-            }
-            _ => Ok(self.port.admit_access_point(
+        match beacon {
+            Some((permission, stamp, deadline)) => Ok(self.port.admit_beacon(
+                BeaconAttempt {
+                    context: self.context.clone(),
+                    ticket,
+                    source: prepared,
+                    power,
+                    permission,
+                    stamp,
+                    deadline,
+                }
+                .admit(),
+            )),
+            None => Ok(self.port.admit_access_point(
                 Attempt {
                     context: self.context.clone(),
                     ticket,
