@@ -429,11 +429,7 @@ impl TxSupply<WrittenFrame> for Supply {
                 TxPublishRefused::Lost => TxRefused::Lost,
             })
     }
-    fn give(
-        &mut self,
-        memory: TxMemory,
-        _cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
-    ) {
+    fn give(&mut self, memory: TxMemory, _end: oer_protocols_ieee80211_contracts_port::TxEnd) {
         self.free
             .ended
             .borrow_mut()
@@ -1295,10 +1291,16 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
         assert!(self.link.try_send(link).is_ok(), "the mailbox is empty");
         self.send(ToActor::Connect);
         self.send(ToActor::Release);
-        self.runner.publish_link_for_test(LinkSnapshot {
-            state: LinkState::Up,
-            epoch: 1,
-        });
+        // The test's association admits DSSS 1 Mb/s.
+        self.runner.publish_link_for_test(
+            LinkSnapshot {
+                state: LinkState::Up,
+                epoch: 1,
+            },
+            Some(oer_protocols_ieee80211_wire::phy::PhyRate::Legacy(
+                oer_protocols_ieee80211_wire::phy::LegacyRate::Dsss1M,
+            )),
+        );
         self.settle();
     }
 

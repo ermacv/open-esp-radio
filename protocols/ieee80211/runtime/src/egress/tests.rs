@@ -4,6 +4,7 @@ use std::vec::Vec;
 
 use core::num::NonZeroU32;
 
+use oer_protocols_ieee80211_contracts_port::PhyRate;
 use oer_protocols_ieee80211_core_upper_mac::airtime::{AirtimeCandidate, AirtimeStorage};
 use oer_protocols_network_port::{Candidate, Class, Egress, Ready};
 
@@ -51,6 +52,8 @@ fn control(peer: u8) -> Work {
 #[derive(Default)]
 struct Air {
     asleep: Vec<u8>,
+    /// What the policy reported of each settled frame's air.
+    reports: Vec<(u8, PhyRate)>,
 }
 
 impl PeerAir for Air {
@@ -67,6 +70,10 @@ impl PeerAir for Air {
     fn ceiling(&self, _ready: &Ready) -> NonZeroU32 {
         micros(CEILING)
     }
+
+    fn reported(&mut self, key: u8, rate: PhyRate) {
+        self.reports.push((key, rate));
+    }
 }
 
 type Policy<'o> = AirtimeEgress<'o, Air, u32, 4, 2>;
@@ -82,6 +89,7 @@ fn exchange(policy: &mut Policy<'_>, ready: &[Work], ticket: u32, charged: u32) 
     let exchange = Exchange {
         ticket,
         charged: Some(micros(charged)),
+        rate: None,
     };
     policy.notice(RadioNotice::Ended(exchange)).unwrap();
     work
@@ -115,6 +123,7 @@ fn a_peer_that_costs_more_waits_longer() {
         let done = Exchange {
             ticket,
             charged: Some(micros(charged)),
+            rate: None,
         };
         policy.notice(RadioNotice::Ended(done)).unwrap();
     }
@@ -157,7 +166,10 @@ fn control_work_goes_first_within_its_peer() {
 #[test]
 fn a_sleeping_peer_is_not_chosen_and_earns_nothing() {
     let mut storage = storage();
-    let air = Air { asleep: [2].into() };
+    let air = Air {
+        asleep: [2].into(),
+        ..Air::default()
+    };
     let mut policy = Policy::new(&mut storage, air);
     let ready = [data(1, 0), data(2, 1)];
     for ticket in 0..10 {
@@ -175,7 +187,10 @@ fn a_sleeping_peer_is_not_chosen_and_earns_nothing() {
 #[test]
 fn nothing_ready_chooses_nothing() {
     let mut storage = storage();
-    let air = Air { asleep: [1].into() };
+    let air = Air {
+        asleep: [1].into(),
+        ..Air::default()
+    };
     let mut policy = Policy::new(&mut storage, air);
     let chosen = policy.choose([data(1, 0)].into_iter()).unwrap();
     assert!(chosen.is_none());
@@ -195,6 +210,7 @@ fn a_full_horizon_waits_for_a_completion() {
     let done = Exchange {
         ticket: 0,
         charged: Some(micros(COST)),
+        rate: None,
     };
     policy.notice(RadioNotice::Ended(done)).unwrap();
     assert!(policy.choose(ready.iter().copied()).unwrap().is_some());
@@ -229,6 +245,7 @@ fn an_unknown_cost_keeps_the_whole_reservation() {
     let unknown = Exchange {
         ticket: 7,
         charged: None,
+        rate: None,
     };
     policy.notice(RadioNotice::Ended(unknown)).unwrap();
     let left = i64::from(QUANTUM) - i64::from(CEILING);
@@ -272,6 +289,7 @@ fn a_completion_of_no_frame_is_a_fault() {
     let stray = Exchange {
         ticket: 9,
         charged: None,
+        rate: None,
     };
     assert_eq!(
         policy.notice(RadioNotice::Ended(stray)),
@@ -292,6 +310,7 @@ fn a_retired_peers_frame_settles_at_its_ceiling_and_its_return_closes_it() {
     let done = Exchange {
         ticket: 3,
         charged: Some(micros(COST)),
+        rate: None,
     };
     policy.notice(RadioNotice::Ended(done)).unwrap();
     assert_eq!(policy.in_flight(), 0, "its return closed the ticket");
@@ -307,6 +326,7 @@ fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
         let done = Exchange {
             ticket,
             charged: Some(micros(COST)),
+            rate: None,
         };
         policy.notice(RadioNotice::Ended(done)).unwrap();
         work.0.flow.unwrap()
@@ -335,6 +355,7 @@ fn an_unknown_cost_buys_no_air_when_the_estimate_is_low() {
         let done = Exchange {
             ticket,
             charged: (peer == 2).then(|| micros(CEILING)),
+            rate: None,
         };
         policy.notice(RadioNotice::Ended(done)).unwrap();
     }
@@ -359,6 +380,7 @@ fn a_peer_that_left_frees_its_account() {
     let ended = Exchange {
         ticket: 0,
         charged: Some(micros(CEILING)),
+        rate: None,
     };
     policy.notice(RadioNotice::Ended(ended)).unwrap();
     assert_eq!(
@@ -390,6 +412,7 @@ fn late_completions_across_many_associations_never_exhaust_the_accounts() {
         let done = Exchange {
             ticket,
             charged: Some(micros(COST)),
+            rate: None,
         };
         policy.notice(RadioNotice::Ended(done)).unwrap();
     }
@@ -411,6 +434,7 @@ fn a_late_return_after_its_account_closed_charges_nothing_twice() {
     let late = Exchange {
         ticket: 7,
         charged: Some(micros(COST)),
+        rate: None,
     };
     policy.notice(RadioNotice::Ended(late)).unwrap();
     assert_eq!(policy.balance_micros(1), None, "no account comes back");
@@ -447,6 +471,8 @@ impl PeerAir for Counting {
     fn ceiling(&self, _ready: &Ready) -> NonZeroU32 {
         micros(CEILING)
     }
+
+    fn reported(&mut self, _key: u8, _rate: PhyRate) {}
 }
 
 /// A ready list that counts the works it yields, over every pass.
@@ -519,4 +545,50 @@ fn more_peers_ready_than_accounts_is_the_scheduler_s_refusal() {
             oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeError::AccountCapacity
         ))
     ));
+}
+
+fn rate(mcs: u8) -> PhyRate {
+    use oer_protocols_ieee80211_wire::phy::{HtMcs, HtRate, PpduBandwidth};
+    PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), PpduBandwidth::Mhz20, false).unwrap())
+}
+
+/// A settled frame's rate reaches the air under its account's key, after
+/// its settlement; a loss, an end without a rate and a frame whose
+/// association left say nothing.
+#[test]
+fn a_settled_frame_reports_its_rate_under_its_account() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let send = |policy: &mut Policy<'_>, peer: u8, ticket: u32| {
+        let (_, held) = policy.choose([data(peer, 0)].into_iter()).unwrap().unwrap();
+        policy.accepted(held, ticket).unwrap();
+    };
+    send(&mut policy, 1, 0);
+    policy
+        .notice(RadioNotice::Ended(Exchange {
+            ticket: 0,
+            charged: Some(micros(COST)),
+            rate: Some(rate(7)),
+        }))
+        .unwrap();
+    send(&mut policy, 2, 1);
+    policy
+        .notice(RadioNotice::Ended(Exchange {
+            ticket: 1,
+            charged: Some(micros(COST)),
+            rate: None,
+        }))
+        .unwrap();
+    send(&mut policy, 2, 2);
+    policy.notice(RadioNotice::Lost(2)).unwrap();
+    send(&mut policy, 2, 3);
+    policy.notice(RadioNotice::Left(2)).unwrap();
+    policy
+        .notice(RadioNotice::Ended(Exchange {
+            ticket: 3,
+            charged: Some(micros(COST)),
+            rate: Some(rate(1)),
+        }))
+        .unwrap();
+    assert_eq!(policy.air().reports, [(1, rate(7))]);
 }

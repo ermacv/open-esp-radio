@@ -259,9 +259,11 @@ impl State {
         if let Some(port) = flight.port {
             self.flows.entry(port).or_default().add(flight.cost);
         }
+        // The medium models no PHY rate.
         self.notices.push_back(RadioNotice::Ended(Exchange {
             ticket: flight.ticket,
             charged,
+            rate: None,
         }));
     }
 }
@@ -492,5 +494,9 @@ impl PeerAir for Medium {
         let state = self.0.borrow();
         let ceiling = state.ceiling(state.peer_of(ready.peer), ready.length);
         NonZeroU32::new(ceiling).unwrap_or(NonZeroU32::MIN)
+    }
+
+    /// The medium's estimates do not depend on a rate, and it reports none.
+    fn reported(&mut self, _key: PeerKey, _rate: oer_protocols_ieee80211_runtime::egress::PhyRate) {
     }
 }

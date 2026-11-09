@@ -8,6 +8,8 @@
 
 use core::num::NonZeroU32;
 
+/// The full rate a settled frame's report names ([`PeerAir::reported`]).
+pub use oer_protocols_ieee80211_contracts_port::PhyRate;
 use oer_protocols_ieee80211_core_upper_mac::airtime::{
     AirtimeCandidate, AirtimeError, AirtimeInFlight, AirtimeReservation, AirtimeScheduler,
     AirtimeStorage,
@@ -27,6 +29,10 @@ pub trait PeerAir {
     /// frame whose cost is not known is charged this, so no peer gains by not
     /// knowing it. It holds only as far as this is a true ceiling.
     fn ceiling(&self, ready: &Ready) -> NonZeroU32;
+
+    /// A frame of `key`'s association settled, its last transmission on the
+    /// air at the full rate `rate`.
+    fn reported(&mut self, key: Self::Key, rate: PhyRate);
 }
 
 /// How a frame ended, as a radio port's completion.
@@ -36,6 +42,10 @@ pub struct Exchange<T> {
     /// What the air cost, or `None` when that is not known, which charges the
     /// frame's ceiling or its reservation, whichever is more.
     pub charged: Option<NonZeroU32>,
+    /// The full rate of the frame's last transmission with an established
+    /// rate; `None` when none has one, which is no proof that nothing was
+    /// sent.
+    pub rate: Option<PhyRate>,
 }
 
 /// What a radio port tells the policy.
@@ -411,6 +421,7 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
             RadioNotice::Lost(ticket) => Exchange {
                 ticket,
                 charged: None,
+                rate: None,
             },
             RadioNotice::Left(key) => return self.retire(key),
         };
@@ -429,7 +440,14 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
                 let charged = exchange
                     .charged
                     .unwrap_or_else(|| ceiling.max(flight.reserved_micros()));
-                self.settle(flight, charged)
+                let key = flight.key();
+                self.settle(flight, charged)?;
+                // The association's air as it last went: what its next
+                // frames' least grants assume.
+                if let Some(rate) = exchange.rate {
+                    self.air.reported(key, rate);
+                }
+                Ok(())
             }
             // Settled when its association left: its return closes it.
             Some(Flight::Closed { .. }) => Ok(()),

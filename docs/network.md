@@ -150,6 +150,23 @@ only after the policy chose it and the port gave the room.
   once: each work's least grant once, kept per account as the largest and
   with the work next in turn, which is all the scheduler and the pick read
   of it. The scan stays one pass over the backlog per frame sent.
+- **Least grant.** A frame's least useful grant is its PPDU at the full rate
+  (mode, MCS, streams, width, guard interval and LTF) of its association's
+  last settled frame: each frame's end carries its own last established rate
+  (`TxEnd`), the data plane keeping it per frame as it keeps the cost, to
+  `Completions` and the policy, which hands it to `StationAir` under the
+  frame's own association. A report of an earlier association changes
+  nothing. Until the current association reports one, the grant is the PPDU
+  at its slowest data rate, `NegotiatedLegacyRates::slowest`: where every
+  rate walk of its plans ends, supported non-basic rates included, so an
+  OFDM-only access point starts at 6 Mb/s. The link publishes that rate in
+  the same word as its epoch. `rate: None` in an end means no established
+  rate, not that nothing was sent. The cost model is asked only with
+  a resolved rate (`FrameCost::least` takes a `PhyRate`): a link up without
+  its association's rate offers no account, so no frame is charged at a rate
+  its association was not given. The S31's cost model keeps its last answers
+  keyed by the resolved rate and the length (the grant) and by the length
+  (the ceiling); a frame no PPDU at its rate carries asks the most.
 - **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
   publications that reached the air by the backend's declared model: the
   modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck
