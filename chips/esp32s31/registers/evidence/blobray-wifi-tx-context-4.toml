@@ -1,0 +1,77 @@
+schema = 1
+
+# SOURCE(esp32s31): libpp[lmac.o]::lmacInit, libpp[lmac.o]::lmacInitAc,
+# libpp[lmac.o]::lmac_stop_hw_txq, libpp[lmac.o]::lmacStopTransmit,
+# libpp[lmac.o]::lmacTxFrame, libpp[hal_mac.o]::hal_mac_is_txq_valid,
+# libpp[hal_mac.o]::hal_mac_set_txq_invalid,
+# libpp[hal_mac_tx.o]::hal_mac_txq_disable.
+[[sources]]
+id = "BLOB_LIBPP_TX_CONTEXT_4_20261109"
+description = """
+SOURCE: Blobray function-records and call-arguments (riscv-integer ABI),
+espressif/esp32-wifi-lib commit f856b5db55cb18e2d1826044430f3f4089e47cf9,
+esp32s31/libpp.a sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391.
+Software context: lmac.o::lmacInit+0xa2 calls lmacInitAc(4, 1, 0, 0, 0)
+after the calls for indices 0..3; lmacInitAc (0x62) stores the index byte at
+instance+4 (+0x1a) of our_instances[index] (stride 56) and zeroes the state
+byte at instance+18 (+0x3a), without any MMIO access. These are the values of
+a software instance; they establish no hardware meaning.
+Concrete index-4 CONTROL site: lmac.o::lmac_stop_hw_txq (0x7e), reached
+from if_hwctrl.o::ic_stop_hw_txq, loops over indices 0..4 (bound five at
++0x32, back edge +0x68). For each index whose instance+18 byte is nonzero it
+calls lmacStopTransmit(index & 0xff) at +0x62. lmacStopTransmit(4) passes 4
+to hal_mac.o::hal_mac_is_txq_valid (+0x3a), hal_mac.o::hal_mac_set_txq_invalid
+(+0x46) and, when the first returned one, hal_mac_tx.o::hal_mac_txq_disable
+(+0x64). All three compute (0x20104d7 - index) << 4, which is 0x20104d30 for
+index 4: hal_mac_is_txq_valid+0xc loads it and returns bit 30;
+hal_mac_set_txq_invalid+0xe..+0x18 clears bit 30 by fresh-read RMW;
+hal_mac_txq_disable+0xe..+0x14 clears bits 31:30 by fresh-read RMW. The
+instance+18 byte is zeroed by lmacInitAc and set to one by lmacTxFrame+0x144
+for the instance it publishes on; its other stores (field-accesses offset 18
+width 1: lmacDisableTransmit, the retry and frame-exchange paths,
+trc_onAmpduOp) act on an instance they are handed. No path that makes it
+nonzero for instance 4 was established, so whether this site runs for index
+4 is not known. This is a static vendor access with a constant index and a
+computed address, not an executed or observed access.
+Indexed candidates: hal_mac_tx.o::hal_mac_tx_config_edca (+0x28, +0x42,
++0x5e), hal_mac_tx.o::hal_mac_tx_config_timeout (+0x6c),
+hal_test.o::test_disable_edca_tx (+0x16, +0x42, +0x5a) and
+hal_coex.o::hal_set_tx_pti (+0x2c) address 0x20104d6c - 16 * index, and
+hal_mac_tx.o::hal_mac_txq_enable (+0x1e) and hal_mac.o::hal_mac_is_txq_enabled
+address (0x20104d7 - index) << 4. Their index comes from the instance byte or
+an argument and no call with index 4 was found, so their index-4 addresses
+0x20104d2c and 0x20104d30 remain candidates under the general formula. In
+libpp and libnet80211 no pp_post or lmacTxFrame call site passes a constant
+4, and hal_mac.o::hal_mac_deinit_twt_tx loops over indices 0..3 only; the
+analysis is partial (opaque calls, indirect posts). No reset,
+field meaning, read safety or write side effect of either word is inferred.
+"""
+
+# SOURCE(esp32s31): librftest[mac_common.o]::BackOffCountGet,
+# librftest[mac_common.o]::ConfAddrGet, librftest[mac_common.o]::Plcp0AddrGet.
+[[sources]]
+id = "BLOB_LIBRFTEST_TX_CONTEXT_4_ADDRESSES_20261109"
+description = """
+SOURCE: Blobray function-records and call-arguments (riscv-integer ABI);
+table bytes read with llvm-objdump -s from the archive member.
+espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0,
+esp32s31/librftest.a sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a,
+member mac_common.o.
+Complete BackOffCountGet (0x7c) dispatches selectors 10..15 and 20..25
+through its jump table to direct constant loads of 0x20104d6c, 0x20104d5c,
+0x20104d4c, 0x20104d3c, 0x20104d2c and 0x20104d1c, masked with 0xfff;
+selectors 14 and 24 load 0x20104d2c at +0x46..+0x4a.
+Complete ConfAddrGet (0x24) returns 0x20104d6c for selector 10 and reads
+.rodata.CSWTCH.101 (.LANCHOR31, 28 bytes, no relocations) for selectors
+11..17; the selector-14 entry at +0xc is 0x20104d2c.
+Complete Plcp0AddrGet (0x24) reads .rodata.CSWTCH.96 (.LANCHOR26, 108 bytes,
+no relocations) for selectors 1..27; the selector-10 entry is 0x20104d70 and
+the selector-14 and selector-24 entries at +0x34 and +0x5c are 0x20104d30.
+So the vendor's own constants pair 0x20104d2c with 0x20104d30 for selector
+14, one 0x10 step below the pair 0x20104d3c/0x20104d40 that selector 13
+returns, as the lmac formula pairs them for index 4. The selector is a
+run-time argument: call-arguments shows constant selectors zero and ten
+only, and tx_a_frame and trig_tx_frame forward an unknown one. These are
+vendor address constants, not executed or observed accesses; no reset,
+field meaning, read safety or write side effect is inferred.
+"""

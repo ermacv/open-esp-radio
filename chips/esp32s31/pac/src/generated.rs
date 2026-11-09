@@ -274288,6 +274288,7 @@ pub mod wifi_bb_brx {
 /// Words 0xc64-0xe1c: Complete dbg_read_rx_count decodes two eight-bit hang counters and two full-width combined hang/panic counters. All four remained zero during the connected open HE matrix baseline.
 /// Word 0xca4: WDEVTXRX_TAB three custom frame-type match and ACK-index profiles decoded by complete dbg_read_rx_misc.
 /// Word 0xcac: Shared MAC run/stop control. The cold open-RX frontier publishes zero; the complete vendor channel-switch chain requests quiescence here and later restarts the no-power-save profile.
+/// Words 0xd2c-0xd30: The CONFIG and CONTROL words the vendor addresses for TX context 4, one bank below the four EDCA banks; their meaning is not established.
 /// Words 0xd34-0xd40: Four ascending physical banks represent logical EDCA queues 3,2,1,0.
 /// Words 0xd74-0xdb8: Eight interleaved hardware/software Buffer Status Report values and their shared control. Complete dbg_read_bsr_info names every exposed field. Complete hal_he_get_hw_txq_bsr independently proves the eight-byte stride and low twenty-bit hardware value. The independent blob and ROM libpp[hal_mac_tx.o]::mac_tx_set_tb and rom[]::mac_tx_set_tb bodies prove the write-side scheduler interpretation: for logical queues zero through three they replace the corresponding software BSR low twenty bits with the sum of every linked frame-state halfword at offset 0x22, then OR the queue bit into CONTROL[7:0]. Complete dbg_read_tx_ppdu independently names that exact halfword msdu_len, proving that this is an original-MSDU byte sum rather than MPDU, PSDU or encoded A-MPDU length. Complete HE BlockAck response/deletion paths separately select and clear TID_BITMAP bits through hal_he_set_tid_bitmap and hal_he_clr_tid_bitmap. Open HE HIL observed TID_BITMAP=1 immediately after the successful TID0 AddBA transition while sustained DCM A-MPDU remained clean. A later rev0 HIL reproduced the complete ROM write order with a 47104-byte TID0 queue: CONTROL validity read back one while SOFTWARE_BSR already read zero. This qualifies the write-side address and validity edge but leaves the zero as a live-update/read-latch ambiguity until a real AP Trigger is observed.
 /// Word 0xdbc: Four MU-EDCA timer words decoded by complete dbg_read_muedca_timer. Durations are reported by the blob in eight-TU units. Complete blob and ROM libpp[hal_mac_tx.o]::mac_tx_set_tb and rom[]::mac_tx_set_tb set ENABLE in the timer selected by the logical TX queue before publishing the Trigger queue configuration. After open HE association and TID0 AddBA, all four ordinary-SU baseline words had ENABLE=0, TIMER/CURRENT/AIFS=0 and REACHED=1; that pre-port baseline AP emitted no Trigger frame.
@@ -294888,10 +294889,10 @@ pub mod wifi_mac {
         }
     }
 
-    /// The `WORD_0D2C_OPAQUE` register.
+    /// The `TX_CONTEXT_4_CONFIG` register.
     ///
-    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established.
-    pub mod word_0d2c_opaque {
+    /// The word the vendor addresses as the CONFIG word of TX context 4, one 0x10 bank below CONFIG0 (context 3). It is a separate register so that CONFIG%s keeps elements 0..3 and its reverse mapping. librftest BackOffCountGet loads it as a direct constant and ConfAddrGet returns it from a constant table for selector 14, paired with TX_CONTEXT_4_CONTROL. The libpp lmac accessors reach it only through their general indexed formula with index 4, which remains a candidate address. The vendor initializes a software context with index 4 (lmacInit, lmacInitAc). No reset, field meaning, read safety or hardware write effect is established. SOURCE: BLOB_LIBRFTEST_TX_CONTEXT_4_ADDRESSES_20261109, BLOB_LIBPP_TX_CONTEXT_4_20261109.
+    pub mod tx_context_4_config {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0xffffffff;
         /// The register's width in bits.
@@ -294912,10 +294913,55 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
+            /// Observed source use; the individual hardware meaning is unknown. The direct librftest load uses bits 11:0; the five masked libpp writes are indexed candidate sites.
             #[inline]
             pub const fn bits_0_31_opaque(self) -> u32 {
                 self.0
+            }
+        }
+    }
+
+    /// The `TX_CONTEXT_4_CONTROL` register.
+    ///
+    /// The word the vendor addresses as the CONTROL word of TX context 4, one 0x10 bank below CONTROL0 (context 3). It is a separate register so that CONTROL%s keeps elements 0..3 and its reverse mapping. libpp lmac_stop_hw_txq passes the constant index 4 through lmacStopTransmit to the queue-valid read, invalidate and disable accessors, which compute this address; the site runs only for a context whose software state is active, and no producer of that state for context 4 is established. librftest Plcp0AddrGet returns this address from a constant table for selector 14, paired with TX_CONTEXT_4_CONFIG. No reset, field meaning, read safety or hardware write effect is established; bits 29:0 have no use at the index-4 site. SOURCE: BLOB_LIBPP_TX_CONTEXT_4_20261109, BLOB_LIBRFTEST_TX_CONTEXT_4_ADDRESSES_20261109.
+    pub mod tx_context_4_control {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xc0000000;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xd30;
+
+        /// Width of `BIT_30_OPAQUE` in bits.
+        pub const BIT_30_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_30_OPAQUE`.
+        pub const BIT_30_OPAQUE_MASK: u32 = 0x40000000;
+
+        /// Width of `BIT_31_OPAQUE` in bits.
+        pub const BIT_31_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_31_OPAQUE`.
+        pub const BIT_31_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_31_OPAQUE`.
+        pub const BIT_31_OPAQUE_MASK: u32 = 0x80000000;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// Observed source use; the hardware meaning is unknown. At the index-4 site hal_mac_is_txq_valid returns this bit, hal_mac_set_txq_invalid clears it and hal_mac_txq_disable clears it together with bit 31.
+            #[inline]
+            pub const fn bit_30_opaque(self) -> bool {
+                (self.0 & 0x40000000) != 0
+            }
+
+            /// Observed source use; the hardware meaning is unknown. At the index-4 site hal_mac_txq_disable clears it together with bit 30.
+            #[inline]
+            pub const fn bit_31_opaque(self) -> bool {
+                (self.0 & 0x80000000) != 0
             }
         }
     }
