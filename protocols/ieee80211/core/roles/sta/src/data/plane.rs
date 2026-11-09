@@ -387,9 +387,10 @@ struct ArenaBook {
     /// What each original position's transmissions cost so far: its part of
     /// every attempt that carried it.
     spent: [TxEstimate; BOOK_FRAMES],
-    /// The full rate of the arena's last attempt that reached the air: the
-    /// rate every frame leaving it last went at.
-    rate: Option<PhyRate>,
+    /// What each original position's last transmission on the air went at:
+    /// the rate of the last attempt that carried it with an established
+    /// rate, `None` while none did.
+    rates: [Option<PhyRate>; BOOK_FRAMES],
     /// Publications that may have reached a receiver: every frame the arena
     /// holds went in each.
     attempts: u8,
@@ -412,7 +413,7 @@ impl ArenaBook {
             octets: 0,
             admitted: [Instant::EPOCH; BOOK_FRAMES],
             spent: [TxEstimate::NONE; BOOK_FRAMES],
-            rate: None,
+            rates: [None; BOOK_FRAMES],
             attempts: 0,
             retained: false,
             published: None,
@@ -433,7 +434,20 @@ impl ArenaBook {
         self.attempts = 0;
         self.retained = false;
         self.spent = [TxEstimate::NONE; BOOK_FRAMES];
-        self.rate = None;
+        self.rates = [None; BOOK_FRAMES];
+    }
+
+    /// The original positions of `carried`, the frames one attempt put on
+    /// the air, last went at `rate`: the others keep their own.
+    fn transmitted(&mut self, carried: u64, rate: PhyRate) {
+        for original in Originals(carried) {
+            if let Some(last) = usize::try_from(original)
+                .ok()
+                .and_then(|original| self.rates.get_mut(original))
+            {
+                *last = Some(rate);
+            }
+        }
     }
 
     /// Split `cost` exactly once among the original positions of `carried`,
@@ -456,24 +470,30 @@ impl ArenaBook {
     }
 
     /// Hand each memory leaving the arena to `returned` with its end: its
-    /// cost and the arena's last on-air rate. The arena returns them in
+    /// cost and its own last established rate. The arena returns them in
     /// position order, which is the ascending order of their original
-    /// positions in `leaving`. A memory past them has no known cost.
+    /// positions in `leaving`. A memory past them has no known cost and no
+    /// rate.
     fn with_costs<M, F: FnMut(M, TxEnd)>(
         &self,
         leaving: u64,
         mut returned: F,
     ) -> impl FnMut(M) + use<M, F> {
         let spent = self.spent;
-        let rate = self.rate;
+        let rates = self.rates;
         let mut originals = Originals(leaving);
         move |memory| {
-            let cost = originals
+            let original = originals
                 .next()
-                .and_then(|original| usize::try_from(original).ok())
+                .and_then(|original| usize::try_from(original).ok());
+            let cost = original
                 .and_then(|original| spent.get(original))
                 .copied()
                 .unwrap_or(TxEstimate::Unknown);
+            let rate = original
+                .and_then(|original| rates.get(original))
+                .copied()
+                .flatten();
             returned(memory, TxEnd { cost, rate });
         }
     }
@@ -1062,8 +1082,9 @@ impl DataPlane {
         let air = done.end().air().map(|air| air.rate);
         let book = self.book_mut(id);
         book.charge(carried, cost);
-        if air.is_some() {
-            book.rate = air;
+        // Only the frames this attempt carried went at its rate.
+        if let Some(rate) = air {
+            book.transmitted(carried, rate);
         }
         let book = self.book(id);
         let link = self.link.as_ref().filter(|_| book.epoch == self.epoch);

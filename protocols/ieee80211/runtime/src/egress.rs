@@ -42,8 +42,9 @@ pub struct Exchange<T> {
     /// What the air cost, or `None` when that is not known, which charges the
     /// frame's ceiling or its reservation, whichever is more.
     pub charged: Option<NonZeroU32>,
-    /// The full rate the frame's last transmission on the air went at; `None`
-    /// when none reached it.
+    /// The full rate of the frame's last transmission with an established
+    /// rate; `None` when none has one, which is no proof that nothing was
+    /// sent.
     pub rate: Option<PhyRate>,
 }
 

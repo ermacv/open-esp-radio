@@ -52,6 +52,9 @@ pub struct State<N: Notifies = SameHart> {
     /// The profile of the one Connect in the queue, published in the same
     /// poll as that request; the lifecycle takes it with the request.
     profile: Cell<Option<StaProfile>>,
+    /// The slowest data rate of the association the link runs, published
+    /// with it; `None` while none connected.
+    floor: Cell<Option<oer_protocols_ieee80211_contracts_port::PhyRate>>,
 }
 
 impl State {
@@ -85,6 +88,7 @@ impl<N: Notifies> State<N> {
             operations: operation::Operations::new(),
             stop_deadline: Cell::new(None),
             profile: Cell::new(None),
+            floor: Cell::new(None),
         }
     }
 
@@ -96,7 +100,7 @@ impl<N: Notifies> State<N> {
     /// Set the status, publishing its link to the network device.
     fn set_status(&self, status: Status) {
         self.status.set(status);
-        self.network.publish(status.link);
+        self.network.publish(status.link, self.floor.get());
     }
     /// The service retired or its lifecycle was lost.
     fn ended(&self) -> bool {
@@ -114,6 +118,8 @@ impl<N: Notifies> State<N> {
         self.operations.begin_epoch();
         // An ended epoch's unserved profile erases itself here.
         drop(self.profile.take());
+        // So did its association's rate.
+        self.floor.set(None);
         // An ended epoch's stop ended with it: the new epoch's policy keeps
         // only the configuration, and no stop deadline is pending.
         self.policy.set(self.policy.get().next_epoch());
@@ -137,6 +143,12 @@ impl<N: Notifies> State<N> {
             output,
         }
     }
+    /// The association that connects now has `floor` as its slowest data
+    /// rate: the link publishes it from its next publication on.
+    pub(crate) fn floor(&self, floor: Option<oer_protocols_ieee80211_contracts_port::PhyRate>) {
+        self.floor.set(floor);
+    }
+
     pub(crate) fn epoch(&self, epoch: u64) {
         let mut status = self.status.get();
         status.link.epoch = epoch;

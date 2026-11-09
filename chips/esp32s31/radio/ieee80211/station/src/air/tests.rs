@@ -22,17 +22,25 @@ fn an_unknown_cost_is_charged_the_backends_ceiling_of_the_executed_bounds() {
     assert_eq!(costs.ceiling(13), NonZeroU32::MAX);
 }
 
+/// The grant goes at the rate the station's air resolved: an OFDM-only
+/// association's 6 Mb/s or a DSSS one's 1 Mb/s give different grants at one
+/// length, each its own PPDU; with no rate, the least nonzero grant.
 #[test]
-fn before_a_report_the_least_grant_goes_at_the_slowest_single_rate() {
+fn the_grant_goes_at_the_resolved_rate_and_two_associations_floors_differ() {
+    use oer_protocols_ieee80211_wire::phy::LegacyRate;
     let costs = S31Ceiling::new();
     let octets = 1514 + MPDU_GROWTH;
-    assert_eq!(
-        costs.least(1514, None).get(),
-        SLOWEST_SINGLE.max_ppdu_duration_micros(octets).unwrap()
-    );
+    let one = PhyRate::Legacy(LegacyRate::Dsss1M);
+    let six = PhyRate::Legacy(LegacyRate::Ofdm6M);
+    let at = |rate: PhyRate| rate.max_ppdu_duration_micros(octets).unwrap();
+    assert_eq!(costs.least(1514, Some(one)).get(), at(one));
+    assert_eq!(costs.least(1514, Some(six)).get(), at(six));
+    assert_eq!(costs.least(1514, Some(one)).get(), at(one), "back again");
+    assert_ne!(at(one), at(six));
+    assert_eq!(costs.least(1514, None), NonZeroU32::MIN);
     let fast = ht(7, PpduBandwidth::Mhz20, true);
-    assert!(costs.least(1514, Some(fast)) < costs.least(1514, None));
-    assert!(costs.least(1514, None) < costs.ceiling(1514));
+    assert!(costs.least(1514, Some(fast)) < costs.least(1514, Some(six)));
+    assert!(costs.least(1514, Some(one)) < costs.ceiling(1514));
     assert!(costs.least(1514, Some(fast)) > costs.least(64, Some(fast)));
 }
 

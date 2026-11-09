@@ -158,7 +158,7 @@ const MPDU_GROWTH: usize = oer_protocols_ieee80211_wire::data::IEEE80211_QOS_DAT
 /// `ordinary_retry_rate`, `oer-chips-family-radio-ieee80211-policy`), whose
 /// HT, 11g and 11b records end at rate code 0x00 (`rate_control.rs`,
 /// `rate_schedule.rs`; vendor `libpp[trc.o]::rcGetRate`).
-pub const SLOWEST_SINGLE: PhyRate = PhyRate::Legacy(LegacyRate::Dsss1M);
+const SLOWEST_SINGLE: PhyRate = PhyRate::Legacy(LegacyRate::Dsss1M);
 
 /// The slowest HE aggregate this backend may publish: HE20 SU, one stream,
 /// MCS 0 at the longest HE-LTF and guard interval, each coding, no DCM.

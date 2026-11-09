@@ -1199,3 +1199,81 @@ fn without_a_threshold_or_at_an_ht_rate_nothing_is_protected() {
         }
     }
 }
+
+cases! {
+    reviewer_an_unsent_arena_member_has_no_transmitted_rate => reviewer_unsent_rate,
+    reviewer_an_unretried_member_keeps_its_own_aggregate_rate => reviewer_unretried_rate,
+}
+
+fn reviewer_withdraw<'p, 'id: 'p>(world: &mut World<'p, 'id>) {
+    let (returned, costs, rates) = (&mut world.returned, &mut world.costs, &mut world.air_rates);
+    world
+        .plane
+        .withdraw_unpublished(
+            &mut world.arena,
+            |memory, end| {
+                returned.push(memory);
+                costs.push(end.cost);
+                rates.push(end.rate);
+            },
+            &mut (),
+        )
+        .unwrap();
+}
+
+fn reviewer_unsent_rate<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..3 {
+        world.taken(tag, BE);
+    }
+    world.plane.agreement(BE, None);
+    let (plan, frames) = world.publish();
+    assert_eq!(plan.kind, PpduKind::Single);
+    assert_eq!(frames.len(), 1);
+    world.arena.answer(ModelArenaAnswer::Ack);
+    world.settle();
+    assert_eq!(world.returned_sequences(), [0]);
+    assert_eq!(world.air_rates, [Some(rates.single.get())]);
+    world.costs.clear();
+    world.air_rates.clear();
+    reviewer_withdraw(&mut world);
+    assert_eq!(world.returned_sequences(), [1, 2]);
+    assert_eq!(world.costs, [TxEstimate::NONE, TxEstimate::NONE]);
+    assert_eq!(
+        world.air_rates,
+        [None, None],
+        "neither remaining member reached the air"
+    );
+}
+
+fn reviewer_unretried_rate<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..3 {
+        world.taken(tag, BE);
+    }
+    assert!(matches!(world.publish().0.kind, PpduKind::Aggregate { .. }));
+    world.block_ack(mask(&[0]));
+    world.settle();
+    assert_eq!(world.returned_sequences(), [0]);
+    world.costs.clear();
+    world.air_rates.clear();
+    world.plane.agreement(BE, None);
+    let (plan, frames) = world.publish();
+    assert_eq!(plan.kind, PpduKind::Single);
+    assert_eq!(sequence(&frames[0]), 1);
+    world.arena.answer(ModelArenaAnswer::Ack);
+    world.settle();
+    assert_eq!(world.returned_sequences(), [1]);
+    assert_eq!(world.air_rates, [Some(rates.single.get())]);
+    world.costs.clear();
+    world.air_rates.clear();
+    reviewer_withdraw(&mut world);
+    assert_eq!(world.returned_sequences(), [2]);
+    assert_eq!(
+        world.air_rates,
+        [Some(rates.aggregate.rate().get())],
+        "the remaining member did not go in the single retry"
+    );
+}

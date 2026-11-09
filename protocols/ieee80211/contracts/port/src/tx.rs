@@ -161,18 +161,21 @@ pub enum IndeterminateCause {
 
 /// How a frame's transmissions ended for its owner: what they cost by the
 /// backend's model, and the full rate (mode, MCS, streams, width, guard
-/// interval and LTF) the last of them that reached the air went at, `None`
-/// when none did.
+/// interval and LTF) of its last transmission with an established rate.
+/// `rate: None` says no rate is established, not that nothing was sent: an
+/// [`AttemptEnd::Aborted`](crate::AttemptEnd::Aborted) publication may
+/// have reached the air, with no rate sample and an unknown cost.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TxEnd {
     /// What the frame's transmissions cost.
     pub cost: TxEstimate,
-    /// The full rate of its last transmission that reached the air.
+    /// The full rate of its last transmission with an established rate;
+    /// `None` when none has one.
     pub rate: Option<crate::PhyRate>,
 }
 
 impl TxEnd {
-    /// A frame that never went on the air.
+    /// A frame known never to have gone on the air: no cost and no rate.
     pub const NONE: Self = Self {
         cost: TxEstimate::NONE,
         rate: None,

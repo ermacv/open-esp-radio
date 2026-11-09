@@ -32,9 +32,10 @@ pub type StationKey = u64;
 /// path the backend executes, which an egress policy charges where the cost
 /// is not known.
 pub trait FrameCost {
-    /// The frame's least useful grant at the full rate `rate` its
-    /// association last went at, or at the lowest rate the backend sends at
-    /// while none reported (`None`).
+    /// The frame's least useful grant at the full rate `rate`: the one its
+    /// association's last settled frame went at, or before one did, the
+    /// association's slowest data rate. `None` when the station knows
+    /// neither, which is no rate the frame may go at.
     fn least(&self, frame_octets: usize, rate: Option<PhyRate>) -> NonZeroU32;
     fn ceiling(&self, frame_octets: usize) -> NonZeroU32;
 }
@@ -42,8 +43,9 @@ pub trait FrameCost {
 /// The station's air over `link`, the network side's view of its link,
 /// with `C` charging a frame of unknown cost. It keeps the full rate the
 /// association's last settled frame went at, and asks each frame's least
-/// grant at it: at the lowest rate until a frame of the association that
-/// runs now reports one.
+/// grant at it: until a frame of the association that runs now reports one,
+/// at that association's slowest data rate, which the link publishes with
+/// its epoch.
 pub struct StationAir<'a, N, C> {
     link: &'a NetworkLink<N>,
     ceiling: C,
@@ -67,15 +69,17 @@ impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
     /// While the link is up, its association's account, with the frame's
     /// least useful grant.
     fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<StationKey>> {
-        let link = self.link.snapshot();
+        let (link, floor) = self.link.read();
         if link.state != LinkState::Up {
             return None;
         }
-        // Another association's rate says nothing of this one's air.
+        // Another association's rate says nothing of this one's air; the
+        // association's own slowest rate stands until it reports one.
         let rate = self
             .last
             .filter(|(key, _)| *key == link.epoch)
-            .map(|(_, rate)| rate);
+            .map(|(_, rate)| rate)
+            .or(floor);
         Some(AirtimeCandidate {
             key: link.epoch,
             minimum_micros: self.ceiling.least(ready.length, rate),

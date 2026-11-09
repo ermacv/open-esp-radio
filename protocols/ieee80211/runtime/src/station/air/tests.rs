@@ -39,7 +39,7 @@ fn an_association_is_one_account_keyed_by_its_epoch_and_a_down_link_serves_none(
     let link = NetworkLink::new();
     let air = StationAir::new(&link, Fixed(1_000));
     assert_eq!(air.candidate(&ready(1514)), None, "down");
-    link.publish(up(3));
+    link.publish(up(3), None);
     let first = air.candidate(&ready(1514)).unwrap();
     let small = air.candidate(&ready(64)).unwrap();
     assert_eq!((first.key, small.key), (3, 3), "every peer, one account");
@@ -48,7 +48,7 @@ fn an_association_is_one_account_keyed_by_its_epoch_and_a_down_link_serves_none(
         (1514, 64),
         "each frame's least grant"
     );
-    link.publish(up(4));
+    link.publish(up(4), None);
     assert_eq!(air.candidate(&ready(1514)).unwrap().key, 4);
     assert_eq!(air.ceiling(&ready(1514)).get(), 2_514);
 }
@@ -152,7 +152,7 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
     };
     let names = ["a", "b", "c", "d", "e"];
     for epoch in 1..=5_u64 {
-        link.publish(up(epoch));
+        link.publish(up(epoch), None);
         // The previous association's end comes first.
         assert!(handed_on(&mut ends, &mut egress).is_empty());
         let (_, held) = egress
@@ -162,7 +162,7 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
         let ticket = u8::try_from(epoch).unwrap();
         egress.accepted(held, ticket).unwrap();
     }
-    link.publish(up(6));
+    link.publish(up(6), None);
     assert!(handed_on(&mut ends, &mut egress).is_empty());
     assert_eq!((egress.unsettled(), egress.in_flight()), (0, 5));
     // Now every buffer comes back, late.
@@ -205,7 +205,7 @@ impl FrameCost for &Asked {
 #[test]
 fn the_least_grant_goes_at_the_association_s_last_reported_rate() {
     let link = NetworkLink::new();
-    link.publish(up(1));
+    link.publish(up(1), None);
     let asked = Asked::default();
     let mut air = StationAir::new(&link, &asked);
     air.candidate(&ready(1514)).unwrap();
@@ -214,7 +214,7 @@ fn the_least_grant_goes_at_the_association_s_last_reported_rate() {
     // The same epoch and length, another guard interval: its own rate.
     air.reported(1, ht(7, false));
     air.candidate(&ready(1514)).unwrap();
-    link.publish(up(2));
+    link.publish(up(2), None);
     air.candidate(&ready(1514)).unwrap();
     air.reported(2, ht(0, false));
     air.candidate(&ready(1514)).unwrap();
@@ -244,7 +244,7 @@ impl FrameCost for ReviewerChanging<'_> {
 #[test]
 fn reviewer_a_changed_cost_input_updates_the_grant_within_the_same_association() {
     let link = NetworkLink::new();
-    link.publish(up(1));
+    link.publish(up(1), None);
     let value = core::cell::Cell::new(100);
     let air = StationAir::new(&link, ReviewerChanging(&value));
     assert_eq!(
@@ -260,7 +260,7 @@ fn reviewer_a_changed_cost_input_updates_the_grant_within_the_same_association()
 #[test]
 fn reviewer_a_changed_cost_input_updates_the_ceiling_within_the_same_association() {
     let link = NetworkLink::new();
-    link.publish(up(1));
+    link.publish(up(1), None);
     let value = core::cell::Cell::new(100);
     let air = StationAir::new(&link, ReviewerChanging(&value));
     assert_eq!(air.ceiling(&ready(1514)).get(), 1000);
@@ -301,11 +301,11 @@ fn a_returned_frame_s_rate_goes_with_its_end() {
 #[test]
 fn a_late_completion_of_an_earlier_association_leaves_the_current_rate() {
     let link = NetworkLink::new();
-    link.publish(up(1));
+    link.publish(up(1), None);
     let asked = Asked::default();
     let mut air = StationAir::new(&link, &asked);
     air.reported(1, ht(7, true));
-    link.publish(up(2));
+    link.publish(up(2), None);
     air.reported(1, ht(3, true));
     air.candidate(&ready(1514)).unwrap();
     air.reported(2, ht(5, false));
@@ -323,7 +323,7 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
     use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
     use oer_protocols_network_port::Egress;
     let link = NetworkLink::new();
-    link.publish(up(1));
+    link.publish(up(1), None);
     let asked = Asked::default();
     let mut storage = AirtimeStorage::<StationKey, 2, 2>::new(NonZeroU32::new(10_000).unwrap());
     let mut egress =
@@ -333,7 +333,7 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
         .unwrap()
         .expect("association 1's account");
     egress.accepted(held, 1).unwrap();
-    link.publish(up(2));
+    link.publish(up(2), None);
     egress
         .notice(RadioNotice::Ended(Exchange {
             ticket: 1,
@@ -347,4 +347,48 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
         .unwrap()
         .expect("association 2's account");
     assert_eq!(*asked.0.borrow(), [None], "association 2 has no rate yet");
+}
+
+fn legacy(rate: oer_protocols_ieee80211_wire::phy::LegacyRate) -> PhyRate {
+    PhyRate::Legacy(rate)
+}
+
+/// An OFDM-only association's grants start at its own slowest rate, 6 Mb/s,
+/// never at DSSS, until a frame of it reports its rate.
+#[test]
+fn an_ofdm_only_association_starts_at_its_own_slowest_rate() {
+    use oer_protocols_ieee80211_wire::phy::LegacyRate;
+    let link = NetworkLink::new();
+    link.publish(up(1), Some(legacy(LegacyRate::Ofdm6M)));
+    let asked = Asked::default();
+    let mut air = StationAir::new(&link, &asked);
+    air.candidate(&ready(1514)).unwrap();
+    air.reported(1, ht(7, true));
+    air.candidate(&ready(1514)).unwrap();
+    assert_eq!(
+        *asked.0.borrow(),
+        [Some(legacy(LegacyRate::Ofdm6M)), Some(ht(7, true))]
+    );
+}
+
+/// Two associations that have reported nothing, at the same length, ask
+/// their grants at their own slowest rates: what the cost model sees is the
+/// resolved rate, never one `None` for both.
+#[test]
+fn two_associations_without_reports_ask_at_their_own_slowest_rates() {
+    use oer_protocols_ieee80211_wire::phy::LegacyRate;
+    let link = NetworkLink::new();
+    let asked = Asked::default();
+    let air = StationAir::new(&link, &asked);
+    link.publish(up(1), Some(legacy(LegacyRate::Dsss1M)));
+    air.candidate(&ready(1514)).unwrap();
+    link.publish(up(2), Some(legacy(LegacyRate::Ofdm6M)));
+    air.candidate(&ready(1514)).unwrap();
+    assert_eq!(
+        *asked.0.borrow(),
+        [
+            Some(legacy(LegacyRate::Dsss1M)),
+            Some(legacy(LegacyRate::Ofdm6M))
+        ]
+    );
 }

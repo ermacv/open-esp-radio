@@ -145,8 +145,9 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 
 /// One MSDU's end, as the station gives it back: the network's memory, what
 /// its transmissions cost by the backend's model (the part of each attempt
-/// that carried it), and the full rate its last transmission on the air went
-/// at ([`TxEnd`]): none of either for an MSDU that never reached the air.
+/// that carried it), and the full rate of its last transmission with an
+/// established rate ([`TxEnd`]): no cost and no rate for an MSDU known never
+/// to have reached the air.
 ///
 /// [`TxEnd`]: oer_protocols_ieee80211_contracts_port::TxEnd
 #[derive(Debug)]

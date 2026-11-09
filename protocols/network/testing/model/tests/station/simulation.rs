@@ -660,9 +660,17 @@ pub struct World<'b, T: 'static> {
     network_loses_its_stop: Cell<bool>,
     /// The network service's `run` future is dropped.
     cancel_run: Signal,
+    /// The link the network side reads.
+    network_link: &'b runtime::NetworkLink<<runtime::SameHart as runtime::Notifies>::NetworkWaker>,
 }
 
 impl<'b, T: 'static> World<'b, T> {
+    /// The association's slowest data rate, as the link publishes it to the
+    /// network side.
+    pub fn link_floor(&self) -> Option<oer_protocols_ieee80211_contracts_port::PhyRate> {
+        self.network_link.read().1
+    }
+
     pub fn now(&self) -> Instant {
         self.clock.now()
     }
@@ -1223,6 +1231,7 @@ async fn run<'s, T: 'static>(
         let heard = Rc::new(Heard::default());
         *hearing.borrow_mut() = heard.clone();
         let world = World {
+            network_link: link,
             clock: clock.clone(),
             air: air.clone(),
             access_point: access_point.clone(),
