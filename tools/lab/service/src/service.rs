@@ -272,7 +272,14 @@ struct Shared {
     /// The directory of the stand's records, and its stand file.
     arbiter: oer_tools_lab_arbiter::Arbiter,
     recovery_deadline: std::time::Duration,
+    /// A step a recovery worker takes once it published its confirmation,
+    /// before it returns: the tests order other threads against it.
+    #[cfg(test)]
+    published: Mutex<Option<Step>>,
 }
+
+#[cfg(test)]
+type Step = Arc<dyn Fn(&Recovery) + Send + Sync>;
 
 struct Inner {
     scheduler: Scheduler,
@@ -382,6 +389,8 @@ impl Service {
                 history_path,
                 arbiter,
                 recovery_deadline,
+                #[cfg(test)]
+                published: Mutex::new(None),
             }),
         };
         {
@@ -1088,6 +1097,8 @@ impl Service {
         std::thread::spawn(move || {
             let confirmation = driver.shared.drivers.recover(&running);
             let _ = done.send(confirmation);
+            #[cfg(test)]
+            driver.published(&running);
             lock(&driver.shared.inner)
                 .recovering
                 .remove(&running.resource);
@@ -1117,6 +1128,15 @@ impl Service {
             }
             service.pump(&mut inner);
         });
+    }
+
+    /// The test's step after a recovery worker published its confirmation.
+    #[cfg(test)]
+    fn published(&self, recovery: &Recovery) {
+        let step = lock(&self.shared.published).clone();
+        if let Some(step) = step {
+            step(recovery);
+        }
     }
 
     /// Grant what can be granted and tell the waiting clients.
