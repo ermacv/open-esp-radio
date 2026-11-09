@@ -13,7 +13,7 @@ use crate::{
     protection::ApBssProtection,
     security::BssSecurityElements,
     sequence::SequenceNumber,
-    ssid::WifiSsid,
+    ssid::Ssid,
 };
 
 pub const AP_BEACON_CAPACITY: usize = 256;
@@ -170,7 +170,7 @@ pub fn write_ht_beacon(
     profile: &Advertisement,
     output: &mut [u8],
     access_point: [u8; 6],
-    ssid: &WifiSsid,
+    ssid: &Ssid,
     channel: Channel,
     beacon_interval_tu: u16,
     dtim_period: u8,

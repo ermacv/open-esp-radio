@@ -14,7 +14,7 @@ use oer_protocols_ieee80211_core_roles_sta::machine::{StaCallbacks, StaConfig};
 use oer_protocols_ieee80211_runtime::station as runtime;
 use oer_protocols_ieee80211_wire::{
     address::{IndividualAddress, OwnAddress},
-    channel::WifiChannelWidth,
+    channel::ChannelWidth,
 };
 use oer_protocols_radio_port::SlotIdentity;
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
@@ -235,11 +235,9 @@ impl Config {
         let domain =
             RegulatoryDomain::of(Country::new(country).map_err(|_| InitializationError::Country)?)
                 .ok_or(InitializationError::Domain)?;
-        let channel_value = oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
-            channel,
-            WifiChannelWidth::Mhz20,
-        )
-        .map_err(|_| InitializationError::Channel)?;
+        let channel_value =
+            oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(channel, ChannelWidth::Mhz20)
+                .map_err(|_| InitializationError::Channel)?;
         let supported = oer_protocols_ieee80211_contracts_port::SupportedChannel::new(
             domain
                 .permit(
@@ -305,10 +303,9 @@ impl<W: Binding> Profile<W> {
         let mut channels = heapless::Vec::new();
         if config.all_channels {
             for n in 1..=13 {
-                let Ok(ch) = oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
-                    n,
-                    WifiChannelWidth::Mhz20,
-                ) else {
+                let Ok(ch) =
+                    oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(n, ChannelWidth::Mhz20)
+                else {
                     continue;
                 };
                 if let Ok(p) = config
@@ -329,7 +326,7 @@ impl<W: Binding> Profile<W> {
         if config.ht40 {
             for scanned in &channels {
                 let number = scanned.channel().number();
-                for width in [WifiChannelWidth::Mhz40Above, WifiChannelWidth::Mhz40Below] {
+                for width in [ChannelWidth::Mhz40Above, ChannelWidth::Mhz40Below] {
                     // A secondary outside the band or the domain is no
                     // 40 MHz channel of this primary.
                     let Ok(wide) =

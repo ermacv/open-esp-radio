@@ -15,7 +15,7 @@
     clippy::arithmetic_side_effects
 )]
 
-use crate::channel::{Channel, WifiChannelWidth};
+use crate::channel::{Channel, ChannelWidth};
 use crate::protection::HtOperationProtection;
 
 pub const HT_CAPABILITY_IE_LEN: usize = 28;
@@ -41,11 +41,8 @@ impl HtDuplicateMcs32 {
         Self
     }
 
-    pub const fn supports_width(width: WifiChannelWidth) -> bool {
-        matches!(
-            width,
-            WifiChannelWidth::Mhz40Above | WifiChannelWidth::Mhz40Below
-        )
+    pub const fn supports_width(width: ChannelWidth) -> bool {
+        matches!(width, ChannelWidth::Mhz40Above | ChannelWidth::Mhz40Below)
     }
 
     /// Advertise receive-only MCS32 in a complete HT Capabilities IE.
@@ -114,7 +111,7 @@ pub const fn ht_capability_ie_for_peer(
 ) -> [u8; HT_CAPABILITY_IE_LEN] {
     // Channel geometry owns the width and short-GI bits even when the
     // caller supplies them in the capability base.
-    let width40 = !matches!(channel.width(), WifiChannelWidth::Mhz20);
+    let width40 = !matches!(channel.width(), ChannelWidth::Mhz20);
     let [c0, c1] = HtCapabilityInfo::from_bytes(local_ht.capability_info.to_le_bytes())
         .with_width40(width40)
         .with_short_gi20(true)
@@ -166,11 +163,11 @@ pub const fn ht_operation_ie(
     element[3] = match channel.width() {
         // Secondary-channel offset zero and STA channel width zero select
         // HT20.
-        WifiChannelWidth::Mhz20 => 0,
+        ChannelWidth::Mhz20 => 0,
         // IEEE secondary offset one and STA channel width one.
-        WifiChannelWidth::Mhz40Above => 0x05,
+        ChannelWidth::Mhz40Above => 0x05,
         // IEEE secondary offset three and STA channel width one.
-        WifiChannelWidth::Mhz40Below => 0x07,
+        ChannelWidth::Mhz40Below => 0x07,
     };
     element[4] = protection.information_byte();
     element
@@ -195,12 +192,12 @@ impl HtPeerCapabilities {
         HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).greenfield()
     }
 
-    pub const fn supports_short_guard_interval(self, width: WifiChannelWidth) -> bool {
+    pub const fn supports_short_guard_interval(self, width: ChannelWidth) -> bool {
         match width {
-            WifiChannelWidth::Mhz20 => {
+            ChannelWidth::Mhz20 => {
                 HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).short_gi20()
             }
-            WifiChannelWidth::Mhz40Above | WifiChannelWidth::Mhz40Below => {
+            ChannelWidth::Mhz40Above | ChannelWidth::Mhz40Below => {
                 self.supports_40_mhz()
                     && HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).short_gi40()
             }

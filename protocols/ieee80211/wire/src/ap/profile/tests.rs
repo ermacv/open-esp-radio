@@ -114,8 +114,8 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
             write_ht_association_response_frame_for_security,
         },
         beacon::write_ht_beacon,
-        channel::WifiChannel,
-        ssid::WifiSsid,
+        channel::Ghz2_4Channel,
+        ssid::Ssid,
     };
     let profile = Advertisement::new(
         LegacyRates::new([0x82; 8], [0x84; 4]),
@@ -131,14 +131,14 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
     };
     let address = [2, 0, 0, 0, 0, 1];
     let peer = [2, 0, 0, 0, 0, 2];
-    let channel = WifiChannel::mhz20(6).unwrap();
+    let channel = Ghz2_4Channel::mhz20(6).unwrap();
     let mut beacon = [0; 256];
     write_ht_beacon(
         &profile,
         &mut beacon,
         address,
-        &WifiSsid::new(b"profile").unwrap(),
-        crate::channel::Channel::from_wifi_channel(channel),
+        &Ssid::new(b"profile").unwrap(),
+        crate::channel::Channel::from_ghz2_4_channel(channel),
         100,
         2,
         seq(0),
@@ -156,7 +156,7 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
         0,
         1,
         seq(0),
-        crate::channel::Channel::from_wifi_channel(channel),
+        crate::channel::Channel::from_ghz2_4_channel(channel),
         None,
         test_elements::WPA2_PERSONAL,
         protection,

@@ -1,8 +1,10 @@
 use super::*;
-use oer_protocols_ieee80211_wire::{channel::WifiChannel, monitor_injection::MonitorInjectionMpdu};
+use oer_protocols_ieee80211_wire::{
+    channel::Ghz2_4Channel, monitor_injection::MonitorInjectionMpdu,
+};
 
 fn binding() -> MonitorInjectionChannelBinding {
-    MonitorInjectionChannelBinding::new(1, 1, WifiChannel::mhz20(1).unwrap()).unwrap()
+    MonitorInjectionChannelBinding::new(1, 1, Ghz2_4Channel::mhz20(1).unwrap()).unwrap()
 }
 
 fn request(bytes: &[u8]) -> MonitorInjectionRequest<'_> {

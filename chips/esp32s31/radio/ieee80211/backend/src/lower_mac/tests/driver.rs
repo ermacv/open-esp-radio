@@ -3,7 +3,7 @@ use super::*;
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum TestStart {
     Enabled,
-    Retune(WifiChannel),
+    Retune(Ghz2_4Channel),
 }
 pub(super) struct TestDriver<'id>(pub(super) CoreOwner<DeviceCore<'id>>);
 impl<'id> core::ops::Deref for TestDriver<'id> {
@@ -33,7 +33,7 @@ impl<'id> TestDriver<'id> {
             CoreView::Disabled(_) | CoreView::DisabledClosing(_) | CoreView::DisabledClosed(_)
         )
     }
-    pub(super) fn radio_tuned_to(&mut self, channel: WifiChannel) -> bool {
+    pub(super) fn radio_tuned_to(&mut self, channel: Ghz2_4Channel) -> bool {
         match self.0.view() {
             CoreView::Disabled(mut view) => {
                 view.radio_tuned_to(channel);
@@ -50,7 +50,7 @@ impl<'id> TestDriver<'id> {
             _ => false,
         }
     }
-    pub(super) fn set_checked_channel(&mut self, channel: WifiChannel) {
+    pub(super) fn set_checked_channel(&mut self, channel: Ghz2_4Channel) {
         match self.0.view() {
             CoreView::Disabled(mut view) => {
                 view.set_checked_channel(channel);

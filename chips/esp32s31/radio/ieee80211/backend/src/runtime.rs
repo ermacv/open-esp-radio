@@ -13,7 +13,7 @@ use oer_chips_esp32s31_radio_client::{
     wifi::{Wifi, WifiLeave, WifiLeft, WifiReturned},
 };
 
-use oer_protocols_ieee80211_wire::channel::WifiChannel;
+use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 
 /// Common stopped Wi-Fi owner after cold MAC initialization.
 ///
@@ -38,8 +38,8 @@ use oer_protocols_ieee80211_wire::channel::WifiChannel;
 /// #     loop {}
 /// # }
 /// use oer_chips_esp32s31_radio_ieee80211_backend::runtime::WifiStopped;
-/// use oer_protocols_ieee80211_wire::channel::WifiChannel;
-/// fn channel(stopped: &WifiStopped<()>) -> WifiChannel {
+/// use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
+/// fn channel(stopped: &WifiStopped<()>) -> Ghz2_4Channel {
 ///     stopped.current_channel()
 /// }
 /// ```
@@ -81,7 +81,7 @@ pub struct WifiStopped<W> {
     clocks: WifiClocksOn,
     member: Member<Wifi, Tracked>,
     start_report: WifiStartReport,
-    current_channel: WifiChannel,
+    current_channel: Ghz2_4Channel,
 }
 
 /// A stopped Wi-Fi client that could not leave because its MAC or RX walker
@@ -212,7 +212,7 @@ impl<W> WifiStopped<W> {
         self,
         cell: MembershipCell<Wifi>,
         channel: oer_protocols_radio_regulatory::Permitted<
-            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>,
         >,
         tx_ceiling: oer_protocols_radio_regulatory::TxCeiling,
     ) -> Result<
@@ -237,7 +237,7 @@ impl<W> WifiStopped<W> {
         self,
         cell: MembershipCell<Wifi>,
         channel: oer_protocols_radio_regulatory::Permitted<
-            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>,
         >,
         tx_ceiling: oer_protocols_radio_regulatory::TxCeiling,
     ) -> WifiRetunePending<W> {
@@ -298,7 +298,7 @@ impl<W> WifiStopped<W> {
         self.start_report
     }
 
-    pub const fn current_channel(&self) -> WifiChannel {
+    pub const fn current_channel(&self) -> Ghz2_4Channel {
         self.current_channel
     }
 
@@ -351,14 +351,14 @@ impl<W: crate::startup::WifiMacPlatform + 'static> crate::port::device::Frontier
     fn into_stopped(registers: RadioAccess, (platform, context): (W, WifiRuntimeContext)) -> Self {
         context.into_stopped(platform, registers)
     }
-    fn current_channel((_, context): &(W, WifiRuntimeContext)) -> WifiChannel {
+    fn current_channel((_, context): &(W, WifiRuntimeContext)) -> Ghz2_4Channel {
         context.current_channel()
     }
     fn start_retune(
         self,
         cell: MembershipCell<Wifi>,
         channel: oer_protocols_radio_regulatory::Permitted<
-            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>,
         >,
         ceiling: oer_protocols_radio_regulatory::TxCeiling,
     ) -> WifiRetunePending<W> {
@@ -420,15 +420,15 @@ pub struct WifiRuntimeContext {
     clocks: WifiClocksOn,
     member: Member<Wifi, Tracked>,
     start_report: WifiStartReport,
-    current_channel: WifiChannel,
+    current_channel: Ghz2_4Channel,
 }
 
 impl WifiRuntimeContext {
-    pub const fn current_channel(&self) -> WifiChannel {
+    pub const fn current_channel(&self) -> Ghz2_4Channel {
         self.current_channel
     }
 
-    pub fn set_current_channel(&mut self, channel: WifiChannel) {
+    pub fn set_current_channel(&mut self, channel: Ghz2_4Channel) {
         self.current_channel = channel;
     }
 
@@ -467,11 +467,11 @@ impl<W> WifiRoleOwner<W> {
         &mut self.platform
     }
 
-    pub const fn current_channel(&self) -> WifiChannel {
+    pub const fn current_channel(&self) -> Ghz2_4Channel {
         self.context.current_channel()
     }
 
-    pub fn set_current_channel(&mut self, channel: WifiChannel) {
+    pub fn set_current_channel(&mut self, channel: Ghz2_4Channel) {
         self.context.set_current_channel(channel);
     }
 
@@ -574,7 +574,7 @@ pub struct WifiRetunePending<W> {
             Wifi,
             oer_chips_esp32s31_radio_client::RetuneAnswer<Wifi>,
         >,
-        (W, WifiStartReport, WifiChannel, WifiChannel),
+        (W, WifiStartReport, Ghz2_4Channel, Ghz2_4Channel),
     )>,
     immediate: Option<(
         MembershipCell<Wifi>,

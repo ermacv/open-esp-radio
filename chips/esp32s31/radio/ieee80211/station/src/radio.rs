@@ -61,7 +61,7 @@ use oer_protocols_ieee80211_runtime::lifecycle::{ActorEnds, LifecyclePort, Lifec
 use oer_protocols_ieee80211_runtime::station::{RxBlockAckStorage, ServiceEvent};
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
-    channel::{WifiChannel, WifiChannelWidth},
+    channel::{ChannelWidth, Ghz2_4Channel},
 };
 use oer_protocols_radio_port::{self as radio, SlotIdentity};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
@@ -605,7 +605,7 @@ pub(crate) fn he_power(
     channel: u8,
     cap_dbm: i8,
 ) -> Result<oer_protocols_ieee80211_core_roles_sta::association::StaHePower, InitializationError> {
-    let channel = WifiChannel::new_2_4_ghz(channel, WifiChannelWidth::Mhz20)
+    let channel = Ghz2_4Channel::new(channel, ChannelWidth::Mhz20)
         .map_err(|_| InitializationError::Channel)?;
     let ceiling = domain
         .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
@@ -628,7 +628,7 @@ async fn install<W: Binding>(
         Country::new(config.country).map_err(|_| InitializationError::Country)?,
     )
     .ok_or(InitializationError::Domain)?;
-    let channel = WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20)
+    let channel = Ghz2_4Channel::new(config.channel, ChannelWidth::Mhz20)
         .map_err(|_| InitializationError::Channel)?;
     let initial = domain
         .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
@@ -791,7 +791,7 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
-        channel: WifiChannel,
+        channel: Ghz2_4Channel,
     ) -> Poll<Result<(), Fault>> {
         <Inner<W> as port::Device<TX>>::poll_start(&mut self.0, cx, channel)
     }

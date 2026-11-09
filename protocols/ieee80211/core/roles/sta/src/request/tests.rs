@@ -13,12 +13,12 @@ use oer_protocols_ieee80211_wire::management::MAX_SSID_LEN;
 
 #[test]
 fn ssid_is_binary_and_length_checked() {
-    let ssid = WifiSsid::new(&[0xff, 0, b'a']).unwrap();
+    let ssid = Ssid::new(&[0xff, 0, b'a']).unwrap();
     assert_eq!(ssid.as_bytes(), &[0xff, 0, b'a']);
-    assert_eq!(WifiSsid::new(&[]), Err(WifiSsidError::Empty));
+    assert_eq!(Ssid::new(&[]), Err(SsidError::Empty));
     assert!(matches!(
-        WifiSsid::new(&[0; MAX_SSID_LEN + 1]),
-        Err(WifiSsidError::TooLong { .. })
+        Ssid::new(&[0; MAX_SSID_LEN + 1]),
+        Err(SsidError::TooLong { .. })
     ));
 }
 
@@ -43,7 +43,7 @@ fn scan_channels_are_bounded_and_deduplicated() {
 
 #[test]
 fn discovery_keeps_protocol_policy_chip_independent() {
-    let ssid = WifiSsid::new(b"portable-station").unwrap();
+    let ssid = Ssid::new(b"portable-station").unwrap();
     let scan = StationScanPolicy::new(
         StationScanChannels::permitted(&germany(), &[1, 6, 11]).unwrap(),
         NonZeroU16::new(40).unwrap(),

@@ -742,7 +742,7 @@ where
                 cause: wifi_poisoned(RequestKind::Track, PoisonCause::Domain(error)),
             });
         }
-        let lowered = crate::channel::lower_wifi_channel(channel.channel().channel());
+        let lowered = crate::channel::lower_ghz2_4_channel(channel.channel().channel());
         let mut observer = self.observer.clone();
         let mut platform = ();
         let transaction = require_radio(self.radio.take(), self.radio_fault)

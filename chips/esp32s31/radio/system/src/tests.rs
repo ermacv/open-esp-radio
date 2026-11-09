@@ -25,7 +25,7 @@ use oer_chips_esp32s31_radio_client::{
 use oer_chips_esp32s31_radio_phy::{PhyCalibrationPath, PhyState};
 use oer_portable_time::{Clock as _, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
-use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
+use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 
 use super::*;
 
@@ -307,14 +307,14 @@ fn track_request(wifi: WifiClocked) -> WifiTrack {
         channel: oer_protocols_radio_regulatory::TEST_DOMAIN
             .permit(
                 oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+                    Ghz2_4Channel::new(6, ChannelWidth::Mhz20).unwrap(),
                 ),
             )
             .unwrap(),
         tx_ceiling: oer_protocols_radio_regulatory::TEST_DOMAIN
             .permit(
                 oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+                    Ghz2_4Channel::new(6, ChannelWidth::Mhz20).unwrap(),
                 ),
             )
             .unwrap()

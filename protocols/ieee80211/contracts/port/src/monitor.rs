@@ -9,7 +9,9 @@
 
 use core::{fmt, num::NonZeroU32};
 
-use oer_protocols_ieee80211_wire::{channel::WifiChannel, monitor_injection::MonitorInjectionMpdu};
+use oer_protocols_ieee80211_wire::{
+    channel::Ghz2_4Channel, monitor_injection::MonitorInjectionMpdu,
+};
 
 use crate::MacRxMetadata;
 
@@ -55,7 +57,7 @@ pub enum MonitorTapPoint {
 pub struct MonitorInjectionChannelBinding {
     generation: u32,
     channel_epoch: NonZeroU32,
-    channel: WifiChannel,
+    channel: Ghz2_4Channel,
 }
 
 impl MonitorInjectionChannelBinding {
@@ -67,7 +69,7 @@ impl MonitorInjectionChannelBinding {
     pub const fn new(
         generation: u32,
         channel_epoch: u32,
-        channel: WifiChannel,
+        channel: Ghz2_4Channel,
     ) -> Result<Self, MonitorInjectionBindingError> {
         match NonZeroU32::new(channel_epoch) {
             Some(channel_epoch) => Ok(Self {
@@ -87,7 +89,7 @@ impl MonitorInjectionChannelBinding {
         self.channel_epoch.get()
     }
 
-    pub const fn channel(self) -> WifiChannel {
+    pub const fn channel(self) -> Ghz2_4Channel {
         self.channel
     }
 }
@@ -215,7 +217,7 @@ pub trait MonitorSink<Rate> {
     /// The default preserves source-only sinks which do not retain channel
     /// metadata. Queue-backed product sinks override this edge and stamp the
     /// exact channel into every independently retained frame.
-    fn begin_channel_epoch(&mut self, _channel: WifiChannel) {}
+    fn begin_channel_epoch(&mut self, _channel: Ghz2_4Channel) {}
 
     /// Revoke dwell-bound injection authority before stop or retune begins.
     fn end_channel_epoch(&mut self) {}

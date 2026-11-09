@@ -202,12 +202,12 @@ impl<
 
     /// Record the actual channel after a radio start.
     #[inline]
-    pub fn radio_tuned_to(&mut self, channel: WifiChannel) {
+    pub fn radio_tuned_to(&mut self, channel: Ghz2_4Channel) {
         self.tuned = channel;
     }
     /// Choose the next enable's channel.
     #[inline]
-    pub fn set_checked_channel(&mut self, channel: WifiChannel) {
+    pub fn set_checked_channel(&mut self, channel: Ghz2_4Channel) {
         self.deref_mut().set_checked_channel(channel);
     }
     /// Consume this view, updating its owner before returning the next view.
@@ -265,7 +265,7 @@ impl<
 
     /// The actual target of this enable's retune.
     #[inline]
-    pub fn target_channel(&self) -> WifiChannel {
+    pub fn target_channel(&self) -> Ghz2_4Channel {
         self.channel
     }
     /// A failed retune returns disabled ownership on the previous channel.

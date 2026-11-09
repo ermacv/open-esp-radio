@@ -12,9 +12,8 @@ use oer_portable_memory::{
     WakingSpscSender,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    ChannelContextId, MacRxMetadata, MonitorDropReason, MonitorFrame,
+    ChannelContextId, Ghz2_4Channel, MacRxMetadata, MonitorDropReason, MonitorFrame,
     MonitorInjectionChannelBinding, MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
-    WifiChannel,
 };
 
 /// Metadata copied alongside one independently retained monitor frame.
@@ -27,7 +26,7 @@ pub struct MonitorCaptureMetadata<Rate> {
     /// `None` is reserved for legacy sinks which publish without first
     /// accepting a channel-epoch edge. Production monitor tasks always stamp
     /// `Some` before starting RX.
-    pub channel: Option<WifiChannel>,
+    pub channel: Option<Ghz2_4Channel>,
     /// Monotonic channel-binding epoch within `generation`. A value may be
     /// skipped when a stopped retune supersedes a prepared channel before RX
     /// starts; retained frames never change their stamped value.
@@ -138,7 +137,7 @@ impl<const CAPACITY: usize, const SLOTS: usize> MonitorCapturePool<CAPACITY, SLO
         &'pool self,
         frame: MonitorFrame<'_, Rate>,
         generation: u32,
-        channel: Option<WifiChannel>,
+        channel: Option<Ghz2_4Channel>,
         channel_epoch: u32,
         injection_binding_valid: bool,
         snapshot_length: Option<usize>,
@@ -256,7 +255,7 @@ pub struct MonitorCaptureSink<
     pool: &'pool MonitorCapturePool<CAPACITY, SLOTS>,
     sender: WakingSpscSender<'queue, MonitorCaptureFrame<'pool, Rate, CAPACITY>, DEPTH>,
     generation: u32,
-    channel: Option<WifiChannel>,
+    channel: Option<Ghz2_4Channel>,
     channel_epoch: u32,
     injection_binding_valid: bool,
     snapshot_length: Option<usize>,
@@ -278,7 +277,7 @@ impl<Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: usize>
 impl<Rate, const DEPTH: usize, const CAPACITY: usize, const SLOTS: usize> MonitorSink<Rate>
     for MonitorCaptureSink<'_, '_, Rate, DEPTH, CAPACITY, SLOTS>
 {
-    fn begin_channel_epoch(&mut self, channel: WifiChannel) {
+    fn begin_channel_epoch(&mut self, channel: Ghz2_4Channel) {
         self.channel = Some(channel);
         if self.injection_binding_valid {
             match self.channel_epoch.checked_add(1) {
