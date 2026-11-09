@@ -262,7 +262,8 @@ pub(crate) async fn datapath(datapath: Datapath) {
 }
 
 /// The station lifecycle's task: an ordinary stop ends it; a restart of
-/// the station stays inside the facade; every terminal exit records its
+/// the station stays inside the facade; a start the radio refused keeps its
+/// typed cause with the control; every other terminal exit records its
 /// typed cause and resets.
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
@@ -276,12 +277,10 @@ pub(crate) async fn serve_station(start: StationStart) {
         .unwrap_or_else(|error| failure(error));
     match observed!(Station, runner.run(profile)).await {
         wifi::StationExit::Stopped => {}
-        wifi::StationExit::Unavailable(unavailable) => match unavailable.cleanup {
-            Ok(()) => failure(unavailable.cause),
-            // The install's refusal and its radio's failed release both
-            // stand: the release is the later, unresolved one.
-            Err(_) => super::fail(oer_portable_diagnostics::name!("wifi-release"; 32)),
-        },
+        // The start's refusal and how its owners ended stay typed with the
+        // control ([`Station::connect`] answers them): a refused start
+        // resets nothing.
+        wifi::StationExit::Unavailable(_) => {}
         wifi::StationExit::Failed(failed) => super::fail_path(
             oer_portable_diagnostics::name!("wifi-failed"; 32),
             &oer_portable_diagnostics::DiagPath::of(&failed),
@@ -608,8 +607,10 @@ pub enum ConnectError {
     Failed(DisconnectReason),
     /// The station's command queue is full.
     Busy,
-    /// The station stopped or never started.
+    /// The station stopped.
     Stopped,
+    /// The station never started, for this typed cause.
+    NotStarted(wifi::StartError),
     /// The profile's credentials could not be prepared.
     Profile(ProfileError),
 }
@@ -629,6 +630,13 @@ impl oer_portable_diagnostics::DiagnosticPath for ConnectError {
             }
             Self::Busy => path.name("Busy"),
             Self::Stopped => path.name("Stopped"),
+            Self::NotStarted(error) => {
+                path.name("NotStarted");
+                path.name(match error {
+                    wifi::StartError::Unavailable(_) => "Unavailable",
+                    wifi::StartError::RunnerLost => "RunnerLost",
+                });
+            }
             Self::Profile(error) => {
                 path.name("Profile");
                 oer_portable_diagnostics::DiagnosticPath::push_path(error, path);
@@ -736,7 +744,7 @@ impl Station {
             self.control
                 .wait_started()
                 .await
-                .map_err(|wifi::StartError::Unavailable| ConnectError::Stopped)?;
+                .map_err(ConnectError::NotStarted)?;
             self.started = true;
         }
         let credentials = profile.0.prepare().await.map_err(ConnectError::Profile)?;

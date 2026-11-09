@@ -465,6 +465,64 @@ impl<W: Binding> AccessPointRunner<W> {
         for (octet, source) in gtk.iter_mut().zip(gtk_bytes) {
             *octet = source;
         }
+        // Everything the access point builds from its settings is built
+        // before the radio starts: a refusal here takes nothing.
+        let Ok(address) =
+            oer_protocols_ieee80211_wire::address::IndividualAddress::for_interface(boot.ap)
+                .map(|address| address.get())
+        else {
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Address,
+            ));
+        };
+        let channel = config.supported;
+        let Some(key_id) = GroupKeyId::new(GROUP_KEY_ID) else {
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Storage,
+            ));
+        };
+        let Ok(service) = AccessPointService::<Interface>::new(
+            address,
+            pmk,
+            RsnGtk::new(key_id, true, &gtk),
+            1,
+            settings.client_limit,
+            AccessPointInactiveTimeout::default(),
+            peers.lend(),
+        ) else {
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Storage,
+            ));
+        };
+        let wire_channel = channel.channel();
+        let Ok(beacon) = ApBeacon::new(
+            template,
+            &ADVERTISEMENT,
+            address,
+            &settings.ssid,
+            wire_channel,
+            settings.beacon_interval_tu,
+            settings.dtim_period,
+            SequenceNumber::ZERO,
+            ApSecurityPolicy::Wpa2Personal,
+        ) else {
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Ssid,
+            ));
+        };
+        let (Some(management_transmissions), Some(data_transmissions)) = (
+            core::num::NonZeroU8::new(MANAGEMENT_TRANSMISSIONS),
+            core::num::NonZeroU8::new(lmac::SHORT_RETRY_LIMIT),
+        ) else {
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Tx,
+            ));
+        };
+        let Some(minted) = installations.first() else {
+            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Registration,
+            ));
+        };
         let (parts, driver) = match radio::install(boot, config, AP_BANK).await {
             Ok(installed) => installed,
             Err(refused) => {
@@ -475,23 +533,16 @@ impl<W: Binding> AccessPointRunner<W> {
                 );
             }
         };
-        let Some(minted) = installations.first() else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Registration,
-            ));
-        };
         let Ok(PortInstallation {
             port,
             commands,
             resources,
         }) = Port::<W>::install(parts, minted, driver)
         else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Backend,
-            ));
+            // The started radio stays in the refused parts' device, which
+            // no release takes back before a start of the port.
+            return ApExit::Unavailable(radio::port_refused(InitializationError::Backend));
         };
-        let address = port_address::<W>(&port);
-        let channel = config.supported;
         let mut tickets = heapless::Vec::new();
         for ticket in resources.tickets {
             // The access point holds every ticket: `TX_TICKETS` is its
@@ -529,49 +580,7 @@ impl<W: Binding> AccessPointRunner<W> {
             group_permission: resources.access_point_group_permission,
             beacon: resources.access_point_beacon,
         };
-        let Some(key_id) = GroupKeyId::new(GROUP_KEY_ID) else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Storage,
-            ));
-        };
-        let Ok(service) = AccessPointService::<Interface>::new(
-            address,
-            pmk,
-            RsnGtk::new(key_id, true, &gtk),
-            1,
-            settings.client_limit,
-            AccessPointInactiveTimeout::default(),
-            peers.lend(),
-        ) else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Storage,
-            ));
-        };
-        let wire_channel = channel.channel();
-        let Ok(beacon) = ApBeacon::new(
-            template,
-            &ADVERTISEMENT,
-            address,
-            &settings.ssid,
-            wire_channel,
-            settings.beacon_interval_tu,
-            settings.dtim_period,
-            SequenceNumber::ZERO,
-            ApSecurityPolicy::Wpa2Personal,
-        ) else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Ssid,
-            ));
-        };
         let engine = ApEngine::new(service, beacon, ADVERTISEMENT, wire_channel, key_id);
-        let (Some(management_transmissions), Some(data_transmissions)) = (
-            core::num::NonZeroU8::new(MANAGEMENT_TRANSMISSIONS),
-            core::num::NonZeroU8::new(lmac::SHORT_RETRY_LIMIT),
-        ) else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Tx,
-            ));
-        };
         let policy = ApPolicy {
             // The BSS's lowest basic rate, the archive's beacon rate.
             management_rate: PhyRate::Legacy(LegacyRate::Dsss1M),
@@ -667,11 +676,6 @@ async fn retire<W: Binding>(
         Ok(()) => ApExit::Ended(ended),
         Err(cause) => ApExit::ReleaseRefused { ended, cause },
     }
-}
-
-/// The access point's own address on `port`.
-fn port_address<W: Binding>(port: &Port<W>) -> [u8; 6] {
-    oer_protocols_ieee80211_contracts_port::AccessPointPort::access_point_address(port).get()
 }
 
 const _: () = {

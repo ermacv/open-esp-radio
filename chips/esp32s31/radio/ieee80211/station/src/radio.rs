@@ -447,6 +447,16 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
         .await;
         return;
     };
+    let Some(minted) = installations.first() else {
+        post(
+            &mut mailbox,
+            News::Unavailable(crate::failure::Unavailable::took_nothing(
+                InitializationError::Registration,
+            )),
+        )
+        .await;
+        return;
+    };
     let config = boot.config;
     let (parts, driver) = match install(boot, config, crate::supply::PORT_BUFFERS).await {
         Ok(installed) => installed,
@@ -458,16 +468,6 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
             return;
         }
     };
-    let Some(minted) = installations.first() else {
-        post(
-            &mut mailbox,
-            News::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Registration,
-            )),
-        )
-        .await;
-        return;
-    };
     let Ok(PortInstallation {
         port,
         commands,
@@ -476,9 +476,7 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
     else {
         post(
             &mut mailbox,
-            News::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Backend,
-            )),
+            News::Unavailable(port_refused(InitializationError::Backend)),
         )
         .await;
         return;
@@ -616,6 +614,19 @@ pub(crate) async fn release<W: Binding>(
         |cause| still_active(*cause),
     )
     .await
+}
+
+/// The refusal of a port that did not take the parts of a started radio:
+/// the radio stays in the parts' device, never started by the port, and no
+/// release takes it back from there ([`take_stopped`] needs a paused
+/// device), so the cleanup names it not released.
+pub(crate) fn port_refused(
+    cause: InitializationError,
+) -> crate::failure::Unavailable<InitializationError> {
+    crate::failure::Unavailable {
+        cause,
+        cleanup: Err(crate::failure::ReleaseCause::NotStopped),
+    }
 }
 
 /// Why [`install`] refused, with the owners it took that its refused step

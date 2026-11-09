@@ -485,7 +485,7 @@ async fn lifecycles<W: Binding>(
             radio::News::Installed(issuer, tokens) => (issuer, tokens),
             radio::News::Unavailable(error) => {
                 if let Some(start) = start.take() {
-                    start.complete(Err(crate::StartError::Unavailable));
+                    start.complete(Err(crate::StartError::Unavailable(error)));
                 }
                 return StationExit::Unavailable(error);
             }

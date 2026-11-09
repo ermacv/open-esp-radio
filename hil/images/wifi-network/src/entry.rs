@@ -311,6 +311,6 @@ fn station_error(error: ConnectError) -> StationError {
         ConnectError::Refused(refusal) => codes::refused(refusal),
         ConnectError::Busy => StationError::failed(codes::class::NOT_ADMITTED, 0, 0),
         ConnectError::Profile(_) => StationError::InvalidSettings,
-        ConnectError::Stopped => StationError::Unavailable,
+        ConnectError::Stopped | ConnectError::NotStarted(_) => StationError::Unavailable,
     }
 }

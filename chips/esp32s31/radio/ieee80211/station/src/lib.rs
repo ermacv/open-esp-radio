@@ -365,10 +365,15 @@ impl<N: Notifies> NetDevice for Network<'_, N> {
         self.inner.read_copied(copied.0, read)
     }
 }
-/// Caller-owned queues, valid before a port installation exists.
+/// Why the station did not start.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StartError {
-    Unavailable,
+    /// The radio's start refused: its typed cause, and how the owners the
+    /// refusal returned ended.
+    #[cfg(target_arch = "riscv32")]
+    Unavailable(failure::Unavailable<InitializationError>),
+    /// The station's runner ended before its start completed.
+    RunnerLost,
 }
 /// The station's restarts since its service began.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -426,7 +431,7 @@ impl StartGuard<'_> {
 impl Drop for StartGuard<'_> {
     fn drop(&mut self) {
         if self.0.result.get().is_none() {
-            self.complete(Err(StartError::Unavailable));
+            self.complete(Err(StartError::RunnerLost));
         }
     }
 }
@@ -1074,7 +1079,7 @@ mod tests {
         assert!(wakes.0.load(Ordering::Relaxed) > 0);
         assert_eq!(
             waiting.as_mut().poll(&mut cx),
-            Poll::Ready(Err(StartError::Unavailable))
+            Poll::Ready(Err(StartError::RunnerLost))
         );
     }
 }
