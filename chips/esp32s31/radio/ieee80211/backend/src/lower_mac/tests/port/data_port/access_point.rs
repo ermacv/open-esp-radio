@@ -711,6 +711,7 @@ enum Check {
     UnsupportedGroupKeyId,
     UnpublishableDuringStationConfigure,
     ReturnedAccessPointCommand,
+    ExpiredGroupInstall,
 }
 
 fn run_check(check: Check) -> Result<(), CaseViolation> {
@@ -749,6 +750,7 @@ fn run_check(check: Check) -> Result<(), CaseViolation> {
                 unpublishable_during_station_configure(&mut harness)
             }
             Check::ReturnedAccessPointCommand => returned_access_point_command(&mut harness),
+            Check::ExpiredGroupInstall => expired_group_install(&mut harness),
         }
     }))
 }
@@ -812,6 +814,78 @@ fn every_access_point_case_without_a_beacon_passes_on_the_s31_port() {
         })
         .collect();
     assert!(failed.is_empty(), "{failed:?}");
+}
+
+/// The access point's group installation held at its receive cut past the
+/// port's command bound, on the S31 port alone: no runner, the S31's own
+/// capabilities. It comes back refused `Expired` with the same slot and
+/// permission, the cut it polled is abandoned once, nothing runs and no
+/// fault is latched; the stop then confirms, every ticket and buffer is
+/// home and the stopped port retires.
+fn expired_group_install<Id: radio::SlotIdentity>(
+    harness: &mut ApFixture<'_, '_, Id>,
+) -> Result<(), CaseViolation> {
+    ap_cases::start(harness)?;
+    harness.hold_group_commands(true);
+    let install = harness
+        .install_group(Issued::Current, Issued::Current, Issued::Current)
+        .ok_or(CaseViolation::Fixture)?;
+    let AccessPointCommand::InstallGroup(issued) = &install else {
+        return Err(CaseViolation::Fixture);
+    };
+    let owners = issued.owners_for_test();
+    let AccessPointProgress::Held(install) = ap_cases::run(harness, Some(install))? else {
+        return Err(CaseViolation::Barrier);
+    };
+    // The caller's turn registers its waker: the cut runs and holds.
+    ap_cases::service(harness)?;
+    let AccessPointProgress::Held(install) = ap_cases::run(harness, Some(install))? else {
+        return Err(CaseViolation::Barrier);
+    };
+    if harness.fr().observed.borrow().cut_calls == 0 {
+        return Err(CaseViolation::Barrier);
+    }
+    let bound = harness.command_bound();
+    AccessPointHarness::advance(harness, bound);
+    let AccessPointProgress::Refused(refused, AccessPointRefusal::Expired) =
+        ap_cases::run(harness, Some(install))?
+    else {
+        return Err(CaseViolation::Refusal);
+    };
+    let AccessPointCommand::InstallGroup(returned) = &refused else {
+        return Err(CaseViolation::Owners);
+    };
+    if returned.owners_for_test() != owners {
+        return Err(CaseViolation::Owners);
+    }
+    if harness.fr().port.fault().is_some() {
+        return Err(CaseViolation::Fault);
+    }
+    if harness.take_terminal().is_some() {
+        return Err(CaseViolation::Barrier);
+    }
+    let observed = harness.fr().observed.borrow();
+    if observed.abandoned_cuts != 1 || observed.resumed_cuts != 0 {
+        return Err(CaseViolation::Barrier);
+    }
+    drop(observed);
+    harness.hold_group_commands(false);
+    ap_cases::stop(harness)?;
+    if !harness.idle() {
+        return Err(CaseViolation::Owners);
+    }
+    drop(refused);
+    // The fixture's transmit buffers go home before the retire checks.
+    drop(core::mem::take(&mut harness.f().buffers));
+    if harness.f().port.release().is_none() {
+        return Err(CaseViolation::Lifecycle);
+    }
+    Ok(())
+}
+
+#[test]
+fn an_ap_group_install_expired_at_its_receive_cut_returns_its_owners_and_the_s31_port_retires() {
+    assert_eq!(run_check(Check::ExpiredGroupInstall), Ok(()));
 }
 
 /// The AP's group installation under key id 0, which the S31 AP key layout

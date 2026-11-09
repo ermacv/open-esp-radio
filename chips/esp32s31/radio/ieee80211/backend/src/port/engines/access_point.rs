@@ -50,6 +50,14 @@ pub struct AccessPointGroupInstall<Id: SlotIdentity> {
     association: u32,
 }
 
+impl<Id: SlotIdentity> AccessPointGroupInstall<Id> {
+    /// The slot and permission indices of the installation.
+    #[cfg(test)]
+    pub(crate) fn owners_for_test(&self) -> (u8, u8) {
+        (self.install.slot.index(), self.install.permission.index())
+    }
+}
+
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     AccessPointTypes<'id> for Types<Id, D, B, O>
 {
