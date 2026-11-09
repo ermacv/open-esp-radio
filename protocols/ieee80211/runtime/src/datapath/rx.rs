@@ -9,9 +9,9 @@
 //! its way to loses nothing, and a slower network paces the peer, whose
 //! frames in full ring slots the recipient does not acknowledge.
 //!
-//! A pressure episode lasts from that first stop until the pull reaches the
-//! ring's end with nothing waiting in delivery order; the network's returns
-//! do not extend it. Once it has lasted [`NETWORK_LATE`] the actor walks
+//! A pressure episode lasts from that first stop until the pull finds the
+//! ring empty while the actor holds no received unit; neither the network's
+//! returns nor a deferred continuation of the pull end or extend it. Once it has lasted [`NETWORK_LATE`] the actor walks
 //! the ring to its end: every frame is admitted and reordered, the
 //! station's frames go to the lifecycle, and an MSDU the port cannot lend
 //! is refused, counted as pressure ([`RxMsdusRefused`]), its buffer back to
@@ -167,11 +167,14 @@ where
         self.network_full(network) && !self.network_late()
     }
 
-    /// The pull reached the ring's end with nothing waiting in delivery
-    /// order: the pressure episode is over, and the next one starts its own
-    /// bound. A return of the network alone does not end it.
-    fn caught_up(&mut self) {
-        if !self.receive.has_ready() {
+    /// The pull found the ring empty: the pressure episode is over, and the
+    /// next one starts its own bound, once that is proven. `Empty` also
+    /// answers a caller at the port's holding limit, so it proves the ring's
+    /// end only while the actor holds no received unit: none in the
+    /// lifecycle's lane, none with the receive agreements. Neither a return
+    /// of the network nor a deferred continuation (`Later`) ends it.
+    fn walked_to_end(&mut self) {
+        if self.frames_out == 0 && !self.receive.holds_frames() {
             self.held_back = None;
         }
     }
@@ -231,7 +234,7 @@ where
                         }
                     }
                     RxPull::Empty => {
-                        self.caught_up();
+                        self.walked_to_end();
                         break;
                     }
                     RxPull::Later(at) if at <= now => {
@@ -245,7 +248,6 @@ where
                     }
                     RxPull::Later(at) => {
                         self.rx_later = Some(at);
-                        self.caught_up();
                         break;
                     }
                 }

@@ -450,7 +450,7 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     rx_later: Option<Instant>,
     /// The start of the pressure episode: the first stop of the pull for a
     /// network that holds every unit the port may lend, until the pull
-    /// reaches the ring's end with nothing waiting.
+    /// finds the ring empty while the actor holds no received unit.
     held_back: Option<Instant>,
     /// A budget ran out with work left.
     again: bool,

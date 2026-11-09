@@ -161,6 +161,72 @@ fn a_network_returning_a_loan_every_9_ms_does_not_extend_the_bound() {
     );
 }
 
+/// As the 9 ms return, with the pull's continuation then deferred by
+/// 500 µs, as a ring that waits for it does: the deferral is a continuation
+/// of the same pull, not an empty ring, so it does not end the pressure
+/// episode either. At the episode's original 10 ms bound the ring is
+/// walked and the ADDBA Request is answered.
+#[test]
+fn a_deferred_continuation_after_a_return_does_not_restart_the_bound() {
+    pair(
+        ht_config,
+        std::vec![script(|world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                world.associate_with(&mut seen, ht_beacon(), false).await;
+                world.connected().await;
+                world.settle().await;
+                let actions = |world: &World<'_>| {
+                    world
+                        .air
+                        .sent()
+                        .iter()
+                        .filter(|frame| kind(frame) == 0x00d0)
+                        .count()
+                };
+                let before = actions(world);
+                for sequence in 0..12 {
+                    world
+                        .air
+                        .receive(&data(sequence, 3, sequence as u8), meta());
+                }
+                world.air.receive(&addba(8, 1, 0, 0), meta());
+                world.settle().await;
+                assert_eq!(world.air.pending_rx(), 12 - MODEL_RX_EVENTS);
+                world.advance_by(Duration::from_millis(9));
+                world.air.defer_receive(
+                    oer_portable_time::Clock::now(&*world.clock)
+                        .saturating_add(Duration::from_micros(500)),
+                );
+                assert!(world.delivered.borrow().try_receive().is_some());
+                world.settle().await;
+                assert_eq!(actions(world), before, "still within the bound");
+                world.advance_by(Duration::from_micros(500));
+                world.settle().await;
+                assert_eq!(actions(world), before, "still within the bound");
+                world.advance_by(NETWORK_LATE.saturating_sub(Duration::from_micros(9_500)));
+                world.settle().await;
+                assert_eq!(
+                    world.air.pending_rx(),
+                    0,
+                    "the ring is walked at the original bound"
+                );
+                assert!(matches!(
+                    response(&world.sent(&mut seen, 0x00d0).await),
+                    BlockAckAction::AddbaResponse {
+                        dialog_token: 8,
+                        status: 0,
+                        tid: 1,
+                        ..
+                    }
+                ));
+                world.stop().await;
+            })
+        })],
+        |ends, _| assert!(stopped(ends)),
+    );
+}
+
 /// The network's task is late while the access point sends A-MSDUs of two
 /// MSDUs each. Their copies fill the copy queue before any loan: the third
 /// A-MSDU's MSDUs are refused for a full queue, while a following frame of
