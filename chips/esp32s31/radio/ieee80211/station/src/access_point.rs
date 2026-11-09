@@ -352,6 +352,8 @@ pub struct AccessPointRunner<W: Binding> {
     template: &'static mut [u8; AP_BEACON_CAPACITY],
     shared: &'static ApShared,
     nonces: Nonces,
+    /// Where a refused release keeps its cleanup's receipt.
+    kept: &'static mut Option<radio::Removal<W>>,
 }
 
 /// The access point's network device and its sending path.
@@ -443,6 +445,7 @@ pub fn access_point<W: Binding, F>(
             template,
             shared,
             nonces: Nonces(nonces),
+            kept: &mut station.kept,
         },
     )
 }
@@ -473,6 +476,7 @@ impl<W: Binding> AccessPointRunner<W> {
             template,
             shared,
             mut nonces,
+            kept,
         } = self;
         let Some((config, settings)) = slot.take(shared).await else {
             return ApExit::Ended(ApEnded::Stopped);
@@ -666,7 +670,7 @@ impl<W: Binding> AccessPointRunner<W> {
             // starts; a run that still ended here never asked it to start.
             ApEnd::Unsupported(cause) => (ApEnded::Unsupported(cause), Stop::Owed),
         };
-        retire::<W>(slot, runner, ended, stop).await
+        retire::<W>(slot, runner, kept, ended, stop).await
     }
 }
 
@@ -698,10 +702,12 @@ type ApRunnerOf<W> = ApRunner<
 /// published as [`ApExit::StopUnconfirmed`]; until the release ends, a
 /// release the MAC refused as still active is published as
 /// [`ApExit::ReleaseRefused`] and tried again. The owners end with the
-/// runner once the stop is confirmed and the release ended.
+/// runner once the stop is confirmed and the release ended; a refused
+/// release's cleanup receipt stays in the composition's storage.
 async fn retire<W: Binding>(
     slot: &StartSlot,
     mut runner: ApRunnerOf<W>,
+    kept: &mut Option<radio::Removal<W>>,
     ended: ApEnded,
     stop: Stop,
 ) -> ApExit {
@@ -724,11 +730,12 @@ async fn retire<W: Binding>(
         slot.ended
             .set(Some(ApExit::ReleaseRefused { ended, cause }))
     };
-    // The cleanup's removal receipt stays here with the runner's owners,
-    // past the release, refused or not.
+    // The cleanup's removal receipt: a refused release keeps it in the
+    // composition's place for good; after a release that succeeded it ends
+    // with the retired installation.
     let (released, returned) = radio::release::<W>(runner.port_mut(), refused).await;
     drop(unrecycled);
-    drop(returned);
+    crate::release::settle(kept, released.is_err(), returned);
     match (ended, finished, released) {
         // A refusal the stop found after another cause.
         (ended, Err(fault), released) if !matches!(ended, ApEnded::Unrecycled(_)) => {

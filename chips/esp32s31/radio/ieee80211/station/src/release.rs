@@ -70,6 +70,21 @@ impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Returning<'id, T> {
     }
 }
 
+/// Where a cleanup's removal receipt goes once the release or reinstall it
+/// came back with ended. A refusal keeps it for good in the composition's
+/// one place, which only the runner's single end reaches (`place` moves
+/// in); after a release that succeeded it ends with the retired
+/// installation's other tokens.
+pub(crate) fn settle<R>(place: &mut Option<R>, refused: bool, receipt: Option<R>) {
+    if refused {
+        if let Some(receipt) = receipt {
+            *place = Some(receipt);
+        }
+    } else {
+        drop(receipt);
+    }
+}
+
 /// The owners a refused start returned, which end through [`Retire::retire`].
 pub(crate) trait Retire {
     /// End the owners: a member of the radio system leaves it.
@@ -177,6 +192,33 @@ mod tests {
 
     fn poll_now<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
         poll(future)
+    }
+
+    /// A receipt whose end the test observes.
+    struct Receipt<'a>(&'a Cell<u8>);
+
+    impl Drop for Receipt<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+
+    #[test]
+    fn a_refused_release_keeps_its_cleanup_receipt_in_the_composition() {
+        let ended = Cell::new(0);
+        let mut place = None;
+        settle(&mut place, true, Some(Receipt(&ended)));
+        assert_eq!(ended.get(), 0, "the refusal ends nothing");
+        assert!(place.is_some(), "the composition holds the receipt");
+        // A release that succeeded ends its receipt with the retired
+        // installation.
+        let succeeded = Cell::new(0);
+        let mut other = None;
+        settle(&mut other, false, Some(Receipt(&succeeded)));
+        assert_eq!(succeeded.get(), 1);
+        assert!(other.is_none());
+        drop(place);
+        assert_eq!(ended.get(), 1);
     }
 
     #[test]

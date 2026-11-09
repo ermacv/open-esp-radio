@@ -136,8 +136,10 @@ one that did not finish, a group key entry the hardware still holds among
 them, keeps the port stopped with its owners and is `Reinstall(Cleanup)` or
 `ReleaseFailed(Cleanup)`, and nothing runs it again. A removal receipt the
 cleanup frees comes back whole to the actor's task, which hands it on with
-its news; the facade keeps it past the release, refused or not (the port's
-release does not ask for it). After an ordinary stop
+its news. After a release that succeeded it ends with the retired
+installation; a refused release or reinstall keeps it in the composition's
+storage for good, as the access point's runner does (the port's release
+does not ask for it). After an ordinary stop
 the actor's task takes the stopped device's Wi-Fi frontier and membership
 cell and releases the radio. The station's exit is published only after that
 release, or once the stop's drain passed first: a cleanup that did not

@@ -452,6 +452,9 @@ pub struct Storage<W: Binding> {
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) actor: radio::ActorStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
+    /// The removal receipt a refused release or reinstall returned with
+    /// its refusal: the composition keeps it here for good.
+    pub(crate) kept: Option<radio::Removal<W>>,
 }
 impl<W, N, A> Storage<W>
 where
@@ -471,6 +474,7 @@ where
             ),
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
+            kept: None,
             pool: static_cell::StaticCell::new(),
         }
     }
@@ -484,6 +488,7 @@ impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
             ),
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
+            kept: None,
             pool: static_cell::StaticCell::new(),
         }
     }
@@ -540,6 +545,8 @@ pub struct StationRunner<W: Binding> {
     pub(crate) news: oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
     /// Publishes the exit to Control once it is final.
     pub(crate) stop: crate::StopGuard<'static, StationExit>,
+    /// Where a refused release or reinstall keeps its cleanup's receipt.
+    pub(crate) kept: &'static mut Option<radio::Removal<W>>,
 }
 pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) config: Config,
@@ -702,6 +709,7 @@ pub fn station<W: Binding>(
                 actor,
                 news,
                 stop,
+                kept: &mut storage.kept,
             },
         },
     )

@@ -432,8 +432,9 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
         mut actor,
         news: mut mailbox,
         stop,
+        kept,
     } = runner;
-    let exit = lifecycles::<W>(service, &mut actor, &mut mailbox, profile).await;
+    let exit = lifecycles::<W>(service, &mut actor, &mut mailbox, kept, profile).await;
     stop.publish(exit);
     exit
 }
@@ -449,6 +450,7 @@ async fn lifecycles<W: Binding>(
         { radio::RETURNS },
     >,
     mailbox: &mut oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
+    kept: &mut Option<radio::Removal<W>>,
     profile: Profile<W>,
 ) -> StationExit {
     let ServiceRunner {
@@ -490,9 +492,9 @@ async fn lifecycles<W: Binding>(
                 return StationExit::Unavailable(error);
             }
             radio::News::Reinstall { cause, returned } => {
-                let exit = StationExit::Failed(crate::failure::LifecycleFailure::Reinstall(cause));
-                drop(returned);
-                return exit;
+                // A refused reinstall: its receipt stays here.
+                crate::release::settle(kept, true, returned);
+                return StationExit::Failed(crate::failure::LifecycleFailure::Reinstall(cause));
             }
             radio::News::Released { .. } => {
                 return StationExit::Failed(crate::failure::LifecycleFailure::Mailbox);
@@ -537,9 +539,8 @@ async fn lifecycles<W: Binding>(
                         network_lost,
                         returned,
                     }) => {
-                        let exit = released_exit(result, network_lost);
-                        drop(returned);
-                        exit
+                        crate::release::settle(kept, result.is_err(), returned);
+                        released_exit(result, network_lost)
                     }
                     None => StationExit::ReleaseFailed(crate::failure::ReleaseCause::Deadline),
                     Some(
@@ -564,9 +565,8 @@ async fn lifecycles<W: Binding>(
                         network_lost,
                         returned,
                     } => {
-                        let exit = released_exit(result, network_lost);
-                        drop(returned);
-                        exit
+                        crate::release::settle(kept, result.is_err(), returned);
+                        released_exit(result, network_lost)
                     }
                     radio::News::Installed(..)
                     | radio::News::Unavailable(_)
