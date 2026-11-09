@@ -999,6 +999,8 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/scenarios/sdk-station", Role::Tool),
     ("hil/scenarios/wifi-station", Role::Tool),
     ("hil/scenarios/wifi-load", Role::Tool),
+    // TEMPORARY experiment host program (branch `probe/beacon-timestamp`).
+    ("hil/scenarios/beacon-stamp", Role::Tool),
 ];
 
 /// Roles fixed before their package exists, with what creates it. When the

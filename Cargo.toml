@@ -9,6 +9,8 @@ members = [
     "hil/probes/esp32s31-register",
     "hil/probes/esp32s31-facts",
     "hil/probes/esp32s31-rx-chain",
+    "hil/probes/esp32s31-beacon-stamp",
+    "hil/scenarios/beacon-stamp",
     "hil/probes/esp32s31-radio",
     "hil/probes/esp32s31-peer-overdue",
     "hil/probes/esp32s31-aes-timing",

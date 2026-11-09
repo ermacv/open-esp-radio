@@ -1,0 +1,55 @@
+[package]
+name = "oer-hil-probes-esp32s31-beacon-stamp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish.workspace = true
+description = "TEMPORARY experiment: who writes the Timestamp of a transmitted beacon; caller value K, queue delay behind a blocker, per-frame clock records"
+build = "build.rs"
+
+[dependencies]
+embedded-io-async = "0.7.0"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+heapless = "0.9.3"
+static_cell = { workspace = true }
+oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
+oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/runtime" }
+oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform/runtime" }
+oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
+oer-chips-family-drivers-usb-serial-jtag.workspace = true
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-portable-trace = { path = "../../../portable/trace" }
+oer-chips-family-platform-interrupt-table = { path = "../../../chips/family/platform/interrupt-table" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-chips-esp32s31-radio-phy = { path = "../../../chips/esp32s31/radio/phy" }
+oer-chips-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
+oer-chips-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
+oer-chips-esp32s31-radio-ieee80211-backend = { path = "../../../chips/esp32s31/radio/ieee80211/backend" }
+oer-protocols-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
+oer-protocols-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-protocols-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
+
+[build-dependencies]
+oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"
+
+[package.metadata.open-radio.panic-budget]
+# Initial composition inventory copied from the rx-rebind probe, which
+# composes the same production crates: existing production/macro sites, no
+# handwritten panic site. CI's image report gives this image's own counts
+# against the target of zero.
+runtime = { hal = 15, chips = 310, portable = 1, firmware = 23, unnamed = 5, hardware = 1 }
+bootstrap = { unnamed = 2 }
