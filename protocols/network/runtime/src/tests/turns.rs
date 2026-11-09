@@ -505,12 +505,20 @@ struct Exhausted;
 impl Egress<u32, u32> for Exhausted {
     type Reservation = ();
     type Fault = core::convert::Infallible;
+    type Plan<C: Candidate> = ();
 
-    fn choose<C: Candidate>(
+    fn plan<C: Candidate>(
         &mut self,
         _ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Option<(C, ())>, core::convert::Infallible> {
-        Ok(None)
+    ) -> Result<(), core::convert::Infallible> {
+        Ok(())
+    }
+
+    fn next<C: Candidate>(
+        &mut self,
+        (): &mut (),
+    ) -> Result<oer_protocols_network_port::Next<C, ()>, core::convert::Infallible> {
+        Ok(oer_protocols_network_port::Next::Idle)
     }
 
     fn accepted(&mut self, (): (), _ticket: u32) -> Result<(), core::convert::Infallible> {

@@ -65,6 +65,61 @@ account. No await falls between a choice and its answer from the port, so a
 cancelled `run` leaves no reservation unanswered. A policy that cannot go on ends the
 service with `EndCause::Egress`, and `Ended` returns the policy with its account.
 
+## Transmit plan
+
+A turn's publishing collects the ready work once into the policy's plan
+(`Egress::plan`), which reserves nothing. Each frame then takes the plan's next
+step (`Egress::next`): a frame with its own reservation, exactly what a choice
+over the same ready work would choose and reserve; nothing, when nothing may go;
+or a stop, with nothing reserved, when the plan can no longer say what that
+choice would be. A plan holds at most `QUANTUM` (eight) frames, and it holds no
+owner: a work stays the core's, a block its pool's, until the frame's answer.
+
+| Step | Owners and state |
+| --- | --- |
+| collect | the core lists its ready work (`demands`), the policy keeps the continuation of its choice and what the choice read; nothing is reserved |
+| next: send | the policy reserves for this frame alone; the core builds it in the port's slot (`transmit`), and exactly one of `accepted`, `refused` or `unknown` answers its reservation |
+| accepted | the core commits the work, the policy keeps its charge; the plan goes on |
+| a final refusal (`Stale`, `Rejected`, `SlotTooShort`) or a decline | the work ends as before, its reservation comes back; the plan is dropped and a new collection chooses |
+| a refusal of the port | the reservation comes back, the work stays ready; publishing ends for the turn, and the rest of the plan reserved nothing |
+| a port fault or a policy fault | as before: publishing ends, the service ends |
+| stop | nothing was reserved; a new collection chooses |
+| end of publishing | the plan is dropped: it held nothing to return |
+
+A plan goes on only after its last frame was accepted, and only within one
+turn's publishing, where nothing reaches the core or the policy but its own
+frames' answers: no command, received frame, notice or offer comes between its
+steps. A turn publishes at most eight frames and collects at most once a frame,
+so a policy whose plans stop at once cannot hold the turn.
+
+A plan stops when:
+
+| Stop | What moved |
+| --- | --- |
+| `Changed` | what the policy's choice reads besides the work: for `AirtimeEgress` its `PeerAir::view`, which for the station is the link's word (its state, its association's epoch, its slowest rate) and the last reported rate, so an association change, a link down or a new rate stops it; or the turn of the account's flows is not the plan's, which a frame not accepted leaves behind |
+| `Grant` | the account's largest least grant went with the frames sent, and the plan does not count the next largest |
+| `Account` | the scheduler would serve another account than the one whose turns the plan holds |
+| `Spent` | the plan's frames are spent and more of the work it serves is ready |
+
+Keys are not the network's: the station reports its link up only once
+connected, and a key it loses reaches the plan as a change of the link's word
+(a stop) or as the port's refusal (`LinkDown`, the end of publishing).
+Resources are not the plan's either: a full port or no free buffer is the
+port's refusal, which ends publishing, and a full reservation horizon is the
+policy's `Idle`, until a frame's end. The core's own state (an address, a
+neighbor, a lease) is read when each frame is built: a work no longer that work
+is `Stale`, which drops the plan.
+
+`Direct`'s plan is the list's own turns: control first as listed, then the
+sockets in turn from the one whose turn it is, one datagram each, which is what
+the core's list gives first after each frame it takes. `AirtimeEgress` counts
+every account's candidate, as a choice gives the scheduler, and keeps the turns
+of the account the scheduler serves first: control first, then that account's
+flows in turn after its last served flow. Each next frame asks the scheduler
+over all accounts and is granted only for the plan's account; another account's
+turn stops the plan before anything is reserved
+(`AirtimeScheduler::reserve_for`).
+
 Memory is shared and has two guards. A block counts toward the `Group` of the pool it
 was taken for until the pool has it back, so moving it between sockets, or dropping
 the socket that handed it over, changes nothing: the charge is on the block, in the
@@ -98,7 +153,8 @@ what those hold: that has no contract yet.
 A turn first reads the port's link into the core, then takes commands (four a
 lane), the returns, received frames (eight) and the port's notices (up to 64, a
 Block Ack's whole ends), then, once it has
-read them all, asks its producer for offers, chooses work and publishes it (eight),
+read them all, asks its producer for offers, chooses work and publishes it (eight,
+over the transmit plan below),
 evicts under memory pressure, then hands results and datagrams back. Each part is bounded, so no lane and no port
 starves the others, and sockets waiting for blocks take turns. Every exit of a
 turn goes through that last part, a fault's too: after a policy or port fault the

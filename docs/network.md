@@ -146,10 +146,15 @@ only after the policy chose it and the port gave the room.
   broadcast included, goes to its access point, so one account per
   association. Control work goes first; flows take turns within the
   account. Service classes are not separated yet.
-- **Choice.** A choice reads the ready work, the network's whole backlog,
-  once: each work's least grant once, kept per account as the largest and
-  with the work next in turn, which is all the scheduler and the pick read
-  of it. The scan stays one pass over the backlog per frame sent.
+- **Choice.** A turn's publishing reads the ready work, the network's whole
+  backlog, once, into a plan: each work's least grant once, kept per
+  account as the largest with how many works hold it, and the turns of the
+  account the scheduler serves first, at most eight frames
+  (`oer-protocols-network-runtime`'s README, "Transmit plan"). Each frame
+  asks the scheduler over every account's candidate and takes the plan's
+  next only when the scheduler serves the plan's account; a change of the
+  link's word, the account's largest least grant gone, or another account's
+  turn stops the plan with nothing reserved, and a new collection chooses.
 - **Least grant.** A frame's least useful grant is its PPDU at the full rate
   (mode, MCS, streams, width, guard interval and LTF) of its association's
   last settled frame: each frame's end carries its own last established rate
