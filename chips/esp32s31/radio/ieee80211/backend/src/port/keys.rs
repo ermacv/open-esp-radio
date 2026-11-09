@@ -181,15 +181,47 @@ pub(super) enum Installed<'id, Id: SlotIdentity> {
     Transmit(KeyHandle<'id, CorePath<Id>>),
     Receive(ReceiveKeyHandle<'id, CorePath<Id>>),
 }
+/// One place of the driver's key table: an installed key, or the removal
+/// its command left there while the key's last use is out.
+pub(super) enum KeyPlace<'id, Id: SlotIdentity> {
+    Installed(RawKeyIdentity, Installed<'id, Id>),
+    Removing(WaitingRemoval<'id, Id>),
+}
+impl<'id, Id: SlotIdentity> KeyPlace<'id, Id> {
+    /// The installed key this place holds.
+    pub(super) fn installed(&self) -> Option<(&RawKeyIdentity, &Installed<'id, Id>)> {
+        match self {
+            Self::Installed(identity, installed) => Some((identity, installed)),
+            Self::Removing(_) => None,
+        }
+    }
+    /// The installed key this place holds, to change.
+    pub(super) fn installed_mut(
+        &mut self,
+    ) -> Option<(&mut RawKeyIdentity, &mut Installed<'id, Id>)> {
+        match self {
+            Self::Installed(identity, installed) => Some((identity, installed)),
+            Self::Removing(_) => None,
+        }
+    }
+}
 /// What a removal's command left: the receipt now, or the core place where
-/// it finishes once the key's last use returns.
-pub(super) enum Removing<'id, Id: SlotIdentity> {
-    Removed(core_mac::KeyRemoved<'id, CorePath<Id>>),
+/// it finishes once the key's last use returns. Either way it holds the
+/// key's table place, which this removal emptied: the only place its
+/// command's rights can wait in, and no other removal can name it.
+pub(super) struct Removing<'a, 'id, Id: SlotIdentity> {
+    pub(super) place: &'a mut Option<KeyPlace<'id, Id>>,
+    pub(super) ended: Removed<'id, Id>,
+}
+pub(super) enum Removed<'id, Id: SlotIdentity> {
+    Now(core_mac::KeyRemoved<'id, CorePath<Id>>),
     Waiting(usize),
 }
-/// A removal its command left waiting at its key's core place: the
-/// command's rights, which its terminal returns.
+/// A removal its command left waiting in its key's table place: the core
+/// place where it finishes and the command's rights, which its terminal
+/// returns.
 pub(super) struct WaitingRemoval<'id, Id: SlotIdentity> {
+    pub(super) core: usize,
     pub(super) removal: Removal<'id, Id>,
 }
 pub(super) enum Removal<'id, Id: SlotIdentity> {

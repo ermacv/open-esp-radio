@@ -411,8 +411,10 @@ pairwise key removal waits while an arena holds a key right.
 A key removal whose key still has an admitted use when its command runs
 is done for its command (`Done`): the core clears the key once its last
 use returns and keeps the receipt in the removal's core place (every
-sink refuses receipts), and the port keeps the command's rights at that
-place (`Driver::removals`). Each later service, a stopped port's
+sink refuses receipts), and the port keeps the command's rights in the
+key's own table place, which the removal emptied (`KeyPlace::Removing`):
+no second removal can name that place while they wait there, and no
+installation reuses it. Each later service, a stopped port's
 included, takes each finished receipt from its own place and ends that
 removal once with those rights (`deliver_removals`); a receipt of another
 key never answers the command at hand. A port with a waiting removal does

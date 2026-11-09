@@ -35,7 +35,7 @@ type InstalledKeys<'id, Id> = (
 
 impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// Install the station's pairwise and group keys on its own tokens.
-    fn installed_keys(&mut self) -> InstalledKeys<'id, Id> {
+    pub(super) fn installed_keys(&mut self) -> InstalledKeys<'id, Id> {
         let (association, group_slot, slot) = self.association();
         let (install, _) = self.commands.install_pairwise(
             &association,

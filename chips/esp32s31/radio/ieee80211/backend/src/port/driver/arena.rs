@@ -33,10 +33,11 @@ pub(in crate::port) type Port<'a, 'id, Id, D, const B: usize, O> = ArenaPort<
 /// The station's installed pairwise transmit key the arenas admit: the
 /// newest active one. A key whose removal began is no longer active.
 pub(in crate::port) fn station_pairwise<'a, 'id, Id: SlotIdentity>(
-    keys: &'a [Option<(RawKeyIdentity, Installed<'id, Id>)>],
+    keys: &'a [Option<KeyPlace<'id, Id>>],
 ) -> Option<&'a KeyHandle<'id, CorePath<Id>>> {
     keys.iter()
         .flatten()
+        .filter_map(KeyPlace::installed)
         .filter_map(|(identity, installed)| match installed {
             Installed::Transmit(key) if identity.role == VifRole::Station && identity.active() => {
                 Some((identity.serial, key))

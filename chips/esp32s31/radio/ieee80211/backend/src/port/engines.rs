@@ -761,6 +761,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.driver.keys.iter().position(|entry| {
             entry
                 .as_ref()
+                .and_then(super::keys::KeyPlace::installed)
                 .is_some_and(|(identity, _)| *identity == key.identity)
         })
     }
@@ -817,7 +818,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// Whether a removal its command left waits in the port.
     #[cfg(test)]
     pub(crate) fn removal_waits_for_test(&self) -> bool {
-        self.driver.removals.iter().any(Option::is_some)
+        self.driver.removal_waits()
     }
 
     /// Set the received units the caller holds: a count a unit did not
@@ -863,7 +864,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.state == PortState::Stopped
             && self.fault.is_none()
             && self.rx_out.get() == 0
-            && self.driver.removals.iter().all(Option::is_none)
+            && !self.driver.removal_waits()
             && self.shared.returned.none_out()
             && self.driver.queues.iter().all(|queue| queue.is_empty())
             && self.driver.running.iter().all(Option::is_none)
@@ -871,13 +872,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     /// End every removal its command left waiting whose key the core
-    /// cleared since: each terminal, routed by its core place, returns the
-    /// waiting command's rights. The key is not cleared again.
+    /// cleared since: each terminal, taken from the core place its key's
+    /// table place names, returns the rights waiting there. The key is not
+    /// cleared again.
     fn deliver_removals(
         &mut self,
         sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
     ) -> Result<(), Fault> {
-        for place in 0..crate::lower_mac::LOWER_MAC_KEY_SLOTS {
+        for place in 0..self.driver.keys.len() {
             if let Some(terminal) = self.driver.finished_removal(place) {
                 sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal?).lend(&self.loan));
             }
@@ -1761,10 +1763,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 };
                 let removal =
                     <Station as Role<'id, Id>>::removal(association).into_owned(&self.loan);
-                let terminal = self
-                    .driver
-                    .settle_removal(removed, removal)
-                    .map_err(CommandFailed::Taken)?;
+                let terminal = removed.settle(removal).map_err(CommandFailed::Taken)?;
                 self.driver.barrier = None;
                 self.holding = None;
                 // A removal whose key's last use is out ends at a later

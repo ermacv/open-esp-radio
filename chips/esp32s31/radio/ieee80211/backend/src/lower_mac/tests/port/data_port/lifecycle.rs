@@ -1869,6 +1869,88 @@ fn a_late_removal_receipt_after_the_stop_ends_its_removal_once_and_the_port_reti
     late_removal_receipt(true);
 }
 
+/// The station's removal terminals among `terminals`: pairwise or group.
+fn removed_station<'id, T>(terminals: &[LowerMacTerminal<'id, T>], pairwise: bool) -> usize
+where
+    T: oer_protocols_ieee80211_contracts_port::PortTypes<'id>,
+{
+    terminals
+        .iter()
+        .filter(|terminal| match terminal {
+            LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise { .. })) => pairwise,
+            LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Group { .. })) => !pairwise,
+            _ => false,
+        })
+        .count()
+}
+
+/// A removal its command leaves waiting keeps its rights in its own key's
+/// table place: another key's removal meanwhile ends at once with its own
+/// rights, and the waiting one ends later, once, with its own.
+#[test]
+fn a_removal_beside_a_waiting_one_ends_with_its_own_rights_and_the_waiting_one_with_its_own() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        let (association, pairwise, group, permission) = fixture.installed_keys();
+        // The pairwise key's last use is out: its removal waits.
+        let held = fixture.port.hold_key_use_for_test().expect("a key use");
+        let _ = fixture.turn();
+        let now = fixture.now();
+        assert!(matches!(
+            fixture.port.command(
+                PortCommand::RemovePairwise {
+                    association,
+                    key: pairwise,
+                },
+                now,
+                &mut fixture.outbox,
+            ),
+            Ok(CommandProgress::Done)
+        ));
+        assert!(fixture.outbox.terminals.is_empty(), "its key is in use");
+        assert!(fixture.port.removal_waits_for_test());
+        // The group key has no use: its removal ends at once, with the
+        // group's rights, and leaves the waiting one where it is.
+        assert!(matches!(
+            fixture.run(PortCommand::RemoveGroup {
+                permission,
+                key: group,
+            }),
+            Ok(CommandProgress::Done)
+        ));
+        assert_eq!(
+            removed_station(&fixture.outbox.terminals, false),
+            1,
+            "the group's own"
+        );
+        assert_eq!(
+            removed_station(&fixture.outbox.terminals, true),
+            0,
+            "still waits"
+        );
+        assert!(fixture.port.removal_waits_for_test());
+        fixture.outbox.terminals.clear();
+        // The last use returns: the next service ends the waiting removal
+        // once, with the pairwise rights.
+        fixture.port.return_key_use_for_test(held);
+        let _ = fixture.turn();
+        let _ = fixture.turn();
+        assert_eq!(removed_station(&fixture.outbox.terminals, true), 1, "once");
+        assert_eq!(
+            removed_station(&fixture.outbox.terminals, false),
+            0,
+            "not again"
+        );
+        assert!(!fixture.port.removal_waits_for_test());
+        fixture.stop();
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        drop(buffers);
+        assert!(port.release().is_some(), "the stopped port retires");
+    });
+}
+
 /// Registers held elsewhere at a publication: every owner of the attempt
 /// goes back, the refusal recovers for a stop, and the stop ends the
 /// attempt once, withdrawn with its owners, through the port's real stop.

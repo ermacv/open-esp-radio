@@ -457,10 +457,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 };
                 let removal =
                     <AccessPoint as Role<'id, Id>>::removal(association).into_owned(&self.loan);
-                let terminal = self
-                    .driver
-                    .settle_removal(removed, removal)
-                    .map_err(CommandFailed::Taken)?;
+                let terminal = removed.settle(removal).map_err(CommandFailed::Taken)?;
                 self.driver.barrier = None;
                 self.access_point_holding = None;
                 self.access_point_since = None;

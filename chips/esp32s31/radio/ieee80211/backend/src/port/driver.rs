@@ -2,7 +2,8 @@ use super::*;
 use super::{
     installation::PortCoreOwner,
     keys::{
-        GroupCommand, Installation, Installed, RawKeyIdentity, Removal, Removing, WaitingRemoval,
+        GroupCommand, Installation, Installed, KeyPlace, RawKeyIdentity, Removal, Removed,
+        Removing, WaitingRemoval,
     },
 };
 use crate::ordinary_tx::sets_retry_bit;
@@ -342,10 +343,10 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     pub(super) access_point_configuring: bool,
     pub(super) closing: Option<GateOpen<'id, Part<Id, 1>>>,
     pub(super) closed: bool,
-    pub(super) keys: [Option<(RawKeyIdentity, Installed<'id, Id>)>; 20],
-    /// Removals the core finishes after their command: each at its core
-    /// place, with the command's rights until its receipt is delivered.
-    pub(super) removals: [Option<WaitingRemoval<'id, Id>>; LOWER_MAC_KEY_SLOTS],
+    /// The installed keys, and in the place of each key whose removal the
+    /// core finishes after its command, that command's rights until its
+    /// receipt is delivered.
+    pub(super) keys: [Option<KeyPlace<'id, Id>>; 20],
     pub(super) applied_ba: [Option<RxBlockAckValues>; 8],
     /// The one receiver of this driver's publication observations, present
     /// from preparation until retirement.
@@ -411,7 +412,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             closing: None,
             closed: false,
             keys: [const { None }; 20],
-            removals: [const { None }; LOWER_MAC_KEY_SLOTS],
             applied_ba: [None; 8],
             observations: None,
         }
@@ -1457,20 +1457,26 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .iter_mut()
             .find(|k| k.is_none())
             .ok_or(Fault::KeySlotMissing(KeyOp::Install))?;
-        *place = Some((identity, installed));
+        *place = Some(KeyPlace::Installed(identity, installed));
         Ok(())
     }
     /// Remove the installed key `identity`: its receipt now, or its core
-    /// place while its last use is out.
+    /// place while its last use is out, with the key's table place this
+    /// removal empties.
     pub(super) fn remove(
         &mut self,
         device: &mut D,
         identity: RawKeyIdentity,
-    ) -> Result<Removing<'id, Id>, Fault> {
+    ) -> Result<Removing<'_, 'id, Id>, Fault> {
         let index = self
             .keys
             .iter()
-            .position(|entry| entry.as_ref().is_some_and(|(key, _)| *key == identity))
+            .position(|entry| {
+                entry
+                    .as_ref()
+                    .and_then(KeyPlace::installed)
+                    .is_some_and(|(key, _)| *key == identity)
+            })
             .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
         // The registers and the core's command view first: a removal they
         // refuse leaves the installed key in its place.
@@ -1480,56 +1486,48 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .view()
             .commands()
             .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
-        let (_, installed) = self
+        let place = self
             .keys
             .get_mut(index)
-            .and_then(Option::take)
             .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
+        let installed = match place.take() {
+            Some(KeyPlace::Installed(_, installed)) => installed,
+            other => {
+                *place = other;
+                return Err(Fault::KeySlotMissing(KeyOp::Remove));
+            }
+        };
         let mut sink = Sink::refusing();
-        let place = match installed {
+        let core = match installed {
             Installed::Transmit(key) => view.remove_checked_key(hardware, key, &mut sink),
             Installed::Receive(key) => view.remove_checked_key(hardware, key, &mut sink),
         };
-        // This removal's own place: a receipt of another key stays in its
-        // place for its own removal.
-        Ok(match self.core.view().take_removed(place) {
-            Some(removed) => Removing::Removed(removed),
-            None => Removing::Waiting(place),
-        })
+        // This removal's own core place: a receipt of another key stays in
+        // its place for its own removal.
+        let ended = match self.core.view().take_removed(core) {
+            Some(removed) => Removed::Now(removed),
+            None => Removed::Waiting(core),
+        };
+        Ok(Removing { place, ended })
     }
-    /// The terminal of a removal its command made: now, or, while its key's
-    /// last use is out, with the command's rights kept at its place until
-    /// [`Self::finished_removal`] delivers it.
-    pub(super) fn settle_removal(
-        &mut self,
-        removing: Removing<'id, Id>,
-        removal: Removal<'id, Id>,
-    ) -> Result<Option<brand::OwnedRemoved<'id, Id>>, Fault> {
-        match removing {
-            Removing::Removed(removed) => Self::removed_terminal(removal, removed).map(Some),
-            Removing::Waiting(place) => {
-                let waiting = self
-                    .removals
-                    .get_mut(place)
-                    .filter(|waiting| waiting.is_none())
-                    .ok_or(Fault::RemovalMismatch)?;
-                *waiting = Some(WaitingRemoval { removal });
-                Ok(None)
-            }
-        }
-    }
-    /// The terminal of the removal waiting at `place`, once the core
-    /// finished it: routed by its place, its rights the waiting command's.
+    /// The removal waiting in table place `index`, once the core finished
+    /// it: its terminal returns the waiting command's rights.
     pub(super) fn finished_removal(
         &mut self,
-        place: usize,
+        index: usize,
     ) -> Option<Result<brand::OwnedRemoved<'id, Id>, Fault>> {
-        let waiting = self.removals.get_mut(place)?;
-        let kept = waiting.take()?;
-        match self.core.view().take_removed(place) {
-            Some(removed) => Some(Self::removed_terminal(kept.removal, removed)),
+        let place = self.keys.get_mut(index)?;
+        let waiting = match place.take() {
+            Some(KeyPlace::Removing(waiting)) => waiting,
+            other => {
+                *place = other;
+                return None;
+            }
+        };
+        match self.core.view().take_removed(waiting.core) {
+            Some(removed) => Some(removed_terminal(waiting.removal, removed)),
             None => {
-                *waiting = Some(kept);
+                *place = Some(KeyPlace::Removing(waiting));
                 None
             }
         }
@@ -1543,6 +1541,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .keys
             .iter()
             .flatten()
+            .filter_map(KeyPlace::installed)
             .find_map(|(_, installed)| match installed {
                 Installed::Transmit(key) => Some(key),
                 Installed::Receive(_) => None,
@@ -1571,35 +1570,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     }
     /// Whether a waiting removal's receipt is ready to deliver.
     pub(super) fn removal_ready(&mut self) -> bool {
-        (0..LOWER_MAC_KEY_SLOTS).any(|place| {
-            self.removals.get(place).is_some_and(Option::is_some)
-                && self.core.view().removed_ready(place)
+        let core = &mut self.core;
+        self.keys.iter().any(|place| match place {
+            Some(KeyPlace::Removing(waiting)) => core.view().removed_ready(waiting.core),
+            _ => false,
         })
     }
-    pub(super) fn removed_terminal(
-        removal: Removal<'id, Id>,
-        removed: KeyRemoved<'id, CorePath<Id>>,
-    ) -> Result<brand::OwnedRemoved<'id, Id>, Fault> {
-        use core_mac::association::VacantKeySlot as Slot;
-        let removed = match (removal, removed.into_slot()) {
-            (Removal::StationPairwise(association), Slot::StationPairwise(slot)) => {
-                brand::OwnedRemoved::Station(brand::RemovedOwners::Pairwise { slot, association })
-            }
-            (Removal::AccessPointPairwise(association), Slot::AccessPointPairwise(slot)) => {
-                brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Pairwise {
-                    slot,
-                    association,
-                })
-            }
-            (Removal::StationGroup(permission), Slot::StationGroup(slot)) => {
-                brand::OwnedRemoved::Station(brand::RemovedOwners::Group { slot, permission })
-            }
-            (Removal::AccessPointGroup(permission), Slot::AccessPointGroup(slot)) => {
-                brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Group { slot, permission })
-            }
-            _ => return Err(Fault::RemovalMismatch),
-        };
-        Ok(removed)
+    /// Whether a removal its command left waits in the key table.
+    pub(super) fn removal_waits(&self) -> bool {
+        self.keys
+            .iter()
+            .any(|place| matches!(place, Some(KeyPlace::Removing(_))))
     }
     pub(super) fn group(
         &mut self,
@@ -1691,9 +1672,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     .keys
                     .iter_mut()
                     .flatten()
-                    .find(|(identity, _)| *identity == key.identity)
+                    .filter_map(KeyPlace::installed_mut)
+                    .find(|(identity, _)| **identity == key.identity)
                     .ok_or(Fault::KeySlotMissing(KeyOp::Replace))?;
-                let Installed::Receive(installed) = &mut entry.1 else {
+                let Installed::Receive(installed) = entry.1 else {
                     return Err(Fault::KeySlotMissing(KeyOp::Replace));
                 };
                 #[cfg(oer_debug_control)]
@@ -1772,7 +1754,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     key_id,
                     ..key.identity
                 };
-                entry.0 = identity;
+                *entry.0 = identity;
                 identity.activity.set(identity.serial);
                 return Ok(Some(brand::OwnedTerminal::GroupKeyReplaced {
                     key: GroupKey {
@@ -1787,6 +1769,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     .keys
                     .iter()
                     .flatten()
+                    .filter_map(KeyPlace::installed)
                     .any(|(identity, _)| *identity == key.identity)
                 {
                     return Err(Fault::KeySlotMissing(KeyOp::Select));
@@ -1797,9 +1780,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }));
             }
             GroupCommand::Remove { identity, removal } => {
-                let removing = self.remove(device, identity)?;
                 return Ok(self
-                    .settle_removal(removing, removal)?
+                    .remove(device, identity)?
+                    .settle(removal)?
                     .map(brand::OwnedTerminal::KeyRemoved));
             }
         }
@@ -1877,7 +1860,7 @@ fn owner_free_refusal<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
 /// The attempt's key: `Some(None)` for an open attempt, `None` when the key
 /// it names is not installed.
 fn admitted_key<'a, 'id, Id: SlotIdentity>(
-    keys: &'a [Option<(RawKeyIdentity, Installed<'id, Id>)>],
+    keys: &'a [Option<KeyPlace<'id, Id>>],
     identity: Option<RawKeyIdentity>,
 ) -> Option<Option<&'a Installed<'id, Id>>> {
     let Some(identity) = identity else {
@@ -1885,7 +1868,8 @@ fn admitted_key<'a, 'id, Id: SlotIdentity>(
     };
     keys.iter()
         .flatten()
-        .find(|(key, _)| *key == identity)
+        .filter_map(KeyPlace::installed)
+        .find(|(key, _)| **key == identity)
         .map(|(_, key)| Some(key))
 }
 
@@ -1919,6 +1903,49 @@ fn bubble<T>(slice: &mut [T], at: usize) {
         }
         at = before;
     }
+}
+
+impl<'id, Id: SlotIdentity> Removing<'_, 'id, Id> {
+    /// The terminal of a removal its command made: now, or, while its key's
+    /// last use is out, with the command's rights kept in the key's table
+    /// place this removal emptied until [`Driver::finished_removal`]
+    /// delivers it.
+    pub(super) fn settle(
+        self,
+        removal: Removal<'id, Id>,
+    ) -> Result<Option<brand::OwnedRemoved<'id, Id>>, Fault> {
+        match self.ended {
+            Removed::Now(removed) => removed_terminal(removal, removed).map(Some),
+            Removed::Waiting(core) => {
+                *self.place = Some(KeyPlace::Removing(WaitingRemoval { core, removal }));
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// The terminal of a removal: its receipt's slot with its command's rights.
+pub(super) fn removed_terminal<'id, Id: SlotIdentity>(
+    removal: Removal<'id, Id>,
+    removed: KeyRemoved<'id, CorePath<Id>>,
+) -> Result<brand::OwnedRemoved<'id, Id>, Fault> {
+    use core_mac::association::VacantKeySlot as Slot;
+    let removed = match (removal, removed.into_slot()) {
+        (Removal::StationPairwise(association), Slot::StationPairwise(slot)) => {
+            brand::OwnedRemoved::Station(brand::RemovedOwners::Pairwise { slot, association })
+        }
+        (Removal::AccessPointPairwise(association), Slot::AccessPointPairwise(slot)) => {
+            brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Pairwise { slot, association })
+        }
+        (Removal::StationGroup(permission), Slot::StationGroup(slot)) => {
+            brand::OwnedRemoved::Station(brand::RemovedOwners::Group { slot, permission })
+        }
+        (Removal::AccessPointGroup(permission), Slot::AccessPointGroup(slot)) => {
+            brand::OwnedRemoved::AccessPoint(brand::RemovedOwners::Group { slot, permission })
+        }
+        _ => return Err(Fault::RemovalMismatch),
+    };
+    Ok(removed)
 }
 
 #[cfg(test)]
