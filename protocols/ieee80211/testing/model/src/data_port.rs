@@ -572,17 +572,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         self,
         installations: &mut Installations<Id, ModelPools>,
     ) -> Result<ModelInstall<'id, Id, C, X>, Box<(Self, ModelReinstallRefused)>> {
-        if self.fault.is_some() || self.air.failed() {
-            return Err(Box::new((self, ModelReinstallRefused::Faulted)));
-        }
-        let retired = self.radio == Radio::Stopped
-            && self.idle()
-            && self.held.events.is_empty()
-            && self.kept.is_empty()
-            && self.held.rx_out.get() == 0
-            && self.driver.removing.is_empty();
-        if !retired {
-            return Err(Box::new((self, ModelReinstallRefused::NotRetired)));
+        if let Err(refused) = self.retirable() {
+            return Err(Box::new((self, refused)));
         }
         let Self {
             air,
@@ -630,6 +621,29 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     ModelReinstallRefused::Receipt,
                 )))
             }
+        }
+    }
+
+    /// The retire checks [`Self::reinstall`] makes, without reinstalling:
+    /// no fault, the radio stopped, no work, terminal or received unit out.
+    ///
+    /// # Errors
+    ///
+    /// Why the port does not retire.
+    pub fn retirable(&self) -> Result<(), ModelReinstallRefused> {
+        if self.fault.is_some() || self.air.failed() {
+            return Err(ModelReinstallRefused::Faulted);
+        }
+        let retired = self.radio == Radio::Stopped
+            && self.idle()
+            && self.held.events.is_empty()
+            && self.kept.is_empty()
+            && self.held.rx_out.get() == 0
+            && self.driver.removing.is_empty();
+        if retired {
+            Ok(())
+        } else {
+            Err(ModelReinstallRefused::NotRetired)
         }
     }
 

@@ -2146,6 +2146,95 @@ fn a_terminal_the_full_lifecycle_refuses_waits_in_the_port_and_comes_once_its_ro
     });
 }
 
+/// The station path's end with a terminal kept: the frame's terminal finds
+/// the lifecycle full and stays in the port; the stop confirms with it kept;
+/// only then does a freed cell let the actor take it through
+/// `take_unconsumed`, once, with the ticket the frame went with; nothing
+/// comes again, the actor retires and the port retires after it.
+#[test]
+fn a_terminal_kept_through_the_confirmed_stop_comes_once_and_the_port_retires() {
+    bench_then(
+        |bench| {
+            let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+            for _ in 0..RETURNS {
+                bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+            }
+            bench.send(ToActor::Start(supported()));
+            bench.connect(link(true, None));
+            let transmit = station_frame_under(bench, 0, false);
+            let ticket = transmit.ticket.index();
+            bench.send(ToActor::StationTx(transmit));
+            for _ in 0..4 {
+                bench.advance(1_000);
+                bench.settle();
+            }
+            assert_eq!(bench.data_sent().len(), 1);
+            while bench.next().is_some() {}
+            // The stop confirms while the port keeps the terminal.
+            let deadline = bench
+                .clock
+                .inner
+                .now()
+                .saturating_add(oer_portable_time::Duration::from_millis(50));
+            bench.send(ToActor::Stop {
+                deadline,
+                network: NetworkEnd::Stays,
+            });
+            bench.advance(1);
+            bench.settle();
+            let mut confirmed = false;
+            while let Some(message) = bench.next() {
+                confirmed |= matches!(message, FromActor::Stopped(StopOutcome::Confirmed));
+            }
+            assert!(confirmed, "the stop confirms with the terminal kept");
+            // A freed cell: the stopped port gives the terminal only through
+            // `take_unconsumed`, once.
+            assert!(matches!(
+                bench.returns.try_receive(),
+                Some(Returned::Command { .. })
+            ));
+            bench.settle();
+            let mut terminals = std::vec::Vec::new();
+            let mut commands = 1;
+            while let Some(returned) = bench.returns.try_receive() {
+                match returned {
+                    Returned::Terminal {
+                        terminal:
+                            LowerMacTerminal::TxCompleted(
+                                oer_protocols_ieee80211_contracts_port::TxCompleted::Single(
+                                    completed,
+                                ),
+                            ),
+                        ..
+                    } => terminals.push(completed.ticket_index()),
+                    Returned::Command { .. } => commands += 1,
+                    _ => panic!("only the commands and the one terminal come back"),
+                }
+            }
+            assert_eq!(commands, RETURNS);
+            assert_eq!(
+                terminals,
+                [ticket],
+                "the terminal comes once, with its ticket"
+            );
+            for _ in 0..4 {
+                bench.advance(1_000);
+                bench.settle();
+            }
+            assert!(bench.returns.try_receive().is_none(), "nothing comes again");
+            bench.send(ToActor::Retire);
+            assert_eq!(bench.end, Some(ActorEnd::Retired));
+        },
+        |actor, _| {
+            assert_eq!(
+                actor.port().retirable(),
+                Ok(()),
+                "nothing stays with the port"
+            );
+        },
+    );
+}
+
 /// Each burst of returned memory tells what it queued, the queue before and
 /// after it and what stayed with the actor: a full queue holds the rest
 /// back, and the burst after the network emptied it carries them, from an
