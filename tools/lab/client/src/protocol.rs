@@ -23,6 +23,8 @@ use oer_tools_lab_arbiter::claims::Claim;
 use oer_tools_lab_arbiter::readiness::Readiness;
 use serde::{Deserialize, Serialize};
 
+pub mod station_link;
+
 /// The protocol version; another one is refused.
 pub const PROTOCOL: u32 = 2;
 /// The token a command runs under: its client joins the lease the token
@@ -442,8 +444,7 @@ pub enum RouterOperation {
     /// What the AP's driver reports of station `mac`'s link: its counters,
     /// the rates of its last frames each way, the AP's channel width, the
     /// survey of the channel in use, and the station's per-TID and the
-    /// radio's transmit queues. Result: the router's
-    /// `station::link::StationLink`.
+    /// radio's transmit queues. Result: a [`station_link::StationLink`].
     StationLink { mac: String },
     /// Station `mac`'s DHCP lease, if it has one.
     Lease { mac: String },

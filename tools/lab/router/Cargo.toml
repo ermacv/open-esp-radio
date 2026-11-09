@@ -11,6 +11,7 @@ description = "The stand: its file, its OpenWrt lab router and the SSH that reac
 [dependencies]
 shlex = "=2.0.1"
 hex = "=0.4.3"
+oer-tools-lab-client = { path = "../client" }
 oer-tools-lab-model = { path = "../model" }
 oer-tools-os-process = { path = "../../os/process" }
 oer-tools-os-durable = { path = "../../os/durable" }

@@ -7,6 +7,9 @@ the connection a command holds its lease by ([`client`](src/client.rs)).
 `cargo fw`, `cargo hil`, `cargo stand` and the HIL harness depend on this
 crate alone; the service's scheduler and drivers stay out of their builds.
 
+- `protocol::station_link` is the typed answer of the router's
+  `StationLink` operation, with its AP queue window (`queue::window`); the
+  router parses into it.
 - `Client::open` connects to the installed service and greets it; a service
   of another protocol refuses with its reason.
 - `Client::acquire` queues for a lease and waits for the grant, which comes
