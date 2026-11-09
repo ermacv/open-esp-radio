@@ -34,9 +34,9 @@ pub type StationKey = u64;
 pub trait FrameCost {
     /// The frame's least useful grant at the full rate `rate`: the one its
     /// association's last settled frame went at, or before one did, the
-    /// association's slowest data rate. `None` when the station knows
-    /// neither, which is no rate the frame may go at.
-    fn least(&self, frame_octets: usize, rate: Option<PhyRate>) -> NonZeroU32;
+    /// association's slowest data rate. [`StationAir`] asks only with a
+    /// rate it resolved for a live association.
+    fn least(&self, frame_octets: usize, rate: PhyRate) -> NonZeroU32;
     fn ceiling(&self, frame_octets: usize) -> NonZeroU32;
 }
 
@@ -67,7 +67,10 @@ impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
     type Key = StationKey;
 
     /// While the link is up, its association's account, with the frame's
-    /// least useful grant.
+    /// least useful grant at the rate resolved for it. A live link carries
+    /// its association's slowest rate, which the lifecycle publishes with
+    /// the association; a link up with no rate resolved offers no account,
+    /// so no frame is charged at a rate the association was not given.
     fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<StationKey>> {
         let (link, floor) = self.link.read();
         if link.state != LinkState::Up {
@@ -79,7 +82,7 @@ impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
             .last
             .filter(|(key, _)| *key == link.epoch)
             .map(|(_, rate)| rate)
-            .or(floor);
+            .or(floor)?;
         Some(AirtimeCandidate {
             key: link.epoch,
             minimum_micros: self.ceiling.least(ready.length, rate),

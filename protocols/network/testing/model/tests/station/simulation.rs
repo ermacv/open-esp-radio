@@ -164,7 +164,7 @@ impl FrameCost for ModelCeiling {
     fn least(
         &self,
         _frame_octets: usize,
-        _rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
+        _rate: oer_protocols_ieee80211_contracts_port::PhyRate,
     ) -> core::num::NonZeroU32 {
         let TxEstimate::Estimated { micros } = MODEL_PUBLICATION_COST else {
             return core::num::NonZeroU32::MIN;

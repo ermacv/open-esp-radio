@@ -1,5 +1,10 @@
 use super::*;
 
+/// The slowest rate the tests' associations admit.
+const FLOOR: Option<PhyRate> = Some(PhyRate::Legacy(
+    oer_protocols_ieee80211_wire::phy::LegacyRate::Dsss1M,
+));
+
 /// An end of `cost` that never says its rate.
 const fn end(cost: TxEstimate) -> TxEnd {
     TxEnd { cost, rate: None }
@@ -9,7 +14,7 @@ use oer_protocols_network_port::Class;
 struct Fixed(u32);
 
 impl FrameCost for Fixed {
-    fn least(&self, frame_octets: usize, _rate: Option<PhyRate>) -> NonZeroU32 {
+    fn least(&self, frame_octets: usize, _rate: PhyRate) -> NonZeroU32 {
         NonZeroU32::new(u32::try_from(frame_octets).unwrap()).unwrap()
     }
     fn ceiling(&self, frame_octets: usize) -> NonZeroU32 {
@@ -39,7 +44,7 @@ fn an_association_is_one_account_keyed_by_its_epoch_and_a_down_link_serves_none(
     let link = NetworkLink::new();
     let air = StationAir::new(&link, Fixed(1_000));
     assert_eq!(air.candidate(&ready(1514)), None, "down");
-    link.publish(up(3), None);
+    link.publish(up(3), FLOOR);
     let first = air.candidate(&ready(1514)).unwrap();
     let small = air.candidate(&ready(64)).unwrap();
     assert_eq!((first.key, small.key), (3, 3), "every peer, one account");
@@ -48,7 +53,7 @@ fn an_association_is_one_account_keyed_by_its_epoch_and_a_down_link_serves_none(
         (1514, 64),
         "each frame's least grant"
     );
-    link.publish(up(4), None);
+    link.publish(up(4), FLOOR);
     assert_eq!(air.candidate(&ready(1514)).unwrap().key, 4);
     assert_eq!(air.ceiling(&ready(1514)).get(), 2_514);
 }
@@ -152,7 +157,7 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
     };
     let names = ["a", "b", "c", "d", "e"];
     for epoch in 1..=5_u64 {
-        link.publish(up(epoch), None);
+        link.publish(up(epoch), FLOOR);
         // The previous association's end comes first.
         assert!(handed_on(&mut ends, &mut egress).is_empty());
         let (_, held) = egress
@@ -162,7 +167,7 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
         let ticket = u8::try_from(epoch).unwrap();
         egress.accepted(held, ticket).unwrap();
     }
-    link.publish(up(6), None);
+    link.publish(up(6), FLOOR);
     assert!(handed_on(&mut ends, &mut egress).is_empty());
     assert_eq!((egress.unsettled(), egress.in_flight()), (0, 5));
     // Now every buffer comes back, late.
@@ -187,10 +192,10 @@ fn ht(mcs: u8, short_gi: bool) -> PhyRate {
 
 /// A [`FrameCost`] that says which rate each least grant was asked at.
 #[derive(Default)]
-struct Asked(core::cell::RefCell<std::vec::Vec<Option<PhyRate>>>);
+struct Asked(core::cell::RefCell<std::vec::Vec<PhyRate>>);
 
 impl FrameCost for &Asked {
-    fn least(&self, frame_octets: usize, rate: Option<PhyRate>) -> NonZeroU32 {
+    fn least(&self, frame_octets: usize, rate: PhyRate) -> NonZeroU32 {
         self.0.borrow_mut().push(rate);
         NonZeroU32::new(u32::try_from(frame_octets).unwrap()).unwrap()
     }
@@ -199,13 +204,13 @@ impl FrameCost for &Asked {
     }
 }
 
-/// The least grant goes at the association's last reported full rate: the
-/// lowest until one reports, each later report as it comes, and none of an
-/// earlier association's.
+/// The least grant goes at the association's last reported full rate: its
+/// slowest rate until one reports, each later report as it comes, and none
+/// of an earlier association's.
 #[test]
 fn the_least_grant_goes_at_the_association_s_last_reported_rate() {
     let link = NetworkLink::new();
-    link.publish(up(1), None);
+    link.publish(up(1), FLOOR);
     let asked = Asked::default();
     let mut air = StationAir::new(&link, &asked);
     air.candidate(&ready(1514)).unwrap();
@@ -214,19 +219,14 @@ fn the_least_grant_goes_at_the_association_s_last_reported_rate() {
     // The same epoch and length, another guard interval: its own rate.
     air.reported(1, ht(7, false));
     air.candidate(&ready(1514)).unwrap();
-    link.publish(up(2), None);
+    link.publish(up(2), FLOOR);
     air.candidate(&ready(1514)).unwrap();
     air.reported(2, ht(0, false));
     air.candidate(&ready(1514)).unwrap();
+    let floor = FLOOR.unwrap();
     assert_eq!(
         *asked.0.borrow(),
-        [
-            None,
-            Some(ht(7, true)),
-            Some(ht(7, false)),
-            None,
-            Some(ht(0, false))
-        ]
+        [floor, ht(7, true), ht(7, false), floor, ht(0, false)]
     );
 }
 
@@ -234,7 +234,7 @@ fn the_least_grant_goes_at_the_association_s_last_reported_rate() {
 /// model whose context changes within one association and length.
 struct ReviewerChanging<'a>(&'a core::cell::Cell<u32>);
 impl FrameCost for ReviewerChanging<'_> {
-    fn least(&self, _: usize, _: Option<PhyRate>) -> NonZeroU32 {
+    fn least(&self, _: usize, _: PhyRate) -> NonZeroU32 {
         NonZeroU32::new(self.0.get()).unwrap()
     }
     fn ceiling(&self, _: usize) -> NonZeroU32 {
@@ -244,7 +244,7 @@ impl FrameCost for ReviewerChanging<'_> {
 #[test]
 fn reviewer_a_changed_cost_input_updates_the_grant_within_the_same_association() {
     let link = NetworkLink::new();
-    link.publish(up(1), None);
+    link.publish(up(1), FLOOR);
     let value = core::cell::Cell::new(100);
     let air = StationAir::new(&link, ReviewerChanging(&value));
     assert_eq!(
@@ -260,7 +260,7 @@ fn reviewer_a_changed_cost_input_updates_the_grant_within_the_same_association()
 #[test]
 fn reviewer_a_changed_cost_input_updates_the_ceiling_within_the_same_association() {
     let link = NetworkLink::new();
-    link.publish(up(1), None);
+    link.publish(up(1), FLOOR);
     let value = core::cell::Cell::new(100);
     let air = StationAir::new(&link, ReviewerChanging(&value));
     assert_eq!(air.ceiling(&ready(1514)).get(), 1000);
@@ -296,22 +296,22 @@ fn a_returned_frame_s_rate_goes_with_its_end() {
 }
 
 /// A frame of association 1 that completes after association 2 began
-/// changes nothing of association 2's rate: none while 2 has reported none,
-/// and 2's own once it has.
+/// changes nothing of association 2's rate: its slowest while it has
+/// reported none, and its own once it has.
 #[test]
 fn a_late_completion_of_an_earlier_association_leaves_the_current_rate() {
     let link = NetworkLink::new();
-    link.publish(up(1), None);
+    link.publish(up(1), FLOOR);
     let asked = Asked::default();
     let mut air = StationAir::new(&link, &asked);
     air.reported(1, ht(7, true));
-    link.publish(up(2), None);
+    link.publish(up(2), FLOOR);
     air.reported(1, ht(3, true));
     air.candidate(&ready(1514)).unwrap();
     air.reported(2, ht(5, false));
     air.reported(1, ht(1, false));
     air.candidate(&ready(1514)).unwrap();
-    assert_eq!(*asked.0.borrow(), [None, Some(ht(5, false))]);
+    assert_eq!(*asked.0.borrow(), [FLOOR.unwrap(), ht(5, false)]);
 }
 
 /// The same through the policy: association 1's frame is still open when
@@ -323,7 +323,7 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
     use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
     use oer_protocols_network_port::Egress;
     let link = NetworkLink::new();
-    link.publish(up(1), None);
+    link.publish(up(1), FLOOR);
     let asked = Asked::default();
     let mut storage = AirtimeStorage::<StationKey, 2, 2>::new(NonZeroU32::new(10_000).unwrap());
     let mut egress =
@@ -333,7 +333,7 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
         .unwrap()
         .expect("association 1's account");
     egress.accepted(held, 1).unwrap();
-    link.publish(up(2), None);
+    link.publish(up(2), FLOOR);
     egress
         .notice(RadioNotice::Ended(Exchange {
             ticket: 1,
@@ -346,7 +346,11 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
         .choose([Frame(ready(1514))].into_iter())
         .unwrap()
         .expect("association 2's account");
-    assert_eq!(*asked.0.borrow(), [None], "association 2 has no rate yet");
+    assert_eq!(
+        *asked.0.borrow(),
+        [FLOOR.unwrap()],
+        "association 2 reported no rate yet"
+    );
 }
 
 fn legacy(rate: oer_protocols_ieee80211_wire::phy::LegacyRate) -> PhyRate {
@@ -365,10 +369,7 @@ fn an_ofdm_only_association_starts_at_its_own_slowest_rate() {
     air.candidate(&ready(1514)).unwrap();
     air.reported(1, ht(7, true));
     air.candidate(&ready(1514)).unwrap();
-    assert_eq!(
-        *asked.0.borrow(),
-        [Some(legacy(LegacyRate::Ofdm6M)), Some(ht(7, true))]
-    );
+    assert_eq!(*asked.0.borrow(), [legacy(LegacyRate::Ofdm6M), ht(7, true)]);
 }
 
 /// Two associations that have reported nothing, at the same length, ask
@@ -386,9 +387,39 @@ fn two_associations_without_reports_ask_at_their_own_slowest_rates() {
     air.candidate(&ready(1514)).unwrap();
     assert_eq!(
         *asked.0.borrow(),
-        [
-            Some(legacy(LegacyRate::Dsss1M)),
-            Some(legacy(LegacyRate::Ofdm6M))
-        ]
+        [legacy(LegacyRate::Dsss1M), legacy(LegacyRate::Ofdm6M)]
+    );
+}
+
+/// A link up with no rate resolved for its association, which the
+/// lifecycle never publishes, offers no account: no frame of it is charged
+/// a grant at a rate the association was not given, and the policy chooses
+/// nothing for it.
+#[test]
+fn a_link_up_without_its_association_s_rate_offers_no_account() {
+    use crate::egress::AirtimeEgress;
+    use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
+    use oer_protocols_network_port::Egress;
+    let link = NetworkLink::new();
+    link.publish(up(1), None);
+    let asked = Asked::default();
+    let mut storage = AirtimeStorage::<StationKey, 2, 2>::new(NonZeroU32::new(10_000).unwrap());
+    let mut egress =
+        AirtimeEgress::<'_, _, u8, 2, 2>::new(&mut storage, StationAir::new(&link, &asked));
+    assert_eq!(egress.air().candidate(&ready(1514)), None);
+    assert!(
+        egress
+            .choose([Frame(ready(1514))].into_iter())
+            .unwrap()
+            .is_none()
+    );
+    assert!(asked.0.borrow().is_empty(), "the cost model is never asked");
+    // Once the association's rate is published, its frames go.
+    link.publish(up(1), FLOOR);
+    assert!(
+        egress
+            .choose([Frame(ready(1514))].into_iter())
+            .unwrap()
+            .is_some()
     );
 }

@@ -37,7 +37,7 @@ const MPDU_GROWTH: u32 = 26 + 8 + 8 + 8 + 4 - 14;
 /// this composition's constants. Another input computes it again.
 #[derive(Debug, Default)]
 pub struct S31Ceiling {
-    least: Cell<Option<(Option<PhyRate>, usize, NonZeroU32)>>,
+    least: Cell<Option<(PhyRate, usize, NonZeroU32)>>,
     ceiling: Cell<Option<(usize, NonZeroU32)>>,
 }
 
@@ -50,17 +50,17 @@ impl S31Ceiling {
     }
 }
 
-/// The least grant of `frame_octets` at `rate`. Without a rate, which the
-/// station's air resolves for every association it serves, and for a frame
-/// no PPDU at that rate can carry, the least nonzero grant: no rate is
-/// assumed that the association may not send at.
-fn least_at(frame_octets: usize, rate: Option<PhyRate>) -> NonZeroU32 {
+/// The least grant of `frame_octets` at `rate`: its PPDU. A frame longer
+/// than any PPDU at that rate carries, or whose time does not fit a `u32`,
+/// asks the most a `u32` holds: it waits for a long enough grant rather
+/// than going on a near-zero one.
+fn least_at(frame_octets: usize, rate: PhyRate) -> NonZeroU32 {
     let octets = u32::try_from(frame_octets)
         .unwrap_or(u32::MAX)
         .saturating_add(MPDU_GROWTH);
-    rate.and_then(|rate| rate.max_ppdu_duration_micros(octets))
+    rate.max_ppdu_duration_micros(octets)
         .and_then(NonZeroU32::new)
-        .unwrap_or(NonZeroU32::MIN)
+        .unwrap_or(NonZeroU32::MAX)
 }
 
 /// The ceiling of `frame_octets` over the executed bounds; one that does
@@ -75,7 +75,7 @@ fn ceiling_of(frame_octets: usize) -> NonZeroU32 {
 }
 
 impl FrameCost for S31Ceiling {
-    fn least(&self, frame_octets: usize, rate: Option<PhyRate>) -> NonZeroU32 {
+    fn least(&self, frame_octets: usize, rate: PhyRate) -> NonZeroU32 {
         match self.least.get() {
             Some((at, octets, micros)) if at == rate && octets == frame_octets => micros,
             _ => {

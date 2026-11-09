@@ -250,10 +250,16 @@ pub struct RunnerControl<'c, N: Notifies = SameHart> {
 }
 
 impl<'c, N: Notifies> RunnerControl<'c, N> {
-    /// Publish `link` as the lifecycle does, for a host composition that
-    /// plays the lifecycle itself.
+    /// Publish `link`, of an association whose slowest data rate is
+    /// `floor`, as the lifecycle does, for a host composition that plays the
+    /// lifecycle itself.
     #[cfg(feature = "test-support")]
-    pub fn publish_link_for_test(&self, link: oer_protocols_network_port::LinkSnapshot) {
+    pub fn publish_link_for_test(
+        &self,
+        link: oer_protocols_network_port::LinkSnapshot,
+        floor: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
+    ) {
+        self.state.floor(floor);
         self.state.set_status(Status {
             link,
             ..self.state.status.get()

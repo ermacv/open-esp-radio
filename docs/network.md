@@ -161,9 +161,12 @@ only after the policy chose it and the port gave the room.
   rate walk of its plans ends, supported non-basic rates included, so an
   OFDM-only access point starts at 6 Mb/s. The link publishes that rate in
   the same word as its epoch. `rate: None` in an end means no established
-  rate, not that nothing was sent. The S31's cost model keeps its last
-  answers keyed by the resolved rate and the length (the grant) and by the
-  length (the ceiling).
+  rate, not that nothing was sent. The cost model is asked only with
+  a resolved rate (`FrameCost::least` takes a `PhyRate`): a link up without
+  its association's rate offers no account, so no frame is charged at a rate
+  its association was not given. The S31's cost model keeps its last answers
+  keyed by the resolved rate and the length (the grant) and by the length
+  (the ceiling); a frame no PPDU at its rate carries asks the most.
 - **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
   publications that reached the air by the backend's declared model: the
   modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck
