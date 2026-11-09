@@ -1818,6 +1818,37 @@ impl<Id: radio::SlotIdentity> Fixture<'_, Id> {
     }
 }
 
+/// A publication that never reached the air (a collision ended it before
+/// its PPDU) adds nothing to its attempt's cost, and what the attempt's
+/// earlier publication cost stays: one publication's PPDU, SIFS and Ack.
+#[test]
+fn a_publication_that_never_reached_the_air_adds_no_cost_and_keeps_the_earlier() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().statuses = std::vec![ACK_TIMEOUT, COLLISION];
+        let [first, _second] = fixture.arenas();
+        fixture.fill(&first, &[10], plain);
+        fixture.publish_single(first, 2);
+        let done = fixture.arena_end();
+        // The attempt's end keeps the transmission its first publication
+        // made; the collided one made none.
+        assert!(
+            matches!(done.end(), AttemptEnd::Collision(Some(air)) if air.transmissions.get() == 1),
+            "the collided publication never reached the air"
+        );
+        // IEEE Std 802.11-2020 17.4.3, as for the summed cost above: the
+        // 30-octet MPDU at 24 Mb/s, its SIFS and an Ack at 6 Mb/s.
+        let psdu = 30 + 4;
+        let ppdu = 20 + 4 * (16 + 8 * psdu + 6_u32).div_ceil(96) + 6;
+        let ack = 10 + 20 + 4 * (16 + 8 * 14 + 6_u32).div_ceil(24) + 6;
+        assert_eq!(
+            done.cost(),
+            oer_protocols_ieee80211_contracts_port::TxEstimate::Estimated { micros: ppdu + ack }
+        );
+        let _first = fixture.port.arena().release(done, drop).expect("released");
+    });
+}
+
 /// An aborted publication may have reached the air, so its attempt's cost
 /// is unknown, never zero: first alone, and after a publication of known
 /// cost, which the unknown one makes unknown too.
