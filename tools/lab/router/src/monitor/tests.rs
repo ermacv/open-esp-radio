@@ -121,8 +121,11 @@ impl Process for FakeProcess {
         Ok("exited (0)".into())
     }
 
-    fn diagnostics(&mut self) -> String {
-        "listening on oercap0, link-type IEEE802_11_RADIO".into()
+    fn diagnostics(&mut self) -> Diagnostics {
+        Diagnostics {
+            text: "listening on oercap0, link-type IEEE802_11_RADIO".into(),
+            error: None,
+        }
     }
 }
 

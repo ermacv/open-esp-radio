@@ -489,7 +489,9 @@ drive a manual one on events). Each step
 runs whatever the one before returned and keeps its own result. The
 capture succeeds only when it was cancelled, its stream ended in the
 bound with nothing discarded, `tcpdump` exited with success, the reader
-ended without an error and the interface is gone. The pcap bytes go to
+ended without an error, the interface is gone and `tcpdump`'s stderr was
+read whole (a read error, a bound or UTF-8 failure, or a panic of its
+reader fails the capture, keeping the prefix read). The pcap bytes go to
 the sink alone; `tcpdump`'s stderr goes into the report or the error.
 `station::lease` reads its DHCP address and lifetime from the isolated lease
 file. `station::stream::Capture::start_peer` observes peer-originated ICMP
