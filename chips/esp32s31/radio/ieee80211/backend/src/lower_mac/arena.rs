@@ -517,9 +517,9 @@ pub struct ArenaPort<
     pub(in crate::lower_mac) core:
         &'a mut LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
     pub hardware: &'a mut H,
-    /// The free EDCA queues by hardware index; a publication holds its
+    /// The free EDCA queues at their own places; a publication holds its
     /// category's until its completion.
-    pub queues: &'a mut [Option<FreeQueue<'core, Path>>; LOWER_MAC_TX_QUEUES],
+    pub queues: &'a mut super::QueueBank<'core, Path>,
     /// The interface the arenas transmit for.
     pub role: VifRole,
     /// The interface's installed pairwise key.
@@ -560,7 +560,7 @@ impl<
             LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
         >,
         hardware: &'a mut H,
-        queues: &'a mut [Option<FreeQueue<'core, Path>>; LOWER_MAC_TX_QUEUES],
+        queues: &'a mut super::QueueBank<'core, Path>,
         role: VifRole,
         pairwise: Option<&'a KeyHandle<'core, Path>>,
         sink: &'a mut S,
@@ -789,9 +789,7 @@ where
         }
         let id = publication.arena.id();
         let category = publication.access_category;
-        let index = usize::from(LegacyTxQueue::from_access_category(category).hardware_index());
-        let busy =
-            self.arenas.on_air().is_some() || self.queues.get(index).is_none_or(Option::is_none);
+        let busy = self.arenas.on_air().is_some() || !self.queues.is_home(category);
         let encrypted = publication.encryption == MpduProtection::Ccmp;
         let Ok(rate) = TxPhyRate::try_from(publication.format.rate()) else {
             let fault = self.arenas.quarantine(ArenaFault::State);
@@ -911,7 +909,7 @@ where
                 }
             }
         }
-        let Some(queue) = self.queues.get_mut(index).and_then(Option::take) else {
+        let Some(queue) = self.queues.take(category) else {
             return Err(PublishError::Fault(
                 self.arenas.quarantine(ArenaFault::State),
             ));
@@ -1115,13 +1113,8 @@ where
             queue, arena, role, ..
         } = on_air;
         let category = queue.category();
-        let Some(place @ None) = self.queues.get_mut(index) else {
-            // No place takes the queue back: it stays quarantined with the
-            // completed arena's right.
-            let _quarantined = core::mem::ManuallyDrop::new((queue, arena));
-            return Err(self.arenas.quarantine(ArenaFault::State));
-        };
-        *place = Some(queue);
+        // The queue's place returns to its own home.
+        self.queues.put(queue);
         self.core.reset_contention(role, category);
         Ok(Some(Completion::new(arena, chain.len, end, cost)))
     }

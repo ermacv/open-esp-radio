@@ -767,7 +767,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// The tickets in the driver's hand and the keys' uses in the core.
     #[cfg(test)]
     pub(crate) fn admissions_for_test(&mut self) -> (usize, Option<u32>) {
-        let tickets = self.driver.tickets.iter().flatten().count();
+        let tickets = self.driver.tickets.at_home() as usize;
         let uses = match self.driver.core.view() {
             CoreView::Open(core) => Some(core.key_uses_for_test()),
             _ => None,
@@ -1043,7 +1043,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         for index in 0..driver.queues.len() {
             // A published MPDU or arena holds the queue.
             let busy = driver.running.get(index).is_none_or(Option::is_some)
-                || driver.free.get(index).is_none_or(Option::is_none);
+                || !driver.free.is_home_at(index);
             if busy {
                 // A beacon past its deadline ends behind a busy queue too:
                 // the next TBTT's beacon replaces it.
@@ -2062,8 +2062,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         // A free queue publishes its head at once: nothing ends here.
         let driver = &mut self.driver;
-        let free = driver.running.get(index).is_some_and(Option::is_none)
-            && driver.free.get(index).is_some_and(Option::is_some);
+        let free =
+            driver.running.get(index).is_some_and(Option::is_none) && driver.free.is_home_at(index);
         let alone = driver.queues.get(index).is_some_and(|queued| {
             queued.len() == 1 && queued.front().is_some_and(|p| !driver.blocked(p))
         });

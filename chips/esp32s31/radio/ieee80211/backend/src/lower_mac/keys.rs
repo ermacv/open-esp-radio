@@ -198,6 +198,16 @@ pub enum TxAdmission<'core, Path: PoolPath = Root<oer_protocols_radio_port::Loca
     Protected(KeyUse<'core, Path>),
 }
 
+impl<'core, Path: PoolPath> TxAdmission<'core, Path> {
+    /// The ticket of an admission whose core holds no key counts.
+    pub(in crate::lower_mac) fn into_ticket(self) -> TxTicket<'core, Path> {
+        match self {
+            Self::Open(ticket) => ticket,
+            Self::Protected(key) => key.ticket,
+        }
+    }
+}
+
 impl<Path: PoolPath> TxAdmission<'_, Path> {
     pub(super) fn matches_frame(
         &self,
@@ -262,14 +272,4 @@ pub struct KeyAdmissionRefused<
 pub enum KeyAdmissionError {
     /// The poisoned core retains its key material until reset.
     Poisoned,
-}
-
-/// An admission returned after the core was poisoned remains in custody.
-/// It cannot be submitted again or turned into a reusable ticket.
-#[must_use = "retain the admission in the poisoned backend's resource bank"]
-pub struct QuarantinedAdmission<
-    'core,
-    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
-> {
-    pub(super) _admission: TxAdmission<'core, Path>,
 }

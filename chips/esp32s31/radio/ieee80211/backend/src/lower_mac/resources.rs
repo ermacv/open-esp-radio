@@ -2,7 +2,9 @@
 
 use crate::mac::tx::LegacyTxQueue;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
-use oer_protocols_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
+use oer_protocols_radio_port::{
+    Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, SlotBank, Slots,
+};
 
 enum CorePlace {}
 enum TicketPlace {}
@@ -111,5 +113,120 @@ impl<Path: PoolPath> TxTicket<'_, Path> {
     /// This ticket's installation-local position, for its owner's return bank.
     pub const fn index(&self) -> usize {
         self.place.index() as usize
+    }
+}
+
+/// The installation's tickets at home: a ticket returns to its own place
+/// ([`SlotBank`]), at its terminal or at its refusal, never elsewhere.
+pub struct TicketBank<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
+    places: SlotBank<'core, TicketPlace, Child<Path, 1>>,
+}
+
+impl<'core, Path: PoolPath> TicketBank<'core, Path> {
+    /// A bank of no tickets.
+    pub const fn empty() -> Self {
+        Self {
+            places: SlotBank::empty(),
+        }
+    }
+
+    /// A bank holding `tickets` at their own places.
+    pub fn new<const N: usize>(tickets: [TxTicket<'core, Path>; N]) -> Self {
+        Self {
+            places: SlotBank::new(tickets.map(|ticket| ticket.place)),
+        }
+    }
+
+    /// Return a ticket to its own place.
+    pub fn put(&mut self, ticket: TxTicket<'core, Path>) {
+        self.places.put(ticket.place);
+    }
+
+    /// The ticket of the lowest index at home.
+    pub fn take(&mut self) -> Option<TxTicket<'core, Path>> {
+        self.places.take_first().map(|place| TxTicket { place })
+    }
+
+    /// How many tickets are at home.
+    pub fn at_home(&self) -> u32 {
+        self.places.at_home()
+    }
+
+    /// Whether every ticket is at home.
+    pub fn all_home(&self) -> bool {
+        self.places.all_home()
+    }
+}
+
+/// The four EDCA queue places at home: a place returns to its own queue's
+/// place at its completion or its refusal ([`SlotBank`]).
+pub struct QueueBank<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
+    places: SlotBank<'core, CorePlace, Child<Path, 0>>,
+}
+
+/// The index the core's pools issue a queue's place at, after the
+/// authority's.
+const fn queue_place(queue: LegacyTxQueue) -> u8 {
+    match queue {
+        LegacyTxQueue::Voice => 1,
+        LegacyTxQueue::Video => 2,
+        LegacyTxQueue::BestEffort => 3,
+        LegacyTxQueue::Background => 4,
+    }
+}
+
+impl<'core, Path: PoolPath> QueueBank<'core, Path> {
+    /// A bank of no queue places.
+    pub const fn empty() -> Self {
+        Self {
+            places: SlotBank::empty(),
+        }
+    }
+
+    /// A bank holding the four queue places at their own places.
+    pub fn new(queues: [FreeQueue<'core, Path>; 4]) -> Self {
+        Self {
+            places: SlotBank::new(queues.map(|queue| queue._place)),
+        }
+    }
+
+    /// Return a queue place to its own place.
+    pub fn put(&mut self, queue: FreeQueue<'core, Path>) {
+        self.places.put(queue._place);
+    }
+
+    /// The place of the queue of `category`, when it is at home.
+    pub fn take(&mut self, category: WmmAccessCategory) -> Option<FreeQueue<'core, Path>> {
+        let queue = LegacyTxQueue::from_access_category(category);
+        self.places.take(queue_place(queue)).map(|place| FreeQueue {
+            _place: place,
+            queue,
+        })
+    }
+
+    /// Whether the place of the queue of `category` is at home.
+    pub fn is_home(&self, category: WmmAccessCategory) -> bool {
+        self.places
+            .is_home(queue_place(LegacyTxQueue::from_access_category(category)))
+    }
+
+    /// Whether the place of the queue of hardware index `index` is at
+    /// home; an index of no queue has none.
+    pub fn is_home_at(&self, index: usize) -> bool {
+        [
+            LegacyTxQueue::Voice,
+            LegacyTxQueue::Video,
+            LegacyTxQueue::BestEffort,
+            LegacyTxQueue::Background,
+        ]
+        .into_iter()
+        .any(|queue| {
+            usize::from(queue.hardware_index()) == index && self.places.is_home(queue_place(queue))
+        })
+    }
+
+    /// Whether every queue place is at home.
+    pub fn all_home(&self) -> bool {
+        self.places.all_home()
     }
 }

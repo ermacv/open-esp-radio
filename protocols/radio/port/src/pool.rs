@@ -190,9 +190,11 @@ use core::{future::Future, marker::PhantomData};
 /// The brand of one install.
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
 
+mod bank;
 mod fifo;
 mod loan;
 mod mint;
+pub use bank::SlotBank;
 pub use fifo::FifoPermitPool;
 pub use loan::BodyLoan;
 mod path;

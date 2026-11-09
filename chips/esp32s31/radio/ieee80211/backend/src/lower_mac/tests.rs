@@ -3627,10 +3627,7 @@ fn refused_publication_returns_the_key_right_until_its_owner_releases_it() {
         let mut events = Events::default();
         core.remove_checked_key(&mut hardware, key, &mut events);
         assert!(events.removed.is_empty());
-        let _ticket = core
-            .return_admission(&mut hardware, refused.admission, &mut events)
-            .ok()
-            .unwrap();
+        let _ticket = core.return_admission(&mut hardware, refused.admission, &mut events);
         assert_eq!(events.order, ["key"]);
         assert_eq!(hardware.cleared_keys, [4]);
     });
@@ -3725,7 +3722,7 @@ fn failed_gate_open_returns_key_uses_of_every_held_attempt() {
 }
 
 #[test]
-fn an_unpublished_right_returned_after_poison_stays_in_custody() {
+fn an_unpublished_right_returned_after_poison_gives_its_key_use_back_and_admits_nothing() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
@@ -3745,6 +3742,7 @@ fn an_unpublished_right_returned_after_poison_stays_in_custody() {
         .ok()
         .unwrap();
         let ticket = core.take_ticket();
+        let admitted = ticket.index();
         let outside = core.admit_key(&key, ticket).ok().unwrap();
         let mut events = Events::default();
         core.remove_checked_key(&mut hardware, key, &mut events);
@@ -3760,13 +3758,23 @@ fn an_unpublished_right_returned_after_poison_stays_in_custody() {
             }
         }
         assert!(core.inner.fault().is_some());
-        let _custody = core
-            .return_admission(&mut hardware, TxAdmission::Protected(outside), &mut events)
-            .err()
-            .unwrap();
-        assert_eq!(core.keys.uses[index].get(), 2);
-        assert!(hardware.cleared_keys.is_empty());
-        assert!(events.order.is_empty());
+        let ticket =
+            core.return_admission(&mut hardware, TxAdmission::Protected(outside), &mut events);
+        assert_eq!(
+            core.keys.uses[index].get(),
+            1,
+            "the key use goes back first"
+        );
+        assert!(
+            hardware.cleared_keys.is_empty(),
+            "the poisoned core keeps its key material"
+        );
+        assert!(events.order.is_empty(), "the removal waits under the fault");
+        assert_eq!(
+            ticket.index(),
+            admitted,
+            "the admission's own ticket comes back"
+        );
     });
 }
 
@@ -3851,10 +3859,7 @@ fn a_protected_wire_frame_cannot_publish_with_an_open_ticket() {
         assert_eq!(refused.fault, LowerMacFault::KeyUseMismatch);
         assert_eq!(hardware.publications(), 0);
         let mut events = Events::default();
-        let _ticket = core
-            .return_admission(&mut hardware, refused.admission, &mut events)
-            .ok()
-            .unwrap();
+        let _ticket = core.return_admission(&mut hardware, refused.admission, &mut events);
         assert!(events.order.is_empty());
     });
 }
@@ -3917,10 +3922,11 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
             assert!(hardware.cleared_keys.is_empty());
             rights.reverse();
             for (ordinal, right) in rights.into_iter().enumerate() {
-                let ticket = core
-                    .return_admission(&mut hardware, TxAdmission::Protected(right), &mut events)
-                    .ok()
-                    .unwrap();
+                let ticket = core.return_admission(
+                    &mut hardware,
+                    TxAdmission::Protected(right),
+                    &mut events,
+                );
                 assert_eq!(ticket.index(), 255 - ordinal);
                 assert_eq!(core.keys.uses[index].get() as usize, 255 - ordinal);
                 assert_eq!(events.removed.len(), usize::from(ordinal == 255));
@@ -4098,18 +4104,14 @@ fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
         };
         inner.remove_checked_key(&mut hardware, key, &mut events);
         assert!(events.removed.is_empty());
-        let _ticket = inner
-            .return_admission(&mut hardware, TxAdmission::Protected(first), &mut events)
-            .ok()
-            .unwrap();
+        let _ticket =
+            inner.return_admission(&mut hardware, TxAdmission::Protected(first), &mut events);
         assert!(
             events.removed.is_empty(),
             "the full bank does not exist while a use is retained"
         );
-        let _ticket = inner
-            .return_admission(&mut hardware, TxAdmission::Protected(second), &mut events)
-            .ok()
-            .unwrap();
+        let _ticket =
+            inner.return_admission(&mut hardware, TxAdmission::Protected(second), &mut events);
         let VacantKeySlot::StationPairwise(pairwise) = events.removed.pop().unwrap().into_slot()
         else {
             panic!("PTK slot");
@@ -4442,4 +4444,32 @@ fn the_port_table_holds_the_lengths_the_core_plans_by() {
             assert_eq!(at(rate).ok(), planned, "{rate:?}");
         }
     }
+}
+
+#[test]
+fn a_ticket_and_a_queue_place_go_back_to_their_own_places() {
+    installed(|pools| {
+        let mut tickets = TicketBank::new(pools.tickets);
+        let mut queues = QueueBank::new(pools.queues);
+        assert!(tickets.all_home() && queues.all_home());
+        let first = tickets.take().unwrap();
+        let second = tickets.take().unwrap();
+        assert_eq!((first.index(), second.index()), (0, 1));
+        tickets.put(first);
+        // The lowest index at home is the one just returned, not a search
+        // for any free place.
+        let again = tickets.take().unwrap();
+        assert_eq!(again.index(), 0);
+        assert_eq!(tickets.at_home(), 2);
+        tickets.put(second);
+        tickets.put(again);
+        assert!(tickets.all_home());
+        let video = queues.take(WmmAccessCategory::Video).unwrap();
+        assert_eq!(video.category(), WmmAccessCategory::Video);
+        assert!(queues.take(WmmAccessCategory::Video).is_none());
+        assert!(!queues.is_home(WmmAccessCategory::Video));
+        assert!(queues.is_home(WmmAccessCategory::Voice));
+        queues.put(video);
+        assert!(queues.all_home());
+    });
 }

@@ -233,6 +233,38 @@ impl<
     }
 }
 
+impl<
+    'core,
+    'slot,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_portable_time::Timer,
+    C: RadioCoexPriorities,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> CoreView<'_, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+{
+    /// Return an admission never published, in whichever phase the core
+    /// is: its key use goes back first, then its ticket comes out. A vacant
+    /// slot holds no core and so no key counts; its admission's ticket
+    /// comes out alone.
+    pub fn return_admission<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    >(
+        self,
+        hardware: &mut H,
+        admission: TxAdmission<'core, Path>,
+        sink: &mut K,
+    ) -> TxTicket<'core, Path> {
+        match self.arena_core() {
+            Some(core) => core.core.return_admission(hardware, admission, sink),
+            None => admission.into_ticket(),
+        }
+    }
+}
+
 /// A vacant slot can be prepared once before any lifecycle transition.
 #[must_use]
 pub struct VacantView<'view, C> {

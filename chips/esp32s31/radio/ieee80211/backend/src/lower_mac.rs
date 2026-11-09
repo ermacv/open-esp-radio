@@ -202,7 +202,9 @@ pub mod ampdu;
 pub mod arena;
 pub mod association;
 mod resources;
-pub use resources::{CoreAuthority, CorePools, CoreResources, FreeQueue, TxTicket};
+pub use resources::{
+    CoreAuthority, CorePools, CoreResources, FreeQueue, QueueBank, TicketBank, TxTicket,
+};
 mod lifecycle;
 pub use lifecycle::{
     ArenaCore, ClosedGate, ClosingGate, CommandView, ConfigurationProgress, ConfigureRefused,
@@ -212,8 +214,8 @@ pub use lifecycle::{
 
 mod keys;
 pub use keys::{
-    KeyAdmissionError, KeyAdmissionRefused, KeyHandle, KeyRemoved, KeyUse, QuarantinedAdmission,
-    ReceiveKeyHandle, RemovingKey, TransmitKeyScope, TxAdmission,
+    KeyAdmissionError, KeyAdmissionRefused, KeyHandle, KeyRemoved, KeyUse, ReceiveKeyHandle,
+    RemovingKey, TransmitKeyScope, TxAdmission,
 };
 use keys::{KeyUseCount, TransmitKeyToken};
 
@@ -2401,6 +2403,11 @@ where
     /// Return an admission which was never published (including submission
     /// refusal), or one carried by a detached aggregate's terminal. Published
     /// MPDUs keep this owner private and return it through their terminal.
+    ///
+    /// The key use goes back first, in every state of the core: a poisoned
+    /// core counts it too, keeps its key material (a removal it holds never
+    /// finishes under the fault) and refuses every later admission, so the
+    /// returned ticket admits nothing it refuses.
     pub fn return_admission<
         H: CcmpKeyHardware,
         K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
@@ -2409,20 +2416,15 @@ where
         hardware: &mut H,
         admission: TxAdmission<'core, Path>,
         sink: &mut K,
-    ) -> Result<TxTicket<'core, Path>, QuarantinedAdmission<'core, Path>> {
-        if self.fault.is_some() {
-            return Err(QuarantinedAdmission {
-                _admission: admission,
-            });
-        }
-        Ok(match admission {
+    ) -> TxTicket<'core, Path> {
+        match admission {
             TxAdmission::Open(ticket) => ticket,
             TxAdmission::Protected(key) => {
                 let (index, ticket) = self.release_key(key);
                 self.finish_key_removal(hardware, index, sink);
                 ticket
             }
-        })
+        }
     }
 
     /// Start an agreement whose values a caller's types guarantee: its TID
