@@ -82,7 +82,9 @@ did, and only a confirmed end state makes it ready again. A client that
 releases its lease hears the end once every recovery ended, with each
 resource left unavailable and why; `cargo hil`, `cargo fw` and `cargo stand
 lease` fail on such an end. A recovery has a deadline (180 s); one past it
-leaves the resource unavailable, untouched until the driver returns. A grant
+leaves the resource unavailable, untouched until the driver returns. A
+driver has returned before its confirmation makes the resource ready, so
+the next lease's end never finds the earlier recovery still running. A grant
 the service could not persist is refused. A restart ends every lease still
 held as abandoned and recovers its resources before granting them again.
 
@@ -161,7 +163,8 @@ a client lost during hardware work, a failed and a late recovery, a restart
 with a lease held, stale confirmations, a slow reader and an unread
 operation, revocations, joined clients and the narrowing of their tokens,
 input by credit and beyond the window, a release that waits for its
-recoveries, a drain that waits for them, a grant that cannot be prepared,
+recoveries, a board granted and released again right after its recovery's
+confirmation, a drain that waits for them, a grant that cannot be prepared,
 the first operation after a grant and an unrecordable grant; the turns of
 operations on one board, a board leased and used while the router is
 unreachable, the operations that need the air, and the router's PHY judged

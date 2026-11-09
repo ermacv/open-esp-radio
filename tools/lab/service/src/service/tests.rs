@@ -57,8 +57,9 @@ struct Fake {
     hardware: Gate,
     recoveries: AtomicU64,
     claims: Mutex<Vec<Vec<Claim>>>,
-    /// What preparing a granted resource returns.
+    /// What preparing a granted resource returns, once `preparation` opens.
     prepared: Mutex<Result<(), String>>,
+    preparation: Gate,
     /// Resources whose recovery leaves them unavailable, emission unknown.
     unavailable: Mutex<Vec<String>>,
 }
@@ -72,6 +73,7 @@ impl Fake {
             recoveries: AtomicU64::new(0),
             claims: Mutex::new(Vec::new()),
             prepared: Mutex::new(Ok(())),
+            preparation: Gate::opened(),
             unavailable: Mutex::new(Vec::new()),
         })
     }
@@ -109,6 +111,7 @@ impl Drivers for Fake {
     }
 
     fn prepare(&self, _: &str, _: &[Claim]) -> Result<(), String> {
+        self.preparation.pass();
         lock(&self.prepared).clone()
     }
 
@@ -826,14 +829,79 @@ fn the_first_operation_after_a_grant_is_never_refused_as_early() {
     let fake = Fake::new();
     let service = open(directory.path(), &fake);
     service.wait_until(ready);
-    for _ in 0..50 {
-        let mut holder = client(&service);
-        holder.acquire(request("ann"), &mut |_| {}).unwrap();
-        holder
-            .run(command("hold"), &mut std::io::sink(), None)
-            .unwrap();
-        holder.release().unwrap();
+    fake.preparation.close();
+    let opener = OpenOnDrop(&fake.preparation);
+    let granted = service.clone();
+    let holder = std::thread::spawn(move || {
+        let mut holder = client(&granted);
+        holder.acquire(request("ann"), &mut |_| {})?;
+        // The first operation goes out the moment the grant arrives.
+        let result = holder.run(command("hold"), &mut std::io::sink(), None)?;
+        holder.release()?;
+        Ok::<_, String>(result)
+    });
+    // Granted in the scheduler, its client still waits for the preparation.
+    service.wait_until(|status| status.holders.len() == 1);
+    assert!(
+        !holder.is_finished(),
+        "the grant arrived before its preparation"
+    );
+    drop(opener);
+    assert_eq!(holder.join().unwrap(), Ok(serde_json::json!("released")));
+}
+
+/// Opens its gate however the test leaves, so no fake waits for it.
+struct OpenOnDrop<'a>(&'a Gate);
+
+impl Drop for OpenOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.open();
     }
+}
+
+#[test]
+fn a_recovery_releases_its_board_before_the_board_is_offered_again() {
+    use oer_tools_lab_arbiter::readiness::Readiness;
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    service.wait_until(ready);
+    let Readiness::Ready { generation } = readiness(&service) else {
+        panic!("the board is not ready");
+    };
+    // The board's first recovery after this one, the first lease's, stops
+    // right after it published its confirmation, until the test lets it
+    // return.
+    let resume = Arc::new(Gate::default());
+    let (stepped, step) = mpsc::channel();
+    let held = resume.clone();
+    let armed = AtomicBool::new(true);
+    *lock(&service.shared.published) = Some(Arc::new(move |recovery: &Recovery| {
+        if recovery.resource == board(A)
+            && recovery.generation > generation
+            && armed.swap(false, Ordering::SeqCst)
+        {
+            let _ = stepped.send(());
+            held.pass();
+        }
+    }));
+    let resumed = OpenOnDrop(&resume);
+
+    let mut first = client(&service);
+    first.acquire(request("ann"), &mut |_| {}).unwrap();
+    first.release().unwrap();
+    // 1. Its confirmation is out and its worker has not returned.
+    step.recv().unwrap();
+    // 2. The confirmation ended the lease and the board is granted again.
+    let mut second = client(&service);
+    second.acquire(request("bob"), &mut |_| {}).unwrap();
+    // 3, 4. The next release finds no earlier recovery holding the board.
+    let released = second.release();
+    drop(resumed);
+    service.wait_until(|status| status.recovering.is_empty());
+    assert_eq!(released, Ok(()));
+    // The end the release heard came with the board's confirmation.
+    assert!(ready(&service.status()));
 }
 
 #[test]

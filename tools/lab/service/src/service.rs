@@ -272,7 +272,14 @@ struct Shared {
     /// The directory of the stand's records, and its stand file.
     arbiter: oer_tools_lab_arbiter::Arbiter,
     recovery_deadline: std::time::Duration,
+    /// A step a recovery worker takes once it published its confirmation,
+    /// before it returns: the tests order other threads against it.
+    #[cfg(test)]
+    published: Mutex<Option<Step>>,
 }
+
+#[cfg(test)]
+type Step = Arc<dyn Fn(&Recovery) + Send + Sync>;
 
 struct Inner {
     scheduler: Scheduler,
@@ -286,7 +293,8 @@ struct Inner {
     connections: BTreeMap<u64, Arc<Outbox>>,
     clients: BTreeMap<u64, ProcessIdentity>,
     /// Resources whose driver still runs a recovery, also one past its
-    /// deadline: nothing else touches them until it returns.
+    /// deadline: nothing else touches them until it returns. A mark leaves
+    /// before its recovery's confirmation can make the resource ready.
     recovering: std::collections::BTreeSet<String>,
     /// Released leases whose client waits for their resources' recoveries.
     closing: BTreeMap<u64, Closing>,
@@ -382,6 +390,8 @@ impl Service {
                 history_path,
                 arbiter,
                 recovery_deadline,
+                #[cfg(test)]
+                published: Mutex::new(None),
             }),
         };
         {
@@ -1065,7 +1075,8 @@ impl Service {
 
     /// Run `recovery` by its driver, for the lease `lease` that left it. A
     /// driver past the deadline leaves the resource unavailable, and its
-    /// resource stays untouched until the driver returns.
+    /// resource stays untouched until the driver returns. The driver's
+    /// confirmation is applied only after its mark in `recovering` left.
     fn spawn_recovery(&self, inner: &mut Inner, recovery: Recovery, lease: Option<u64>) {
         if !inner.recovering.insert(recovery.resource.clone()) {
             // The running recovery's result is stale; a person returns the
@@ -1087,11 +1098,16 @@ impl Service {
         let running = recovery.clone();
         std::thread::spawn(move || {
             let confirmation = driver.shared.drivers.recover(&running);
-            let _ = done.send(confirmation);
+            // The driver returned: its mark goes before its confirmation, so
+            // the resource is never ready, and so granted and released
+            // again, while this recovery still holds it.
             lock(&driver.shared.inner)
                 .recovering
                 .remove(&running.resource);
             driver.shared.changed.notify_all();
+            let _ = done.send(confirmation);
+            #[cfg(test)]
+            driver.published(&running);
         });
         let service = self.clone();
         std::thread::spawn(move || {
@@ -1117,6 +1133,15 @@ impl Service {
             }
             service.pump(&mut inner);
         });
+    }
+
+    /// The test's step after a recovery worker published its confirmation.
+    #[cfg(test)]
+    fn published(&self, recovery: &Recovery) {
+        let step = lock(&self.shared.published).clone();
+        if let Some(step) = step {
+            step(recovery);
+        }
     }
 
     /// Grant what can be granted and tell the waiting clients.
