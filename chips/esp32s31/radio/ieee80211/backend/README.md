@@ -116,7 +116,16 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   exists for the S31 and the port takes no beacon: the vendor's beacon path
   writes the MAC's local-time count, not the access point's TSF, into the
   frame in software, no timestamp-insertion control is known, and whether
-  the hardware replaces the field at transmission is not established.
+  the hardware replaces the field at transmission is not established. The
+  access point's runner writes the Timestamp itself (`Caller`): over this
+  port it ends `ApEnd::Unsupported` before the radio starts, and the S31
+  composition's start refuses `StartRefused::Unsupported` with its
+  settings before anything starts. Should the field turn out to be the
+  transmitter's (`Transmitter`), the runner needs that rule's support
+  before the S31 can serve an access point. On the S31 the access-point
+  suite's beacon cases end `Fixture`, which is no coverage; its two stops
+  run over ordinary access-point frames (`StopsAloneFrames`,
+  `SharedStopFrames`).
 - **Publication observations.** `Esp32s31Port`'s last parameter `O` is
   the port's observation receiver (`port::Observations`, an
   `oer_portable_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is

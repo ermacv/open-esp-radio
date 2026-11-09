@@ -28,9 +28,12 @@
 //! that ends in any way is not sent again: the next TBTT's beacon replaces
 //! it. The beacon's Timestamp is written at its preparation
 //! ([`BeaconTimestamp::Caller`]): the runner's time since the TSF restart;
-//! the deadline says nothing of its accuracy on the air. Over a port that
-//! declares no such rule no beacon is admitted: each TBTT's beacon ends
-//! unsent, its ticket and buffer home.
+//! the deadline says nothing of its accuracy on the air. The runner needs
+//! that rule: over a port whose capabilities declare no `Caller` rule (none,
+//! or only [`BeaconTimestamp::Transmitter`], which the runner does not
+//! support) a run ends at once, before the radio starts,
+//! [`ApEnd::Unsupported`] with every owner in the runner; a composition
+//! checks [`serves_beacons`] before it starts the radio at all.
 //!
 //! # Waiting
 //!
@@ -79,16 +82,16 @@ use core::task::{Context, Poll};
 use embassy_futures::select::{Either, Either4, select, select4};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
-    AccessPoint, AccessPointCommand, AccessPointCommands, AccessPointPort, AccessPointProgress,
-    AccessPointReceive, AccessPointRefusal, Attempt, AttemptKey, BeaconAttempt, BeaconPermission,
-    BeaconStamp, BeaconTimestamp, CommandFailed, ConfigurePermission, Configured, ConnectionFrame,
-    DataPort, Facts, GroupKeyId, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
-    NumberedKey, PhyRate, PortSink, PortTypes, Protection, ReceiveAccounting, ReceiveFilter,
-    RecycleRefused, Removed, RemovedKey, RetryPlan, RetryStage, RxCryptoStatus, RxEvidence,
-    RxMetadata, RxPull, SingleEnd, StopUnconfirmed, SupportedChannel, SupportedFilter,
-    SupportedPower, SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass,
-    TxBufferMemory, TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower,
-    TxProtection, TxSource,
+    AccessPoint, AccessPointCapabilities, AccessPointCommand, AccessPointCommands, AccessPointPort,
+    AccessPointProgress, AccessPointReceive, AccessPointRefusal, Attempt, AttemptKey,
+    BeaconAttempt, BeaconPermission, BeaconStamp, BeaconTimestamp, CommandFailed,
+    ConfigurePermission, Configured, ConnectionFrame, DataPort, Facts, GroupKeyId, InstalledGroup,
+    InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey, PhyRate, PortSink, PortTypes,
+    Protection, ReceiveAccounting, ReceiveFilter, RecycleRefused, Removed, RemovedKey, RetryPlan,
+    RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopUnconfirmed,
+    SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl, TbttEvent,
+    TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxFacts,
+    TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
     ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
@@ -241,9 +244,36 @@ pub trait ApNonces {
     fn nonce(&mut self) -> Option<[u8; 32]>;
 }
 
+/// What the port's capabilities lack for the access point to serve.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApUnsupported {
+    /// The port declares no beacon Timestamp rule the runner writes
+    /// ([`BeaconTimestamp::Caller`]): it would run without beacons.
+    BeaconTimestamp,
+}
+
+/// Whether a port of the capabilities `K` serves the runner's beacons: it
+/// declares the [`BeaconTimestamp::Caller`] rule. A port that declares only
+/// [`BeaconTimestamp::Transmitter`] needs that rule's support in the runner
+/// first.
+///
+/// # Errors
+///
+/// What `K` lacks.
+pub const fn serves_beacons<K: AccessPointCapabilities>() -> Result<(), ApUnsupported> {
+    match BeaconStamp::<K>::new(BeaconTimestamp::Caller) {
+        Some(_) => Ok(()),
+        None => Err(ApUnsupported::BeaconTimestamp),
+    }
+}
+
 /// Why the runner ended.
 #[derive(Debug)]
 pub enum ApEnd<F> {
+    /// The port's capabilities do not serve the access point: the run
+    /// ended before it asked the radio to start, every owner in the
+    /// runner.
+    Unsupported(ApUnsupported),
     /// The access point stopped and the radio with it; every owner is back
     /// in the runner.
     Stopped,
@@ -1351,6 +1381,10 @@ where
         shared: &ApShared,
         clock: &T,
     ) -> ApEnd<PortFault<'id, P>> {
+        // A port that cannot beacon is refused before its radio starts.
+        if let Err(unsupported) = serves_beacons::<Caps<'id, P>>() {
+            return ApEnd::Unsupported(unsupported);
+        }
         // A unit the port refused stays until its owner takes it: no run.
         if let Some(refused) = self.homes.unrecycled.as_ref() {
             return ApEnd::Unrecycled(refused.fault);

@@ -379,6 +379,7 @@ fn stopped<F: core::fmt::Debug>(end: ApEnd<F>) {
         ApEnd::Contract(contract) => panic!("the runner's contract: {contract:?}"),
         ApEnd::Refused(refusal) => panic!("the port takes every command: {refusal:?}"),
         ApEnd::Unrecycled(fault) => panic!("the port takes every unit back: {fault:?}"),
+        ApEnd::Unsupported(unsupported) => panic!("the model serves beacons: {unsupported:?}"),
     }
 }
 
@@ -759,3 +760,8 @@ fn an_expired_group_removal_at_the_stop_returns_its_key_and_the_stop_completes()
 mod handshake;
 
 mod ends;
+
+#[test]
+fn a_port_with_the_callers_timestamp_rule_serves_beacons() {
+    assert_eq!(serves_beacons::<ModelCaps24>(), Ok(()));
+}

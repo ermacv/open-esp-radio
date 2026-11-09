@@ -1,6 +1,8 @@
 //! The access point's runner over the real S31 port, device, receive
 //! session and DMA owners, on the backend's model of the hardware atoms and
-//! virtual time: its start (receive rules, group key, TSF) and its stop.
+//! virtual time. The S31 declares no beacon Timestamp rule, so the runner
+//! refuses the port before its radio starts; the runner's positive start,
+//! beacon and stop paths run over the model only.
 //!
 //! The bench polls the runner only once woken, runs the interrupt handler's
 //! signals before each poll, ends each PPDU the air takes and moves time to
@@ -15,8 +17,8 @@ use oer_protocols_ieee80211_core_roles_ap::{
 };
 use oer_protocols_ieee80211_core_security_rsn::{PmkDerivation, frames::RsnGtk};
 use oer_protocols_ieee80211_runtime::access_point::{
-    AP_BUFFERS, AP_KEYS, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared, GROUP_KEY_ID,
-    network::ApNetworkStorage,
+    AP_BUFFERS, AP_KEYS, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared, ApUnsupported,
+    GROUP_KEY_ID, network::ApNetworkStorage, serves_beacons,
 };
 use oer_protocols_ieee80211_wire::{
     beacon::AP_BEACON_CAPACITY, phy::LegacyRate, security::spp::Interface,
@@ -242,8 +244,22 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                 ApEnd::Contract(contract) => std::format!("contract: {contract:?}"),
                 ApEnd::Refused(refusal) => std::format!("refused: {refusal:?}"),
                 ApEnd::Unrecycled(fault) => std::format!("unrecycled: {fault:?}"),
+                ApEnd::Unsupported(unsupported) => {
+                    // Every owner stays in the runner, none apart.
+                    let whole = runner.take_kept().is_none()
+                        && runner.take_returned().is_none()
+                        && runner.take_unrecycled().is_none();
+                    std::format!(
+                        "unsupported: {unsupported:?}, {}",
+                        if whole {
+                            "owners in the runner"
+                        } else {
+                            "an owner apart"
+                        }
+                    )
+                }
             });
-            if !matches!(end, ApEnd::Stopped) {
+            if !matches!(end, ApEnd::Stopped | ApEnd::Unsupported(_)) {
                 // The run ended before its stop: the stop goes on until the
                 // port confirms it.
                 let finished = runner.finish_stop(&airy, |_| {}).await;
@@ -318,54 +334,29 @@ impl Timer for Airy {
     }
 }
 
+/// The S31 declares no beacon Timestamp rule the runner writes: a run over
+/// the real S31 port ends unsupported before it asks the radio to start.
+/// The MAC runtime never runs and no beacon is counted; the runner
+/// keeps every owner (none kept apart, returned or unrecycled), and the
+/// composition's start check refuses with the same cause first.
 #[test]
-fn the_access_point_starts_and_stops_on_the_s31_port() {
-    on_the_s31_port(|until, shared, _, clock| {
-        // The receive rules, the group key through its receive cut, then
-        // the TSF: the access point runs.
-        until("the access point runs", &mut |shared, ended| {
-            assert_eq!(ended, None, "the run goes on");
-            shared.status().running
+fn the_access_point_over_the_s31_port_is_refused_unsupported_before_the_radio_starts() {
+    assert_eq!(
+        serves_beacons::<Caps>(),
+        Err(ApUnsupported::BeaconTimestamp)
+    );
+    on_the_s31_port(|until, shared, atoms, _| {
+        until("the run ends unsupported", &mut |shared, ended| {
+            assert!(!atoms.running(), "the MAC runtime never runs");
+            assert!(!shared.status().running, "the access point never runs");
+            match ended {
+                None => false,
+                Some(ended) => {
+                    assert_eq!(ended, "unsupported: BeaconTimestamp, owners in the runner");
+                    true
+                }
+            }
         });
-        // The S31 declares no beacon Timestamp rule: its TBTTs pass and no
-        // beacon goes, the run going on.
-        let start = clock.now();
-        until("three TBTTs pass", &mut |shared, ended| {
-            assert_eq!(ended, None, "the run goes on");
-            assert_eq!(shared.status().beacons, 0, "no beacon without a stamp");
-            clock.now().saturating_duration_since(start)
-                >= oer_portable_time::Duration::from_millis(320)
-        });
-        shared.request_stop();
-        until("the access point stops", &mut |shared, ended| {
-            !shared.status().running && ended == Some("stopped")
-        });
-    });
-}
-
-/// The stand failure's order: the group key's installation holds at its
-/// receive cut, mid-freeze, and the runner's task does not run again until
-/// past the port's command bound. The installation never reached the key
-/// table: the run ends refused `Expired` with it, the cut resumes, and the
-/// stop completes.
-#[test]
-fn a_group_install_expired_at_its_receive_cut_ends_refused_and_the_stop_completes() {
-    on_the_s31_port(|until, _, atoms, clock| {
-        // The port's start runs the MAC runtime; the cut's freeze asks it
-        // to stop and waits for it.
-        let mut opened = false;
-        until("the cut freezes", &mut |_, _| {
-            opened |= atoms.running();
-            opened && !atoms.running()
-        });
-        clock.pass(port::COMMAND_BOUND.as_micros());
-        until(
-            "the run ends refused and its stop completes",
-            &mut |_, ended| match ended {
-                None | Some("refused: Expired") => false,
-                Some("refused: Expired, stop confirmed") => true,
-                Some(other) => panic!("the run ended: {other}"),
-            },
-        );
+        assert_eq!(shared.status().beacons, 0);
     });
 }

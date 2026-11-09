@@ -10,7 +10,7 @@
 
 use super::*;
 use oer_chips_esp32s31_radio_ieee80211_station::access_point::{
-    self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage, StartRefused,
+    self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage,
 };
 use oer_portable_embassy_net::{
     NetworkInterfaceId, OwnedNetworkTxFrame,
@@ -18,8 +18,9 @@ use oer_portable_embassy_net::{
 };
 use oer_protocols_ieee80211_runtime::access_point::network::{ApNetDevice, ApNetTransmit};
 
-pub use ap::{ApExit, ApSettings, ApSettingsError};
+pub use ap::{ApExit, ApSettings, ApSettingsError, StartRefused};
 pub use oer_protocols_ieee80211_runtime::access_point::ApStatus;
+pub use oer_protocols_ieee80211_runtime::access_point::ApUnsupported;
 
 /// The access point's receive packets: each one 1514-byte Ethernet frame.
 pub const AP_RX: usize = 4;
@@ -130,11 +131,11 @@ impl AccessPoint {
     /// serves once.
     ///
     /// # Errors
-    /// It serves already; the settings come back.
-    pub fn serve(&self, config: Config, settings: ApSettings) -> Result<(), ApSettings> {
-        self.control
-            .start(config.chip, settings)
-            .map_err(|StartRefused::AlreadyStarted(settings)| settings)
+    /// The radio cannot beacon ([`StartRefused::Unsupported`], checked
+    /// before anything starts, the radio included), or it serves already;
+    /// the settings come back either way.
+    pub fn serve(&self, config: Config, settings: ApSettings) -> Result<(), StartRefused> {
+        self.control.start(config.chip, settings)
     }
 
     /// The access point's status now.

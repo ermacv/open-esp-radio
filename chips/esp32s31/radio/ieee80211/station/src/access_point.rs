@@ -23,8 +23,9 @@ use oer_protocols_ieee80211_core_roles_ap::{
 use oer_protocols_ieee80211_core_security_rsn::{PmkDerivation, frames::RsnGtk};
 use oer_protocols_ieee80211_runtime::access_point::{
     AP_BUFFERS, AP_KEYS, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared, ApStatus,
-    GROUP_KEY_ID,
+    ApUnsupported, GROUP_KEY_ID,
     network::{ApNetDevice, ApNetTransmit, ApNetworkEnd, ApNetworkStorage},
+    serves_beacons,
 };
 use oer_protocols_ieee80211_wire::{
     beacon::AP_BEACON_CAPACITY, phy::LegacyRate, security::spp::Interface,
@@ -192,6 +193,26 @@ pub struct AccessPointControl {
 pub enum StartRefused {
     /// It was started once already; the settings come back.
     AlreadyStarted(ApSettings),
+    /// The S31 port's capabilities do not serve the runner's beacons: no
+    /// beacon Timestamp rule is declared for the S31
+    /// ([`serves_beacons`]). Nothing started, the radio included; the
+    /// settings come back, and the access point was not started (a stop
+    /// ends its runner without a radio).
+    Unsupported {
+        /// The settings, unchanged.
+        settings: ApSettings,
+        /// What the port lacks.
+        cause: ApUnsupported,
+    },
+}
+
+/// Whether the S31 port serves the access point: refused before anything
+/// starts, the settings returned.
+fn check_start(settings: ApSettings) -> Result<ApSettings, StartRefused> {
+    match serves_beacons::<radio::Caps>() {
+        Ok(()) => Ok(settings),
+        Err(cause) => Err(StartRefused::Unsupported { settings, cause }),
+    }
 }
 
 impl AccessPointControl {
@@ -201,8 +222,11 @@ impl AccessPointControl {
     /// without a radio.
     ///
     /// # Errors
-    /// A second start returns its settings.
+    /// A port that cannot beacon refuses before anything starts
+    /// ([`StartRefused::Unsupported`]); a second start returns its
+    /// settings. Either way the settings come back.
     pub fn start(&self, config: Config, settings: ApSettings) -> Result<(), StartRefused> {
+        let settings = check_start(settings)?;
         if self.start.given.replace(true) {
             return Err(StartRefused::AlreadyStarted(settings));
         }
@@ -271,6 +295,9 @@ pub enum ApEnded {
     /// The port refused a received unit's recycle for its count; the unit
     /// stayed with the runner and ended with it after the release.
     Unrecycled(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
+    /// The port's capabilities do not serve the access point; the run
+    /// never asked the radio to start.
+    Unsupported(ApUnsupported),
 }
 
 /// How the access point ended, or how far its end came.
@@ -635,6 +662,9 @@ impl<W: Binding> AccessPointRunner<W> {
             ApEnd::Contract(contract) => (ApEnded::Contract(contract), Stop::Owed),
             ApEnd::Refused(refusal) => (ApEnded::Refused(refusal), Stop::Owed),
             ApEnd::Unrecycled(fault) => (ApEnded::Unrecycled(fault), Stop::Owed),
+            // The start's check refuses such a port before the radio
+            // starts; a run that still ended here never asked it to start.
+            ApEnd::Unsupported(cause) => (ApEnded::Unsupported(cause), Stop::Owed),
         };
         retire::<W>(slot, runner, ended, stop).await
     }

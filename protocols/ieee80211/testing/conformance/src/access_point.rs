@@ -33,7 +33,10 @@
 //!   returns a held command, which the stopped port refuses
 //!   ([`Case::StopReturnsHeld`]);
 //! - the shared stop ends the beacon and the access point's interface
-//!   ([`Case::SharedStop`]).
+//!   ([`Case::SharedStop`]);
+//! - the same two stops over ordinary access-point frames, no beacon
+//!   among them ([`Case::StopsAloneFrames`], [`Case::SharedStopFrames`]):
+//!   a backend that admits no beacon runs these.
 
 use core::task::{Context, Poll, Waker};
 
@@ -327,11 +330,18 @@ pub enum Case {
     StopReturnsHeld,
     /// The shared stop ends the beacon and the access point's interface.
     SharedStop,
+    /// The access point stops alone beside a running station, its frames
+    /// ordinary access-point frames: the one on the air ends as the air
+    /// answers, the one queued behind it withdrawn.
+    StopsAloneFrames,
+    /// The shared stop ends the work of both roles once, an access-point
+    /// frame on the air among it, and the access point's interface.
+    SharedStopFrames,
 }
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 19] = [
         Self::SharedPort,
         Self::StationConfigureApart,
         Self::ConfigureBarrier,
@@ -349,6 +359,8 @@ impl Case {
         Self::ExpiredRemoval,
         Self::StopReturnsHeld,
         Self::SharedStop,
+        Self::StopsAloneFrames,
+        Self::SharedStopFrames,
     ];
 }
 
@@ -400,11 +412,13 @@ pub fn check<'id, H: AccessPointHarness<'id>>(
         Case::StaleRemoval => stale_removal(harness),
         Case::StaleFrameKey => stale_frame_key(harness),
         Case::Keys => keys(harness),
-        Case::StopsAlone => stops_alone(harness),
+        Case::StopsAlone => stops_alone(harness, Behind::Beacon),
         Case::HeldCommandApart => held_command_apart(harness),
         Case::ExpiredRemoval => expired_removal(harness),
         Case::StopReturnsHeld => stop_returns_held(harness),
-        Case::SharedStop => shared_stop(harness),
+        Case::SharedStop => shared_stop(harness, Behind::Beacon),
+        Case::StopsAloneFrames => stops_alone(harness, Behind::Frame),
+        Case::SharedStopFrames => shared_stop(harness, Behind::Frame),
     }
 }
 
@@ -1070,7 +1084,18 @@ fn keys<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violatio
     remove_keys(harness, 0)
 }
 
-fn stops_alone<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+/// What a stop case puts in the beacon's queue besides an ordinary frame:
+/// a beacon, or an ordinary access-point frame in its place.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Behind {
+    Beacon,
+    Frame,
+}
+
+fn stops_alone<'id, H: AccessPointHarness<'id>>(
+    harness: &mut H,
+    behind: Behind,
+) -> Result<(), Violation> {
     start(harness)?;
     // The station runs: configured, its key installed, its frames out.
     configure_station(harness)?;
@@ -1091,13 +1116,19 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), V
     }
     install_keys(harness, 0)?;
     // An access-point frame under its key on the air in the beacon's
-    // queue, a beacon queued behind it, a station frame on the air.
+    // queue, a beacon (or a second frame) queued behind it, a station frame
+    // on the air.
     harness.hold(BEACON_QUEUE, true);
     let ap_frame = harness.access_point_frame(Some(Issued::Current), BEACON_QUEUE);
     let ap_frame = submit(harness, ap_frame)?;
-    let deadline = far(harness);
-    let queued_beacon = harness.beacon(Issued::Current, deadline);
-    let queued_beacon = submit(harness, queued_beacon)?;
+    let queued_behind = match behind {
+        Behind::Beacon => {
+            let deadline = far(harness);
+            harness.beacon(Issued::Current, deadline)
+        }
+        Behind::Frame => harness.access_point_frame(Some(Issued::Current), BEACON_QUEUE),
+    };
+    let queued_behind = submit(harness, queued_behind)?;
     harness.hold(STATION_QUEUE, true);
     let station_on_air = harness.station_frame(STATION_QUEUE, true);
     let station_on_air = submit(harness, station_on_air)?;
@@ -1146,14 +1177,16 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), V
     if !finished {
         return Err(Violation::Barrier);
     }
-    // Its frame ended; the beacon queued behind it ended withdrawn, never
-    // published, with the permission.
+    // Its frame ended; what was queued behind it ended withdrawn, never
+    // published, a beacon with its permission.
     let ended = harness.take_ends();
     let ended = ended.as_ref();
-    let beacon_ended = ended.iter().any(
-        |end| matches!(end, Ended::Beacon(ticket, End::Withdrawn(_)) if *ticket == queued_beacon),
-    );
-    if ended.len() != 2 || !beacon_ended || !ended.contains(&Ended::Frame(ap_frame, End::Delivered))
+    let behind_ended = ended.iter().any(|end| match (behind, end) {
+        (Behind::Beacon, Ended::Beacon(ticket, End::Withdrawn(_)))
+        | (Behind::Frame, Ended::Frame(ticket, End::Withdrawn(_))) => *ticket == queued_behind,
+        _ => false,
+    });
+    if ended.len() != 2 || !behind_ended || !ended.contains(&Ended::Frame(ap_frame, End::Delivered))
     {
         return Err(Violation::Ends);
     }
@@ -1405,16 +1438,24 @@ fn stop_returns_held<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result
     Ok(())
 }
 
-fn shared_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+fn shared_stop<'id, H: AccessPointHarness<'id>>(
+    harness: &mut H,
+    behind: Behind,
+) -> Result<(), Violation> {
     start(harness)?;
     let configure = harness.configure(Issued::Current, Receive::Bss, Some(TsfControl::Restart));
     done(harness, configure)?;
     terminal(harness, Terminal::Configured(0))?;
-    // A beacon on the air and a station frame queued behind a busy queue
-    // when the shared owner stops.
+    // A beacon (or an access-point frame) on the air and a station frame
+    // queued behind a busy queue when the shared owner stops.
     harness.hold(BEACON_QUEUE, true);
-    let deadline = far(harness);
-    let on_air = harness.beacon(Issued::Current, deadline);
+    let on_air = match behind {
+        Behind::Beacon => {
+            let deadline = far(harness);
+            harness.beacon(Issued::Current, deadline)
+        }
+        Behind::Frame => harness.access_point_frame(None, BEACON_QUEUE),
+    };
     let on_air = submit(harness, on_air)?;
     harness.hold(STATION_QUEUE, true);
     let busy = harness.station_frame(STATION_QUEUE, false);
@@ -1440,9 +1481,12 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), V
     stop(harness)?;
     let ended = harness.take_ends();
     let ended = ended.as_ref();
-    let beacon_ended = ended
-        .iter()
-        .any(|end| matches!(end, Ended::Beacon(ticket, _) if *ticket == on_air));
+    let on_air_ended = ended.iter().any(|end| match (behind, end) {
+        (Behind::Beacon, Ended::Beacon(ticket, _)) | (Behind::Frame, Ended::Frame(ticket, _)) => {
+            *ticket == on_air
+        }
+        _ => false,
+    });
     let busy_ended = ended
         .iter()
         .any(|end| matches!(end, Ended::Frame(ticket, _) if *ticket == busy));
@@ -1450,7 +1494,7 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), V
         queued,
         End::Withdrawn(WithdrawCause::Disabled),
     ));
-    if ended.len() != 3 || !beacon_ended || !busy_ended || !queued_ended {
+    if ended.len() != 3 || !on_air_ended || !busy_ended || !queued_ended {
         return Err(Violation::Ends);
     }
     if !harness.holds_beacon(Issued::Current) {

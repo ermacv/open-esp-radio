@@ -760,8 +760,12 @@ fn an_expired_configuration_and_pairwise_removal_undo_their_barriers_on_the_s31_
     }
 }
 
-/// The cases that submit a beacon: the S31 declares no Timestamp rule, so
-/// no beacon stamp exists and the fixture builds no beacon.
+/// The cases that submit a beacon. The S31 declares no Timestamp rule, so
+/// no beacon stamp exists and the fixture cannot build a beacon: such a case
+/// ends `Violation::Fixture`, which means it has NO coverage on the S31, not
+/// that the port refused a beacon. Their positive paths run on the model
+/// only; the two stops run here over ordinary access-point frames
+/// ([`FRAME_STOP_CASES`]).
 const BEACON_CASES: [ap_cases::Case; 6] = [
     ap_cases::Case::BeaconPermission,
     ap_cases::Case::StoppedBeacon,
@@ -778,6 +782,22 @@ fn the_s31_declares_no_beacon_timestamp_rule() {
     }
 }
 
+/// The access point's own stop beside a running station and the shared
+/// stop, over ordinary access-point frames instead of beacons.
+const FRAME_STOP_CASES: [ap_cases::Case; 2] = [
+    ap_cases::Case::StopsAloneFrames,
+    ap_cases::Case::SharedStopFrames,
+];
+
+#[test]
+fn the_access_point_stops_alone_and_with_the_shared_stop_over_ordinary_frames_on_the_s31_port() {
+    for case in FRAME_STOP_CASES {
+        assert_eq!(run_case(case), Ok(()), "{case:?}");
+    }
+}
+
+/// Every case but the beacon ones passes; a beacon case ends `Fixture`:
+/// it runs nothing on the S31 (no coverage), see [`BEACON_CASES`].
 #[test]
 fn every_access_point_case_without_a_beacon_passes_on_the_s31_port() {
     let failed: Vec<_> = ap_cases::Case::ALL
