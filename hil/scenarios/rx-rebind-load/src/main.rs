@@ -1,6 +1,7 @@
 //! TEMPORARY experiment host program (branch `probe/rx-descriptor-rebind`,
-//! never merged). It builds nothing: the probe's bundle is prepared first
-//! (`cargo fw build esp32s31-rx-rebind`), outside any lease.
+//! never merged). It builds nothing: the probe's bundle is built first by
+//! the standard `cargo fw build esp32s31-rx-rebind`, outside any lease, and
+//! the image identity comes from that build's own records (`bundle.rs`).
 //!
 //! Under one lease on the board, the router and the air it writes the
 //! bundle, has the router serve its WPA2 network on channel 13 at HT20,
@@ -17,9 +18,9 @@
 //! laptop's managed interface state, then releases the lease.
 #![forbid(unsafe_code)]
 
+mod bundle;
 mod console;
 mod load;
-mod prepared;
 mod result;
 
 use std::{
@@ -42,7 +43,7 @@ use oer_tools_lab_client::{
 };
 use serde_json::{Value, json};
 
-use crate::{console::ConsoleSession, load::Load, prepared::Prepared, result::ProbeResult};
+use crate::{bundle::Identity, console::ConsoleSession, load::Load, result::ProbeResult};
 
 const IMAGE: &str = "esp32s31-rx-rebind";
 const HELPER: &str = "/usr/local/sbin/open-radio-net";
@@ -71,12 +72,10 @@ fn main() -> ExitCode {
         .collect::<Vec<_>>()
         .as_slice()
     {
-        ["prepare", bundle] => prepare(Path::new(bundle)).map(|()| true),
-        ["run", board, bundle, console] => run(board, Path::new(bundle), Path::new(console)),
+        [board, bundle, console] => run(board, Path::new(bundle), Path::new(console)),
         _ => {
             eprintln!(
-                "usage: oer-hil-scenarios-rx-rebind-load prepare <bundle-directory>\n       \
-                 oer-hil-scenarios-rx-rebind-load run <board> <bundle-directory> <console-log>"
+                "usage: oer-hil-scenarios-rx-rebind-load <board> <bundle-directory> <console-log>"
             );
             return ExitCode::from(2);
         }
@@ -91,40 +90,16 @@ fn main() -> ExitCode {
     }
 }
 
-fn git(arguments: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .args(arguments)
-        .output()
-        .map_err(|error| format!("git: {error}"))?;
-    if !output.status.success() {
-        return Err(format!("git {} failed", arguments.join(" ")));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-}
-
-/// Build the image once, outside any lease, and record what was built.
-fn prepare(bundle: &Path) -> Result<()> {
-    let commit = git(&["rev-parse", "HEAD"])?;
-    let dirty = !git(&["status", "--porcelain"])?.is_empty();
-    let status = Command::new("cargo")
-        .args(["fw", "build", IMAGE])
-        .env("CARGO_INCREMENTAL", "0")
-        .status()
-        .map_err(|error| format!("cargo fw build: {error}"))?;
-    if !status.success() {
-        return Err(format!("cargo fw build {IMAGE} exited with {status}"));
-    }
-    let prepared = prepared::write(bundle, &commit, dirty)?;
-    eprintln!(
-        "load: prepared {IMAGE} from {} (dirty {}), application {}",
-        prepared.commit, prepared.dirty, prepared.application_sha256
-    );
-    Ok(())
-}
-
 /// `Ok(true)` when the probe printed its pass line.
 fn run(board_id: &str, bundle: &Path, console: &Path) -> Result<bool> {
-    let prepared = prepared::read(bundle)?;
+    let identity = bundle::identity(bundle)?;
+    eprintln!(
+        "load: bundle of {} at {} (dirty {}), application {}",
+        bundle::PACKAGE,
+        identity.commit,
+        identity.dirty,
+        identity.application_sha256
+    );
     let stand = oer_tools_lab_model::path()
         .and_then(|path| oer_tools_lab_model::Stand::load(&path))
         .map_err(|error| format!("the stand file: {error}"))?;
@@ -170,7 +145,7 @@ fn run(board_id: &str, bundle: &Path, console: &Path) -> Result<bool> {
         &board.mac,
         &owner,
         bundle,
-        &prepared,
+        &identity,
         console,
     );
     let restored = station.restore();
@@ -415,7 +390,7 @@ fn leased(
     mac: &str,
     owner: &str,
     bundle: &Path,
-    prepared: &Prepared,
+    identity: &Identity,
     console: &Path,
 ) -> Result<bool> {
     client.run(
@@ -424,9 +399,9 @@ fn leased(
             bundle: bundle.display().to_string(),
             image: ImageIdentity {
                 name: IMAGE.to_owned(),
-                sha256: prepared.application_sha256.clone(),
-                commit: Some(prepared.commit.clone()),
-                dirty: Some(prepared.dirty),
+                sha256: identity.application_sha256.clone(),
+                commit: Some(identity.commit.clone()),
+                dirty: Some(identity.dirty),
                 origin: std::env::args().collect::<Vec<_>>().join(" "),
             },
             owner: owner.to_owned(),
@@ -438,7 +413,7 @@ fn leased(
     )?;
     eprintln!(
         "load: wrote the probe bundle, application {}",
-        prepared.application_sha256
+        identity.application_sha256
     );
     let ssid = format!("oer-rebind-{}", secret(6)?);
     let passphrase = secret(16)?;

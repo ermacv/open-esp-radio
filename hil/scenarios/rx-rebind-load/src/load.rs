@@ -111,62 +111,95 @@ impl Drop for Load {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
 
-    #[test]
-    fn finish_joins_a_sender_blocked_in_its_bounded_send() {
-        let load = Load::start(
-            || {
-                // A send held to its write timeout.
-                std::thread::sleep(Duration::from_millis(50));
-                Err(io::Error::from(io::ErrorKind::WouldBlock))
-            },
-            || "1.0 MBit/s".to_owned(),
-            Duration::from_millis(10),
-        );
-        std::thread::sleep(Duration::from_millis(120));
-        let started = Instant::now();
-        let report = load.finish();
-        assert!(started.elapsed() < Duration::from_secs(1));
-        assert!(report.refused >= 1);
-        assert_eq!(report.datagrams, 0);
-        assert!(!report.samples.is_empty());
+    /// Reports `name` when the closure owning it is dropped: at the end of
+    /// the thread that ran it, before that thread's join returns.
+    struct Ended(mpsc::Sender<&'static str>, &'static str);
+
+    impl Drop for Ended {
+        fn drop(&mut self) {
+            let _ = self.0.send(self.1);
+        }
     }
 
-    #[test]
-    fn a_long_sample_period_does_not_delay_the_stop() {
+    fn ended(receiver: &mpsc::Receiver<&'static str>) -> Vec<&'static str> {
+        let mut names: Vec<_> = receiver.try_iter().collect();
+        names.sort_unstable();
+        names
+    }
+
+    /// A sender inside a send that returns only when `release` ends, as a
+    /// send held to its write timeout returns, and a sampler that has taken
+    /// its first sample.
+    fn blocked_load() -> (Load, mpsc::Sender<()>, mpsc::Receiver<&'static str>) {
+        let (entered, in_send) = mpsc::channel();
+        let (release, released) = mpsc::channel::<()>();
+        let (sampled, first_sample) = mpsc::channel();
+        let (done, threads) = mpsc::channel();
+        let sender_ended = Ended(done.clone(), "sender");
+        let sampler_ended = Ended(done, "sampler");
         let load = Load::start(
-            || Ok(()),
-            || "54.0 MBit/s".to_owned(),
+            move || {
+                let _owned = &sender_ended;
+                let _ = entered.send(());
+                let _ = released.recv();
+                Err(io::Error::from(io::ErrorKind::TimedOut))
+            },
+            move || {
+                let _owned = &sampler_ended;
+                let _ = sampled.send(());
+                "6.0 MBit/s".to_owned()
+            },
             Duration::from_secs(3600),
         );
-        std::thread::sleep(Duration::from_millis(30));
-        let started = Instant::now();
-        let report = load.finish();
-        assert!(started.elapsed() < Duration::from_secs(1));
-        assert_eq!(report.samples, ["54.0 MBit/s"]);
-        assert!(report.datagrams > 0);
+        in_send.recv().unwrap();
+        first_sample.recv().unwrap();
+        (load, release, threads)
     }
 
     #[test]
-    fn dropping_the_load_stops_and_joins_both_threads() {
-        let calls = Arc::new(AtomicU64::new(0));
-        {
-            let calls = calls.clone();
-            let _load = Load::start(
-                move || {
-                    calls.fetch_add(1, Ordering::Relaxed);
-                    std::thread::sleep(Duration::from_millis(2));
-                    Ok(())
-                },
-                String::new,
-                Duration::from_millis(5),
-            );
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        // The drop joined the sender: no call follows it.
-        let after_drop = calls.load(Ordering::Relaxed);
-        std::thread::sleep(Duration::from_millis(30));
-        assert!(after_drop > 0);
-        assert_eq!(calls.load(Ordering::Relaxed), after_drop);
+    fn finish_joins_a_sender_held_in_its_bounded_send_and_the_sampler() {
+        let (load, release, threads) = blocked_load();
+        let finishing = std::thread::spawn(move || load.finish());
+        // The held send returns; every later one returns at once.
+        drop(release);
+        let report = finishing.join().unwrap();
+        assert_eq!(ended(&threads), ["sampler", "sender"]);
+        assert!(report.refused >= 1);
+        assert_eq!(report.datagrams, 0);
+        assert_eq!(report.samples, ["6.0 MBit/s"]);
+    }
+
+    #[test]
+    fn dropping_the_load_joins_both_threads() {
+        let (load, release, threads) = blocked_load();
+        let dropping = std::thread::spawn(move || drop(load));
+        drop(release);
+        dropping.join().unwrap();
+        assert_eq!(ended(&threads), ["sampler", "sender"]);
+    }
+
+    #[test]
+    fn a_long_sample_period_does_not_hold_the_stop() {
+        let (sent, first_send) = mpsc::channel();
+        let (sampled, first_sample) = mpsc::channel();
+        let load = Load::start(
+            move || {
+                let _ = sent.send(());
+                Ok(())
+            },
+            move || {
+                let _ = sampled.send(());
+                "54.0 MBit/s".to_owned()
+            },
+            Duration::from_secs(3600),
+        );
+        first_send.recv().unwrap();
+        first_sample.recv().unwrap();
+        // The sampler waits out its hour only while the load runs.
+        let report = load.finish();
+        assert_eq!(report.samples, ["54.0 MBit/s"]);
+        assert!(report.datagrams >= 1);
     }
 }

@@ -2258,6 +2258,7 @@ dependencies = [
  "oer-tools-lab-arbiter",
  "oer-tools-lab-client",
  "oer-tools-lab-model",
+ "oer-tools-os-durable",
  "serde_json",
  "tempfile",
 ]

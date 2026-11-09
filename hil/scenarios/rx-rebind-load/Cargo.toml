@@ -12,6 +12,7 @@ description = "TEMPORARY experiment host program: one lease on a board, the rout
 oer-tools-lab-arbiter = { path = "../../../tools/lab/arbiter" }
 oer-tools-lab-client = { path = "../../../tools/lab/client" }
 oer-tools-lab-model = { path = "../../../tools/lab/model" }
+oer-tools-os-durable = { path = "../../../tools/os/durable" }
 serde_json = "1.0"
 
 [dev-dependencies]

@@ -85,59 +85,67 @@ impl Drop for ConsoleSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    };
 
-    /// A console that yields `lines`, then blocks until it is cancelled,
-    /// then ends, as the LAB service's console operation does.
+    /// A console that yields `text`, then blocks until it is cancelled,
+    /// then ends, as the LAB service's console operation does. Dropped with
+    /// the reader thread that owns it, which reports it then.
     struct Console {
-        lines: Vec<u8>,
+        text: Vec<u8>,
         at: usize,
-        cancelled: Arc<AtomicBool>,
+        cancelled: mpsc::Receiver<()>,
+        ended: mpsc::Sender<()>,
     }
 
     impl Read for Console {
         fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-            if let Some(rest) = self.lines.get(self.at..).filter(|rest| !rest.is_empty()) {
+            if let Some(rest) = self.text.get(self.at..).filter(|rest| !rest.is_empty()) {
                 let count = rest.len().min(buffer.len());
-                buffer[..count].copy_from_slice(&rest[..count]);
+                for (to, from) in buffer.iter_mut().zip(rest.iter()).take(count) {
+                    *to = *from;
+                }
                 self.at += count;
                 return Ok(count);
             }
-            while !self.cancelled.load(Ordering::Relaxed) {
-                std::thread::sleep(Duration::from_millis(2));
-            }
+            // Blocks until the cancel drops its sender.
+            let _ = self.cancelled.recv();
             Ok(0)
         }
     }
 
-    fn open(text: &str) -> (ConsoleSession, Arc<AtomicBool>) {
-        let cancelled = Arc::new(AtomicBool::new(false));
-        let flag = cancelled.clone();
+    impl Drop for Console {
+        fn drop(&mut self) {
+            let _ = self.ended.send(());
+        }
+    }
+
+    /// A session over `text`; the receiver reports the reader's end.
+    fn open(text: &str) -> (ConsoleSession, mpsc::Receiver<()>) {
+        let (cancel, cancelled) = mpsc::channel::<()>();
+        let (ended, reader_ended) = mpsc::channel();
         let console = Console {
-            lines: text.as_bytes().to_vec(),
+            text: text.as_bytes().to_vec(),
             at: 0,
-            cancelled: cancelled.clone(),
+            cancelled,
+            ended,
         };
         (
-            ConsoleSession::new(console, move || flag.store(true, Ordering::Relaxed)),
-            cancelled,
+            ConsoleSession::new(console, move || drop(cancel)),
+            reader_ended,
         )
     }
 
     #[test]
     fn the_result_line_ends_the_read_and_finish_cancels_and_joins() {
-        let (session, cancelled) =
+        let (session, reader_ended) =
             open("REBIND boot\nSEG 0 arm=fixed\nOER-RESULT: pass rx-rebind\n");
         let mut log = Vec::new();
         assert_eq!(
-            session.result(&mut log, Duration::from_secs(5)),
+            session.result(&mut log, Duration::from_secs(3600)),
             Ok(ProbeResult::Pass)
         );
         session.finish();
-        assert!(cancelled.load(Ordering::Relaxed));
+        // Joined: the reader's stream was dropped before `finish` returned.
+        assert_eq!(reader_ended.try_recv(), Ok(()));
         assert_eq!(
             String::from_utf8(log).unwrap(),
             "REBIND boot\nSEG 0 arm=fixed\nOER-RESULT: pass rx-rebind\n"
@@ -155,27 +163,33 @@ mod tests {
                 Ok(())
             }
         }
-        let (session, cancelled) = open("REBIND boot\n");
-        assert!(session.result(&mut Broken, Duration::from_secs(5)).is_err());
+        let (session, reader_ended) = open("REBIND boot\n");
+        assert!(
+            session
+                .result(&mut Broken, Duration::from_secs(3600))
+                .is_err()
+        );
         drop(session);
-        assert!(cancelled.load(Ordering::Relaxed));
+        assert_eq!(reader_ended.try_recv(), Ok(()));
     }
 
     #[test]
-    fn a_timeout_or_a_foreign_result_is_an_error_and_still_ends_the_console() {
-        let (session, cancelled) = open("REBIND boot\n");
+    fn a_foreign_result_is_an_error_and_still_ends_the_console() {
+        let (session, reader_ended) = open("OER-RESULT: pass rx-chain\n");
         assert!(
             session
-                .result(&mut Vec::new(), Duration::from_millis(50))
+                .result(&mut Vec::new(), Duration::from_secs(3600))
                 .is_err()
         );
         session.finish();
-        assert!(cancelled.load(Ordering::Relaxed));
-        let (session, _) = open("OER-RESULT: pass rx-chain\n");
-        assert!(
-            session
-                .result(&mut Vec::new(), Duration::from_secs(5))
-                .is_err()
-        );
+        assert_eq!(reader_ended.try_recv(), Ok(()));
+    }
+
+    #[test]
+    fn a_console_without_a_result_times_out_and_still_ends() {
+        let (session, reader_ended) = open("REBIND boot\n");
+        assert!(session.result(&mut Vec::new(), Duration::ZERO).is_err());
+        session.finish();
+        assert_eq!(reader_ended.try_recv(), Ok(()));
     }
 }
