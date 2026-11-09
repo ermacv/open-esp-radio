@@ -86,9 +86,10 @@ outlive services: a next service binds the same `Group` values, as a pool keeps
 Dropping a `LateSocket` or a `Service` with commands in a request lane still strands
 what those hold: that has no contract yet.
 
-A turn first reads the port's link into the core, then takes commands,
-received frames and the port's notices, then, once it has
-read them all, asks its producer for offers, chooses work and publishes it,
+A turn first reads the port's link into the core, then takes commands (four a
+lane), received frames (eight) and the port's notices (up to 64, a Block Ack's
+whole ends), then, once it has
+read them all, asks its producer for offers, chooses work and publishes it (eight),
 evicts under memory pressure, then hands results and datagrams back. Each part is bounded, so no lane and no port
 starves the others, and sockets waiting for blocks take turns. Every exit of a
 turn goes through that last part, a fault's too: after a policy or port fault the

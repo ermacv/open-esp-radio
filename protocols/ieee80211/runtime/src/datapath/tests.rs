@@ -1947,3 +1947,51 @@ fn a_lost_network_settles_only_once_every_ended_frame_s_memory_went_home() {
         assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
+
+/// Ends the network has not taken back wait in the actor while the queue
+/// is full; once the network takes the queue's, the actor returns the rest
+/// as one burst. A network waiting for a return is told once, at the
+/// burst's end, and finds the whole burst; one that arms only after the
+/// burst finds it at its arming, with no wake to lose.
+#[test]
+fn freed_memory_goes_back_as_one_burst_with_one_wake() {
+    for armed in [true, false] {
+        bench(|bench| {
+            bench.start();
+            bench.connect(link(true, None));
+            bench.send_msdu(msdu(0, &[0; 8]));
+            bench.settle();
+            let _traffic = bench.next();
+            // More ends than the queue holds.
+            for round in 1..TX_DEPTH + 4 {
+                bench.send_msdu(msdu(0, &[u8::try_from(round).unwrap(); 8]));
+                bench.settle();
+                bench.advance(1_000);
+                bench.settle();
+            }
+            assert_eq!(bench.returned.len(), TX_DEPTH, "the queue is full");
+            let mut back = 0;
+            while bench.returned.try_receive_with(Option::take).is_ok() {
+                back += 1;
+            }
+            let told = Arc::new(Counter(AtomicUsize::new(0)));
+            let waker = Waker::from(told.clone());
+            let mut cx = core::task::Context::from_waker(&waker);
+            if armed {
+                let ready = core::pin::pin!(bench.returned.ready()).poll(&mut cx);
+                assert!(ready.is_pending(), "the queue is empty");
+            }
+            bench.settle();
+            let burst = bench.returned.len();
+            assert!(burst >= 2, "the rest come back together: {burst}");
+            assert_eq!(back + burst, bench.data_sent().len(), "every end is back");
+            if armed {
+                assert_eq!(told.0.load(Ordering::Relaxed), 1, "one wake for the burst");
+            } else {
+                let ready = core::pin::pin!(bench.returned.ready()).poll(&mut cx);
+                assert!(ready.is_ready(), "its arming finds the burst");
+                assert_eq!(told.0.load(Ordering::Relaxed), 0);
+            }
+        });
+    }
+}

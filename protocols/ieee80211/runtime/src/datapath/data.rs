@@ -457,7 +457,11 @@ where
     }
 
     /// Give the network the memory of ended frames while its queue has
-    /// room.
+    /// room, as one burst: a network waiting for its first return is told
+    /// once, after the burst's last ([`SlotSender::try_send_held_with`]),
+    /// so its turn finds all of them, a whole Block Ack's when the queue
+    /// holds it. The burst's end tells a network that armed meanwhile; one
+    /// that armed before any fill rechecks the queue at its arming.
     pub(super) fn return_freed<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -467,19 +471,24 @@ where
         &mut self,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) {
+        let mut burst = false;
         while network.returned.free_capacity() != 0 {
             let Some(memory) = self.data.freed.pop_front() else {
-                return;
+                break;
             };
             let mut memory = Some(memory);
-            let _sent = network.returned.try_send_with(|slot| {
+            let _sent = network.returned.try_send_held_with(|slot| {
                 *slot = memory.take();
                 Ok::<_, core::convert::Infallible>(())
             });
+            burst = true;
             if let Some(memory) = memory {
                 // The room was checked: the queue only keeps it when broken.
                 let _quarantined = core::mem::ManuallyDrop::new(memory);
             }
+        }
+        if burst {
+            network.returned.flush();
         }
     }
 }

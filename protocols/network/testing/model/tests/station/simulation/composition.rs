@@ -216,32 +216,45 @@ pub struct FreeMemory {
     /// port hands the end on.
     ended: RefCell<Completions<Memory, Ticket, { super::NETWORK_BUFFERS }>>,
     total: usize,
+    /// Each buffer's address, at its place: as the S31 names a frame by
+    /// its buffer's place among the network's.
+    places: Vec<usize>,
     waker: Cell<Option<Waker>>,
     /// Frames' ends the port handed on, with a known cost and without.
     settled: Cell<(usize, usize)>,
 }
 
-/// The name of a frame in transmit memory: its buffer's address, which no
-/// other buffer has while the station holds this one.
+/// The name of a frame in transmit memory: its buffer's place, below the
+/// buffers' count, which no other frame has while the station holds this
+/// one and until its end is handed on.
 pub type Ticket = usize;
 
 /// What the port tells the egress policy.
 pub type Notice = RadioNotice<Ticket, StationKey>;
 
-fn ticket_of(memory: &Memory) -> Ticket {
-    memory.as_ptr().addr()
-}
-
 impl FreeMemory {
     /// `total` buffers of an MPDU each.
     pub fn new(total: usize) -> Rc<Self> {
+        let free: Vec<Memory> = (0..total).map(|_| Box::new([0; MODEL_MAX_MPDU])).collect();
+        let places = free.iter().map(|memory| memory.as_ptr().addr()).collect();
         Rc::new(Self {
-            free: RefCell::new((0..total).map(|_| Box::new([0; MODEL_MAX_MPDU])).collect()),
+            free: RefCell::new(free),
             ended: RefCell::new(Completions::new()),
             settled: Cell::new((0, 0)),
             total,
+            places,
             waker: Cell::new(None),
         })
+    }
+
+    /// The place of `memory`, a buffer of these; past every place for any
+    /// other, which the policy refuses.
+    fn ticket_of(&self, memory: &Memory) -> Ticket {
+        let address = memory.as_ptr().addr();
+        self.places
+            .iter()
+            .position(|place| *place == address)
+            .unwrap_or(usize::MAX)
     }
 
     /// The memory no frame holds: free, or given back with an end the port
@@ -312,7 +325,7 @@ impl TxSupply<WrittenFrame> for Supply {
         Ok(frame.memory)
     }
     fn give(&mut self, memory: Memory, end: TxEnd) {
-        let ticket = ticket_of(&memory);
+        let ticket = self.0.ticket_of(&memory);
         // One end a buffer, and the queue holds every buffer.
         if let Err(memory) = self.0.ended.borrow_mut().returned(memory, ticket, end) {
             self.0.give(memory);
@@ -335,7 +348,7 @@ impl TxBuffers for Buffers<'_> {
     type Ticket = Ticket;
     type Notice = Notice;
     fn ticket(&self, frame: &WrittenFrame) -> Ticket {
-        ticket_of(&frame.memory)
+        self.free.ticket_of(&frame.memory)
     }
     fn take_notice(&mut self) -> Option<Notice> {
         let (notice, memory) = self

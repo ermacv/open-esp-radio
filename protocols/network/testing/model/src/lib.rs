@@ -99,10 +99,10 @@ struct State {
     broadcast: Spent,
     flows: BTreeMap<u16, Spent>,
     flights: VecDeque<Flight>,
-    depth: usize,
     now: u64,
     busy_until: u64,
-    /// Which places hold a frame whose notice was not taken.
+    /// Which places hold a frame whose notice was not taken: one place for
+    /// each frame the port holds at once.
     held: Vec<bool>,
     refusals: u32,
     refused: u64,
@@ -318,7 +318,6 @@ impl Medium {
             broadcast: Spent::default(),
             flows: BTreeMap::new(),
             flights: VecDeque::new(),
-            depth,
             now: 0,
             busy_until: 0,
             held: vec![false; depth],

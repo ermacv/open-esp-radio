@@ -52,10 +52,13 @@ pub type TxMemory = TxBacking<TX>;
 pub struct TxSlot(NetworkLease);
 
 impl TxSlot {
-    /// The buffer's index in the pool: it names the frame the buffer holds
-    /// until the station gives it back.
-    pub const fn index(&self) -> u8 {
-        self.0.index()
+    /// The buffer's place among the network's, below [`NETWORK_BUFFERS`]:
+    /// its pool index past the port's buffers. It names the frame the buffer
+    /// holds until the station gives it back, so a policy keeps that frame
+    /// at this place. A buffer of the port's, which the network never holds,
+    /// would wrap past every place, which a policy refuses.
+    pub const fn place(&self) -> u8 {
+        self.0.index().wrapping_sub(PORT_BUFFERS)
     }
 }
 

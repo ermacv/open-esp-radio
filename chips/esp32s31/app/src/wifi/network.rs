@@ -122,8 +122,10 @@ pub type NetworkBlock = Block<'static, Brand, BLOCK>;
 /// The port of the service over the station.
 type Port = DevicePort<wifi::Network<'static, Notifies>, Transmit, WifiBuffers>;
 
-/// Names a frame in the station's transmit buffers: its buffer's index,
-/// which no other frame has until the station gives the buffer back.
+/// Names a frame in the station's transmit buffers: its buffer's place
+/// among the network's ([`wifi::TxSlot::place`]), below
+/// [`wifi::NETWORK_BUFFERS`], which no other frame has until the station
+/// gives the buffer back and its end is handed on.
 pub type TxTicket = u8;
 /// What the port tells the egress policy.
 pub type TxNotice = RadioNotice<TxTicket, StationKey>;
@@ -406,7 +408,7 @@ impl FreeSlots {
     /// The station gave `slot` back, its frame ended so (`end`): it waits
     /// with that end for the port.
     fn ended(&self, slot: wifi::TxSlot, end: TxEnd) {
-        let ticket = slot.index();
+        let ticket = slot.place();
         let mut slot = Some(slot);
         // Only the network's task lends this, so a lend is never refused.
         let refused = self
@@ -527,7 +529,7 @@ impl TxSupply<TxPacket> for WifiTx {
     }
     fn write(&mut self, frame: TxPacket) -> Result<wifi::TxMemory, TxRefused<TxPacket>> {
         let WrittenFrame { slot, length } = frame;
-        let ticket = slot.index();
+        let ticket = slot.place();
         self.publisher
             .publish(slot, 0, length)
             .map_err(|refused| match refused {
@@ -561,7 +563,7 @@ impl TxBuffers for WifiBuffers {
     type Ticket = TxTicket;
     type Notice = TxNotice;
     fn ticket(&self, frame: &WrittenFrame) -> TxTicket {
-        frame.slot.index()
+        frame.slot.place()
     }
     fn take_notice(&mut self) -> Option<TxNotice> {
         FREE.take_notice(self.link.snapshot())
