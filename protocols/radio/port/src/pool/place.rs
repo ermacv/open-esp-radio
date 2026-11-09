@@ -52,8 +52,21 @@ impl<const N: usize> Place<N> {
         self.index
     }
 
-    /// Every place of a pool of `N`, in order.
+    /// Every place of a pool of `N`, in order. A pool holds at most 256
+    /// slots, so a larger `N` fails at instantiation:
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_protocols_radio_port::Place;
+    /// fn main() {
+    ///     let _ = Place::<257>::all().count();
+    /// }
+    /// ```
     pub fn all() -> impl Iterator<Item = Self> {
+        const {
+            if N > 256 {
+                panic!("a pool holds at most 256 tokens");
+            }
+        };
         (0..N).map(|index| Self {
             index: super::index_of(index),
         })

@@ -134,7 +134,10 @@ reinstall is `Failed(Reinstall)`. Before a reinstall or a release the
 actor's task runs the stopped port's cleanup once (`DataPort::clean_stopped`);
 one that did not finish, a group key entry the hardware still holds among
 them, keeps the port stopped with its owners and is `Reinstall(Cleanup)` or
-`ReleaseFailed(Cleanup)`, and nothing runs it again. After an ordinary stop
+`ReleaseFailed(Cleanup)`, and nothing runs it again. A removal receipt the
+cleanup frees comes back whole to the actor's task, which hands it on with
+its news; the facade keeps it past the release, refused or not (the port's
+release does not ask for it). After an ordinary stop
 the actor's task takes the stopped device's Wi-Fi frontier and membership
 cell and releases the radio. The station's exit is published only after that
 release, or once the stop's drain passed first: a cleanup that did not

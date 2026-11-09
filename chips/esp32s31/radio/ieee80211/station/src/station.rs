@@ -489,8 +489,10 @@ async fn lifecycles<W: Binding>(
                 }
                 return StationExit::Unavailable(error);
             }
-            radio::News::Reinstall(cause) => {
-                return StationExit::Failed(crate::failure::LifecycleFailure::Reinstall(cause));
+            radio::News::Reinstall { cause, returned } => {
+                let exit = StationExit::Failed(crate::failure::LifecycleFailure::Reinstall(cause));
+                drop(returned);
+                return exit;
             }
             radio::News::Released { .. } => {
                 return StationExit::Failed(crate::failure::LifecycleFailure::Mailbox);
@@ -533,12 +535,17 @@ async fn lifecycles<W: Binding>(
                     Some(radio::News::Released {
                         result,
                         network_lost,
-                    }) => released_exit(result, network_lost),
+                        returned,
+                    }) => {
+                        let exit = released_exit(result, network_lost);
+                        drop(returned);
+                        exit
+                    }
                     None => StationExit::ReleaseFailed(crate::failure::ReleaseCause::Deadline),
                     Some(
                         radio::News::Installed(..)
                         | radio::News::Unavailable(_)
-                        | radio::News::Reinstall(_),
+                        | radio::News::Reinstall { .. },
                     ) => StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
                 };
             }
@@ -555,10 +562,15 @@ async fn lifecycles<W: Binding>(
                     radio::News::Released {
                         result,
                         network_lost,
-                    } => released_exit(result, network_lost),
+                        returned,
+                    } => {
+                        let exit = released_exit(result, network_lost);
+                        drop(returned);
+                        exit
+                    }
                     radio::News::Installed(..)
                     | radio::News::Unavailable(_)
-                    | radio::News::Reinstall(_) => {
+                    | radio::News::Reinstall { .. } => {
                         StationExit::Failed(crate::failure::LifecycleFailure::Mailbox)
                     }
                 };

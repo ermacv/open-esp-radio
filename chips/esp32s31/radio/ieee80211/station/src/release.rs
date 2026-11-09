@@ -7,38 +7,54 @@ use core::{
 };
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
-    DataPort, LowerMacTerminal, PortSink, PortTypes, TbttEvent,
+    DataPort, LowerMacTerminal, PortSink, PortTypes, Removed, TbttEvent,
 };
 
-/// The stopped port's cleanup, once per call of its lifecycle owner, after
-/// a confirmed stop: the removal receipts it frees end here with the
-/// retiring installation's other tokens ([`Retiring`]).
-///
-/// # Errors
-///
-/// The cleanup did not finish: the port keeps its owners and stays
-/// stopped; nothing here calls it again.
-pub(crate) fn clean<'id, P>(port: &mut P) -> Result<(), crate::failure::CleanupCause>
-where
-    P: DataPort<'id, Fault = oer_chips_esp32s31_radio_ieee80211_backend::port::Fault>,
-{
-    port.clean_stopped(&mut Retiring)
-        .map_err(crate::failure::convert::cleanup)
+/// What one call of the stopped port's cleanup did: its result, and the
+/// removal receipt it freed, whose slot and permission the composition
+/// that called it keeps, past the port's final retire, and on a refused
+/// retire or reinstall too.
+#[must_use = "the cleanup's receipt holds a slot and a permission"]
+pub(crate) struct Cleaned<'id, T: PortTypes<'id>> {
+    pub result: Result<(), crate::failure::CleanupCause>,
+    pub removed: Option<Removed<'id, T>>,
 }
 
-/// The sink of a retiring port's cleanup. It takes a removal receipt,
-/// whose slot and permission end with the installation the port retires,
-/// and refuses every other item whole: the port keeps it, and then does
-/// not retire.
-struct Retiring;
+/// The stopped port's cleanup, once per call of its lifecycle owner, after
+/// a confirmed stop. A removal receipt it frees comes back whole to the
+/// caller ([`Cleaned::removed`]); nothing here calls it again.
+pub(crate) fn clean<'id, P>(port: &mut P) -> Cleaned<'id, P::Types>
+where
+    P: DataPort<'id, Fault = oer_chips_esp32s31_radio_ieee80211_backend::port::Fault>,
+    P::Types: PortTypes<'id>,
+{
+    let mut sink = Returning { removed: None };
+    let result = port
+        .clean_stopped(&mut sink)
+        .map_err(crate::failure::convert::cleanup);
+    Cleaned {
+        result,
+        removed: sink.removed,
+    }
+}
 
-impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Retiring {
+/// The sink of a stopped port's cleanup: one place for the removal receipt
+/// it frees. A second receipt and every other item are refused whole: the
+/// port keeps them, and then does not retire.
+struct Returning<'id, T: PortTypes<'id>> {
+    removed: Option<Removed<'id, T>>,
+}
+
+impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Returning<'id, T> {
     fn terminal(
         &mut self,
         terminal: LowerMacTerminal<'id, T>,
     ) -> Result<(), LowerMacTerminal<'id, T>> {
         match terminal {
-            LowerMacTerminal::KeyRemoved(_removed) => Ok(()),
+            LowerMacTerminal::KeyRemoved(removed) if self.removed.is_none() => {
+                self.removed = Some(removed);
+                Ok(())
+            }
             other => Err(other),
         }
     }

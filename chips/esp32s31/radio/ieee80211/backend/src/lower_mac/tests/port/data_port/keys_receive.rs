@@ -899,6 +899,88 @@ fn a_failed_rollbacks_entry_is_cleared_once_and_then_only_read_until_it_reads_cl
     });
 }
 
+/// The port's release does not ask for a cleanup receipt's owners: a
+/// caller that dropped the receipt before it would still see the port
+/// retire. So the receipt leaves whole to the caller's sink, and the caller
+/// keeps the very slot and permission past the release.
+#[test]
+fn a_cleanup_receipt_leaves_whole_to_its_caller_and_outlives_the_release() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        fixture.observed.borrow_mut().reject_key_writes = 2;
+        assert!(matches!(
+            fixture.run_failed(replace),
+            Err(CommandFailed::Taken(_))
+        ));
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        assert!(fixture.clean().is_ok());
+        let index = fixture
+            .outbox
+            .terminals
+            .iter()
+            .position(|terminal| group_terminal::<_>(terminal).is_some())
+            .expect("the receipt is in the caller's sink");
+        let receipt = fixture.outbox.terminals.remove(index);
+        assert_eq!(
+            group_terminal::<_>(&receipt),
+            Some((Mutation::Remove, owners.0, owners.1))
+        );
+        // Not enforced by the port: the release succeeds with the receipt
+        // out, whether its holder keeps it or dropped it.
+        retires(fixture);
+        assert_eq!(
+            group_terminal::<_>(&receipt),
+            Some((Mutation::Remove, owners.0, owners.1)),
+            "the caller still holds the owners after the release"
+        );
+        drop(receipt);
+    });
+}
+
+/// A stopped port that holds a fault runs no cleanup: the refusal names
+/// that exact fault, clears nothing and frees nothing; the owners stay
+/// retained and the port does not retire.
+#[test]
+fn a_faulted_stopped_port_refuses_its_cleanup_with_its_fault_and_clears_nothing() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        fixture.observed.borrow_mut().reject_key_writes = 2;
+        assert!(matches!(
+            fixture.run_failed(replace),
+            Err(CommandFailed::Taken(_))
+        ));
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        fixture.port.fault_for_test(Fault::Abandoned);
+        let clears = fixture.observed.borrow().key_clears;
+        for _ in 0..2 {
+            assert_eq!(
+                fixture.clean(),
+                Err(CleanupRefused::Faulted(Fault::Abandoned)),
+                "the exact cause"
+            );
+        }
+        assert_eq!(
+            fixture.observed.borrow().key_clears,
+            clears,
+            "nothing cleared"
+        );
+        assert!(fixture.group_terminals().is_empty(), "nothing freed");
+        assert_eq!(
+            fixture.port.retained_group().0,
+            Some(owners),
+            "the owners stay in place"
+        );
+        assert_eq!(fixture.port.fault(), Some(Fault::Abandoned));
+        assert!(fixture.stopped_release_refused());
+    });
+}
+
 #[test]
 fn a_received_unit_keeps_its_bytes_and_owner_until_it_is_recycled() {
     with_installations(|mut fixture, _| {

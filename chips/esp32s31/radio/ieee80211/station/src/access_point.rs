@@ -724,8 +724,11 @@ async fn retire<W: Binding>(
         slot.ended
             .set(Some(ApExit::ReleaseRefused { ended, cause }))
     };
-    let released = radio::release::<W>(runner.port_mut(), refused).await;
+    // The cleanup's removal receipt stays here with the runner's owners,
+    // past the release, refused or not.
+    let (released, returned) = radio::release::<W>(runner.port_mut(), refused).await;
     drop(unrecycled);
+    drop(returned);
     match (ended, finished, released) {
         // A refusal the stop found after another cause.
         (ended, Err(fault), released) if !matches!(ended, ApEnded::Unrecycled(_)) => {

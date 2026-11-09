@@ -1120,14 +1120,20 @@ fn joined_with<T: 'static>(
             });
             // The facade's `release`: the stopped port's cleanup, then the
             // port's release.
+            // Its receipt, if one, stays here past the release.
             let cleaned = crate::release::clean(actor.port_mut());
-            match cleaned.ok().and_then(|()| actor.port_mut().release()) {
+            match cleaned
+                .result
+                .ok()
+                .and_then(|()| actor.port_mut().release())
+            {
                 Some(device) => {
                     ends.released = Some(true);
                     ends.frontier = device.take_stopped().map(|(frontier, ())| frontier);
                 }
                 None => ends.released = Some(false),
             }
+            drop(cleaned.removed);
         };
         let mut actor_task = pin!(actor_task);
 
