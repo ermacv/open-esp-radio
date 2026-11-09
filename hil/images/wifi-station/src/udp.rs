@@ -22,9 +22,9 @@ use core::task::{Context, Poll};
 use embassy_futures::select::{Either, select};
 use heapless::Vec;
 use oer::wifi::{
-    self, AtomicWaker, ClaimCell, Declined, Delivered, Interest, Ipv4, LendingSocket as Socket,
-    LocalEnd, NetworkBlock, NetworkInstant, Next, Offer, Outcome, Produce, Refusal, Refused,
-    Remote, SendRefusal, WatchRefused, Work,
+    self, AtomicWaker, ClaimCell, Declined, Delivered, FrameLengthError, Interest, Ipv4,
+    LendingSocket as Socket, LocalEnd, NetworkBlock, NetworkInstant, Next, Offer, Outcome, Produce,
+    Refusal, Refused, Remote, SendRefusal, WatchRefused, Work,
 };
 use oer_hil_services_load::header::{self, Header};
 use oer_hil_services_load::{LoadError, Start};
@@ -704,13 +704,17 @@ impl Drop for Packet<'_, '_> {
 }
 
 impl Packet<'_, '_> {
-    /// The datagram's data; none of a lent buffer that no longer holds what
-    /// the station showed, which breaks its contract.
-    pub(crate) fn payload(&mut self) -> &[u8] {
+    /// The datagram's data.
+    ///
+    /// # Errors
+    /// [`FrameLengthError`]: a lent buffer no longer holds what the station
+    /// showed, which breaks its contract. The buffer still goes back as this
+    /// ends.
+    pub(crate) fn payload(&mut self) -> Result<&[u8], FrameLengthError> {
         match self.datagram.as_mut() {
-            Some(Delivered::Copied(datagram)) => datagram.block.octets(),
-            Some(Delivered::Lent(lent)) => lent.data().unwrap_or_default(),
-            None => &[],
+            Some(Delivered::Copied(datagram)) => Ok(datagram.block.octets()),
+            Some(Delivered::Lent(lent)) => lent.data(),
+            None => Ok(&[]),
         }
     }
 

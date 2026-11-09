@@ -207,6 +207,9 @@ pub struct Received {
     /// Datagrams on the port that are not the run's load: another run, no
     /// header, or too short.
     pub foreign: u64,
+    /// Lent datagrams whose buffer no longer held what the station showed:
+    /// a broken device contract, counted apart from `foreign`.
+    pub unreadable: u64,
     /// Echo replies the image sent, and those its socket refused.
     pub echoed: u64,
     pub echo_refused: u64,

@@ -45,8 +45,7 @@ use oer_protocols_network_core::{
     ClaimRefused, Group, Interface, InterfaceError, NetworkOwner, OpenRefused, Retired, claim,
 };
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, TransmitError, TransmitRefused, TxStorage,
-    Unpublished,
+    EthernetFrame, EthernetFrameView, TransmitError, TransmitRefused, TxStorage, Unpublished,
 };
 use oer_protocols_network_runtime::ConfigurationWatch;
 use oer_protocols_network_runtime::{
@@ -65,6 +64,8 @@ pub use oer_protocols_network_core::{
     Block, Configuration, Datagram, Declined, DhcpState, Ipv4, Lease, Outcome, Remote, SendRefusal,
     WorkId,
 };
+/// Why a lent buffer no longer holds what the station showed.
+pub use oer_protocols_network_port::FrameLengthError;
 pub use oer_protocols_network_runtime::{
     Interest, LocalEnd, Next, Observer, Offer, Produce, RESERVE_AHEAD, Refusal, Refused,
     SocketClosed, WatchRefused, Work,

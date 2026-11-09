@@ -100,7 +100,7 @@ impl FramePort for Port {
 impl FrameSource for Port {
     type Notice = ();
 
-    type Held = oer_protocols_network_port::NeverHeld;
+    type Held = wifi::HostHeld;
     fn take_frame(
         &mut self,
         read: impl FnOnce(

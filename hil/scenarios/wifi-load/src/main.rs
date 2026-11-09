@@ -1594,6 +1594,7 @@ fn measurement(
                 "duplicates": device.duplicates,
                 "untracked": device.untracked,
                 "foreign": device.foreign,
+                "unreadable": device.unreadable,
             }),
         );
     }

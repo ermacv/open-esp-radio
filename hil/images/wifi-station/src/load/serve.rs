@@ -429,17 +429,20 @@ async fn receive(
         socket.ready().await;
         while let Some(mut packet) = socket.take() {
             let now = now_us();
-            match classify(packet.payload(), run) {
+            // An unreadable lent buffer is counted as such, and goes back to
+            // the station as its packet drops.
+            let (kind, length) = match packet.payload() {
+                Ok(payload) => (classify(payload, run), payload.len()),
+                Err(_broken) => {
+                    counts.unreadable();
+                    continue;
+                }
+            };
+            match kind {
                 Datagram::Echo(header) => counts.echo(packet.echo(echo(header)).await),
                 Datagram::Load(header) => {
                     window.socket.datagram(now);
-                    counts.load(
-                        tally,
-                        header.sequence,
-                        packet.payload().len(),
-                        now,
-                        window.contains(now),
-                    );
+                    counts.load(tally, header.sequence, length, now, window.contains(now));
                 }
                 Datagram::Foreign => counts.foreign(),
             }

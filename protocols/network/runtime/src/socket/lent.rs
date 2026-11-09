@@ -281,6 +281,7 @@ pub(crate) fn lending_lanes<
         LendingSocket {
             socket,
             lent: receiver,
+            copy_next: false,
         },
         end,
         LentEnd {
@@ -292,9 +293,11 @@ pub(crate) fn lending_lanes<
 }
 
 /// What an application holds of a lending socket: a [`Socket`], whose
-/// receiving takes lent datagrams too. Dropping it drops the lent datagrams
-/// it holds, then the socket; a [`Lent`] in the application's hands stays
-/// there, and its loan counts until it drops.
+/// receiving takes lent datagrams too. Its two lanes take turns: while both
+/// hold a datagram, receives alternate between them, so a copy waits behind
+/// at most one loan, and a loan behind at most one copy. Dropping it drops
+/// the lent datagrams it holds, then the socket; a [`Lent`] in the
+/// application's hands stays there, and its loan counts until it drops.
 pub struct LendingSocket<
     'a,
     'm,
@@ -307,6 +310,9 @@ pub struct LendingSocket<
 > {
     socket: Socket<'a, 'm, B, SIZE, DEPTH, RECEIVED, CREDITS>,
     lent: WakingSpscReceiver<'a, Lent<'a, H>, RECEIVED>,
+    /// The copies' lane goes first at the next receive: the last one took a
+    /// loan.
+    copy_next: bool,
 }
 
 impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, const CREDITS: usize, H> Drop
@@ -343,18 +349,15 @@ impl<
         loop {
             // In this order: nothing follows a close in the lanes.
             self.socket.take_answers();
-            if let Some(lent) = self.lent.try_receive() {
-                return Ok(Received::Lent(lent));
-            }
-            let Some(inbound) = &mut self.socket.inbound else {
-                return Err(SocketClosed);
-            };
-            if let Some(datagram) = inbound.datagrams.try_receive() {
-                return Ok(Received::Copied(datagram));
+            if let Some(received) = self.take() {
+                return Ok(received);
             }
             if self.socket.closed {
                 return Err(SocketClosed);
             }
+            let Some(inbound) = &mut self.socket.inbound else {
+                return Err(SocketClosed);
+            };
             let _any = select4(
                 self.lent.ready(),
                 inbound.datagrams.ready(),
@@ -368,9 +371,173 @@ impl<
     /// [`Self::receive`] without waiting: the next datagram if one is here.
     pub fn try_receive(&mut self) -> Option<Received<'a, 'm, B, SIZE, H>> {
         self.socket.take_answers();
-        if let Some(lent) = self.lent.try_receive() {
-            return Some(Received::Lent(lent));
+        self.take()
+    }
+
+    /// The next datagram of the two lanes, the one whose turn it is first.
+    fn take(&mut self) -> Option<Received<'a, 'm, B, SIZE, H>> {
+        let lent = &self.lent;
+        let copies = self
+            .socket
+            .inbound
+            .as_ref()
+            .map(|inbound| &inbound.datagrams);
+        let copied = || {
+            copies
+                .and_then(|lane| lane.try_receive())
+                .map(Received::Copied)
+        };
+        let loaned = || lent.try_receive().map(Received::Lent);
+        let received = if self.copy_next {
+            copied().or_else(loaned)
+        } else {
+            loaned().or_else(copied)
+        };
+        self.copy_next = matches!(received, Some(Received::Lent(_)));
+        received
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+
+    use std::boxed::Box;
+    use std::vec::Vec;
+
+    use oer_protocols_network_core::{Datagram, Pool, Remote, claim};
+    use oer_protocols_network_port::{EthernetFrame, EthernetFrameView, FrameLengthError};
+
+    use super::{LendingLanes, LendingSocket, LentDatagram, LentEnd, Received, lending_lanes};
+    use crate::socket::ServiceEnd;
+
+    const SIZE: usize = 64;
+    const LANE: usize = 16;
+    const PEER: Remote = Remote {
+        address: [192, 0, 2, 2],
+        port: 7,
+    };
+
+    /// A lent buffer of the test's own: its octets are its payload.
+    struct Frame(Vec<u8>);
+
+    impl EthernetFrame for Frame {
+        fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+            Ok(EthernetFrameView {
+                destination: [2; 6],
+                source: [4; 6],
+                ether_type: 0x0800,
+                payload: &self.0,
+            })
         }
-        self.socket.try_receive().map(Received::Copied)
+    }
+
+    type Socket<B> = LendingSocket<'static, 'static, B, SIZE, 4, LANE, 2, Frame>;
+
+    struct Ends<B: 'static> {
+        socket: Socket<B>,
+        end: ServiceEnd<'static, 'static, B, SIZE, 4, LANE, 2>,
+        lent: LentEnd<'static, B, Frame, LANE>,
+        pool: Pool<'static, B, SIZE, 1>,
+    }
+
+    fn ends<B: 'static>() -> Ends<B> {
+        let memory = Box::leak(Box::new([[0; SIZE]; 1]));
+        let (mut pool, _brand) = claim::<B, SIZE, 1>(memory).unwrap();
+        pool.loans().pool(LANE, 0).unwrap();
+        pool.loans().grant(0, LANE).unwrap();
+        let storage = Box::leak(Box::new(LendingLanes::new()));
+        let (socket, end, lent) = lending_lanes(storage);
+        Ends {
+            socket,
+            end,
+            lent,
+            pool,
+        }
+    }
+
+    /// A format copy arrives first, then `LANE` loans.
+    fn copy_then_loans<B>(ends: &mut Ends<B>) {
+        let mut block = ends.pool.take().unwrap();
+        block.fill(b"copy").unwrap();
+        assert!(
+            ends.end
+                .datagrams
+                .try_send(Datagram {
+                    remote: PEER,
+                    block,
+                })
+                .is_ok()
+        );
+        for n in 0..LANE {
+            let loan = ends.pool.loans().lend(0).unwrap();
+            let datagram = LentDatagram {
+                flow: 0,
+                remote: PEER,
+                data: 0..1,
+                frame: Frame(std::vec![n as u8]),
+                loan,
+            };
+            ends.lent.lend(datagram, ends.pool.loans()).unwrap();
+        }
+    }
+
+    /// What each receive gave: `true` for the copy.
+    fn order<B>(
+        mut receive: impl FnMut() -> Option<Received<'static, 'static, B, SIZE, Frame>>,
+    ) -> Vec<bool> {
+        core::iter::from_fn(|| receive())
+            .map(|received| matches!(received, Received::Copied(_)))
+            .collect()
+    }
+
+    #[test]
+    fn a_copy_behind_loans_comes_within_two_tries() {
+        struct Net;
+        let mut ends = ends::<Net>();
+        copy_then_loans(&mut ends);
+        let socket = &mut ends.socket;
+        let order = order(|| socket.try_receive());
+        assert_eq!(order.len(), LANE + 1, "everything comes");
+        assert_eq!(order.iter().position(|copy| *copy), Some(1));
+    }
+
+    #[test]
+    fn a_copy_behind_loans_comes_within_two_receives() {
+        struct Net;
+        let mut ends = ends::<Net>();
+        copy_then_loans(&mut ends);
+        let socket = &mut ends.socket;
+        let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
+        let order = order(|| {
+            let mut receive = core::pin::pin!(socket.receive());
+            match receive.as_mut().poll(cx) {
+                core::task::Poll::Ready(received) => received.ok(),
+                core::task::Poll::Pending => None,
+            }
+        });
+        assert_eq!(order.len(), LANE + 1, "everything comes");
+        assert_eq!(order.iter().position(|copy| *copy), Some(1));
+    }
+
+    #[test]
+    fn while_both_lanes_hold_datagrams_receives_alternate() {
+        struct Net;
+        let mut ends = ends::<Net>();
+        copy_then_loans(&mut ends);
+        let first = ends.socket.try_receive();
+        assert!(matches!(first, Some(Received::Lent(_))));
+        let Some(Received::Copied(copy)) = ends.socket.try_receive() else {
+            panic!("the copy's turn");
+        };
+        assert_eq!(copy.block.octets(), b"copy");
+        // A second copy waits behind one loan only.
+        assert!(ends.end.datagrams.try_send(copy).is_ok());
+        assert!(matches!(ends.socket.try_receive(), Some(Received::Lent(_))));
+        assert!(matches!(
+            ends.socket.try_receive(),
+            Some(Received::Copied(_))
+        ));
+        drop(first);
     }
 }
