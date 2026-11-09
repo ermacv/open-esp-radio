@@ -1,3 +1,8 @@
+use oer_tools_lab_client::protocol::station_link::{
+    StationLink,
+    queue::{Counts, Kind, Observed, Scope, Unit},
+};
+
 use super::*;
 use crate::station::link::parse_link;
 
@@ -47,13 +52,6 @@ fn station(tid0: &str, tid7: &str) -> String {
 
 fn read(text: &str) -> StationLink {
     parse_link(text).unwrap()
-}
-
-fn delta(change: Change) -> i64 {
-    match change {
-        Change::Valid(delta) => delta.change,
-        other => panic!("not valid: {other:?}"),
-    }
 }
 
 #[test]
@@ -215,172 +213,6 @@ fn a_file_its_header_does_not_describe_refuses_the_observation() {
 }
 
 #[test]
-fn the_balance_takes_the_whole_tid_0_and_never_adds_overlimit_operations() {
-    let start = read(&answer(
-        "10.00",
-        Some("5.000s"),
-        1000,
-        "10.02",
-        &station("1500 1 3 4 0 2 0 9000 6", "0 0 2 0 0 0 0 322 2"),
-        RADIO,
-    ));
-    // 500 more entered: TID 0 dequeued 400, CoDel dropped 30 and its
-    // backlog grew by 20; TID 7 dequeued 1; 3 more overlimit operations.
-    let end = read(&answer(
-        "16.00",
-        Some("5.000s"),
-        1500,
-        "16.03",
-        &station("31500 21 9 34 1 5 0 609000 406", "0 0 3 0 0 0 0 483 3"),
-        &RADIO.replace("fq_overmemory 9", "fq_overmemory 12"),
-    ));
-    let queues = window(&start, &end);
-    assert_eq!(queues.association, Association::Same);
-    let tid0 = queues.tids.get(&0).unwrap();
-    assert_eq!(delta(tid0.tx_packets), 400);
-    assert_eq!(delta(tid0.drops), 30);
-    assert_eq!(delta(tid0.backlog_packets), 20);
-    assert_eq!(delta(tid0.overlimit), 3);
-    let Change::Valid(overlimit) = tid0.overlimit else {
-        panic!("{:?}", tid0.overlimit);
-    };
-    assert_eq!(
-        (overlimit.unit, overlimit.from_ms, overlimit.to_ms),
-        (Unit::Operation, 10_020, 16_030)
-    );
-    assert_eq!(delta(queues.balance.entry), 500);
-    // 500 − (400 + 30 + 20) − 1 (TID 7): the 3 operations stay out.
-    assert_eq!(queues.balance.remainder, Remainder::Packets(49));
-    assert_eq!(queues.balance.skew_ms, Some(30));
-    let Change::Valid(radio) = *queues.radio.get("fq_overmemory").unwrap() else {
-        panic!("the radio's counter");
-    };
-    assert_eq!((radio.change, radio.scope), (3, Scope::Radio));
-    // A draining backlog adds to what the queue accounts.
-    let drained = read(&answer(
-        "16.00",
-        Some("5.000s"),
-        1500,
-        "16.03",
-        &station("0 0 9 34 1 5 0 609000 426", "0 0 3 0 0 0 0 483 3"),
-        RADIO,
-    ));
-    let queues = window(&start, &drained);
-    assert_eq!(delta(queues.tids.get(&0).unwrap().backlog_packets), -1);
-    assert_eq!(queues.balance.remainder, Remainder::Packets(50));
-    let json = serde_json::to_value(&queues).unwrap();
-    assert_eq!(serde_json::from_value::<QueueWindow>(json).unwrap(), queues);
-}
-
-#[test]
-fn a_counter_that_went_back_invalidates_its_change_and_leaves_the_balance_open() {
-    let file = |tx: &str| station(&format!("0 0 3 4 0 0 0 9000 {tx}"), "0 0 0 0 0 0 0 0 0");
-    let start = read(&answer(
-        "1.00",
-        Some("0.500s"),
-        100,
-        "1.00",
-        &file("60"),
-        RADIO,
-    ));
-    let end = read(&answer(
-        "2.00",
-        Some("0.500s"),
-        200,
-        "2.00",
-        &file("5"),
-        &RADIO.replace("fq_collisions 18", "fq_collisions 2"),
-    ));
-    let queues = window(&start, &end);
-    assert_eq!(queues.association, Association::Same);
-    let tid0 = queues.tids.get(&0).unwrap();
-    assert_eq!(tid0.tx_packets, Change::Invalid(Invalid::WentBack));
-    assert_eq!(delta(tid0.drops), 0, "the others stay valid");
-    assert!(matches!(queues.balance.remainder, Remainder::Open(_)));
-    assert_eq!(
-        *queues.radio.get("fq_collisions").unwrap(),
-        Change::Invalid(Invalid::WentBack)
-    );
-    // A level may fall.
-    assert_eq!(delta(*queues.radio.get("fq_backlog").unwrap()), 0);
-}
-
-#[test]
-fn a_new_association_invalidates_the_station_s_changes_but_not_the_radio_s() {
-    let file = station("0 0 3 4 0 0 0 9000 60", "0 0 0 0 0 0 0 0 0");
-    let start = read(&answer("1.00", Some("0.500s"), 100, "1.00", &file, RADIO));
-    let later = station("0 0 9 8 0 0 0 19000 90", "0 0 0 0 0 0 0 0 0");
-    let rejoined = read(&answer(
-        "9.00",
-        Some("8.500s"),
-        900,
-        "9.00",
-        &later,
-        &RADIO.replace("fq_overmemory 9", "fq_overmemory 10"),
-    ));
-    let queues = window(&start, &rejoined);
-    assert_eq!(queues.association, Association::Changed);
-    let tid0 = queues.tids.get(&0).unwrap();
-    for change in [
-        tid0.tx_packets,
-        tid0.drops,
-        tid0.overlimit,
-        tid0.backlog_packets,
-    ] {
-        assert_eq!(change, Change::Invalid(Invalid::Reassociated));
-    }
-    assert_eq!(queues.balance.entry, Change::Invalid(Invalid::Reassociated));
-    assert!(matches!(queues.balance.remainder, Remainder::Open(_)));
-    assert_eq!(delta(*queues.radio.get("fq_overmemory").unwrap()), 1);
-    let unconfirmed = read(&answer("9.00", None, 900, "9.00", &later, RADIO));
-    let queues = window(&start, &unconfirmed);
-    assert_eq!(queues.association, Association::Unconfirmed);
-    assert_eq!(
-        queues.tids.get(&0).unwrap().tx_packets,
-        Change::Invalid(Invalid::AssociationUnconfirmed)
-    );
-}
-
-#[test]
-fn a_value_one_read_lacks_is_unavailable_and_leaves_the_balance_open() {
-    let start = read(&answer(
-        "1.00",
-        Some("0.500s"),
-        100,
-        "1.00",
-        &station("0 0 3 4 0 0 0 9000 60", "0 0 0 0 0 0 0 0 0"),
-        "",
-    ));
-    let end = read(&answer(
-        "2.00",
-        Some("0.500s"),
-        200,
-        "2.00",
-        "tid tx-packets drops\n0 90 4\n7 0 0\n",
-        RADIO,
-    ));
-    let queues = window(&start, &end);
-    let tid0 = queues.tids.get(&0).unwrap();
-    assert_eq!(delta(tid0.tx_packets), 30);
-    assert_eq!(tid0.backlog_packets, Change::Unavailable);
-    assert_eq!(tid0.overlimit, Change::Unavailable);
-    assert!(matches!(queues.balance.remainder, Remainder::Open(_)));
-    assert!(
-        queues
-            .radio
-            .values()
-            .all(|change| *change == Change::Unavailable),
-        "the start had no radio file"
-    );
-    let none = read(&answer("1.00", Some("0.500s"), 100, "1.00", "", ""));
-    let queues = window(&none, &none);
-    assert!(queues.tids.is_empty() && queues.radio.is_empty());
-    assert_eq!(delta(queues.balance.entry), 0);
-    assert!(matches!(queues.balance.remainder, Remainder::Open(_)));
-    assert_eq!(queues.balance.skew_ms, None);
-}
-
-#[test]
 fn the_clock_reads_hundredths_of_seconds() {
     assert_eq!(parse_clock("508749.69").unwrap(), 508_749_690);
     assert_eq!(parse_clock("0.05").unwrap(), 50);
@@ -390,82 +222,28 @@ fn the_clock_reads_hundredths_of_seconds() {
 }
 
 #[test]
-fn a_station_change_across_a_router_clock_that_went_back_is_invalid() {
-    // The owner's counterexample: the first read at 100 s with the counter
-    // at 100, the second at 5 s with it already at 200, the association
-    // time numerically equal.
-    let file = |tx: u64| station(&format!("0 0 0 0 0 0 0 0 {tx}"), "0 0 0 0 0 0 0 0 0");
+fn two_parsed_reads_make_the_client_s_window() {
+    use oer_tools_lab_client::protocol::station_link::queue::{Change, Remainder, window};
     let start = read(&answer(
-        "100.00",
-        Some("1.000s"),
-        100,
-        "100.00",
-        &file(100),
-        "",
+        "10.00",
+        Some("5.000s"),
+        1000,
+        "10.02",
+        &station("1500 1 3 4 0 2 0 9000 6", "0 0 2 0 0 0 0 322 2"),
+        RADIO,
     ));
-    let end = read(&answer("5.00", Some("1.000s"), 200, "5.00", &file(200), ""));
-    let queues = window(&start, &end);
-    assert_eq!(queues.association, Association::Same);
-    assert_eq!(
-        queues.balance.entry,
-        Change::Invalid(Invalid::ClockWentBack)
-    );
-    let tid0 = queues.tids.get(&0).unwrap();
-    for change in [
-        tid0.tx_packets,
-        tid0.drops,
-        tid0.backlog_packets,
-        tid0.overlimit,
-    ] {
-        assert_eq!(change, Change::Invalid(Invalid::ClockWentBack));
-    }
-    assert_eq!(
-        queues.tids.get(&7).unwrap().tx_packets,
-        Change::Invalid(Invalid::ClockWentBack)
-    );
-    assert!(matches!(queues.balance.remainder, Remainder::Open(_)));
-    // Equal times stand: the clock steps 10 ms.
-    let same_tick = read(&answer(
-        "100.00",
-        Some("1.000s"),
-        200,
-        "100.00",
-        &file(200),
-        "",
+    let end = read(&answer(
+        "16.00",
+        Some("5.000s"),
+        1500,
+        "16.03",
+        &station("31500 21 9 34 1 5 0 609000 406", "0 0 3 0 0 0 0 483 3"),
+        &RADIO.replace("fq_overmemory 9", "fq_overmemory 12"),
     ));
-    let queues = window(&start, &same_tick);
-    assert_eq!(delta(queues.balance.entry), 100);
-    assert_eq!(delta(queues.tids.get(&0).unwrap().tx_packets), 100);
-    assert_eq!(queues.balance.remainder, Remainder::Packets(0));
-}
-
-#[test]
-fn a_radio_change_across_a_router_clock_that_went_back_is_invalid() {
-    // The owner's counterexample on the radio: 100 at 100 s, 200 at 5 s.
-    let radio = |count: u64| RADIO.replace("fq_overmemory 9", &format!("fq_overmemory {count}"));
-    let start = read(&answer("100.00", None, 1, "100.00", "", &radio(100)));
-    let end = read(&answer("5.00", None, 1, "5.00", "", &radio(200)));
     let queues = window(&start, &end);
-    assert_eq!(
-        *queues.radio.get("fq_overmemory").unwrap(),
-        Change::Invalid(Invalid::ClockWentBack)
-    );
-    assert!(
-        queues
-            .radio
-            .values()
-            .all(|change| *change == Change::Invalid(Invalid::ClockWentBack)),
-        "every radio value"
-    );
-    // Its own read's clock suffices, though the station's went forward.
-    let late = read(&answer("200.00", None, 1, "5.00", "", &radio(200)));
-    assert_eq!(
-        *window(&start, &late).radio.get("fq_overmemory").unwrap(),
-        Change::Invalid(Invalid::ClockWentBack)
-    );
-    let forward = read(&answer("100.00", None, 1, "100.00", "", &radio(200)));
-    assert_eq!(
-        delta(*window(&start, &forward).radio.get("fq_overmemory").unwrap()),
-        100
-    );
+    assert_eq!(queues.balance.remainder, Remainder::Packets(49));
+    assert!(matches!(
+        queues.radio.get("fq_overmemory"),
+        Some(Change::Valid(delta)) if delta.change == 3
+    ));
 }

@@ -452,7 +452,10 @@ are those of mac80211 in backports v6.18.26, the router's
   `fq->overlimit` (every drop operation) as `fq_overmemory`;
 - the radio's values are every station's and never one station's.
 
-`station::link::queue::window` takes two such reads: each value's change, or
+The record (`StationLink`, its rates, survey and queues) is the client
+protocol's answer type, `oer_tools_lab_client::protocol::station_link`:
+this crate runs the commands and parses their text into it. The client's
+`station_link::queue::window` takes two such reads: each value's change, or
 why there is none (a read lacks it, the router's boot clock went back
 between the reads, the station associated again, its association time is
 missing, a counter went back by a reset or a 32-bit wrap). Equal clock

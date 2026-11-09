@@ -189,7 +189,17 @@ transmissions per MPDU. RX and TX stay the image's.
   driver's names (`dot11FCSErrorCount`, `dot11RTSSuccessCount`,
   `dot11RTSFailureCount`, `ba_miss`): the whole radio's, not the station's.
   A count the driver does not report, or one that went back, is null; when the router gives no view, `router` is `{"unavailable":
-  why}`. A `last_bitrate` is one frame's, at the span's end.
+  why}` with `queues` and `answers`. A `last_bitrate` is one frame's, at the span's end.
+  `answers` keeps both readings whole: `start` and `end`, each
+  `{"answer": …}` as the router gave it or `{"error": why}` for a read
+  that gave none. `queues` is the access point's queues between them
+  (`oer_tools_lab_client::protocol::station_link::queue::window`): the
+  `association`, each TID's and the radio's changes (`valid` with its unit,
+  scope and times, `unavailable`, or `invalid` with its reason such as
+  `clock-went-back`, `reassociated` or `went-back`) and the `balance`. When
+  a read gave no answer or its answer is not the client's station link (an
+  older LAB service's), `queues` is `{"unavailable": [why, …]}`, one reason
+  per read, and no value is made up.
 - `device` is the image's count over its window, from its trace build
   (zeros otherwise). `rx`: the data MPDUs addressed to the station that
   reached its port, by their PPDU's rate as the receive metadata decodes
