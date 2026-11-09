@@ -253,6 +253,18 @@ impl<W: Binding> DatapathPort<'static> for ActorPort<W> {
             oer_portable_trace::observe!(observer, crate::observation::ActorReturned::of(burst));
         }
     }
+    const OBSERVES_INTAKE: bool = cfg!(oer_trace);
+    #[cfg_attr(
+        not(oer_trace),
+        allow(unused_variables, reason = "only a trace build observes the intake")
+    )]
+    fn took_in(msdus: usize) {
+        #[cfg(oer_trace)]
+        {
+            let observer = W::DriverObserver::default();
+            oer_portable_trace::observe!(observer, crate::observation::ActorTookIn::of(msdus));
+        }
+    }
     #[cfg_attr(
         not(oer_trace),
         allow(unused_variables, reason = "only a trace build observes the unit")

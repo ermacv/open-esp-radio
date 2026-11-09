@@ -109,3 +109,34 @@ fn a_frame_no_ppdu_carries_asks_the_most_never_a_near_zero_grant() {
         assert!(costs.least(length, one).get() > 1, "{length}");
     }
 }
+
+/// What a trace build reports as a miss is exactly an answer computed
+/// rather than kept: the same query again keeps it, any other input of the
+/// one entry computes it, and alternating lengths miss every time, for the
+/// grant and the ceiling alike.
+#[test]
+fn a_miss_is_an_answer_computed_and_alternating_inputs_miss_each_time() {
+    let costs = S31Ceiling::new();
+    let fast = ht(7, PpduBandwidth::Mhz40, true);
+    let slow = ht(0, PpduBandwidth::Mhz20, false);
+    let least: std::vec::Vec<bool> = [
+        (1514, fast),
+        (1514, fast),
+        (98, fast),
+        (1514, fast),
+        (1514, slow),
+        (1514, slow),
+    ]
+    .into_iter()
+    .map(|(length, rate)| costs.least_answer(length, rate).1)
+    .collect();
+    assert_eq!(least, [true, false, true, true, true, false]);
+    let ceiling: std::vec::Vec<bool> = [1514, 1514, 98, 1514, 98, 98]
+        .into_iter()
+        .map(|length| costs.ceiling_answer(length).1)
+        .collect();
+    assert_eq!(ceiling, [true, false, true, true, true, false]);
+    // The grant and the ceiling keep their own entries.
+    assert!(!costs.least_answer(1514, slow).1);
+    assert!(!costs.ceiling_answer(98).1);
+}

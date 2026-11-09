@@ -52,7 +52,8 @@ was still owed, and what it was granted stays its own.
 
 A service's `Egress` policy chooses what goes out, among all ready work and before
 any frame exists, and keeps its own account: `Direct` is the first ready work and no
-account. No await falls between a choice and its answer from the port, so a
+account. `choose` reports what it weighed and why it withheld work to the sink the
+service lends it (`EgressEvent`), as `ServiceEvent::Egress`. No await falls between a choice and its answer from the port, so a
 cancelled `run` leaves no reservation unanswered. A policy that cannot go on ends the
 service with `EndCause::Egress`, and `Ended` returns the policy with its account.
 
@@ -188,6 +189,24 @@ them, a full intake, each notice it hands the policy, each frame the port accept
 publishing ended, what was free when the turn ended, and whether the pass after it
 yielded or waited. The sink counts; the service keeps nothing and reads no clock for
 it. A disabled sink, `()` among them, hears nothing and builds no event.
+
+The same sink hears the bounds of the turn's steps, for a sink that reads a
+clock at each event: the notices from `NoticesBegan` to `NoticesEnded`, each
+notice from `Noticed` to `Settled` (the policy's debit), each publication
+attempt from `ChoiceBegan` through the policy's `Egress` events to `Chose`,
+then for a chosen work the port's `Accepted` or `Unsent` and the policy's
+`Answered`, and after publishing `Flushed` when it flushed the port. The
+service reports them at the same points whatever its policy, so the steps of
+two policies have the same bounds. `Chose` carries the works the policy pulled
+from the ready list and the passes it began, which the service counts by
+handing the policy a counting list, only for an enabled sink: a disabled sink
+gets the list as it is. `Home` says what a turn brought home before its frames
+(the return lane's blocks and the loans of lent buffers back with their port that
+it gave back to the account), and `NoCredit` the account's loans out and the
+lent buffers back with their port whose loans are not yet given back, read once
+a take of a received frame left frames unlent for want of credit. The policy
+reports to the sink `choose` is lent (`EgressEvent`); `Direct` reports
+nothing.
 
 `Service::run` ends at the first look after a stop, or at once when the port
 contradicts itself, and returns the cause. Nothing is published from then on.

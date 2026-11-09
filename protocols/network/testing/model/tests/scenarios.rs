@@ -282,12 +282,133 @@ struct TurnCount {
     deferred: bool,
 }
 
+/// What the publication attempts and notice steps of a run told, summed:
+/// the bounds a timing sink reads, checked in order as they come.
+#[derive(Clone, Copy, Debug, Default)]
+struct StepCount {
+    choices: u64,
+    /// Choices that chose a work, and those that chose nothing.
+    worked: u64,
+    nothing: u64,
+    /// Works the choices pulled, and the passes they began.
+    examined: u64,
+    walks: u64,
+    /// Works pulled by the choices that chose one.
+    examined_by_work: u64,
+    /// What the policy weighed: its reports, their candidates, and the
+    /// choices it withheld work in.
+    weighed: u64,
+    candidates: u64,
+    withheld: u64,
+    accepted: u64,
+    unsent: u64,
+    answered: u64,
+    flushed: u64,
+    noticed: u64,
+    settled: u64,
+    /// The step open now, by the events so far.
+    open: Option<Open>,
+    notices_open: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Open {
+    Choice,
+    Transmit,
+    Answer,
+}
+
+impl StepCount {
+    fn hear(&mut self, event: ServiceEvent) {
+        use oer_protocols_network_port::EgressEvent;
+        use oer_protocols_network_runtime::Chosen;
+        match event {
+            ServiceEvent::ChoiceBegan => {
+                assert_eq!(self.open, None, "an attempt opens alone");
+                self.open = Some(Open::Choice);
+            }
+            ServiceEvent::Egress(egress) => {
+                assert_eq!(
+                    self.open,
+                    Some(Open::Choice),
+                    "{egress:?} within its choice"
+                );
+                match egress {
+                    EgressEvent::Weighed { candidates, .. } => {
+                        self.weighed += 1;
+                        self.candidates += u64::from(candidates);
+                    }
+                    EgressEvent::Withheld(_) => self.withheld += 1,
+                }
+            }
+            ServiceEvent::Chose(choice) => {
+                assert_eq!(self.open, Some(Open::Choice));
+                self.choices += 1;
+                self.examined += u64::from(choice.examined);
+                self.walks += u64::from(choice.walks);
+                self.open = match choice.chosen {
+                    Chosen::Work => {
+                        self.worked += 1;
+                        self.examined_by_work += u64::from(choice.examined);
+                        Some(Open::Transmit)
+                    }
+                    Chosen::Nothing => {
+                        self.nothing += 1;
+                        None
+                    }
+                    Chosen::Fault => None,
+                };
+            }
+            ServiceEvent::Accepted | ServiceEvent::Unsent(_) => {
+                assert_eq!(
+                    self.open,
+                    Some(Open::Transmit),
+                    "the port ends a chosen work"
+                );
+                if event == ServiceEvent::Accepted {
+                    self.accepted += 1;
+                } else {
+                    self.unsent += 1;
+                }
+                self.open = Some(Open::Answer);
+            }
+            ServiceEvent::Answered => {
+                assert_eq!(self.open, Some(Open::Answer));
+                self.answered += 1;
+                self.open = None;
+            }
+            ServiceEvent::Flushed => self.flushed += 1,
+            ServiceEvent::NoticesBegan => {
+                assert!(!self.notices_open && self.open.is_none());
+                self.notices_open = true;
+            }
+            ServiceEvent::Noticed => {
+                assert!(self.notices_open);
+                self.noticed += 1;
+            }
+            ServiceEvent::Settled => self.settled += 1,
+            ServiceEvent::NoticesEnded => {
+                assert!(self.notices_open);
+                self.notices_open = false;
+            }
+            ServiceEvent::TurnEnded(_) => {
+                assert!(
+                    self.open.is_none() && !self.notices_open,
+                    "a turn ends between steps"
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Counts each turn: the medium tells how many notices it handed on.
 struct Turns {
     medium: Medium,
     taken: u64,
     turn: TurnCount,
     turns: Rc<RefCell<Vec<TurnCount>>>,
+    steps: Rc<RefCell<StepCount>>,
 }
 
 impl EventSink<NetEvent> for Turns {
@@ -296,6 +417,7 @@ impl EventSink<NetEvent> for Turns {
 
 impl EventSink<ServiceEvent> for Turns {
     fn event(&mut self, event: ServiceEvent) {
+        self.steps.borrow_mut().hear(event);
         match event {
             ServiceEvent::Accepted => self.turn.accepted += 1,
             ServiceEvent::Published(PublishEnd::Deferred) => self.turn.deferred = true,
@@ -316,6 +438,8 @@ struct Report<B: 'static, E: Egress<Ticket, Notice>, const N: usize> {
     ended: Run<B, E, N>,
     /// Each turn of the service.
     turns: Vec<TurnCount>,
+    /// Its attempts' and notices' steps.
+    steps: StepCount,
 
     marks: Vec<Vec<Spent>>,
     /// Datagrams evicted, by the flow's port.
@@ -404,11 +528,13 @@ impl Scenario<'_> {
         }
         let keep = ended.clone();
         let counted = Rc::new(RefCell::new(Vec::new()));
+        let steps = Rc::new(RefCell::new(StepCount::default()));
         let mut events = Turns {
             medium: medium.clone(),
             taken: medium.notices_taken(),
             turn: TurnCount::default(),
             turns: counted.clone(),
+            steps: steps.clone(),
         };
         tasks.push(Box::pin(async move {
             match cancel_at {
@@ -450,9 +576,11 @@ impl Scenario<'_> {
             ended.retired.pool.give(block);
         }
         let outstanding = ended.retired.pool.outstanding();
+        let steps = *steps.borrow();
         Report {
             ended,
             turns: counted.take(),
+            steps,
             marks: marks.take(),
             evicted: evicted.take(),
             outstanding,
@@ -512,6 +640,73 @@ fn with_no_policy_the_same_peers_do_not_share_the_air() {
     assert!(
         slow.air_micros > 4 * fast.air_micros,
         "the control must tell the policies apart: {slow:?} {fast:?}"
+    );
+}
+
+/// The same peers and flows under the first-ready egress and the airtime
+/// one: both tell every attempt and notice in the same steps, bracketed in
+/// the same order, so a timing sink bounds them alike. Where they differ is
+/// what each choice pulls, which the service counts as it hands the list:
+/// the first-ready egress one work in one pass, the airtime egress every
+/// ready work, with one report of what it weighed per choice. The notices
+/// each run hands on are the medium's own count of them.
+#[test]
+fn direct_and_queued_tell_their_steps_alike_and_differ_in_what_a_choice_pulls() {
+    struct First;
+    struct Airtime;
+    let peers = [peer(1, SLOW), peer(2, FAST)];
+    let workload = || {
+        let medium = medium(&peers);
+        let flows = flows(&[(5000, peers[0]), (5001, peers[1]), (5002, peers[1])]);
+        (medium, flows, vec![(SECOND / 4, At::Stop)])
+    };
+    let (medium, flows, script) = workload();
+    let direct = scenario(&medium, &flows, script)
+        .run(owner::<First, BLOCKS>(&medium), Direct)
+        .steps;
+    let direct_notices = medium.notices_taken();
+    let (medium, flows, script) = workload();
+    let queued = scenario(&medium, &flows, script)
+        .run(owner::<Airtime, BLOCKS>(&medium), fair(&medium))
+        .steps;
+    let queued_notices = medium.notices_taken();
+    for (name, steps, notices) in [
+        ("direct", direct, direct_notices),
+        ("queued", queued, queued_notices),
+    ] {
+        assert!(steps.accepted > 20, "{name}: {steps:?}");
+        assert_eq!(
+            steps.worked,
+            steps.accepted + steps.unsent,
+            "{name}: {steps:?}"
+        );
+        assert_eq!(steps.answered, steps.worked, "{name}: {steps:?}");
+        assert_eq!(
+            steps.choices,
+            steps.worked + steps.nothing,
+            "{name}: {steps:?}"
+        );
+        assert_eq!(steps.noticed, notices, "{name}: the medium's count");
+        assert_eq!(steps.settled, steps.noticed, "{name}: {steps:?}");
+        assert!(steps.flushed != 0, "{name}: {steps:?}");
+    }
+    assert_eq!(
+        direct.examined_by_work, direct.worked,
+        "one work each: {direct:?}"
+    );
+    assert_eq!(direct.walks, direct.choices, "one pass each: {direct:?}");
+    assert_eq!(direct.weighed + direct.withheld, 0, "it weighs nothing");
+    assert_eq!(
+        queued.weighed, queued.choices,
+        "one report a choice: {queued:?}"
+    );
+    assert!(
+        queued.examined_by_work > queued.worked,
+        "it reads past the first ready work: {queued:?}"
+    );
+    assert_eq!(
+        queued.candidates, queued.examined,
+        "each work it pulled was a candidate: {queued:?}"
     );
 }
 

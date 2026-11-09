@@ -51,6 +51,11 @@ impl Returns {
         self.back.swap(0, Ordering::AcqRel)
     }
 
+    /// Returns counted and not yet taken.
+    fn waiting(&self) -> u32 {
+        self.back.load(Ordering::Acquire)
+    }
+
     /// Whether a return waits; `cx` hears the next.
     pub(crate) fn poll(&self, cx: &Context<'_>) -> bool {
         self.waker.register(cx.waker());
@@ -197,9 +202,15 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
         self.lent.try_send(lent).map_err(|_| LentLaneFull)
     }
 
-    /// Give back to `account` the loans whose buffers came back; whether any.
-    pub(crate) fn collect(&mut self, account: &mut Loans<B, GROUPS>) -> bool {
+    /// Give back to `account` the loans whose buffers came back.
+    pub(crate) fn collect(&mut self, account: &mut Loans<B, GROUPS>) -> Collected {
         give_back(self.returns, &mut self.loans, account)
+    }
+
+    /// Lent buffers back with their port whose loans [`Self::collect`] has
+    /// not yet given back.
+    pub(crate) fn returned(&self) -> u32 {
+        self.returns.waiting()
     }
 
     /// Whether a return waits; `cx` hears the next.
@@ -220,21 +231,34 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct LentLaneFull;
 
+/// What a collect found: whether any buffer came back, and the loans it gave
+/// back to the account for them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Collected {
+    pub(crate) any: bool,
+    pub(crate) given: usize,
+}
+
 /// Give back as many of `loans` as `returns` counts.
 fn give_back<B, const RECEIVED: usize>(
     returns: &Returns,
     loans: &mut [Option<Loan<B>>; RECEIVED],
     account: &mut Loans<B, GROUPS>,
-) -> bool {
+) -> Collected {
     let back = returns.take();
     let mut taken = loans.iter_mut().filter_map(Option::take);
+    let mut given = 0_usize;
     for _ in 0..back {
         let Some(loan) = taken.next() else {
             break;
         };
         account.give_back(loan);
+        given = given.saturating_add(1);
     }
-    back != 0
+    Collected {
+        any: back != 0,
+        given,
+    }
 }
 
 /// A lending socket's loans after its service: they come back to whoever
@@ -246,7 +270,7 @@ pub(crate) struct LateLoans<'a, B, const RECEIVED: usize> {
 
 impl<B, const RECEIVED: usize> LateLoans<'_, B, RECEIVED> {
     pub(crate) fn collect(&mut self, account: &mut Loans<B, GROUPS>) -> bool {
-        give_back(self.returns, &mut self.loans, account)
+        give_back(self.returns, &mut self.loans, account).any
     }
 
     /// Whether every loan came back.

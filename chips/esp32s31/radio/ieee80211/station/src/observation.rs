@@ -619,6 +619,90 @@ impl core::fmt::Display for ActorReturned {
     }
 }
 
+/// One intake of the network's MSDUs into the datapath actor's standby
+/// arena while the link carries data: the `msdus` it took from the
+/// network's transmit queue, zero when none waited. Counts above 255 read
+/// 255.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ActorTookIn {
+    pub msdus: u8,
+}
+
+impl ActorTookIn {
+    /// The event of an intake of `msdus`.
+    pub fn of(msdus: usize) -> Self {
+        Self {
+            msdus: u8::try_from(msdus).unwrap_or(u8::MAX),
+        }
+    }
+}
+
+impl Event for ActorTookIn {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 36);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [u32::from(self.msdus), 0]
+    }
+
+    fn decode([word, rest]: [u32; 2]) -> Option<Self> {
+        if rest != 0 {
+            return None;
+        }
+        Some(Self {
+            msdus: u8::try_from(word).ok()?,
+        })
+    }
+}
+
+impl core::fmt::Display for ActorTookIn {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "station.took_in msdus={}", self.msdus)
+    }
+}
+
+/// Which of the S31's frame costs ([`crate::S31Ceiling`]) an
+/// [`AirCostComputed`] computed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum AirCost {
+    /// A frame's least useful grant at its rate.
+    Least = 0,
+    /// A frame's ceiling, charged where its cost is not known.
+    Ceiling = 1,
+}
+
+/// The S31's frame costs answered a query its last answer of that cost did
+/// not hold, and computed it: one miss of the cost's one-entry cache.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AirCostComputed {
+    pub cost: AirCost,
+}
+
+impl Event for AirCostComputed {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 37);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [self.cost as u32, 0]
+    }
+
+    fn decode([word, rest]: [u32; 2]) -> Option<Self> {
+        let cost = match (word, rest) {
+            (0, 0) => AirCost::Least,
+            (1, 0) => AirCost::Ceiling,
+            _ => return None,
+        };
+        Some(Self { cost })
+    }
+}
+
+impl core::fmt::Display for AirCostComputed {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "station.air_cost computed={:?}", self.cost)
+    }
+}
+
 /// What the station service decided about received frames: the kind of
 /// one decision, which [`StationRx`] counts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1296,6 +1380,8 @@ mod tests {
             StationAddba::KIND,
             TxRateSelected::KIND,
             ActorReturned::KIND,
+            ActorTookIn::KIND,
+            AirCostComputed::KIND,
         ]
         .map(Kind::raw);
         for (at, kind) in kinds.iter().enumerate() {
@@ -1527,6 +1613,18 @@ mod tests {
             },
             "a count past a byte reads 255"
         );
+        round_trip(ActorTookIn { msdus: 0 });
+        round_trip(ActorTookIn { msdus: 255 });
+        assert_eq!(ActorTookIn::of(300), ActorTookIn { msdus: u8::MAX });
+        assert_eq!(ActorTookIn::decode([256, 0]), None, "past a byte");
+        assert_eq!(ActorTookIn::decode([1, 1]), None);
+        round_trip(AirCostComputed {
+            cost: AirCost::Least,
+        });
+        round_trip(AirCostComputed {
+            cost: AirCost::Ceiling,
+        });
+        assert_eq!(AirCostComputed::decode([2, 0]), None, "an unknown cost");
         round_trip(TxRateSelected { kbps: None });
         round_trip(TxRateSelected { kbps: Some(65_000) });
         assert_eq!(StationBeacon::decode([7, 1]), None);

@@ -352,6 +352,9 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             ProfileCollected::Moments(moments) => turn_profile.moments = moments,
             ProfileCollected::Cells(cells) => turn_profile.cells = cells,
             ProfileCollected::Spread(spread) => turn_profile.spread = spread,
+            ProfileCollected::Steps(steps) => turn_profile.steps = steps,
+            ProfileCollected::Choices(choices) => turn_profile.choices = choices,
+            ProfileCollected::Loans(loans) => turn_profile.loans = loans,
             other => {
                 return Err(Failure::Fail(format!(
                     "the image's turn profile, page {page}: {other:?}"

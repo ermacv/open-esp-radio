@@ -143,7 +143,7 @@ const AIR_QUANTUM: core::num::NonZeroU32 = match core::num::NonZeroU32::new(2_00
 pub type AirStorage = AirtimeStorage<StationKey, AIR_PEERS, { wifi::NETWORK_BUFFERS }>;
 type Airtime = AirtimeEgress<
     'static,
-    wifi::StationAir<'static, Notifies>,
+    wifi::StationAir<'static, Notifies, StationObserver>,
     TxTicket,
     AIR_PEERS,
     { wifi::NETWORK_BUFFERS },
@@ -194,7 +194,11 @@ impl TransmitMode for Queued {
     ) -> Airtime {
         AirtimeEgress::new(
             storage,
-            wifi::StationAir::<Notifies>::new(link, wifi::S31Ceiling::new()),
+            wifi::StationAir::<Notifies, StationObserver>::new(
+                link,
+                // A trace build counts the costs it computes.
+                wifi::S31Ceiling::observed(StationObserver::default()),
+            ),
         )
     }
 }

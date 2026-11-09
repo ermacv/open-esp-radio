@@ -69,7 +69,7 @@ fn moving_the_end_closes_nothing() {
     let moved = Some(end);
     let end = moved.unwrap();
     returner.give(block).ok().unwrap();
-    assert!(end.take_home(&mut pool));
+    assert_eq!(end.take_home(&mut pool), 1, "one block came home");
     assert_eq!(pool.outstanding(), 0);
 }
 
@@ -154,7 +154,7 @@ fn copies_of_a_returner_share_the_lane() {
     let copy = returner;
     returner.give(one).ok().unwrap();
     copy.give(two).ok().unwrap();
-    assert!(end.take_home(&mut pool));
+    assert_eq!(end.take_home(&mut pool), 2, "both copies' blocks");
     assert_eq!(pool.outstanding(), 0);
 }
 
@@ -184,6 +184,10 @@ fn a_slot_held_by_a_lower_context_refuses_for_now_and_keeps_the_block() {
         .unwrap();
     assert_eq!(three.reason, ReturnRefusal::Busy);
     returner.give(three.block).ok().unwrap();
-    assert!(end.take_home(&mut pool));
+    assert_eq!(
+        end.take_home(&mut pool),
+        3,
+        "every block, the refused one's too"
+    );
     assert_eq!(pool.outstanding(), 0);
 }

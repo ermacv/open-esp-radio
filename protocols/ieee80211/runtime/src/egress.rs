@@ -8,13 +8,15 @@
 
 use core::num::NonZeroU32;
 
+use oer_portable_events::{EventSink, report};
+
 /// The full rate a settled frame's report names ([`PeerAir::reported`]).
 pub use oer_protocols_ieee80211_contracts_port::PhyRate;
 use oer_protocols_ieee80211_core_upper_mac::airtime::{
     AirtimeCandidate, AirtimeError, AirtimeInFlight, AirtimeReservation, AirtimeScheduler,
     AirtimeStorage,
 };
-use oer_protocols_network_port::{Candidate, Class, Egress, Ready};
+use oer_protocols_network_port::{Candidate, Class, Egress, EgressEvent, Ready, Withheld};
 
 /// What the radio knows of the peers.
 pub trait PeerAir {
@@ -230,13 +232,19 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
     }
 
     /// The work of `key` next in turn: control first, then the flow after the
-    /// last served one.
-    fn pick<C: Candidate>(&self, ready: impl Iterator<Item = C>, key: A::Key) -> Option<C> {
+    /// last served one. `candidate` hears each work that may go.
+    fn pick<C: Candidate>(
+        &self,
+        ready: impl Iterator<Item = C>,
+        key: A::Key,
+        candidate: impl Fn(),
+    ) -> Option<C> {
         let last = self.last_flow(key);
         ready
             .filter(|work| {
                 self.air
                     .candidate(work.ready())
+                    .inspect(|_| candidate())
                     .is_some_and(|candidate| candidate.key == key)
             })
             .min_by_key(|work| turn(work.ready(), last))
@@ -245,27 +253,66 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
     /// Choose over `ready` read twice, the whole list given to the scheduler:
     /// for more accounts than one pass keeps, whose answer the scheduler
     /// gives.
+    /// `events` hears the candidates of the first pass and of these two
+    /// passes ([`EgressEvent::Weighed`]), and why nothing was reserved.
     #[cold]
-    fn choose_over<C: Candidate>(
+    fn choose_over<C: Candidate, S: EventSink<EgressEvent>>(
         &mut self,
         ready: impl Iterator<Item = C> + Clone,
+        first: usize,
+        events: &mut S,
     ) -> Result<Option<(C, Held<'o, A::Key>)>, AirtimeFault> {
         let air = &self.air;
-        let candidates = ready.clone().filter_map(|work| air.candidate(work.ready()));
-        let reservation = match self.scheduler.reserve(candidates, &mut ()) {
-            Ok(reservation) => reservation,
-            Err(AirtimeError::ReservationCapacity) => None,
-            Err(error) => return Err(error.into()),
+        // Only a measuring sink counts the candidates of these passes.
+        let counted = core::cell::Cell::new(first);
+        let candidates = ready.clone().filter_map(|work| {
+            let candidate = air.candidate(work.ready());
+            if S::ENABLED && candidate.is_some() {
+                counted.set(counted.get().saturating_add(1));
+            }
+            candidate
+        });
+        let reserved = self.scheduler.reserve(candidates, &mut ());
+        let weighed = |events: &mut S, picked: usize| {
+            report(events, || EgressEvent::Weighed {
+                candidates: short(counted.get().saturating_add(picked)),
+                accounts: u8::try_from(PEERS).unwrap_or(u8::MAX),
+                widened: true,
+            });
         };
-        let Some(reservation) = reservation else {
-            return Ok(None);
+        let reservation = match reserved {
+            Ok(Some(reservation)) => reservation,
+            Ok(None) => {
+                weighed(events, 0);
+                report(events, || EgressEvent::Withheld(Withheld::NoGrant));
+                return Ok(None);
+            }
+            Err(AirtimeError::ReservationCapacity) => {
+                weighed(events, 0);
+                report(events, || EgressEvent::Withheld(Withheld::Capacity));
+                return Ok(None);
+            }
+            Err(error) => {
+                weighed(events, 0);
+                return Err(error.into());
+            }
         };
-        match self.pick(ready, reservation.key()) {
+        let picked = core::cell::Cell::new(0_usize);
+        let work = self.pick(ready, reservation.key(), || {
+            if S::ENABLED {
+                picked.set(picked.get().saturating_add(1));
+            }
+        });
+        weighed(events, picked.get());
+        match work {
             Some(work) => Ok(Some(self.hold(work, reservation))),
-            None => match self.scheduler.cancel(reservation, &mut ()) {
-                Ok(()) => Ok(None),
-                Err((error, _)) => Err(error.into()),
-            },
+            None => {
+                report(events, || EgressEvent::Withheld(Withheld::NoWork));
+                match self.scheduler.cancel(reservation, &mut ()) {
+                    Ok(()) => Ok(None),
+                    Err((error, _)) => Err(error.into()),
+                }
+            }
         }
     }
 
@@ -300,6 +347,24 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
     }
 }
 
+/// Whether `events` hears anything: only then does a choice count what it
+/// weighed.
+const fn enabled<S: EventSink<EgressEvent> + ?Sized>(_events: &S) -> bool {
+    S::ENABLED
+}
+
+/// Tell `events` the choice withheld work for `why`, when work could go.
+fn seen_withheld<S: EventSink<EgressEvent> + ?Sized>(events: &mut S, could: bool, why: Withheld) {
+    if could {
+        report(events, || EgressEvent::Withheld(why));
+    }
+}
+
+/// A count past `u16` reads its largest value.
+fn short(count: usize) -> u16 {
+    u16::try_from(count).unwrap_or(u16::MAX)
+}
+
 /// How far `ready` stands from its turn after flow `last`.
 fn turn(ready: &Ready, last: Option<u8>) -> (bool, u8) {
     let flow = ready.flow.unwrap_or(0);
@@ -317,16 +382,23 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
     /// as its largest least grant and its work next in turn, which is what
     /// the scheduler and the pick read of all of them. More accounts than
     /// `PEERS` cannot all be served; the scheduler names that from the whole
-    /// list, read once more.
+    /// list, read once more. `events` hears the candidates and accounts it
+    /// weighed, and why it reserved nothing when work could go.
     fn choose<C: Candidate>(
         &mut self,
         ready: impl Iterator<Item = C> + Clone,
+        events: &mut impl EventSink<EgressEvent>,
     ) -> Result<Option<(C, Self::Reservation)>, AirtimeFault> {
+        let measuring = enabled(events);
+        let mut candidates = 0_usize;
         let mut best: heapless::Vec<Best<A::Key, C>, PEERS> = heapless::Vec::new();
         for work in ready.clone() {
             let Some(candidate) = self.air.candidate(work.ready()) else {
                 continue;
             };
+            if measuring {
+                candidates = candidates.saturating_add(1);
+            }
             match best.iter_mut().find(|best| best.key == candidate.key) {
                 Some(best) => {
                     best.minimum = best.minimum.max(candidate.minimum_micros);
@@ -347,23 +419,33 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
                         work,
                     };
                     if best.push(entry).is_err() {
-                        return self.choose_over(ready);
+                        return self.choose_over(ready, candidates, events);
                     }
                 }
             }
         }
+        report(events, || EgressEvent::Weighed {
+            candidates: short(candidates),
+            accounts: u8::try_from(best.len()).unwrap_or(u8::MAX),
+            widened: false,
+        });
         let candidates = best.iter().map(|best| AirtimeCandidate {
             key: best.key,
             minimum_micros: best.minimum,
         });
+        let could = !best.is_empty();
         let reservation = match self.scheduler.reserve(candidates, &mut ()) {
-            Ok(reservation) => reservation,
+            Ok(Some(reservation)) => reservation,
+            Ok(None) => {
+                seen_withheld(events, could, Withheld::NoGrant);
+                return Ok(None);
+            }
             // A frame's completion makes room, and it wakes the service.
-            Err(AirtimeError::ReservationCapacity) => None,
+            Err(AirtimeError::ReservationCapacity) => {
+                seen_withheld(events, could, Withheld::Capacity);
+                return Ok(None);
+            }
             Err(error) => return Err(error.into()),
-        };
-        let Some(reservation) = reservation else {
-            return Ok(None);
         };
         let key = reservation.key();
         // Taken by `pop`, not a consuming iterator: heapless's `IntoIter`
@@ -378,6 +460,7 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
             }
         }
         // The candidates were these accounts, so one of them holds the key.
+        report(events, || EgressEvent::Withheld(Withheld::NoWork));
         match self.scheduler.cancel(reservation, &mut ()) {
             Ok(()) => Ok(None),
             Err((error, _)) => Err(error.into()),

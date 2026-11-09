@@ -27,8 +27,8 @@ pub use device::{
 };
 
 pub use frame::{
-    Candidate, Class, Egress, FramePort, FrameSource, Holding, Keep, NeverHeld, Ready, Taken,
-    Unpublished,
+    Candidate, Class, Egress, EgressEvent, FramePort, FrameSource, Holding, Keep, NeverHeld, Ready,
+    Taken, Unpublished, Withheld,
 };
 
 /// Opaque identity of one logical network endpoint sharing a physical radio.

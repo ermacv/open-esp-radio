@@ -333,6 +333,17 @@ impl oer_portable_trace::Observer for Observer {
         if let Some(burst) = Self::decoded::<E, station::ActorReturned>(event) {
             RETURNS.burst(burst.queued, burst.before, burst.after, burst.held);
         }
+        #[cfg(feature = "wifi")]
+        if let Some(intake) = Self::decoded::<E, station::ActorTookIn>(event) {
+            INTAKES.intake(intake.msdus);
+        }
+        #[cfg(feature = "wifi")]
+        if let Some(computed) = Self::decoded::<E, station::AirCostComputed>(event) {
+            match computed.cost {
+                station::AirCost::Least => AIR_COSTS.least(),
+                station::AirCost::Ceiling => AIR_COSTS.ceiling(),
+            }
+        }
         if let Some(request) = Self::decoded::<E, station::StationAddba>(event) {
             ADDBA.record(request.tid, addba_request(request));
         }
@@ -576,9 +587,42 @@ pub fn return_bursts() -> crate::observe::profile::Returns {
     RETURNS.read()
 }
 
+/// The network core's turn steps since boot ([`crate::observe::profile::TurnSteps`]):
+/// zeros unless a trace build. Read as [`turn_profile`] is.
+#[cfg(feature = "network")]
+pub fn turn_steps() -> crate::observe::profile::TurnSteps {
+    PROFILE.read_steps()
+}
+
+/// The datapath actor's intakes of the network's MSDUs; the actor is their
+/// one writer, through the observer of a trace build.
+#[cfg(feature = "wifi")]
+static INTAKES: crate::observe::profile::IntakeCounter =
+    crate::observe::profile::IntakeCounter::new();
+
+/// The datapath actor's intakes since boot: zeros unless a trace build.
+#[cfg(feature = "wifi")]
+pub fn actor_intakes() -> crate::observe::profile::Intakes {
+    INTAKES.read()
+}
+
+/// The station's frame costs computed for the network's queued egress; the
+/// network's task, where the egress asks them, is their one writer, through
+/// the observer of a trace build.
+#[cfg(feature = "wifi")]
+static AIR_COSTS: crate::observe::profile::AirCostCounter =
+    crate::observe::profile::AirCostCounter::new();
+
+/// The station's frame costs computed since boot: zeros unless a trace
+/// build and a queued egress.
+#[cfg(feature = "wifi")]
+pub fn air_costs() -> crate::observe::profile::AirCosts {
+    AIR_COSTS.read()
+}
+
 /// The network service's sink: its turns and the core's drops, by reason,
 /// go to [`network_turns`]; in a trace build, each turn's cycles and work go
-/// to [`turn_profile`].
+/// to [`turn_profile`], and its steps to [`turn_steps`].
 #[cfg(feature = "network")]
 #[derive(Default)]
 pub(crate) struct NetworkSink(
@@ -599,28 +643,90 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
         };
         #[cfg(oer_trace)]
         {
+            use crate::observe::profile::{Unsent, Withheld};
+            use oer_protocols_network_port::{EgressEvent, Withheld as Withholds};
+            use oer_protocols_network_runtime::{Chosen, UnsentKind};
+            // Every event's cycle first: a step's bounds are its two
+            // events' readings, each at the same place in the sink.
+            let now = oer_portable_riscv::cycle64();
             let profile = &mut self.1;
             match event {
                 // The turn's cycles run from its first event to its end.
-                ServiceEvent::TurnBegan => profile.began(&PROFILE, oer_portable_riscv::cycle64()),
-                ServiceEvent::TurnEnded(_) => {
-                    profile.ended(&PROFILE, oer_portable_riscv::cycle64());
-                }
+                ServiceEvent::TurnBegan => profile.began(&PROFILE, now),
+                ServiceEvent::TurnEnded(_) => profile.ended(&PROFILE, now),
                 ServiceEvent::FrameTaken => profile.frame(),
-                ServiceEvent::Accepted => profile.accepted(),
-                ServiceEvent::Noticed => profile.noticed(),
+                ServiceEvent::Accepted => profile.transmitted(&PROFILE, now, None),
+                ServiceEvent::Unsent(kind) => profile.transmitted(
+                    &PROFILE,
+                    now,
+                    Some(match kind {
+                        UnsentKind::Stale => Unsent::Stale,
+                        UnsentKind::Port => Unsent::Port,
+                        UnsentKind::Rejected => Unsent::Rejected,
+                        UnsentKind::SlotTooShort => Unsent::SlotTooShort,
+                        UnsentKind::Declined => Unsent::Declined,
+                        UnsentKind::FillMisreported => Unsent::FillMisreported,
+                        UnsentKind::PortContract => Unsent::PortContract,
+                    }),
+                ),
+                ServiceEvent::Answered => profile.answered(&PROFILE, now),
+                ServiceEvent::ChoiceBegan => profile.choice_began(now),
+                ServiceEvent::Egress(EgressEvent::Weighed {
+                    candidates,
+                    accounts,
+                    widened,
+                }) => profile.weighed(&PROFILE, candidates, accounts, widened),
+                ServiceEvent::Egress(EgressEvent::Withheld(why)) => profile.withheld(
+                    &PROFILE,
+                    match why {
+                        Withholds::NoGrant => Withheld::NoGrant,
+                        Withholds::Capacity => Withheld::Capacity,
+                        Withholds::NoWork => Withheld::NoWork,
+                    },
+                ),
+                ServiceEvent::Chose(choice) => profile.chose(
+                    &PROFILE,
+                    now,
+                    choice.examined,
+                    choice.walks,
+                    match choice.chosen {
+                        Chosen::Work => Some(true),
+                        Chosen::Nothing => Some(false),
+                        Chosen::Fault => None,
+                    },
+                ),
+                ServiceEvent::Published(_) => profile.published(now),
+                ServiceEvent::Flushed => profile.flushed(&PROFILE, now),
+                ServiceEvent::NoticesBegan => profile.notices_began(now),
+                ServiceEvent::Noticed => profile.notice_at(now),
+                ServiceEvent::Settled => profile.settled(&PROFILE, now),
+                ServiceEvent::NoticesEnded => profile.notices_ended(&PROFILE, now),
+                ServiceEvent::Home(home) => profile.home(home.blocks, home.loans),
+                ServiceEvent::NoCredit(credit) => {
+                    profile.no_credit(&PROFILE, credit.drops, credit.outstanding, credit.returned);
+                }
                 ServiceEvent::Took(_) => profile.took(),
                 ServiceEvent::Yielded => profile.yielded(),
                 ServiceEvent::Waited { ready } => profile.waited(&PROFILE, ready),
-                ServiceEvent::BudgetSpent
-                | ServiceEvent::IntakeFull
-                | ServiceEvent::Published(_)
-                | ServiceEvent::Local(_) => {}
+                ServiceEvent::BudgetSpent | ServiceEvent::IntakeFull | ServiceEvent::Local(_) => {}
             }
         }
         let tally = &mut self.0;
         match event {
-            ServiceEvent::TurnBegan | ServiceEvent::FrameTaken | ServiceEvent::Noticed => {}
+            ServiceEvent::TurnBegan
+            | ServiceEvent::FrameTaken
+            | ServiceEvent::Noticed
+            | ServiceEvent::Home(_)
+            | ServiceEvent::NoCredit(_)
+            | ServiceEvent::NoticesBegan
+            | ServiceEvent::Settled
+            | ServiceEvent::NoticesEnded
+            | ServiceEvent::ChoiceBegan
+            | ServiceEvent::Egress(_)
+            | ServiceEvent::Chose(_)
+            | ServiceEvent::Unsent(_)
+            | ServiceEvent::Answered
+            | ServiceEvent::Flushed => {}
             ServiceEvent::Took(kind) => tally.took(
                 &NETWORK,
                 match kind {

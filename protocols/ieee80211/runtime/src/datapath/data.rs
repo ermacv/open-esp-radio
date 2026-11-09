@@ -119,6 +119,8 @@ where
         let now = self.now;
         let mut tids = [false; 8];
         let mut taken = 0_usize;
+        // Only an observing port counts what came from the network's queue.
+        let mut fresh = 0_usize;
         let mut yielded = false;
         {
             let Self {
@@ -149,11 +151,16 @@ where
                             memory,
                             length,
                             priority,
-                        })) => OutboundMsdu {
-                            memory,
-                            length: usize::from(length),
-                            priority,
-                        },
+                        })) => {
+                            if D::OBSERVES_INTAKE {
+                                fresh = fresh.saturating_add(1);
+                            }
+                            OutboundMsdu {
+                                memory,
+                                length: usize::from(length),
+                                priority,
+                            }
+                        }
                         _ => break,
                     },
                 };
@@ -193,6 +200,9 @@ where
                     *next = Some(link.numbers().next(tid));
                 }
             }
+        }
+        if D::OBSERVES_INTAKE {
+            D::took_in(fresh);
         }
         // The budget ran out while the network still has MSDUs the standby
         // may take.

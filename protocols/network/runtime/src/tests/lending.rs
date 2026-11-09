@@ -364,3 +364,167 @@ fn serving_late_loans_after_a_stop_waits_for_the_held_buffer_and_closes_the_acco
     assert!(ended.retired.pool.loans().released());
     assert_eq!(lent_out(&wire), 0);
 }
+
+/// Every event of both kinds, in order.
+#[derive(Default)]
+struct Heard {
+    service: Vec<ServiceEvent>,
+    drops: Vec<NetEvent>,
+}
+
+impl EventSink<ServiceEvent> for Heard {
+    fn event(&mut self, event: ServiceEvent) {
+        self.service.push(event);
+    }
+}
+
+impl EventSink<NetEvent> for Heard {
+    fn event(&mut self, event: NetEvent) {
+        self.drops.push(event);
+    }
+}
+
+/// Poll `run` once.
+fn pass<R: core::future::Future>(run: &mut core::pin::Pin<&mut R>) {
+    let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
+    assert!(run.as_mut().poll(cx).is_pending());
+}
+
+/// A frame that finds no credit tells the loans then: the one out, and the
+/// one already back with its port, dropped by another context after the
+/// turn took its returns home and before the frame. The next turn gives
+/// that loan back and says so; the buffer went back to the port at the drop,
+/// before any of it.
+#[test]
+fn a_frame_without_credit_tells_the_loans_out_and_those_back_but_not_given_back() {
+    use crate::{Credit, Home};
+    #[derive(Debug)]
+    struct Net;
+    let (mut service, _copying, mut lending, wire, _stop) = lending::<Net>(4, 1);
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut heard = Heard::default();
+    {
+        let mut run = core::pin::pin!(service.run(clock, &mut heard));
+        arrive(&wire, LENDING, b"first");
+        pass(&mut run);
+        let Some(Received::Lent(held)) = lending.try_receive() else {
+            panic!("a lendable datagram is lent");
+        };
+        assert_eq!(lent_out(&wire), 1);
+        // Another context drops it while the next turn runs, between its
+        // returns and its frame.
+        let port = wire.clone();
+        wire.0.borrow_mut().on_take = Some(Box::new(move || {
+            drop(held);
+            assert_eq!(lent_out(&port), 0, "the buffer is back at the drop");
+        }));
+        arrive(&wire, LENDING, b"second");
+        pass(&mut run);
+        pass(&mut run);
+    }
+    assert_eq!(heard.drops, [NetEvent::NotLent(NotLent::NoCredit)]);
+    let credit: Vec<Credit> = heard
+        .service
+        .iter()
+        .filter_map(|event| match event {
+            ServiceEvent::NoCredit(credit) => Some(*credit),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        credit,
+        [Credit {
+            drops: 1,
+            outstanding: 1,
+            returned: 1,
+        }],
+        "the credit was out, and its loan was back but not given back"
+    );
+    let home: Vec<Home> = heard
+        .service
+        .iter()
+        .filter_map(|event| match event {
+            ServiceEvent::Home(home) => Some(*home),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        home,
+        [Home {
+            blocks: 0,
+            loans: 1
+        }],
+        "given back once"
+    );
+    let at_drop = heard
+        .service
+        .iter()
+        .position(|event| matches!(event, ServiceEvent::NoCredit(_)))
+        .unwrap();
+    let given = heard
+        .service
+        .iter()
+        .position(|event| matches!(event, ServiceEvent::Home(_)))
+        .unwrap();
+    assert!(given > at_drop, "given back in a later turn");
+    assert_eq!(
+        heard.service[..given]
+            .iter()
+            .rev()
+            .find(|event| matches!(event, ServiceEvent::TurnBegan | ServiceEvent::TurnEnded(_))),
+        Some(&ServiceEvent::TurnBegan),
+        "within that turn"
+    );
+}
+
+/// A turn whose only work is giving loans back says so, and a sink that
+/// counts no turns sees nothing of it: loans given back are their own
+/// count, apart from frames, notices and requests.
+#[test]
+fn loans_given_back_are_counted_apart_from_frames_and_notices() {
+    use crate::Home;
+    #[derive(Debug)]
+    struct Net;
+    let (mut service, _copying, mut lending, wire, _stop) = lending::<Net>(4, 1);
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut heard = Heard::default();
+    {
+        let mut run = core::pin::pin!(service.run(clock, &mut heard));
+        arrive(&wire, LENDING, b"one");
+        pass(&mut run);
+        let Some(Received::Lent(held)) = lending.try_receive() else {
+            panic!("a lendable datagram is lent");
+        };
+        pass(&mut run);
+        drop(held);
+        pass(&mut run);
+    }
+    let turns: Vec<&[ServiceEvent]> = heard
+        .service
+        .split(|event| *event == ServiceEvent::TurnBegan)
+        .collect();
+    let homing: Vec<_> = turns
+        .iter()
+        .filter(|turn| {
+            turn.iter()
+                .any(|event| matches!(event, ServiceEvent::Home(_)))
+        })
+        .collect();
+    let [turn] = homing[..] else {
+        panic!("one turn gave the loan back: {homing:?}");
+    };
+    assert!(
+        turn.contains(&ServiceEvent::Home(Home {
+            blocks: 0,
+            loans: 1
+        })),
+        "{turn:?}"
+    );
+    assert!(
+        !turn.iter().any(|event| matches!(
+            event,
+            ServiceEvent::FrameTaken | ServiceEvent::Noticed | ServiceEvent::Took(_)
+        )),
+        "the turn did nothing else: {turn:?}"
+    );
+}

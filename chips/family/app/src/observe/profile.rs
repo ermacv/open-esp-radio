@@ -8,7 +8,12 @@
 //! sums of a least-squares fit of its active cycles to those four counts
 //! ([`TurnProfile::moments`]), to cells of turns with one kind of work, to
 //! histograms, and to the gaps between turns by how the pass after the turn
-//! went on. Nothing is kept per turn.
+//! went on. Nothing is kept per turn. It also times the steps inside each
+//! turn and counts what they did ([`TurnSteps`], `steps`).
+//!
+//! [`IntakeCounter`] counts the datapath actor's intakes of the network's
+//! MSDUs, and [`AirCostCounter`] the station's frame costs computed for the
+//! queued egress.
 //!
 //! [`ReturnCounter`] counts the bursts in which the station's datapath
 //! actor gave the network's memory back through the return queue.
@@ -234,26 +239,20 @@ const fn notice_cell(notices: u32) -> usize {
     }
 }
 
-/// The network's turn profile, published word by word.
-pub struct ProfileCounter {
-    /// Each 64-bit word as its low and its high half.
-    halves: [AtomicU32; 2 * WORDS],
+/// `N` 64-bit words with one writer, each as its low and its high half.
+pub(crate) struct Words<const N: usize> {
+    halves: [[AtomicU32; 2]; N],
 }
 
-impl ProfileCounter {
-    pub const fn new() -> Self {
+impl<const N: usize> Words<N> {
+    pub(crate) const fn new() -> Self {
         Self {
-            halves: [const { AtomicU32::new(0) }; 2 * WORDS],
+            halves: [const { [AtomicU32::new(0), AtomicU32::new(0)] }; N],
         }
     }
 
-    fn word(&self, index: usize) -> Option<(&AtomicU32, &AtomicU32)> {
-        let low = index.checked_mul(2)?;
-        Some((self.halves.get(low)?, self.halves.get(low.checked_add(1)?)?))
-    }
-
-    fn add(&self, index: usize, by: u64) {
-        if let Some((low, high)) = self.word(index) {
+    pub(crate) fn add(&self, index: usize, by: u64) {
+        if let Some([low, high]) = self.halves.get(index) {
             let was = u64::from(low.load(Ordering::Relaxed))
                 | (u64::from(high.load(Ordering::Relaxed)) << 32);
             let now = was.wrapping_add(by);
@@ -263,16 +262,44 @@ impl ProfileCounter {
         }
     }
 
-    fn load(&self, index: usize) -> u64 {
-        self.word(index).map_or(0, |(low, high)| {
+    pub(crate) fn load(&self, index: usize) -> u64 {
+        self.halves.get(index).map_or(0, |[low, high]| {
             u64::from(low.load(Ordering::Relaxed)) | (u64::from(high.load(Ordering::Relaxed)) << 32)
         })
     }
 
+    pub(crate) fn read(&self) -> [u64; N] {
+        core::array::from_fn(|index| self.load(index))
+    }
+}
+
+/// The network's turn profile and its steps ([`TurnSteps`]), published word
+/// by word.
+pub struct ProfileCounter {
+    words: Words<WORDS>,
+    steps: Words<STEP_WORDS>,
+}
+
+impl ProfileCounter {
+    pub const fn new() -> Self {
+        Self {
+            words: Words::new(),
+            steps: Words::new(),
+        }
+    }
+
+    fn add(&self, index: usize, by: u64) {
+        self.words.add(index, by);
+    }
+
     /// The sums now.
     pub fn read(&self) -> TurnProfile {
-        let words: [u64; WORDS] = core::array::from_fn(|index| self.load(index));
-        TurnProfile::from_words(&words)
+        TurnProfile::from_words(&self.words.read())
+    }
+
+    /// The steps' sums now.
+    pub fn read_steps(&self) -> TurnSteps {
+        TurnSteps::from_words(&self.steps.read())
     }
 }
 
@@ -295,6 +322,8 @@ pub struct ProfileTally {
     ended: Option<(u64, u32)>,
     /// How the pass after the last turn went on.
     gap: Option<Gap>,
+    /// The turn's steps so far.
+    steps: StepTally,
 }
 
 impl ProfileTally {
@@ -307,6 +336,7 @@ impl ProfileTally {
             requests: 0,
             ended: None,
             gap: None,
+            steps: StepTally::new(),
         }
     }
 
@@ -399,6 +429,8 @@ impl ProfileTally {
             (0, 0, 1..) => cell(word::NOTICE_ONLY, notice_cell(notices), notices),
             _ => {}
         }
+        let none = frames == 0 && accepted == 0 && notices == 0 && requests == 0;
+        self.steps.ended(&counter.steps, none, cycles);
         let notice_bin = if notices == 0 {
             0
         } else {
@@ -575,6 +607,9 @@ impl Default for ReturnCounter {
         Self::new()
     }
 }
+
+mod steps;
+pub use steps::*;
 
 #[cfg(test)]
 mod tests;

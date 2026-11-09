@@ -536,6 +536,14 @@ pub(crate) struct Turns {
     profile_window: oer::observe::profile::TurnProfile,
     returns_start: oer::observe::profile::Returns,
     returns_window: oer::observe::profile::Returns,
+    /// The turns' steps, the datapath actor's intakes and the station's
+    /// computed frame costs, likewise.
+    steps_start: oer::observe::profile::TurnSteps,
+    steps_window: oer::observe::profile::TurnSteps,
+    intakes_start: oer::observe::profile::Intakes,
+    intakes_window: oer::observe::profile::Intakes,
+    costs_start: oer::observe::profile::AirCosts,
+    costs_window: oer::observe::profile::AirCosts,
 }
 
 /// The one place of the turns.
@@ -548,6 +556,12 @@ pub(crate) static TURNS: static_cell::ConstStaticCell<Turns> =
         profile_window: PROFILE_NONE,
         returns_start: RETURNS_NONE,
         returns_window: RETURNS_NONE,
+        steps_start: oer::observe::profile::TurnSteps::NONE,
+        steps_window: oer::observe::profile::TurnSteps::NONE,
+        intakes_start: oer::observe::profile::Intakes::NONE,
+        intakes_window: oer::observe::profile::Intakes::NONE,
+        costs_start: oer::observe::profile::AirCosts::NONE,
+        costs_window: oer::observe::profile::AirCosts::NONE,
     });
 
 #[cfg(target_arch = "riscv32")]
@@ -597,23 +611,90 @@ const _: () = {
         || library::FRAME_BINS != service::PROFILE_FRAME_BINS
         || library::BURST_BINS != service::RETURN_BURST_BINS
         || library::OCCUPANCY_BINS != service::RETURN_OCCUPANCY_BINS
+        || library::STEPS != service::PROFILE_STEPS
+        || library::CHOICE_ENDS != service::PROFILE_CHOICE_ENDS
+        || library::WITHHELD != service::PROFILE_WITHHELD
+        || library::UNSENT != service::PROFILE_UNSENT
+        || library::EXAMINED_BINS != service::PROFILE_EXAMINED_BINS
+        || library::FLUSH_BINS != service::PROFILE_FLUSH_BINS
+        || library::CHOICE_BINS != service::PROFILE_CHOICE_BINS
+        || library::LOAN_BINS != service::PROFILE_LOAN_BINS
+        || library::RETURNED_BINS != service::PROFILE_RETURNED_BINS
+        || library::INTAKE_BINS != service::PROFILE_INTAKE_BINS
     {
         panic!("the load service's profile has the library's geometry");
     }
 };
 
+/// A window's count past `u32` reads its largest value.
+#[cfg(target_arch = "riscv32")]
+fn count(value: u64) -> u32 {
+    u32::try_from(value).unwrap_or(u32::MAX)
+}
+
 /// Page `page` of the last closed window's profile: none before one closed.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn profile_page(net: &Network, page: u8) -> oer_hil_services_load::ProfileCollected {
     use oer_hil_services_load::{
-        LoadError, ProfileCollected, ReturnBursts, TurnCell, TurnCells, TurnMoments, TurnSpread,
+        ActorIntakes, HomeOnly, LoadError, ProfileCollected, ReturnBursts, StepCost, TurnCell,
+        TurnCells, TurnChoices, TurnLoans, TurnMoments, TurnSpread, TurnStepCosts,
     };
-    let count = |value: u64| u32::try_from(value).unwrap_or(u32::MAX);
     let cell = |[turns, cycles, items]: [u64; 3]| TurnCell {
         turns: count(turns),
         cycles,
         items: count(items),
     };
+    let step = |[occurrences, cycles, squared]: [u64; 3]| StepCost {
+        count: count(occurrences),
+        cycles,
+        squared,
+    };
+    if page >= 3 {
+        let window =
+            net.turns(|turns| Some((turns.steps_window, turns.intakes_window, turns.costs_window)));
+        let Some((steps, intakes, costs)) = window else {
+            return ProfileCollected::Refused(LoadError::UnknownRun);
+        };
+        return match page {
+            3 => ProfileCollected::Steps(TurnStepCosts {
+                available: cfg!(oer_trace),
+                steps: steps.steps.map(step),
+                turn_steps: steps.turn_steps.map(step),
+            }),
+            4 => ProfileCollected::Choices(TurnChoices {
+                weighed: steps.weighed.map(count),
+                chosen: steps.chosen.map(count),
+                withheld: steps.withheld.map(count),
+                unsent: steps.unsent.map(count),
+                examined_by_choice: steps.examined_by_choice.map(count),
+                accepted_by_flush: steps.accepted_by_flush.map(count),
+                choices_by_turn: steps.choices_by_turn.map(count),
+                air_costs: [costs.least, costs.ceiling],
+            }),
+            5 => ProfileCollected::Loans(TurnLoans {
+                home: steps.home.map(count),
+                home_only: {
+                    let [turns, cycles, squared, loans] = steps.home_only;
+                    HomeOnly {
+                        turns: count(turns),
+                        cycles,
+                        squared,
+                        loans: count(loans),
+                    }
+                },
+                loans_by_turn: steps.loans_by_turn.map(count),
+                no_credit: steps.no_credit.map(count),
+                returned_at_drop: steps.returned_at_drop.map(count),
+                intakes: ActorIntakes {
+                    intakes: intakes.intakes,
+                    taking: intakes.taking,
+                    msdus: intakes.msdus,
+                    msdus_by_intake: intakes.msdus_by_intake,
+                },
+            }),
+            _ => ProfileCollected::Refused(LoadError::InvalidParameters),
+        };
+    }
     let window = net.turns(|turns| Some((turns.profile_window, turns.returns_window)));
     let Some((profile, returns)) = window else {
         return ProfileCollected::Refused(LoadError::UnknownRun);
@@ -675,6 +756,9 @@ pub(crate) fn open_turns(net: &Network) {
         turns.start = network_turns(net.source);
         turns.profile_start = oer::observe::turn_profile();
         turns.returns_start = oer::observe::return_bursts();
+        turns.steps_start = oer::observe::turn_steps();
+        turns.intakes_start = oer::observe::actor_intakes();
+        turns.costs_start = oer::observe::air_costs();
     });
 }
 
@@ -693,6 +777,16 @@ pub(crate) fn close_turns(net: &Network) {
             &turns.returns_start,
             &oer::observe::return_bursts(),
         );
+        turns.steps_window = oer::observe::profile::TurnSteps::window(
+            &turns.steps_start,
+            &oer::observe::turn_steps(),
+        );
+        turns.intakes_window = oer::observe::profile::Intakes::window(
+            &turns.intakes_start,
+            &oer::observe::actor_intakes(),
+        );
+        turns.costs_window =
+            oer::observe::profile::AirCosts::window(&turns.costs_start, &oer::observe::air_costs());
     });
 }
 

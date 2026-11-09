@@ -166,7 +166,11 @@ only after the policy chose it and the port gave the room.
   its association's rate offers no account, so no frame is charged at a rate
   its association was not given. The S31's cost model keeps its last answers
   keyed by the resolved rate and the length (the grant) and by the length
-  (the ceiling); a frame no PPDU at its rate carries asks the most.
+  (the ceiling); a frame no PPDU at its rate carries asks the most. In a
+  trace build it tells its observer each answer it computed rather than
+  kept (`AirCostComputed`), and each choice tells the service the
+  candidates and accounts it weighed and why it withheld work
+  (`EgressEvent`).
 - **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
   publications that reached the air by the backend's declared model: the
   modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck

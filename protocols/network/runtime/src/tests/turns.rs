@@ -5,7 +5,10 @@ use oer_portable_events::EventSink;
 use oer_protocols_network_core::NetEvent;
 
 use super::*;
-use crate::{PublishEnd, RequestKind, ServiceEvent, TurnEnd};
+use crate::{
+    Choice, Chosen, Credit, Home, PublishEnd, RequestKind, ServiceEvent, TurnEnd, UnsentKind,
+};
+use oer_protocols_network_port::EgressEvent;
 
 /// The geometry of a sender that holds blocks ahead: every block it may ask
 /// ahead, and credits and lane room for all of them.
@@ -98,6 +101,28 @@ struct Turn {
     accepted: usize,
     published: Vec<PublishEnd>,
     end: Option<TurnEnd>,
+    /// Its choices, what the policy said of them, the port's refusals of
+    /// chosen work, the answers, and the flushes after publishing.
+    choices: Vec<Choice>,
+    egress: Vec<EgressEvent>,
+    unsent: Vec<UnsentKind>,
+    answered: usize,
+    flushed: usize,
+    /// What came home, and the loans at each take that left frames unlent
+    /// for want of credit.
+    home: Vec<Home>,
+    credit: Vec<Credit>,
+    /// Its notice phases, and the notices the policy took in.
+    notice_phases: usize,
+    settled: usize,
+}
+
+/// The step of a publication attempt or a notice the events have opened.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Step {
+    Choice,
+    Transmit,
+    Answer,
 }
 
 impl Turn {
@@ -137,6 +162,11 @@ impl Turn {
 fn turns(events: &[ServiceEvent]) -> Vec<Turn> {
     let mut turns = Vec::new();
     let mut turn = Turn::default();
+    // Each step's events open and close it in order: the bounds a timing
+    // sink reads.
+    let mut step = None;
+    let mut notices_open = false;
+    let mut debit_open = false;
     for event in events {
         match *event {
             ServiceEvent::TurnBegan => {
@@ -148,12 +178,71 @@ fn turns(events: &[ServiceEvent]) -> Vec<Turn> {
             }
             ServiceEvent::Took(kind) => turn.took.push(kind),
             ServiceEvent::BudgetSpent => turn.spent += 1,
+            ServiceEvent::Home(home) => turn.home.push(home),
             ServiceEvent::FrameTaken => turn.frames += 1,
-            ServiceEvent::Noticed => turn.notices += 1,
-            ServiceEvent::Accepted => turn.accepted += 1,
-            ServiceEvent::Published(end) => turn.published.push(end),
+            ServiceEvent::NoCredit(credit) => turn.credit.push(credit),
+            ServiceEvent::NoticesBegan => {
+                assert!(!notices_open && step.is_none(), "{event:?} opens notices");
+                notices_open = true;
+                turn.notice_phases += 1;
+            }
+            ServiceEvent::Noticed => {
+                assert!(notices_open && !debit_open, "a notice within its phase");
+                debit_open = true;
+                turn.notices += 1;
+            }
+            ServiceEvent::Settled => {
+                assert!(debit_open, "a settlement closes its notice");
+                debit_open = false;
+                turn.settled += 1;
+            }
+            ServiceEvent::NoticesEnded => {
+                assert!(notices_open && !debit_open, "the phase ends settled");
+                notices_open = false;
+            }
+            ServiceEvent::ChoiceBegan => {
+                assert!(step.is_none() && !notices_open, "a choice opens alone");
+                step = Some(Step::Choice);
+            }
+            ServiceEvent::Egress(egress) => {
+                assert_eq!(step, Some(Step::Choice), "the policy speaks in its choice");
+                turn.egress.push(egress);
+            }
+            ServiceEvent::Chose(choice) => {
+                assert_eq!(step, Some(Step::Choice), "a choice ends what began");
+                step = (choice.chosen == Chosen::Work).then_some(Step::Transmit);
+                turn.choices.push(choice);
+            }
+            ServiceEvent::Accepted => {
+                assert_eq!(step, Some(Step::Transmit), "the port answers a chosen work");
+                step = Some(Step::Answer);
+                turn.accepted += 1;
+            }
+            ServiceEvent::Unsent(kind) => {
+                assert_eq!(step, Some(Step::Transmit), "the port answers a chosen work");
+                step = Some(Step::Answer);
+                turn.unsent.push(kind);
+            }
+            ServiceEvent::Answered => {
+                assert_eq!(
+                    step,
+                    Some(Step::Answer),
+                    "the policy answers the port's end"
+                );
+                step = None;
+                turn.answered += 1;
+            }
+            ServiceEvent::Published(end) => {
+                assert!(step.is_none(), "publishing ends between attempts");
+                turn.published.push(end);
+            }
+            ServiceEvent::Flushed => {
+                assert!(!turn.published.is_empty(), "a flush follows publishing");
+                turn.flushed += 1;
+            }
             ServiceEvent::TurnEnded(end) => {
                 assert!(turn.began, "every turn that ends began");
+                assert!(step.is_none() && !notices_open, "a turn ends between steps");
                 turn.end = Some(end);
                 turns.push(core::mem::take(&mut turn));
             }
@@ -240,6 +329,39 @@ fn an_unpaced_sender_s_turns_take_its_reserves_and_sends_within_the_budget() {
         wire.0.borrow().sent.len(),
         "every frame the port took, ARP's among them"
     );
+    // Each attempt the first-ready egress makes pulls one work in one pass,
+    // and the one that ends publishing finds the list empty; every attempt
+    // the port ended is answered, and a turn that published flushes once.
+    for turn in &turns {
+        let worked = turn.choices.iter().filter(|c| c.chosen == Chosen::Work);
+        assert!(
+            worked.clone().all(|c| c.examined == 1 && c.walks == 1),
+            "{turn:?}"
+        );
+        assert_eq!(
+            worked.count(),
+            turn.accepted + turn.unsent.len(),
+            "{turn:?}"
+        );
+        assert_eq!(turn.answered, turn.accepted + turn.unsent.len(), "{turn:?}");
+        assert!(
+            turn.egress.is_empty(),
+            "the first-ready egress weighs nothing"
+        );
+        assert_eq!(turn.flushed, usize::from(turn.accepted != 0), "{turn:?}");
+        assert_eq!(turn.notice_phases, 1, "{turn:?}");
+        if turn.published == [PublishEnd::Chose] {
+            assert_eq!(
+                turn.choices.last(),
+                Some(&Choice {
+                    examined: 0,
+                    walks: 1,
+                    chosen: Chosen::Nothing,
+                }),
+                "{turn:?}"
+            );
+        }
+    }
 
     // What the turns that took a request show: the sends alone still spend
     // the budget in most, and a reservation a look-ahead leaves more than
@@ -314,12 +436,20 @@ fn a_spent_budget_counts_only_while_the_lane_holds_more() {
     }
     let release = ServiceEvent::Took(RequestKind::Release);
     assert_eq!(
-        seen.0[seen.0.len() - 7..],
+        seen.0[seen.0.len() - 11..],
         [
             release,
             release,
             release,
             release,
+            ServiceEvent::NoticesBegan,
+            ServiceEvent::NoticesEnded,
+            ServiceEvent::ChoiceBegan,
+            ServiceEvent::Chose(Choice {
+                examined: 0,
+                walks: 1,
+                chosen: Chosen::Nothing,
+            }),
             ServiceEvent::Published(PublishEnd::Chose),
             ServiceEvent::TurnEnded(TurnEnd {
                 blocks_free: true,
@@ -495,6 +625,114 @@ fn each_turn_tells_the_frames_it_took_in_and_the_notices_it_handed_on() {
         "the first turn hands on every notice"
     );
     assert_eq!(notices.iter().sum::<usize>(), 3, "every notice, once");
+    for turn in &turns {
+        assert_eq!(turn.settled, turn.notices, "each notice settled: {turn:?}");
+        assert_eq!(turn.notice_phases, 1, "{turn:?}");
+    }
+}
+
+/// A full port refuses the chosen work: the attempt ends unsent, the policy
+/// still answers it, publishing ends refused and nothing is flushed.
+#[test]
+fn a_port_s_refusal_is_an_attempt_that_ends_unsent_and_answered() {
+    brand!(Net);
+    let (mut service, mut socket, wire, _stop) = flow::<Net>();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut seen = Seen::default();
+    let mut observers = Vec::new();
+    {
+        let mut run = pin!(service.run(clock, &mut seen));
+        let mut blocks = hold(&mut socket, &mut run, 1);
+        wire.0.borrow_mut().full = true;
+        for mut block in blocks.drain(..) {
+            block.fill(b"refused").unwrap();
+            observers.push(socket.send(peer(), block).ok().unwrap());
+        }
+        pass(&mut run);
+    }
+    let turns = turns(&seen.0);
+    let refused: Vec<_> = turns
+        .iter()
+        .filter(|turn| !turn.unsent.is_empty())
+        .collect();
+    let [turn] = refused[..] else {
+        panic!("one turn met the full port: {turns:?}");
+    };
+    assert_eq!(turn.unsent, [UnsentKind::Port]);
+    assert_eq!(turn.accepted, 0);
+    assert_eq!(turn.answered, 1, "the refusal is answered");
+    assert_eq!(turn.published, [PublishEnd::Refused]);
+    assert_eq!(turn.flushed, 0, "nothing moved, nothing flushed");
+    assert_eq!(
+        turn.choices,
+        [Choice {
+            examined: 1,
+            walks: 1,
+            chosen: Chosen::Work,
+        }]
+    );
+}
+
+/// A policy that withholds ready work without reading it pulls nothing:
+/// the choice says so, apart from a choice that found the list empty only
+/// by its counts, and the service publishes nothing.
+#[test]
+fn a_policy_that_reads_nothing_pulls_nothing_from_ready_work() {
+    brand!(Net);
+    let memory = Box::leak(Box::new([[0; SIZE]; FLOW_BLOCKS]));
+    let (pool, brand) = claim::<Net, SIZE, FLOW_BLOCKS>(memory).unwrap();
+    let wire = WirePort::default();
+    wire.0.borrow_mut().answers = true;
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service: Service<
+        'static,
+        'static,
+        Net,
+        SIZE,
+        1,
+        FLOW_CREDITS,
+        RECEIVED,
+        2,
+        FLOW_BLOCKS,
+        FLOW_DEPTH,
+        RECEIVED,
+        WirePort,
+        Exhausted,
+    > = Service::new(owner, Exhausted, MemoryPolicy::KEEP, stopping);
+    let mut socket = service
+        .bind(
+            5000,
+            Dscp::default(),
+            Group::shared(),
+            Box::leak(Box::new(SocketLanes::new())),
+        )
+        .ok()
+        .unwrap();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut seen = Seen::default();
+    let mut observers = Vec::new();
+    {
+        let mut run = pin!(service.run(clock, &mut seen));
+        for mut block in hold(&mut socket, &mut run, 1) {
+            block.fill(b"withheld").unwrap();
+            observers.push(socket.send(peer(), block).ok().unwrap());
+        }
+        pass(&mut run);
+    }
+    let turns = turns(&seen.0);
+    let last = turns.last().unwrap();
+    assert_eq!(
+        last.choices,
+        [Choice {
+            examined: 0,
+            walks: 0,
+            chosen: Chosen::Nothing,
+        }]
+    );
+    assert_eq!(last.answered, 0, "nothing chosen, nothing answered");
+    assert_eq!(last.published, [PublishEnd::Chose]);
 }
 
 /// An egress whose reservations are all out: it chooses nothing until a
@@ -508,6 +746,7 @@ impl Egress<u32, u32> for Exhausted {
     fn choose<C: Candidate>(
         &mut self,
         _ready: impl Iterator<Item = C> + Clone,
+        _events: &mut impl oer_portable_events::EventSink<oer_protocols_network_port::EgressEvent>,
     ) -> Result<Option<(C, ())>, core::convert::Infallible> {
         Ok(None)
     }

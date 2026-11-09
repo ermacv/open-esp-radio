@@ -298,10 +298,10 @@ impl<'a, N: Notifies> Network<'a, N> {
 }
 /// The station's air for a network's queued egress: one account per
 /// association of the link `N`'s network end reads, a frame of unknown
-/// cost charged the S31's ceiling.
+/// cost charged the S31's ceiling, whose computed costs `O` hears.
 #[cfg(any(test, target_arch = "riscv32"))]
-pub type StationAir<'a, N> =
-    runtime::StationAir<'a, <Ch<N> as runtime::Notifies>::NetworkWaker, S31Ceiling>;
+pub type StationAir<'a, N, O = oer_portable_trace::Noop> =
+    runtime::StationAir<'a, <Ch<N> as runtime::Notifies>::NetworkWaker, S31Ceiling<O>>;
 /// Affine neutral Ethernet transmit end over the network stack's packets
 /// `P`, whose frames go into the network's transmit memory `S`.
 pub struct NetworkTransmit<'a, N: Notifies, P, S: runtime::TxSupply<P>> {

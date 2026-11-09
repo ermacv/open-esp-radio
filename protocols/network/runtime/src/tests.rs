@@ -85,6 +85,8 @@ struct Wire {
     holding: Option<Holding>,
     /// Buffers the port lent and has not got back.
     lent_out: Rc<std::cell::Cell<usize>>,
+    /// What another context does at the next take of a frame, before it.
+    on_take: Option<Box<dyn FnOnce()>>,
 }
 
 /// A buffer the wire lent: it counts itself back when dropped.
@@ -191,6 +193,10 @@ impl FrameSource for WirePort {
         &mut self,
         read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
     ) -> Taken<WireHeld> {
+        let meanwhile = self.0.borrow_mut().on_take.take();
+        if let Some(meanwhile) = meanwhile {
+            meanwhile();
+        }
         let (frame, holding, out) = {
             let mut wire = self.0.borrow_mut();
             let Some(frame) = wire.incoming.pop_front() else {
@@ -2743,6 +2749,7 @@ impl Egress<u32, u32> for Policy {
     fn choose<C: Candidate>(
         &mut self,
         mut ready: impl Iterator<Item = C> + Clone,
+        _events: &mut impl oer_portable_events::EventSink<oer_protocols_network_port::EgressEvent>,
     ) -> Result<Option<(C, ())>, &'static str> {
         let mut account = self.0.borrow_mut();
         if account.fails && ready.clone().next().is_some() {

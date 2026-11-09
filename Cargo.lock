@@ -2863,6 +2863,7 @@ dependencies = [
 name = "oer-protocols-network-port"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-events",
  "oer-protocols-network-wire",
 ]
 

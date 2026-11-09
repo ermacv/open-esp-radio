@@ -91,6 +91,12 @@ impl<'s> DatapathPort<'s> for TestPort<'s> {
     fn returned(burst: super::ReturnBurst) {
         BURSTS.with(|bursts| bursts.borrow_mut().push(burst));
     }
+
+    const OBSERVES_INTAKE: bool = true;
+
+    fn took_in(msdus: usize) {
+        INTAKES.with(|intakes| intakes.borrow_mut().push(msdus));
+    }
 }
 
 std::thread_local! {
@@ -98,6 +104,8 @@ std::thread_local! {
     static OBSERVED: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
     /// The return bursts the actor's observation saw on this test's thread.
     static BURSTS: RefCell<Vec<super::ReturnBurst>> = const { RefCell::new(Vec::new()) };
+    /// The intakes the actor's observation saw on this test's thread.
+    static INTAKES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
 }
 
 type P<'s> = TestPort<'s>;
@@ -2037,6 +2045,28 @@ fn each_return_burst_tells_its_size_the_queue_around_it_and_what_stayed() {
             bench.data_sent().len(),
             "every end went back in a burst"
         );
+    });
+}
+
+/// Each intake tells the MSDUs it took from the network, zero when none
+/// waited, and the intakes together took every MSDU the network sent, each
+/// once.
+#[test]
+fn each_intake_tells_the_msdus_it_took_from_the_network() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        INTAKES.with(|intakes| intakes.borrow_mut().clear());
+        for round in 0..3_u8 {
+            bench.send_msdu(msdu(0, &[round; 8]));
+        }
+        bench.settle();
+        bench.advance(1_000);
+        bench.settle();
+        let taken = INTAKES.with(|intakes| intakes.borrow().clone());
+        assert_eq!(taken.iter().sum::<usize>(), 3, "{taken:?}");
+        assert!(taken.iter().any(|msdus| *msdus != 0), "{taken:?}");
+        assert_eq!(bench.data_sent().len(), 3, "each went on the air");
     });
 }
 

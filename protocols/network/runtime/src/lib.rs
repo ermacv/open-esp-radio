@@ -47,7 +47,10 @@ pub use device::{DevicePort, PortRefusal, TxBuffers};
 pub use local::{
     Interest, LocalEnd, LocalRefused, Next, Offer, Produce, Producer, Producers, Work,
 };
-pub use observation::{LocalEvent, PublishEnd, RequestKind, ServiceEvent, TurnEnd};
+pub use observation::{
+    Choice, Chosen, Credit, Home, LocalEvent, PublishEnd, RequestKind, ServiceEvent, TurnEnd,
+    UnsentKind,
+};
 pub use returns::{NotHome, ReturnEnd, ReturnLane, ReturnRefusal, Returner};
 pub use service::{
     BindRefused, Direct, EndCause, Ended, MemoryPolicy, Service, StopLane, serve_late_loans,

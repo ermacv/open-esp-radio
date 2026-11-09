@@ -111,11 +111,12 @@ impl<'a, 'm, B, const SIZE: usize, const BLOCKS: usize> ReturnLane<'m, B, SIZE, 
         })
     }
 
-    fn drain<const POOL: usize>(&self, pool: &mut Pool<'m, B, SIZE, POOL>) -> bool {
-        let mut moved = false;
+    /// Bring every block the slots hold to `pool`; how many there were.
+    fn drain<const POOL: usize>(&self, pool: &mut Pool<'m, B, SIZE, POOL>) -> usize {
+        let mut moved = 0_usize;
         while let Some(block) = self.take_any() {
             pool.give(block);
-            moved = true;
+            moved = moved.saturating_add(1);
         }
         moved
     }
@@ -232,9 +233,13 @@ impl<B, const SIZE: usize, const BLOCKS: usize> Drop for ReturnEnd<'_, '_, B, SI
 }
 
 impl<'m, B, const SIZE: usize, const BLOCKS: usize> ReturnEnd<'_, 'm, B, SIZE, BLOCKS> {
-    /// Bring home what has arrived; whether anything had.
-    pub(crate) fn take_home<const POOL: usize>(&self, pool: &mut Pool<'m, B, SIZE, POOL>) -> bool {
-        self.lane.pending.swap(false, Ordering::AcqRel) && self.lane.drain(pool)
+    /// Bring home what has arrived; how many blocks had.
+    pub(crate) fn take_home<const POOL: usize>(&self, pool: &mut Pool<'m, B, SIZE, POOL>) -> usize {
+        if self.lane.pending.swap(false, Ordering::AcqRel) {
+            self.lane.drain(pool)
+        } else {
+            0
+        }
     }
 
     /// Whether a block waits; `cx` hears the next.

@@ -1177,8 +1177,9 @@ impl NetworkTurns {
 
 /// One page of what the network core's turns and the station's return
 /// bursts did within run `run`'s window ([`ProfileCollected`]): page 0 the
-/// [`TurnMoments`], 1 the [`TurnCells`], 2 the [`TurnSpread`]. Only a trace
-/// image counts them; others report `available: false` and zeros.
+/// [`TurnMoments`], 1 the [`TurnCells`], 2 the [`TurnSpread`], 3 the
+/// [`TurnStepCosts`], 4 the [`TurnChoices`], 5 the [`TurnLoans`]. Only a
+/// trace image counts them; others report `available: false` and zeros.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct CollectProfile {
     pub run: u32,
@@ -1186,7 +1187,7 @@ pub struct CollectProfile {
 }
 
 /// The pages of a run's profile.
-pub const PROFILE_PAGES: u8 = 3;
+pub const PROFILE_PAGES: u8 = 6;
 
 /// The answer to [`CollectProfile`]: its page, or a page past
 /// [`PROFILE_PAGES`] refused as `InvalidParameters`.
@@ -1195,6 +1196,9 @@ pub enum ProfileCollected {
     Moments(TurnMoments),
     Cells(TurnCells),
     Spread(TurnSpread),
+    Steps(TurnStepCosts),
+    Choices(TurnChoices),
+    Loans(TurnLoans),
     /// The run's window or drain has not ended yet.
     Running,
     Refused(LoadError),
@@ -1306,6 +1310,129 @@ pub struct ReturnBursts {
     /// and those memories.
     pub held_bursts: u32,
     pub held: u32,
+}
+
+/// The steps of [`TurnStepCosts::steps`]: a publication attempt's choice,
+/// the port's answer to the chosen work (its fill included) and the
+/// policy's answer to the port, the flush after publishing, a turn's
+/// notice phase, and one notice's debit within it.
+pub const PROFILE_STEPS: usize = 6;
+
+/// One step within a window: its count, its cycles and the sum of their
+/// squares.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StepCost {
+    pub count: u32,
+    pub cycles: u64,
+    pub squared: u64,
+}
+
+/// Within one window, what the steps of the network's turns cost on the
+/// network's hart ([`PROFILE_STEPS`]). A step runs from the event that
+/// opens it to the event that closes it, each read on the hart's cycle
+/// counter as the image's sink takes it; the events are the same for every
+/// egress policy, so the steps of two policies have the same bounds. A step
+/// includes the interrupts within it, the sink's whole cost for events
+/// inside it and about one event's cost at its two ends.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TurnStepCosts {
+    pub available: bool,
+    /// Each step's occurrences.
+    pub steps: [StepCost; PROFILE_STEPS],
+    /// Each step by turn: the turns it ran in (`count`) and the sums of
+    /// each such turn's cycles in it and of their squares.
+    pub turn_steps: [StepCost; PROFILE_STEPS],
+}
+
+/// The ends of [`TurnChoices::chosen`]: a work, nothing from a list it
+/// pulled no work from, nothing although it pulled works, a fault.
+pub const PROFILE_CHOICE_ENDS: usize = 4;
+/// The reasons of [`TurnChoices::withheld`]: no account could spend, every
+/// reservation was out, the account granted had no work.
+pub const PROFILE_WITHHELD: usize = 3;
+/// The kinds of [`TurnChoices::unsent`]: stale, the port's refusal,
+/// rejected for good, a slot too short, declined by the producer, a fill
+/// misreported, the port's contract broken.
+pub const PROFILE_UNSENT: usize = 7;
+/// The bins of [`TurnChoices::examined_by_choice`]: 0, 1, 2, 3 to 4, 5 to
+/// 8, 9 to 16, and 17 or more works.
+pub const PROFILE_EXAMINED_BINS: usize = 7;
+/// The bins of [`TurnChoices::accepted_by_flush`]: 0 to 7 frames, and 8 or
+/// more.
+pub const PROFILE_FLUSH_BINS: usize = 9;
+/// The bins of [`TurnChoices::choices_by_turn`]: 0 to 8, and 9 or more.
+pub const PROFILE_CHOICE_BINS: usize = 10;
+
+/// Within one window, what the egress policy's choices pulled and weighed,
+/// how they and the port's answers ended, how publishing flushed, and the
+/// station's frame costs the queued egress computed.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TurnChoices {
+    /// The works the choices pulled from the ready list over every pass,
+    /// the passes begun, the candidates the policy read, the accounts summed
+    /// over its choices, and the choices it widened past one pass.
+    pub weighed: [u32; 5],
+    pub chosen: [u32; PROFILE_CHOICE_ENDS],
+    pub withheld: [u32; PROFILE_WITHHELD],
+    pub unsent: [u32; PROFILE_UNSENT],
+    pub examined_by_choice: [u32; PROFILE_EXAMINED_BINS],
+    /// The flushes by the frames the port accepted in their turn.
+    pub accepted_by_flush: [u32; PROFILE_FLUSH_BINS],
+    pub choices_by_turn: [u32; PROFILE_CHOICE_BINS],
+    /// The station's least grants and ceilings computed: each a miss of
+    /// its one-entry cache.
+    pub air_costs: [u32; 2],
+}
+
+/// The bins of [`TurnLoans::loans_by_turn`]: 1, 2, 3 to 4, 5 to 8, 9 to 16,
+/// and 17 or more loans.
+pub const PROFILE_LOAN_BINS: usize = 6;
+/// The bins of [`TurnLoans::returned_at_drop`]: 0, 1, 2, 3 to 4, 5 to 8,
+/// and 9 or more loans.
+pub const PROFILE_RETURNED_BINS: usize = 6;
+/// The bins of [`ActorIntakes::msdus_by_intake`]: 0, 1, 2, 3 to 4, 5 to 8,
+/// 9 to 16, and 17 or more MSDUs.
+pub const PROFILE_INTAKE_BINS: usize = 7;
+
+/// Turns of the window with none of the profile's four items that brought
+/// something home: their count, cycles, cycles squared and the loans they
+/// gave back.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct HomeOnly {
+    pub turns: u32,
+    pub cycles: u64,
+    pub squared: u64,
+    pub loans: u32,
+}
+
+/// The datapath actor's intakes of the network's MSDUs into its standby
+/// arena within one window, each while the link carried data: the intakes,
+/// those that took any MSDU, the MSDUs, and the intakes by their MSDUs.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct ActorIntakes {
+    pub intakes: u32,
+    pub taking: u32,
+    pub msdus: u32,
+    pub msdus_by_intake: [u32; PROFILE_INTAKE_BINS],
+}
+
+/// Within one window, what came home to the network before its turns'
+/// frames, the loans at each frame left unlent for want of credit, and the
+/// datapath actor's intakes.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TurnLoans {
+    /// The loans given back to the account, the turns that gave any back,
+    /// the blocks the return lane brought, and the turns that brought any.
+    pub home: [u32; 4],
+    pub home_only: HomeOnly,
+    pub loans_by_turn: [u32; PROFILE_LOAN_BINS],
+    /// The takes of a received frame that left frames unlent for want of
+    /// credit, the frames, the sums of the loans out and of the loans back
+    /// with their port and not yet given back, read once the take ended, and
+    /// the takes with any such loan.
+    pub no_credit: [u32; 5],
+    pub returned_at_drop: [u32; PROFILE_RETURNED_BINS],
+    pub intakes: ActorIntakes,
 }
 
 /// The L1 cache's access counts within one window, by bus: the image

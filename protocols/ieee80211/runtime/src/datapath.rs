@@ -208,6 +208,17 @@ pub trait DatapathPort<'id>: Sized + 'id {
     /// Observe one burst of the network's memory the actor gave back
     /// ([`ReturnBurst`]); called only when [`Self::OBSERVES_RETURNS`].
     fn returned(_burst: ReturnBurst) {}
+
+    /// Whether [`Self::took_in`] observes the actor's intakes: without it
+    /// the actor reports none.
+    const OBSERVES_INTAKE: bool = false;
+
+    /// Observe one intake of the network's MSDUs into the standby arena
+    /// while the link carries data: the `msdus` it took from the network's
+    /// transmit queue, zero when none waited. An MSDU the plane deferred and
+    /// takes again later counts once, when it left the queue. Called only
+    /// when [`Self::OBSERVES_INTAKE`].
+    fn took_in(_msdus: usize) {}
 }
 
 /// One burst of the network's memory the actor gave back through the

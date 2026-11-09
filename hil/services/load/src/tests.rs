@@ -867,6 +867,11 @@ fn every_profile_page_at_its_largest_fits_one_response() {
         cycles: u64::MAX,
         items: u32::MAX,
     };
+    let step = StepCost {
+        count: u32::MAX,
+        cycles: u64::MAX,
+        squared: u64::MAX,
+    };
     let pages = [
         ProfileCollected::Moments(TurnMoments {
             available: true,
@@ -895,9 +900,47 @@ fn every_profile_page_at_its_largest_fits_one_response() {
                 held: u32::MAX,
             },
         }),
+        ProfileCollected::Steps(TurnStepCosts {
+            available: true,
+            steps: [step; PROFILE_STEPS],
+            turn_steps: [step; PROFILE_STEPS],
+        }),
+        ProfileCollected::Choices(TurnChoices {
+            weighed: [u32::MAX; 5],
+            chosen: [u32::MAX; PROFILE_CHOICE_ENDS],
+            withheld: [u32::MAX; PROFILE_WITHHELD],
+            unsent: [u32::MAX; PROFILE_UNSENT],
+            examined_by_choice: [u32::MAX; PROFILE_EXAMINED_BINS],
+            accepted_by_flush: [u32::MAX; PROFILE_FLUSH_BINS],
+            choices_by_turn: [u32::MAX; PROFILE_CHOICE_BINS],
+            air_costs: [u32::MAX; 2],
+        }),
+        ProfileCollected::Loans(TurnLoans {
+            home: [u32::MAX; 4],
+            home_only: HomeOnly {
+                turns: u32::MAX,
+                cycles: u64::MAX,
+                squared: u64::MAX,
+                loans: u32::MAX,
+            },
+            loans_by_turn: [u32::MAX; PROFILE_LOAN_BINS],
+            no_credit: [u32::MAX; 5],
+            returned_at_drop: [u32::MAX; PROFILE_RETURNED_BINS],
+            intakes: ActorIntakes {
+                intakes: u32::MAX,
+                taking: u32::MAX,
+                msdus: u32::MAX,
+                msdus_by_intake: [u32::MAX; PROFILE_INTAKE_BINS],
+            },
+        }),
         ProfileCollected::Running,
         ProfileCollected::Refused(LoadError::InvalidParameters),
     ];
+    assert_eq!(
+        pages.len(),
+        usize::from(PROFILE_PAGES) + 2,
+        "every page and both other answers"
+    );
     for page in pages {
         let encoded = postcard::to_slice(&page, &mut buffer).unwrap();
         assert!(encoded.len() <= 512, "{page:?}: {}", encoded.len());

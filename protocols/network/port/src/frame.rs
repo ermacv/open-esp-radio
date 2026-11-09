@@ -3,6 +3,8 @@
 
 use core::task::Context;
 
+use oer_portable_events::EventSink;
+
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::device::{EthernetFrame, EthernetFrameView, LinkSnapshot};
@@ -176,13 +178,16 @@ pub trait Egress<Ticket, Notice> {
     type Fault;
 
     /// Choose among `ready`, which holds every piece of ready work; `None`
-    /// until a port's wake if nothing may go now.
+    /// until a port's wake if nothing may go now. `events` hears what the
+    /// choice weighed and why it withheld work ([`EgressEvent`]); a disabled
+    /// sink, `()` among them, hears nothing and the policy builds no event.
     ///
     /// # Errors
     /// [`Self::Fault`], which ends the service.
     fn choose<C: Candidate>(
         &mut self,
         ready: impl Iterator<Item = C> + Clone,
+        events: &mut impl EventSink<EgressEvent>,
     ) -> Result<Option<(C, Self::Reservation)>, Self::Fault>;
 
     /// The port took the frame: its charge waits for a notice.
@@ -213,6 +218,39 @@ pub trait Egress<Ticket, Notice> {
     /// # Errors
     /// [`Self::Fault`].
     fn notice(&mut self, notice: Notice) -> Result<(), Self::Fault>;
+}
+
+/// What a policy's choice weighed and absorbed, for the sink its caller lends
+/// [`Egress::choose`]. The choice's result is the caller's to count; a policy
+/// with nothing to weigh, such as one that takes the first ready work,
+/// reports nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EgressEvent {
+    /// The choice read `candidates` works that may go now, summed over every
+    /// pass it made over the ready work, in `accounts` accounts. With
+    /// `widened`, it found more accounts than one pass keeps and read the
+    /// whole list twice more; `accounts` is then the most one pass keeps.
+    /// Counts past the field's range read its largest value.
+    Weighed {
+        candidates: u16,
+        accounts: u8,
+        widened: bool,
+    },
+    /// The choice reserved nothing although work could go.
+    Withheld(Withheld),
+}
+
+/// Why a choice with work that could go reserved nothing
+/// ([`EgressEvent::Withheld`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Withheld {
+    /// No account may spend now.
+    NoGrant,
+    /// Every reservation is out: a frame's end makes room.
+    Capacity,
+    /// The account granted had no work of the list: its reservation went
+    /// back.
+    NoWork,
 }
 
 /// Why a port published nothing.

@@ -90,7 +90,10 @@ fn storage() -> AirtimeStorage<u8, 4, 2> {
 
 /// Choose, publish under `ticket` and complete at `charged`.
 fn exchange(policy: &mut Policy<'_>, ready: &[Work], ticket: u8, charged: u32) -> Work {
-    let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (work, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.accepted(held, ticket).unwrap();
     let exchange = Exchange {
         ticket,
@@ -122,7 +125,10 @@ fn a_peer_that_costs_more_waits_longer() {
     let mut air = [0_u32; 3];
     for round in 0..40 {
         let ticket = place(round);
-        let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let (work, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
         let peer = work.0.peer[5];
         let charged = if peer == 2 { 4 * COST } else { COST };
         air[usize::from(peer)] += charged;
@@ -207,7 +213,7 @@ fn nothing_ready_chooses_nothing() {
         ..Air::default()
     };
     let mut policy = Policy::new(&mut storage, air);
-    let chosen = policy.choose([data(1, 0)].into_iter()).unwrap();
+    let chosen = policy.choose([data(1, 0)].into_iter(), &mut ()).unwrap();
     assert!(chosen.is_none());
 }
 
@@ -217,10 +223,18 @@ fn a_full_horizon_waits_for_a_completion() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
     for ticket in 0..2 {
-        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let (_, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
         policy.accepted(held, ticket).unwrap();
     }
-    assert!(policy.choose(ready.iter().copied()).unwrap().is_none());
+    assert!(
+        policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(policy.in_flight(), 2);
     let done = Exchange {
         ticket: 0,
@@ -228,7 +242,12 @@ fn a_full_horizon_waits_for_a_completion() {
         rate: None,
     };
     policy.notice(RadioNotice::Ended(done)).unwrap();
-    assert!(policy.choose(ready.iter().copied()).unwrap().is_some());
+    assert!(
+        policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[test]
@@ -236,7 +255,10 @@ fn a_refusal_returns_the_whole_reservation() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
-    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     assert_eq!(policy.balance_micros(1), Some(0), "the balance is reserved");
     policy.refused(held).unwrap();
     assert_eq!(policy.balance_micros(1), Some(i64::from(QUANTUM)));
@@ -255,7 +277,10 @@ fn an_unknown_cost_keeps_the_whole_reservation() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
-    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.accepted(held, 1).unwrap();
     let unknown = Exchange {
         ticket: 1,
@@ -272,7 +297,10 @@ fn a_frame_of_unknown_end_is_charged_and_not_refunded() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
-    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.unknown(held).unwrap();
     let left = i64::from(QUANTUM) - i64::from(CEILING);
     assert_eq!(policy.balance_micros(1), Some(left));
@@ -284,7 +312,10 @@ fn a_lost_frame_settles_its_reservation_at_the_ceiling_and_frees_its_place() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
-    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.accepted(held, 1).unwrap();
     policy.notice(RadioNotice::Lost(1)).unwrap();
     let left = i64::from(QUANTUM) - i64::from(CEILING);
@@ -317,7 +348,10 @@ fn a_retired_peers_frame_settles_at_its_ceiling_and_its_return_closes_it() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
-    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.accepted(held, 1).unwrap();
     policy.retire(1).unwrap();
     assert_eq!(policy.balance_micros(1), None, "the account ended with it");
@@ -336,7 +370,10 @@ fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
     let mut storage = AirtimeStorage::<u8, 1, 2>::new(micros(QUANTUM));
     let mut policy = AirtimeEgress::<'_, Air, u8, 1, 2>::new(&mut storage, Air::default());
     let go = |policy: &mut AirtimeEgress<'_, Air, u8, 1, 2>, ready: &[Work], ticket| {
-        let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let (work, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
         policy.accepted(held, ticket).unwrap();
         let done = Exchange {
             ticket,
@@ -364,7 +401,10 @@ fn an_unknown_cost_buys_no_air_when_the_estimate_is_low() {
     let mut actual = [0_u32; 3];
     for round in 0..1000 {
         let ticket = place(round);
-        let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let (work, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
         let peer = work.0.peer[5];
         actual[usize::from(peer)] += CEILING;
         policy.accepted(held, ticket).unwrap();
@@ -384,7 +424,10 @@ fn a_peer_that_left_frees_its_account() {
     let mut policy = AirtimeEgress::<'_, Air, u8, 1, 2>::new(&mut storage, Air::default());
     let go = |policy: &mut AirtimeEgress<'_, Air, u8, 1, 2>, peer, ticket| {
         let ready = [data(peer, 0)];
-        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let (_, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
         policy.accepted(held, ticket).unwrap();
     };
     go(&mut policy, 1, 0);
@@ -417,7 +460,10 @@ fn late_completions_across_many_associations_never_exhaust_the_accounts() {
         AirtimeEgress::<'_, Air, u8, 2, RESERVATIONS>::new(&mut storage, Air::default());
     for peer in 1..=5_u8 {
         let ready = [data(peer, 0)];
-        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let (_, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
         policy.accepted(held, peer).unwrap();
         policy.notice(RadioNotice::Left(peer)).unwrap();
     }
@@ -441,10 +487,16 @@ fn late_completions_across_many_associations_never_exhaust_the_accounts() {
 fn a_late_return_after_its_account_closed_charges_nothing_twice() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
-    let (_, held) = policy.choose([data(1, 0)].into_iter()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose([data(1, 0)].into_iter(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.accepted(held, 0).unwrap();
     policy.notice(RadioNotice::Left(1)).unwrap();
-    let (_, held) = policy.choose([data(2, 0)].into_iter()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose([data(2, 0)].into_iter(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.accepted(held, 1).unwrap();
     let new_account = policy.balance_micros(2);
     let late = Exchange {
@@ -525,7 +577,7 @@ fn a_choice_reads_each_ready_work_once_and_asks_its_candidate_once() {
             works: ready.iter(),
             yielded: &yielded,
         };
-        let (_, held) = policy.choose(works).unwrap().unwrap();
+        let (_, held) = policy.choose(works, &mut ()).unwrap().unwrap();
         policy.accepted(held, ticket).unwrap();
         assert_eq!(yielded.get(), ready.len(), "one pass over the ready work");
         assert_eq!(policy.air().asked.get(), ready.len(), "one candidate each");
@@ -561,7 +613,7 @@ fn more_peers_ready_than_accounts_is_the_scheduler_s_refusal() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready: Vec<Work> = (1..=5).map(|peer| data(peer, 0)).collect();
     assert!(matches!(
-        policy.choose(ready.iter().copied()),
+        policy.choose(ready.iter().copied(), &mut ()),
         Err(AirtimeFault::Airtime(
             oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeError::AccountCapacity
         ))
@@ -581,7 +633,10 @@ fn a_settled_frame_reports_its_rate_under_its_account() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let send = |policy: &mut Policy<'_>, peer: u8, ticket: u8| {
-        let (_, held) = policy.choose([data(peer, 0)].into_iter()).unwrap().unwrap();
+        let (_, held) = policy
+            .choose([data(peer, 0)].into_iter(), &mut ())
+            .unwrap()
+            .unwrap();
         policy.accepted(held, ticket).unwrap();
     };
     send(&mut policy, 1, 0);
@@ -654,7 +709,10 @@ fn a_frame_reads_its_own_place_once_at_acceptance_and_once_at_its_end() {
     };
     let ready = [data(1, 0)];
     for place in 0..PLACES {
-        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let (_, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
         reads.set(0);
         policy.accepted(held, ticket(place)).unwrap();
         assert_eq!(reads.get(), 1, "acceptance reads one place");
@@ -689,15 +747,24 @@ fn a_ticket_given_twice_or_past_the_places_is_a_fault() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
-    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.accepted(held, 1).unwrap();
-    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     assert_eq!(policy.accepted(held, 1), Err(AirtimeFault::TicketInUse));
     assert_eq!(policy.in_flight(), 1, "the first frame keeps its place");
     // The refused place's frame was accepted and settled at once: its
     // reservation is free again, the first frame's end still settles, and
     // with both ended the association retires whole.
-    let (_, again) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, again) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     policy.refused(again).unwrap();
     let first = Exchange {
         ticket: 1,
@@ -710,7 +777,10 @@ fn a_ticket_given_twice_or_past_the_places_is_a_fault() {
     assert_eq!(policy.balance_micros(1), None, "no reservation pins it");
     let mut storage = self::storage();
     let mut policy = Policy::new(&mut storage, Air::default());
-    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose(ready.iter().copied(), &mut ())
+        .unwrap()
+        .unwrap();
     assert_eq!(policy.accepted(held, 2), Err(AirtimeFault::NoPlace));
     assert_eq!(
         policy.balance_micros(1),
@@ -719,7 +789,10 @@ fn a_ticket_given_twice_or_past_the_places_is_a_fault() {
     );
     // Both reservations are free: two more frames fit.
     for ticket in 0..2 {
-        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        let (_, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
         policy.accepted(held, ticket).unwrap();
     }
 }
@@ -729,9 +802,9 @@ fn reviewer_ticket_collision_does_not_orphan_the_accepted_reservation() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
-    let (_, first) = policy.choose(ready.into_iter()).unwrap().unwrap();
+    let (_, first) = policy.choose(ready.into_iter(), &mut ()).unwrap().unwrap();
     policy.accepted(first, 1).unwrap();
-    let (_, second) = policy.choose(ready.into_iter()).unwrap().unwrap();
+    let (_, second) = policy.choose(ready.into_iter(), &mut ()).unwrap().unwrap();
     assert_eq!(policy.accepted(second, 1), Err(AirtimeFault::TicketInUse));
     // Complete the first physical return after its association leaves.
     policy.notice(RadioNotice::Left(1)).unwrap();
@@ -755,7 +828,10 @@ fn reviewer_ticket_collision_does_not_orphan_the_accepted_reservation() {
 fn reviewer_an_out_of_range_ticket_does_not_orphan_the_accepted_reservation() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
-    let (_, held) = policy.choose([data(1, 0)].into_iter()).unwrap().unwrap();
+    let (_, held) = policy
+        .choose([data(1, 0)].into_iter(), &mut ())
+        .unwrap()
+        .unwrap();
     assert_eq!(policy.accepted(held, 2), Err(AirtimeFault::NoPlace));
     policy.notice(RadioNotice::Left(1)).unwrap();
     assert_eq!(policy.in_flight(), 0);
@@ -765,4 +841,172 @@ fn reviewer_an_out_of_range_ticket_does_not_orphan_the_accepted_reservation() {
         None,
         "the fault must not strand the accepted frame's reservation"
     );
+}
+
+/// Every event a choice reported, in order.
+#[derive(Default)]
+struct Weighing(Vec<oer_protocols_network_port::EgressEvent>);
+
+impl oer_portable_events::EventSink<oer_protocols_network_port::EgressEvent> for Weighing {
+    fn event(&mut self, event: oer_protocols_network_port::EgressEvent) {
+        self.0.push(event);
+    }
+}
+
+/// A choice tells the candidates it read and the accounts they fall in,
+/// once: works whose peer may not go are no candidates, and a peer's flows
+/// share its account.
+#[test]
+fn a_choice_reports_the_candidates_and_the_accounts_it_weighed() {
+    use oer_protocols_network_port::EgressEvent;
+    let mut storage = storage();
+    let air = Air {
+        asleep: std::vec![3],
+        ..Air::default()
+    };
+    let mut policy = Policy::new(&mut storage, air);
+    let ready = [data(1, 0), data(1, 1), data(2, 0), control(3)];
+    let mut seen = Weighing::default();
+    let chosen = policy.choose(ready.iter().copied(), &mut seen).unwrap();
+    assert!(chosen.is_some());
+    assert_eq!(
+        seen.0,
+        [EgressEvent::Weighed {
+            candidates: 3,
+            accounts: 2,
+            widened: false,
+        }]
+    );
+    // Nothing ready: nothing weighed, and nothing withheld.
+    let mut seen = Weighing::default();
+    let none: [Work; 0] = [];
+    assert!(
+        policy
+            .choose(none.into_iter(), &mut seen)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        seen.0,
+        [EgressEvent::Weighed {
+            candidates: 0,
+            accounts: 0,
+            widened: false,
+        }]
+    );
+}
+
+/// With every reservation out, a choice with work that could go withholds
+/// it for capacity and says so; a frame's end makes room again.
+#[test]
+fn a_choice_with_every_reservation_out_says_it_withheld_for_capacity() {
+    use oer_protocols_network_port::{EgressEvent, Withheld};
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0), data(2, 0)];
+    for ticket in 0..2 {
+        let (_, held) = policy
+            .choose(ready.iter().copied(), &mut ())
+            .unwrap()
+            .unwrap();
+        policy.accepted(held, ticket).unwrap();
+    }
+    let mut seen = Weighing::default();
+    assert!(
+        policy
+            .choose(ready.iter().copied(), &mut seen)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        seen.0,
+        [
+            EgressEvent::Weighed {
+                candidates: 2,
+                accounts: 2,
+                widened: false,
+            },
+            EgressEvent::Withheld(Withheld::Capacity),
+        ]
+    );
+    let done = Exchange {
+        ticket: 0,
+        charged: Some(micros(COST)),
+        rate: None,
+    };
+    policy.notice(RadioNotice::Ended(done)).unwrap();
+    let mut seen = Weighing::default();
+    assert!(
+        policy
+            .choose(ready.iter().copied(), &mut seen)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        !seen
+            .0
+            .iter()
+            .any(|event| matches!(event, EgressEvent::Withheld(_))),
+        "{:?}",
+        seen.0
+    );
+}
+
+/// More accounts than one pass keeps widen the choice: it reads the whole
+/// list once more for the scheduler, whose refusal of so many accounts ends
+/// it, and the candidates it reports are both passes'.
+#[test]
+fn a_widened_choice_counts_the_candidates_of_every_pass() {
+    use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeError;
+    use oer_protocols_network_port::EgressEvent;
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0), data(2, 0), data(3, 0), data(4, 0), data(5, 0)];
+    let mut seen = Weighing::default();
+    assert_eq!(
+        policy.choose(ready.iter().copied(), &mut seen).err(),
+        Some(AirtimeFault::Airtime(AirtimeError::AccountCapacity))
+    );
+    // Five in the first pass (the fifth overflows), five for the scheduler.
+    assert_eq!(
+        seen.0,
+        [EgressEvent::Weighed {
+            candidates: 10,
+            accounts: 4,
+            widened: true,
+        }]
+    );
+}
+
+/// What a measuring sink hears changes no choice: the same works in the
+/// same order with the unit sink and with one that records.
+#[test]
+fn a_recording_sink_changes_no_choice() {
+    let ready = [data(1, 0), data(2, 1), data(2, 2), control(1), data(3, 0)];
+    let picks = |record: bool| {
+        let mut storage = storage();
+        let mut policy = Policy::new(&mut storage, Air::default());
+        (0..24)
+            .map(|round| {
+                let mut seen = Weighing::default();
+                let (work, held) = if record {
+                    policy.choose(ready.iter().copied(), &mut seen)
+                } else {
+                    policy.choose(ready.iter().copied(), &mut ())
+                }
+                .unwrap()
+                .unwrap();
+                let ticket = place(round);
+                policy.accepted(held, ticket).unwrap();
+                let done = Exchange {
+                    ticket,
+                    charged: Some(micros(COST + 100 * round)),
+                    rate: None,
+                };
+                policy.notice(RadioNotice::Ended(done)).unwrap();
+                work
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(picks(true), picks(false));
 }

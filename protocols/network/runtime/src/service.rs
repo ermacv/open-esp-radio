@@ -14,11 +14,14 @@ use oer_protocols_network_core::{
     CommandId, CommandState, Eviction, Group, GroupsFull, Intake, LentDatagram, LoansRefused,
     NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId, Unsent,
 };
-use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
+use oer_protocols_network_port::{Candidate, Egress, EgressEvent, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::local::{LocalEnd, LocalRefused, Produce, Producer, Producers};
-use crate::observation::{LocalEvent, PublishEnd, ServiceEvent, TurnEnd, seen};
+use crate::observation::{
+    Chosen, Counted, Credit, CreditSeen, Home, LocalEvent, PublishEnd, ServiceEvent, ToService,
+    TurnEnd, UnsentKind, Walked, seen, short,
+};
 use crate::returns::ReturnEnd;
 use crate::socket::{
     Answer, Inbound, LateSocket, LendingLanes, LendingSocket, LentEnd, Request, Sent, ServiceEnd,
@@ -47,9 +50,11 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
     type Reservation = ();
     type Fault = Infallible;
 
+    /// The first ready work: nothing is weighed, so `events` hears nothing.
     fn choose<C: Candidate>(
         &mut self,
         mut ready: impl Iterator<Item = C> + Clone,
+        _events: &mut impl EventSink<EgressEvent>,
     ) -> Result<Option<(C, ())>, Infallible> {
         Ok(ready.next().map(|work| (work, ())))
     }
@@ -180,7 +185,7 @@ impl<
     pub fn collect(&mut self) {
         let pool = &mut self.retired.pool;
         if let Some(returns) = &self.returns {
-            let _any = returns.take_home(pool);
+            let _blocks = returns.take_home(pool);
         }
         for late in self.sockets.iter_mut().chain(&mut self.adopted) {
             if late.as_mut().is_some_and(|late| late.collect(pool)) {
@@ -555,12 +560,23 @@ impl<
         }
     }
 
-    /// Bring home what came by the return lane and from adopted sockets.
-    fn take_home(&mut self) -> bool {
+    /// Bring home what came by the return lane and from adopted sockets, and
+    /// the loans of lent buffers back with their port; whether anything
+    /// moved, and, for a sink `S` that hears turns, the blocks and loans
+    /// that came.
+    fn take_home<S: EventSink<ServiceEvent>>(&mut self) -> (bool, Home) {
         let mut moved = false;
+        let mut home = Home {
+            blocks: 0,
+            loans: 0,
+        };
         let pool = self.owner.pool();
         if let Some(returns) = &self.returns {
-            moved |= returns.take_home(pool);
+            let blocks = returns.take_home(pool);
+            moved |= blocks != 0;
+            if S::ENABLED {
+                home.blocks = short(blocks);
+            }
         }
         for late in &mut self.adopted {
             if late.as_mut().is_some_and(|late| late.collect(pool)) {
@@ -570,10 +586,51 @@ impl<
         }
         for bound in self.bound.iter_mut().flatten() {
             if let Some(lent) = &mut bound.lent {
-                moved |= lent.collect(pool.loans());
+                let collected = lent.collect(pool.loans());
+                moved |= collected.any;
+                if S::ENABLED {
+                    home.loans = home.loans.saturating_add(short(collected.given));
+                }
             }
         }
-        moved
+        (moved, home)
+    }
+
+    /// The pool's loans after a take of a received frame left `drops` frames
+    /// unlent for want of credit.
+    fn credit(&mut self, drops: u8) -> Credit {
+        let returned = self
+            .bound
+            .iter()
+            .flatten()
+            .filter_map(|bound| bound.lent.as_ref())
+            .fold(0_u32, |sum, lent| sum.saturating_add(lent.returned()));
+        Credit {
+            drops,
+            outstanding: short(self.owner.pool().loans().outstanding()),
+            returned: u16::try_from(returned).unwrap_or(u16::MAX),
+        }
+    }
+
+    /// Take in one received frame, and tell `events` of the loans when the
+    /// take left any frame unlent for want of credit. A sink that hears no
+    /// turns takes the core's take as it is.
+    fn take_frame<S: EventSink<NetEvent> + EventSink<ServiceEvent>>(
+        &mut self,
+        now: Instant,
+        events: &mut S,
+    ) -> Intake<B, P::Held> {
+        if !<S as EventSink<ServiceEvent>>::ENABLED {
+            return self.owner.take_frame(now, events);
+        }
+        let mut seen = CreditSeen::new(&mut *events);
+        let intake = self.owner.take_frame(now, &mut seen);
+        let drops = seen.drops();
+        if drops != 0 {
+            let credit = self.credit(drops);
+            report(events, || ServiceEvent::NoCredit(credit));
+        }
+        intake
     }
 
     /// A new group of at most `limit` blocks.
@@ -719,10 +776,10 @@ impl<
     /// One bounded pass over everything; whether anything moved. Every exit
     /// goes through its one epilogue, which hands every known result to its
     /// client, so at an await each open work truly was not published.
-    fn turn(
+    fn turn<S: EventSink<NetEvent> + EventSink<ServiceEvent>>(
         &mut self,
         now: Instant,
-        events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
+        events: &mut S,
     ) -> bool {
         let mut moved = false;
         report(events, || ServiceEvent::TurnBegan);
@@ -732,11 +789,15 @@ impl<
         for index in 0..SOCKETS {
             moved |= self.commands(now, index, events);
         }
-        moved |= self.take_home();
+        let (home_moved, home) = self.take_home::<S>();
+        moved |= home_moved;
+        seen(events, || {
+            (home.blocks != 0 || home.loans != 0).then_some(ServiceEvent::Home(home))
+        });
         moved |= self.give_blocks();
         let mut intake_full = true;
         for _ in 0..TURN_FRAMES {
-            match self.owner.take_frame(now, events) {
+            match self.take_frame(now, events) {
                 Intake::Empty => {
                     intake_full = false;
                     break;
@@ -749,6 +810,7 @@ impl<
         }
         seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
         let mut told_all = false;
+        report(events, || ServiceEvent::NoticesBegan);
         for _ in 0..TURN_NOTICES {
             let Some(notice) = self.owner.take_notice() else {
                 told_all = true;
@@ -758,10 +820,12 @@ impl<
             report(events, || ServiceEvent::Noticed);
             let answer = self.egress.notice(notice);
             self.note(answer);
+            report(events, || ServiceEvent::Settled);
             if self.fault.is_some() {
                 break;
             }
         }
+        report(events, || ServiceEvent::NoticesEnded);
         if self.fault.is_some() {
             // Nothing more is offered or published: the epilogue delivers.
             report(events, || ServiceEvent::Published(PublishEnd::Fault));
@@ -1007,17 +1071,35 @@ impl<
     /// Publish what the policy chooses, until it or the port has no room. No
     /// await falls between a choice and its answer, so no cancellation can
     /// leave a reservation unanswered.
-    fn publish(&mut self, now: Instant, events: &mut impl EventSink<ServiceEvent>) -> bool {
+    fn publish<S: EventSink<ServiceEvent>>(&mut self, now: Instant, events: &mut S) -> bool {
         let mut moved = false;
         let mut end = PublishEnd::Budget;
         for _ in 0..TURN_FRAMES {
+            report(events, || ServiceEvent::ChoiceBegan);
             // After a declining fill, the producer's flow sits out the turn.
             let filtered = self.local.filtered();
             let ready = self
                 .owner
                 .demands(now)
                 .filter(move |demand| filtered.is_none_or(|flow| demand.ready.flow != Some(flow)));
-            let chosen = match self.egress.choose(ready) {
+            let chosen = if S::ENABLED {
+                // A measuring sink hears what the choice pulled: the same
+                // count for every policy, as the service hands the list.
+                let walked = core::cell::Cell::new(Walked::default());
+                let chosen = self
+                    .egress
+                    .choose(Counted::new(ready, &walked), &mut ToService(&mut *events));
+                let kind = match &chosen {
+                    Ok(Some(_)) => Chosen::Work,
+                    Ok(None) => Chosen::Nothing,
+                    Err(_) => Chosen::Fault,
+                };
+                report(events, || ServiceEvent::Chose(walked.get().choice(kind)));
+                chosen
+            } else {
+                self.egress.choose(ready, &mut ToService(&mut *events))
+            };
+            let chosen = match chosen {
                 Ok(chosen) => chosen,
                 Err(fault) => {
                     self.note(Err(fault));
@@ -1031,17 +1113,19 @@ impl<
             };
             let local = &mut self.local;
             let fill = |work, data: &mut [u8]| local.fill(now, work, data);
-            match self.owner.transmit(now, demand.grant(), fill) {
+            let sent = self.owner.transmit(now, demand.grant(), fill);
+            report(events, || match &sent {
+                Ok(_) => ServiceEvent::Accepted,
+                Err(unsent) => ServiceEvent::Unsent(UnsentKind::of(unsent)),
+            });
+            let (answer, stop) = match sent {
                 Ok(ticket) => {
                     moved = true;
-                    report(events, || ServiceEvent::Accepted);
-                    let answer = self.egress.accepted(reservation, ticket);
-                    self.note(answer);
+                    (self.egress.accepted(reservation, ticket), None)
                 }
                 Err(Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort) => {
                     moved = true;
-                    let answer = self.egress.refused(reservation);
-                    self.note(answer);
+                    (self.egress.refused(reservation), None)
                 }
                 // One declining fill a turn: the producer's flow is out of
                 // the rest of it, so its declines never stop another's work.
@@ -1049,30 +1133,26 @@ impl<
                     moved = true;
                     report(events, || ServiceEvent::Local(LocalEvent::Declined));
                     self.local.declined();
-                    let answer = self.egress.refused(reservation);
-                    self.note(answer);
+                    (self.egress.refused(reservation), None)
                 }
                 // The port took nothing, by its word, and is at fault: the
                 // work ended by its fill's cause, and the service ends.
                 Err(Unsent::FillMisreported(_)) => {
                     moved = true;
-                    let answer = self.egress.refused(reservation);
-                    self.note(answer);
-                    end = PublishEnd::Fault;
-                    break;
+                    (self.egress.refused(reservation), Some(PublishEnd::Fault))
                 }
                 Err(Unsent::Port(_)) => {
-                    let answer = self.egress.refused(reservation);
-                    self.note(answer);
-                    end = PublishEnd::Refused;
-                    break;
+                    (self.egress.refused(reservation), Some(PublishEnd::Refused))
                 }
                 Err(Unsent::PortContract) => {
-                    let answer = self.egress.unknown(reservation);
-                    self.note(answer);
-                    end = PublishEnd::Fault;
-                    break;
+                    (self.egress.unknown(reservation), Some(PublishEnd::Fault))
                 }
+            };
+            self.note(answer);
+            report(events, || ServiceEvent::Answered);
+            if let Some(stop) = stop {
+                end = stop;
+                break;
             }
             if self.fault.is_some() {
                 end = PublishEnd::Fault;
@@ -1082,6 +1162,7 @@ impl<
         report(events, || ServiceEvent::Published(end));
         if moved {
             self.owner.flush();
+            report(events, || ServiceEvent::Flushed);
         }
         moved
     }
@@ -1151,7 +1232,7 @@ impl<
         // The lease leaves with the core: the watch ends here, as it would
         // at a drop.
         drop(this.watch.take());
-        while this.take_home() {}
+        while this.take_home::<()>().0 {}
         let adopted = this.adopted;
         let returns = this.returns;
         let mut retired = this.owner.retire();

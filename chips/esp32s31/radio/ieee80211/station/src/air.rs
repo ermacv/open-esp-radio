@@ -8,8 +8,11 @@ use core::num::NonZeroU32;
 
 use oer_chips_esp32s31_radio_ieee80211_backend::lower_mac::arena::msdu_cost_ceiling_micros;
 use oer_chips_family_radio_ieee80211_policy::rate_schedule::MAX_SCHEDULE_PUBLICATION_LIMIT;
+use oer_portable_trace::{Noop, Observer, observe};
 use oer_protocols_ieee80211_runtime::station::FrameCost;
 use oer_protocols_ieee80211_wire::phy::PhyRate;
+
+use crate::observation::{AirCost, AirCostComputed};
 
 /// Aggregates on the air a missing member may miss before the data plane
 /// drops it, which the station's transmit Block Ack policy passes on.
@@ -34,18 +37,28 @@ const MPDU_GROWTH: u32 = 26 + 8 + 8 + 8 + 4 - 14;
 /// Each answer is kept with every input it was computed from: the least
 /// grant with the full rate (mode, MCS, streams, width, guard interval and
 /// LTF) and the frame length, the ceiling with the length, whose bounds are
-/// this composition's constants. Another input computes it again.
+/// this composition's constants. Another input computes it again, which a
+/// trace build tells `O` ([`AirCostComputed`]); `Noop` hears nothing.
 #[derive(Debug, Default)]
-pub struct S31Ceiling {
+pub struct S31Ceiling<O = Noop> {
     least: Cell<Option<(PhyRate, usize, NonZeroU32)>>,
     ceiling: Cell<Option<(usize, NonZeroU32)>>,
+    observer: O,
 }
 
 impl S31Ceiling {
     pub const fn new() -> Self {
+        Self::observed(Noop)
+    }
+}
+
+impl<O> S31Ceiling<O> {
+    /// The costs, with `observer` told of each one computed.
+    pub const fn observed(observer: O) -> Self {
         Self {
             least: Cell::new(None),
             ceiling: Cell::new(None),
+            observer,
         }
     }
 }
@@ -74,27 +87,59 @@ fn ceiling_of(frame_octets: usize) -> NonZeroU32 {
     .unwrap_or(NonZeroU32::MAX)
 }
 
-impl FrameCost for S31Ceiling {
-    fn least(&self, frame_octets: usize, rate: PhyRate) -> NonZeroU32 {
+impl<O> S31Ceiling<O> {
+    /// The least grant of `frame_octets` at `rate`, and whether it was
+    /// computed rather than kept.
+    fn least_answer(&self, frame_octets: usize, rate: PhyRate) -> (NonZeroU32, bool) {
         match self.least.get() {
-            Some((at, octets, micros)) if at == rate && octets == frame_octets => micros,
+            Some((at, octets, micros)) if at == rate && octets == frame_octets => (micros, false),
             _ => {
                 let micros = least_at(frame_octets, rate);
                 self.least.set(Some((rate, frame_octets, micros)));
-                micros
+                (micros, true)
             }
         }
     }
 
-    fn ceiling(&self, frame_octets: usize) -> NonZeroU32 {
+    /// The ceiling of `frame_octets`, and whether it was computed rather
+    /// than kept.
+    fn ceiling_answer(&self, frame_octets: usize) -> (NonZeroU32, bool) {
         match self.ceiling.get() {
-            Some((octets, micros)) if octets == frame_octets => micros,
+            Some((octets, micros)) if octets == frame_octets => (micros, false),
             _ => {
                 let micros = ceiling_of(frame_octets);
                 self.ceiling.set(Some((frame_octets, micros)));
-                micros
+                (micros, true)
             }
         }
+    }
+}
+
+impl<O: Observer> FrameCost for S31Ceiling<O> {
+    fn least(&self, frame_octets: usize, rate: PhyRate) -> NonZeroU32 {
+        let (micros, computed) = self.least_answer(frame_octets, rate);
+        if computed {
+            observe!(
+                self.observer,
+                AirCostComputed {
+                    cost: AirCost::Least
+                }
+            );
+        }
+        micros
+    }
+
+    fn ceiling(&self, frame_octets: usize) -> NonZeroU32 {
+        let (micros, computed) = self.ceiling_answer(frame_octets);
+        if computed {
+            observe!(
+                self.observer,
+                AirCostComputed {
+                    cost: AirCost::Ceiling
+                }
+            );
+        }
+        micros
     }
 }
 

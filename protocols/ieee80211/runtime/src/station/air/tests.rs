@@ -161,7 +161,7 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
         // The previous association's end comes first.
         assert!(handed_on(&mut ends, &mut egress).is_empty());
         let (_, held) = egress
-            .choose([Frame(ready(1514))].into_iter())
+            .choose([Frame(ready(1514))].into_iter(), &mut ())
             .unwrap()
             .expect("every association has its account");
         let ticket = u8::try_from(epoch).unwrap();
@@ -329,7 +329,7 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
     let mut egress =
         AirtimeEgress::<'_, _, u8, 2, 2>::new(&mut storage, StationAir::new(&link, &asked));
     let (_, held) = egress
-        .choose([Frame(ready(1514))].into_iter())
+        .choose([Frame(ready(1514))].into_iter(), &mut ())
         .unwrap()
         .expect("association 1's account");
     egress.accepted(held, 1).unwrap();
@@ -343,7 +343,7 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
         .unwrap();
     asked.0.borrow_mut().clear();
     let _chosen = egress
-        .choose([Frame(ready(1514))].into_iter())
+        .choose([Frame(ready(1514))].into_iter(), &mut ())
         .unwrap()
         .expect("association 2's account");
     assert_eq!(
@@ -409,7 +409,7 @@ fn a_link_up_without_its_association_s_rate_offers_no_account() {
     assert_eq!(egress.air().candidate(&ready(1514)), None);
     assert!(
         egress
-            .choose([Frame(ready(1514))].into_iter())
+            .choose([Frame(ready(1514))].into_iter(), &mut ())
             .unwrap()
             .is_none()
     );
@@ -418,7 +418,7 @@ fn a_link_up_without_its_association_s_rate_offers_no_account() {
     link.publish(up(1), FLOOR);
     assert!(
         egress
-            .choose([Frame(ready(1514))].into_iter())
+            .choose([Frame(ready(1514))].into_iter(), &mut ())
             .unwrap()
             .is_some()
     );

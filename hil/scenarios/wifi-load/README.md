@@ -135,6 +135,60 @@ queued, the bursts by size (`queued_by_burst`), the queue's occupancy
 before and after each burst, and the bursts that left memory with the
 station for want of room (`held_bursts`, `held`).
 
+The same record splits the turns into steps, each timed on the network
+task's hart from the service event that opens it to the one that closes
+it, as the image's sink reads the cycle counter first thing for every
+event. The service reports these events at the same points whatever its
+egress, `Direct` or `Queued`, so both have the same bounds. `steps` holds
+each step's occurrences (`count`, `cycles`, `cycles_squared`,
+`mean_cycles`) and `turn_steps` the same per turn that had the step
+(`count` is then turns, `cycles` the sum of each turn's cycles in it):
+`choice` from an attempt's beginning, through building the ready list and
+the policy's choice, to its end; `transmit` from a chosen work to the
+port's acceptance or refusal of it, the frame's fill included; `answer`
+from the port's end to the policy's answer (`accepted`, `refused` or
+`unknown`); `flush` from the end of publishing to the port's flush after
+it, when publishing moved anything (the ring that tells the station's
+actor); `notices` from the beginning of a turn's notices to their end,
+every take of a notice from the port included; and `debit`, nested in
+`notices`, from one notice handed to the policy to its settlement. A step
+includes the interrupts taken on that hart within it, the sink's whole
+cost for the events inside it (the policy's report within a choice, the
+notices within a notice phase) and about one event's cost at its two ends;
+a trace image's counting list adds a cell update per work a choice pulls,
+which a `Queued` choice does for every ready work. `choices` holds what
+the choices pulled (`examined` works over every pass, `walks` passes
+begun, counted by the service as it hands the list), what the policy
+weighed (`candidates` read over every pass, `accounts` summed over its
+choices, `widened` choices past one pass; `Direct` weighs nothing), the
+choices by how they ended (`chosen`: a `work`, nothing from a list it
+pulled nothing from (`empty`), nothing although it pulled works
+(`withheld`), a `fault`), why the policy withheld work (`withheld`:
+`no_grant`, `capacity`, `no_work`), the chosen works the port published
+nothing of by why (`unsent`), the choices by works pulled, the flushes by
+the frames accepted in their turn (`accepted_by_flush`, the publication
+sizes), the turns by their choices, and `air_costs_computed`: the S31 frame
+costs the queued egress computed rather than kept, each a miss of its
+one-entry cache, least grants and ceilings. `loans` holds what came home
+before the turns' frames: the loans of lent buffers back with their port
+that a turn gave back to the account (`loans_back`, `loan_turns`,
+`loans_by_turn`) apart from the blocks the return lane brought
+(`blocks_home`, `block_turns`), the transmit notices and the buffers'
+physical return to the port at their drop; `home_only` the turns with none
+of the four items that brought something home, with their cycles and
+loans (the rest of `empty` brought nothing); `no_credit` each take of a
+received frame that left frames unlent for want of credit, read once the
+take ended: the frames, the sums of the loans out (`outstanding`) and of
+the lent buffers back with their port whose loans were not yet given back
+(`returned`), and the takes by the latter (`returned_at_drop`); and
+`actor_intakes`, counted on the datapath actor's hart: the actor's intakes
+of the network's MSDUs into its standby arena while the link carried data,
+those that took any, the MSDUs and the intakes by MSDUs. The summary line
+adds the choices' mean cycles and works pulled, the mean transmit, answer
+and debit, the loans back, the home-only turns and the takes without
+credit. Host tests check what is counted and where; only a trace image on
+the board gives cycles.
+
 Each level's `network_turns` records what the network core's service did
 in its turns over the window, and prints one line (`network turns
 <level>:`); only a trace build counts them (`available` false otherwise). `requests` counts the requests

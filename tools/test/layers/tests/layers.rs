@@ -4273,10 +4273,14 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
 }
 
 /// Every network package and the workspace packages it may take, normal or
-/// build: the codec stands on `oer-portable-wire` alone and the contract on the codec.
+/// build: the codec stands on `oer-portable-wire` alone and the contract on the
+/// codec and the event sinks its policies report to.
 const NETWORK_LAYERS: [(&str, &[&str]); 5] = [
     ("protocols/network/wire", &["oer-portable-wire"]),
-    ("protocols/network/port", &["oer-protocols-network-wire"]),
+    (
+        "protocols/network/port",
+        &["oer-portable-events", "oer-protocols-network-wire"],
+    ),
     (
         "protocols/network/core",
         &[
