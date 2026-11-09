@@ -76,3 +76,36 @@ fn an_unconfirmed_stop_that_the_port_confirms_later_returns_every_owner() {
         assert!(embassy_futures::block_on(stopped).is_ok());
     }));
 }
+
+#[test]
+fn the_terminals_of_one_call_each_bring_their_owners_home() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        let script = async {
+            counted.idle(64).await;
+            // Probe responses wait in their held queue, each with a ticket
+            // and a buffer of the runner's.
+            air.hold(WmmAccessCategory::Voice, true);
+            for _ in 0..4 {
+                air.receive(&probe_request(), ModelRxMeta::new(channel(), -40, -90));
+                counted.idle(16).await;
+            }
+            // The stop withdraws them in one of the port's calls: each
+            // terminal brings its owners home during that call.
+            stop_and_finish(&counted, &air, &shared).await;
+        };
+        stopped(drive(runner.run(&shared, &counted), script).await);
+        assert_eq!(
+            runner.homes.tickets.len(),
+            oer_protocols_ieee80211_testing_model::MODEL_TICKETS
+        );
+        assert_eq!(
+            runner.homes.buffers.len(),
+            oer_protocols_ieee80211_testing_model::MODEL_LARGE_BUFFERS
+        );
+        assert!(runner.homes.purposes.iter().all(Option::is_none));
+        assert!(runner.take_kept().is_none());
+        assert!(runner.homes.held.is_none() && runner.homes.refused.is_none());
+    }));
+}

@@ -1,10 +1,55 @@
-//! The release answer's wait, bounded by the stop's deadline.
+//! The release answer's wait, bounded by the stop's deadline, and the
+//! release of a stopped radio until it left.
 
 use core::{
     future::Future,
     task::{Context, Poll},
 };
-use oer_portable_time::{Instant, Timer};
+use oer_portable_time::{Duration, Instant, Timer};
+
+/// What one release of a stopped radio `R` did.
+pub(crate) enum Leave<R, C> {
+    /// It left the radio system.
+    Left,
+    /// It refused before it posted anything, for `cause`: the radio comes
+    /// back for a later release.
+    NotPosted { cause: C, radio: R },
+    /// The leave was posted and ended for `cause`: it is never posted
+    /// again.
+    Ended(C),
+}
+
+/// Release `radio` through `leave` until it left or a posted leave ended. A
+/// release that posted nothing is tried again `retry` after its refusal,
+/// each refusal's cause going to `refused`; a posted leave is waited for by
+/// `leave` and never posted again.
+///
+/// # Errors
+///
+/// The cause a posted leave ended with.
+pub(crate) async fn until_left<R, C, F>(
+    timer: &impl Timer,
+    retry: Duration,
+    radio: R,
+    mut leave: impl FnMut(R) -> F,
+    mut refused: impl FnMut(&C),
+) -> Result<(), C>
+where
+    F: Future<Output = Leave<R, C>>,
+{
+    let mut radio = radio;
+    loop {
+        match leave(radio).await {
+            Leave::Left => return Ok(()),
+            Leave::Ended(cause) => return Err(cause),
+            Leave::NotPosted { cause, radio: back } => {
+                refused(&cause);
+                radio = back;
+                timer.wait_until(timer.now().saturating_add(retry)).await;
+            }
+        }
+    }
+}
 
 /// Wait for `answer` until `deadline`, which is checked before each poll of
 /// it: once the deadline has passed `answer` is not polled again, so an
@@ -42,6 +87,73 @@ mod tests {
 
     fn poll<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
         future.poll(&mut Context::from_waker(core::task::Waker::noop()))
+    }
+
+    /// A stopped radio of the test: its number names the one owner.
+    #[derive(Debug, Eq, PartialEq)]
+    struct Radio(u8);
+
+    fn poll_now<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
+        poll(future)
+    }
+
+    #[test]
+    fn a_release_refused_before_its_post_is_tried_again_with_the_same_radio_until_it_left() {
+        let clock = VirtualClock::<2>::new();
+        let attempts = Cell::new(0_u8);
+        let refusals = Cell::new(0_u8);
+        let retry = Duration::from_millis(1);
+        let mut release = core::pin::pin!(until_left(
+            &clock,
+            retry,
+            Radio(7),
+            |radio: Radio| {
+                attempts.set(attempts.get() + 1);
+                let attempt = attempts.get();
+                async move {
+                    // The owner every attempt holds is the first one.
+                    assert_eq!(radio, Radio(7));
+                    if attempt < 3 {
+                        Leave::NotPosted {
+                            cause: "still active",
+                            radio,
+                        }
+                    } else {
+                        Leave::Left
+                    }
+                }
+            },
+            |_| refusals.set(refusals.get() + 1),
+        ));
+        assert!(poll_now(release.as_mut()).is_pending());
+        assert_eq!((attempts.get(), refusals.get()), (1, 1));
+        // Nothing is tried again before the retry time.
+        assert!(poll_now(release.as_mut()).is_pending());
+        assert_eq!(attempts.get(), 1);
+        clock.advance(retry).unwrap();
+        assert!(poll_now(release.as_mut()).is_pending());
+        assert_eq!((attempts.get(), refusals.get()), (2, 2));
+        clock.advance(retry).unwrap();
+        assert_eq!(poll_now(release.as_mut()), Poll::Ready(Ok(())));
+        assert_eq!(attempts.get(), 3);
+    }
+
+    #[test]
+    fn a_posted_leave_that_ended_is_never_posted_again() {
+        let clock = VirtualClock::<2>::new();
+        let attempts = Cell::new(0_u8);
+        let mut release = core::pin::pin!(until_left(
+            &clock,
+            Duration::from_millis(1),
+            Radio(1),
+            |_radio: Radio| {
+                attempts.set(attempts.get() + 1);
+                async { Leave::Ended("unanswered") }
+            },
+            |_: &&str| panic!("a posted leave is no refusal before its post"),
+        ));
+        assert_eq!(poll_now(release.as_mut()), Poll::Ready(Err("unanswered")));
+        assert_eq!(attempts.get(), 1);
     }
 
     #[test]

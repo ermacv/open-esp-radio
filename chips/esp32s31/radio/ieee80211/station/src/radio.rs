@@ -547,19 +547,6 @@ pub(crate) struct StoppedRadio {
     cell: MembershipCell<Wifi>,
 }
 
-/// Why a release of the stopped radio did not end.
-pub(crate) enum ReleaseRefused {
-    /// The MAC or its RX walker was still active; nothing was posted. The
-    /// stopped radio comes back with its cell, for a later release.
-    StillActive {
-        cause: crate::failure::ReleaseCause,
-        radio: StoppedRadio,
-    },
-    /// The leave was posted and ended for its cause: it is never posted
-    /// again.
-    Ended(crate::failure::ReleaseCause),
-}
-
 /// How long a release the MAC refused as still active waits before it
 /// tries again: a chosen retry time, not a hardware bound.
 pub(crate) const RELEASE_RETRY: Duration = Duration::from_millis(1);
@@ -568,24 +555,26 @@ impl StoppedRadio {
     /// Leave the radio system: confirm the MAC stopped, then post the
     /// leave and wait for its answer, however late. A refusal before the
     /// post returns the radio; once posted, the leave is never posted
-    /// again.
-    pub(crate) async fn release(self) -> Result<(), ReleaseRefused> {
+    /// again ([`crate::release::until_left`]).
+    pub(crate) async fn release(self) -> crate::release::Leave<Self, crate::failure::ReleaseCause> {
         use crate::failure::{ReleaseCause, convert};
+        use crate::release::Leave;
         let Self { stopped, cell } = self;
         match stopped.release(cell).await {
-            Ok((_cell, Ok(released))) => {
-                convert::released(released.domain).map_err(ReleaseRefused::Ended)
-            }
-            Ok((cell, Err(failure))) => Err(ReleaseRefused::StillActive {
+            Ok((_cell, Ok(released))) => match convert::released(released.domain) {
+                Ok(()) => Leave::Left,
+                Err(cause) => Leave::Ended(cause),
+            },
+            Ok((cell, Err(failure))) => Leave::NotPosted {
                 cause: convert::still_active(failure.error),
                 radio: Self {
                     stopped: failure.stopped,
                     cell,
                 },
-            }),
-            Err(quarantine) => Err(ReleaseRefused::Ended(ReleaseCause::LeaveUnanswered(
+            },
+            Err(quarantine) => Leave::Ended(ReleaseCause::LeaveUnanswered(
                 quarantine.reason.observations(),
-            ))),
+            )),
         }
     }
 }
@@ -609,22 +598,19 @@ pub(crate) async fn release<W: Binding>(
     port: &mut Port<W>,
     mut still_active: impl FnMut(crate::failure::ReleaseCause),
 ) -> Result<(), crate::failure::ReleaseCause> {
-    let Some(mut radio) = take_stopped::<W>(port) else {
+    let Some(radio) = take_stopped::<W>(port) else {
         return Err(crate::failure::ReleaseCause::NotStopped);
     };
-    loop {
-        match radio.release().await {
-            Ok(()) => return Ok(()),
-            Err(ReleaseRefused::Ended(cause)) => return Err(cause),
-            Err(ReleaseRefused::StillActive { cause, radio: back }) => {
-                still_active(cause);
-                radio = back;
-                let at = oer_portable_time::Clock::now(&EmbassyClock).saturating_add(RELEASE_RETRY);
-                oer_portable_time::Timer::wait_until(&EmbassyClock, at).await;
-            }
-        }
-    }
+    crate::release::until_left(
+        &EmbassyClock,
+        RELEASE_RETRY,
+        radio,
+        StoppedRadio::release,
+        |cause| still_active(*cause),
+    )
+    .await
 }
+
 /// Why [`install`] refused, with the owners it took that its refused step
 /// did not consume.
 pub(crate) struct InstallRefused<W: Binding> {
@@ -725,20 +711,18 @@ impl<W: Binding> Acquired<W> {
                 }
             },
             Self::Started {
-                mut radio,
+                radio,
                 transmitter: _transmitter,
-            } => loop {
-                match radio.release().await {
-                    Ok(()) => return Ok(()),
-                    Err(ReleaseRefused::Ended(cause)) => return Err(cause),
-                    Err(ReleaseRefused::StillActive { radio: back, .. }) => {
-                        radio = back;
-                        let at = oer_portable_time::Clock::now(&EmbassyClock)
-                            .saturating_add(RELEASE_RETRY);
-                        oer_portable_time::Timer::wait_until(&EmbassyClock, at).await;
-                    }
-                }
-            },
+            } => {
+                crate::release::until_left(
+                    &EmbassyClock,
+                    RELEASE_RETRY,
+                    radio,
+                    StoppedRadio::release,
+                    |_| {},
+                )
+                .await
+            }
         }
     }
 }
