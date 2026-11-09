@@ -1099,9 +1099,10 @@ where
             LowerMacTerminal::Configured(Configured::AccessPoint(permission)) => {
                 Ok(Admitted::Configured(permission))
             }
-            LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint { key, permission }) => {
-                Ok(Admitted::GroupInstalled(key, permission))
-            }
+            LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint {
+                key,
+                permission,
+            }) => Ok(Admitted::GroupInstalled(key, permission)),
             LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key)) => {
                 Ok(Admitted::PairwiseInstalled(key))
             }

@@ -1795,12 +1795,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         restored: matches!(error, ReplaceError::ReplacementRolledBack(_)),
                     });
                     return Err(match replacement_failed(error) {
-                        Err(failure) => back(
-                            permission,
-                            key,
-                            material,
-                            Fault::GroupReplacement(failure),
-                        ),
+                        Err(failure) => {
+                            back(permission, key, material, Fault::GroupReplacement(failure))
+                        }
                         Ok((replacement, rollback)) => {
                             // Neither key's entry is installed: the previous
                             // key is not live, and its slot stays with the
@@ -1920,7 +1917,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 Err(Fault::GroupEntryUnconfirmed)
             }
         })();
-        let removed = cleared.and_then(|()| self.remove::<StaPermission<'id, Id>>(device, key.identity));
+        let removed =
+            cleared.and_then(|()| self.remove::<StaPermission<'id, Id>>(device, key.identity));
         match removed {
             Ok(removing) => Ok(removing.settle(permission)),
             Err(fault) => {

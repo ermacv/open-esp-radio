@@ -195,8 +195,8 @@ use oer_protocols_ieee80211_contracts_port::{
     LowerMacCapabilities, MpduKind, MpduLayout, PhyFormatSet, PortTypes, PreparationError,
     PreparationRefused, PreparedTx, RateSupport, ReceiveFilter, RetransmissionPlan, RoleKeys,
     RxBuffer, RxEvidence, RxMeta, RxMetadata, SignalMetadata, Station, SupportedBlockAck,
-    SupportedChannel, TxBody, TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxFrame, TxMpdu,
-    TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
+    SupportedChannel, TxBody, TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxFrame,
+    TxMpdu, TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_contracts_port::{
     AckSnr, Air, BlockAckSnr, SingleEnd, SingleOutcome, SingleResponse, SnrSample,

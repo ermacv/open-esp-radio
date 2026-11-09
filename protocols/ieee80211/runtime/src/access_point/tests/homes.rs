@@ -60,13 +60,13 @@ fn a_terminal_without_a_home_of_the_runners_is_refused_whole_and_stays_with_the_
             assert!(served.is_ok());
         }
         // Refused whole: nothing of it went home.
-        assert_eq!(
-            runner.homes.broken,
-            Some(ApContract::UnknownTicket(index))
-        );
+        assert_eq!(runner.homes.broken, Some(ApContract::UnknownTicket(index)));
         assert_eq!(runner.homes.tickets.len(), tickets);
         assert_eq!(runner.homes.buffers.len(), buffers);
-        assert!(runner.homes.kept.is_empty(), "nothing is kept in the runner");
+        assert!(
+            runner.homes.kept.is_empty(),
+            "nothing is kept in the runner"
+        );
         // The port keeps it through its stop; offered after it, it is
         // refused again and stays.
         runner.homes.broken = None;

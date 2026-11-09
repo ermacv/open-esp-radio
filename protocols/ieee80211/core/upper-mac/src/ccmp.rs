@@ -139,7 +139,10 @@ impl<I> PendingCcmpTxKey<I> {
 impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// Whether `key` is this installation's pairwise key, as
     /// [`Self::installed`] checks it, read by borrow: nothing is spent.
-    pub fn names_pairwise<'id, Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>>(
+    pub fn names_pairwise<
+        'id,
+        Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>,
+    >(
         &self,
         key: &Keys::PairwiseKey,
     ) -> bool {

@@ -797,10 +797,7 @@ fn a_gtk_replacement_whose_rollback_fails_returns_its_owners_through_the_stop_on
         // until its cleanup.
         assert!(fixture.port.recover_for_stop());
         fixture.stop();
-        assert!(
-            fixture.stopped_release_refused(),
-            "the owners are retained"
-        );
+        assert!(fixture.stopped_release_refused(), "the owners are retained");
         assert!(fixture.stopped_service().is_ok());
         assert_eq!(
             fixture.group_terminals(),
@@ -830,20 +827,14 @@ fn a_failed_rollbacks_entry_the_table_does_not_read_cleared_keeps_its_owners() {
         assert!(fixture.port.recover_for_stop());
         fixture.stop();
         fixture.observed.borrow_mut().key_entries_stuck = true;
-        assert_eq!(
-            fixture.stopped_service(),
-            Err(Fault::GroupEntryUnconfirmed)
-        );
+        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryUnconfirmed));
         assert!(fixture.group_terminals().is_empty(), "the slot is not free");
         assert!(fixture.port.retained_group().0.is_some());
         // A table that would now read the entry cleared changes nothing:
         // the clear is not tried again.
         fixture.observed.borrow_mut().key_entries_stuck = false;
         assert!(!fixture.port.recover_for_stop(), "the fault stays");
-        assert_eq!(
-            fixture.stopped_service(),
-            Err(Fault::GroupEntryUnconfirmed)
-        );
+        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryUnconfirmed));
         assert!(fixture.group_terminals().is_empty());
         drop(core::mem::take(&mut fixture.buffers));
         assert!(fixture.port.release().is_none(), "the owners stay");
