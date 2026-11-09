@@ -293,7 +293,8 @@ struct Inner {
     connections: BTreeMap<u64, Arc<Outbox>>,
     clients: BTreeMap<u64, ProcessIdentity>,
     /// Resources whose driver still runs a recovery, also one past its
-    /// deadline: nothing else touches them until it returns.
+    /// deadline: nothing else touches them until it returns. A mark leaves
+    /// before its recovery's confirmation can make the resource ready.
     recovering: std::collections::BTreeSet<String>,
     /// Released leases whose client waits for their resources' recoveries.
     closing: BTreeMap<u64, Closing>,
@@ -1074,7 +1075,8 @@ impl Service {
 
     /// Run `recovery` by its driver, for the lease `lease` that left it. A
     /// driver past the deadline leaves the resource unavailable, and its
-    /// resource stays untouched until the driver returns.
+    /// resource stays untouched until the driver returns. The driver's
+    /// confirmation is applied only after its mark in `recovering` left.
     fn spawn_recovery(&self, inner: &mut Inner, recovery: Recovery, lease: Option<u64>) {
         if !inner.recovering.insert(recovery.resource.clone()) {
             // The running recovery's result is stale; a person returns the
@@ -1096,13 +1098,16 @@ impl Service {
         let running = recovery.clone();
         std::thread::spawn(move || {
             let confirmation = driver.shared.drivers.recover(&running);
-            let _ = done.send(confirmation);
-            #[cfg(test)]
-            driver.published(&running);
+            // The driver returned: its mark goes before its confirmation, so
+            // the resource is never ready, and so granted and released
+            // again, while this recovery still holds it.
             lock(&driver.shared.inner)
                 .recovering
                 .remove(&running.resource);
             driver.shared.changed.notify_all();
+            let _ = done.send(confirmation);
+            #[cfg(test)]
+            driver.published(&running);
         });
         let service = self.clone();
         std::thread::spawn(move || {

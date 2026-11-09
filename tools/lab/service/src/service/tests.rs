@@ -842,7 +842,10 @@ fn the_first_operation_after_a_grant_is_never_refused_as_early() {
     });
     // Granted in the scheduler, its client still waits for the preparation.
     service.wait_until(|status| status.holders.len() == 1);
-    assert!(!holder.is_finished(), "the grant arrived before its preparation");
+    assert!(
+        !holder.is_finished(),
+        "the grant arrived before its preparation"
+    );
     drop(opener);
     assert_eq!(holder.join().unwrap(), Ok(serde_json::json!("released")));
 }
