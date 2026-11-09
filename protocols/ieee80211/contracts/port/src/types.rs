@@ -1046,6 +1046,29 @@ pub trait TxBufferPool<'id, C: TxBufferClass>: PortTypes<'id> {
     /// forgotten, and the next protected attempt in it is numbered anew.
     /// The original external body is returned explicitly beside the memory.
     fn renew(buffer: Self::Sent) -> (Self::Buffer, Option<Self::TxBody>);
+
+    /// The form the buffer of `mpdu` comes back in, read by borrow:
+    /// [`TxBufferForm::Fresh`] when [`Self::class`] takes it,
+    /// [`TxBufferForm::Sent`] when [`Self::sent`] does, `None` when it is of
+    /// another class. Nothing changes and no owner moves.
+    fn class_of(mpdu: &Self::TxMpdu) -> Option<TxBufferForm>;
+
+    /// The form of the buffer a single MPDU's terminal returns, read by
+    /// borrow as [`Self::class_of`] reads it, before the terminal is taken
+    /// apart.
+    fn completed_class(completed: &SingleCompleted<'id, Self>) -> Option<TxBufferForm> {
+        Self::class_of(completed.payload())
+    }
+}
+
+/// The form in which a buffer of a class comes back from its MPDU
+/// ([`TxBufferPool::class_of`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxBufferForm {
+    /// Fresh memory, never published.
+    Fresh,
+    /// A published MPDU, `Sent`.
+    Sent,
 }
 
 /// A returned MPDU retains whether it has ever been published, independently

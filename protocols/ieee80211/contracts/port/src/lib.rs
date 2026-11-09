@@ -190,7 +190,8 @@ pub use types::{
     PoolMpdu, PoolPreparation, PoolSource, PortBlockAckSlot, PortSingleOutcome, PortTypes,
     PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
     RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
-    TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
+    TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection,
+    TxSource,
 };
 
 #[cfg(test)]

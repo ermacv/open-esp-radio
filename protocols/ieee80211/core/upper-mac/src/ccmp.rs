@@ -137,6 +137,28 @@ impl<I> PendingCcmpTxKey<I> {
 }
 
 impl<I: PartialEq> PendingCcmpTxKey<I> {
+    /// Whether `key` is this installation's pairwise key, as
+    /// [`Self::installed`] checks it, read by borrow: nothing is spent.
+    pub fn names_pairwise<'id, Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>>(
+        &self,
+        key: &Keys::PairwiseKey,
+    ) -> bool {
+        Keys::pairwise_identity(key) == self.installation
+    }
+
+    /// Whether `key` is the group key of this installation's slot, as
+    /// [`Self::installed_group`] checks it, read by borrow: nothing is
+    /// spent.
+    pub fn names_group<
+        'id,
+        Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, GroupSlotIdentity = I>,
+    >(
+        &self,
+        key: &Keys::GroupKey,
+    ) -> bool {
+        Keys::group_slot_identity(key) == self.installation
+    }
+
     /// Pair the key the installation terminal returned with its new PN
     /// allocator; the token is spent. A key of another installation, which
     /// may already own a numbering, is refused with both owners.

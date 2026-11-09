@@ -761,6 +761,8 @@ mod handshake;
 
 mod ends;
 
+mod homes;
+
 #[test]
 fn a_port_with_the_callers_timestamp_rule_serves_beacons() {
     assert_eq!(serves_beacons::<ModelCaps24>(), Ok(()));

@@ -173,6 +173,12 @@ impl<C, T, M, O> Completed<C, T, M, O> {
     pub const fn outcome(&self) -> &O {
         &self.outcome
     }
+
+    /// The terminal's payload, read by its pool's class check
+    /// ([`TxBufferPool::completed_class`](crate::TxBufferPool::completed_class)).
+    pub(crate) const fn payload(&self) -> &M {
+        &self.operation.payload
+    }
 }
 
 impl<C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'static, Kind, Path>, M, O> {

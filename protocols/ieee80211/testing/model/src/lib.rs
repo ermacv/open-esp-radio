@@ -195,7 +195,7 @@ use oer_protocols_ieee80211_contracts_port::{
     LowerMacCapabilities, MpduKind, MpduLayout, PhyFormatSet, PortTypes, PreparationError,
     PreparationRefused, PreparedTx, RateSupport, ReceiveFilter, RetransmissionPlan, RoleKeys,
     RxBuffer, RxEvidence, RxMeta, RxMetadata, SignalMetadata, Station, SupportedBlockAck,
-    SupportedChannel, TxBody, TxBufferClass, TxBufferMemory, TxBufferPool, TxFrame, TxMpdu,
+    SupportedChannel, TxBody, TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxFrame, TxMpdu,
     TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_contracts_port::{
@@ -870,7 +870,33 @@ impl<'id, B: ModelComposition> TxMpdu for ModelMpdu<'id, B> {
         }
     }
 }
+/// The variant of [`ModelAnyBuffer`] a model MPDU comes back as.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelBufferKind {
+    /// Fresh small memory.
+    Small,
+    /// Fresh large memory.
+    Large,
+    /// A small published MPDU.
+    SmallSent,
+    /// A large published MPDU.
+    LargeSent,
+}
+
 impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
+    /// The variant its `into_parts` returns, read by borrow.
+    const fn returned_kind(&self) -> ModelBufferKind {
+        match (&self.buffer, self.published.is_some()) {
+            (ModelAnyBuffer::Small(_), true) | (ModelAnyBuffer::SmallSent(_), _) => {
+                ModelBufferKind::SmallSent
+            }
+            (ModelAnyBuffer::Large(_), true) | (ModelAnyBuffer::LargeSent(_), _) => {
+                ModelBufferKind::LargeSent
+            }
+            (ModelAnyBuffer::Small(_), false) => ModelBufferKind::Small,
+            (ModelAnyBuffer::Large(_), false) => ModelBufferKind::Large,
+        }
+    }
     fn admit(&mut self, at: Instant) {
         match &mut self.buffer {
             ModelAnyBuffer::Small(buffer) => buffer.admit(at),
@@ -1245,6 +1271,10 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
     fn renew(mpdu: Self::Sent) -> (Self::Buffer, Option<ModelBodyOf<B>>) {
         // The MPDU and its PN end here; `renew_msdu` releases its admission.
         (mpdu.buffer, mpdu.body)
+    }
+
+    fn class_of(mpdu: &ModelMpdu<'id, B>) -> Option<TxBufferForm> {
+        C::class_of(mpdu.returned_kind())
     }
 }
 
@@ -3675,6 +3705,9 @@ pub trait ModelClass: TxBufferClass + Sized {
     fn sent<'id, B: ModelComposition>(
         buffer: ModelAnyBuffer<'id, B>,
     ) -> Result<ModelSent<'id, B, Self>, ModelAnyBuffer<'id, B>>;
+    /// The form a buffer of `kind` takes in this class, as `class` and
+    /// `sent` take it; `None` for another class's.
+    fn class_of(kind: ModelBufferKind) -> Option<TxBufferForm>;
 }
 
 impl ModelClass for ModelSmall {
@@ -3708,6 +3741,13 @@ impl ModelClass for ModelSmall {
             buffer => Err(buffer),
         }
     }
+    fn class_of(kind: ModelBufferKind) -> Option<TxBufferForm> {
+        match kind {
+            ModelBufferKind::Small => Some(TxBufferForm::Fresh),
+            ModelBufferKind::SmallSent => Some(TxBufferForm::Sent),
+            _ => None,
+        }
+    }
 }
 impl ModelClass for ModelLarge {
     type Path<Id: SlotIdentity> = ModelPool<Id, 3>;
@@ -3738,6 +3778,13 @@ impl ModelClass for ModelLarge {
         match buffer {
             ModelAnyBuffer::LargeSent(buffer) => Ok(buffer),
             buffer => Err(buffer),
+        }
+    }
+    fn class_of(kind: ModelBufferKind) -> Option<TxBufferForm> {
+        match kind {
+            ModelBufferKind::Large => Some(TxBufferForm::Fresh),
+            ModelBufferKind::LargeSent => Some(TxBufferForm::Sent),
+            _ => None,
         }
     }
 }

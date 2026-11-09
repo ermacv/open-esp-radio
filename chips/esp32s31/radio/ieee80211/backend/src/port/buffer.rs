@@ -386,6 +386,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // The MPDU and its PN end here; `renew_msdu` releases its admission.
         (buffer.mpdu.buffer, buffer.mpdu.body)
     }
+    fn class_of(mpdu: &Mpdu<'id, Id, D, B, O>) -> Option<TxBufferForm> {
+        // The installation's one class: its MPDU comes back as its
+        // `into_parts` returns it.
+        Some(if mpdu.published {
+            TxBufferForm::Sent
+        } else {
+            TxBufferForm::Fresh
+        })
+    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> PortTypes<'id>

@@ -138,6 +138,12 @@ const SCRATCH: usize = 512;
 /// The Key ID of the group key the BSS announces.
 pub const GROUP_KEY_ID: u8 = 1;
 
+/// [`GROUP_KEY_ID`] as a KeyID, checked at compile time.
+const GROUP_KEY: GroupKeyId = match GroupKeyId::new(GROUP_KEY_ID) {
+    Some(key_id) => key_id,
+    None => panic!("the group KeyID is one of 1 to 3"),
+};
+
 /// The types of the port `P`.
 type Ty<'id, P> = <P as DataPort<'id>>::Types;
 /// The capabilities of the port `P`.
@@ -328,13 +334,6 @@ where
     C: TxBufferClass,
     Ty<'id, P>: TxBufferPool<'id, C>,
 {
-    Terminal(LowerMacTerminal<'id, Ty<'id, P>>),
-    Unit(<Ty<'id, P> as PortTypes<'id>>::RxBuffer),
-    Beacon(Beacon<'id, P>),
-    Configure(Configure<'id, P>),
-    Association(<Keys<'id, P> as KeyTypes<'id>>::Association),
-    GroupSlot(<Keys<'id, P> as KeyTypes<'id>>::GroupSlot),
-    GroupPermission(<Keys<'id, P> as KeyTypes<'id>>::GroupPermission),
     GroupKey(<Keys<'id, P> as KeyTypes<'id>>::GroupKey),
     ForeignGroup(
         oer_protocols_ieee80211_core_upper_mac::ccmp::ForeignCcmpTxKey<
@@ -343,13 +342,39 @@ where
         >,
     ),
     PairwiseSlot(<Keys<'id, P> as KeyTypes<'id>>::PairwiseSlot),
-    Installing(Installing<'id, P>),
     PairwiseKey(<Keys<'id, P> as KeyTypes<'id>>::PairwiseKey),
     Installed(Installed<'id, P>),
     Ticket(Ticket<'id, P>),
     AnyBuffer(<Ty<'id, P> as PortTypes<'id>>::AnyTxBuffer),
     Buffer(Buffer<'id, P, C>),
     Sent(<Ty<'id, P> as TxBufferPool<'id, C>>::Sent),
+}
+
+/// A terminal of the access point whose owners' homes
+/// [`Homes::admit`] found free.
+enum Admitted<'id, P>
+where
+    P: AccessPointPort<'id>,
+{
+    Single(oer_protocols_ieee80211_contracts_port::SingleCompleted<'id, Ty<'id, P>>),
+    Beacon(
+        oer_protocols_ieee80211_contracts_port::SingleCompleted<'id, Ty<'id, P>>,
+        Beacon<'id, P>,
+    ),
+    Configured(Configure<'id, P>),
+    GroupInstalled(
+        <Keys<'id, P> as KeyTypes<'id>>::GroupKey,
+        <Keys<'id, P> as KeyTypes<'id>>::GroupPermission,
+    ),
+    PairwiseInstalled(<Keys<'id, P> as KeyTypes<'id>>::PairwiseKey),
+    PairwiseRemoved(
+        <Keys<'id, P> as KeyTypes<'id>>::PairwiseSlot,
+        <Keys<'id, P> as KeyTypes<'id>>::Association,
+    ),
+    GroupRemoved(
+        <Keys<'id, P> as KeyTypes<'id>>::GroupSlot,
+        <Keys<'id, P> as KeyTypes<'id>>::GroupPermission,
+    ),
 }
 
 /// What the runner found broken of its own contract.
@@ -654,8 +679,16 @@ where
         &mut self,
         terminal: LowerMacTerminal<'id, Ty<'id, P>>,
     ) -> Result<(), LowerMacTerminal<'id, Ty<'id, P>>> {
+        // Every home the terminal's owners go to is checked before any is
+        // taken: a terminal with a home taken, or with an owner the runner
+        // never lent, is refused whole. The port keeps it, and the run ends
+        // on the break.
+        let admitted = self.admit(terminal).map_err(|(terminal, contract)| {
+            self.broken.get_or_insert(contract);
+            terminal
+        })?;
         self.taken = self.taken.wrapping_add(1);
-        self.terminal_home(terminal);
+        self.terminal_home(admitted);
         Ok(())
     }
     fn tbtt(&mut self, _: TbttEvent) {}
@@ -901,10 +934,7 @@ where
         if self.group_pending.is_some() || self.group.is_some() {
             return None;
         }
-        let Some(key_id) = GroupKeyId::new(GROUP_KEY_ID) else {
-            self.broken.get_or_insert(ApContract::CommandRefused);
-            return None;
-        };
+        let key_id = GROUP_KEY;
         let (Some(association), Some(_), Some(_)) = (
             self.association.as_ref(),
             self.group_slot.as_ref(),
@@ -986,81 +1016,179 @@ where
         None
     }
 
-    /// One terminal: its owners go home.
-    fn terminal_home(&mut self, terminal: LowerMacTerminal<'id, Ty<'id, P>>) {
-        match terminal {
+    /// `terminal`, once every home of its owners is free and each owner is
+    /// one the runner lent, read by borrow before anything is taken; refused,
+    /// the terminal whole with the break it shows.
+    #[allow(
+        clippy::type_complexity,
+        clippy::result_large_err,
+        reason = "a refusal returns the terminal whole, by value"
+    )]
+    fn admit(
+        &self,
+        terminal: LowerMacTerminal<'id, Ty<'id, P>>,
+    ) -> Result<Admitted<'id, P>, (LowerMacTerminal<'id, Ty<'id, P>>, ApContract)> {
+        let refusal = match &terminal {
             LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
-                self.completed(completed);
+                self.admits_completed(completed)
             }
-            LowerMacTerminal::TxCompleted(TxCompleted::Beacon {
-                completed,
-                permission,
-            }) => {
-                if let Some(other) = self.beacon.replace(permission) {
-                    self.keep(Kept::Beacon(other), ApContract::Permission);
+            LowerMacTerminal::TxCompleted(TxCompleted::Beacon { completed, .. }) => {
+                if self.beacon.is_some() {
+                    Err(ApContract::Permission)
+                } else {
+                    self.admits_completed(completed)
                 }
-                self.completed(completed);
             }
-            LowerMacTerminal::Configured(Configured::AccessPoint(permission)) => {
-                if let Some(other) = self.configure.replace(permission) {
-                    self.keep(Kept::Configure(other), ApContract::Permission);
+            LowerMacTerminal::Configured(Configured::AccessPoint(_)) => match self.configure {
+                None => Ok(()),
+                Some(_) => Err(ApContract::Permission),
+            },
+            LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint { key, .. }) => {
+                match &self.group_pending {
+                    _ if self.group_permission.is_some() => Err(ApContract::Permission),
+                    Some(pending) if pending.names_group::<Keys<'id, P>>(key) => Ok(()),
+                    _ => Err(ApContract::ForeignKey),
                 }
-                self.configured();
-            }
-            LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint {
-                key,
-                permission,
-            }) => {
-                if let Some(other) = self.group_permission.replace(permission) {
-                    self.keep(Kept::GroupPermission(other), ApContract::Permission);
-                }
-                self.group_installed(key);
             }
             LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key)) => {
-                self.pairwise_installed(key);
+                // Its key goes to the installed keys, or, its peer gone, to
+                // the removals: both places are checked.
+                if self
+                    .installing
+                    .iter()
+                    .any(|(_, pending)| pending.names_pairwise::<Keys<'id, P>>(key))
+                    && !self.keys.is_full()
+                    && !self.removals.is_full()
+                {
+                    Ok(())
+                } else {
+                    Err(ApContract::ForeignKey)
+                }
             }
-            LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Pairwise {
-                slot,
-                association,
-            })) => {
-                if let Some(other) = self.association.replace(association) {
-                    self.keep(Kept::Association(other), ApContract::Permission);
+            LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Pairwise { .. })) => {
+                if self.association.is_some() {
+                    Err(ApContract::Permission)
+                } else if self.pairwise.is_full() {
+                    Err(ApContract::ForeignKey)
+                } else {
+                    Ok(())
                 }
-                if let Err(slot) = self.pairwise.push(slot) {
-                    self.keep(Kept::PairwiseSlot(slot), ApContract::ForeignKey);
-                }
-                self.advance_stop();
             }
-            LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Group {
-                slot,
-                permission,
-            })) => {
-                if let Some(other) = self.group_slot.replace(slot) {
-                    self.keep(Kept::GroupSlot(other), ApContract::Permission);
-                }
-                if let Some(other) = self.group_permission.replace(permission) {
-                    self.keep(Kept::GroupPermission(other), ApContract::Permission);
-                }
-                if self.phase == Phase::RemovingGroup {
-                    self.phase = Phase::StoppingTsf;
+            LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Group { .. })) => {
+                if self.group_slot.is_some() || self.group_permission.is_some() {
+                    Err(ApContract::Permission)
+                } else {
+                    Ok(())
                 }
             }
             // The station's terminals never come to the access point's
             // runner: no station command goes.
-            other => self.keep(Kept::Terminal(other), ApContract::UnknownTicket(u8::MAX)),
+            _ => Err(ApContract::UnknownTicket(u8::MAX)),
+        };
+        if let Err(contract) = refusal {
+            return Err((terminal, contract));
+        }
+        match terminal {
+            LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
+                Ok(Admitted::Single(completed))
+            }
+            LowerMacTerminal::TxCompleted(TxCompleted::Beacon {
+                completed,
+                permission,
+            }) => Ok(Admitted::Beacon(completed, permission)),
+            LowerMacTerminal::Configured(Configured::AccessPoint(permission)) => {
+                Ok(Admitted::Configured(permission))
+            }
+            LowerMacTerminal::GroupKeyInstalled(InstalledGroup::AccessPoint { key, permission }) => {
+                Ok(Admitted::GroupInstalled(key, permission))
+            }
+            LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key)) => {
+                Ok(Admitted::PairwiseInstalled(key))
+            }
+            LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Pairwise {
+                slot,
+                association,
+            })) => Ok(Admitted::PairwiseRemoved(slot, association)),
+            LowerMacTerminal::KeyRemoved(Removed::AccessPoint(RemovedKey::Group {
+                slot,
+                permission,
+            })) => Ok(Admitted::GroupRemoved(slot, permission)),
+            other => Err((other, ApContract::UnknownTicket(u8::MAX))),
         }
     }
 
-    /// The group key is installed: the TSF restarts last.
+    /// Whether a single MPDU's owners have their homes: its ticket names a
+    /// purpose the runner gave it, a ticket's place is free, and its buffer
+    /// comes back of the runner's class with a buffer's place free.
+    fn admits_completed(
+        &self,
+        completed: &oer_protocols_ieee80211_contracts_port::SingleCompleted<'id, Ty<'id, P>>,
+    ) -> Result<(), ApContract> {
+        let index = completed.ticket_index();
+        if self
+            .purposes
+            .get(usize::from(index))
+            .is_none_or(Option::is_none)
+        {
+            return Err(ApContract::UnknownTicket(index));
+        }
+        if self.tickets.is_full() {
+            return Err(ApContract::UnknownTicket(index));
+        }
+        if <Ty<'id, P> as TxBufferPool<'id, C>>::completed_class(completed).is_none()
+            || self.buffers.is_full()
+        {
+            return Err(ApContract::BufferClass);
+        }
+        Ok(())
+    }
+
+    /// One terminal [`Self::admit`] admitted: its owners go home, each to
+    /// the home `admit` found free.
+    fn terminal_home(&mut self, terminal: Admitted<'id, P>) {
+        match terminal {
+            Admitted::Single(completed) => self.completed(completed),
+            Admitted::Beacon(completed, permission) => {
+                self.beacon = Some(permission);
+                self.completed(completed);
+            }
+            Admitted::Configured(permission) => {
+                self.configure = Some(permission);
+                self.configured();
+            }
+            Admitted::GroupInstalled(key, permission) => {
+                self.group_permission = Some(permission);
+                self.group_installed(key);
+            }
+            Admitted::PairwiseInstalled(key) => self.pairwise_installed(key),
+            Admitted::PairwiseRemoved(slot, association) => {
+                self.association = Some(association);
+                if let Err(slot) = self.pairwise.push(slot) {
+                    // Excluded by `admit`: the place was free.
+                    self.keep(Kept::PairwiseSlot(slot), ApContract::ForeignKey);
+                }
+                self.advance_stop();
+            }
+            Admitted::GroupRemoved(slot, permission) => {
+                self.group_slot = Some(slot);
+                self.group_permission = Some(permission);
+                if self.phase == Phase::RemovingGroup {
+                    self.phase = Phase::StoppingTsf;
+                }
+            }
+        }
+    }
+
+    /// The group key is installed: the TSF restarts last. [`Self::admit`]
+    /// found it the pending installation's.
     fn group_installed(&mut self, key: <Keys<'id, P> as KeyTypes<'id>>::GroupKey) {
-        let (Some(pending), Some(key_id)) =
-            (self.group_pending.take(), GroupKeyId::new(GROUP_KEY_ID))
-        else {
+        let Some(pending) = self.group_pending.take() else {
+            // Excluded by `admit`: the installation was pending.
             self.keep(Kept::GroupKey(key), ApContract::ForeignKey);
             return;
         };
         let installation = ApGroupKeyInstallation {
-            key_id,
+            key_id: GROUP_KEY,
             generation: self.policy.group_generation,
         };
         match pending
@@ -1070,39 +1198,31 @@ where
                 self.group = Some(installed);
                 self.phase = Phase::StartingTsf;
             }
+            // Excluded by `admit`: the key is the pending installation's.
             Err(foreign) => self.keep(Kept::ForeignGroup(foreign), ApContract::ForeignKey),
         }
     }
 
     /// A peer's pairwise key is installed: its Message 3 goes once the
-    /// port's call returned.
+    /// port's call returned. [`Self::admit`] found it one installation's.
     fn pairwise_installed(&mut self, key: <Keys<'id, P> as KeyTypes<'id>>::PairwiseKey) {
-        let mut key = Some(key);
-        let mut matched = None;
-        let mut index = 0;
-        while index < self.installing.len()
-            && let Some(unmatched) = key.take()
-        {
-            let (peer, pending) = self.installing.swap_remove(index);
-            match pending.installed::<Keys<'id, P>>(unmatched) {
-                Ok(installed) => matched = Some((peer, installed)),
-                Err(foreign) => {
-                    // The entry's own place, which its removal freed.
-                    if let Err(back) = self.installing.push((peer, foreign.pending)) {
-                        self.keep(Kept::Installing(back), ApContract::ForeignKey);
-                    }
-                    key = Some(foreign.key);
-                    // The swapped-in entry now sits at `index`; the one put
-                    // back went to the end.
-                    index = index.saturating_add(1);
-                }
-            }
-        }
-        let Some((peer, installed)) = matched else {
-            if let Some(key) = key {
-                self.keep(Kept::PairwiseKey(key), ApContract::ForeignKey);
-            }
+        let Some(at) = self
+            .installing
+            .iter()
+            .position(|(_, pending)| pending.names_pairwise::<Keys<'id, P>>(&key))
+        else {
+            // Excluded by `admit`.
+            self.keep(Kept::PairwiseKey(key), ApContract::ForeignKey);
             return;
+        };
+        let (peer, pending) = self.installing.swap_remove(at);
+        let installed = match pending.installed::<Keys<'id, P>>(key) {
+            Ok(installed) => installed,
+            Err(foreign) => {
+                // Excluded by the position's own check.
+                self.keep(Kept::PairwiseKey(foreign.key), ApContract::ForeignKey);
+                return;
+            }
         };
         if self.engine.service().peer_status(peer).is_none()
             || self.engine.pairwise_installed(peer).is_err()
@@ -1161,13 +1281,15 @@ where
         let index = parts.ticket.index();
         let outcome = parts.outcome;
         let (buffer, _) = parts.payload.into_parts();
+        // Each home below was found free by `admit`, and the buffer of the
+        // runner's class.
         if let Err(ticket) = self.tickets.push(parts.ticket) {
             self.keep(Kept::Ticket(ticket), ApContract::UnknownTicket(index));
         }
         match <Ty<'id, P> as TxBufferPool<'id, C>>::class(buffer) {
-            Ok(buffer) => self.give_buffer(buffer),
+            Ok(buffer) => self.home_buffer(buffer),
             Err(buffer) => match <Ty<'id, P> as TxBufferPool<'id, C>>::sent(buffer) {
-                Ok(sent) => self.give_buffer(<Ty<'id, P> as TxBufferPool<'id, C>>::renew(sent).0),
+                Ok(sent) => self.home_buffer(<Ty<'id, P> as TxBufferPool<'id, C>>::renew(sent).0),
                 Err(other) => self.keep(Kept::AnyBuffer(other), ApContract::BufferClass),
             },
         }
@@ -1177,6 +1299,7 @@ where
             .get_mut(usize::from(index))
             .and_then(Option::take)
         else {
+            // Excluded by `admit`: the ticket named a purpose.
             self.broken.get_or_insert(ApContract::UnknownTicket(index));
             return;
         };
@@ -1228,6 +1351,19 @@ where
             }
         }
         self.advance_stop();
+    }
+
+    /// Return a terminal's buffer home, renewed for a new MPDU. A buffer
+    /// whose memory the port still holds is not renewed: it goes home as
+    /// it is, the port's break recorded, and the run ends on it.
+    fn home_buffer(&mut self, mut buffer: Buffer<'id, P, C>) {
+        if buffer.renew_msdu().is_err() {
+            self.broken.get_or_insert(ApContract::BufferClass);
+        }
+        if let Err(buffer) = self.buffers.push(buffer) {
+            // Excluded by `admit`: a buffer's place was free.
+            self.keep(Kept::Buffer(buffer), ApContract::BufferClass);
+        }
     }
 
     /// Return a buffer home, renewed for a new MPDU.
@@ -1553,25 +1689,6 @@ where
     ) -> Result<(), ReceiveAccounting> {
         if self.homes.faulted {
             self.homes.faulted = !self.port.recover_for_stop();
-        }
-        // A unit a cut handed over beyond the runner's reading goes back to
-        // its ring: the port counts it out until then.
-        for _ in 0..self.homes.kept.len() {
-            match self.homes.kept.pop_front() {
-                Some(Kept::Unit(frame)) if self.homes.unrecycled.is_none() => {
-                    if let Err(refused) = self.port.recycle(frame) {
-                        // The first refusal: no unit goes back after it.
-                        self.homes.unrecycled = Some(refused);
-                    }
-                }
-                Some(other) => {
-                    // Its own place, which the pop freed.
-                    if let Err(other) = self.homes.kept.push_back(other) {
-                        self.homes.keep(other, ApContract::CutUnits);
-                    }
-                }
-                None => break,
-            }
         }
         self.homes.stop = true;
         self.homes.phase = Phase::StoppingRadio;
