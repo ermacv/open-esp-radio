@@ -535,6 +535,14 @@ async fn run_direct(
     let stopped_ring = ready
         .publish(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-publish"; 32))?;
+    // Printed before the walker starts: a refused write returns before
+    // anything runs.
+    usb::text(
+        console,
+        b"REBIND begin v=2 channel=13 count=32 buffer=1664 spares=96 pool=64 segment_ms=2500 action_ms=80 arms=fixed,rebind,rebind,fixed-late\n",
+    )
+    .await
+    .map_err(|_| oer_portable_diagnostics::name!("console-write"; 32))?;
     let mut ring = stopped_ring
         .try_start(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-start"; 32))?;
@@ -545,12 +553,6 @@ async fn run_direct(
     mac_irq.acknowledge_mac_interrupt_raw(stale);
     access.wifi_mac_hal().configure_open_promiscuous_receive();
     mac_irq.mask_all_mac_interrupts();
-    usb::text(
-        console,
-        b"REBIND begin v=2 channel=13 count=32 buffer=1664 spares=96 pool=64 segment_ms=2500 action_ms=80 arms=fixed,rebind,rebind,fixed-late\n",
-    )
-    .await
-    .map_err(|_| oer_portable_diagnostics::name!("console-write"; 32))?;
     let observation =
         experiment::run(state, frame, storage, bank, &mut ring, access, &mut mac_irq).await;
     access.wifi_mac_hal().request_channel_stop();
