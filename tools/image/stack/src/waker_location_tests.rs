@@ -21,16 +21,6 @@ fn wake_replaced(previous: Option<Waker>, current: &Waker) {
     )
 }
 
-fn typed_debug(elf: &[u8]) -> (Dwarf, TypeFacts) {
-    read_debug(
-        &std::rc::Rc::from(elf),
-        DebugMetadata::TypedLocations,
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap()
-}
-
 #[test]
 fn pre_823_compiler_shape_proves_both_merged_slots_without_method_scopes() {
     let elf = compiled(&merged_program(WAKER_PROGRAM));

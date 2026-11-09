@@ -21,16 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 pub(crate) mod locations;
-use locations::{LocalLocations, LocationWalk};
-
-/// Additional metadata retained by the shared DWARF pass. The callback audit
-/// can use local/parameter storage locations without another DWARF walk.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum DebugMetadata {
-    #[default]
-    Standard,
-    TypedLocations,
-}
+use locations::{LocalLocations, LocationQueries, LocationWalk};
 
 pub(crate) type Reader<'d> = SliceReader<'d>;
 pub(crate) type Unit<'d> = gimli::Unit<Reader<'d>>;
@@ -169,13 +160,11 @@ pub(crate) fn origin_reference(unit: &Unit<'_>, entry: &Entry<'_>) -> Option<usi
 }
 
 /// Read the debug information of `elf`: its DWARF facts and type facts,
-/// admitted in `keep`, which the caller holds while it keeps them.
-/// `TypedLocations` additionally prepares PC-specific local/parameter
-/// locations in TypeFacts for the common callback audit. `Standard`
-/// skips that collector and allocates no local-location records or scopes.
+/// admitted in `keep`, which the caller holds while it keeps them. The
+/// PC-specific local/parameter locations are not read here: they need the
+/// instruction pass's [`LocationQueries`] ([`read_locations`]).
 pub fn read(
     elf: &Rc<[u8]>,
-    metadata: DebugMetadata,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<(Dwarf, TypeFacts)> {
@@ -189,16 +178,11 @@ pub fn read(
     let mut returns = Returns::default();
     let mut copies = Copies::default();
     let mut types = TypeWalk::default();
-    let mut locations = (metadata == DebugMetadata::TypedLocations).then(LocalLocations::default);
     let mut units = dwarf.units();
     while let Some(header) = units.next().map_err(dwarf_error)? {
         let unit = dwarf.unit(header).map_err(dwarf_error)?;
         returns.begin_unit(&mut scratch, control)?;
         types.begin_unit();
-        let mut location_walk = locations
-            .as_mut()
-            .map(|facts| LocationWalk::new(facts, memory, control))
-            .transpose()?;
         let mut entries = unit.entries();
         while let Some(entry) = entries.next_dfs().map_err(dwarf_error)? {
             control.checkpoint(1)?;
@@ -222,9 +206,6 @@ pub fn read(
                 &mut scratch,
                 control,
             )?;
-            if let Some(locations) = &mut location_walk {
-                locations.entry(&dwarf, &unit, entry, offset, keep, control)?;
-            }
         }
     }
     copies.resolve_origins(control)?;
@@ -234,7 +215,6 @@ pub fn read(
         control.checkpoint(1)?;
         types.identify_waker(id, &returns.qualified(id));
     }
-    types.locations = locations;
     types.source = Some(elf.clone());
     let symbolizer = Symbolizer::shared(elf.clone()).map_err(|error| invalid(error.to_string()))?;
     let mut out = Dwarf {
@@ -248,6 +228,56 @@ pub fn read(
     returns.finish(&mut out, keep, control)?;
     drop(scratch);
     Ok((out, types))
+}
+
+/// Read the PC-specific local/parameter locations of the ELF `types` came
+/// from into `types`, admitted in `keep`, keeping only the locations
+/// `queries` can ask for ([`LocationQueries::keeps`]). `queries` come from
+/// the instruction pass of the same ELF ([`crate::location_queries`]); the
+/// typed consumers ask nothing outside them. A second read is refused: the
+/// first one's admitted records stay in `keep`.
+pub fn read_locations(
+    types: &mut TypeFacts,
+    queries: &LocationQueries,
+    keep: &mut Ledger<'_>,
+    control: &mut dyn RunControl,
+) -> Result<()> {
+    if types.locations.is_some() {
+        return Err(Error::new(
+            ErrorCode::Incompatible,
+            "typed locations were already read",
+        ));
+    }
+    let elf = types
+        .source
+        .clone()
+        .ok_or_else(|| Error::new(ErrorCode::Incompatible, "type facts have no source ELF"))?;
+    let memory = keep.memory();
+    let file = oer_tools_analysis_elf::Elf::parse(&elf).map_err(|_| invalid("invalid ELF"))?;
+    let sections = DebugSections::load(&file).map_err(|error| invalid(error.to_string()))?;
+    let dwarf = sections
+        .dwarf()
+        .map_err(|error| invalid(error.to_string()))?;
+    let mut locations = LocalLocations::default();
+    let mut units = dwarf.units();
+    while let Some(header) = units.next().map_err(dwarf_error)? {
+        let unit = dwarf.unit(header).map_err(dwarf_error)?;
+        let mut walk = LocationWalk::new(&mut locations, queries, memory, control)?;
+        let mut entries = unit.entries();
+        while let Some(entry) = entries.next_dfs().map_err(dwarf_error)? {
+            control.checkpoint(1)?;
+            let Some(offset) = entry
+                .offset()
+                .to_debug_info_offset(&unit.header)
+                .map(|offset| offset.0)
+            else {
+                continue;
+            };
+            walk.entry(&dwarf, &unit, entry, offset, keep, control)?;
+        }
+    }
+    types.locations = Some(locations);
+    Ok(())
 }
 
 /// Where a subprogram entry's description continues.

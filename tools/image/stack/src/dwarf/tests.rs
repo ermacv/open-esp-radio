@@ -1,4 +1,4 @@
-use super::locations::Place;
+use super::locations::{Location, Place};
 use super::*;
 use object::write::Object;
 use object::{Architecture, BinaryFormat, Endianness, SectionKind};
@@ -118,8 +118,26 @@ impl Fixture {
         Rc::from(object.write().unwrap())
     }
 }
-fn read_fixture(elf: &Rc<[u8]>, mode: DebugMetadata) -> (Dwarf, TypeFacts) {
-    read(elf, mode, &mut crate::tests::ledger(), &mut || Ok(())).unwrap()
+fn read_fixture(elf: &Rc<[u8]>) -> (Dwarf, TypeFacts) {
+    read(elf, &mut crate::tests::ledger(), &mut || Ok(())).unwrap()
+}
+
+/// Every fixture PC asked: no location of the fixtures' code is filtered.
+fn every_pc() -> LocationQueries {
+    LocationQueries::asking(&(0..0x1000).collect::<Vec<_>>(), &[])
+}
+
+/// [`read_fixture`] with the locations [`every_pc`] asks for.
+fn read_typed(elf: &Rc<[u8]>) -> (Dwarf, TypeFacts) {
+    let (dwarf, mut types) = read_fixture(elf);
+    read_locations(
+        &mut types,
+        &every_pc(),
+        &mut crate::tests::ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap();
+    (dwarf, types)
 }
 
 #[test]
@@ -147,8 +165,8 @@ fn common_pass_collects_register_parameters_stack_locals_and_pointer_values() {
     ); // breg3+8; stack_value
     fixture.end();
     let elf = fixture.finish();
-    let (_, standard) = read_fixture(&elf, DebugMetadata::Standard);
-    let (_, mut typed) = read_fixture(&elf, DebugMetadata::TypedLocations);
+    let (_, standard) = read_fixture(&elf);
+    let (_, mut typed) = read_typed(&elf);
     assert!(standard.locations.is_none());
     let locals = typed.locations.take().unwrap();
     assert_eq!(
@@ -214,7 +232,7 @@ fn independent_missing_and_unsupported_pieces_keep_object_byte_offsets() {
         &[reference_attr(gimli::DW_AT_type, ty), expr(&[0x90, 32])],
     );
     fixture.end();
-    let (_, types) = read_fixture(&fixture.finish(), DebugMetadata::TypedLocations);
+    let (_, types) = read_typed(&fixture.finish());
     let locals = types.locations.unwrap();
     assert_eq!(locals.registers.len(), 3);
     assert_eq!(
@@ -282,7 +300,7 @@ fn lexical_ranges_and_location_lists_preserve_gaps_and_explicit_start_scope() {
         ],
     );
     fixture.end();
-    let (_, types) = read_fixture(&fixture.finish(), DebugMetadata::TypedLocations);
+    let (_, types) = read_typed(&fixture.finish());
     let locals = types.locations.unwrap();
     let ranges = |register| {
         locals.registers[&register]
@@ -379,7 +397,7 @@ fn local_types_follow_origins_and_specifications_without_inheriting_locations() 
         ],
     );
     fixture.end();
-    let (_, types) = read_fixture(&fixture.finish(), DebugMetadata::TypedLocations);
+    let (_, types) = read_typed(&fixture.finish());
     let locals = types.locations.unwrap();
     assert_eq!(locals.variable_type(origin), Some(origin_ty));
     assert_eq!(locals.variable_type(specified), Some(own_ty));
@@ -428,14 +446,12 @@ fn noreturn_inherits_origins_and_specifications_but_conflicts_stay_false() {
     attrs.push(flag(gimli::DW_AT_noreturn, true));
     fixture.die(gimli::DW_TAG_subprogram, false, &attrs);
     let elf = fixture.finish();
-    for mode in [DebugMetadata::Standard, DebugMetadata::TypedLocations] {
-        let (dwarf, _) = read_fixture(&elf, mode);
-        for pc in [100, 120] {
-            assert!(dwarf.noreturn(Callee::Address(pc)));
-        }
-        assert!(!dwarf.noreturn(Callee::Address(140)));
-        assert!(dwarf.noreturn(Callee::Address(160)));
+    let (dwarf, _) = read_fixture(&elf);
+    for pc in [100, 120] {
+        assert!(dwarf.noreturn(Callee::Address(pc)));
     }
+    assert!(!dwarf.noreturn(Callee::Address(140)));
+    assert!(dwarf.noreturn(Callee::Address(160)));
 }
 
 #[test]
@@ -507,12 +523,10 @@ fn noreturn_uses_the_nearest_flag_and_rejects_broken_or_cyclic_inheritance() {
         fixture.die(gimli::DW_TAG_subprogram, false, &attrs);
     }
     let elf = fixture.finish();
-    for mode in [DebugMetadata::Standard, DebugMetadata::TypedLocations] {
-        let (dwarf, _) = read_fixture(&elf, mode);
-        assert!(dwarf.noreturn(Callee::Address(100)));
-        for pc in [120, 140, 160, 180, 200, 220, 240, 260] {
-            assert!(!dwarf.noreturn(Callee::Address(pc)), "PC {pc}");
-        }
+    let (dwarf, _) = read_fixture(&elf);
+    assert!(dwarf.noreturn(Callee::Address(100)));
+    for pc in [120, 140, 160, 180, 200, 220, 240, 260] {
+        assert!(!dwarf.noreturn(Callee::Address(pc)), "PC {pc}");
     }
 }
 
@@ -576,7 +590,7 @@ fn a_return_follows_origins_and_specifications_and_says_unknown_where_dwarf_does
         &[reference_attr(gimli::DW_AT_type, raw_waker)],
     );
     concrete(&mut fixture, 220, &[]);
-    let (dwarf, _) = read_fixture(&fixture.finish(), DebugMetadata::Standard);
+    let (dwarf, _) = read_fixture(&fixture.finish());
     for pc in [100, 120, 140] {
         assert_eq!(dwarf.returned(pc), Returned::Type("RawWaker"), "{pc}");
     }
@@ -588,7 +602,7 @@ fn a_return_follows_origins_and_specifications_and_says_unknown_where_dwarf_does
     // returns are unknown.
     let mut untyped = Fixture::new();
     concrete(&mut untyped, 100, &[]);
-    let (dwarf, _) = read_fixture(&untyped.finish(), DebugMetadata::Standard);
+    let (dwarf, _) = read_fixture(&untyped.finish());
     assert_eq!(dwarf.returned(100), Returned::Unknown);
 }
 
@@ -614,8 +628,8 @@ fn local_image(start: u32, register: u8, count: usize) -> Rc<[u8]> {
 fn local_metadata_of_two_elfs_with_identical_die_offsets_is_independent() {
     let main = local_image(100, 10, 1);
     let companion = local_image(500, 11, 1);
-    let (_, a) = read_fixture(&main, DebugMetadata::TypedLocations);
-    let (_, b) = read_fixture(&companion, DebugMetadata::TypedLocations);
+    let (_, a) = read_typed(&main);
+    let (_, b) = read_typed(&companion);
     let a = a.locations.unwrap();
     let b = b.locations.unwrap();
     assert_eq!(
@@ -646,40 +660,34 @@ impl RunControl for Units {
 }
 
 #[test]
-fn requested_local_metadata_obeys_budgets_and_releases_all_reservations() {
+fn read_locations_obey_budgets_and_release_all_reservations() {
     let elf = local_image(100, 10, 64);
-    let mut measurements = Vec::new();
-    for mode in [DebugMetadata::Standard, DebugMetadata::TypedLocations] {
-        let memory = WorkingMemory::new(1 << 24).unwrap();
-        let mut control = Units(u64::MAX);
-        let mut keep = Ledger::new(&memory, &mut control).unwrap();
-        let (_, types) = read(&elf, mode, &mut keep, &mut control).unwrap();
-        assert_eq!(
-            types.locations.is_some(),
-            mode == DebugMetadata::TypedLocations
-        );
-        assert_eq!(
-            memory.used(),
-            keep.bytes(),
-            "per-unit scopes and temporary pieces were released"
-        );
-        measurements.push((memory.peak(), u64::MAX - control.0));
-        drop(types);
-        drop(keep);
-        assert_eq!(memory.used(), 0);
-    }
-    let ((standard_peak, standard_work), (typed_peak, typed_work)) =
-        (measurements[0], measurements[1]);
-    assert!(typed_peak > standard_peak);
-    assert!(typed_work > standard_work);
-    for (bytes, units) in [(standard_peak, u64::MAX), (1 << 24, standard_work)] {
+    let queries = every_pc();
+    // The location read alone, in its own memory and work budget.
+    let (_, mut types) = read_fixture(&elf);
+    let memory = WorkingMemory::new(1 << 24).unwrap();
+    let mut control = Units(u64::MAX);
+    let mut keep = Ledger::new(&memory, &mut control).unwrap();
+    read_locations(&mut types, &queries, &mut keep, &mut control).unwrap();
+    assert_eq!(types.locations.as_ref().unwrap().registers[&10].len(), 64);
+    assert_eq!(
+        memory.used(),
+        keep.bytes(),
+        "per-unit scopes and temporary pieces were released"
+    );
+    let (peak, work) = (memory.peak(), u64::MAX - control.0);
+    assert!(keep.bytes() > 0 && work > 0);
+    drop(keep);
+    assert_eq!(memory.used(), 0);
+    for (bytes, units) in [(peak - 1, u64::MAX), (1 << 24, work - 1)] {
+        let (_, mut types) = read_fixture(&elf);
         let memory = WorkingMemory::new(bytes).unwrap();
         let mut control = Units(units);
         let mut keep = Ledger::new(&memory, &mut control).unwrap();
-        let error = read(&elf, DebugMetadata::TypedLocations, &mut keep, &mut control)
-            .err()
-            .expect("requested metadata cannot silently fall back");
+        let error = read_locations(&mut types, &queries, &mut keep, &mut control)
+            .expect_err("requested locations cannot silently fall back");
         assert_eq!(error.code, ErrorCode::ResourceLimited);
+        assert!(types.locations.is_none(), "a refused read keeps nothing");
         assert_eq!(
             memory.used(),
             keep.bytes(),
@@ -691,12 +699,12 @@ fn requested_local_metadata_obeys_budgets_and_releases_all_reservations() {
 }
 
 #[test]
-fn standard_metadata_does_not_decode_unrequested_parameter_locations() {
+fn the_type_read_does_not_decode_parameter_locations_and_the_location_read_does() {
     let mut fixture = Fixture::new();
     let ty = fixture.ty("word");
     fixture.function(100, 200);
     // An incomplete breg instruction is malformed rather than a supported
-    // location. The standard signature reader has no reason to decode it.
+    // location. The type reader has no reason to decode it.
     fixture.die(
         gimli::DW_TAG_formal_parameter,
         false,
@@ -704,14 +712,96 @@ fn standard_metadata_does_not_decode_unrequested_parameter_locations() {
     );
     fixture.end();
     let elf = fixture.finish();
-    read_fixture(&elf, DebugMetadata::Standard);
-    let error = read(
-        &elf,
-        DebugMetadata::TypedLocations,
+    let (_, mut types) = read_fixture(&elf);
+    // Asking nothing filters every location, but each is still decoded.
+    let error = read_locations(
+        &mut types,
+        &LocationQueries::asking(&[], &[]),
         &mut crate::tests::ledger(),
         &mut || Ok(()),
     )
     .err()
     .unwrap();
     assert_eq!(error.code, ErrorCode::Integrity);
+}
+
+#[test]
+fn a_second_location_read_is_refused() {
+    let (_, mut types) = read_typed(&local_image(100, 10, 1));
+    let error = read_locations(
+        &mut types,
+        &every_pc(),
+        &mut crate::tests::ledger(),
+        &mut || Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.code, ErrorCode::Incompatible);
+    assert_eq!(types.locations.unwrap().registers[&10].len(), 1);
+}
+
+fn located(start: u32, end: u32, bytes: Option<u64>, place: Place) -> Location {
+    Location {
+        start,
+        end,
+        owner: 0,
+        offset: 0,
+        bytes,
+        place,
+    }
+}
+
+#[test]
+fn a_point_keeps_every_place_whose_half_open_range_contains_it() {
+    let queries = LocationQueries::asking(&[19, 10, 10], &[]);
+    for place in [
+        Place::Register(10),
+        Place::Memory(2, 8),
+        Place::Pointer(3, 4),
+    ] {
+        for bytes in [None, Some(1), Some(4), Some(1664)] {
+            assert!(queries.keeps(&located(10, 20, bytes, place)));
+            assert!(queries.keeps(&located(19, 21, bytes, place)));
+            assert!(
+                !queries.keeps(&located(20, 30, bytes, place)),
+                "end is exclusive"
+            );
+            assert!(!queries.keeps(&located(0, 10, bytes, place)));
+            assert!(!queries.keeps(&located(11, 19, bytes, place)));
+        }
+    }
+}
+
+#[test]
+fn a_window_keeps_only_intersecting_complete_register_words() {
+    let queries = LocationQueries::asking(&[], &[(30, 40)]);
+    for bytes in [None, Some(4)] {
+        let register = |start, end| located(start, end, bytes, Place::Register(13));
+        assert!(queries.keeps(&register(25, 31)), "starts before the window");
+        assert!(queries.keeps(&register(39, 50)), "ends after the window");
+        assert!(queries.keeps(&register(0, 100)), "spans the window");
+        assert!(!queries.keeps(&register(40, 50)), "adjoins after it");
+        assert!(!queries.keeps(&register(20, 30)), "adjoins before it");
+    }
+    // A Waker continuation is a complete register word: other pieces and
+    // places in the window are never asked by it.
+    assert!(!queries.keeps(&located(30, 40, Some(1), Place::Register(13))));
+    assert!(!queries.keeps(&located(30, 40, Some(8), Place::Register(13))));
+    assert!(!queries.keeps(&located(30, 40, None, Place::Memory(2, 0))));
+    assert!(!queries.keeps(&located(30, 40, None, Place::Pointer(2, 0))));
+}
+
+#[test]
+fn overlapping_and_adjoining_windows_merge_and_empty_ones_ask_nothing() {
+    let queries = LocationQueries::asking(&[], &[(10, 20), (50, 50), (5, 12), (20, 25), (40, 45)]);
+    let register = |start, end| located(start, end, Some(4), Place::Register(10));
+    for (start, end) in [(5, 6), (12, 13), (24, 26), (44, 60)] {
+        assert!(queries.keeps(&register(start, end)), "{start}..{end}");
+    }
+    for (start, end) in [(0, 5), (25, 40), (45, 60), (50, 51)] {
+        assert!(!queries.keeps(&register(start, end)), "{start}..{end}");
+    }
+    // A window may end at the top of the address space.
+    let top = LocationQueries::asking(&[], &[(u32::MAX - 4, 1 << 32)]);
+    assert!(top.keeps(&register(u32::MAX - 1, u32::MAX)));
 }

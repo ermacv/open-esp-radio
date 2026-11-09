@@ -3,8 +3,8 @@ use crate::Analysis;
 use crate::cha::TypeFacts;
 use crate::cha::locations::Locations;
 use crate::dwarf::Reader;
-use crate::dwarf::locations::LocalLocations;
-use crate::tests::{compiled, ledger, with_facts};
+use crate::dwarf::locations::{LocalLocations, LocationQueries};
+use crate::tests::{compiled, every_pc_debug, ledger, typed_debug, with_facts};
 use crate::{StorageEvidence, UnknownUse, audit_function_addresses};
 use oer_tools_analysis_elf::dwarf::gimli;
 use oer_tools_analysis_elf::rv32::Role;
@@ -20,16 +20,6 @@ fn typed_function_pointer_resolutions(
     let mut scratch = Ledger::new(keep.memory(), control)?;
     let audit = audit_function_addresses(image, analysis, types, &mut scratch, control)?;
     crate::typed_function_pointer_resolutions(&audit, keep, control)
-}
-
-fn typed_debug(elf: &[u8]) -> (crate::Dwarf, TypeFacts) {
-    crate::read_debug(
-        &std::rc::Rc::from(elf),
-        crate::DebugMetadata::TypedLocations,
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap()
 }
 
 const PROGRAM: &str = r#"
@@ -132,6 +122,74 @@ fn a_pointer_parameter_names_its_function_field_at_the_load() {
 }
 
 #[test]
+fn a_load_point_keeps_a_pointer_value_at_the_load_alone() {
+    let elf = compiled(PROGRAM);
+    let (_, mut types) = typed_debug(&elf);
+    let pointer = *types
+        .types
+        .iter()
+        .find(|(_, ty)| {
+            ty.tag == gimli::DW_TAG_pointer_type
+                && ty
+                    .target
+                    .and_then(|id| types.resolve(id))
+                    .is_some_and(|(_, ty)| ty.name.as_deref() == Some("Callbacks"))
+        })
+        .expect("pointer parameter type")
+        .0;
+    with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let start = named(&analysis, "_start");
+        let load = analysis.functions[&start]
+            .transfers
+            .iter()
+            .find(|transfer| transfer.target.is_none())
+            .and_then(|transfer| transfer.load)
+            .expect("load provenance");
+        // A pointer value (DW_OP_bregN 0; DW_OP_stack_value) of the load's
+        // base for the load's one byte: no window asks for it.
+        let queries = crate::location_queries(image, &analysis, &mut keep, &mut || Ok(()))?;
+        let mut debug = LocalLocations::default();
+        debug.variables.insert(0, (Some(pointer), None));
+        debug.expression(
+            gimli::Expression(Reader::new(
+                &[0x70 + load.base, 0, 0x9f],
+                gimli::RunTimeEndian::Little,
+            )),
+            gimli::Encoding {
+                address_size: 4,
+                format: gimli::Format::Dwarf32,
+                version: 4,
+            },
+            0,
+            &[(load.site, load.site + 1)],
+            &queries,
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        assert_eq!(debug.registers[&load.base].len(), 1, "{load:?}");
+        types.locations = Some(debug);
+        let mut locations = Locations::default();
+        locations.read_aliases(image, &mut keep, &mut || Ok(()))?;
+        assert!(
+            locations
+                .field(&types, load.site, load.base, load.offset, &mut || Ok(()))?
+                .is_some()
+        );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
 fn one_erased_address_use_keeps_an_incompatible_declaration_a_candidate() {
     let source = PROGRAM.replace(
         "black_box(&OTHER);",
@@ -222,6 +280,7 @@ fn an_optimized_out_piece_does_not_shift_the_next_stack_field() {
             },
             0,
             &[(100, 200)],
+            &LocationQueries::asking(&[100], &[]),
             &mut ledger(),
             &mut || Ok(()),
         )
@@ -251,19 +310,97 @@ fn an_optimized_out_piece_does_not_shift_the_next_stack_field() {
     );
 }
 
+const GUARD_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+use core::hint::black_box;
+
+#[repr(C)]
+pub struct Guard { run: fn(u32) -> u32 }
+#[inline(never)]
+fn target(value: u32) -> u32 { black_box(value.wrapping_add(1)) }
+#[inline(never)]
+fn different(value: u16) -> u16 { black_box(value.wrapping_add(2)) }
+#[unsafe(no_mangle)]
+pub static GUARD: Guard = Guard { run: target };
+#[unsafe(no_mangle)]
+pub static OTHER: fn(u16) -> u16 = different;
+#[unsafe(no_mangle)]
+#[inline(never)]
+pub extern "C" fn _start(value: u32, guard: Guard) -> u32 {
+    (guard.run)(value).wrapping_add(1)
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn keep() -> *const Guard {
+    black_box(&OTHER);
+    &GUARD
+}
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo<'_>) -> ! { loop {} }
+"#;
+
+#[test]
+fn a_call_through_a_register_piece_is_asked_at_its_transfer() {
+    let elf = compiled(GUARD_PROGRAM);
+    let resolve = |types: &TypeFacts| {
+        with_facts(&elf, |image| {
+            let mut keep = ledger();
+            let analysis = crate::analyze(
+                image,
+                &[],
+                &[],
+                &UnknownCallBehavior,
+                &mut keep,
+                &mut || Ok(()),
+            )?;
+            let facts = &analysis.functions[&named(&analysis, "_start")];
+            // No target load: no window asks in this function.
+            assert!(
+                facts.target_loads.is_empty() && facts.open_exit_target_loads.is_empty(),
+                "{facts:#?}"
+            );
+            let site = facts
+                .transfers
+                .iter()
+                .find(|transfer| transfer.target.is_none())
+                .unwrap()
+                .site;
+            let resolutions = typed_function_pointer_resolutions(
+                image,
+                &analysis,
+                types,
+                &mut keep,
+                &mut || Ok(()),
+            )?;
+            Ok((
+                resolutions.get(site).map(|r| r.targets.clone()),
+                named(&analysis, "target"),
+            ))
+        })
+        .unwrap()
+    };
+    let (filtered, target) = resolve(&typed_debug(&elf).1);
+    let (every, _) = resolve(&every_pc_debug(&elf).1);
+    assert_eq!(filtered, every);
+    assert!(filtered.expect("a typed value field").contains(&target));
+}
+
 #[test]
 fn reading_locations_respects_the_work_budget() {
     let elf = compiled(PROGRAM);
+    let (_, mut types) = crate::tests::debug(&elf);
+    let analysis = crate::tests::analyze(&elf, &[], &[]).unwrap();
+    let queries = with_facts(&elf, |image| {
+        crate::location_queries(image, &analysis, &mut ledger(), &mut || Ok(()))
+    })
+    .unwrap();
     let mut keep = ledger();
-    let error = crate::read_debug(
-        &std::rc::Rc::from(&elf[..]),
-        crate::DebugMetadata::TypedLocations,
-        &mut keep,
-        &mut || Err(Error::new(ErrorCode::Cancelled, "cancelled")),
-    )
-    .err()
-    .expect("cancelled while walking DWARF");
+    let error = crate::read_locations(&mut types, &queries, &mut keep, &mut || {
+        Err(Error::new(ErrorCode::Cancelled, "cancelled"))
+    })
+    .expect_err("cancelled while walking DWARF");
     assert_eq!(error.code, ErrorCode::Cancelled);
+    assert!(types.locations.is_none(), "a cancelled read keeps nothing");
 }
 
 #[test]
@@ -371,7 +508,7 @@ fn the_resolver_requires_prepared_locations_without_implicitly_loading_them() {
                 .err()
                 .unwrap();
         assert_eq!(error.code, ErrorCode::Incompatible);
-        assert!(error.message.contains("not requested"));
+        assert!(error.message.contains("not read"));
         Ok(())
     })
     .unwrap();
@@ -842,6 +979,17 @@ fn transported_base(before: &str, between: &str, expected: bool) {
 }
 
 fn transported_base_from(before: &str, between: &str, base: &str, expected: bool) {
+    // DW_OP_reg11: the seed's pointer is in a1.
+    transported_base_located(before, between, base, &[0x5b], expected);
+}
+
+fn transported_base_located(
+    before: &str,
+    between: &str,
+    base: &str,
+    location: &[u8],
+    expected: bool,
+) {
     let program = PROGRAM.replace("fn _start(", "fn typed_start(").replace(
         "black_box(&OTHER);",
         "black_box(typed_start as extern \"C\" fn(u32, &Callbacks) -> u32); black_box(&OTHER);",
@@ -896,21 +1044,6 @@ exit:
             .find(|s| s.name == "seed")
             .unwrap()
             .address as u32;
-        let mut debug = LocalLocations::default();
-        debug.variables.insert(0, (Some(pointer), None));
-        debug.expression(
-            gimli::Expression(Reader::new(&[0x5b], gimli::RunTimeEndian::Little)), // DW_OP_reg11
-            gimli::Encoding {
-                address_size: 4,
-                format: gimli::Format::Dwarf32,
-                version: 4,
-            },
-            0,
-            &[(seed, seed + 4)],
-            &mut ledger(),
-            &mut || Ok(()),
-        )?;
-        types.locations = Some(debug);
         let mut keep = ledger();
         let mut analysis = crate::analyze(
             image,
@@ -920,6 +1053,25 @@ exit:
             &mut keep,
             &mut || Ok(()),
         )?;
+        // The seed's location is kept only as the witness the instruction
+        // pass asks at.
+        let queries = crate::location_queries(image, &analysis, &mut keep, &mut || Ok(()))?;
+        let mut debug = LocalLocations::default();
+        debug.variables.insert(0, (Some(pointer), None));
+        debug.expression(
+            gimli::Expression(Reader::new(location, gimli::RunTimeEndian::Little)),
+            gimli::Encoding {
+                address_size: 4,
+                format: gimli::Format::Dwarf32,
+                version: 4,
+            },
+            0,
+            &[(seed, seed + 4)],
+            &queries,
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        types.locations = Some(debug);
         let start = named(&analysis, "_start");
         let site = analysis.functions[&start]
             .transfers
@@ -972,6 +1124,13 @@ exit:
 #[test]
 fn a_pointer_witness_crosses_a_move_and_a_branch_continuation() {
     transported_base("", "beq a0, zero, exit", true);
+}
+
+#[test]
+fn a_witness_point_keeps_a_pointer_value_no_window_asks_for() {
+    // DW_OP_breg11 0; DW_OP_stack_value: a pointer value, never a register
+    // word, so only the witness PC keeps its location.
+    transported_base_located("", "beq a0, zero, exit", "t0", &[0x7b, 0, 0x9f], true);
 }
 
 #[test]

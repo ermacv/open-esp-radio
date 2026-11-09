@@ -1,10 +1,9 @@
 use super::*;
-use crate::tests::{compiled, ledger, with_facts};
-use crate::{Analysis, DebugMetadata, StorageEvidence, UnknownUse, read_debug};
+use crate::tests::{compiled, every_pc_debug, ledger, typed_debug, with_facts};
+use crate::{Analysis, StorageEvidence, UnknownUse};
 use oer_tools_analysis_elf::rv32::{self, Role};
 use oer_tools_analysis_riscv_model::{ErrorCode, UnknownCallBehavior};
 use oer_tools_analysis_riscv_program::facts::ImageFacts;
-use std::rc::Rc;
 
 const PROGRAM: &str = r#"
 #![no_std]
@@ -72,13 +71,14 @@ fn with_audit(
     elf: &[u8],
     check: impl FnOnce(&ImageFacts<'_>, &Analysis, &FunctionPointerAudit<'_, '_>) -> Result<()>,
 ) {
-    let (_, types) = read_debug(
-        &Rc::from(elf),
-        DebugMetadata::TypedLocations,
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap();
+    with_audit_of(elf, &typed_debug(elf).1, check);
+}
+
+fn with_audit_of(
+    elf: &[u8],
+    types: &TypeFacts,
+    check: impl FnOnce(&ImageFacts<'_>, &Analysis, &FunctionPointerAudit<'_, '_>) -> Result<()>,
+) {
     with_facts(elf, |image| {
         let mut keep = ledger();
         let analysis = crate::analyze(
@@ -89,7 +89,7 @@ fn with_audit(
             &mut keep,
             &mut || Ok(()),
         )?;
-        let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))?;
+        let audit = audit_function_addresses(image, &analysis, types, &mut keep, &mut || Ok(()))?;
         check(image, &analysis, &audit)
     })
     .unwrap();
@@ -150,6 +150,75 @@ fn a_pc_relative_address_reaches_a_typed_word_store() {
             assert!(proof.barrier.is_none());
         }
         assert_both(analysis, audit, false);
+        Ok(())
+    });
+}
+
+/// Everything the audit and both resolvers answer, in one comparable form.
+fn answers(analysis: &Analysis, audit: &FunctionPointerAudit<'_, '_>) -> String {
+    let global = function_pointer_resolutions(audit, &mut ledger(), &mut || Ok(())).unwrap();
+    let typed = typed_function_pointer_resolutions(audit, &mut ledger(), &mut || Ok(())).unwrap();
+    let mut loads = Vec::new();
+    for facts in analysis.functions.values() {
+        for load in facts.target_loads.values().flatten() {
+            loads.push(
+                audit
+                    .load_field(facts.function.address, load.site, &mut || Ok(()))
+                    .unwrap(),
+            );
+        }
+    }
+    format!(
+        "{:?}\n{:?}\n{global:?}\n{typed:?}\n{loads:?}",
+        audit.uses().collect::<Vec<_>>(),
+        audit.pc_relative_uses()
+    )
+}
+
+#[test]
+fn a_store_through_a_moved_base_keeps_the_location_of_its_alias() {
+    let source = PROGRAM
+        .replace(
+            "\"sw t0, 0({storage})\",",
+            "\"mv t1, {storage}\", \"sw t0, 0(t1)\",",
+        )
+        .replace("out(\"t0\") _,", "out(\"t0\") _, out(\"t1\") _,");
+    assert_ne!(source, PROGRAM);
+    let elf = compiled(&source);
+    let (_, types) = typed_debug(&elf);
+    let mut filtered = String::new();
+    with_audit_of(&elf, &types, |_, analysis, audit| {
+        let function = named(analysis, "different");
+        let uses = audit
+            .uses()
+            .find(|(entry, _)| *entry == function)
+            .unwrap()
+            .1;
+        let store = uses
+            .iter()
+            .find_map(|use_| match use_.evidence {
+                StorageEvidence::Typed(_) => use_.stores.first().copied(),
+                StorageEvidence::Unknown(_) => None,
+            })
+            .expect("a typed store through the moved base");
+        assert_eq!(store.base, 6, "the store's base is t1");
+        // DWARF names the storage parameter's own register, never t1: the
+        // field comes from the alias's location at the store's PC.
+        let debug = types.locations.as_ref().unwrap();
+        assert!(
+            !debug
+                .registers
+                .get(&6)
+                .into_iter()
+                .flatten()
+                .any(|location| { location.start <= store.site && store.site < location.end })
+        );
+        filtered = answers(analysis, audit);
+        Ok(())
+    });
+    let (_, every) = every_pc_debug(&elf);
+    with_audit_of(&elf, &every, |_, analysis, audit| {
+        assert_eq!(answers(analysis, audit), filtered);
         Ok(())
     });
 }
@@ -488,13 +557,7 @@ fn equal_numeric_addresses_in_distinct_elfs_cannot_share_pair_or_type_facts() {
     let first = compiled(PROGRAM);
     let second = compiled(&PROGRAM.replace("marker: 7", "marker: 8"));
     assert_eq!(pair_bytes(&first).high_site, pair_bytes(&second).high_site);
-    let (_, types) = read_debug(
-        &Rc::from(&first[..]),
-        DebugMetadata::TypedLocations,
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap();
+    let (_, types) = typed_debug(&first);
     with_facts(&second, |image| {
         let analysis = crate::analyze(
             image,
@@ -532,13 +595,7 @@ fn normalization_alone_does_not_prove_other_lowering_forms_or_dead_values() {
 #[test]
 fn normalization_and_proof_temporary_storage_obey_resource_limits() {
     let elf = compiled(PROGRAM);
-    let (_, types) = read_debug(
-        &Rc::from(&elf[..]),
-        DebugMetadata::TypedLocations,
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap();
+    let (_, types) = typed_debug(&elf);
     with_facts(&elf, |image| {
         let analysis = crate::analyze(
             image,

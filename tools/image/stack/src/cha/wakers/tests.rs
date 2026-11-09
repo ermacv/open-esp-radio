@@ -1,7 +1,7 @@
 use super::*;
 use crate::cha::{Type, Variant};
-use crate::dwarf::locations::{LocalLocations, Location};
-use crate::tests::{Symbol, analyze, debug, executable, ledger};
+use crate::dwarf::locations::{LocalLocations, Location, LocationQueries};
+use crate::tests::{Symbol, analyze, debug, executable, ledger, with_facts};
 use crate::{Analysis, Dwarf, Fact, Resolutions, waker_resolutions};
 use oer_tools_analysis_riscv_model::{Error, ErrorCode};
 use std::collections::{BTreeMap, BTreeSet};
@@ -257,6 +257,86 @@ fn every_byte_from_base_through_jalr_needs_the_same_live_piece() {
     let debug = f.types.locations.as_mut().unwrap();
     debug.variables.insert(200, (Some(1), None));
     debug.registers.get_mut(&13).unwrap().push(second);
+    f.hole();
+}
+
+/// The location queries of the fixture's own instruction pass.
+fn queries(f: &Fixture) -> LocationQueries {
+    let elf = f.types.source.clone().unwrap();
+    with_facts(&elf, |image| {
+        crate::location_queries(image, &f.analysis, &mut ledger(), &mut || Ok(()))
+    })
+    .unwrap()
+}
+
+#[test]
+fn the_queries_keep_a_continuation_that_contains_no_queried_point() {
+    let mut f = Fixture::merged();
+    // The vtable word from the base witness (16) through jalr (24..28), as
+    // three adjoining entries; the first two hold no queried PC.
+    let whole = *f.location();
+    let parts = [(16, 17), (17, 19), (19, 28)].map(|(start, end)| Location {
+        start: TEXT + start,
+        end: TEXT + end,
+        ..whole
+    });
+    // A byte piece or a spill of the same variable beside them, and a word
+    // after the function, are never asked.
+    let beside = Location {
+        start: TEXT + 16,
+        end: TEXT + 19,
+        ..whole
+    };
+    let decoys = [
+        Location {
+            bytes: Some(1),
+            ..beside
+        },
+        Location {
+            place: Place::Memory(13, 0),
+            ..beside
+        },
+        Location {
+            start: TEXT + 0x100,
+            end: TEXT + 0x104,
+            ..whole
+        },
+    ];
+    f.types
+        .locations
+        .as_mut()
+        .unwrap()
+        .registers
+        .insert(13, parts.iter().chain(&decoys).copied().collect());
+    let complete = f.resolve();
+    assert_eq!(
+        complete.get(f.site).unwrap().targets,
+        BTreeSet::from([f.table[1], f.table[3]])
+    );
+    let queries = queries(&f);
+    assert!(
+        !queries
+            .points()
+            .iter()
+            .any(|&pc| (TEXT + 16..TEXT + 19).contains(&pc)),
+        "only the function's window keeps the first two entries: {:x?}",
+        queries.points()
+    );
+    let registers = &mut f.types.locations.as_mut().unwrap().registers;
+    for locations in registers.values_mut() {
+        locations.retain(|location| queries.keeps(location));
+    }
+    assert_eq!(registers[&13], parts, "the continuity proof is kept whole");
+    assert_eq!(f.resolve(), complete);
+    // Without its first entry the same proof has a hole.
+    f.types
+        .locations
+        .as_mut()
+        .unwrap()
+        .registers
+        .get_mut(&13)
+        .unwrap()
+        .remove(0);
     f.hole();
 }
 
