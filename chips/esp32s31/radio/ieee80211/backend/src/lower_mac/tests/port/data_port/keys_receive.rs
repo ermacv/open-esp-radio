@@ -810,15 +810,19 @@ fn a_gtk_replacement_whose_rollback_fails_returns_its_owners_through_the_stop_on
     });
 }
 
-/// A cleanup whose clear the key table does not read back cleared frees
-/// nothing: no terminal, the named fault, the owners stay with the port,
-/// and the clear is not tried again.
+/// The cleanup of a failed rollback's entry, each case its own: without
+/// registers it writes nothing and waits; a table that still reads the
+/// entry valid after the one clear frees nothing, and each later stopped
+/// service only reads it again. Each is the call's named result, the port's
+/// own fault untouched, the owners with the port. Once the table reads the
+/// entry cleared, the removal (writing nothing more) returns the same slot
+/// and permission once, and the port retires.
 #[test]
-fn a_failed_rollbacks_entry_the_table_does_not_read_cleared_keeps_its_owners() {
+fn a_failed_rollbacks_entry_is_cleared_once_and_then_only_read_until_it_reads_cleared() {
     with_installations(|mut fixture, _| {
         let fixture = &mut fixture;
         fixture.start();
-        let (replace, _) = fixture.replacement();
+        let (replace, owners) = fixture.replacement();
         fixture.observed.borrow_mut().reject_key_writes = 2;
         assert!(matches!(
             fixture.run_failed(replace),
@@ -826,18 +830,43 @@ fn a_failed_rollbacks_entry_the_table_does_not_read_cleared_keeps_its_owners() {
         ));
         assert!(fixture.port.recover_for_stop());
         fixture.stop();
+        // The device's `hardware` records the clears earlier calls wrote.
+        let observed = fixture.observed.clone();
+        let clears = || observed.borrow().key_clears;
+        fixture.observed.borrow_mut().hardware_unavailable = true;
+        assert_eq!(fixture.stopped_service(), Err(Fault::HardwareUnavailable));
+        let before = clears();
+        fixture.observed.borrow_mut().hardware_unavailable = false;
         fixture.observed.borrow_mut().key_entries_stuck = true;
-        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryUnconfirmed));
+        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryHeld));
+        assert_eq!(clears(), before, "nothing was written without registers");
         assert!(fixture.group_terminals().is_empty(), "the slot is not free");
+        assert_eq!(
+            fixture.port.fault(),
+            None,
+            "the call's result, not recorded"
+        );
         assert!(fixture.port.retained_group().0.is_some());
-        // A table that would now read the entry cleared changes nothing:
-        // the clear is not tried again.
-        fixture.observed.borrow_mut().key_entries_stuck = false;
-        assert!(!fixture.port.recover_for_stop(), "the fault stays");
-        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryUnconfirmed));
+        assert!(fixture.stopped_release_refused(), "the owners stay");
+        // Read again: still valid.
+        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryHeld));
+        assert_eq!(clears(), before + 1, "the clear was issued once");
+        assert_eq!(fixture.stopped_service(), Err(Fault::GroupEntryHeld));
+        assert_eq!(clears(), before + 1, "a read writes nothing");
         assert!(fixture.group_terminals().is_empty());
-        drop(core::mem::take(&mut fixture.buffers));
-        assert!(fixture.port.release().is_none(), "the owners stay");
+        // The table reads the entry cleared: the removal, which writes the
+        // entry no more, returns the owners once.
+        fixture.observed.borrow_mut().key_entries_stuck = false;
+        assert!(fixture.stopped_service().is_ok());
+        assert_eq!(
+            fixture.group_terminals(),
+            [(Mutation::Remove, owners.0, owners.1)],
+            "the removal returns the slot and the permission"
+        );
+        assert!(fixture.stopped_service().is_ok());
+        assert_eq!(clears(), before + 1, "no second clear");
+        assert_eq!(fixture.group_terminals().len(), 1, "once");
+        retires(fixture);
     });
 }
 

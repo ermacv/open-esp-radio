@@ -4419,12 +4419,22 @@ fn group_replacement_keeps_exact_material_and_the_core_runs_on_after_every_faile
                     );
                     assert_eq!(hardware.crypto_order.len(), writes);
                     assert!(core.fault.is_none());
-                    // The cleanup clears the entry and reads it cleared;
-                    // a table that still reads it valid is not confirmed.
+                    // The cleanup clears the entry once and reads it; a
+                    // table that still reads it valid is read again, with
+                    // nothing written.
                     hardware.key_entries_stuck = true;
-                    assert!(!core.clear_failed_station_group(&mut hardware, &mut key));
+                    core.clear_failed_station_group(&mut hardware, &mut key);
+                    let writes = hardware.crypto_order.len();
+                    assert_eq!(
+                        core.read_failed_station_group(&mut hardware, &key),
+                        crate::mac::crypto::EntryRead::Held
+                    );
                     hardware.key_entries_stuck = false;
-                    assert!(core.clear_failed_station_group(&mut hardware, &mut key));
+                    assert_eq!(
+                        core.read_failed_station_group(&mut hardware, &key),
+                        crate::mac::crypto::EntryRead::Cleared
+                    );
+                    assert_eq!(hardware.crypto_order.len(), writes, "reads write nothing");
                 }
             }
         });

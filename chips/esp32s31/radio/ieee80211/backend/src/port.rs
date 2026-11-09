@@ -421,9 +421,15 @@ pub enum Fault {
     /// it ended.
     GroupReplacement(GroupReplacement),
     /// The stopped port cleared the station group key entry a failed
-    /// rollback left, and the key table did not read it cleared: the
-    /// replacement's owners stay with the port.
-    GroupEntryUnconfirmed,
+    /// rollback left, once, and the key table still reads the entry valid:
+    /// the replacement's owners stay with the port, its slot not free.
+    /// Each later stopped service reads the table again and writes nothing
+    /// (not recorded: this call's result).
+    GroupEntryHeld,
+    /// The key table does not say whether the station group key entry a
+    /// failed rollback left is cleared: the owners stay as for
+    /// [`Self::GroupEntryHeld`] (not recorded: this call's result).
+    GroupEntryUnobservable,
 }
 
 /// How a station group key replacement the hardware did not take ended.

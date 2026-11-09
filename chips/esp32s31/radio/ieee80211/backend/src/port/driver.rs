@@ -303,6 +303,24 @@ impl<'id, Id: SlotIdentity, const B: usize> QueueHomes<'id, Id, B> {
     }
 }
 
+/// A station group key replacement whose rollback failed: the command's
+/// owners, kept with the port until its cleanup removes the key.
+pub(super) struct RetainedGroup<'id, Id: SlotIdentity> {
+    pub(super) permission: StaPermission<'id, Id>,
+    pub(super) key: GroupKey<'id, Id, Station>,
+    /// Whether the cleanup's one write, the entry's clear, was issued.
+    pub(super) clear: GroupClear,
+}
+
+/// Where the cleanup of a retained replacement stands with its one write.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum GroupClear {
+    /// The entry's clear is not issued yet.
+    NotIssued,
+    /// The clear was issued: the cleanup only reads the table from now on.
+    Issued,
+}
+
 pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) core: PortCoreOwner<'id, Id, D, B>,
     /// The tickets at home, each at its own place.
@@ -324,7 +342,7 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     /// A station group key replacement whose rollback failed: its
     /// command's owners, until the stopped port's cleanup confirms the
     /// key's entry cleared and removes the key ([`Driver::clean_retained_group`]).
-    pub(super) retained_group: Option<StationGroupCommand<'id, Id>>,
+    pub(super) retained_group: Option<RetainedGroup<'id, Id>>,
     /// The key of a removal the data port's caller holds at its barrier:
     /// queued attempts that name it end withdrawn.
     pub(super) barrier: Option<RawKeyIdentity>,
@@ -1808,11 +1826,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                                 .shared()
                                 .retained_group
                                 .set((key.identity.slot, permission.index()));
-                            self.retained_group = Some(StationGroupCommand::Replace {
+                            // The replacement's material has no use left:
+                            // it zeroizes as it drops here.
+                            drop(material);
+                            self.retained_group = Some(RetainedGroup {
                                 permission,
                                 key,
-                                key_id,
-                                material,
+                                clear: GroupClear::NotIssued,
                             });
                             GroupFailed::Retained(Fault::GroupReplacement(
                                 GroupReplacement::RollbackFailed {
@@ -1870,39 +1890,39 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
     }
     /// The stopped port's cleanup of a station group replacement whose
-    /// rollback failed: clear the key's entry, and once the key table reads
-    /// it cleared, remove the key, its terminal returning the slot and the
-    /// command's permission. The cleanup clears the entry each time it
-    /// runs; nothing else repeats.
+    /// rollback failed. Its one write, the clear of the key's entry, is
+    /// issued once; from then on the cleanup only reads the key table. Once
+    /// the table reads the entry cleared, the key is removed (writing the
+    /// entry no more), its terminal returning the slot and the command's
+    /// permission.
     ///
     /// # Errors
     ///
-    /// The registers, the core's command view or the key's place are not
-    /// there, or the table does not read the entry cleared
-    /// ([`Fault::GroupEntryUnconfirmed`]): the owners stay retained and the
-    /// slot is not free.
+    /// This call's result, never recorded; the owners stay retained and
+    /// the slot is not free, and the next stopped service runs the cleanup
+    /// on from where it is. Before the clear: the registers, the core's
+    /// command view or the key's place are not there, and nothing was
+    /// written. After it: the table reads the entry valid
+    /// ([`Fault::GroupEntryHeld`]) or does not say
+    /// ([`Fault::GroupEntryUnobservable`]), or the registers or the removal
+    /// are not there.
     pub(super) fn clean_retained_group(
         &mut self,
         device: &mut D,
     ) -> Result<Option<brand::OwnedRemoved<'id, Id>>, Fault> {
-        let Some(StationGroupCommand::Replace {
-            permission,
-            key,
-            key_id,
-            material,
-        }) = self.retained_group.take()
-        else {
+        let Some(mut retained) = self.retained_group.take() else {
             return Ok(None);
         };
-        let cleared = (|| {
+        let identity = retained.key.identity;
+        let observed = (|| {
             let hardware = device.hardware()?;
             let installed = self
                 .keys
                 .iter_mut()
                 .flatten()
                 .filter_map(KeyPlace::installed_mut)
-                .find_map(|(identity, installed)| match installed {
-                    Installed::Receive(installed) if *identity == key.identity => Some(installed),
+                .find_map(|(held, installed)| match installed {
+                    Installed::Receive(installed) if *held == identity => Some(installed),
                     _ => None,
                 })
                 .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
@@ -1911,23 +1931,22 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 .view()
                 .commands()
                 .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
-            if view.clear_failed_station_group(hardware, installed) {
-                Ok(())
-            } else {
-                Err(Fault::GroupEntryUnconfirmed)
+            if retained.clear == GroupClear::NotIssued {
+                view.clear_failed_station_group(hardware, installed);
+                retained.clear = GroupClear::Issued;
+            }
+            match view.read_failed_station_group(hardware, installed) {
+                crate::mac::crypto::EntryRead::Cleared => Ok(()),
+                crate::mac::crypto::EntryRead::Held => Err(Fault::GroupEntryHeld),
+                crate::mac::crypto::EntryRead::Unobservable => Err(Fault::GroupEntryUnobservable),
             }
         })();
         let removed =
-            cleared.and_then(|()| self.remove::<StaPermission<'id, Id>>(device, key.identity));
+            observed.and_then(|()| self.remove::<StaPermission<'id, Id>>(device, identity));
         match removed {
-            Ok(removing) => Ok(removing.settle(permission)),
+            Ok(removing) => Ok(removing.settle(retained.permission)),
             Err(fault) => {
-                self.retained_group = Some(StationGroupCommand::Replace {
-                    permission,
-                    key,
-                    key_id,
-                    material,
-                });
+                self.retained_group = Some(retained);
                 Err(fault)
             }
         }

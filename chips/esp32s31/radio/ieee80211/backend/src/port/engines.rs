@@ -2200,13 +2200,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             PortState::Running | PortState::Recovering | PortState::Stopping { .. }
         ) {
             // A stopped port cleans up a replacement whose rollback failed,
-            // then ends the removals the stop finished.
+            // then ends the removals the stop finished. The cleanup's
+            // refusal is this call's result, not the port's fault: the next
+            // stopped service runs it on from where it stands, writing
+            // nothing it wrote before.
+            let cleaned = self.clean_retained_group(sink);
             let delivered = self
-                .clean_retained_group(sink)
-                .and_then(|()| self.deliver_removals(sink))
+                .deliver_removals(sink)
                 .map_err(|fault| self.record(fault));
             self.recompute_deadline();
-            return delivered.map(|()| None);
+            return delivered.and(cleaned).map(|()| None);
         }
         let done = self
             .turn(tx, tbtt, now, sink)

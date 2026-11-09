@@ -2360,15 +2360,24 @@ where
     }
 
     /// Clear the station group key entry of `installed`, whose replacement's
-    /// rollback failed, and read whether the key table holds it no more:
-    /// `false` when the table still holds it or does not say. The key stays
-    /// in its place either way; only its removal frees the slot.
+    /// rollback failed, once. The key stays in its place; only its removal,
+    /// which writes the entry no more, frees the slot.
     pub(crate) fn clear_failed_station_group<H: CcmpKeyHardware>(
         &mut self,
         hardware: &mut H,
         installed: &mut ReceiveKeyHandle<'core, Path>,
-    ) -> bool {
-        installed.token.clear_confirmed(hardware)
+    ) {
+        installed.token.clear_failed(hardware);
+    }
+
+    /// Read, writing nothing, what the key table holds at the station group
+    /// key entry of `installed`.
+    pub(crate) fn read_failed_station_group<H: CcmpKeyHardware>(
+        &self,
+        hardware: &mut H,
+        installed: &ReceiveKeyHandle<'core, Path>,
+    ) -> crate::mac::crypto::EntryRead {
+        installed.token.read_entry(hardware)
     }
 
     fn vacant_key(

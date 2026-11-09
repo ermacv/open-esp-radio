@@ -151,6 +151,17 @@ impl CcmpKeyHardware for RadioAccess {
     }
 }
 
+/// What the key table read at one entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EntryRead {
+    /// The entry is not valid: the table holds no key there.
+    Cleared,
+    /// The entry is valid: the table holds a key there.
+    Held,
+    /// The table does not say: the entry lies outside it.
+    Unobservable,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CryptoKeyError {
     InvalidGroupKeyId,
@@ -311,13 +322,20 @@ impl StaGroupCcmpSlot {
         }
     }
 
-    /// Clear the slot's entry whatever a failed rollback left in it, and
-    /// read whether the key table holds it no more: `false` when it still
-    /// does or the hardware does not say. The slot stays not installed.
-    pub fn clear_confirmed<H: CcmpKeyHardware>(&mut self, hardware: &mut H) -> bool {
+    /// Clear the slot's entry whatever a failed rollback left in it. The
+    /// slot stays not installed: its removal writes nothing more.
+    pub fn clear_failed<H: CcmpKeyHardware>(&mut self, hardware: &mut H) {
         hardware.clear_ccmp_entry(STA_GROUP_HARDWARE_INDEX);
         self.installed = false;
-        hardware.ccmp_entry_is_valid(STA_GROUP_HARDWARE_INDEX) == Some(false)
+    }
+
+    /// Read, writing nothing, what the key table holds at the slot's entry.
+    pub fn read_entry<H: CcmpKeyHardware>(&self, hardware: &mut H) -> EntryRead {
+        match hardware.ccmp_entry_is_valid(STA_GROUP_HARDWARE_INDEX) {
+            Some(false) => EntryRead::Cleared,
+            Some(true) => EntryRead::Held,
+            None => EntryRead::Unobservable,
+        }
     }
 }
 

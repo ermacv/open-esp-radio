@@ -66,9 +66,12 @@ pub enum BackendFault {
     HeAssociationRange,
     /// A station group key replacement the hardware did not take.
     GroupReplacement(GroupReplacement),
-    /// The stopped port's clear of a failed rollback's group key entry did
-    /// not read back cleared.
-    GroupEntryUnconfirmed,
+    /// The stopped port's one clear of a failed rollback's group key entry
+    /// left the key table reading it valid.
+    GroupEntryHeld,
+    /// The key table does not say whether a failed rollback's group key
+    /// entry is cleared.
+    GroupEntryUnobservable,
 }
 /// How a station group key replacement the hardware did not take ended.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

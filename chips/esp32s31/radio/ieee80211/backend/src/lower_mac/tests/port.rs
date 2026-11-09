@@ -309,6 +309,8 @@ impl Device<512> for TestDevice {
     type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = Tag;
     fn hardware(&mut self) -> Result<&mut Hardware, Fault> {
         self.assert_task_context();
+        // The clears every earlier call wrote.
+        self.observed.borrow_mut().key_clears = self.hardware.cleared_keys.len();
         if self.observed.borrow().hardware_unavailable {
             return Err(Fault::HardwareUnavailable);
         }

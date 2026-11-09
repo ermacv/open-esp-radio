@@ -76,9 +76,13 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   runs on. A replacement whose rollback fails keeps the command's owners in
   the port with both causes (`RollbackFailed`); the previous key is not
   live, and the port does not retire. The stopped port's service clears the
-  entry once and reads it back: cleared, the key's removal returns the slot
-  and the permission (`KeyRemoved`); not cleared, nothing is freed and the
-  fault is `GroupEntryUnconfirmed`. The receive handle retains zeroizing
+  entry once, ever, and reads it back: cleared, the key's removal (which
+  writes the entry no more) returns the slot and the permission
+  (`KeyRemoved`). Read valid (`GroupEntryHeld`) or not readable
+  (`GroupEntryUnobservable`), or the registers missing, nothing is freed;
+  that is the call's result, not the port's fault, and each later stopped
+  service only reads the table again. Registers missing before the clear
+  write nothing, and the clear waits for the next service. The receive handle retains zeroizing
   rollback material until removal or reset.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole.

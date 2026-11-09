@@ -126,7 +126,8 @@ impl DiagnosticPath for BackendFault {
                     }
                 }
             }
-            Self::GroupEntryUnconfirmed => path.name("GroupEntryUnconfirmed"),
+            Self::GroupEntryHeld => path.name("GroupEntryHeld"),
+            Self::GroupEntryUnobservable => path.name("GroupEntryUnobservable"),
         }
     }
 }
