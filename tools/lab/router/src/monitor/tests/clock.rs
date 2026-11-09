@@ -158,6 +158,7 @@ impl ManualClock {
     /// deadline: wait until every byte written so far was read (or the
     /// clock is released), then count `bytes` as written in the same
     /// change, so no quiet moment lies between the read and the write.
+    /// The write stays pending until [`Self::write_done`].
     pub fn wait_then_write(&self, bytes: u64) {
         let state = self.lock();
         let mut state = self
@@ -168,9 +169,13 @@ impl ManualClock {
             })
             .unwrap_or_else(PoisonError::into_inner);
         state.written += bytes;
-        state.writes_left = state.writes_left.saturating_sub(1);
         state.generation += 1;
         self.0.1.notify_all();
+    }
+
+    /// The writer's write is in the pipe, or failed.
+    pub fn write_done(&self) {
+        self.change(|state| state.writes_left = state.writes_left.saturating_sub(1));
     }
 
     /// The writer will make `writes` writes before it waits for a signal.
