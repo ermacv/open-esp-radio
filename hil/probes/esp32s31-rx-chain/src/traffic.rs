@@ -206,8 +206,9 @@ fn scan(
                         .get(index)
                         .ok_or(oer_portable_diagnostics::name!("traffic-post"; 32))?;
                     let bytes = unit
-                        .segment(step)
-                        .ok_or(oer_portable_diagnostics::name!("traffic-segment"; 32))?;
+                        .step(step)
+                        .map_err(|_| oer_portable_diagnostics::name!("traffic-segment"; 32))?
+                        .bytes();
                     for (i, byte) in bytes.iter().copied().enumerate() {
                         let observed = early
                             .get(i / 4)
@@ -261,8 +262,9 @@ fn scan(
                 let mut offset = 0usize;
                 for step in 0..count {
                     for byte in unit
-                        .segment(step)
-                        .ok_or(oer_portable_diagnostics::name!("traffic-segment-reread"; 32))?
+                        .step(step)
+                        .map_err(|_| oer_portable_diagnostics::name!("traffic-segment-reread"; 32))?
+                        .bytes()
                     {
                         unstable = unstable
                             .saturating_add(u32::from(saved.taken.get(offset) != Some(byte)));

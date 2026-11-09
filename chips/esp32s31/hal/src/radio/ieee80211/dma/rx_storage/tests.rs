@@ -1771,8 +1771,23 @@ fn walked_live<const COUNT: usize>() -> (
     core::cell::RefCell<crate::radio::ieee80211::dma::rx_dma::model::RxWalkerModel>,
     RxRingLive<'static, COUNT>,
 ) {
+    walked_live_rotated(0)
+}
+
+/// [`walked_live`] with each descriptor bound to buffer
+/// `(index + rotation) % COUNT`.
+fn walked_live_rotated<const COUNT: usize>(
+    rotation: usize,
+) -> (
+    &'static RxDmaStorage<COUNT, 16, 16, HostDma>,
+    [u32; COUNT],
+    u32,
+    core::cell::RefCell<crate::radio::ieee80211::dma::rx_dma::model::RxWalkerModel>,
+    RxRingLive<'static, COUNT>,
+) {
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 16, HostDma>::new()));
-    let placed = place(storage);
+    let placed = RxDmaStorage::place_rotated(Placed::host(storage), rotation)
+        .expect("the host storage has a layout");
     let storage = placed.storage();
     let buffers = storage.buffer_addresses().bits();
     let base = placed.descriptor_base();
@@ -1868,6 +1883,184 @@ fn a_landing_never_writes_under_a_taken_chain() {
     assert_eq!(read, [1, 2, 3, 4], "the bytes stayed");
     storage.dma_read(&live, buffers[1], &mut read).unwrap();
     assert_eq!(read, [5, 6, 7, 8], "the bytes stayed");
+}
+
+/// A taken chain that wraps past the ring's end lends each step through
+/// its descriptor's own binding and length, as often as asked; the views
+/// take nothing, and the whole unit recycles once they are gone.
+#[test]
+fn a_completed_chain_lends_each_step_past_the_ring_end() {
+    use crate::radio::ieee80211::dma::rx_dma::model::RxWalkerLanding;
+    let (storage, buffers, base, walker, mut live) = walked_live_rotated::<4>(1);
+    let table = storage.walker_table().unwrap();
+    let low = |index: u32| {
+        (base + index * crate::radio::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
+            & ADDRESS_LOW_MASK
+    };
+    // Two single frames, then the first returns to the ring after three.
+    storage.land_unit(&walker, &[1; 4]).unwrap();
+    storage.land_unit(&walker, &[2; 4]).unwrap();
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, frozen)
+        .unwrap()
+        .expect("the first frame");
+    assert_eq!(unit.head_index(), 0);
+    assert!(unit.recycle(&mut *walker.borrow_mut()).unwrap().is_some());
+    live.complete_pending_reload(&mut *walker.borrow_mut(), frozen_settle())
+        .unwrap();
+    // A chain lands in two, three and, past the ring's end, zero.
+    storage.dma_write(&live, buffers[2], &[0x21; 16]).unwrap();
+    assert_eq!(
+        walker.borrow_mut().land(table, 16, false),
+        RxWalkerLanding::Landed(low(2))
+    );
+    storage.dma_write(&live, buffers[3], &[0x31; 16]).unwrap();
+    assert_eq!(
+        walker.borrow_mut().land(table, 16, false),
+        RxWalkerLanding::Landed(low(3))
+    );
+    assert_eq!(
+        storage.land_unit(&walker, &[0x41, 0x42, 0x43]),
+        Ok(RxWalkerLanding::Landed(low(0)))
+    );
+    // The second frame returns, behind zero, where the walker waits.
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, frozen)
+        .unwrap()
+        .expect("the second frame");
+    assert_eq!(unit.head_index(), 1);
+    assert!(unit.recycle(&mut *walker.borrow_mut()).unwrap().is_some());
+    live.complete_pending_reload(&mut *walker.borrow_mut(), frozen_settle())
+        .unwrap();
+    assert_eq!(walker.borrow().next_descriptor_low, low(1));
+
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, frozen)
+        .unwrap()
+        .expect("the chain");
+    assert_eq!(
+        (
+            unit.head_index(),
+            unit.descriptor_count(),
+            unit.total_length()
+        ),
+        (2, 3, 16 + 16 + 3)
+    );
+    let expected: [(usize, &[u8]); 3] =
+        [(2, &[0x21; 16]), (3, &[0x31; 16]), (0, &[0x41, 0x42, 0x43])];
+    let views = [unit.step(0), unit.step(1), unit.step(2)].map(Result::unwrap);
+    for (view, (index, bytes)) in views.iter().zip(expected) {
+        assert_eq!(view.descriptor_index(), index);
+        assert_eq!(view.bytes(), bytes);
+        assert_eq!(
+            view.descriptor_word0(),
+            storage.descriptors()[index].word0(),
+            "the descriptor's own word"
+        );
+    }
+    assert!(!views[1].descriptor_word0().rx_done());
+    assert!(views[2].descriptor_word0().rx_done());
+    // A second read is the same view of the same bytes.
+    for (step, view) in views.iter().enumerate() {
+        let again = unit.step(step).unwrap();
+        assert!(core::ptr::eq(again.bytes(), view.bytes()));
+    }
+    // While the views live, the engine writes none of the unit's buffers.
+    for index in [2, 3, 0] {
+        aim_free_descriptor(table, &walker, buffers[index]);
+        assert_eq!(
+            storage.land_unit(&walker, &[9; 4]),
+            Err(HostDmaAccessError::HeldByCpu)
+        );
+    }
+    // Restore the walker's free descriptor, one, to its own buffer.
+    aim_free_descriptor(table, &walker, buffers[1]);
+    // The views' last use is above: the unit is free to recycle.
+    // A later frame moves the walker's LAST past the chain.
+    assert_eq!(
+        storage.land_unit(&walker, &[5; 4]),
+        Ok(RxWalkerLanding::Landed(low(1)))
+    );
+
+    let append = unit
+        .recycle(&mut *walker.borrow_mut())
+        .unwrap()
+        .expect("the whole chain returns");
+    assert_eq!((append.head_index.get(), append.descriptor_count), (2, 3));
+    live.complete_pending_reload(&mut *walker.borrow_mut(), frozen_settle())
+        .unwrap();
+    for index in [2, 3, 0] {
+        assert_eq!(storage.dma_write(&live, buffers[index], &[9; 4]), Ok(()));
+    }
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(live.try_stop(&mut *walker.borrow_mut()).is_ok());
+}
+
+/// A step the unit does not hold, or a descriptor word that contradicts the
+/// unit, lends nothing; the unit keeps every descriptor and still returns
+/// whole.
+#[test]
+fn a_unit_step_refuses_without_losing_the_unit() {
+    let (storage, buffers, _, walker, mut live) = walked_live::<4>();
+    let table = storage.walker_table().unwrap();
+    storage.dma_write(&live, buffers[0], &[0x11; 16]).unwrap();
+    walker.borrow_mut().land(table, 16, false);
+    storage.land_unit(&walker, &[0x22; 6]).unwrap();
+    // A later frame releases the chain's terminal link for recycle.
+    storage.land_unit(&walker, &[0x33; 4]).unwrap();
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, frozen)
+        .unwrap()
+        .expect("the chain");
+    assert_eq!((unit.head_index(), unit.descriptor_count()), (0, 2));
+
+    for step in [2, 3, 4, usize::MAX] {
+        assert_eq!(unit.step(step).err(), Some(RxUnitStepError::Step));
+    }
+    let word0 = |length, terminal| {
+        crate::radio::ieee80211::dma::descriptor::rx_landed_word(16, length, terminal)
+    };
+    // A length past the buffer is refused before any byte is sliced.
+    storage.descriptors()[1].write_word0(word0(17, true));
+    assert_eq!(unit.step(1).err(), Some(RxUnitStepError::Length));
+    // RX_DONE before the last step, or missing on it.
+    storage.descriptors()[1].write_word0(word0(6, false));
+    assert_eq!(unit.step(1).err(), Some(RxUnitStepError::Terminal));
+    storage.descriptors()[1].write_word0(word0(6, true));
+    storage.descriptors()[0].write_word0(word0(16, true));
+    assert_eq!(unit.step(0).err(), Some(RxUnitStepError::Terminal));
+    storage.descriptors()[0].write_word0(word0(16, false));
+
+    // The unit still holds both descriptors and lends both steps.
+    assert_eq!(unit.step(0).unwrap().bytes(), [0x11; 16]);
+    assert_eq!(unit.step(1).unwrap().bytes(), [0x22; 6]);
+    for index in [0, 1] {
+        aim_free_descriptor(table, &walker, buffers[index]);
+        assert_eq!(
+            storage.land_unit(&walker, &[9; 4]),
+            Err(HostDmaAccessError::HeldByCpu)
+        );
+    }
+    aim_free_descriptor(table, &walker, buffers[3]);
+    unit.retain_for_deferred_recycle();
+    // Views and refusals took nothing: only the chain is observed.
+    let observed = live.observed_mask();
+    assert_eq!(observed.count_ones(), 2);
+    assert!(observed.contains(0) && observed.contains(1));
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+
+    let frozen = live.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+    let credit = storage
+        .claim_deferred_recycle(&mut live, frozen)
+        .unwrap()
+        .expect("the retained chain is at the frontier");
+    assert_eq!(credit.descriptor_count(), 2);
+    assert!(credit.append(&mut *walker.borrow_mut()).is_ok());
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
 }
 
 /// A recycle gives the descriptor's buffer back to the engine.
