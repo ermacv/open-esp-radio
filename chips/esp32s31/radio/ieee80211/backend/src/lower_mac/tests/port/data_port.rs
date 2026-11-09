@@ -261,6 +261,20 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         key: Option<&PairwiseKey<'id, Id, Station>>,
         transmissions: core::num::NonZeroU8,
     ) -> Option<<Port<'id, Id> as DataPort<'id>>::Admitted> {
+        self.mpdu_in(
+            key,
+            transmissions,
+            oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+        )
+    }
+
+    /// [`Self::mpdu_of`] in the access category `category`.
+    fn mpdu_in(
+        &mut self,
+        key: Option<&PairwiseKey<'id, Id, Station>>,
+        transmissions: core::num::NonZeroU8,
+        category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
+    ) -> Option<<Port<'id, Id> as DataPort<'id>>::Admitted> {
         let buffer = self.buffers.pop()?;
         let ticket = self.tickets.pop()?;
         let rate = self.port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))?;
@@ -311,7 +325,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             context: Tag(91, None),
             ticket,
             source,
-            access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+            access_category: category,
             protection: Protection::None,
             power: SupportedPower::new(TxPower::Calibrated).expect("power"),
             coex_operation: TxOperation::Data,

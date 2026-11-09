@@ -21,7 +21,7 @@ use core::{
     convert::Infallible,
     marker::PhantomData,
     pin::Pin,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     task::{Context, Poll},
 };
 use oer_portable_time::{Duration, Instant, Timer};
@@ -401,7 +401,7 @@ pub enum Fault {
     /// A received unit's MPDU lies outside the unit.
     ReceiveRange,
     /// A received buffer was dropped without its recycle: its unit went
-    /// back to the ring, outside the held count.
+    /// back to the ring. A stop's recovery takes it out of the held count.
     ReceiveLost,
     /// The data arenas' step completed an MPDU or removed a key.
     ArenaCoreContract,
@@ -531,7 +531,7 @@ impl Fault {
     /// here names sites that took nothing: a fault of any other kind stays
     /// terminal until its site proves the same.
     pub(crate) const fn leaves_owners_whole(self) -> bool {
-        matches!(self, Self::Unpublished(_))
+        matches!(self, Self::Unpublished(_) | Self::ReceiveLost)
     }
 }
 
@@ -553,8 +553,9 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
 /// a quarantine keeps its DMA return places and key activity unavailable
 /// for reuse.
 pub struct PortSharedStorage<const B: usize, P: LentNotifies = SameHart> {
-    /// Set when a received buffer was dropped without its recycle.
-    lost: AtomicBool,
+    /// Units of received buffers dropped without their recycle, back in
+    /// the ring but not yet out of the caller's held count.
+    lost: AtomicUsize,
     key_live: [KeyActivity; 20],
     /// Each pool buffer's place, holding it while the CPU owns it.
     returned: oer_portable_memory::ReturnBank<TxBacking<B>, TX_BUFFERS>,
@@ -580,7 +581,7 @@ impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
     pub const fn with_network(notifies: P) -> Self {
         let network = lent::NetworkCredit::with(notifies);
         Self {
-            lost: AtomicBool::new(false),
+            lost: AtomicUsize::new(0),
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_portable_memory::ReturnBank::new(),
             network,
@@ -592,7 +593,11 @@ impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
     }
     /// Whether a received buffer was dropped without its recycle.
     fn lost(&self) -> bool {
-        self.lost.load(Ordering::Acquire)
+        self.lost.load(Ordering::Acquire) != 0
+    }
+    /// The units dropped without their recycle since the last take.
+    fn take_lost(&self) -> usize {
+        self.lost.swap(0, Ordering::AcqRel)
     }
 }
 
@@ -675,11 +680,11 @@ pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
 /// but the caller's held count no longer matches, and the port's next call
 /// answers with [`Fault::ReceiveLost`].
 pub(crate) struct LossGuard {
-    lost: &'static AtomicBool,
+    lost: &'static AtomicUsize,
     armed: bool,
 }
 impl LossGuard {
-    pub(crate) fn new(lost: &'static AtomicBool) -> Self {
+    pub(crate) fn new(lost: &'static AtomicUsize) -> Self {
         Self { lost, armed: true }
     }
     /// The buffer's unit leaves by an explicit path; nothing is lost.
@@ -690,7 +695,7 @@ impl LossGuard {
 impl Drop for LossGuard {
     fn drop(&mut self) {
         if self.armed {
-            self.lost.store(true, Ordering::Release);
+            self.lost.fetch_add(1, Ordering::AcqRel);
         }
     }
 }

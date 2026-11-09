@@ -1171,9 +1171,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         let stopping = self.stopping();
         let (driver, device, mut env) = self.parts(sink);
         let mut steps = Sink::default();
-        core_views::open::<Id, D, B>(driver.core.view(), device.hardware()?, &mut steps)?;
-        driver.closed = false;
-        driver.collect(&mut env, &mut steps, stopping)?;
+        let opened =
+            core_views::open::<Id, D, B>(driver.core.view(), device.hardware()?, &mut steps);
+        if opened.is_ok() {
+            driver.closed = false;
+        }
+        // What the open's steps completed goes home before its fault.
+        let collected = driver.collect(&mut env, &mut steps, stopping);
+        opened?;
+        collected?;
         self.reopen = false;
         Ok(())
     }
@@ -2377,8 +2383,23 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     fn recover_for_stop(&mut self) -> bool {
         // A faulted port keeps no command: the call that faulted returned
         // it to its caller.
-        let recoverable =
-            !self.shared.lost() && self.fault.is_some_and(|fault| fault.leaves_owners_whole());
+        // Units of buffers dropped unrecycled are back in the ring: they
+        // leave the held count here, and the loss stays the port's cause
+        // until this recovery.
+        let lost = self.shared.take_lost();
+        if lost > 0 {
+            match self.rx_out.get().checked_sub(lost) {
+                Some(held) => {
+                    self.rx_out.set(held);
+                    self.device.returned();
+                    self.record(Fault::ReceiveLost);
+                }
+                None => {
+                    self.record(Fault::ReceiveAccounting);
+                }
+            }
+        }
+        let recoverable = self.fault.is_some_and(|fault| fault.leaves_owners_whole());
         if recoverable {
             self.fault = None;
             if matches!(self.state, PortState::Starting { .. } | PortState::Running) {

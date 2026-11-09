@@ -759,7 +759,7 @@ fn a_lent_unit_lends_its_storage_and_its_drop_returns_it_to_the_ring() {
 }
 
 #[test]
-fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_goes_back() {
+fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit_goes_back() {
     use oer_protocols_ieee80211_contracts_port::LendRefused;
     with_installations(|mut fixture, _| {
         fixture.start();
@@ -845,14 +845,16 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_goes
             assert_eq!(observed.received.len(), 1, "the third unit stays staged");
         }
         assert_eq!(count(&fixture.released), 2, "each unit returned once");
+        // The stop's recovery takes the returned unit out of the held
+        // count; the ordinary stop then confirms.
+        assert!(fixture.port.recover_for_stop(), "the unit is back");
+        assert_eq!(fixture.port.fault(), None);
+        fixture.stop();
         let Fixture {
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(
-            port.release().is_none(),
-            "the loss is a fault: the device stays with the port"
-        );
+        assert!(port.release().is_some(), "the stopped port retires");
     });
 }
 

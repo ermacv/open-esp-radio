@@ -832,8 +832,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             // No arena to offer the edge: the MPDUs' settles are the core's
             // own.
             let mut sink = Sink::default();
-            core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink)?;
-            self.collect(env, &mut sink, stopping)?;
+            // What the service completed goes home even when a later queue
+            // of the same service faulted; the service's fault comes first.
+            let served = core_views::service::<Id, D, B>(
+                self.core.view(),
+                device.hardware()?,
+                wake,
+                &mut sink,
+            );
+            let collected = self.collect(env, &mut sink, stopping);
+            served?;
+            collected?;
             return Ok(None);
         }
         let settling = |driver: &mut Self| {
@@ -848,20 +857,25 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         };
         let before = settling(self);
         let mut sink = Sink::default();
-        core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink)?;
-        self.collect(env, &mut sink, stopping)?;
+        let served =
+            core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink);
+        let collected = self.collect(env, &mut sink, stopping);
+        served?;
+        collected?;
         let settled = before && !settling(self);
         let (done, again) =
             self.service_arena(device, if settled { timeout } else { wake }, now)?;
         if again {
             let mut sink = Sink::default();
-            core_views::service::<Id, D, B>(
+            let served = core_views::service::<Id, D, B>(
                 self.core.view(),
                 device.hardware()?,
                 timeout,
                 &mut sink,
-            )?;
-            self.collect(env, &mut sink, stopping)?;
+            );
+            let collected = self.collect(env, &mut sink, stopping);
+            served?;
+            collected?;
         }
         Ok(done)
     }

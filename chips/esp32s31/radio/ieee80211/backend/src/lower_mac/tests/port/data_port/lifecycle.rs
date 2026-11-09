@@ -2135,3 +2135,39 @@ fn a_submission_the_core_refuses_goes_back_to_its_queue_with_its_ticket() {
         );
     });
 }
+
+/// One service finds the first queue's MPDU delivered and the next
+/// queue's completion unreadable: the delivered one still comes back, and
+/// the service answers the core's fault.
+#[test]
+fn a_completion_ahead_of_a_faulting_queue_in_one_service_still_comes_back() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().statuses = std::vec![SUCCESS, (9, 0)];
+        fixture.hold_air(true);
+        let one = core::num::NonZeroU8::MIN;
+        let first = fixture
+            .mpdu_in(None, one, WmmAccessCategory::Voice)
+            .expect("first");
+        fixture.submit_now(first);
+        let second = fixture
+            .mpdu_in(None, one, WmmAccessCategory::Background)
+            .expect("second");
+        fixture.submit_now(second);
+        fixture.hold_air(false);
+        // Both completions latch before the one service reads them.
+        let waker = fixture.waker();
+        let _ = fixture.port.poll_facts(&mut Context::from_waker(&waker));
+        let _ = fixture.port.poll_facts(&mut Context::from_waker(&waker));
+        let now = fixture.now();
+        let served = fixture
+            .port
+            .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox);
+        assert!(matches!(served, Err(Fault::Core(_))), "{served:?}");
+        assert!(matches!(
+            last_outcome(fixture),
+            Some(TxOutcome::Ended(SingleEnd::Delivered { .. }))
+        ));
+        assert_eq!(fixture.take_completed(), 1, "the delivered MPDU came back");
+    });
+}
