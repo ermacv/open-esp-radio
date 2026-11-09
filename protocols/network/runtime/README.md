@@ -31,6 +31,15 @@ cancelled; `take` consumes the observer, so a result is read once and a credit's
 next command is out of its reach. Dropping an observer gives up the result, and
 the credit frees when the command has ended, whichever comes last.
 
+The service finds results only where the core tells them (`next_end`, see the
+core's README, "Work records"): a running command is never looked at to learn
+that it did not end. The service keeps, at each command's place in the core,
+the right to its result (`CommandId`) and the credit's tag it answers. A
+credit's tag and its command's place free at different times, so they need not
+be equal. A told end is matched by place and generation; one that is not this
+right's command leaves the right where it is. The result goes to its tag's
+place once, as before. A producer's works are kept and matched in the same way.
+
 A socket's lanes wake through waker cells, so today a socket and its service
 share a hart.
 

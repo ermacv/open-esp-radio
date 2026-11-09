@@ -135,6 +135,7 @@ mod loans;
 mod machine;
 mod neighbor;
 mod owner;
+mod places;
 
 pub use block::{
     Block, BlockTooShort, BrandRefusal, ClaimRefused, Claimed, CoreBrand, GROUPS, Group,
@@ -145,9 +146,9 @@ pub use echo::{ECHOES, IcmpDrop, RATE as ECHO_RATE};
 pub use interface::{Interface, InterfaceError, Ipv4};
 pub use loans::{Loan, Loans, LoansRefused, NotLent};
 pub use machine::{
-    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Eviction, FillFailed,
-    Grant, LendTo, NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults, SendRefusal,
-    SendRefused, SocketId, StaleSocket, WorkId,
+    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Ends, Eviction,
+    FillFailed, Grant, LendTo, NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults,
+    SendRefusal, SendRefused, SocketId, StaleSocket, WorkId,
 };
 pub use owner::{Intake, LentDatagram, NetworkOwner, Retired, Unsent};
 

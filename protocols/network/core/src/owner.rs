@@ -11,9 +11,9 @@ use crate::block::{Block, CoreBrand, Group, Pool};
 use crate::interface::Interface;
 use crate::loans::Loan;
 use crate::machine::{
-    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Eviction, FillFailed,
-    Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal, SendRefused,
-    SocketId, StaleSocket, WorkId,
+    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Ends, Eviction,
+    FillFailed, Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal,
+    SendRefused, SocketId, StaleSocket, WorkId,
 };
 
 /// What a retired core hands on, each to its own owner.
@@ -464,6 +464,11 @@ impl<
     /// See [`Core::take_result`].
     pub fn take_result(&mut self, command: CommandId<B>) -> CommandState<B> {
         self.core.take_result(command)
+    }
+
+    /// See [`Core::next_end`].
+    pub fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId> {
+        self.core.next_end(ends)
     }
 
     /// See [`Core::drop_observer`].

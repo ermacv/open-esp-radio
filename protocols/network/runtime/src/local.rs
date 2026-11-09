@@ -17,8 +17,8 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::AtomicWaker;
 use oer_portable_time::Instant;
 use oer_protocols_network_core::{
-    CommandId, CommandState, Declined, NetworkOwner, OpenRefused, Outcome, Remote, RetiredResults,
-    SendRefusal, SocketId, WorkId,
+    CommandId, CommandState, Declined, Ends, NetworkOwner, OpenRefused, Outcome, Remote,
+    RetiredResults, SendRefusal, SocketId, WorkId,
 };
 use oer_protocols_network_port::FramePort;
 
@@ -221,6 +221,8 @@ struct Hold<T> {
 pub struct Producer<'a, B, P: Produce, const CREDITS: usize> {
     producer: P,
     socket: Option<SocketId<B>>,
+    /// Where the core tells the socket's ends.
+    ends: Option<Ends<B>>,
     /// Each open work by its core place.
     works: [Option<(CommandId<B>, P::Tag)>; CREDITS],
     /// The works open.
@@ -242,6 +244,7 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
         Self {
             producer,
             socket: None,
+            ends: None,
             works: [const { None }; CREDITS],
             open: 0,
             generation: 0,
@@ -257,14 +260,15 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
     }
 
     pub(crate) fn bind(&mut self, socket: SocketId<B>) {
+        self.ends = Some(socket.ends());
         self.socket = Some(socket);
     }
 }
 
 pub(crate) mod sealed {
     use super::{
-        CommandId, CommandState, Context, Declined, EventSink, Instant, Remote, RetiredResults,
-        SendRefusal, ServiceEvent, SocketId, WorkId,
+        CommandId, CommandState, Context, Declined, Ends, EventSink, Instant, Remote,
+        RetiredResults, SendRefusal, ServiceEvent, SocketId, WorkId,
     };
 
     /// What a producer's part of the service asks of the core.
@@ -278,6 +282,7 @@ pub(crate) mod sealed {
         ) -> Result<CommandId<B>, SendRefusal>;
         fn withdraw(&mut self, command: &CommandId<B>) -> bool;
         fn take_result(&mut self, command: CommandId<B>) -> CommandState<B>;
+        fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId>;
         fn neighbors_changed(&self) -> u32;
         fn address_version(&self) -> u32;
     }
@@ -372,6 +377,10 @@ impl<
 
     fn take_result(&mut self, command: CommandId<B>) -> CommandState<B> {
         Self::take_result(self, command)
+    }
+
+    fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId> {
+        Self::next_end(self, ends)
     }
 
     fn neighbors_changed(&self) -> u32 {
@@ -560,18 +569,27 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
     fn deliver(
         &mut self,
         owner: &mut impl Owner<B>,
-        events: &mut impl EventSink<ServiceEvent>,
+        _events: &mut impl EventSink<ServiceEvent>,
     ) -> bool {
-        if self.open == 0 {
+        let Some(ends) = self.ends else {
             return false;
-        }
+        };
         let mut moved = false;
-        for slot in &mut self.works {
+        // Only what the core told ended: open works are not looked at.
+        while let Some(work) = owner.next_end(&ends) {
+            // The generation decides: a told end that is not this work's
+            // leaves the work where it is.
+            let Some(slot) = self.works.get_mut(work.place()).filter(|slot| {
+                slot.as_ref()
+                    .is_some_and(|(command, _)| command.work() == work)
+            }) else {
+                continue;
+            };
             let Some((command, tag)) = slot.take() else {
                 continue;
             };
-            let id = command.work();
             let outcome = match owner.take_result(command) {
+                // An end is told once it is a result, so this keeps the work.
                 CommandState::Running(command) => {
                     *slot = Some((command, tag));
                     continue;
@@ -581,7 +599,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
                 CommandState::Gone => Outcome::Unknown,
             };
             self.open = self.open.saturating_sub(1);
-            self.producer.ended(Work { id, tag }, outcome);
+            self.producer.ended(Work { id: work, tag }, outcome);
             moved = true;
         }
         moved

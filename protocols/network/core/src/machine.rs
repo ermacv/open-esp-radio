@@ -29,6 +29,7 @@ use crate::interface::{
 };
 use crate::loans::{LoansRefused, NotLent};
 use crate::neighbor::{Lookup, Neighbors};
+use crate::places::{Declared, Place, Places, Run, Sending};
 
 /// RFC 1122, 3.2.1.7: a default time to live large enough for the Internet.
 const TIME_TO_LIVE: u8 = 64;
@@ -303,7 +304,35 @@ impl<B> SocketId<B> {
     pub const fn flow(&self) -> u8 {
         self.index
     }
+
+    /// Where this socket's ends are told ([`Core::next_end`]): it outlives
+    /// the handle's close, for the ends of what the socket ran.
+    pub const fn ends(&self) -> Ends<B> {
+        Ends {
+            index: self.index,
+            serial: self.serial,
+            brand: PhantomData,
+        }
+    }
 }
+
+/// Where one socket's ended commands are told, for as long as the socket
+/// holds its place in the core: a socket opened again there later is
+/// another, and this tells none of its ends.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Ends<B> {
+    index: u8,
+    serial: u64,
+    brand: Tag<B>,
+}
+
+impl<B> Clone for Ends<B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<B> Copy for Ends<B> {}
 
 /// A datagram accepted and not yet taken by the port, which only this can
 /// evict. What the port took, an application's blocks and a socket's received
@@ -496,112 +525,6 @@ pub enum NetEvent {
     Icmp(IcmpDrop),
 }
 
-#[derive(Debug)]
-struct Sending<'m, B, const SIZE: usize> {
-    remote: Remote,
-    block: Block<'m, B, SIZE>,
-    since: Instant,
-    /// The neighbor it goes through; broadcast has none. Its station address
-    /// is read when the frame is built, so a change reaches a waiting datagram.
-    hop: Option<[u8; 4]>,
-}
-
-/// A producer's work: a place and no block, its data the producer's until
-/// it fills the slot.
-#[derive(Debug)]
-struct Declared {
-    remote: Remote,
-    length: usize,
-    /// As [`Sending::hop`].
-    hop: Option<[u8; 4]>,
-}
-
-#[derive(Debug)]
-enum Run<'m, B, const SIZE: usize> {
-    Free,
-    Sending(Sending<'m, B, SIZE>),
-    Declared(Declared),
-    Finished(Outcome),
-}
-
-impl<B, const SIZE: usize> Run<'_, B, SIZE> {
-    /// The neighbor running work goes through, which it protects.
-    const fn hop(&self) -> Option<[u8; 4]> {
-        match self {
-            Self::Sending(Sending { hop, .. }) | Self::Declared(Declared { hop, .. }) => *hop,
-            Self::Free | Self::Finished(_) => None,
-        }
-    }
-
-    const fn running(&self) -> bool {
-        matches!(self, Self::Sending(_) | Self::Declared(_))
-    }
-}
-
-/// One command's place: what it runs and, after, its result.
-#[derive(Debug)]
-struct Place<'m, B, const SIZE: usize> {
-    /// The running command's, or 0.
-    serial: u64,
-    /// Someone holds the right to the result.
-    observed: bool,
-    run: Run<'m, B, SIZE>,
-}
-
-impl<'m, B, const SIZE: usize> Place<'m, B, SIZE> {
-    const fn new() -> Self {
-        Self {
-            serial: 0,
-            observed: false,
-            run: Run::Free,
-        }
-    }
-
-    /// End running work as `outcome`, its block to `pool`; whether it held a
-    /// neighbor's protection, which ends with it. Anything else here stays.
-    fn end<const BLOCKS: usize>(
-        &mut self,
-        outcome: Outcome,
-        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
-    ) -> bool {
-        if !self.run.running() {
-            return false;
-        }
-        let protected = self.run.hop().is_some();
-        if let Run::Sending(sending) = core::mem::replace(&mut self.run, Run::Free) {
-            pool.give(sending.block);
-        }
-        self.finish(outcome);
-        protected
-    }
-
-    /// End declared work as `outcome`: it holds no block. Whether it held a
-    /// neighbor's protection.
-    fn end_declared(&mut self, outcome: Outcome) -> bool {
-        let Run::Declared(declared) = &self.run else {
-            return false;
-        };
-        let protected = declared.hop.is_some();
-        self.finish(outcome);
-        protected
-    }
-
-    /// End the command. A place nobody observes frees here; otherwise the
-    /// result waits in it.
-    fn finish(&mut self, outcome: Outcome) {
-        if self.observed {
-            self.run = Run::Finished(outcome);
-        } else {
-            self.free();
-        }
-    }
-
-    fn free(&mut self) {
-        self.run = Run::Free;
-        self.serial = 0;
-    }
-}
-
 /// End every datagram that waits for `address` as `outcome`, its block home.
 fn end_waiting<
     'm,
@@ -617,11 +540,7 @@ fn end_waiting<
     pool: &mut Pool<'m, B, SIZE, BLOCKS>,
 ) {
     for socket in sockets {
-        for place in &mut socket.places {
-            if place.run.hop() == Some(address) {
-                let _released = place.end(outcome, pool);
-            }
-        }
+        let _released = socket.places.end_through(Some(address), outcome, pool);
     }
 }
 
@@ -675,9 +594,9 @@ struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: us
     dscp: Dscp,
     /// What its received data counts toward.
     group: Group<B>,
-    places: [Place<'m, B, SIZE>; CREDITS],
-    /// Held from the socket's creation: a close always has a place.
-    close: Place<'m, B, SIZE>,
+    /// Its commands' places, the close's among them: held from the
+    /// socket's creation, so a close always has a place.
+    places: Places<'m, B, SIZE, CREDITS>,
     received: heapless::Deque<Datagram<'m, B, SIZE>, RECEIVED>,
 }
 
@@ -693,36 +612,20 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>
             lends: false,
             dscp: BEST_EFFORT,
             group: Group::shared(),
-            places: [const { Place::new() }; CREDITS],
-            close: Place::new(),
+            places: Places::new(),
             received: heapless::Deque::new(),
         }
     }
 
     fn in_use(&self) -> bool {
-        self.open
-            || !matches!(self.close.run, Run::Free)
-            || self
-                .places
-                .iter()
-                .any(|place| !matches!(place.run, Run::Free))
+        self.open || !self.places.idle()
     }
 
     /// Whether running work here goes through `address`.
     fn needs(&self, address: [u8; 4]) -> bool {
         self.places
-            .iter()
-            .any(|place| place.run.hop() == Some(address))
-    }
-
-    /// A command's place by its number: `CREDITS` is the close's.
-    fn place_mut(&mut self, place: u8) -> Option<&mut Place<'m, B, SIZE>> {
-        let place = usize::from(place);
-        if place == CREDITS {
-            Some(&mut self.close)
-        } else {
-            self.places.get_mut(place)
-        }
+            .running()
+            .any(|(_, place)| place.run().hop() == Some(address))
     }
 }
 
@@ -875,9 +778,7 @@ impl<
         self.ipv4 = ipv4;
         self.version = self.version.wrapping_add(1);
         for socket in &mut self.sockets {
-            for place in &mut socket.places {
-                let _released = place.end(Outcome::Readdressed, pool);
-            }
+            let _released = socket.places.end_all(Outcome::Readdressed, pool);
         }
         self.echoes.take_all(|owed| {
             pool.give(owed.block);
@@ -1135,12 +1036,7 @@ impl<
             .socket_mut(socket.index, socket.serial)
             .filter(|open| open.open)
             .ok_or(SendRefusal::Stale)?;
-        let free = open
-            .places
-            .iter()
-            .position(|place| matches!(place.run, Run::Free))
-            .ok_or(SendRefusal::NoPlace)?;
-        let number = u8::try_from(free).map_err(|_| SendRefusal::NoPlace)?;
+        let number = open.places.vacant().ok_or(SendRefusal::NoPlace)?;
         let ipv4 = self.usable(now).ok_or(SendRefusal::NoAddress)?;
         let hop = if self.is_broadcast(remote.address) {
             None
@@ -1164,13 +1060,10 @@ impl<
         let serial = self.next_serial();
         // `admit` found this place free in this open socket, and nothing ran
         // since.
-        if let Some(place) = self
-            .socket_mut(socket.index, socket.serial)
-            .and_then(|open| open.places.get_mut(usize::from(admitted.number)))
-        {
-            place.observed = true;
-            place.serial = serial;
-            place.run = run(admitted.hop);
+        if let Some(open) = self.socket_mut(socket.index, socket.serial) {
+            let _started = open
+                .places
+                .start(admitted.number, serial, run(admitted.hop));
         }
         CommandId {
             socket: socket.index,
@@ -1200,18 +1093,19 @@ impl<
     /// End declared `command` [`Outcome::Declined`], before any port saw it:
     /// its source moved on. Whether it was still declared.
     pub fn withdraw(&mut self, command: &CommandId<B>) -> bool {
-        let Some(place) = self
+        let Some(places) = self
             .sockets
             .get_mut(usize::from(command.socket))
-            .and_then(|socket| socket.places.get_mut(usize::from(command.place)))
-            .filter(|place| place.serial == command.serial)
+            .map(|socket| &mut socket.places)
+            .filter(|places| {
+                places
+                    .of(command.place, command.serial)
+                    .is_some_and(|place| matches!(place.run(), Run::Declared(_)))
+            })
         else {
             return false;
         };
-        if !matches!(place.run, Run::Declared(_)) {
-            return false;
-        }
-        let protected = place.end_declared(Outcome::Declined);
+        let protected = places.end_declared(command.place, Outcome::Declined);
         if protected {
             self.neighbors_moved();
         }
@@ -1229,20 +1123,27 @@ impl<
 
     /// The command's result, once it ended: its place frees.
     pub fn take_result(&mut self, command: CommandId<B>) -> CommandState<B> {
-        let Some(place) = self
+        let taken = self
             .sockets
             .get_mut(usize::from(command.socket))
-            .and_then(|socket| socket.place_mut(command.place))
-            .filter(|place| place.serial == command.serial)
-        else {
-            return CommandState::Gone;
-        };
-        if let Run::Finished(outcome) = place.run {
-            place.free();
-            CommandState::Finished(outcome)
-        } else {
-            CommandState::Running(command)
+            .and_then(|socket| socket.places.take(command.place, command.serial));
+        match taken {
+            None => CommandState::Gone,
+            Some(Some(outcome)) => CommandState::Finished(outcome),
+            Some(None) => CommandState::Running(command),
         }
+    }
+
+    /// The next of `ends`' socket's commands to end since this last told it,
+    /// oldest end first, the close's among them: each end is told once, as
+    /// the work's place and generation. Its result stays in its place for
+    /// whoever holds its [`CommandId`] ([`CommandId::work`] is the same
+    /// value), so a told end is no right to anything. A socket reopened in
+    /// the same place is another, and the ends of an earlier one tell it
+    /// nothing.
+    pub fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId> {
+        let (place, serial) = self.socket_mut(ends.index, ends.serial)?.places.tell()?;
+        Some(WorkId { serial, place })
     }
 
     /// Every datagram [`Self::evict`] can take back.
@@ -1251,15 +1152,16 @@ impl<
         (0_u8..)
             .zip(self.sockets.iter())
             .flat_map(move |(flow, socket)| {
-                (0_u8..)
-                    .zip(socket.places.iter())
-                    .filter_map(move |(place, entry)| match &entry.run {
+                socket
+                    .places
+                    .running()
+                    .filter_map(move |(place, entry)| match entry.run() {
                         Run::Sending(sending) => Some(Queued {
                             flow,
                             group: sending.block.group(),
                             since: sending.since,
                             place,
-                            serial: entry.serial,
+                            serial: entry.serial(),
                             brand,
                         }),
                         _ => None,
@@ -1275,18 +1177,19 @@ impl<
         eviction: Eviction,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> bool {
-        let Some(place) = self
+        let Some(places) = self
             .sockets
             .get_mut(usize::from(queued.flow))
-            .and_then(|socket| socket.places.get_mut(usize::from(queued.place)))
-            .filter(|place| place.serial == queued.serial)
+            .map(|socket| &mut socket.places)
+            .filter(|places| {
+                places
+                    .of(queued.place, queued.serial)
+                    .is_some_and(|place| matches!(place.run(), Run::Sending(_)))
+            })
         else {
             return false;
         };
-        if !matches!(place.run, Run::Sending(_)) {
-            return false;
-        }
-        if place.end(Outcome::Evicted(eviction), pool) {
+        if places.end(queued.place, Outcome::Evicted(eviction), pool) {
             self.neighbors_moved();
         }
         self.forget_unneeded();
@@ -1297,16 +1200,8 @@ impl<
     /// frees now; a running command keeps it until its end, so that end
     /// never reaches a later command.
     pub fn drop_observer(&mut self, command: CommandId<B>) {
-        if let Some(place) = self
-            .sockets
-            .get_mut(usize::from(command.socket))
-            .and_then(|socket| socket.place_mut(command.place))
-            .filter(|place| place.serial == command.serial)
-        {
-            place.observed = false;
-            if matches!(place.run, Run::Finished(_)) {
-                place.free();
-            }
+        if let Some(socket) = self.sockets.get_mut(usize::from(command.socket)) {
+            socket.places.unobserve(command.place, command.serial);
         }
     }
 
@@ -1349,13 +1244,8 @@ impl<
         while let Some(datagram) = open.received.pop_front() {
             pool.give(datagram.block);
         }
-        let mut released = false;
-        for place in &mut open.places {
-            released |= place.end(Outcome::Closed, pool);
-        }
-        open.close.observed = true;
-        open.close.serial = serial;
-        open.close.run = Run::Finished(Outcome::SocketClosed);
+        let released = open.places.end_all(Outcome::Closed, pool);
+        open.places.close(serial);
         if released {
             self.neighbors_moved();
         }
@@ -1746,8 +1636,8 @@ impl<
         let hops = self
             .sockets
             .iter()
-            .flat_map(|socket| socket.places.iter())
-            .filter_map(|place| place.run.hop())
+            .flat_map(|socket| socket.places.running())
+            .filter_map(|(_, place)| place.run().hop())
             .chain(self.echoes.iter().map(|owed| owed.hop))
             .chain(dhcp);
         for hop in hops {
@@ -1878,13 +1768,9 @@ impl<
             .filter_map(|offset| self.cursor.wrapping_add(offset).checked_rem(SOCKETS))
             .filter_map(|index| Some((index, self.sockets.get(index)?)))
             .flat_map(move |(index, socket)| {
-                socket
-                    .places
-                    .iter()
-                    .enumerate()
-                    .filter_map(move |(number, place)| {
-                        self.datagram_demand(now, index, socket, number, place)
-                    })
+                socket.places.running().filter_map(move |(number, place)| {
+                    self.datagram_demand(now, index, socket, number, place)
+                })
             });
         replies
             .chain(requests)
@@ -1909,10 +1795,10 @@ impl<
         now: Instant,
         index: usize,
         socket: &Socket<'m, B, SIZE, CREDITS, RECEIVED>,
-        number: usize,
+        number: u8,
         place: &Place<'m, B, SIZE>,
     ) -> Option<Demand<B>> {
-        let (hop, length) = match &place.run {
+        let (hop, length) = match place.run() {
             Run::Sending(sending) => (sending.hop, sending.block.octets().len()),
             Run::Declared(declared) => (declared.hop, declared.length),
             Run::Free | Run::Finished(_) => return None,
@@ -1931,8 +1817,8 @@ impl<
             },
             work: Work::Datagram {
                 socket: u8::try_from(index).ok()?,
-                place: u8::try_from(number).ok()?,
-                serial: place.serial,
+                place: number,
+                serial: place.serial(),
                 peer,
             },
             brand: self.brand,
@@ -2113,11 +1999,8 @@ impl<
         let source = self.usable(now)?.address();
         let open = self.sockets.get(usize::from(socket))?;
         let source_port = open.port?;
-        let entry = open
-            .places
-            .get(usize::from(place))
-            .filter(|entry| entry.serial == serial)?;
-        let (remote, hop, data, length) = match &entry.run {
+        let entry = open.places.of(place, serial)?;
+        let (remote, hop, data, length) = match entry.run() {
             Run::Sending(sending) => (
                 sending.remote,
                 sending.hop,
@@ -2287,9 +2170,9 @@ impl<
         let released = self
             .sockets
             .get_mut(usize::from(socket))
-            .and_then(|open| open.places.get_mut(usize::from(place)))
-            .filter(|entry| entry.serial == serial)
-            .is_some_and(|entry| entry.end(outcome, pool));
+            .map(|open| &mut open.places)
+            .filter(|places| places.of(place, serial).is_some())
+            .is_some_and(|places| places.end(place, outcome, pool));
         if released {
             self.neighbors_moved();
         }
@@ -2318,7 +2201,12 @@ impl<
                 self.identification = self.identification.wrapping_add(1);
                 self.end_echo(serial, pool);
             }
-            Work::Datagram { socket, place, .. } => {
+            Work::Datagram {
+                socket,
+                place,
+                serial,
+                ..
+            } => {
                 self.cursor = usize::from(socket).wrapping_add(1);
                 self.identification = self.identification.wrapping_add(1);
                 let outcome = if written {
@@ -2329,8 +2217,9 @@ impl<
                 let released = self
                     .sockets
                     .get_mut(usize::from(socket))
-                    .and_then(|open| open.places.get_mut(usize::from(place)))
-                    .is_some_and(|entry| entry.end(outcome, pool));
+                    .map(|open| &mut open.places)
+                    .filter(|places| places.of(place, serial).is_some())
+                    .is_some_and(|places| places.end(place, outcome, pool));
                 if released {
                     self.neighbors_moved();
                 }
@@ -2366,11 +2255,11 @@ impl<
                 pool.give(datagram.block);
                 received_dropped = received_dropped.saturating_add(1);
             }
-            let close = Kept::of(socket.close);
-            let kept = socket.places.map(|place| {
-                let observed = place.observed;
-                let place_serial = place.serial;
-                let outcome = match place.run {
+            let (places, close) = socket.places.into_places();
+            let close = Kept::of(close);
+            let kept = places.map(|place| {
+                let (place_serial, observed, run) = place.into_parts();
+                let outcome = match run {
                     Run::Sending(sending) => {
                         pool.give(sending.block);
                         Some(Outcome::Retired)
@@ -2418,9 +2307,9 @@ impl Kept {
     };
 
     fn of<B, const SIZE: usize>(place: Place<'_, B, SIZE>) -> Self {
-        match place.run {
-            Run::Finished(outcome) if place.observed => Self {
-                serial: place.serial,
+        match place.into_parts() {
+            (serial, true, Run::Finished(outcome)) => Self {
+                serial,
                 outcome: Some(outcome),
             },
             _ => Self::NONE,
